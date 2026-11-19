@@ -759,6 +759,53 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
     }
 }
 
+/// The live seam (docs/plans/extension-model.md E5c): a real packed module of the boot is taken down, its file is loaded again at run time under a new path at a new
+/// selection index, taken down, and loaded again at its own path and index, each time through the file checks and the plan over the live set. A file whose name is loaded
+/// is refused first.
+#[test]
+fn a_packed_module_is_unloaded_loaded_under_a_new_path_and_loaded_again_at_run_time() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (mut l, mut plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
+            let _dsp = dsp_env(*dev, &l, &plan);
+            l.load_providers(&plan);
+            l.settle(&mut plan, 1);
+            let (path, copy) = ("modules/lfo-shape.dkm\0", "modules/lfo-shape-copy.dkm\0");
+            let bytes = l.m.files.iter().find(|(n, _)| n == b"modules/lfo-shape.dkm").expect("the module is on the card").1.clone();
+            l.m.files.push((b"modules/lfo-shape-copy.dkm".to_vec(), bytes));
+            l.phase = Phase::Boot;
+            crate::selection::BOOT_IDX = 0;
+            assert_eq!(l.load(path.as_ptr()), OK, "{}", dev.name);
+            crate::selection::BOOT_IDX = u32::MAX;
+            l.phase = Phase::Closed;
+            let caps = |l: &Boot| {
+                let mut c = capacity(&l.p);
+                crate::loader::live_caps(&mut c, (0, 0));
+                c
+            };
+            // the module of that name is loaded: its copy is refused by name, before anything changes
+            assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), E_LOADED, "{}", dev.name);
+            assert_eq!((records::module(1).used, l.accepted[1]), (0, false));
+            // an unload, then the copy at a new index (its file name was not in the boot's selection)
+            assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
+            l.retire_index(0);
+            assert_eq!((records::module(0).used, l.accepted[0], l.sel_of_rec[0]), (0, false, u8::MAX), "{}", dev.name);
+            assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), OK, "{}", dev.name);
+            assert_eq!(l.live_load(1, copy.as_ptr()), OK, "{}", dev.name);
+            assert_eq!((records::module(0).used, l.sel_of_rec[0], l.accepted[1]), (1, 1, true), "{}", dev.name);
+            // and down again, then the first path at its index
+            assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
+            l.retire_index(1);
+            assert_eq!(l.live_check_load(0, path.as_ptr(), &caps(&l)), OK, "{}", dev.name);
+            assert_eq!(l.live_load(0, path.as_ptr()), OK, "{}", dev.name);
+            assert_eq!((records::module(0).used, l.sel_of_rec[0], l.accepted[0], l.accepted[1]), (1, 0, true, false), "{}", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
 /// A module that uses the sample pool is found by its needs: the search finds `services/samples.dks`, the file loads (ABI word, declare check, exports and the
 /// two pool slots as the bind records say), and the module's imports (`dk_sample_pool_*`) resolve to the file's exports.
 #[test]

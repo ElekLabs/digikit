@@ -21,6 +21,12 @@
 #define DKRT_MOD_LOADED 0
 /* DkrtModule.state: its DSP part is still being sent. */
 #define DKRT_MOD_LOADING 1
+/* dkrt_live op: load the content module of a store file that is not loaded. */
+#define DKRT_LIVE_LOAD 1
+/* dkrt_live op: unload the loaded content module that came from a store path. */
+#define DKRT_LIVE_UNLOAD 2
+/* dkrt_live op: replace the loaded content module that came from a store path by the file now at that path. */
+#define DKRT_LIVE_RELOAD 3
 /* Room for the entries a caller of dkrt_capacity gives (the runtime has 16 kinds; new kinds are appended). */
 #define DKRT_CAP_MAX 20
 /* The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it). */
@@ -193,6 +199,7 @@
 #define DKRT_STATE_ACTIVE 5              /* loaded; its DSP part, if any, is in place */
 #define DKRT_STATE_FAILED 6              /* loading failed after the plan accepted it; the result code says why */
 #define DKRT_STATE_SKIPPED 7             /* not loaded on purpose: this boot is in safe mode */
+#define DKRT_STATE_UNLOADED 8            /* taken down at run time by an unload (it can be loaded again) */
 
 /* CAPACITY kinds (DkrtCap.kind), from [capacity.kinds] of sdk/sdk.toml. */
 #define DKRT_CAPK_MODULES 1
@@ -303,6 +310,15 @@ typedef struct DkrtStoreFile {
     uint32_t size;
     uint8_t sha[32];
 } DkrtStoreFile;
+
+/* dkrt_live_state result: the live job (a load, an unload or a reload; the runtime has one). The same words as the RELOAD_STATE command. */
+typedef struct DkrtLive {
+    uint32_t phase;                              /* 0 no job yet, 1 queued or running, 2 finished */
+    int32_t result;                              /* 0, or the refusal or failure (E_* of sdk/sdk.toml); valid when phase is 2 */
+    uint32_t step;                               /* 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done */
+    uint32_t unloaded;                           /* 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0 */
+    uint32_t op;                                 /* LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet) */
+} DkrtLive;
 
 /* dkrt_module result: one loaded module. */
 typedef struct DkrtModule {
@@ -498,6 +514,12 @@ _Static_assert(sizeof(DkrtStoreFile) == 40, "DkrtStoreFile size");
 _Static_assert(offsetof(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
 _Static_assert(offsetof(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
 _Static_assert(offsetof(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
+_Static_assert(sizeof(DkrtLive) == 20, "DkrtLive size");
+_Static_assert(offsetof(DkrtLive, phase) == 0, "DkrtLive.phase");
+_Static_assert(offsetof(DkrtLive, result) == 4, "DkrtLive.result");
+_Static_assert(offsetof(DkrtLive, step) == 8, "DkrtLive.step");
+_Static_assert(offsetof(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
+_Static_assert(offsetof(DkrtLive, op) == 16, "DkrtLive.op");
 _Static_assert(sizeof(DkrtModule) == 124, "DkrtModule size");
 _Static_assert(offsetof(DkrtModule, name) == 0, "DkrtModule.name");
 _Static_assert(offsetof(DkrtModule, version) == 32, "DkrtModule.version");
@@ -599,6 +621,12 @@ void dkrt_status(DkrtStatus *out);
 
 /* Load the module at store path (NUL-terminated). Only at boot: after it, E_BOOT_ONLY. */
 int32_t dkrt_load(const uint8_t *path);
+
+/* Queue a live job: op is LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD, path the store path (NUL-terminated, at most 63 bytes; the file of a load or a reload is on the card already). The job runs from the UI loop, one step a pass; dkrt_live_state says where it is. OK (queued), E_BUSY (a job is queued or running), E_MSG (no path, one that does not fit, or an unknown op), E_RELOAD_RETAINED, E_FORMAT (the path is the file of a service), E_NOT_FOUND (unload and reload: no loaded content module came from that path), E_LOADED (load: a module of that path is loaded). */
+int32_t dkrt_live(uint32_t op, const uint8_t *path);
+
+/* Fill out: the phase, result and step of the live job and whether the module was torn down. */
+void dkrt_live_state(DkrtLive *out);
 
 /* The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end. */
 int32_t dkrt_module(uint32_t index, DkrtModule *out);

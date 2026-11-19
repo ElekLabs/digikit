@@ -1333,24 +1333,41 @@ export class DkSession {
     await this.ok(GCMD.RELOAD, 'reload', concat(text.encode(path), Uint8Array.of(0)));
   }
   /**
-   * RELOAD_STATE: `phase` 0 (no reload yet), 1 (queued or running) or 2 (finished), the `result` (0 is ok; else the refusal before anything changed, or the failure after the old module
-   * was torn down), the job's `step`, and `unloaded`: true when the old module was torn down, so it is not loaded unless the result is 0; false when it still runs.
+   * LOAD (runtime capability LIVE): queue the load of the module file at the store path `path`, which no loaded module came from; the file is on the card already. The same job and
+   * replies as `reload`, except E_LOADED (a module of that path is loaded) in place of E_NOT_FOUND. See `loadAndWait`.
    */
-  async reloadState(): Promise<{ phase: number; result: number; step: number; unloaded: boolean }> {
+  async load(path: string): Promise<void> {
+    await this.ok(GCMD.LOAD, 'load', concat(text.encode(path), Uint8Array.of(0)));
+  }
+  /**
+   * UNLOAD (runtime capability LIVE): queue the unload of the loaded module that came from the store path `path` (no replacement; the file stays on the card). The same job and
+   * replies as `reload`. See `unloadAndWait`.
+   */
+  async unload(path: string): Promise<void> {
+    await this.ok(GCMD.UNLOAD, 'unload', concat(text.encode(path), Uint8Array.of(0)));
+  }
+  /**
+   * RELOAD_STATE: the state of the live job, whichever it is (a load, an unload or a reload). `phase` 0 (no job yet), 1 (queued or running) or 2 (finished), the `result` (0 is ok;
+   * else the refusal before anything changed, or the failure after the old module was torn down), the job's `step`, `op` (1 load, 2 unload, 3 reload; 0 from a runtime that does not say) and `unloaded`: true when the module was torn down, so it is not
+   * loaded unless the result is 0 and the job loaded; false when it still runs (or, for a load, was never there).
+   */
+  async reloadState(): Promise<{ phase: number; result: number; step: number; unloaded: boolean; op: number }> {
     const b = await this.ok(GCMD.RELOAD_STATE, 'reload state');
     return {
       phase: b[0]!,
       result: new DataView(b.buffer, b.byteOffset, b.byteLength).getInt32(1),
       step: b[5]!,
       unloaded: b[6] === 1,
+      op: b[7] ?? 0,
     };
   }
-  /** `reload`, then `reloadState` on the session clock until the job ends: `{ result, unloaded }` (see `reloadState`). A job that does not end within `withinMs` rejects. */
-  async reloadAndWait(
-    path: string,
-    opts: { withinMs?: number; pollMs?: number; hangMs?: number } = {},
+  /** Queue with `queue`, then `reloadState` on the session clock until the job ends: `{ result, unloaded }` (see `reloadState`). A job that does not end within `withinMs` rejects. */
+  private async liveAndWait(
+    queue: () => Promise<void>,
+    what: string,
+    opts: { withinMs?: number; pollMs?: number; hangMs?: number },
   ): Promise<{ result: number; unloaded: boolean }> {
-    await this.reload(path);
+    await queue();
     const s = await poll(
       this.sessionClock,
       () => this.reloadState(),
@@ -1358,11 +1375,32 @@ export class DkSession {
       {
         withinMs: opts.withinMs ?? 30_000,
         intervalMs: opts.pollMs ?? this.sessionClock.pollMs ?? WALL_POLL_MS,
-        message: `the reload of ${path}`,
+        message: what,
         hangMs: opts.hangMs,
       },
     );
     return { result: s.result, unloaded: s.unloaded };
+  }
+  /** `reload`, then wait for the job: `{ result, unloaded }` (see `reloadState`). */
+  async reloadAndWait(
+    path: string,
+    opts: { withinMs?: number; pollMs?: number; hangMs?: number } = {},
+  ): Promise<{ result: number; unloaded: boolean }> {
+    return this.liveAndWait(() => this.reload(path), `the reload of ${path}`, opts);
+  }
+  /** `load`, then wait for the job: `{ result, unloaded }`; a result of 0 means the module is loaded. */
+  async loadAndWait(
+    path: string,
+    opts: { withinMs?: number; pollMs?: number; hangMs?: number } = {},
+  ): Promise<{ result: number; unloaded: boolean }> {
+    return this.liveAndWait(() => this.load(path), `the load of ${path}`, opts);
+  }
+  /** `unload`, then wait for the job: `{ result, unloaded }`; a result of 0 (with `unloaded`) means the module is not loaded any more. */
+  async unloadAndWait(
+    path: string,
+    opts: { withinMs?: number; pollMs?: number; hangMs?: number } = {},
+  ): Promise<{ result: number; unloaded: boolean }> {
+    return this.liveAndWait(() => this.unload(path), `the unload of ${path}`, opts);
   }
   /** LOG (the debug module `digikit/debug`): events from `from` on (the log of this boot), `[oldest, newest, events]`. */
   async logPage(from: number, quick: Quick = false): Promise<[number, number, DkLogEvent[]]> {

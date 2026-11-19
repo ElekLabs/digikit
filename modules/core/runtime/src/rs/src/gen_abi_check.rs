@@ -5,6 +5,8 @@ use dkrt_sdk::gen_abi::sig;
 
 const _: sig::dkrt_status = crate::dkrt_status;
 const _: sig::dkrt_load = crate::dkrt_load;
+const _: sig::dkrt_live = crate::reload::dkrt_live;
+const _: sig::dkrt_live_state = crate::reload::dkrt_live_state;
 const _: sig::dkrt_module = crate::dkrt_module;
 const _: sig::dkrt_fx = crate::dkrt_fx;
 const _: sig::dkrt_health = crate::dkrt_health;

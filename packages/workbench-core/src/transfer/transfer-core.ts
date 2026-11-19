@@ -172,6 +172,22 @@ export function eventText(e: TransferEvent): string {
         : `${e.path}: not reloaded (status ${s(e.result)}); the old module still runs`;
     case 'reload-failed':
       return `${e.path}: the reload failed after the old module was removed (status ${s(e.result)}); the module is not loaded`;
+    case 'load':
+      return `Loading ${e.path} without a boot`;
+    case 'load-refused':
+      return e.result === -87
+        ? `${e.path}: not loaded: the DSP loader holds a module it could not release. Restart the device`
+        : `${e.path}: not loaded (status ${s(e.result)}); nothing changed`;
+    case 'load-failed':
+      return `${e.path}: the load failed (status ${s(e.result)}); the module is not loaded`;
+    case 'unload':
+      return `Unloading ${e.path} without a boot`;
+    case 'unload-refused':
+      return e.result === -87
+        ? `${e.path}: not unloaded: the DSP loader holds a module it could not release. Restart the device`
+        : `${e.path}: not unloaded (status ${s(e.result)}); the module still runs`;
+    case 'unload-failed':
+      return `${e.path}: the unload failed (status ${s(e.result)})`;
     case 'restart':
       return 'Restarting the device';
     case 'wait':
@@ -179,6 +195,8 @@ export function eventText(e: TransferEvent): string {
     case 'done':
       if (Array.isArray(e.deleted)) return `Deleted ${e.deleted.length} file${e.deleted.length === 1 ? '' : 's'}`;
       if (Array.isArray(e.reloaded)) return `Reloaded ${s(e.reloaded) || 'nothing'}`;
+      if (e.op === 'load' && Array.isArray(e.done)) return `Loaded ${s(e.done) || 'nothing'}`;
+      if (e.op === 'unload' && Array.isArray(e.done)) return `Unloaded ${s(e.done) || 'nothing'}`;
       if (e.restarted === false) return DONE_ON_CARD;
       return Array.isArray(e.loaded) && e.loaded.length
         ? `Restarted. Loaded: ${s(e.loaded)}`

@@ -887,6 +887,7 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     settle_over_the_live_set_changes_nothing::<S>(f);
     teardown_refusal_leaves_no_residue::<S>(f);
     a_reload_that_ends_leaves_no_placeholder::<S>(f);
+    a_live_unload_and_load_keeps_the_numbers::<S>(f);
     // leave the statics empty for the next profile
     drop(Lifecycle::<S>::new(f));
 }
@@ -1250,6 +1251,57 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
         profile(f),
         plain.diff(&failed)
     );
+}
+
+/// Case 12: a live unload of a module and a live load of it again (docs/plans/extension-model.md E5c) leave the service as it was: the job ends an unload with `live_done`
+/// and no settle, and a load settles over the live set with the file at its index before it loads. With A and B loaded, take B down and load it again: B gets the numbers
+/// it had, A is untouched, and the service holds what it held before. The same for A alone.
+fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
+    let both = l.snapshot();
+    for round in 0..3 {
+        l.unload(1);
+        unsafe { S::live_done(&l.core) };
+        l.settle_over(&[&f.a, &f.b]);
+        assert_eq!(
+            l.load(1, &f.b),
+            OK,
+            "{}: B is refused when loaded again (round {round})",
+            f.name
+        );
+        unsafe { S::live_done(&l.core) };
+        expect(
+            &std::format!("unload and load of B (round {round}) changed what the service holds"),
+            f,
+            &both,
+            &l.snapshot(),
+        );
+    }
+    l.unload(1);
+    l.unload(0);
+    // A alone, numbered by a run-time settle (the snapshot after the boot's settle counts every module of the fixture)
+    l.settle_over(&[&f.a]);
+    assert_eq!(l.load(0, &f.a), OK);
+    let alone = l.snapshot();
+    l.unload(0);
+    unsafe { S::live_done(&l.core) };
+    l.settle_over(&[&f.a]);
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: A is refused when loaded again",
+        f.name
+    );
+    unsafe { S::live_done(&l.core) };
+    expect(
+        "unload and load of A changed what the service holds",
+        f,
+        &alone,
+        &l.snapshot(),
+    );
+    l.unload(0);
 }
 
 /// Whether the DSP state bytes of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` names.

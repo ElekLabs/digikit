@@ -23,17 +23,19 @@ const code = (name: string) => LOAD_STATUS.find(([, n]) => n === name)![0];
 
 test('a version 2 reply gives every module its state, code, detail and needs', () => {
   const body = cat(
-    Uint8Array.of(2, 4),
+    Uint8Array.of(2, 5),
     v2({ name: 'pluck.dkm', result: 0, state: state('ACTIVE') }),
     v2({ name: 'big.dkm', result: code('E_PLAN_FIT'), state: state('REFUSED'), detail: [6, 0] }),
     v2({ name: 'usb-fast.dkm', result: code('E_IMPORT'), state: state('FAILED'), needs: 'usb-bulk' }),
     v2({ name: 'fx.dkm', result: 1, state: state('DSP_LOADING') }),
+    v2({ name: 'old.dkm', result: 0, state: state('UNLOADED') }),
   );
   expect(parseLoads(body)).toEqual([
     { index: 0, name: 'pluck.dkm', state: 'ACTIVE', result: 0, detail: [0, 0] },
     { index: 1, name: 'big.dkm', state: 'REFUSED', result: -78, detail: [6, 0] },
     { index: 2, name: 'usb-fast.dkm', state: 'FAILED', result: -7, detail: [0, 0], needs: 'usb-bulk' },
     { index: 3, name: 'fx.dkm', state: 'DSP_LOADING', result: 1, detail: [0, 0] },
+    { index: 4, name: 'old.dkm', state: 'UNLOADED', result: 0, detail: [0, 0] },
   ]);
 });
 
@@ -92,6 +94,9 @@ test('failures keep the loader text, a missing module names core/<module>, and a
   ).toBe('usb-fast not loaded: this firmware has no core/usb-bulk. Flash firmware from the Firmware page.');
   expect(moduleStateText(mod({ state: 'SKIPPED', result: code('E_SAFE_MODE') }))).toBe(
     'm skipped: this boot is in safe mode, so no module is loaded',
+  );
+  expect(moduleStateText(mod({ state: 'UNLOADED', result: 0, name: 'sine.dkm' }))).toBe(
+    'sine not loaded: it was unloaded while the device was running; its file is still on the card',
   );
   expect(moduleReason(mod({ state: 'ACTIVE' }))).toBeUndefined();
   expect(moduleStateText(mod({ state: 'DSP_LOADING', result: 1 }))).toBeUndefined();
