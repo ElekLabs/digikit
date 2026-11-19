@@ -43,6 +43,19 @@ pub unsafe fn has_voice_row<C: CoreApi>(core: &C, t: u32) -> bool {
     false
 }
 
+/// Whether a MISSING placeholder row of machine type `t` stands (the row that makes the type silent).
+pub unsafe fn has_parked_row<C: CoreApi>(core: &C, t: u32) -> bool {
+    let d = core.dsp();
+    let mut k = 0;
+    while k < MAX_ROWS {
+        if d.row_owner[k] == PLACEHOLDER_OWNER && d.row_type[k] == t {
+            return true;
+        }
+        k += 1;
+    }
+    false
+}
+
 /// The voice row of machine type `t` that module record `rec` claimed.
 pub unsafe fn voice_row<C: CoreApi>(core: &C, rec: usize, t: u32) -> Option<usize> {
     let d = core.dsp();

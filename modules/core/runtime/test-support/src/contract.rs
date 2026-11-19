@@ -956,6 +956,22 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         }
     }
 
+    /// At an idle point (the loader idle, the boot over, no load pending) a service that parks the rows of absent modules has one placeholder for each number it holds that no
+    /// module has: one pass of its tick, then the placeholders equal those numbers (`Fixture::absent_rows`).
+    pub fn expect_all_parked(&self) {
+        let Some(absent) = self.f.absent_rows else {
+            return;
+        };
+        unsafe { S::tick(&self.core, dkrt_abi::service::tick_phase::LAST) };
+        let (rows, held) = absent(&self.core);
+        assert_eq!(
+            rows, held,
+            "{} ({}): placeholder rows against the numbers held for absent modules at an idle point",
+            self.f.name,
+            profile(self.f)
+        );
+    }
+
     /// The service's `check` steps over a staged section, for the check that nothing is written: the snapshot before and after.
     pub fn check_only(&self, sec: &[u8]) -> i32 {
         self.walk_check(sec)
@@ -1371,6 +1387,7 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
         profile(f),
         plain.diff(&failed)
     );
+    l.expect_all_parked();
 }
 
 /// Case 12: a live unload of a module and a live load of it again (docs/plans/extension-model.md E5c) leave the service as it was: the job ends an unload with `live_done`
@@ -1507,6 +1524,7 @@ fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Ser
     unsafe { S::live_done(&l.core) };
     l.core.live_op.set(0);
     gap_rows_after_an_unload(f, &on, &loaded, &l.snapshot());
+    l.expect_all_parked();
 }
 
 /// What a module's rows are after its unload, or after a reload that ended without it (E5d: the module is absent either way): where the service parks the rows of an
@@ -1823,6 +1841,10 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
             f.name
         );
         l.unload(0);
+        // (a service that parks the rows of absent modules writes MISSING for a number once its row is parked, at its tick: the refused module has no row of its own)
+        if f.parks_rows {
+            unsafe { S::tick(&l.core, dkrt_abi::service::tick_phase::LAST) };
+        }
         let reference = l.snapshot();
         expect_small("the reference of the late refusal", f, &before, &reference);
 
@@ -1839,6 +1861,9 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
             "{}: the module is refused before any record was applied (error {r})",
             f.name
         );
+        if f.parks_rows {
+            unsafe { S::tick(&l.core, dkrt_abi::service::tick_phase::LAST) };
+        }
         let refused = l.snapshot();
         expect_small("a refusal during apply", f, &before, &refused);
         // (a service that parks the rows of an absent module keeps the voice row of the module that unloaded: only the placeholder rows' bytes are left out of the compare)

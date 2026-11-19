@@ -117,6 +117,10 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn settle(core: &C, s: &SettleCtx) {
+        // a new plan of the numbers: the parking state of the earlier one is not carried over
+        PARK_TRIES = 0;
+        BUSY_PASSES = 0;
+        LOGGED = 0;
         crate::assign::plan(core, s)
     }
 
@@ -897,10 +901,15 @@ const PARK_MAX: u32 = 3;
 static mut LOGGED: u32 = 0;
 
 /// Why a number holds no placeholder (the third argument of the `MACHINE_TYPE_EVICTED` event of the machines service: hash, type, why): a real load took the row, no voice row is free,
-/// the DSP did not take the write `PARK_MAX` passes in a row.
+/// the DSP did not take the write `PARK_MAX` passes in a row, the loader was busy `BUSY_MAX` passes in a row.
 const WHY_GAVE_WAY: u32 = 1;
 const WHY_NO_ROW: u32 = 2;
 const WHY_WRITE_FAILED: u32 = 3;
+const WHY_LOADER_BUSY: u32 = 4;
+
+/// Passes in a row with the DSP loader busy after which a number that waits for its voice row is logged (why 4); the wait goes on and the row is parked when the loader is idle.
+const BUSY_MAX: u32 = 1800;
+static mut BUSY_PASSES: u32 = 0;
 
 unsafe fn log_gap<C: CoreApi>(core: &C, k: usize, t: u32, why: u32) {
     if LOGGED & (1 << k) == 0 {
@@ -946,6 +955,11 @@ unsafe fn park_absent<C: CoreApi>(core: &C) {
     let s = rstate();
     let mut changed = false;
     let idle = dsp::loader_idle(core);
+    BUSY_PASSES = if idle {
+        0
+    } else {
+        BUSY_PASSES.saturating_add(1)
+    };
     let mut failed = false;
     let mut i = 0;
     while i < dkrt_sdk::sel::MAP_N {
@@ -964,6 +978,8 @@ unsafe fn park_absent<C: CoreApi>(core: &C) {
         if !parked {
             if PARK_TRIES >= PARK_MAX {
                 why = WHY_WRITE_FAILED;
+            } else if !idle && BUSY_PASSES >= BUSY_MAX {
+                why = WHY_LOADER_BUSY;
             } else if idle && !failed {
                 match dsp::park_missing(core, t) {
                     Some(true) => {
@@ -1084,7 +1100,9 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             let t = iw(inf, w::M_DYN0) + k as u32;
             nativepage::remove(core, t); // callbacks must go before code/strings can be released
             let held = crate::assign::holds(t);
-            let missing = held || core.live_op() != 0;
+            // MISSING only while a parked voice row makes it silent (`dsp_clear` ran before this `remove`); otherwise the gap row, and `park_absent` writes MISSING once it
+            // has parked a row
+            let missing = (held || core.live_op() != 0) && dsp::has_parked_row(core, t);
             reset_machine_row(core, inf, k, missing);
             if missing && !held {
                 MISSING_ROWS |= 1 << k;

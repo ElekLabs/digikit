@@ -1512,7 +1512,9 @@ id = 30
 name = "MACHINE_TYPE_ASSIGNED"
 args = ["hash", "type", "sticky", "rule", "-"]
 
-# the map of remembered numbers was full and an entry of a module that is not loaded in this boot was dropped
+# the map of remembered numbers was full and an entry of a module that is not loaded in this boot was dropped (error event). The machines service also logs it, with `arg 3` (`why`),
+# when a number it holds for an absent module has no voice row and so reads as a gap row (the stock sound) instead of MISSING: 1 a real load took the row, 2 no voice row is free,
+# 3 the DSP did not take the write in 3 passes in a row, 4 the DSP loader stayed busy for 1800 passes in a row. The map's own event has `why` 0 (the argument is not set).
 [[log.kind]]
 id = 31
 name = "MACHINE_TYPE_EVICTED"

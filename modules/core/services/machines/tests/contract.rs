@@ -668,6 +668,64 @@ fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_l
 }
 
 #[test]
+fn a_removal_writes_missing_only_when_a_voice_row_is_parked_and_a_busy_loader_is_bounded() {
+    use dkrt_abi::dsp::{PH_IDLE, PLACEHOLDER_OWNER};
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::{locked, Lifecycle};
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    let whys = || {
+        l.core
+            .calls
+            .borrow()
+            .iter()
+            .filter_map(|c| match c {
+                dkrt_test_support::Call::Log { kind, args }
+                    if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
+                {
+                    Some(args[2])
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    // the unload of a module whose voice row was never published: no voice row stands for the number, so the row is the gap row, not MISSING
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let row = rows_owned_by(&l.core, 1)[0];
+    l.core.dsp().row_pub[row] = 0;
+    l.unload(0);
+    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
+    assert!(
+        !missing_row(&l.core).2,
+        "no MISSING row without a voice row"
+    );
+    // the loader stays busy: nothing is parked, the row stays a gap row, and after the bound one event says why (once)
+    l.core.dsp().phase = PH_IDLE + 1;
+    for _ in 0..1799 {
+        tick();
+    }
+    assert!(whys().is_empty());
+    tick();
+    tick();
+    assert_eq!(
+        whys().iter().filter(|w| **w == 4).count() as u32,
+        dkrt_svc_machines::assign::map_used(),
+        "one event for each held number, logged once"
+    );
+    assert!(!missing_row(&l.core).2);
+    // the loader is idle again: the number is parked and reads MISSING
+    l.core.dsp().phase = PH_IDLE;
+    tick();
+    assert!(missing_row(&l.core).2);
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len() as u32,
+        dkrt_svc_machines::assign::map_used()
+    );
+}
+
+#[test]
 fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_when_a_row_frees() {
     use dkrt_abi::dsp::PLACEHOLDER_OWNER;
     use dkrt_abi::service::{tick_phase, Service};
