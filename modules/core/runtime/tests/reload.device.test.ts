@@ -241,7 +241,11 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
   // both builds go through the same pack, so the only difference is the constant
   const builds = [fs.readFileSync(await build('sine-base', [])), fs.readFileSync(await build('sine-octave', [SINE_OCTAVE_UP]))];
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
+  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
+  const epoch = await epochOf(rt);
   const sine = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
+  // what the image accounts for: a reload that leaks DSP area, arena or a row per cycle shows here only (the contract suite runs over a fake core)
+  const start = await rt.dk.capacity();
   await pickSine(rt);
   const amp = AMP_CC[device];
   await sendCc(rt, MIDI_CHANNEL, amp.hold, 127);
@@ -285,6 +289,10 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
     expect(m.types, `cycle ${cycle}: the machine type moved`).toEqual(sine.types);
     expect(m.rows, `cycle ${cycle}: the voice row moved`).toBe(sine.rows);
     expect(m.faults, `cycle ${cycle}: the guard counted a fault`).toBe(0);
+    await expectReloadLeftNothing(rt, plan, `soak cycle ${cycle}`, epoch);
+    const cap = await rt.dk.capacity();
+    for (const kind of ['MODULES', 'MACHINE_ROWS', 'VOICE_ROWS', 'PARAM_ROWS', 'DSP_AREA', 'ARENA'])
+      expect(cap[kind]?.used, `soak cycle ${cycle}: ${kind} in use changed`).toBe(start[kind]?.used);
   }
   record(artifacts, 'pitch-soak', { cycles: SOAK_CYCLES, hz: seen, capacity: await rt.dk.capacity() });
 }
