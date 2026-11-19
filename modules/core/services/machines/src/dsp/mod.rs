@@ -12,8 +12,35 @@ pub unsafe fn rows_counts<C: CoreApi>(core: &C) -> (u32, u32) {
     if inf.is_null() {
         return (0, 0);
     }
-    let used = capacity::used_rows(&core.dsp().row_owner);
+    // a placeholder gives way to a real load (`make_room`), so it is no row in use: the planner and `check_rows` count the same
+    let used = capacity::used_rows(&core.dsp().row_owner) - placeholders(core.dsp());
     (iw(inf, I_VFREE).min(MAX_ROWS as u32), used)
+}
+
+/// The voice rows that are MISSING placeholders.
+pub fn placeholders(d: &DspState) -> u32 {
+    let mut n = 0;
+    let mut k = 0;
+    while k < MAX_ROWS {
+        if d.row_owner[k] == PLACEHOLDER_OWNER {
+            n += 1;
+        }
+        k += 1;
+    }
+    n
+}
+
+/// Whether a voice row (a module's or a placeholder) has machine type `t`.
+pub unsafe fn has_voice_row<C: CoreApi>(core: &C, t: u32) -> bool {
+    let d = core.dsp();
+    let mut k = 0;
+    while k < MAX_ROWS {
+        if d.row_owner[k] != 0 && d.row_type[k] == t {
+            return true;
+        }
+        k += 1;
+    }
+    false
 }
 
 /// The voice row of machine type `t` that module record `rec` claimed.
@@ -213,12 +240,12 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     OK
 }
 
-/// DSP section: voice rows are free for the module's voices.
+/// DSP section: voice rows are free for the module's voices. A placeholder is free for any real load (`make_room` gives it back first); a row of the module being reloaded is
+/// free for a voice of its type (the teardown that comes before the load parks it).
 pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     let nvoice = sec.nvoice;
     let d = core.dsp();
-    // a voice whose type has a placeholder row takes that row: it needs no free one
-    let mut parked = 0;
+    let mut own = 0;
     let mut i = 0;
     while i < nvoice {
         let e = sec
@@ -227,10 +254,11 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
         let mut k = 0;
         while k < MAX_ROWS {
-            // a placeholder row, or a row of the module being reloaded (it is parked by the teardown that comes before the load): the same type takes it over
-            let own = d.row_owner[k] as u32 == core.live_op() && d.row_owner[k] != 0;
-            if (d.row_owner[k] == PLACEHOLDER_OWNER || own) && d.row_type[k] == t {
-                parked += 1;
+            if d.row_owner[k] as u32 == core.live_op()
+                && d.row_owner[k] != 0
+                && d.row_type[k] == t
+            {
+                own += 1;
                 break;
             }
             k += 1;
@@ -239,8 +267,81 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     }
     capacity::dsp_rows(
         nvoice,
-        capacity::free_rows(&d.row_owner, iw(core.dsp_info(), I_VFREE)) + parked,
+        capacity::free_rows(&d.row_owner, iw(core.dsp_info(), I_VFREE)) + placeholders(d) + own,
     )
+}
+
+/// `Service::dsp_admit`: a real load always wins a voice row. When fewer free rows exist than voices that have no placeholder or own row of their type, the placeholders of
+/// other numbers are freed (the type word first, then the disabled word) until the rows are there, and `gave` is told each type: the caller turns its machine row into a gap
+/// row and logs it. `E_BUSY` when the DSP did not take a write (nothing is reserved yet; the load is tried again).
+pub(crate) unsafe fn make_room<C: CoreApi>(
+    core: &C,
+    job: &Job,
+    gave: &mut dyn FnMut(u32),
+) -> i32 {
+    if core.dsp_info().is_null() {
+        return OK;
+    }
+    let d = core.dsp();
+    let types_of_job = |t: u32| {
+        let mut i = 0;
+        while i < job.nvoice as usize {
+            let e = job.voices.add(job.vstride as usize * i);
+            if crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize))) == t {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    };
+    let mut need = 0;
+    let mut i = 0;
+    while i < job.nvoice as usize {
+        let e = job.voices.add(job.vstride as usize * i);
+        let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
+        let mut have = false;
+        let mut k = 0;
+        while k < MAX_ROWS {
+            if (d.row_owner[k] == PLACEHOLDER_OWNER
+                || (d.row_owner[k] as u32 == core.live_op() && d.row_owner[k] != 0))
+                && d.row_type[k] == t
+            {
+                have = true;
+            }
+            k += 1;
+        }
+        if !have {
+            need += 1;
+        }
+        i += 1;
+    }
+    let first = iw(core.dsp_info(), I_VFIRST);
+    let mut free = capacity::free_rows(&d.row_owner, iw(core.dsp_info(), I_VFREE));
+    while free < need {
+        let mut pick = MAX_ROWS;
+        let mut k = 0;
+        while k < MAX_ROWS {
+            if d.row_owner[k] == PLACEHOLDER_OWNER && !types_of_job(d.row_type[k]) {
+                pick = k;
+            }
+            k += 1;
+        }
+        if pick == MAX_ROWS {
+            break; // `check_rows` counted exactly these rows: nothing more to give
+        }
+        let at = ROW_WORDS * (first + pick as u32);
+        let mut seq = Sequence::new();
+        seq.push(WIN_VOICES, at, FREE_TYPE);
+        seq.push(WIN_VOICES, at + 10, 0);
+        if !core.link_run(Owner::Core, &seq) {
+            return E_BUSY;
+        }
+        let t = d.row_type[pick];
+        reset_row(d, pick, 0, FREE_TYPE, 0);
+        gave(t);
+        free += 1;
+    }
+    OK
 }
 
 /// DSP section: the voices' types are in the run-time range, their entries are inside the image, and no loaded or loading module or

@@ -132,7 +132,10 @@ pub struct Fixture {
     /// wrote, is a leftover.
     pub kept: fn(&FakeCore, u32, u32) -> bool,
     /// The same for the DSP state: `(byte offset in DspState, value)` pairs a release leaves other than at the start, on purpose. Each entry has a reason in the fixture.
-    pub kept_dsp: fn(usize, u8) -> bool,
+    pub kept_dsp: fn(&FakeCore, usize, u8) -> bool,
+    /// (placeholder voice rows, numbers the service holds for absent modules) now, for a service with `parks_rows` (`None` otherwise). A placeholder row exists only for a held
+    /// number, so every snapshot checks `rows <= held`; the cases that unload a module check that its rows are there.
+    pub absent_rows: Option<fn(&FakeCore) -> (usize, usize)>,
     /// What the service does while a module runs that the loader does not do: queue live values for the module's rows, as a knob turn does (`None`: the service
     /// queues none). Case 7 calls it with the module loaded, so a release that leaves a value queued on the link shows.
     pub live: Option<fn(&FakeCore)>,
@@ -195,13 +198,83 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    fn state_of_dsp(&self) -> DspState {
+        assert_eq!(self.dsp.len(), core::mem::size_of::<DspState>());
+        unsafe { core::ptr::read_unaligned(self.dsp.as_ptr() as *const DspState) }
+    }
+
+    fn with_dsp(&self, d: DspState) -> Snapshot {
+        let mut out = self.clone();
+        unsafe { core::ptr::write_unaligned(out.dsp.as_mut_ptr() as *mut DspState, d) };
+        out
+    }
+
+    /// The snapshot with each MISSING placeholder voice row as a free row (owner 0, type `FREE_TYPE`, every other field 0): what a comparison of services that park rows of
+    /// absent modules leaves of the row bytes that are not the module's own.
+    pub fn without_placeholders(&self) -> Snapshot {
+        let mut d = self.state_of_dsp();
+        for k in 0..dkrt_abi::dsp::MAX_ROWS {
+            if d.row_owner[k] == dkrt_abi::dsp::PLACEHOLDER_OWNER {
+                d.row_owner[k] = 0;
+                d.row_type[k] = dkrt_abi::dsp::FREE_TYPE;
+                d.row_pc[k] = 0;
+                d.row_rng[k] = [0; 8];
+                d.row_pub[k] = 0;
+                d.row_note_on[k] = 0;
+                d.row_state_base[k] = 0;
+                d.row_stride[k] = 0;
+                d.row_clear[k] = 0;
+                d.row_latched[k] = 0;
+            }
+        }
+        self.with_dsp(d)
+    }
+
+    /// `without_placeholders`, and the voice rows in the order of their types (free rows last), with the row masks of the records following: a module loaded beside a parked
+    /// row has its row at another index than the same module loaded alone, and its words are compared by type.
+    pub fn by_type(&self) -> Snapshot {
+        let clean = self.without_placeholders();
+        let d = clean.state_of_dsp();
+        let mut order: Vec<usize> = (0..dkrt_abi::dsp::MAX_ROWS).collect();
+        order.sort_by_key(|k| (d.row_type[*k], *k));
+        let mut n = unsafe { core::ptr::read_unaligned(clean.dsp.as_ptr() as *const DspState) };
+        for (i, k) in order.iter().enumerate() {
+            n.row_type[i] = d.row_type[*k];
+            n.row_pc[i] = d.row_pc[*k];
+            n.row_rng[i] = d.row_rng[*k];
+            n.row_owner[i] = d.row_owner[*k];
+            n.row_pub[i] = d.row_pub[*k];
+            n.row_note_on[i] = d.row_note_on[*k];
+            n.row_state_base[i] = d.row_state_base[*k];
+            n.row_stride[i] = d.row_stride[*k];
+            n.row_clear[i] = d.row_clear[*k];
+            n.row_latched[i] = d.row_latched[*k];
+        }
+        for r in 0..n.mod_rows.len() {
+            let mut m = 0;
+            for (i, k) in order.iter().enumerate() {
+                if d.mod_rows[r] & (1 << k) != 0 {
+                    m |= 1 << i;
+                }
+            }
+            n.mod_rows[r] = m;
+        }
+        clean.with_dsp(n)
+    }
+
+    /// Voice rows that are MISSING placeholders in this snapshot.
+    fn placeholder_rows(&self) -> usize {
+        let d = self.state_of_dsp();
+        d.row_owner.iter().filter(|o| **o == dkrt_abi::dsp::PLACEHOLDER_OWNER).count()
+    }
+
     fn small(&self) -> (Vec<(u8, u32, u32)>, Vec<u32>) {
         (self.caps.clone(), self.state.clone())
     }
 
     /// What `self` wrote and `other` does not hold any more: every word, link word and DSP state byte that is not 0 in `self` and has another value in `other`.
     /// `other` may have more (rows a module cleared hold the service's free values, rows that were never used hold 0). Each area lists its first 8.
-    pub fn lost_in(&self, other: &Snapshot, kept_dsp: fn(usize, u8) -> bool) -> String {
+    pub fn lost_in(&self, other: &Snapshot, kept_dsp: &dyn Fn(usize, u8) -> bool) -> String {
         let mut out = String::new();
         let mut n = 0;
         for (k, v) in &self.mem {
@@ -254,7 +327,7 @@ impl Snapshot {
         start: &Snapshot,
         end: &Snapshot,
         kept: &dyn Fn(u32, u32) -> bool,
-        kept_dsp: fn(usize, u8) -> bool,
+        kept_dsp: &dyn Fn(usize, u8) -> bool,
     ) -> String {
         let mut out = String::new();
         let mut n = 0;
@@ -529,18 +602,16 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         let mut caps = Vec::new();
         for kind in 0..32u8 {
             if let Some((l, u)) = unsafe { S::cap(core, kind) } {
-                // a MISSING placeholder takes a voice row for each absent number (docs/plans/extension-model.md E5d): the figure compared is the rows modules use, so
-                // that "A, unload A" is the start for the counts whether or not the number keeps a placeholder (the services' own tests count the placeholders)
-                let parked = if kind == dkrt_sdk::proto::CAPK_VOICE_ROWS {
-                    d.row_owner
-                        .iter()
-                        .filter(|o| **o == dkrt_abi::dsp::PLACEHOLDER_OWNER)
-                        .count() as u32
-                } else {
-                    0
-                };
-                caps.push((kind, l, u - parked));
+                caps.push((kind, l, u));
             }
+        }
+        if let Some(absent) = self.f.absent_rows {
+            let (rows, held) = absent(core);
+            assert!(
+                rows <= held,
+                "{}: {rows} placeholder rows for {held} numbers held for absent modules",
+                self.f.name
+            );
         }
         Snapshot {
             mem: core
@@ -1088,7 +1159,7 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     // words, DSP state and ids are what is compared, and the capacity counts
     // (a service that parks the rows of an absent module keeps A's row, so B has the next one: B's words are in another row and are not compared)
     if !f.parks_rows {
-        let lost = after_b.lost_in(&l.snapshot(), f.kept_dsp);
+        let lost = after_b.by_type().lost_in(&l.snapshot().by_type(), &|o, v| (f.kept_dsp)(&l.core, o, v));
         assert!(
             lost.is_empty(),
             "{} ({}): A, unload A, B differs from B\n{lost}",
@@ -1128,7 +1199,7 @@ fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
         f.name
     );
     l.unload(0);
-    let lost = b_alone.lost_in(&l.snapshot(), f.kept_dsp);
+    let lost = b_alone.lost_in(&l.snapshot(), &|o, v| (f.kept_dsp)(&l.core, o, v));
     assert!(
         lost.is_empty(),
         "{} ({}): A's unload changed what B holds\n{lost}",
@@ -1263,7 +1334,7 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
     let end = l.snapshot();
     expect_small("A, its reload, unload A", f, &start, &end);
     assert!(
-        dsp_same(f, &start, &end),
+        dsp_same(f, &l.core, &start, &end),
         "{} ({}): the DSP state after a reload and an unload differs from the start",
         f.name,
         profile(f)
@@ -1277,7 +1348,7 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
     let end = l.snapshot();
     expect_small("A, a reload that fails", f, &start, &end);
     assert!(
-        dsp_same(f, &start, &end),
+        dsp_same(f, &l.core, &start, &end),
         "{} ({}): the DSP state after a failed reload differs from the start",
         f.name,
         profile(f)
@@ -1442,6 +1513,16 @@ fn gap_rows_after_an_unload(
     loaded: &Snapshot,
     s: &Snapshot,
 ) {
+    if f.absent_rows.is_some() {
+        let rows = on(loaded).iter().filter(|o| **o).count();
+        assert_eq!(
+            s.placeholder_rows(),
+            rows,
+            "{} ({}): the rows of A after its unload are placeholders",
+            f.name,
+            profile(f)
+        );
+    }
     if f.parks_rows {
         assert_eq!(
             s.enable,
@@ -1542,8 +1623,8 @@ fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f:
 }
 
 /// Whether the DSP state bytes of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` names.
-fn dsp_same(f: &Fixture, start: &Snapshot, end: &Snapshot) -> bool {
-    (0..start.dsp.len()).all(|i| start.dsp[i] == end.dsp[i] || (f.kept_dsp)(i, end.dsp[i]))
+fn dsp_same(f: &Fixture, core: &FakeCore, start: &Snapshot, end: &Snapshot) -> bool {
+    (0..start.dsp.len()).all(|i| start.dsp[i] == end.dsp[i] || (f.kept_dsp)(core, i, end.dsp[i]))
 }
 
 /// Case 6: case 3 ten times: no table grows and no sticky value drifts.
@@ -1612,6 +1693,12 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
             .filter(|(e, w)| **w != 0 && **w != e.2)
             .count()
     };
+    assert!(
+        f.absent_rows.is_none() || end_a.placeholder_rows() == on(&loaded_a),
+        "{} ({}): the rows of A after its unload are not parked",
+        f.name,
+        profile(f)
+    );
     // a service that parks the rows of an absent module (`parks_rows`) leaves A's row words on the link as they were: the row is parked, disabled by other means
     assert_eq!(
         on(&end_a),
@@ -1641,7 +1728,7 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
         end_a.live,
         end_a.reqs
     );
-    let left = loaded_a.survivors(&start, &end_a, &|a, v| (f.kept)(&l.core, a, v), f.kept_dsp);
+    let left = loaded_a.survivors(&start, &end_a, &|a, v| (f.kept)(&l.core, a, v), &|o, v| (f.kept_dsp)(&l.core, o, v));
     assert!(
         left.is_empty(),
         "{} ({}): the unload of A left what A wrote\n{left}",
@@ -1683,7 +1770,7 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     assert!(wrong.is_empty(), "{} ({}): {wrong:?}", f.name, profile(f));
     l.unload(0);
     let end_a2 = l.snapshot();
-    let left = loaded_a2.survivors(&start, &end_a2, &|a, v| (f.kept)(&l.core, a, v), f.kept_dsp);
+    let left = loaded_a2.survivors(&start, &end_a2, &|a, v| (f.kept)(&l.core, a, v), &|o, v| (f.kept_dsp)(&l.core, o, v));
     assert!(
         left.is_empty(),
         "{} ({}): the unload of a2 left what a2 wrote\n{left}",
@@ -1745,13 +1832,8 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         );
         let refused = l.snapshot();
         expect_small("a refusal during apply", f, &before, &refused);
-        // (a service that parks the rows of an absent module keeps the voice row of the module that unloaded and frees the claim of the one that was refused before its
-        // row was published: the DSP state differs by that row, which the service's own tests check)
-        let (mut reference_cmp, mut refused_cmp) = (reference.clone(), refused.clone());
-        if f.parks_rows {
-            reference_cmp.dsp.clear();
-            refused_cmp.dsp.clear();
-        }
+        // (a service that parks the rows of an absent module keeps the voice row of the module that unloaded: only the placeholder rows' bytes are left out of the compare)
+        let (reference_cmp, refused_cmp) = (reference.without_placeholders(), refused.without_placeholders());
         if let Err(d) = reference_cmp.same_after_unload(&refused_cmp, false) {
             panic!(
                 "{} ({}): the undo of a refusal during apply differs from an unload of the same rows{}\n{d}",

@@ -118,7 +118,8 @@ fn fixture(device: u32) -> Fixture {
         enable: &[],
         parks_rows: false,
         kept: |_, _, _| false,
-        kept_dsp: |_, _| false,
+        kept_dsp: |_, _, _| false,
+        absent_rows: None,
         live: None,
         salt_same: &[
             ("memory", "the maximum of the WAVE rows is the highest loaded number << 8, and A and a2 have the same key, so the same number"),

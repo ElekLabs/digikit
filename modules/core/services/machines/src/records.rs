@@ -260,6 +260,10 @@ impl<C: CoreApi> Service<C> for Machines {
         dsp::check_types(core, sec)
     }
 
+    unsafe fn dsp_admit(core: &C, job: &dkrt_abi::dsp::Job) -> i32 {
+        dsp::make_room(core, job, &mut |t| give_way(core, t))
+    }
+
     unsafe fn dsp_claim(core: &C, c: &mut Claim) {
         dsp::claim(core, c)
     }
@@ -788,6 +792,7 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
         // publish: the name pointer marks the row as used (one aligned store)
         s.mach_owner[k] = owner;
         MISSING_ROWS &= !(1 << k);
+        LOGGED &= !(1 << k);
         core.wr(row + iw(inf, w::O_NAME), s.s.mach_name[k].as_ptr() as u32);
     });
     // what the native pages need when the walker reaches them in file order
@@ -887,19 +892,61 @@ static mut MISSING_ROWS: u32 = 0;
 static mut PARK_TRIES: u32 = 0;
 const PARK_MAX: u32 = 3;
 
+/// The machine rows (bit k) whose number has no placeholder and was logged as such (`MACHINE_TYPE_EVICTED`, an error event): one event for each time a number loses its
+/// placeholder, not one for each pass.
+static mut LOGGED: u32 = 0;
+
+/// Why a number holds no placeholder (the second argument of the `MACHINE_TYPE_EVICTED` event of the machines service): a real load took the row, no voice row is free,
+/// the DSP did not take the write `PARK_MAX` passes in a row.
+const WHY_GAVE_WAY: u32 = 1;
+const WHY_NO_ROW: u32 = 2;
+const WHY_WRITE_FAILED: u32 = 3;
+
+unsafe fn log_gap<C: CoreApi>(core: &C, k: usize, t: u32, why: u32) {
+    if LOGGED & (1 << k) == 0 {
+        LOGGED |= 1 << k;
+        core.log(
+            dkrt_sdk::logk::MACHINE_TYPE_EVICTED,
+            dkrt_sdk::logk::F_ERROR,
+            [t, why, 0, 0, 0],
+        );
+    }
+}
+
+/// Whether the machine row of type `t` reads MISSING: hidden from the list, `own_dsp` 1.
+unsafe fn reads_missing<C: CoreApi>(core: &C, inf: *const u32, t: u32) -> bool {
+    let row = iw(inf, w::M_ROWS) + (t - iw(inf, w::M_FIRST)) * iw(inf, w::M_ROW_SIZE);
+    core.rd(row + iw(inf, w::O_NAME)) == iw(inf, w::EMPTY) && core.rd(row + iw(inf, w::O_OWN)) == 1
+}
+
+/// A real load took the placeholder of type `t` (`dsp::make_room`): its machine row falls back to the gap row (the stock sound) and the event says so; the number is parked
+/// again when a row frees (`park_absent`).
+unsafe fn give_way<C: CoreApi>(core: &C, t: u32) {
+    let inf = dkrt_svc_params::dynreg(core);
+    let d0 = iw(inf, w::M_DYN0);
+    if inf.is_null() || t < d0 || (t - d0) as usize >= MAX_MACH {
+        return;
+    }
+    let k = (t - d0) as usize;
+    if rstate().mach_owner[k] == 0 {
+        reset_machine_row(core, inf, k, false);
+        log_gap(core, k, t, WHY_GAVE_WAY);
+    }
+}
+
 /// The machine rows and voice rows of the numbers the sticky map holds that no module has: MISSING and silent (docs/plans/extension-model.md E5d). A module that is not
-/// loaded at boot, or failed before its rows were written, has no unload to leave them. Called from every UI-loop pass: the machine row is written when it does not read
-/// MISSING yet (and the machine list is built again once), and the voice row is parked when the DSP loader is idle, a free row exists and the write is taken. Nothing runs during a live operation.
+/// loaded at boot, or failed before its rows were written, has no unload to leave them. Called from every UI-loop pass. The voice row is parked when the boot's loads are over
+/// (`boot_index` is `u32::MAX` again) and the DSP loader is idle, a free row exists and the write is taken; only then the machine row reads MISSING. A number that cannot be
+/// parked (no free row, or the write failed `PARK_MAX` passes in a row) keeps the gap row and one error event says why. Nothing runs during a live operation.
 unsafe fn park_absent<C: CoreApi>(core: &C) {
     let inf = dkrt_svc_params::dynreg(core);
-    if inf.is_null() || core.live_op() != 0 {
+    if inf.is_null() || core.live_op() != 0 || core.boot_index() != u32::MAX {
         return;
     }
     let s = rstate();
-    let empty = iw(inf, w::EMPTY);
-    let first = iw(inf, w::M_FIRST);
     let mut changed = false;
-    let mut voices = PARK_TRIES < PARK_MAX && dsp::loader_idle(core);
+    let idle = dsp::loader_idle(core);
+    let mut failed = false;
     let mut i = 0;
     while i < dkrt_sdk::sel::MAP_N {
         let t = crate::assign::number_at(i);
@@ -912,19 +959,40 @@ unsafe fn park_absent<C: CoreApi>(core: &C) {
         if s.mach_owner[k] != 0 || dsp::module_of_type(core, t).is_some() {
             continue;
         }
-        let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
-        if core.rd(row + iw(inf, w::O_NAME)) != empty || core.rd(row + iw(inf, w::O_OWN)) != 1 {
-            reset_machine_row(core, inf, k, true);
-            changed = true;
-        }
-        if voices {
-            match dsp::park_missing(core, t) {
-                Some(_) => PARK_TRIES = 0,
-                None => {
-                    PARK_TRIES += 1;
-                    voices = false;
+        let mut parked = dsp::has_voice_row(core, t);
+        let mut why = 0;
+        if !parked {
+            if PARK_TRIES >= PARK_MAX {
+                why = WHY_WRITE_FAILED;
+            } else if idle && !failed {
+                match dsp::park_missing(core, t) {
+                    Some(true) => {
+                        parked = true;
+                        PARK_TRIES = 0;
+                    }
+                    Some(false) => why = WHY_NO_ROW,
+                    None => {
+                        failed = true;
+                        PARK_TRIES += 1;
+                        if PARK_TRIES >= PARK_MAX {
+                            why = WHY_WRITE_FAILED;
+                        }
+                    }
                 }
             }
+        }
+        if parked {
+            LOGGED &= !(1 << k);
+            if !reads_missing(core, inf, t) {
+                reset_machine_row(core, inf, k, true);
+                changed = true;
+            }
+        } else if why != 0 {
+            if reads_missing(core, inf, t) {
+                reset_machine_row(core, inf, k, false);
+                changed = true;
+            }
+            log_gap(core, k, t, why);
         }
     }
     if changed {
@@ -933,8 +1001,8 @@ unsafe fn park_absent<C: CoreApi>(core: &C) {
 }
 
 /// The long and short names of the MISSING placeholder of a machine type whose module is not there.
-const MISSING_LONG: [u8; MACH_TEXT] = *b"MISSING\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-const MISSING_SHORT: [u8; MACH_TEXT] = *b"MISS\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+const MISSING_LONG: [u8; MACH_TEXT] = *b"MISSING                 ";
+const MISSING_SHORT: [u8; MACH_TEXT] = *b"MISS                    ";
 
 /// Give back the machine rows `owner` filled (hidden, then reset to a gap row, or to the MISSING placeholder during a reload), then its pages, then its parameters.
 /// Machine row `k` of module-owned rows, hidden and reset: a MISSING placeholder during a reload (`missing`), else a gap row as a plain unload leaves it.
