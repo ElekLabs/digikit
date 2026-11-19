@@ -1391,7 +1391,9 @@ static void settings_release(void)
         if (g_set_open[k] && (!g_set[k] || !dk_ui_menu_is_open(g_set[k]))) {
             g_set_open[k] = 0;
             if (g_set[k])
-                dk_ui_menu_refresh(g_set[k]); /* the rows of the module are gone before the module can be unloaded */
+                dk_ui_menu_refresh(
+                    g_set
+                        [k]); /* the rows of the module are gone before the module can be unloaded */
             if (g_set_hold[k]) {
                 dkrt_menu_release(g_set_hold[k], 0);
                 g_set_hold[k] = 0;
@@ -1455,7 +1457,9 @@ static void panel_settings(void *ctx, int32_t row)
     }
     if (g_set[k]) {
         if (!g_set_hold[k]) {
-            g_set_hold[k] = (uintptr_t)mod.menu; /* before the module adds its rows: the module stays loaded while the page is open */
+            g_set_hold[k] =
+                (uintptr_t)mod
+                    .menu; /* before the module adds its rows: the module stays loaded while the page is open */
             dkrt_menu_built(g_set_hold[k], 0);
         }
         g_set_open[k] = 1;

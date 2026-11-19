@@ -995,12 +995,24 @@ fn an_open_settings_page_holds_its_module_and_leaving_it_gives_the_hold_back() {
     press_right(0);
     choose_panel_row(1);
     assert_eq!(render(), ["HELD 0", "RELEASE"]);
-    assert_eq!(unsafe { fk_menu_held() }, 1, "the open page holds the module");
+    assert_eq!(
+        unsafe { fk_menu_held() },
+        1,
+        "the open page holds the module"
+    );
     unsafe { fk_settings_poll() };
-    assert_eq!(unsafe { fk_menu_held() }, 1, "polling an open page keeps the hold and takes no second one");
+    assert_eq!(
+        unsafe { fk_menu_held() },
+        1,
+        "polling an open page keeps the hold and takes no second one"
+    );
     press_no(); // the page is left
     unsafe { fk_settings_poll() };
-    assert_eq!(unsafe { fk_menu_held() }, 0, "the left page gave the hold back");
+    assert_eq!(
+        unsafe { fk_menu_held() },
+        0,
+        "the left page gave the hold back"
+    );
     unsafe { fk_settings_poll() };
     assert_eq!(unsafe { fk_menu_held() }, 0, "once");
     press_right(0);
@@ -1019,11 +1031,19 @@ fn the_release_before_an_apply_gives_the_hold_back_too() {
     press_right(0);
     choose_panel_row(1);
     press_no();
-    assert_eq!(unsafe { fk_menu_held() }, 1, "the page is left but not released yet");
+    assert_eq!(
+        unsafe { fk_menu_held() },
+        1,
+        "the page is left but not released yet"
+    );
     press_yes(0);
     press_no();
     answer_confirm(true);
-    assert_eq!(unsafe { fk_menu_held() }, 0, "the batch that unloads the module finds no hold");
+    assert_eq!(
+        unsafe { fk_menu_held() },
+        0,
+        "the batch that unloads the module finds no hold"
+    );
     poll_until_idle();
 }
 
