@@ -399,7 +399,7 @@ The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `table_off` and
 The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (7206 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
 machine needs about 10 records, the other modules 3 to 7. The collection is refused with `E_DECL_ID` (-27: an index outside the keys table), `E_DECL_USES` (-28: more rows than `[uses]` says) or `E_DECL_FULL` (-74: more calls than the limits allow). When `init` returns `DK_OK`:
 
-1. Check the collection (device limits, `[uses]`, the keys in the header, FX ids of modules already loaded: a duplicate is `E_FX_ID_DUP`), lower it to records and check the records with the `registry::check` rules.
+1. Check the collection (device limits, `[uses]`, the keys in the header; a repeated key or effect id is refused by the planner before the load: `E_PLAN_KEY`), lower it to records and check the records with the `registry::check` rules.
 2. Fill each voice row's 8 ranges and its latched mask from the collected params. The ranges are the knob params' min and max, a clamp
    guard the DSP voice code reads.
 3. Apply the records (`registry::apply`). FX pages need their FX row, which reserve already claimed.

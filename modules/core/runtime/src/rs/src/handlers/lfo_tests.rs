@@ -105,7 +105,7 @@ fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
 }
 
 #[test]
-fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
+fn an_id_twice_or_zero_and_a_file_that_does_not_fit_the_table_are_refused() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
@@ -115,8 +115,7 @@ fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
     unsafe {
         assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), OK);
         assert_eq!(registry::apply(1, a.as_ptr(), a.len() as u32, 0x1000), OK);
-        // another module with the same id is refused at the check, and what the first kept is unchanged
-        assert_eq!(registry::check(a.as_ptr(), a.len() as u32, 0, 1), E_TYPE_USED);
+        // another key is accepted (the same key twice is the planner's refusal, `E_PLAN_KEY`, before any check runs)
         let other = section(&[(0x200, 5)]);
         assert_eq!(registry::check(other.as_ptr(), other.len() as u32, 0, 1), OK);
         // an id twice in one file, and the id 0
@@ -124,10 +123,10 @@ fn a_second_owner_of_a_shape_id_and_an_id_twice_or_zero_are_refused() {
         assert_eq!(registry::check(twice.as_ptr(), twice.len() as u32, 0, 1), E_TYPE_USED);
         let zero = section(&[(0, 0)]);
         assert_eq!(registry::check(zero.as_ptr(), zero.len() as u32, 0, 1), E_FORMAT);
-        // a table that cannot take the file's shapes: the first number is kept, so all eight do not fit
+        // a table that cannot take the file's shapes: one is kept, so all eight do not fit
         let many: Vec<(u32, i16)> = keys[..MAX_SHAPES].iter().map(|k| (*k, 0)).collect();
         let big = section(&many);
-        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0, 1), E_TYPE_USED);
+        assert_eq!(registry::check(big.as_ptr(), big.len() as u32, 0, 1), E_TABLE_FULL);
         registry::remove(1);
     }
     assert_eq!(used(), 0);

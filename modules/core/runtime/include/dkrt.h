@@ -156,7 +156,7 @@
 #define DKRT_E_TYPE_IN_USE (-26)         /* reserved (hot reload is archived); never returned */
 #define DKRT_E_DECL_ID (-27)             /* a builder call names a machine or effect id that the keys table of the header lacks */
 #define DKRT_E_DECL_USES (-28)           /* init declared more machine, param or page rows than the [uses] counts of the header say */
-#define DKRT_E_FX_ID_DUP (-29)           /* an effect id of the module is already loaded (or twice in the module) */
+#define DKRT_E_FX_ID_DUP (-29)           /* reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned */
 #define DKRT_E_NO_DSP (-30)              /* DSP code in the file, no DSP loader in the image */
 #define DKRT_E_DSP_FORMAT (-31)          /* the DSP section is malformed */
 #define DKRT_E_DSP_IMPORT (-32)          /* a DSP symbol is not exported by the image */

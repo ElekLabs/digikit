@@ -289,6 +289,20 @@ pub fn used() -> usize {
     n
 }
 
+/// Shapes that module record `owner - 1` keeps (0 when `owner` is 0: no live job runs).
+fn own_shapes(owner: u8) -> usize {
+    let t = unsafe { &*addr_of!(SHAPES) };
+    let mut n = 0;
+    let mut i = 0;
+    while owner != 0 && i < MAX_SHAPES {
+        if t[i].owner == owner {
+            n += 1;
+        }
+        i += 1;
+    }
+    n
+}
+
 /// The built-in triangle (the stock TRI function): the fallback of a number whose shape is not loaded. Full scale, 0 at phase 0.
 #[inline]
 pub fn tri(phase: u32) -> i32 {
@@ -499,24 +513,20 @@ impl<C: CoreApi> Service<C> for Lfo {
                 r
             }
         } else if step == check_step::ROWS {
-            // every key has a wave number, its number is free, and the table has room
+            // every key has a wave number, and the table has room (the shapes of the module being reloaded are given back before its new file loads). A number is never
+            // held by another module: `settle` gives one number to each key, and the planner refuses a repeated key.
             let mut r = OK;
             let mut add = 0;
             let at = core.boot_index();
             each(c.reg, |kind, b| {
                 if kind == KIND_LFO_SHAPE && r == OK {
-                    match slot(number_of(at, rd32(b))) {
-                        None => r = E_TABLE_FULL,
-                        Some(i) => {
-                            if (*addr_of!(SHAPES))[i].owner != 0 {
-                                r = E_TYPE_USED;
-                            }
-                        }
+                    if slot(number_of(at, rd32(b))).is_none() {
+                        r = E_TABLE_FULL;
                     }
                     add += 1;
                 }
             });
-            if r == OK && used() + add > MAX_SHAPES {
+            if r == OK && used() - own_shapes(core.live_op() as u8) + add > MAX_SHAPES {
                 r = E_TABLE_FULL;
             }
             // the WAVE rows must take the maximum (`sync_range`): the image has the registry's parameter table
@@ -539,9 +549,6 @@ impl<C: CoreApi> Service<C> for Lfo {
             None => return E_TABLE_FULL,
         };
         let t = &mut *addr_of_mut!(SHAPES);
-        if t[i].owner != 0 {
-            return E_TYPE_USED;
-        }
         let mut name = [0u8; NAME_LEN];
         name.copy_from_slice(core::slice::from_raw_parts(body.add(4), NAME_LEN));
         let mut samples = [0i16; SAMPLES];

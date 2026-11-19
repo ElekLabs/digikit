@@ -194,7 +194,7 @@ LOAD_STATUS: dict[int, tuple[str, str]] = {
     ),
     -29: (
         "E_FX_ID_DUP",
-        "an effect id of the module is already loaded (or twice in the module)",
+        "reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned",
     ),
     -30: ("E_NO_DSP", "DSP code in the file, no DSP loader in the image"),
     -31: ("E_DSP_FORMAT", "the DSP section is malformed"),

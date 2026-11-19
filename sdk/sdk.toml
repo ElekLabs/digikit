@@ -2014,7 +2014,7 @@ E_PAGE_FULL = { code = -25, text = "no free reserved page row (Digitone II)" }
 E_TYPE_IN_USE = { code = -26, text = "reserved (hot reload is archived); never returned" }
 E_DECL_ID = { code = -27, text = "a builder call names a machine or effect id that the keys table of the header lacks" }
 E_DECL_USES = { code = -28, text = "init declared more machine, param or page rows than the [uses] counts of the header say" }
-E_FX_ID_DUP = { code = -29, text = "an effect id of the module is already loaded (or twice in the module)" }
+E_FX_ID_DUP = { code = -29, text = "reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned" }
 E_DECL_FULL = { code = -74, text = "init made more builder calls than the record limit allows" }
 E_PLAN_KIND = { code = -75, text = "the boot plan refused the module: a record kind of its header table has no owning service" }
 E_PLAN_OWNER = { code = -76, text = "the boot plan refused the module: another module owns the kind, slot or hook site it takes" }

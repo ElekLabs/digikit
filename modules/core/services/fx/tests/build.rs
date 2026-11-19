@@ -118,7 +118,7 @@ fn an_effect_short_name_longer_than_its_tab_label_is_refused_not_cut() {
     let mut b = Box::new(Build::new());
     b.add_fx(0, c(b"Freq shift\0"), c(b"FSHF\0"));
     assert_eq!(b.err, E_FORMAT);
-    assert_eq!(check_commit(&b, &keys(&[FXID]), &[]), E_FORMAT);
+    assert_eq!(check_commit(&b, &keys(&[FXID])), E_FORMAT);
     // the page's tab label too, and an effect has one page
     let mut b = Box::new(Build::new());
     let f = b.add_fx(0, c(b"A\0"), c(b"A\0"));
@@ -131,13 +131,13 @@ fn an_effect_short_name_longer_than_its_tab_label_is_refused_not_cut() {
 }
 
 #[test]
-fn commit_refuses_an_unknown_id_an_id_another_loaded_module_has_and_an_id_twice() {
+fn commit_refuses_an_effect_index_the_keys_table_lacks() {
     let f = effect(0, None);
     assert_eq!(f.err, 0);
-    assert_eq!(check_commit(&f, &keys(&[FXID]), &[]), OK);
-    assert_eq!(check_commit(&f, &keys(&[]), &[]), E_DECL_ID);
-    assert_eq!(check_commit(&f, &keys(&[FXID]), &[7, FXID]), E_FX_ID_DUP);
-    assert_eq!(check_commit(&f, &keys(&[FXID, FXID]), &[]), E_FX_ID_DUP);
+    assert_eq!(check_commit(&f, &keys(&[FXID])), OK);
+    assert_eq!(check_commit(&f, &keys(&[])), E_DECL_ID);
+    // an effect id that is twice in the file or in another module is the planner's refusal (E_PLAN_KEY), not the commit's
+    assert_eq!(check_commit(&f, &keys(&[FXID, FXID])), OK);
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn collect_effect(core: &FakeCore, rec: usize) {
 }
 
 #[test]
-fn the_commit_measures_then_writes_declares_the_effects_row_and_remembers_the_ids_until_removed() {
+fn the_commit_measures_then_writes_and_declares_the_effects_row() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
     collect_effect(&core, REC);
@@ -256,30 +256,6 @@ fn the_commit_measures_then_writes_declares_the_effects_row_and_remembers_the_id
     assert_eq!(
         (d.fx_flags[1], f32::from_bits(d.fx_par[1][0])),
         (0b101, 0.5)
-    );
-    // the id is remembered: the same id in another module is refused, until this module is removed
-    collect_effect(&core, REC + 1);
-    assert_eq!(
-        commit(
-            &core,
-            REC + 1,
-            commit_phase::PREPARE,
-            &k,
-            &mut RecordSink::measure()
-        ),
-        E_FX_ID_DUP
-    );
-    unsafe { <Fx as Service<FakeCore>>::remove(&core, REC as u8 + 1) };
-    collect_effect(&core, REC + 1);
-    assert_eq!(
-        commit(
-            &core,
-            REC + 1,
-            commit_phase::PREPARE,
-            &k,
-            &mut RecordSink::measure()
-        ),
-        OK
     );
     unsafe { build::end() };
 }

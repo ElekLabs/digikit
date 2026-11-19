@@ -235,7 +235,7 @@ A module that emits records of a generic kind (a kind a service owns that has no
  init(ctx)      builder calls append to the Collect block; no firmware row is written
     |  non-zero result: E_INIT, or E_IMPORT when an absent provider answered DK_E_MISSING
     v
- commit         check ([uses], keys, duplicate effect id, free rows)  E_DECL_ID, E_DECL_USES, E_DECL_FULL, E_FX_ID_DUP, E_PARAM_FULL ...
+ commit         check ([uses], keys, free rows)  E_DECL_ID, E_DECL_USES, E_DECL_FULL, E_PARAM_FULL ...
                 lower to records, check records, voice ranges and latch mask
                 apply: firmware rows are written here; the record block stays in the arena
     |  any failure: undo (below)

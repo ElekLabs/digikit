@@ -241,8 +241,6 @@ impl Build {
 
 static mut BUILD: Build = Build::new();
 static mut GATE: Gate = Gate::new();
-/// The effect ids of the header table of each loaded module record (0: none).
-static mut IDS: [[u32; MAX_PA]; MAX_MODULES] = [[0; MAX_PA]; MAX_MODULES];
 
 fn gate() -> &'static mut Gate {
     unsafe { &mut *addr_of_mut!(GATE) }
@@ -269,11 +267,8 @@ pub unsafe fn end() {
     gate().end();
 }
 
-/// Module record `rec` goes away: forget its effect ids and close the collection.
-pub unsafe fn release(rec: usize) {
-    if rec < MAX_MODULES {
-        (*addr_of_mut!(IDS))[rec] = [0; MAX_PA];
-    }
+/// Module record `rec` goes away: close the collection.
+pub unsafe fn release(_rec: usize) {
     end();
 }
 
@@ -456,40 +451,9 @@ pub fn fx_defaults(b: &Build, f: usize) -> [u32; 8] {
 
 // ---- the commit checks ---------------------------------------------------------------------------------------------------------
 
-fn contains(a: &[u32], v: u32) -> bool {
-    let mut i = 0;
-    while i < a.len() {
-        if a[i] == v {
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
-
-/// The effect ids of every loaded module but `rec` (0 marks no id: ids are 1 to 0xffff), for the duplicate check; their count.
-unsafe fn loaded_ids(rec: usize, out: &mut [u32; MAX_MODULES * MAX_PA]) -> usize {
-    let mut n = 0;
-    let mut r = 0;
-    while r < MAX_MODULES {
-        if r != rec {
-            let mut i = 0;
-            while i < MAX_PA {
-                let v = (*addr_of!(IDS))[r][i];
-                if v != 0 {
-                    out[n] = v;
-                    n += 1;
-                }
-                i += 1;
-            }
-        }
-        r += 1;
-    }
-    n
-}
-
-/// The checks of 6.3 that need only the collection, the header's keys table and the effect ids of the other loaded modules. Returns OK or the refusal.
-pub fn check_commit(b: &Build, keys: &KeysCopy, loaded: &[u32]) -> i32 {
+/// The checks of 6.3 that need only the collection and the header's keys table. Returns OK or the refusal. An effect id that is twice in the file or in another loaded module
+/// is the planner's refusal (`E_PLAN_KEY`, at the boot and at a live load or reload), not this check's.
+pub fn check_commit(b: &Build, keys: &KeysCopy) -> i32 {
     if b.err != 0 {
         return b.err;
     }
@@ -498,14 +462,6 @@ pub fn check_commit(b: &Build, keys: &KeysCopy, loaded: &[u32]) -> i32 {
     while i < b.nf {
         if b.fxs[i].index as usize >= keys.nf {
             return E_DECL_ID;
-        }
-        i += 1;
-    }
-    // an effect id is not twice in this module, and not in a module that is loaded
-    i = 0;
-    while i < keys.nf {
-        if contains(&keys.fk[..i], keys.fk[i]) || contains(loaded, keys.fk[i]) {
-            return E_FX_ID_DUP;
         }
         i += 1;
     }
@@ -533,9 +489,7 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
         if b.is_empty() {
             return OK;
         }
-        let mut loaded = [0u32; MAX_MODULES * MAX_PA];
-        let n = loaded_ids(rec, &mut loaded);
-        let r = check_commit(b, c.keys, &loaded[..n]);
+        let r = check_commit(b, c.keys);
         if r != OK {
             return r;
         }
@@ -568,14 +522,6 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
             }
             f += 1;
         }
-    }
-    // the ids of this module are loaded from now on
-    let ids = &mut (*addr_of_mut!(IDS))[rec];
-    *ids = [0; MAX_PA];
-    let mut i = 0;
-    while i < c.keys.nf && i < MAX_PA {
-        ids[i] = c.keys.fk[i];
-        i += 1;
     }
     end();
     OK

@@ -29,7 +29,6 @@ const COMMIT = 'modules/core/runtime/tests/capacity/commit.device.test.ts';
 const NEEDS = 'modules/core/apps/digikit-menu/tests/needs.device.test.ts';
 const SAFE = 'modules/core/runtime/tests/safe-mode.device.test.ts';
 const COLLECT = 'modules/core/runtime/src/rs/src/collect/tests.rs';
-const FX_BUILD = 'modules/core/services/fx/tests/build.rs';
 const MACHINES_BUILD = 'modules/core/services/machines/tests/build.rs';
 const CAP_RS = 'modules/core/runtime/sdk/src/capacity/tests.rs';
 const STORE_RS = 'modules/core/runtime/sdk/src/store/tests.rs';
@@ -73,7 +72,7 @@ export const ROWS: Record<string, Row> = {
   E_TYPE_IN_USE: { kind: 'reserved', reason: 'hot reload is archived; never returned' },
   E_DECL_ID: { fail: { file: COMMIT, test: 'a machine index that the keys table lacks is E_DECL_ID' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_DECL_USES: { fail: { file: COMMIT, test: 'more rows than [uses] is E_DECL_USES' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
-  E_FX_ID_DUP: { kind: 'host', reason: 'the boot plan refuses a repeated effect id first (E_PLAN_KEY); the commit check stays until a run-time load runs the planner (E5)', covered: [{ file: FX_BUILD, test: 'commit_refuses_an_unknown_id_an_id_another_loaded_module_has_and_an_id_twice' }] },
+  E_FX_ID_DUP: { kind: 'reserved', reason: 'the planner refuses a repeated effect id (E_PLAN_KEY) at the boot and at a live load or reload; never returned' },
   E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: MACHINES_BUILD, test: 'E_DECL_FULL' }] },
   E_PLAN_KIND: { fail: mine('keys for a kind nobody owns are refused'), pass: loads },
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },
