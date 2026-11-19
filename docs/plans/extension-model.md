@@ -987,7 +987,7 @@ runtime-and-services.md.
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | done: PR #623 (device: reload test on DT2 and DN2 incl. PCM swap check and soak; named subset 35 halves, gate-smoke, gate-pins) |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
-| 7 | E5c-1 live job: load, unload and reload (runtime, protocol, clients) | E5 | live test (list in E5c), subset | active: branch e5c/live-job (host checks; the device tests are written, not run) |
+| 7 | E5c-1 live job: load, unload and reload (runtime, protocol, clients) | E5 | live test (list in E5c), subset | done: PR (device: live, shot-live, reload, C:loading subset, gate-smoke, gate-pins on DT2 and DN2) |
 | 7 | E5c-2 MODULES applies live (menu) | E5c-1 | menu device test, subset | todo |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |
