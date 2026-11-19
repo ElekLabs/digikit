@@ -14,7 +14,7 @@
  *
  * Interface for the runtime (C ABI, no struct results):
  *   int dl_send(u32 dst_l2, const void *buf, u32 len);   0 started; -1 busy; -2 bad destination or size
- *   int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len);   the same into window `win` (1: the voices registry, 2: the effect rows of core/fx),
+ *   int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len);   the same into window `win` (1: the voices registry, 2: the effect rows of core/fx, 3: the stats control words, only the runtime sends them),
  *       the destination in words from the start of the window; the DSP checks it against the window's size (status 3)
  *   int dl_poll(DlStatus *st);                           the state (DL_IDLE, DL_BUSY, DL_DONE, DL_ERROR), and *st filled
  *   int dl_diag(u32 *out, u32 n);                        the DSP's diagnostic words of the last block (layout: README.md and
@@ -177,7 +177,7 @@ int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len)
     u32 st = l->state;
     if (st == DL_BUSY || st == DL_START || l->ending)
         return -1;
-    if (win == 0u || win > 2u || (len & 3u) || len == 0u || dst_word >= DL_AREA_MAX_WORDS ||
+    if (win == 0u || win > 3u || (len & 3u) || len == 0u || dst_word >= DL_AREA_MAX_WORDS ||
         buf == 0)
         return -2;
     l->win = win;

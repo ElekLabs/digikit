@@ -85,7 +85,7 @@ async function expectDspStats(rt: TestRuntime): Promise<void> {
   const again = await sweepAfter(0, 'sweep after the clear');
   expect(again.blocks, 'the counts start again from 0').toBeLessThan(second.blocks);
   expect(again.blocks).toBeLessThan(BLOCKS_PER_S);
-  expect(again.rows[MACHINE_ROW]!.calls).toBeLessThanOrEqual(again.blocks);
+  expect(again.rows[MACHINE_ROW]!.calls, 'rows of one sweep are up to 50 blocks apart').toBeLessThanOrEqual(again.blocks + 50);
   await dk.profileDsp('stop');
   await session.expectNoFault('DSP stats');
 }

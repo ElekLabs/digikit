@@ -493,7 +493,7 @@ def test_window_transfers_carry_the_window_and_refuse_bad_arguments(machine, bui
     assert (w[1] & 0x1FFFF, (w[1] >> 17) & 0xFF, (w[1] >> 25) & 1) == (5, 2, 1)
     bad = [
         [0, 0, src, 8],  # window 0 is dl_send's
-        [3, 0, src, 8],  # no window 3
+        [4, 0, src, 8],  # no window 4 (3 is the stats control)
         [1, 0, src, 0],
         [1, 0, src, 6],
         [1, 0x20000, src, 4],
