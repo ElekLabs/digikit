@@ -92,7 +92,7 @@ readonly = [2, 4, 8]
 # `track_channels[n]` is the factory MIDI channel (1-16) of track n+1 (SETTINGS > MIDI CONFIG > CHANNELS); a user can change it, so a runner reads or sets it.
 # The device also needs INPUT FROM = USB (or MIDI+USB), RECEIVE NOTES on and RECEIVE CC/NRPN on (SETTINGS > MIDI CONFIG > PORT CONFIG); the menu is the only place to read them.
 # A parameter has `cc` (7-bit, value 0-127) and `nrpn = [msb, lsb]` (14-bit).
-# DT2: audio tracks 1-8 (tracks 9-16 are MIDI tracks and take no audio parameters). The manual lists `filter_env_depth` and an "Env. Delay" with the same NRPN 1/23 (a manual error); CC 77 is unambiguous.
+# DT2 has 16 tracks, each audio or MIDI. The manual (section 8.4) states the default channels 1-8 only for tracks 1-8, so only those are listed; a runner reads or sets the channel of a track above 8 in SETTINGS > MIDI CONFIG > CHANNELS. The manual lists `filter_env_depth` and an "Env. Delay" with the same NRPN 1/23 (a manual error); CC 77 is unambiguous.
 [midi]
 track_channels = [1, 2, 3, 4, 5, 6, 7, 8]
 

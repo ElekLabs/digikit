@@ -1,0 +1,6 @@
+# The case of this module in the calibration profile "modules" (devices/calibration/profiles/modules.toml, docs/INSTRUMENTATION.md "Calibration runs").
+schema = "dk.calcase/1"
+id = "bd"
+module = "fadedlimes/bd"
+steps = "play-module-machine"
+args = { machine = "fadedlimes/bd" }
