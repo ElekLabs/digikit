@@ -21,7 +21,7 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  *
  * Test 1 (both devices, code-only modules, a boot with the debug module alone):
  * - (e) `test/sine` is on the card but the machines service is not loaded (no module of the boot needed it): `LOAD` ends with `E_MISSING`, nothing is loaded and nothing is counted.
- * - (a) `test/cf-demo` (needs no service) is on the card, not in the boot selection: `LOAD` loads it (`wb transfer load` the first time), LOADS says ACTIVE at a new selection index with its file name,
+ * - (a) `test/c-demo` (needs no service) is on the card, not in the boot selection: `LOAD` loads it (`wb transfer load` the first time), LOADS says ACTIVE at a new selection index with its file name,
  *   MODULES lists it, the `reloads` counter went up. A second `LOAD` of the same path is `E_LOADED` at the queue.
  * - `UNLOAD` takes it down (`wb transfer unload`): not in MODULES, LOADS says UNLOADED at the same index, its file is still on the card. `LOAD` again gives the same index and ACTIVE.
  *
@@ -36,9 +36,9 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  *
  * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof"). The sample-pool case is in the tests of the module that uses the pool (DT2).
  */
-/** A module that needs no service and builds no menu (code, data and bss; nothing calls it): the code-only case needs no service of the boot. */
-const SHAPE_PATH = 'modules/cf-demo.dkm';
-const SHAPE_ID = 'test/cf-demo';
+/** A module that needs no service and builds no menu (`init` logs one line; no builder call, no menu, no DSP part): the code-only case needs no service of the boot. */
+const SHAPE_PATH = 'modules/c-demo.dkm';
+const SHAPE_ID = 'test/c-demo';
 const SINE_PATH = 'modules/sine.dkm';
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 const E_MISSING = loadCode('E_MISSING');

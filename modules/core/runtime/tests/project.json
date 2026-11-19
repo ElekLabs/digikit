@@ -19,7 +19,7 @@
         "files": ["live.device.test.ts"],
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],
-        "modules": ["digikit/debug", "test/cf-demo", "test/sine", "core/services/machines"],
+        "modules": ["digikit/debug", "test/c-demo", "test/sine", "core/services/machines"],
         "sources": [
           "packages/dk-session/src/dkupload-core.ts",
           "packages/dk-session/src/gen_proto.ts",
