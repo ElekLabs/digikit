@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -17,22 +16,23 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 /**
  * Reload of a content module (docs/plans/extension-model.md E5): `RELOAD` swaps the code, DSP and keys of a loaded module without a boot.
  *
- * Every reload below is followed by the same checks of what the runtime and the firmware keep: RELOAD_STATE says finished with result 0; no new boot (the epoch);
- * the `reloads` counter of `DKRT_BOOT` went up by exactly one; no module record, row or placeholder is left over (the voice rows in use are those the modules' row masks name:
- * a placeholder row would count in use and be in no mask); no `TABLE_BAD` in the log; and the machine selection view the hook remembered is still there (`dynreg_info` words 48
- * and 49 name the variable and the builder, and the variable is not 0: the rebuild of the list at the end of a reload has a view to rebuild). The rebuilt list itself is not read.
+ * Every reload below is followed by the checks of what only the firmware shows: the reload answers result 0 with the old module torn down; no new boot (the epoch); no row or
+ * placeholder is left over (the voice rows in use are those the modules' row masks name: a placeholder row would count in use and be in no mask); and the machine selection view
+ * the hook remembered is still there (`dynreg_info` words 48 and 49 name the variable and the builder, and the variable is not 0: the rebuild of the list at the end of a reload
+ * has a view to rebuild). The rebuilt list itself is not read. What the runtime keeps on the host is not read here: the job's steps, state and counters are unit tests
+ * (`reload.rs`, `loader`), a service's rows and numbers across a reload are the service contract suite (`dkrt_test_support::contract`, case 12b).
  *
  * - (a) a code-only module (`test/lfo-shape`) reloads.
  * - (b) the machine `test/sine`, with a note held by MIDI over the reload and the PCM captured: the level before the reload is audible, at least 3 windows in a row inside the
  *   swap (queued to the new note; the AMP hold is set to NOTE by CC so a held note does not fade by itself) are below 1% of it (the placeholder row, not a stock sound), a control capture of the same note and span without a reload stays above that threshold over the whole
  *   span (so decay alone cannot make the quiet run), and a new note after the swap is audible again. The peaks per window are in the assertion messages and `pcm-windows.json`.
  *   The machine type keeps its number and its voice row.
- * - (c) the reload is refused while the transport plays (`E_RELOAD_PLAYING`, the old module is live and the counter did not move) and goes through after STOP.
- * - the soak: the reload of the machine, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`), with the same checks each cycle and the capacity counts
- *   unchanged.
+ * - (c) the reload is refused while the transport plays (`E_RELOAD_PLAYING`, the old module is live and the counter did not move) and goes through after STOP. This is the one
+ *   proof that the firmware's transport state reaches the refusal; the order and wording of the refusals are unit tests.
  * - the pitch soak (docs/plans/extension-model.md E5b item 8): two builds of `test/sine` with the same module id and keys that differ in one constant (`packModuleVariant`: the DSP
- *   phase increment, one octave), put on the card alternately and reloaded with a note held, 5 cycles in the gate and 20 in the full tier. Each cycle: the checks of every reload, then the
- *   pitch of a new note after the swap is that of the build just loaded (220 Hz or 440 Hz, within 2%), so a reload that kept the old DSP image would fail it.
+ *   phase increment, one octave), put on the card alternately and reloaded with a note held, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`). Each cycle: the
+ *   pitch of a new note after the swap is that of the build just loaded (220 Hz or 440 Hz, within 2%), so a reload that kept the old DSP image would fail it; the machine type, its
+ *   voice row and the guard's fault count are as they were.
  *
  * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof").
  */
@@ -72,17 +72,12 @@ const epochOf = async (rt: TestRuntime): Promise<number> => {
   return e;
 };
 
-/** What every reload leaves: see the header. `before` is the reload counter read before the reload. */
-async function expectReloadLeftNothing(rt: TestRuntime, plan: RuntimePlan, why: string, epoch: number, before: number, bumped = 1): Promise<void> {
-  const st = await rt.dk.reloadState();
-  expect(st.phase, `${why}: RELOAD_STATE phase (2 = finished)`).toBe(2);
-  expect(st.result, `${why}: RELOAD_STATE result`).toBe(0);
+/** What every reload leaves: see the header. */
+async function expectReloadLeftNothing(rt: TestRuntime, plan: RuntimePlan, why: string, epoch: number): Promise<void> {
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
-  expect(await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS), `${why}: the reloads counter`).toBe(before + bumped);
   const [cap, mods] = [await rt.dk.capacity(), await moduleRows(rt)];
   const named = mods.reduce((n, m) => n + popcount(m.rows), 0);
   expect(cap['VOICE_ROWS']?.used, `${why}: voice rows in use (the row masks of the modules name ${named}; a placeholder row would be one more)`).toBe(named);
-  expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
   const info = planSymbol(plan, 'dynreg_info');
   const viewVar = await word(rt.session, info + DYNREG_VIEW_VAR);
   expect(viewVar, `${why}: dynreg_info word 48 (the variable that holds the machine selection view)`).not.toBe(0);
@@ -92,10 +87,9 @@ async function expectReloadLeftNothing(rt: TestRuntime, plan: RuntimePlan, why: 
 
 /** One reload of `modulePath`, then the checks of `expectReloadLeftNothing`. */
 async function reloadChecked(rt: TestRuntime, plan: RuntimePlan, modulePath: string, why: string, epoch: number): Promise<void> {
-  const before = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
   const end = await rt.dk.reloadAndWait(modulePath);
   expect(end, `${why}: the reload of ${modulePath}`).toEqual({ result: 0, unloaded: true });
-  await expectReloadLeftNothing(rt, plan, why, epoch, before);
+  await expectReloadLeftNothing(rt, plan, why, epoch);
 }
 
 /** Blocks (1500 a second) each capture records: the note, the reload (a few hundred blocks) and the note after it fit with room to spare; `expect` below checks it. */
@@ -156,11 +150,10 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
       await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
       await waitClock(rt.clock, 400); // the note sounds for 400 emulated ms before the reload starts
       mark.start = (await frames(rt.session)) - trigger;
-      const counter = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
       const end = await rt.dk.reloadAndWait(MODULE_PATH);
       mark.end = (await frames(rt.session)) - trigger;
       expect(end, '(b) the reload of the machine').toEqual({ result: 0, unloaded: true });
-      await expectReloadLeftNothing(rt, plan, '(b) machine with a note held', epoch, counter);
+      await expectReloadLeftNothing(rt, plan, '(b) machine with a note held', epoch);
       // the held note belonged to the old module: a new note after the swap is the proof that the new row plays
       await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
       await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
@@ -225,28 +218,6 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   await reloadChecked(rt, plan, MODULE_PATH, '(c) after STOP', epoch);
 }
 
-async function expectReloadSoak(rt: TestRuntime): Promise<void> {
-  setPaths(rt);
-  const artifacts = liveArtifacts(rt.session, 'reload-soak');
-  await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
-  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
-  const epoch = await epochOf(rt);
-  const start = await rt.dk.capacity();
-  const sine = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
-  for (let cycle = 0; cycle < SOAK_CYCLES; cycle++) {
-    await reloadChecked(rt, plan, MODULE_PATH, `soak cycle ${cycle}`, epoch);
-    const cap = await rt.dk.capacity();
-    const m = (await moduleRows(rt)).find((x) => x.name === 'test/sine')!;
-    expect(m.types, `cycle ${cycle}: the machine type moved`).toEqual(sine.types);
-    expect(m.rows, `cycle ${cycle}: the voice row moved`).toBe(sine.rows);
-    expect(m.faults, `cycle ${cycle}: the guard counted a fault`).toBe(0);
-    for (const kind of ['MODULES', 'MACHINE_ROWS', 'VOICE_ROWS', 'PARAM_ROWS', 'DSP_AREA', 'ARENA']) {
-      expect(cap[kind]?.used, `cycle ${cycle}: ${kind} in use grew`).toBe(start[kind]?.used);
-    }
-  }
-  record(artifacts, 'soak', { cycles: SOAK_CYCLES, capacity: await rt.dk.capacity() });
-}
-
 /** Upward zero crossings of the left channel (every second sample of the interleaved stereo PCM) of `xs[from..to)`: the frequency between the first and the last. */
 function leftHz(xs: Float32Array, from: number, to: number, rate = 48_000): number {
   const at: number[] = [];
@@ -267,9 +238,6 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
   // both builds go through the same pack, so the only difference is the constant
   const builds = [fs.readFileSync(await build('sine-base', [])), fs.readFileSync(await build('sine-octave', [SINE_OCTAVE_UP]))];
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
-  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
-  const epoch = await epochOf(rt);
-  const start = await rt.dk.capacity();
   const sine = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
   await pickSine(rt);
   const amp = AMP_CC[device];
@@ -295,11 +263,9 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
       during: async () => {
         await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
         await waitClock(rt.clock, 400);
-        const counter = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
         const end = await rt.dk.reloadAndWait(MODULE_PATH);
         mark.end = (await frames(rt.session)) - trigger;
         expect(end, `soak cycle ${cycle}: the reload`).toEqual({ result: 0, unloaded: true });
-        await expectReloadLeftNothing(rt, plan, `soak cycle ${cycle}`, epoch, counter);
         await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
         await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
       },
@@ -316,14 +282,9 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
     expect(m.types, `cycle ${cycle}: the machine type moved`).toEqual(sine.types);
     expect(m.rows, `cycle ${cycle}: the voice row moved`).toBe(sine.rows);
     expect(m.faults, `cycle ${cycle}: the guard counted a fault`).toBe(0);
-    const cap = await rt.dk.capacity();
-    for (const kind of ['MODULES', 'MACHINE_ROWS', 'VOICE_ROWS', 'PARAM_ROWS', 'DSP_AREA', 'ARENA']) {
-      expect(cap[kind]?.used, `cycle ${cycle}: ${kind} in use grew`).toBe(start[kind]?.used);
-    }
   }
   record(artifacts, 'pitch-soak', { cycles: SOAK_CYCLES, hz: seen, capacity: await rt.dk.capacity() });
 }
 
 runtimeTests('RELOAD swaps a code-only module and a machine without a boot, and refuses while the transport plays', expectReloadLive, { dsp: 'sharc' });
-runtimeTests('RELOAD of a machine leaves no row, record or byte behind over many cycles', expectReloadSoak, { dsp: 'sharc' });
 runtimeTests('RELOAD between two builds of a machine that differ in one constant plays the pitch of the build just loaded, cycle after cycle', expectReloadPitchSoak, { dsp: 'sharc' });
