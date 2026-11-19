@@ -285,8 +285,8 @@ again (`core/runtime:test-assembly`), `packages/dk-session/tests/live.test.ts`, 
 `DIGIKIT_TIER=full`, `E_MISSING` without the machines service, a sample-pool module loaded, bound, unloaded and loaded again: `modules/machines/shot/tests/shot-live-dt2.device.test.ts`, DT2).
 
 Device tests: `modules/core/runtime/tests/reload.device.test.ts` (reload of a code-only module, of a machine with a note held, the refusal while the transport plays, and the soak:
-5 cycles, 20 with `DIGIKIT_TIER=full`). Host tests: `pnpm nx:pilot run core/runtime:rust-tests` (the job over a scripted system, the loader's reload steps, the placeholder rows)
-and `core/runtime:test-assembly` (a real packed module reloaded twice), the service contract cases 9 to 11 (`cargo test -p dkrt-svc-machines --test contract`).
+5 cycles, 20 with `DIGIKIT_TIER=full`; and the pitch soak: two builds of `test/sine` that differ in the DSP phase increment, made by `packModuleVariant` in `tests/regression/runtime/module-variant.ts` from a temporary copy of the module directory, put on the card alternately and reloaded with a note held). `reload-fx.device.test.ts` does the same for an effect on the master route and a send effect (level, knob value, swap windows, send cell), `reload-project.device.test.ts` (DT2) saves a project with the machine, reloads it and loads the project. Host tests: `pnpm nx:pilot run core/runtime:rust-tests` (the job over a scripted system, the loader's reload steps, the placeholder rows)
+and `core/runtime:test-assembly` (a real packed module reloaded twice), the service contract cases 9 to 11 (`cargo test -p dkrt-svc-machines --test contract`; the fx service has its own reload case in `modules/core/services/fx/tests/contract.rs`).
 
 ## Inputs
 

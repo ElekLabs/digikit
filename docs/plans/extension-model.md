@@ -74,7 +74,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
 - ARCHITECTURE.md:198: menus are never freed and no module unloads.
 - The `dk:dev` swap (about 4 s) replaces module bytes inside the emulator and restores the screen (`tools/patchkit/pk_devreload.py`). It never
   runs the device unload path. Machine and fx modules still boot.
-- Duplicate checks that see the live set are per service: `E_FX_ID_DUP` (fx `build.rs:504-509`), `E_TYPE_USED` (lfo `records.rs:109-123`).
+- The planner is the one duplicate check of keys and effect ids (`E_PLAN_KEY`); the per-service checks (`E_FX_ID_DUP` in fx, the lfo number check with `E_TYPE_USED`) are gone (E5b).
   A duplicate machine key is not refused: it gets a fresh number and is not recorded (`assign.rs`, rule 4).
 - Machine and page rows are written with the raw `wr`/`rd` at absolute addresses (machines `records.rs:8`), which a host test cannot reach
   (machines `tests/records.rs:1-3`). Service state sits in statics outside `FakeCore.mem` (`DKRT_REG`, fx `IDS`, `DKRT_FXP_*`, lfo `SHAPES`).
@@ -298,7 +298,7 @@ No hand-built record bytes where a builder call exists.
 Service statics are reset by `module_begin` and `remove`; the suite takes the shared test lock.
 
 This is the "contract suites for `Service`" item of [test-architecture.md](test-architecture.md) T1 and the follow-up named in the 2026-11-17
-handovers. Key refusal is a planner test (E3), not a contract case. There is no `in_use` scan: the refusals of an unload are the menu check and `teardown_refusal` (E5c).
+handovers. Key refusal is a planner test (E3), not a contract case. There is no `in_use` scan: the refusals of an unload are the menu check (a menu object was built for the module) and `teardown_refusal` (E5c; no service refuses today).
 
 ### 3.6 Reload of content modules
 
@@ -310,8 +310,7 @@ Order:
    for the candidate against the live set minus the old module.
 2. **Keys check**: the new file's `KEYS` must contain every key of the old file that kit data can name. If not, refuse (this replaces an
    `in_use` scan for reload; a key the new file drops needs an unload and a load, E5c).
-3. **Refuse** while the transport plays or records, during card operations, in safe mode, when the module built its own menus (until
-   `core/ui` can tear down a module's menus, E5b), and for an fx module that has a published effect row (E5b).
+3. **Refuse** while the transport plays or records, during card operations, in safe mode, and when a menu object was built for the module (`dkrt_menu_built`, E5b: menus are never freed and keep pointers into the module).
 4. **Unload the old module**: stop its voices, wait for in-flight SysEx commands and the span clock, run `unload_rec`. `unload_rec` resumes
    after `E_BUSY` from the step that returned it. DSP code is freed after two confirmed blocks.
 5. **Placeholder window**: from unload to the new module's commit, a type number the kit names resolves to the MISSING placeholder row, so no
@@ -324,7 +323,7 @@ Order:
 9. `invariants::check` after unload and after load (exists).
 
 The planner check of step 1 is the only duplicate check on a run-time load, so E3 must not delete the per-service checks until E5 runs the
-planner against the live set (E3, E5 and E5b land in that order, the per-service checks go in E5b).
+planner against the live set (E3, E5 and E5b land in that order).
 
 ## 4. Code structure
 
@@ -503,7 +502,7 @@ for LFO shapes; for MACHINE and EFFECT it checks only that the kind has an owner
 
 What, as separate commits:
 1. `dkneeds` `Keys::first_shared_key(&self, other) -> Option<(kind, key)>` and `Keys::first_repeat(&self) -> Option<(kind, key)>` next to
-   `has_key` (`keys.rs:534`), with host tests. The planner and E5's live-set check use them. (The workbench fit check calls `pk_fit` for capacity only; the key check there is E5b item 4.)
+   `has_key` (`keys.rs:534`), with host tests. The planner and E5's live-set check use them. (The workbench key check is `pk_keys_check`, E5b item 4.)
 2. `plan.rs`: `keys_clash` keeps the owner check and uses the two functions for every kind (the `is_generic` condition goes; `is_generic`
    is deleted if nothing else uses it). `settle` hands the services the keys of the modules the plan accepted only (`settle_ctx`), so a module refused with `E_PLAN_KEY` takes no number. Expose `key_refusal(t, others) -> Option<Reason>` for E5. Plan tests: duplicate machine key, duplicate
    effect id, the same module twice, the same local id in two modules (accepted), a forced hash collision, a key repeated inside one table.
@@ -514,7 +513,7 @@ What, as separate commits:
 4. `role_ok` (`role.rs:256-271`): role 0 also refuses KINDS and SLOTS; unit cases next to the existing ones.
 5. LFO shape keys: `[[record]]` takes a local `id` string; patchkit puts `hash24(<module id>:<id>) << 8` (low byte 0) into KEYS and generates
    a per-module constant `DK_KEY_<ID>` (as `module_ids.h` gives machine ids) that `module.c` writes into the record body, so the key has one
-   source. The lfo service keeps `id != 0` and `E_TYPE_USED` until E5b. The fixture `lfo-shape-dup` is deleted (it only repeated shape id 7); the lfo
+   source. The lfo service keeps `id != 0`. The fixture `lfo-shape-dup` is deleted (it only repeated shape id 7); the lfo
    and refusal device tests make the second owner of a key by renaming a copy of the `lfo-shape` file.
 6. Trait (4.3), last and on its own: `fx_entry`, `guard_state`, `owned_ids` leave `Service`, `ServiceRow` and the thunks. Each service
    declares an export (`dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`, in `dks/src/rt.rs`): a plain `extern "C"` function with no core
@@ -523,9 +522,7 @@ What, as separate commits:
    (`E_NOT_FOUND`, 0, none). `SVC_ABI` changes once; every `.dks` and the runtime object rebuild (`objects-check`).
 7. One assembly case: two packed fixtures with the same machine key refused by the boot plan. Doc updates (service.rs and handlers.rs doc
    comments that name the three methods).
-8. The per-service duplicate checks (`E_FX_ID_DUP`, the lfo `E_TYPE_USED` path) stay until E5b; E5b deletes them with their refusal-table rows. At boot the plan now
-   refuses the repeated key first (`E_PLAN_KEY`), so the commit test of a repeated effect id expects `E_PLAN_KEY` and the `E_FX_ID_DUP` row of the refusal table is a host
-   row (the fx unit test of `check_commit`).
+8. At boot the plan refuses a repeated key first (`E_PLAN_KEY`). The per-service duplicate checks (`E_FX_ID_DUP`, the lfo number check) were deleted in E5b; `E_FX_ID_DUP` is a reserved code.
 
 Scan before landing (done, from the manifests of 57 modules, with the hash of `register.rs`): no two shipped modules or fixtures share a machine key or an
 effect id, and no module repeats a key. Two test paths relied on the old gap and changed: the commit test that repeats an effect id (now `E_PLAN_KEY`), and the
@@ -575,7 +572,7 @@ This is hot reload S1 (code-only modules) and S4 (machine and fx modules) of [di
 (3.6), scoped to day-to-day machine work: the module's code, DSP and keys change; its menus and its own effect routes do not. It starts
 after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6, 2.7) and moves
 DSP row state into the services (step 7). The two-block DSP wait is new work, done here. Menus, fx reload, the workbench key check and the
-cleanup of the old duplicate checks wait in E5b.
+cleanup of the old duplicate checks was E5b.
 
 Before E5 starts (about 2 hours, no code): map which code of the archive tag `digikit-hot-reload-v1` carries over to the R12-8 layout
 (`loader::unload`, `registry::in_use`, `refresh_view`, `CMD_UNLOAD`; findings 32 and 33 proved machine unload on the emulator).
@@ -591,7 +588,7 @@ What:
    are not judged again (their rows are in the service table, which the boot's judgment refuses as a second owner) and the capacity counts that the live
    modules own start at 0 (`live_caps`), because the plan counts every live module again. The checks of the new file run as a load runs them: `reload_check` sets `CoreApi::boot_index` to the module's selection index and numbers the file's keys first (`settle` over the live set with the file in the old slot; the old keys keep their numbers), because the services' DSP checks resolve a voice's key to its type by that index and the numbering; and `CoreApi::live_op` is the owner of the module being reloaded for the whole job, so the machines service leaves the module's own voice rows out of "used by another module" in `check_types` and counts them as takeable in `check_rows`. (Without this every reload of a machine with DSP was refused with `E_DSP_TYPE`.) Nothing is unloaded before both pass.
 3. Transport and state refusal: one function, in this order: safe mode; the firmware transport function returns non-zero (`cf.project.fn.transport_state`, declared in `devices/fw/project.toml`; `Platform::play_state`; a platform that cannot read it refuses);
-   card operations; the module built its own menus; then each service's `Service::teardown_refusal(core, owner)` (required, like `validate_records`; the fx service answers `E_RELOAD_ROUTED` for any module with a published effect row, because E5 has no fx teardown (route 0 is the master chain; E5b relaxes it), machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
+   card operations; the module built its own menus; then each service's `Service::teardown_refusal(core, owner)` (required, like `validate_records`; the fx service answered `E_RELOAD_ROUTED` for any module with a published effect row in E5, because E5 had no fx teardown (route 0 is the master chain); E5b built it and no service refuses now; machines and lfo never refuse, samples never refuses: whether a pool entry is in use is not cheap to know, a follow-up). Refusing while the machine selection view
    is open is not needed: the list rebuild (item 9) is unconditional.
 4. Fixed record index. A reload loads into the old record (`Slot::Module(rec)`), so owner ids (`rec + 1` in machine rows, DSP rows, menus,
    `sel_of_rec`) do not move.
@@ -695,26 +692,33 @@ Depends on: E3, E4, R12-8 merged. (E0b is done.)
 
 ### E5b Reload follow-ups (deferred from E5)
 
-What:
-1. `core/ui` menu owner count: record the owner of each menu at `dk_ui_menu_new`, export `dk_ui_owner_menus(owner)`; then allow reload of
-   modules that built menus (the refusal of E5 item 3 goes). Menu teardown stays later work.
-2. Open-view predicate spike: find the function that says which view is on top (neighbours of `cf.view.fn.view_controller_push` in
-   `devices/fw/view.toml`). Then skip the unconditional list rebuild when the selection view is not open.
-3. Fx placeholder for an absent effect id: what the FX page shows for a track that names an effect id with no row (one static read), then
-   allow fx reload while the effect is on a route, and add the fx reload device test.
-4. Workbench key check: a `pk_keys_check` wasm export next to `pk_fit` (`Keys::first_shared_key`, `first_repeat`, `first_missing_key`), called by
-   `fit.ts`, shown by `transfer-backend.ts` before the upload; one wasm test and one Vitest case.
-5a. The fx reload must leave the module's own effect rows out of the fx service's `dsp_check_rows` (`fx_owner`, as the machines service does for voice rows with `live_op`).
-5. Delete `E_FX_ID_DUP` and the lfo `E_TYPE_USED` path with their refusal-table rows, after the reload planner case of E5 is green.
-6. The 20-cycle soak and the full project round trip (save a project that uses the module, reload, load the project, same sound), if E5 did
-   not carry them.
+Status: built (branch e5b/fx-teardown). Host checks green; the device tests are written and not run (list in "Device proof" below). What was built:
+1. Menu owner count, as `dkrt_menu_built(code, data)` of the runtime (`abi.toml`): `core/ui` calls it from `dk_ui_menu_new` with the descriptor's `fill` and the descriptor, and the DIGIKIT menu calls it
+   when it builds the settings page of a module (with the module's `menu` function). The runtime counts the menu objects of each module record (`DKRT_MENU_OBJS`, zero when a module loads into the record; the module is
+   found by the address, as the poll owner is) and refuses an unload or a reload with `E_RELOAD_MENUS` while the count is not 0. A header `menu` entry alone no longer refuses; a module that called
+   `dk_ui_menu_new` itself, which E5 let through, now does. Menus are never freed, so such a module stays refused until the next boot (menu teardown stays later work; E5c-2 drops the cached settings page).
+2. Open-view predicate spike: not done. The list rebuild after a job stays unconditional.
+3. Effect teardown: the loader's `dsp_clear` (pc to free first: the master chain passes the signal dry, a send bus returns nothing) and `remove` (page, list, send cell, defaults) already were the teardown,
+   so `Fx::teardown_refusal` accepts and no service refuses any more (`E_RELOAD_ROUTED` keeps its code for a service that cannot give back the module's state). There is no DSP placeholder for an
+   effect: while the module is gone the row is free, the FX page of its row is empty (the state of a failed effect load, finding 61), and the route and the send amounts, which are settings keyed by
+   the module id, come back with the next load. The user's knob values stay in the kit's array: `fxpage::remove` parks the effect id, the live kit and the count of kit loads and initialisations,
+   and `apply` keeps the array values when the same effect returns to its row with the same kit and no kit loaded since; otherwise the record's defaults are seeded as at a boot. A kit saved while the
+   module is gone loses the effect's values (finding 61). The fx reload device test is `reload-fx.device.test.ts`.
+4. Workbench key check: `pk_keys_check` of `patchkit.wasm` (`keys_check_json` in `packages/patchkit/src/dkm.rs`) next to `pk_fit`, called by `keyWarnings` in `fit.ts`; the install in `dktransfer.ts` emits a `keys` event
+   before the upload for each rule a file breaks (a key twice, a key of another module on the card, a key of the version on the card that the new file lacks). It only warns. One wasm test (`dkneeds.wasm.test.ts`),
+   one Vitest case (`dktransfer.test.ts`), one Rust unit test.
+5a. `dsp_check_rows` of the fx service counts the rows of the module being reloaded (`CoreApi::live_op`) as free; the lfo ROWS check does the same for the shapes of the module being reloaded (a reload of a
+   shape module was refused with `E_TYPE_USED` because the old shapes were still in the table).
+5. `E_FX_ID_DUP` (now a reserved code, never returned) and the lfo number check with its `E_TYPE_USED` path are deleted, with the fx commit's remembered effect ids and the refusal-table row of `E_FX_ID_DUP`.
+   `E_TYPE_USED` stays for machines.
+6. The 20-cycle soak is the full-tier setting of the existing soaks. The project round trip is `reload-project.device.test.ts` (DT2): save a project with the machine, reload it, load the project, the same sound.
+7. Reload that needs a service that is not loaded: replaced by port file step 3 (slot fill); E5 and E5c refuse with `E_MISSING`. The installer's run-time hook writes of the first plan are not built.
+8. The soak's pitch switch: `tests/regression/runtime/module-variant.ts` packs two builds of `test/sine` that differ in one constant (the DSP phase increment, one octave; same module id and keys) from a copy of the module
+   directory (`patchkit pack --manifest`); the soak in `reload.device.test.ts` puts them on the card alternately, reloads with a note held and checks the pitch of the new note each cycle.
 
-7. Reload that needs a service that is not loaded (the "Reusable reload" rule says the reload loads it first): E5 refuses with `E_MISSING` (`plan::plan_live`). Loading it
-   at run time is the boot's provider stage run again: `discover::find` for the new file's unmet hard needs, a plan over the loaded providers, a free provider record, the
-   installer's hook and slot writes (firmware code is patched while the system runs, under one mask) and the provider's DSP part after the boot, then `settle`. About 8 h of
-   edits and host tests, and its own device proof (a hook installed at run time on both devices); reload never replaces a service.
-8. The soak's pitch switch: two builds of `test/sine` that differ in one constant (same module id and keys), reloaded alternately with a note held, each cycle checking the pitch;
-   E5's soak reloads the same file (rows, records, bytes and faults) and a build helper with a changed constant is still to be written.
+Device proof (not run; one gate on both devices, with the go of the owner): `core/runtime-tests:test-device--reload-fx` (DT2 and DN2: master-route level, knob value, swap windows, soak, send cell), `core/runtime-tests:test-device--reload`
+(the pitch soak is new), `core/runtime-tests:test-device--reload-project--dt2`, then `core/runtime-tests:test-device--live` and the subset `S:machines C:loading` with gate-smoke and gate-pins, because the image
+changed (the runtime object, `core/ui`, the DIGIKIT menu and the service files). Time: about 15 minutes for the three new files on both devices, the subset as in E5.
 
 Estimate: 1-2 days. Depends on: E5.
 
@@ -750,7 +754,7 @@ What:
    | Rule | load | unload | reload |
    | --- | --- | --- | --- |
    | safe mode, DSP retained, transport not stopped, upload open, card busy | yes | yes | yes |
-   | the module built menus (`E_RELOAD_MENUS`); `Service::teardown_refusal` (an fx on a route: `E_RELOAD_ROUTED`) | - | yes | yes |
+   | a menu object was built for the module (`E_RELOAD_MENUS`); `Service::teardown_refusal` (`E_RELOAD_ROUTED`; no service refuses today) | - | yes | yes |
    | file checks and the plan over the live set (`E_MISSING` for a service that is not loaded) | yes | - | yes |
    | same name, keys superset (`E_RELOAD_KEYS`) | - | - | yes |
 
@@ -991,7 +995,7 @@ runtime-and-services.md.
 | 4 | E4 contract suite | E3, `nx/dks-tests` | none | done: PR #610 (device: runtime-machines-tests machine-rows on DT2 and DN2) |
 | 5 | R12-8 merged | (roadmap) | (its own gate) | roadmap row R12-8 |
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | done: PR #623 (device: reload test on DT2 and DN2 incl. PCM swap check and soak; named subset 35 halves, gate-smoke, gate-pins) |
-| 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
+| 7 | E5b reload follow-ups | E5 | fx reload test, soak | built on branch e5b/fx-teardown; device tests written, not run |
 | 7 | E5c-1 live job: load, unload and reload (runtime, protocol, clients) | E5 | live test (list in E5c), subset | done: PR (device: live, shot-live, reload, C:loading subset, gate-smoke, gate-pins on DT2 and DN2) |
 | 7 | E5c-2 MODULES applies live (menu) | E5c-1 | menu device test, subset | active: branch e5c/menu-live (host tests and checks done; the device test is written, not run) |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
