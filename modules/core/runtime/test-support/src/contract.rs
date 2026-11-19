@@ -142,6 +142,25 @@ pub struct Fixture {
     pub bad_late: Option<Late>,
     /// The service's `validate_records` refuses some records (it is not `accepts_records!()`): case 1b then also checks that it refuses a fixture record whose body is one byte short.
     pub rules: bool,
+    /// The values the user turned on the module's rows, which the service keeps while the module is gone (`None`: the service keeps none). Case 13.
+    pub knobs: Option<Knobs>,
+}
+
+/// What case 13 needs to turn a module's stored value and read it back: the live kit, the value of the first row's first knob in it, and the firmware's kit load.
+/// The value is what the firmware keeps for the row (the effect's knob array in the kit); the service parks it when the module unloads for a reload and puts it back when
+/// the same module loads into the row again.
+#[derive(Clone, Copy)]
+pub struct Knobs {
+    /// Adds the live kit to the image after `Fixture::image` (the cell that holds the kit pointer).
+    pub image: fn(&mut FakeCore),
+    /// Makes kit `n` (0 or 1) the live kit: the two kits have other pointers.
+    pub kit: fn(&FakeCore, u32),
+    /// The stored value of the loaded module's first row in the live kit, and its write (the user's knob turn).
+    pub get: fn(&FakeCore) -> i32,
+    pub set: fn(&FakeCore, i32),
+    /// A kit load ran in the firmware (what the firmware's kit hook counts), and its undo for the next test.
+    pub kit_loaded: fn(&FakeCore),
+    pub kit_reset: fn(),
 }
 
 /// A refusal during apply and its reference.
@@ -421,9 +440,15 @@ const DSP_BASE: u32 = L2_BYTE_BASE + 0x1000;
 impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
     /// A core of the fixture's profile, and every owner's `remove` once (the service's statics start empty).
     pub fn new(f: &'f Fixture) -> Self {
+        Self::with_image(f, |_| {})
+    }
+
+    /// `new` with `extra` applied to the core after the fixture's image, before the service's first `remove` and settle.
+    pub fn with_image(f: &'f Fixture, extra: impl FnOnce(&mut FakeCore)) -> Self {
         let mut core = FakeCore::new();
         core.device = f.device;
         (f.image)(&mut core);
+        extra(&mut core);
         let l = Lifecycle {
             core,
             f,
@@ -888,6 +913,7 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     teardown_refusal_leaves_no_residue::<S>(f);
     a_reload_that_ends_leaves_no_placeholder::<S>(f);
     a_live_unload_and_load_keeps_the_numbers::<S>(f);
+    parked_values_belong_to_the_module_and_kit_that_left::<S>(f);
     // leave the statics empty for the next profile
     drop(Lifecycle::<S>::new(f));
 }
@@ -1302,6 +1328,74 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
         &l.snapshot(),
     );
     l.unload(0);
+}
+
+/// Case 13 (`Fixture::knobs`): the values the user turned survive a reload of the same module, as the firmware's kit array keeps them, and only that: they are the defaults
+/// when another kit is live at the load, when a kit load ran while the module was gone, when another module takes the row, and when a module of another name has the
+/// same keys. The user's value is `0x1234`, a word no fixture holds as a default. Docs: docs/plans/extension-model.md, E5b.
+fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f: &Fixture) {
+    let Some(k) = f.knobs else { return };
+    const TURNED: i32 = 0x1234;
+    const LEFT: i32 = 0x2222;
+    let mut l = Lifecycle::<S>::with_image(f, k.image);
+    let (name, turned) = (f.name, "the value the user turned");
+    (k.kit)(&l.core, 0);
+    assert_eq!(l.load(0, &f.a), OK, "{name}: module A is refused");
+    let default = (k.get)(&l.core);
+    assert_ne!(default, TURNED, "{name}: the fixture's default must not be {TURNED:#x}");
+    (k.set)(&l.core, TURNED);
+    // a reload: the job sets the live op, the teardown runs, the file loads again
+    l.core.live_op.set(1);
+    assert_eq!(
+        unsafe { S::teardown_refusal(&l.core, 1) },
+        OK,
+        "{name}: a loaded module is refused its teardown"
+    );
+    l.unload(0);
+    l.core.live_op.set(0);
+    assert_eq!(l.load(0, &f.a), OK, "{name}: the reload of A is refused");
+    assert_eq!((k.get)(&l.core), TURNED, "{name}: {turned} is lost in a reload of the same module");
+    // an unload and a load, with another kit live in between: the defaults
+    l.unload(0);
+    (k.kit)(&l.core, 1);
+    assert_eq!(l.load(0, &f.a), OK);
+    assert_eq!(
+        (k.get)(&l.core),
+        default,
+        "{name}: a kit the module never held gets the defaults"
+    );
+    // an unload, a kit load in the firmware, then the load: the defaults
+    (k.set)(&l.core, LEFT);
+    l.unload(0);
+    (k.kit_loaded)(&l.core);
+    assert_eq!(l.load(0, &f.a), OK);
+    assert_eq!(
+        (k.get)(&l.core),
+        default,
+        "{name}: a kit was loaded while the module was gone"
+    );
+    // another module takes the row: its defaults, not the left value
+    (k.set)(&l.core, LEFT);
+    l.unload(0);
+    assert_eq!(l.load(0, &f.b), OK);
+    assert_ne!((k.get)(&l.core), LEFT, "{name}: another module inherits the left value");
+    l.unload(0);
+    // the same keys in a module of another name: the defaults
+    (k.kit_reset)();
+    (k.kit)(&l.core, 0);
+    assert_eq!(l.load(0, &f.a), OK);
+    (k.set)(&l.core, TURNED);
+    l.unload(0);
+    let own = core::mem::replace(&mut l.core.name, String::from("other\0"));
+    assert_eq!(l.load(0, &f.a), OK);
+    assert_eq!(
+        (k.get)(&l.core),
+        default,
+        "{name}: a module of another name inherits the values"
+    );
+    l.unload(0);
+    l.core.name = own;
+    (k.kit_reset)();
 }
 
 /// Whether the DSP state bytes of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` names.

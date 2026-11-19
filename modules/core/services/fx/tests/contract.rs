@@ -13,7 +13,7 @@ use dkrt_svc_fx::build::{self, ROUTE_MASTER, ROUTE_SEND};
 use dkrt_svc_fx::fxpage::{self, INFO_HASH};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::records::Fx;
-use dkrt_test_support::contract::{contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module};
+use dkrt_test_support::contract::{contract, locked, Dsp, Fixture, Init, Knobs, Late, Lifecycle, Module};
 use dkrt_test_support::FakeCore;
 
 /// The effect ids of the keys tables of the two modules (what `DK_FX_ID_GAIN` is the index of).
@@ -280,6 +280,7 @@ fn fixture(device: u32) -> Fixture {
             beside_b: false,
         }),
         rules: true,
+        knobs: Some(knobs()),
     }
 }
 
@@ -351,9 +352,8 @@ const KIT_CELL: u32 = 0x7000;
 const KIT_A: u32 = 0x4000_1000;
 const KIT_B: u32 = 0x4000_3000;
 
-/// `image` with a live kit: the cell `KIT_CELL` holds the kit pointer `KIT_A` (a DDR address), and word `j` of effect row `k` lives at array index `8k + j`.
-fn image_with_kit(core: &mut FakeCore) {
-    image(core);
+/// The live kit in the image: the cell `KIT_CELL` is the kit pointer cell of `fxpages_info` (word 19), and word `j` of effect row `k` lives at array index `8k + j`.
+fn with_kit(core: &mut FakeCore) {
     let t = &mut core
         .info_tables
         .iter_mut()
@@ -367,34 +367,48 @@ fn image_with_kit(core: &mut FakeCore) {
     }
 }
 
+/// `image` with a live kit.
+fn image_with_kit(core: &mut FakeCore) {
+    image(core);
+    with_kit(core);
+}
+
 /// A live kit: the first effect word's index, the kit array, and the mark the pages put in it.
 fn kit_array(kit: u32) -> u32 {
     kit + 0x14
 }
 
-/// The effect of a module that is reloaded keeps the user's knob values (the array of the live kit still holds them), the route and the send cell it had; a unload
-/// and a load with a kit loaded in between (or another live kit) give the defaults, as a restart does. Docs: docs/plans/extension-model.md, E5b.
+/// The hooks of the contract's case 13: the knob of effect row 0 in the live kit (`KIT_CELL` holds kit `KIT_A` or `KIT_B`), and the firmware's kit-load count.
+fn knobs() -> Knobs {
+    Knobs {
+        image: with_kit,
+        kit: |core, n| unsafe { core.wr(KIT_CELL, if n == 0 { KIT_A } else { KIT_B }) },
+        get: |core| unsafe { core.rd16(kit_array(core.rd(KIT_CELL))) },
+        set: |core, v| unsafe { core.wr16(kit_array(core.rd(KIT_CELL)), v) },
+        kit_loaded: |_| unsafe {
+            let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
+            core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
+        },
+        kit_reset: || unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD), 0) },
+    }
+}
+
+/// An effect with a send route that is reloaded gets its send cell back with the module (the unload gives the cell and the page row back, the load takes them again).
+/// Docs: docs/plans/extension-model.md, E5b.
 #[test]
-fn a_reloaded_effect_keeps_its_knob_values_route_and_send_cell() {
+fn a_reloaded_effect_gets_its_send_cell_and_page_row_back() {
     let _g = locked();
-    let mut f = fixture(DT2.id);
-    f.image = image_with_kit;
+    let f = fixture(DT2.id);
     let l = Lifecycle::<Fx>::new(&f);
     unsafe {
-        l.core.wr(KIT_CELL, KIT_A);
-        let arr = kit_array(KIT_A);
-        let knob = |kit: u32| l.core.rd16(kit_array(kit));
         // the effect with the default route "send": a send cell
         assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
         assert_eq!(fxsend::used(), 1, "the effect has its send cell");
-        let default = knob(KIT_A);
-        assert_ne!(default, 0x1234);
-        l.core.wr16(arr, 0x1234); // the user turned the knob
-                                  // a reload: the job sets the live op, the teardown runs, the file loads again
         l.core.live_op.set(1);
         assert_eq!(
             <Fx as dkrt_abi::service::Service<FakeCore>>::teardown_refusal(&l.core, 1),
-            dkrt_sdk::OK
+            dkrt_sdk::OK,
+            "an effect with a send route is torn down"
         );
         l.unload(0);
         assert_eq!(fxsend::used(), 0, "the cell is given back with the module");
@@ -402,77 +416,32 @@ fn a_reloaded_effect_keeps_its_knob_values_route_and_send_cell() {
         l.core.live_op.set(0);
         assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
         assert_eq!(fxsend::used(), 1, "the route comes back");
-        assert_eq!(knob(KIT_A), 0x1234, "the user's value stays");
-        // unload, then another kit becomes live before the load: defaults
+        assert_eq!(fxpage::page_owner(0), 1);
         l.unload(0);
-        l.core.wr(KIT_CELL, KIT_B);
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!(
-            knob(KIT_B),
-            default,
-            "a kit the module never held gets the defaults"
-        );
-        // unload, a kit load runs in the firmware, then the load: defaults
-        l.core.wr16(kit_array(KIT_B), 0x2222);
-        l.unload(0);
-        let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
-        core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!(
-            knob(KIT_B),
-            default,
-            "a kit was loaded while the module was gone"
-        );
-        // another effect takes the row: its defaults, not the left values
-        l.core.wr16(kit_array(KIT_B), 0x2222);
-        l.unload(0);
-        assert_eq!(l.load(0, &f.b), dkrt_sdk::OK);
-        assert_ne!(
-            knob(KIT_B),
-            0x2222,
-            "another effect does not inherit the values"
-        );
-        l.unload(0);
-        core::ptr::write_volatile(n, 0);
     }
 }
 
-/// The parked values are stamped for each row with the module's name, the effect id and the kit: another module with the same effect id does not inherit them, and the removal
+/// The parked values are stamped for each row with the module's name, the effect id and the kit (the contract's case 13 covers the module and kit parts): the removal
 /// of another module's effect later does not refresh the stamp of a row that was parked before a kit was loaded.
 #[test]
-fn parked_knob_values_belong_to_the_module_and_the_row_that_left() {
+fn the_removal_of_another_effect_does_not_refresh_the_stamp_of_a_parked_row() {
     let _g = locked();
     let mut f = fixture(DT2.id);
     f.image = image_with_kit;
-    let mut l = Lifecycle::<Fx>::new(&f);
-    let knob = |l: &Lifecycle<Fx>, row: u32| unsafe { l.core.rd16(kit_array(KIT_A) + 2 * 8 * row) };
+    let l = Lifecycle::<Fx>::new(&f);
+    let k = knobs();
     unsafe {
-        l.core.wr(KIT_CELL, KIT_A);
+        (k.kit)(&l.core, 0);
         assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        let default = knob(&l, 0);
-        l.core.wr16(kit_array(KIT_A), 0x1234);
-        // the same effect id from a module of another name: the defaults
-        l.unload(0);
-        l.core.name = String::from("other\0");
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!(
-            knob(&l, 0),
-            default,
-            "a module of another name does not inherit the values"
-        );
-        l.unload(0);
-        l.core.name = String::from("fake\0");
-        // a row parked, a kit loaded, then another module's effect removed: the row keeps its own stamp
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        let default = (k.get)(&l.core);
         assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
-        l.core.wr16(kit_array(KIT_A), 0x1234);
+        (k.set)(&l.core, 0x1234);
         l.unload(0);
-        let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
-        core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
+        (k.kit_loaded)(&l.core);
         l.unload(1);
         assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!(knob(&l, 0), default, "a kit was loaded after the row was parked: the removal of another effect does not refresh its stamp");
+        assert_eq!((k.get)(&l.core), default, "a kit was loaded after the row was parked: the removal of another effect does not refresh its stamp");
         l.unload(0);
-        core::ptr::write_volatile(n, 0);
+        (k.kit_reset)();
     }
 }
