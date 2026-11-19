@@ -45,6 +45,11 @@ const MIDI_CHANNEL = 1;
  * is held (the default hold ends by itself and the note faded out in the middle of the measured span), the decay then only shapes the release after the note off.
  */
 const AMP_CC = { dt2: { hold: 80, decay: 81 }, dn2: { hold: 85, decay: 86 } } as const;
+/**
+ * The track's FX send CCs (Digitakt II B.7, Digitone II C.7): delay, reverb, chorus. They are set to 0 so that the capture holds the voice only: the default Digitone II sound sends
+ * to the effects, and their tail after the voice is cut (a decorrelated 220 Hz at about -30 dB, left and right unlike) is no leak of the placeholder.
+ */
+const SEND_CC = { dt2: [84, 85, 12], dn2: [30, 31, 29] } as const;
 const NOTE = 57;
 
 const moduleRows = async (rt: TestRuntime) => (await rt.dk.modules()).filter((m) => m.name !== DEBUG_MODULE);
@@ -113,6 +118,7 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   const amp = AMP_CC[rt.session.options.device as 'dt2' | 'dn2'];
   await sendCc(rt, MIDI_CHANNEL, amp.hold, 127); // the note sounds as long as the key is held: the same in the capture with the reload and in the control
   await sendCc(rt, MIDI_CHANNEL, amp.decay, 64);
+  for (const cc of SEND_CC[rt.session.options.device as 'dt2' | 'dn2']) await sendCc(rt, MIDI_CHANNEL, cc, 0); // the voice only: no effect tail in the swap
   const length = CAPTURE_BLOCKS;
   const WINDOWS = 32;
   /** Peaks of `WINDOWS` equal windows of blocks `a..b` of a recording of `length` blocks; a window past the recording throws. */

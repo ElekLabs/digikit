@@ -266,7 +266,7 @@
   "modules/core/runtime/tests/memaudit.device.test.ts": 5,
   "modules/core/runtime/tests/modules-capacity.device.test.ts": 3,
   "modules/core/runtime/tests/project.json": 12,
-  "modules/core/runtime/tests/reload.device.test.ts": 6,
+  "modules/core/runtime/tests/reload.device.test.ts": 13,
   "modules/core/runtime/tests/safe-mode.device.test.ts": 6,
   "modules/core/runtime/tests/samples-live.device.test.ts": 3,
   "modules/core/runtime/tests/samples-store-live.device.test.ts": 2,
