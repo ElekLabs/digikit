@@ -1026,6 +1026,19 @@ mod tests {
         assert_eq!(key_refusal(&kc, &[Some(&kb), Some(&ka)]), Some(Reason::DuplicateKey(KIND_MACHINE, 2)));
     }
 
+    /// An effect id that a loaded module has too is refused for a run-time load or reload (`E_PLAN_KEY`, the one rule for every kind), and one effect id twice in a file too.
+    #[test]
+    fn an_effect_id_a_live_module_has_is_refused_like_any_key() {
+        use dkneeds::KIND_EFFECT;
+        let effect = |keys: &[u32]| bytes(&Table { keys: &[KeyGroup { kind: KIND_EFFECT, keys }], ..KEEP });
+        let (live, same, other, twice) = (effect(&[0x1001]), effect(&[0x1001]), effect(&[0x1002]), effect(&[0x1003, 0x1003]));
+        let (kl, ks, ko, kt) = (Keys::parse(&live).unwrap(), Keys::parse(&same).unwrap(), Keys::parse(&other).unwrap(), Keys::parse(&twice).unwrap());
+        assert_eq!(key_refusal(&ks, &[Some(&kl)]), Some(Reason::DuplicateKey(KIND_EFFECT, 0x1001)));
+        assert_eq!(Verdict::Refused(Reason::DuplicateKey(KIND_EFFECT, 0x1001)).result(), dkrt_sdk::E_PLAN_KEY);
+        assert_eq!(key_refusal(&ko, &[Some(&kl)]), None);
+        assert_eq!(key_refusal(&kt, &[]), Some(Reason::DuplicateKey(KIND_EFFECT, 0x1003)));
+    }
+
     #[test]
     fn a_full_selection_of_modules_that_use_nothing_is_accepted() {
         // eight modules, eight selection paths and eight module records: the plan counts the paths as it takes the modules, so all fit
