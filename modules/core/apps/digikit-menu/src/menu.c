@@ -98,7 +98,8 @@ static dk_ui_menu *g_main, *g_about, *g_mem, *g_modules, *g_info;
 static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 
 /* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
-   time the user opens it and kept: no module is unloaded at run time, so the module's code and the ctx it passes stay valid. */
+   time the user opens it and kept: a module that has a menu function is never unloaded or reloaded at run time (the runtime refuses with E_RELOAD_MENUS), so the module's code and the
+   ctx it passes stay valid. */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
 /* Calls the module's menu function (dk_module.menu) at address a (DkrtModule.menu) with the module's ctx (DkrtModule.ctx) and the menu to fill: menu(ctx, menu).
