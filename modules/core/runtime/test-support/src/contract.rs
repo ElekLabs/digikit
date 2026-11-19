@@ -1342,7 +1342,10 @@ fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f:
     (k.kit)(&l.core, 0);
     assert_eq!(l.load(0, &f.a), OK, "{name}: module A is refused");
     let default = (k.get)(&l.core);
-    assert_ne!(default, TURNED, "{name}: the fixture's default must not be {TURNED:#x}");
+    assert_ne!(
+        default, TURNED,
+        "{name}: the fixture's default must not be {TURNED:#x}"
+    );
     (k.set)(&l.core, TURNED);
     // a reload: the job sets the live op, the teardown runs, the file loads again
     l.core.live_op.set(1);
@@ -1354,7 +1357,11 @@ fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f:
     l.unload(0);
     l.core.live_op.set(0);
     assert_eq!(l.load(0, &f.a), OK, "{name}: the reload of A is refused");
-    assert_eq!((k.get)(&l.core), TURNED, "{name}: {turned} is lost in a reload of the same module");
+    assert_eq!(
+        (k.get)(&l.core),
+        TURNED,
+        "{name}: {turned} is lost in a reload of the same module"
+    );
     // an unload and a load, with another kit live in between: the defaults
     l.unload(0);
     (k.kit)(&l.core, 1);
@@ -1378,7 +1385,11 @@ fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f:
     (k.set)(&l.core, LEFT);
     l.unload(0);
     assert_eq!(l.load(0, &f.b), OK);
-    assert_ne!((k.get)(&l.core), LEFT, "{name}: another module inherits the left value");
+    assert_ne!(
+        (k.get)(&l.core),
+        LEFT,
+        "{name}: another module inherits the left value"
+    );
     l.unload(0);
     // the same keys in a module of another name: the defaults
     (k.kit_reset)();

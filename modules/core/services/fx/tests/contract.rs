@@ -13,7 +13,9 @@ use dkrt_svc_fx::build::{self, ROUTE_MASTER, ROUTE_SEND};
 use dkrt_svc_fx::fxpage::{self, INFO_HASH};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::records::Fx;
-use dkrt_test_support::contract::{contract, locked, Dsp, Fixture, Init, Knobs, Late, Lifecycle, Module};
+use dkrt_test_support::contract::{
+    contract, locked, Dsp, Fixture, Init, Knobs, Late, Lifecycle, Module,
+};
 use dkrt_test_support::FakeCore;
 
 /// The effect ids of the keys tables of the two modules (what `DK_FX_ID_GAIN` is the index of).
@@ -389,7 +391,9 @@ fn knobs() -> Knobs {
             let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
             core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
         },
-        kit_reset: || unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD), 0) },
+        kit_reset: || unsafe {
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD), 0)
+        },
     }
 }
 
