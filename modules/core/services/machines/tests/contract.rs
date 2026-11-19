@@ -321,6 +321,7 @@ fn fixture(device: u32) -> Fixture {
         b: module(1, keys_b, sine_two, 3),
         a2: module(0, keys_a, sine_alt, 2),
         enable: &ENABLE,
+        parks_rows: true,
         kept,
         kept_dsp: |_, _| false,
         // the machines service queues no live value for its rows
@@ -392,7 +393,7 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
         assert_eq!(
             voice_row_word(&l.core, row, 0),
             Some(ty),
-            "the row is published"
+            "the row is published with its type"
         );
         l.core.live_op.set(1);
         l.unload(0);
@@ -497,7 +498,7 @@ fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_le
         "the disabled word is cleared when the row is published"
     );
     assert_eq!(voice_row_word(&l.core, row, 0), Some(d.row_type[row]));
-    // nothing is left to free when the reload ends
+    // that the row's enable words and what the service holds are those of the first load is the contract suite's case 12b; nothing is left to free at the end
     unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
     assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
     l.core.live_op.set(0);

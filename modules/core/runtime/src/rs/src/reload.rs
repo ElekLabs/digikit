@@ -1054,6 +1054,53 @@ mod tests {
         assert_not_loaded(&s, "a failed load");
     }
 
+    /// The wire mapping of the live commands (`admin_cmds`): the queue's refusal is the reply status, and `RELOAD_STATE` carries phase, result, step, torn and op of the job as bytes.
+    /// The end of a job counts in `DkrtBootInfo.reloads` when the module set changed: a finished job (`ok`) or one that tore a module down (`changed`), not a refusal.
+    #[test]
+    fn a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let n = || crate::boot::info().reloads;
+            let start = n();
+            RealOps.finish(false, false);
+            assert_eq!(n(), start);
+            RealOps.finish(true, false);
+            assert_eq!(n(), start.wrapping_add(1));
+            RealOps.finish(false, true);
+            assert_eq!(n(), start.wrapping_add(2));
+        }
+    }
+
+    #[test]
+    fn the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body() {
+        use crate::admin_cmds::{cmd_load, cmd_reload, cmd_reload_state, cmd_unload};
+        use crate::transport::{DKRT_UPLOAD_LAST, RBODY};
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let status = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(DKRT_UPLOAD_LAST)) };
+        let body = |i: usize| unsafe { *(core::ptr::addr_of!(RBODY) as *const u8).add(1 + i) };
+        unsafe {
+            *job() = Job::new();
+            let path = b"mods/x.dkm\0";
+            // no loaded module came from the path: reload and unload say E_NOT_FOUND, an empty body is E_MSG, and no job is queued
+            cmd_reload(1, path.as_ptr(), path.len());
+            assert_eq!(status(), E_NOT_FOUND);
+            cmd_unload(1, path.as_ptr(), path.len());
+            assert_eq!(status(), E_NOT_FOUND);
+            cmd_load(1, b"\0".as_ptr(), 1);
+            assert_eq!(status(), dkrt_sdk::proto::E_MSG);
+            cmd_reload_state(1);
+            assert_eq!((status(), body(0), body(6), body(7)), (OK, 0, 0, 0), "no job yet");
+            // a finished unload that was refused by playback: result, step, torn and op in the body
+            *job() = Job { phase: 2, result: E_RELOAD_PLAYING, step: 5, torn: true, op: LIVE_UNLOAD as u8, ..Job::new() };
+            cmd_reload_state(2);
+            assert_eq!(status(), OK);
+            assert_eq!(body(0), 2, "phase");
+            assert_eq!(i32::from_be_bytes([body(1), body(2), body(3), body(4)]), E_RELOAD_PLAYING, "result");
+            assert_eq!((body(5), body(6), body(7)), (5, 1, LIVE_UNLOAD as u8), "step, torn, op");
+            *job() = Job::new();
+        }
+    }
+
     #[test]
     fn queueing_resolves_the_path_refuses_a_service_file_a_bad_path_and_a_second_job() {
         let mut s = Script::new();

@@ -123,6 +123,9 @@ pub struct Fixture {
     /// The link words the DSP reads to run a row (`(window, word, off)`: the pc of an effect row, the type of a voice row, and the value that turns the row off): a
     /// release must send the word that turns the row off. The words other than these are the content of a row, which stays in the DSP memory until the next module's row overwrites it.
     pub enable: &'static [(u32, u32, u32)],
+    /// The service keeps the DSP rows of a module that unloads in a reload (a placeholder: the row's link word stays on, the row is disabled by other means), so the reload
+    /// takes the same row over; `false`: it frees them at the unload and the load takes a free row again. The `enable` words show which.
+    pub parks_rows: bool,
     /// `(core, address, value)`: whether a word of firmware memory may hold `value` after a release although the start state holds another (the service's documented
     /// free values, such as the empty string a released row points to). The value is part of the question: a word that holds anything else, such as the value `A`
     /// wrote, is a leftover.
@@ -913,6 +916,7 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     teardown_refusal_leaves_no_residue::<S>(f);
     a_reload_that_ends_leaves_no_placeholder::<S>(f);
     a_live_unload_and_load_keeps_the_numbers::<S>(f);
+    a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row::<S>(f);
     parked_values_belong_to_the_module_and_kit_that_left::<S>(f);
     // leave the statics empty for the next profile
     drop(Lifecycle::<S>::new(f));
@@ -1328,6 +1332,103 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
         &l.snapshot(),
     );
     l.unload(0);
+}
+
+/// Case 12b: a reload of module A (the live op set, its unload, its load) takes over what the unload parked: the load gets the same rows and the same words on the link
+/// as before, and the service holds what it held with A loaded. Where the service parks DSP rows (`Fixture::parks_rows`), the words that run a row stay on while A is
+/// gone; where it does not, they are off. A reload that ends without A (`live_done`) leaves the rows off, as a plain unload does.
+fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Service<FakeCore>>(
+    f: &Fixture,
+) {
+    let on = |s: &Snapshot| -> Vec<bool> {
+        f.enable
+            .iter()
+            .zip(&s.enable)
+            .map(|(e, w)| *w != 0 && *w != e.2)
+            .collect()
+    };
+    let l = Lifecycle::<S>::new(f);
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    let loaded = l.snapshot();
+    assert!(
+        f.enable.is_empty() || on(&loaded).contains(&true),
+        "{}: the load of A publishes no row: the check of the parked rows sees nothing",
+        f.name
+    );
+    // the reload: A is parked, then taken over
+    l.core.live_op.set(1);
+    l.unload(0);
+    let parked = l.snapshot();
+    if f.parks_rows {
+        assert_eq!(
+            parked.enable,
+            loaded.enable,
+            "{} ({}): a parked row keeps its words on the link",
+            f.name,
+            profile(f)
+        );
+    }
+    assert_eq!(
+        on(&parked),
+        if f.parks_rows {
+            on(&loaded)
+        } else {
+            std::vec![false; f.enable.len()]
+        },
+        "{} ({}): the rows of A while A is gone (parks_rows {})",
+        f.name,
+        profile(f),
+        f.parks_rows
+    );
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: the reload of A is refused",
+        f.name
+    );
+    let again = l.snapshot();
+    assert_eq!(
+        again.enable,
+        loaded.enable,
+        "{} ({}): the reload of A runs other rows or types than the first load",
+        f.name,
+        profile(f)
+    );
+    expect(
+        "the reload of A changed what the service holds",
+        f,
+        &loaded,
+        &again,
+    );
+    unsafe { S::live_done(&l.core) };
+    expect(
+        "the end of a reload that took everything over changed what the service holds",
+        f,
+        &loaded,
+        &l.snapshot(),
+    );
+    l.core.live_op.set(0);
+    l.unload(0);
+    gap_rows_after_an_unload(f, &on, &l.snapshot());
+    // a reload that ends without A: what nobody took over is freed
+    assert_eq!(l.load(0, &f.a), OK);
+    l.core.live_op.set(1);
+    l.unload(0);
+    unsafe { S::live_done(&l.core) };
+    l.core.live_op.set(0);
+    gap_rows_after_an_unload(f, &on, &l.snapshot());
+}
+
+/// The rows a module left with its unload (or with a reload that ended without it) run no more. This is the half of case 12b that says what a gone module's rows are:
+/// off, with no placeholder. E5d changes the machine row of a reload's end to the MISSING text; the DSP side stays as asserted here.
+fn gap_rows_after_an_unload(f: &Fixture, on: &dyn Fn(&Snapshot) -> Vec<bool>, s: &Snapshot) {
+    assert!(
+        on(s).iter().all(|o| !o),
+        "{} ({}): a row of A still runs after its unload: {:x?}",
+        f.name,
+        profile(f),
+        s.enable
+    );
 }
 
 /// Case 13 (`Fixture::parked_knobs`): the values the user turned survive a reload of the same module, as the firmware's kit array keeps them, and only that: they are the defaults

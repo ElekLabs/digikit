@@ -59,6 +59,7 @@ fn fixture(device: u32) -> Fixture {
         // the keys of `a` and another local id
         a2: module(0, 3, nothing),
         enable: &[],
+        parks_rows: false,
         kept: |_, _, _| false,
         kept_dsp: |_, _| false,
         live: None,

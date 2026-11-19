@@ -1524,9 +1524,11 @@ fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_
         let mut l = live_a();
         let base = st().modules[0].base;
         assert_eq!(crate::entry::tick_of(0), base + 8);
+        let unloads = crate::boot::info().unloads;
         // the DSP stays retained: the teardown stops at the quiesce, after the tick was stopped
         dsp::ds().phase = dsp::PH_RETAINED;
         assert_eq!(l.unload_rec(0), E_BUSY);
+        assert_eq!(crate::boot::info().unloads, unloads, "a teardown that stopped is not counted");
         assert_eq!(crate::entry::tick_of(0), 0);
         assert_eq!(st().modules[0].used, 1, "the old module is not released");
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))));
@@ -1536,6 +1538,7 @@ fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_
         // and the teardown can be tried again: the DSP is free this time, `fini` and the undo run once
         dsp::ds().phase = dsp::PH_IDLE;
         assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(crate::boot::info().unloads, unloads.wrapping_add(1), "a module's unload counts once (DkrtBootInfo.unloads)");
         let n = |v: &Vec<Ev>, e: Ev| v.iter().filter(|x| **x == e).count();
         assert_eq!((n(&l.m.log, Ev::Fini(0, base + 4)), n(&l.r.log, Ev::Remove(0))), (1, 1));
         assert_eq!(l.torn[0], 0, "the mask is clear once the record is free");
