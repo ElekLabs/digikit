@@ -549,6 +549,11 @@ impl<C: CoreApi> Service<C> for Lfo {
             None => return E_TABLE_FULL,
         };
         let t = &mut *addr_of_mut!(SHAPES);
+        // defence in depth: `settle` gives each key its own number, so a slot is never held by another module; one that is (the module being reloaded still holds its own
+        // until its teardown) is not overwritten
+        if t[i].owner != 0 && t[i].owner != c.owner && t[i].owner as u32 != core.live_op() {
+            return E_TYPE_USED;
+        }
         let mut name = [0u8; NAME_LEN];
         name.copy_from_slice(core::slice::from_raw_parts(body.add(4), NAME_LEN));
         let mut samples = [0i16; SAMPLES];

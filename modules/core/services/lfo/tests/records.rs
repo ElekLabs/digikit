@@ -224,6 +224,30 @@ fn a_key_without_a_number_and_a_full_table_are_refused() {
     );
 }
 
+/// Defence in depth: a slot held by another module is not overwritten, while the module being reloaded may still hold its own.
+#[test]
+fn a_slot_of_another_module_is_not_overwritten() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A]]);
+    core.boot_index.set(0);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"A   ", 0)),
+        OK
+    );
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_A, b"B   ", 0)),
+        E_TYPE_USED
+    );
+    assert_eq!(owner_of(number_of(0, KEY_A)), 1, "the holder is unchanged");
+    core.live_op.set(1);
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_A, b"B   ", 0)),
+        OK,
+        "the module being reloaded"
+    );
+    core.live_op.set(0);
+}
+
 /// A reload of a module that keeps shapes: its own shapes are still in the table at the check of its new file (the teardown that precedes the load gives them back),
 /// so they do not count against the table; another module's shapes do. No other number check exists: `settle` gives each key its own number.
 #[test]
