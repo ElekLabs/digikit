@@ -154,6 +154,7 @@ static ROW: dkrt_abi::service::ServiceRow = dkrt_abi::service::ServiceRow::of::<
 struct Nothing;
 impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_teardown!();
 }
 
 #[test]

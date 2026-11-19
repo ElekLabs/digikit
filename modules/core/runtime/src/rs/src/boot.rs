@@ -43,6 +43,8 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
     needs: [[0; NEEDS_LEN]; SEL_MAX],
     states: [STATE_SELECTED; SEL_MAX],
     detail: [[0; 2]; SEL_MAX],
+    unloads: 0,
+    reloads: 0,
 };
 
 /// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
@@ -334,6 +336,8 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         needs: b.needs,
         states: b.states,
         detail: b.detail,
+        unloads: b.unloads,
+        reloads: b.reloads,
     };
 }
 

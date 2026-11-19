@@ -164,7 +164,7 @@
 #define DKRT_E_SEL_WRITE (-42)           /* the firmware's block write failed */
 #define DKRT_E_CARD_BUSY (-43)           /* a card transfer is in flight */
 #define DKRT_E_SAFE_MODE (-44)           /* this boot is in safe mode: no module was loaded */
-#define DKRT_E_BOOT_ONLY (-45)           /* the module set is fixed after the boot hook */
+#define DKRT_E_BOOT_ONLY (-45)           /* the module set is fixed after the boot hook (a reload of a loaded module is the only later load) */
 #define DKRT_E_RANGE (-46)               /* a card write outside the store range */
 #define DKRT_E_CARD_RO (-47)             /* the card's store area is not ours and not blank */
 #define DKRT_E_CONTRACT (-48)            /* the module needs another runtime version than this one (another major or minor, or a higher patch) */
@@ -178,6 +178,11 @@
 #define DKRT_E_DECL_KIND (-79)           /* a service declared a record kind that the header table does not carry, or with another length */
 #define DKRT_E_SVC_ABI (-81)             /* a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint) */
 #define DKRT_E_HOOK_STOCK (-82)          /* a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init */
+#define DKRT_E_RELOAD_PLAYING (-83)      /* reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read) */
+#define DKRT_E_RELOAD_MENUS (-84)        /* reload refused: the module built menus of its own */
+#define DKRT_E_RELOAD_ROUTED (-85)       /* reload refused: the module has a published effect row (no effect teardown yet) */
+#define DKRT_E_RELOAD_KEYS (-86)         /* reload refused: the new file lacks a key of the file it replaces */
+#define DKRT_E_RELOAD_RETAINED (-87)     /* reload refused: the DSP loader holds a module it could not release; restart the device */
 
 /* Module states (DkrtBootInfo.states), from [load.state] of sdk/sdk.toml. */
 #define DKRT_STATE_SELECTED 0            /* in the selection, not planned yet */
@@ -348,6 +353,8 @@ typedef struct DkrtBootInfo {
     uint8_t needs[DKRT_SEL_MAX][DKRT_NEEDS_LEN]; /* per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise */
     uint8_t states[DKRT_SEL_MAX];                /* per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED */
     uint32_t detail[DKRT_SEL_MAX][2];            /* per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise */
+    uint32_t unloads;                            /* modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes */
+    uint32_t reloads;                            /* reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes */
 } DkrtBootInfo;
 
 /* dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end. */
@@ -513,7 +520,7 @@ _Static_assert(sizeof(DkrtSelection) == 456, "DkrtSelection size");
 _Static_assert(offsetof(DkrtSelection, count) == 0, "DkrtSelection.count");
 _Static_assert(offsetof(DkrtSelection, flags) == 4, "DkrtSelection.flags");
 _Static_assert(offsetof(DkrtSelection, paths) == 8, "DkrtSelection.paths");
-_Static_assert(sizeof(DkrtBootInfo) == 248, "DkrtBootInfo size");
+_Static_assert(sizeof(DkrtBootInfo) == 256, "DkrtBootInfo size");
 _Static_assert(offsetof(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 _Static_assert(offsetof(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 _Static_assert(offsetof(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -530,6 +537,8 @@ _Static_assert(offsetof(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
 _Static_assert(offsetof(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
 _Static_assert(offsetof(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
 _Static_assert(offsetof(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
+_Static_assert(offsetof(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
+_Static_assert(offsetof(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
 _Static_assert(sizeof(DkrtDiag) == 172, "DkrtDiag size");
 _Static_assert(offsetof(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 _Static_assert(offsetof(DkrtDiag, version) == 4, "DkrtDiag.version");

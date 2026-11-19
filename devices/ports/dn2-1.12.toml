@@ -472,6 +472,16 @@ mark = "D"
 rule = "fw/machine:cf_func"
 
 [[anchor]]
+name = "cf.machine.fn.view.build"
+cpu = "cf"
+kind = "code"
+addr = 0x4005b2c0
+len = 8
+sha256 = "d38e64037d171546ea46d9f5ff950af69f4742dd92f87e4f56faf9fe101bb64e"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
 name = "cf.machine.site.frametype"
 cpu = "cf"
 kind = "code"
@@ -2476,6 +2486,16 @@ mark = "D"
 rule = "fw/project:cf_func"
 
 [[anchor]]
+name = "cf.project.fn.transport_state"
+cpu = "cf"
+kind = "code"
+addr = 0x400d86c0
+len = 4
+sha256 = "5b80da913924cb1a83c3f2f91deccdb5220d292d6a5f2bc36b136cd3c7194461"
+mark = "D"
+rule = "fw/project:cf_func"
+
+[[anchor]]
 name = "cf.rtos.fn.create_main"
 cpu = "cf"
 kind = "data"
@@ -4084,6 +4104,11 @@ clobbers = ["d0", "d1", "a0", "ccr"]
 len = 6
 kind = "raw"
 check = "c922b7ba3d1f5458"
+
+[[hook]]
+name = "cf.machine.hook.view.build"
+site = "cf.machine.fn.view.build"
+mode = "before"
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"

@@ -63,6 +63,8 @@ export const CMD = {
   MODULES: 0x03,
   CAPACITY: 0x04,
   LOADS: 0x05,
+  RELOAD: 0x06,
+  RELOAD_STATE: 0x07,
   BEGIN: 0x10,
   DATA: 0x11,
   END: 0x12,
@@ -162,7 +164,11 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-42, 'E_SEL_WRITE', "the firmware's block write failed"],
   [-43, 'E_CARD_BUSY', 'a card transfer is in flight'],
   [-44, 'E_SAFE_MODE', 'this boot is in safe mode: no module was loaded'],
-  [-45, 'E_BOOT_ONLY', 'the module set is fixed after the boot hook'],
+  [
+    -45,
+    'E_BOOT_ONLY',
+    'the module set is fixed after the boot hook (a reload of a loaded module is the only later load)',
+  ],
   [-46, 'E_RANGE', 'a card write outside the store range'],
   [-47, 'E_CARD_RO', "the card's store area is not ours and not blank"],
   [
@@ -192,6 +198,15 @@ export const LOAD_STATUS: [number, string, string][] = [
     'E_HOOK_STOCK',
     'a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init',
   ],
+  [
+    -83,
+    'E_RELOAD_PLAYING',
+    "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
+  ],
+  [-84, 'E_RELOAD_MENUS', 'reload refused: the module built menus of its own'],
+  [-85, 'E_RELOAD_ROUTED', 'reload refused: the module has a published effect row (no effect teardown yet)'],
+  [-86, 'E_RELOAD_KEYS', 'reload refused: the new file lacks a key of the file it replaces'],
+  [-87, 'E_RELOAD_RETAINED', 'reload refused: the DSP loader holds a module it could not release; restart the device'],
 ];
 
 /** The state of a module of the boot selection (LOADS v2): [code, name, text] */
@@ -224,6 +239,7 @@ export const CAP = {
   READBACK: 14,
   LOADS: 15,
   SVC_ABI: 16,
+  RELOAD: 17,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */

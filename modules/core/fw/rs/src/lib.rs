@@ -93,6 +93,12 @@ pub mod machine {
     // cf.machine.fn.type_reader: no sig yet
 
     unsafe extern "C" {
+        /// `void f(MachineSelectionView *)`: fills the items of the machine selection view from the list getter (it clears its items first); the view's constructor calls it once at boot. The list is cached in the view, so a reload calls it again on the stored view (the hook `cf.machine.hook.view.build` remembers the view).
+        #[link_name = "cf.machine.fn.view.build"]
+        pub fn view_build(view: u32);
+    }
+
+    unsafe extern "C" {
         /// Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted.
         #[link_name = "cf.machine.data.list.table"]
         pub static LIST_TABLE: u8;
@@ -115,6 +121,9 @@ pub mod machine {
         #[link_name = "cf.machine.data.pertype.table"]
         pub static PERTYPE_TABLE: u8;
     }
+
+    /// Entry of the machine selection view's item builder (view at 4(sp)); the hook remembers the view for a reload's list rebuild.
+    pub type ViewBuildHook = unsafe extern "C" fn(view: u32);
 }
 
 pub mod mem {
@@ -532,6 +541,12 @@ pub mod project {
         /// `int f(Kit *, int track)`: the machine type of a track of a kit, -1 when the track does not exist. core/runtime uses it for the machine-change watch.
         #[link_name = "cf.project.fn.track_type"]
         pub fn track_type(kit: u32, track: i32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147.
+        #[link_name = "cf.project.fn.transport_state"]
+        pub fn transport_state() -> u32;
     }
 }
 

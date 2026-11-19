@@ -3161,6 +3161,62 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4005b2c0",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4005b2c0",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40060f50",
+            "len": 8
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_machine_view_build",
+        "rust": "dkfw::machine::view_build"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "`void f(MachineSelectionView *)`: fills the items of the machine selection view from the list getter (it clears its items first); the view's constructor calls it once at boot. The list is cached in the view, so a reload calls it again on the stored view (the hook `cf.machine.hook.view.build` remembers the view).",
+      "file": "devices/fw/machine.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.machine.fn.view.build",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "sig": "void (u32 view)",
+      "subsystem": "machine",
+      "users": [
+        "core/dynreg"
+      ],
+      "was": [
+        "cf.dynreg.msv_build"
+      ]
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4005da60"
@@ -3736,6 +3792,58 @@
       "subsystem": "machine",
       "users": [
         "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4005b2c0"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4005b2c0"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40060f50"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_machine_view_build_hook",
+        "gas": "dk_fw_machine_view_build_hook",
+        "rust": "dkfw::machine::ViewBuildHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Entry of the machine selection view's item builder (view at 4(sp)); the hook remembers the view for a reload's list rebuild.",
+      "file": "devices/fw/machine.toml",
+      "handler": {
+        "args": [
+          "sp+4"
+        ],
+        "sig": "void (u32 view)"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.machine.hook.view.build",
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "sig": "void (u32 view)",
+      "site": "cf.machine.fn.view.build",
+      "subsystem": "machine",
+      "users": [
+        "core/dynreg"
       ],
       "was": []
     },
@@ -11321,6 +11429,67 @@
       "was": [
         "dkrt.fw.track_type"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400d855c",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400d86c0",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400d688a",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4008b838",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_project_transport_state",
+        "rust": "dkfw::project::transport_state"
+      },
+      "cpu": "cf",
+      "doc": "Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147.",
+      "file": "devices/fw/project.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.project.fn.transport_state",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 ()",
+      "subsystem": "project",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -22630,7 +22799,7 @@
       "name": "link"
     },
     {
-      "count": 62,
+      "count": 64,
       "cpu": "cf",
       "file": "devices/fw/machine.toml",
       "meaning": "the machine framework: dispatch, names, per-type tables, the run-time registry",
@@ -22672,7 +22841,7 @@
       "name": "param"
     },
     {
-      "count": 5,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/project.toml",
       "meaning": "the project object, kits, tracks, serialisation",

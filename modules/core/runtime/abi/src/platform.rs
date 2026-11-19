@@ -170,6 +170,9 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     /// The machine type of `track` of the active kit, read-only: `None` when there is no project yet, `Some(-1)` past track 15 or when the firmware has no
     /// type for the track.
     unsafe fn track_type(&self, track: u32) -> Option<i32>;
+    /// The firmware's transport state (`cf.project.fn.transport_state`): 0 stopped, 1 playing, 2 paused, 3 the two play words disagree. `None` when the
+    /// platform cannot read it; a reload refuses then (docs/plans/extension-model.md E5).
+    unsafe fn play_state(&self) -> Option<u32>;
     /// Is panel key `key` held?
     unsafe fn key_down(&self, key: u32) -> bool;
     fn soft_reset(&self) -> !;

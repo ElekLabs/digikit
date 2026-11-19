@@ -407,7 +407,7 @@ def stop_connected(emu: Emu, run_dir: Path, timeout: float = 5) -> None:
 
 def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
     """Update one preview DKM on the mounted card, then soft-reset the guest."""
-    from tools.device import dkmodule, dkrun, dkupload
+    from tools.device import dkmodule, dkproto, dkrun, dkupload
 
     def idle() -> None:
         if emu.status().get("job"):
@@ -420,7 +420,8 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
     try:
         emu.subscribe()
         up = dkupload.Uploader(dkupload.EmuTransport(emu))
-        dkrun.require_runtime(up.info())
+        info = up.info()
+        dkrun.require_runtime(info)
         path = prepared["selected"][0]
         source = candidate / "plus_drive/digikit" / path
         data = source.read_bytes()
@@ -430,6 +431,29 @@ def upload_store(emu: Emu, candidate: Path, prepared: dict[str, Any]) -> None:
         dkrun.upload_if_changed(up, path, data)
         if up.verify(path) != dkupload.file_hash(data).hex():
             raise H.HarnessError("preview module did not verify on the mounted card")
+        # A module that is loaded already and a runtime that can reload it: no boot (RELOAD, docs/TESTING.md "Fast iteration"). The emulator is stepped
+        # between the asks, as the guest runs only then.
+        loaded = {m["name"] for m in up.modules()["modules"]}
+        if (
+            header["name"] in loaded
+            and info.get("caps", 0) >> dkproto.CAP["RELOAD"] & 1
+        ):
+            print("preview: upload verified; reloading module", flush=True)
+            result, unloaded = up.reload_and_wait(
+                path, lambda: emu.step(int(0.05 * dkrun.EMU_IPS))
+            )
+            if result == 0:
+                print(f"preview: module reloaded ({header['name']})", flush=True)
+                return
+            # refused before anything changed (the old module still runs), or failed after the old one was removed (the module is not loaded): the boot below takes the file as it is
+            what = (
+                "failed, the module is not loaded"
+                if unloaded
+                else "the DSP loader is retained, restart needed"
+                if result == -87
+                else "refused, the old module ran"
+            )
+            print(f"preview: reload {what} ({result}); restarting instead", flush=True)
         # A preview selects one module explicitly; all other card contents stay.
         print("preview: upload verified; selecting module", flush=True)
         up.select(prepared["selected"])

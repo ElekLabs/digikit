@@ -36,6 +36,9 @@ impl CoreApi for RealCore {
     fn boot_index(&self) -> u32 {
         unsafe { core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)) }
     }
+    fn live_op(&self) -> u32 {
+        crate::reload::phase()
+    }
     fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize {
         crate::loader::keys_of(at, kind, out)
     }

@@ -1325,6 +1325,45 @@ export class DkSession {
     await this.ok(GCMD.RESTART, 'restart');
     this.rpcProven = false;
   }
+  /**
+   * RELOAD (runtime capability RELOAD): queue the reload of the loaded module that came from the store path `path`; the new file is on the card already. The reply says only that the
+   * job is queued (E_BUSY: one runs, E_STATE: an upload is open, E_NOT_FOUND: no loaded module has that path). See `reloadState` and `reloadAndWait`.
+   */
+  async reload(path: string): Promise<void> {
+    await this.ok(GCMD.RELOAD, 'reload', concat(text.encode(path), Uint8Array.of(0)));
+  }
+  /**
+   * RELOAD_STATE: `phase` 0 (no reload yet), 1 (queued or running) or 2 (finished), the `result` (0 is ok; else the refusal before anything changed, or the failure after the old module
+   * was torn down), the job's `step`, and `unloaded`: true when the old module was torn down, so it is not loaded unless the result is 0; false when it still runs.
+   */
+  async reloadState(): Promise<{ phase: number; result: number; step: number; unloaded: boolean }> {
+    const b = await this.ok(GCMD.RELOAD_STATE, 'reload state');
+    return {
+      phase: b[0]!,
+      result: new DataView(b.buffer, b.byteOffset, b.byteLength).getInt32(1),
+      step: b[5]!,
+      unloaded: b[6] === 1,
+    };
+  }
+  /** `reload`, then `reloadState` on the session clock until the job ends: `{ result, unloaded }` (see `reloadState`). A job that does not end within `withinMs` rejects. */
+  async reloadAndWait(
+    path: string,
+    opts: { withinMs?: number; pollMs?: number; hangMs?: number } = {},
+  ): Promise<{ result: number; unloaded: boolean }> {
+    await this.reload(path);
+    const s = await poll(
+      this.sessionClock,
+      () => this.reloadState(),
+      (v) => v.phase === 2,
+      {
+        withinMs: opts.withinMs ?? 30_000,
+        intervalMs: opts.pollMs ?? this.sessionClock.pollMs ?? WALL_POLL_MS,
+        message: `the reload of ${path}`,
+        hangMs: opts.hangMs,
+      },
+    );
+    return { result: s.result, unloaded: s.unloaded };
+  }
   /** LOG (the debug module `digikit/debug`): events from `from` on (the log of this boot), `[oldest, newest, events]`. */
   async logPage(from: number, quick: Quick = false): Promise<[number, number, DkLogEvent[]]> {
     const b = await this.ok(SERVICE_CMD.LOG, 'log', be32(from), quick);

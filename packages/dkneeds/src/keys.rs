@@ -569,6 +569,23 @@ impl<'a> Keys<'a> {
         None
     }
 
+    /// The first (kind, key) that this table provides and `new` does not, in the order of this table; `None` when `new` keeps every key. A reload
+    /// refuses a new file that lacks a key of the old one: kits and projects name the numbers of those keys. Plain index loops.
+    pub fn first_missing_key(&self, new: &Keys) -> Option<(u32, u32)> {
+        let mut g = 0;
+        while let Some((kind, list)) = self.group(g) {
+            let mut j = 0;
+            while j < list.len() {
+                if !new.has_key(kind, list.get(j)) {
+                    return Some((kind, list.get(j)));
+                }
+                j += 1;
+            }
+            g += 1;
+        }
+        None
+    }
+
     /// The first (kind, key) that this table provides twice, in a group or across two groups of one kind; `None` when every key is unique per kind.
     pub fn first_repeat(&self) -> Option<(u32, u32)> {
         let mut g = 0;
@@ -924,6 +941,25 @@ mod tests {
         assert_eq!(ka.first_shared_key(&kc), Some((KIND_EFFECT, 3)));
         assert_eq!(kb.first_shared_key(&kc), None);
         assert_eq!(ka.first_shared_key(&ka), Some((KIND_MACHINE, 1)));
+    }
+
+    #[test]
+    fn a_reload_may_add_keys_but_not_drop_one() {
+        let old = table_with(&[(KIND_MACHINE, &[1, 2]), (KIND_EFFECT, &[3])]);
+        let more = table_with(&[(KIND_MACHINE, &[2, 1, 7]), (KIND_EFFECT, &[3])]);
+        let drop = table_with(&[(KIND_MACHINE, &[1]), (KIND_EFFECT, &[3])]);
+        // the key exists, but for another kind
+        let kind = table_with(&[(KIND_MACHINE, &[1, 2]), (KIND_EFFECT, &[])]);
+        let first = |o: &[u8], n: &[u8]| {
+            Keys::parse(o)
+                .unwrap()
+                .first_missing_key(&Keys::parse(n).unwrap())
+        };
+        assert_eq!(first(&old, &old), None);
+        assert_eq!(first(&old, &more), None);
+        assert_eq!(first(&old, &drop), Some((KIND_MACHINE, 2)));
+        assert_eq!(first(&old, &kind), Some((KIND_EFFECT, 3)));
+        assert_eq!(first(&drop, &old), None);
     }
 
     #[test]

@@ -18,6 +18,7 @@ import {
   type ModuleState,
   type ModuleStateName,
 } from '@digi/dk-session';
+import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
 import { BindUnavailableError } from './dkbind.ts';
 import { fitsNow, type Caps, type Needs } from './fit.ts';
 import {
@@ -918,6 +919,66 @@ export async function deleteFiles(
   emit({ event: 'done', deleted: all });
   return { deleted: all };
 }
+
+/**
+ * RELOAD of the modules loaded from `paths` (a content module whose new file is on the card already): no boot. The caller tells three outcomes apart, each with a numeric result:
+ * - `reloaded`: the new file is loaded.
+ * - `refused`: refused before anything changed (not loaded, an upload is open, the transport plays, a key was dropped, a menu was built, a plan or load check failed, a runtime without
+ *   RELOAD): the old module is still running.
+ * - `failed`: failed after the old module was torn down (the load of the new file, its DSP part, or the teardown): the module is not loaded, as after a plain unload.
+ * Neither list is thrown: the caller recovers (select and restart) or reports. A link error rejects.
+ */
+export async function reloadModules(
+  s: DkSession,
+  paths: string[],
+  emit: Emit = () => {},
+  opts: { withinMs?: number } = {},
+): Promise<{ reloaded: string[]; refused: ReloadOutcome[]; failed: ReloadOutcome[] }> {
+  const info = await s.info();
+  requireRuntime(info);
+  const reloaded: string[] = [];
+  const refused: ReloadOutcome[] = [];
+  const failed: ReloadOutcome[] = [];
+  for (const path of paths) {
+    emit({ event: 'reload', path });
+    try {
+      const { result, unloaded } = await s.reloadAndWait(path, opts);
+      if (result === 0) reloaded.push(path);
+      else if (unloaded) {
+        failed.push({ path, result });
+        emit({ event: 'reload-failed', path, result });
+      } else {
+        refused.push({ path, result });
+        emit({ event: 'reload-refused', path, result });
+      }
+    } catch (e) {
+      const code = e instanceof DkError && e.status !== undefined ? STATUS_CODE.get(e.status) : undefined;
+      if (code === undefined || !REFUSED_AT_QUEUE.has(e instanceof DkError ? (e.status ?? '') : '')) throw e;
+      refused.push({ path, result: code });
+      emit({ event: 'reload-refused', path, result: code });
+    }
+  }
+  emit({ event: 'done', reloaded, refused, failed });
+  return { reloaded, refused, failed };
+}
+
+/** A path and the status a reload ended with (a number: the runtime's `E_*` code). */
+export interface ReloadOutcome {
+  path: string;
+  result: number;
+}
+
+/** The statuses of a RELOAD request that mean "not now or not this way": nothing changed and the old module runs. */
+const REFUSED_AT_QUEUE = new Set<string>([
+  'E_NOT_FOUND',
+  'E_BUSY',
+  'E_STATE',
+  'E_PROTO',
+  'E_FORMAT',
+  'E_MSG',
+  'E_RELOAD_RETAINED',
+]);
+const STATUS_CODE = new Map<string, number>([...STATUS, ...LOAD_STATUS].map(([code, name]) => [name, code]));
 
 /**
  * RESTART, wait for the boot (the log: BOOT_START, then FW_READY), then report what MODULES lists. The page expects no module: it only reports what loaded.

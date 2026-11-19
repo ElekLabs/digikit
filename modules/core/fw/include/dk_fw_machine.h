@@ -13,6 +13,8 @@
 /* cf.machine.fn.permit: no sig yet */
 /* cf.machine.fn.type_page.count: no sig yet */
 /* cf.machine.fn.type_reader: no sig yet */
+/* `void f(MachineSelectionView *)`: fills the items of the machine selection view from the list getter (it clears its items first); the view's constructor calls it once at boot. The list is cached in the view, so a reload calls it again on the stored view (the hook `cf.machine.hook.view.build` remembers the view). */
+void dk_fw_machine_view_build(uint32_t view) __asm__("cf.machine.fn.view.build");
 /* Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted. */
 extern const uint8_t dk_fw_machine_list_table __asm__("cf.machine.data.list.table");
 /* Display-name table of the machines, 12 bytes per type (long name, short name, header hint); the anchor is the pointer operand at +0x12 of the long-name accessor. */
@@ -21,5 +23,7 @@ extern const uint8_t dk_fw_machine_name_table __asm__("cf.machine.data.name.tabl
 extern const uint8_t dk_fw_machine_permit_table __asm__("cf.machine.data.permit.table");
 /* DT2 only: a 7-byte per-type byte table (cd d6 df e8 f1 00 fb) read behind a type bound by six firmware functions; what the bytes mean is not known. */
 extern const uint8_t dk_fw_machine_pertype_table __asm__("cf.machine.data.pertype.table");
+/* Entry of the machine selection view's item builder (view at 4(sp)); the hook remembers the view for a reload's list rebuild. */
+typedef void dk_fw_machine_view_build_hook(uint32_t view);
 
 #endif

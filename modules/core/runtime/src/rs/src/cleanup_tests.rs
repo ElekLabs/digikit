@@ -206,6 +206,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     *st() = core::mem::zeroed();
     *dsp::ds() = core::mem::zeroed();
     *boot::info() = core::mem::zeroed();
+    crate::loader::test_clear_torn();
     dsp_loading();
     dsp::init_once();
     LINK = Link {
@@ -451,6 +452,41 @@ fn acknowledged_voice_cleanup_reclaims_and_advances_queue() {
     unsafe {
         successful_case(false, true);
         assert_eq!(LINK.accepted, 1);
+    }
+}
+/// A reload gives up a DSP part that does not end (`loader::cancel_dsp`): the transfer in flight is taken down as a failed one is, the record is free, no tick runs, the
+/// queue goes on, and the boot record says the module failed with the code.
+#[test]
+fn a_cancelled_dsp_part_ends_like_a_failed_one() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        assert!(crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert_eq!(st().modules[0].used, 0, "the record is free");
+        assert!(!entry::has_tick(0));
+        assert_eq!(dsp::ds().mod_len[0], 0);
+        assert_eq!(dsp::ds().pending.rec, 1, "the queued load of the next module started");
+        assert!(!dsp::retained());
+        assert_eq!(boot::info().results[0], E_DSP_XFER);
+        // nothing is left to cancel: the DSP part of record 0 has ended
+        assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER));
+    }
+}
+/// The load that waits in the queue is given up: it is removed and its record taken down, the load in flight goes on, and the DSP is not retained.
+#[test]
+fn a_cancelled_queued_dsp_part_is_removed_and_the_load_in_flight_goes_on() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        // the seed's module 0 is the one the test stubs know: let it be the queued one, and module 1 the load in flight
+        let d = dsp::ds();
+        d.waiting[0].rec = 0;
+        d.pending.rec = 1;
+        assert!(crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert_eq!((dsp::ds().nwait, dsp::ds().pending.rec), (0, 1), "nothing waits, the load in flight goes on");
+        assert_eq!(st().modules[0].used, 0, "the queued module is taken down");
+        assert!(st().modules[1].used == 1 && !dsp::retained());
+        assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER), "nothing is left to cancel");
     }
 }
 #[test]

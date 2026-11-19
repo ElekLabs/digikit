@@ -345,6 +345,15 @@ impl Platform for RealPlatform {
         }
         Some(dkfw::project::track_type(dkfw::project::active_kit(p), track as i32))
     }
+    /// The firmware's own transport test: both play words ORed.
+    #[cfg(not(test))]
+    unsafe fn play_state(&self) -> Option<u32> {
+        Some(dkfw::project::transport_state())
+    }
+    #[cfg(test)]
+    unsafe fn play_state(&self) -> Option<u32> {
+        None
+    }
     /// The stock key state byte. Returns false before the first channel-2 report.
     unsafe fn key_down(&self, key: u32) -> bool {
         dkfw::input::key_down(key) != 0

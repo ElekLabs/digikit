@@ -42,6 +42,7 @@ shared = [
 "C:boot" = ["dkrt::boot", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
 "C:loading" = [
   "dkrt::loader",
+  "dkrt::reload",   # the reload job, its refusals and the placeholder phase (docs/plans/extension-model.md E5)
   "dkrt::svc_rows",
   "dkrt::plan",
   "dkrt::scan",

@@ -58,6 +58,7 @@ mod svc_rows;
 mod mailbox;
 mod plan;
 mod platform;
+pub mod reload;
 mod safe_mode;
 mod selection;
 mod report;

@@ -78,7 +78,7 @@ All use existing codes at MOD_LOAD. A name that the firmware lacks is not a refu
 
 ## 8. Format and ABI
 
-Table tags BIND (10) and FW (11) leave services. New port tags FWNAMES and SITES. `SVC_ABI` and the runtime minor version change once in this stack. The stack merges after E5 ([extension-model.md](extension-model.md)), which changes `SVC_ABI` first (`reload_phase`). Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
+Table tags BIND (10) and FW (11) leave services. New port tags FWNAMES and SITES. `SVC_ABI` and the runtime minor version change once in this stack. The stack merges after E5 ([extension-model.md](extension-model.md)), which changes `SVC_ABI` first (`live_op`). Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
 
 ## 9. Step 3: adapter routines in the port file (after E8)
 

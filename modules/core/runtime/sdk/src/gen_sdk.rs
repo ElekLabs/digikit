@@ -207,6 +207,8 @@ pub mod proto {
     pub const CMD_MODULES: u8 = 0x03;
     pub const CMD_CAPACITY: u8 = 0x04;
     pub const CMD_LOADS: u8 = 0x05;
+    pub const CMD_RELOAD: u8 = 0x06;
+    pub const CMD_RELOAD_STATE: u8 = 0x07;
     pub const CMD_BEGIN: u8 = 0x10;
     pub const CMD_DATA: u8 = 0x11;
     pub const CMD_END: u8 = 0x12;
@@ -270,6 +272,7 @@ pub mod proto {
     pub const CAP_READBACK: u32 = 1 << 14;
     pub const CAP_LOADS: u32 = 1 << 15;
     pub const CAP_SVC_ABI: u32 = 1 << 16;
+    pub const CAP_RELOAD: u32 = 1 << 17;
     pub const CAPK_MODULES: u8 = 1;
     pub const CAPK_SELECTION: u8 = 2;
     pub const CAPK_ARENA: u8 = 3;
@@ -446,6 +449,11 @@ pub mod load {
     pub const E_DECL_KIND: i32 = -79;
     pub const E_SVC_ABI: i32 = -81;
     pub const E_HOOK_STOCK: i32 = -82;
+    pub const E_RELOAD_PLAYING: i32 = -83;
+    pub const E_RELOAD_MENUS: i32 = -84;
+    pub const E_RELOAD_ROUTED: i32 = -85;
+    pub const E_RELOAD_KEYS: i32 = -86;
+    pub const E_RELOAD_RETAINED: i32 = -87;
     pub const STATE_SELECTED: u8 = 0;
     pub const STATE_PLANNED: u8 = 1;
     pub const STATE_REFUSED: u8 = 2;

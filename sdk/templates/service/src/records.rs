@@ -1,5 +1,5 @@
 //! `__NAME__` service, handlers (interface B): what the core calls on the service. Every method has a default that does nothing, so the service
-//! overrides only what it owns (`dkrt_abi::service::Service`). `validate_records` is the one required method: say what the service checks about its records.
+//! overrides only what it owns (`dkrt_abi::service::Service`). `validate_records` and `teardown_refusal` are the required methods: say what the service checks about its records and whether a reload must wait.
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::service::{Declare, Problem, Service};
 
@@ -23,6 +23,12 @@ impl __CAMEL__ {
 impl<C: CoreApi> Service<C> for __CAMEL__ {
     fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
         __CAMEL__::validate(kind, bodies, report)
+    }
+
+    /// Whether a module of this service may be reloaded now: `0`, or the status that refuses (see `Service::teardown_refusal`). A service with nothing to wait for
+    /// writes `dkrt_abi::accepts_teardown!();` instead.
+    unsafe fn teardown_refusal(_core: &C, _owner: u8) -> i32 {
+        0
     }
 
     /// The record kinds the service owns: one `d.kind(KIND_X, LEN_X)` for each `[records.kinds]` entry of sdk/sdk.toml with `service = "__NAME__"`

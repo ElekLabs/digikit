@@ -28,9 +28,10 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # Digitone II: the same, and a page row per machine: a machine with a page row is its own type for the page and draw code
 # (core/machines), the knobs are the page's columns. Eight page rows are reserved (their `machine` is a value no type has).
 #
-# Archived with hot reload (docs/plans/digikit-hot-reload.md, tag digikit-hot-reload-v1): the view hook (`dynreg_view_hook`, the
-# `cf.dynreg.msv_build` anchor) and the in-use anchors (`cf.dynreg.project`, `kit_of`, `track_type`). At boot the rows are in place
-# before the stock builder reads the list, so nothing rebuilds the view.
+# The view hook (`dynreg_view_hook`, the anchor `cf.machine.fn.view.build`) remembers the machine selection view, which caches the machine list:
+# a reload (docs/plans/extension-model.md E5) rebuilds the view's list through words 48 and 49 of `dynreg_info`. At boot the rows are in place
+# before the stock builder reads the list, so nothing rebuilds the view then. The in-use anchors of hot reload (`cf.dynreg.project`, `kit_of`,
+# `track_type`) stay archived (tag digikit-hot-reload-v1).
 #
 # The runtime fills and clears the rows. With this module the rows read as gap rows (clone of type 0, no name), which is
 # also what a project that names an unloaded run-time machine gets.
@@ -64,6 +65,8 @@ _dr_p_row_size = "params.row_size"
 _dr_p_first = "params.first"
 _dr_p_count = "params.count"
 _dr_p_dyn0 = "params.dp0.index"
+dynreg_view_next = "hook.cf.machine.fn.view.build.tail"
+_dr_f_build = "cf.machine.fn.view.build"
 
 
 [[object]]
@@ -91,6 +94,8 @@ _dr_pg_row_size = "pages.row_size"
 _dr_pg_first = "pages.first"
 _dr_pg_dyn0 = "pages.dpg0.index"
 _dr_t_copy = "cf.machine.site.list.copy"
+dynreg_view_next = "hook.cf.machine.fn.view.build.tail"
+_dr_f_build = "cf.machine.fn.view.build"
 
 # the copy at the end of the machine list getter: `jsr copy(begin, end, dest)`, result in d0 = the end of the copy
 [[op]]
@@ -109,6 +114,16 @@ devices = ["dn2"]
 
 [[claim]]
 resource = "cf.machine.site.list.copy"
+
+# the entry of the function that fills the machine selection view's items from the getter (the view caches the list): the hook remembers the view
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.view.build"
+to = "dynreg_view_hook"
+devices = ["dt2", "dn2"]
+
+[[claim]]
+resource = "cf.machine.fn.view.build"
 
 # ---- reserved rows -------------------------------------------------------------------------------------------------------
 

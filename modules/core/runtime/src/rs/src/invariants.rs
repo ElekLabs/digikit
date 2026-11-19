@@ -83,7 +83,7 @@ pub unsafe fn check() -> u32 {
     let mut k = 0;
     while k < dsp::MAX_ROWS {
         let o = d.row_owner[k];
-        if o != 0 && (o as usize > MAX_MODULES || s.modules[o as usize - 1].used == 0 || d.mod_rows[o as usize - 1] & (1 << k) == 0) {
+        if o != 0 && o != dkrt_abi::dsp::PLACEHOLDER_OWNER && (o as usize > MAX_MODULES || s.modules[o as usize - 1].used == 0 || d.mod_rows[o as usize - 1] & (1 << k) == 0) {
             return fail(3, if o != 0 && (o as usize) <= MAX_MODULES { o as usize - 1 } else { 0 }, k as u32, o as u32);
         }
         k += 1;
@@ -138,4 +138,29 @@ pub unsafe fn check() -> u32 {
         i += 1;
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_lock::LOCK;
+
+    /// A voice row that no module record owns because it is a MISSING placeholder (`PLACEHOLDER_OWNER`) is part of the consistent tables; any other owner of a record
+    /// that is not used is invariant 3.
+    #[test]
+    fn a_placeholder_voice_row_has_no_record_and_is_consistent_and_another_owner_of_a_free_record_is_not() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            *st() = core::mem::zeroed();
+            *dsp::ds() = core::mem::zeroed();
+            let d = dsp::ds();
+            d.row_owner[1] = dkrt_abi::dsp::PLACEHOLDER_OWNER;
+            d.row_type[1] = 16;
+            assert_eq!(check(), 0);
+            d.row_owner[1] = 3; // a record that is not used
+            assert_eq!(check(), 3);
+            *addr_of_mut!(DKRT_TABLE_BAD) = 0; // a failed check latches the flag for every later test
+            d.row_owner[1] = 0;
+        }
+    }
 }

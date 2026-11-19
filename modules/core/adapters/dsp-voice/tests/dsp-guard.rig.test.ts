@@ -157,6 +157,33 @@ describe('core/dsp-voice runtime guard on the rig', () => {
     expect(out2.reads.diag![D_FAULTS]).toBe(d[D_FAULTS]);
   });
 
+  it('a row whose disabled word names its type renders silence from a routine that sounds, without a fault (the MISSING placeholder of a machine)', async () => {
+    // control: the clean routine sounds
+    const control = clean();
+    control.setType(0, TYPE);
+    control.arm();
+    const [heard] = await control.step();
+    expect(heard).toEqual(RAMP);
+    // the placeholder row the machines service parks for an unloaded module: type and pc as published, word 10 (the disabled word) pre-set to the type
+    const rig = clean();
+    rig.setType(0, TYPE);
+    rig.dm.set(nw(TABLE) + 10, TYPE);
+    rig.arm();
+    const [y, out] = await rig.step();
+    expect(any(y), 'a disabled type is a silent block').toBe(false);
+    expect(y.every(Number.isFinite)).toBe(true);
+    expect(out.reads.seen, 'the routine was not called').toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(out.reads.diag![D_FAULTS], 'no fault is counted').toBe(0);
+    expect(out.reads.row![10], 'the row still names the disabled type').toBe(TYPE);
+    // the row published again (word 10 cleared, as the machines service does for the module's own row) sounds
+    const again = clean();
+    again.setType(0, TYPE);
+    again.dm.set(nw(TABLE) + 10, 0);
+    again.arm();
+    const [z] = await again.step();
+    expect(z).toEqual(RAMP);
+  });
+
   it('an overlevel block is a fault of kind 2', async () => {
     const rig = new GuardRig('loud', '_ld_render');
     rig.setType(0, TYPE);

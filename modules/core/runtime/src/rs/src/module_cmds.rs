@@ -189,6 +189,71 @@ pub(crate) fn svc() -> &'static mut [Svc; SVC_MAX] {
     unsafe { &mut *addr_of_mut!(SVC) }
 }
 
+/// Commands of each module record (owner - 1) whose handler runs now, on the MIDI task. A reload waits until the count is 0 before it frees the module's code
+/// (`reload`); the one writer is the MIDI task, which counts the command before the handler can be released.
+static mut IN_FLIGHT: [u8; crate::MAX_MODULES] = [0; crate::MAX_MODULES];
+/// Bit `owner - 1`: the module is being reloaded; its commands are refused with `E_BUSY` while the ones in flight finish.
+static mut DRAINING: u16 = 0;
+const _: () = assert!(crate::MAX_MODULES <= 16);
+
+/// Refuse (`on`) or accept again the commands of the module whose source index is `owner`.
+pub(crate) unsafe fn set_draining(owner: u8, on: bool) {
+    if owner == 0 || owner as usize > crate::MAX_MODULES {
+        return;
+    }
+    let sr = crate::platform::irq_mask();
+    let bit = 1u16 << (owner - 1);
+    let d = &mut *addr_of_mut!(DRAINING);
+    *d = if on { *d | bit } else { *d & !bit };
+    crate::platform::irq_restore(sr);
+}
+
+/// The handler of command `cmd` and its owner, with the command counted as in flight for that owner: the lookup and the count are one step under the interrupt mask,
+/// so a module that is torn down either is not found or is counted. `Ok(None)`: no module registered the command; `Err(())`: its module is being reloaded
+/// (`set_draining`). Pair a found handler with `end_cmd`.
+pub(crate) unsafe fn begin_cmd(cmd: u8) -> Result<Option<(dkrt_sdk::HostCmdFn, u8)>, ()> {
+    let sr = crate::platform::irq_mask();
+    let found = service_of(cmd).and_then(|s| s.h.map(|h| (h, s.owner)));
+    let mut r = Ok(found);
+    if let Some((_, owner)) = found {
+        if owner != 255 && owner > 0 {
+            if *addr_of!(DRAINING) & (1u16 << (owner - 1)) != 0 {
+                r = Err(());
+            } else {
+                let c = &mut (*addr_of_mut!(IN_FLIGHT))[owner as usize - 1];
+                *c = c.saturating_add(1);
+            }
+        }
+    }
+    crate::platform::irq_restore(sr);
+    r
+}
+
+/// The handler returned: the command of `owner` is no longer in flight.
+pub(crate) unsafe fn end_cmd(owner: u8) {
+    if owner != 255 && owner > 0 {
+        // masked like `begin_cmd`: the count is a read-modify-write, and the task that reads it can interrupt this one
+        let sr = crate::platform::irq_mask();
+        let c = &mut (*addr_of_mut!(IN_FLIGHT))[owner as usize - 1];
+        *c = c.saturating_sub(1);
+        crate::platform::irq_restore(sr);
+    }
+}
+
+/// Host tests: `n` commands of `owner` are in flight.
+#[cfg(test)]
+pub(crate) unsafe fn test_set_in_flight(owner: u8, n: u8) {
+    (*addr_of_mut!(IN_FLIGHT))[owner as usize - 1] = n;
+}
+
+/// Commands of the module whose source index is `owner` that are in flight.
+pub(crate) unsafe fn in_flight(owner: u8) -> u8 {
+    if owner == 0 || owner as usize > crate::MAX_MODULES {
+        return 0;
+    }
+    core::ptr::read_volatile(addr_of!(IN_FLIGHT[owner as usize - 1]))
+}
+
 /// The handler of a registered command.
 pub(crate) fn service(cmd: u8) -> Option<dkrt_sdk::HostCmdFn> {
     service_of(cmd).and_then(|s| s.h)
@@ -246,6 +311,7 @@ pub unsafe fn host_register(first: u32, count: u32, handler: Option<dkrt_sdk::Ho
 
 /// The module whose source index is `owner` was taken down: release its ranges.
 pub unsafe fn release_cmds(owner: u8) {
+    set_draining(owner, false);
     let t = svc();
     let mut i = 0;
     while i < SVC_MAX {
@@ -257,3 +323,43 @@ pub unsafe fn release_cmds(owner: u8) {
 }
 
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_lock::LOCK;
+    use crate::transport::{dkrt_midi_rx, DKRT_UPLOAD_LAST};
+    use dkrt_sdk::E_BUSY;
+
+    unsafe extern "C" fn answers_ok(_cmd: u32, _seq: u32, _body: *const u8, _len: u32, _out: *mut u8) -> i32 {
+        0
+    }
+
+    /// One request of command `cmd` with no body, through the MIDI hook; the status the runtime replied with.
+    unsafe fn ask(cmd: u8) -> i32 {
+        let msg = [0xf0, 0x7d, 0x64, 0x6b, VERSION, cmd, 1, 0xf7];
+        assert_eq!(dkrt_midi_rx(msg.as_ptr(), msg.len() as u32, 0), 1);
+        DKRT_UPLOAD_LAST
+    }
+
+    #[test]
+    fn a_command_of_a_module_that_is_being_reloaded_answers_busy_and_counts_nothing() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            // the runtime is initialised (the hook's `init_once` would set up the arena)
+            crate::st().magic = crate::state::STATE_MAGIC;
+            let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
+            assert_eq!(host_register(0x38, 1, Some(answers_ok)), OK);
+            dlog::leave_module(prev);
+            assert_eq!(ask(0x38), OK, "it runs when the module is not draining");
+            assert_eq!(in_flight(1), 0, "and is not in flight once it returned");
+            set_draining(1, true);
+            assert_eq!(ask(0x38), E_BUSY, "its module is draining: the host asks again");
+            assert_eq!(in_flight(1), 0);
+            set_draining(1, false);
+            assert_eq!(ask(0x38), OK);
+            release_cmds(1);
+            assert_eq!(ask(0x38), E_PROTO, "released: nobody registered it");
+        }
+    }
+}

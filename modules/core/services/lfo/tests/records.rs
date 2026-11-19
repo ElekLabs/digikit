@@ -510,3 +510,31 @@ fn the_delta_table_gives_the_same_value_as_the_plain_formula_for_random_tables_a
         }
     }
 }
+
+/// A reload runs `settle` again over the live modules and the new file in the old slot: loaded shapes keep their numbers, a shape the new file adds takes a free one,
+/// and a second run over the same set changes nothing.
+#[test]
+fn a_second_settle_over_the_live_set_keeps_every_number_and_numbers_an_added_shape() {
+    const KEY_C: u32 = 0x00c1_0100;
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A], &[KEY_B]]);
+    assert_eq!((number_of(0, KEY_A), number_of(1, KEY_B)), (7, 8));
+    settle(&core, &[&[KEY_A], &[KEY_B]]);
+    assert_eq!(
+        (number_of(0, KEY_A), number_of(1, KEY_B)),
+        (7, 8),
+        "idempotent"
+    );
+    // module 0 is reloaded with a file that adds a shape
+    settle(&core, &[&[KEY_A, KEY_C], &[KEY_B]]);
+    assert_eq!(
+        (number_of(0, KEY_A), number_of(1, KEY_B)),
+        (7, 8),
+        "loaded shapes keep their numbers"
+    );
+    assert_eq!(
+        number_of(0, KEY_C),
+        9,
+        "the added shape takes the next free number"
+    );
+}

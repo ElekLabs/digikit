@@ -37,7 +37,7 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     // appended after the log range: the whole packed runtime version (bytes 2-3 keep its low 16 bits) and the capability bits
     wr32(rb.add(25), RUNTIME_VERSION);
     let log_caps = if dlog::sink_present() { CAP_LOG | CAP_PEEK | CAP_LOGCFG } else { 0 };
-    wr32(rb.add(29), log_caps | CAP_SELECT | CAP_RESTART | CAP_MODULES | CAP_CAPACITY | CAP_READ | CAP_VERIFY | CAP_SERVICE_CMDS | CAP_FOLDERS | CAP_SETTINGS | CAP_FILEHASH | CAP_RENAME | CAP_READBACK | CAP_LOADS | CAP_SVC_ABI);
+    wr32(rb.add(29), log_caps | CAP_SELECT | CAP_RESTART | CAP_MODULES | CAP_CAPACITY | CAP_READ | CAP_VERIFY | CAP_SERVICE_CMDS | CAP_FOLDERS | CAP_SETTINGS | CAP_FILEHASH | CAP_RENAME | CAP_READBACK | CAP_LOADS | CAP_SVC_ABI | CAP_RELOAD);
     // appended after the capability bits: the id of the flashed image (patchkit stamps it; zeros when there is none)
     let id = crate::image_id();
     let mut i = 0;
@@ -159,6 +159,38 @@ pub unsafe fn restart_poll() {
     }
 }
 
+/// RELOAD (runtime 4): queue the reload of the module that was loaded from the store path in the body (NUL terminated; the new file is already there). The job runs
+/// from the UI task's passes (`reload::poll`); `RELOAD_STATE` says where it is and how it ended. Status: 0, `E_MSG` (no path), `E_BUSY` (a reload is queued or running),
+/// `E_STATE` (an upload is open or a store write is in flight), `E_NOT_FOUND` (no loaded content module came from that path), `E_FORMAT` (the path is the file of a service).
+pub(crate) unsafe fn cmd_reload(seq: u32, body: *const u8, blen: usize) -> i32 {
+    if blen < 2 || *body.add(blen - 1) != 0 {
+        return reply(CMD_RELOAD, seq, E_MSG, 0);
+    }
+    if sw::is_open() || sw::is_locked() {
+        return reply(CMD_RELOAD, seq, E_STATE, 0);
+    }
+    let r = crate::reload::cmd_queue(body);
+    reply(CMD_RELOAD, seq, r, 0)
+}
+
+/// RELOAD_STATE: `u8 phase` (0 none yet, 1 queued or running, 2 finished), `i32 result`, `u8 step`, `u8 unloaded` (1: the old module was torn down, so it is not loaded
+/// unless the result is 0; 0: a refusal or an abort left it running). No body.
+pub(crate) unsafe fn cmd_reload_state(seq: u32) -> i32 {
+    let (phase, result, step, torn) = crate::reload::state();
+    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
+    *rb = phase;
+    wr32(rb.add(1), result as u32);
+    *rb.add(5) = step;
+    *rb.add(6) = torn as u8;
+    reply(CMD_RELOAD_STATE, seq, OK, 7)
+}
+
+pub(crate) unsafe fn h_reload(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
+    cmd_reload(seq, body, blen)
+}
+pub(crate) unsafe fn h_reload_state(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> i32 {
+    cmd_reload_state(seq)
+}
 pub(crate) unsafe fn h_info(seq: u32, buf: *mut u8, _body: *const u8, _blen: usize) -> i32 {
     cmd_info(seq, buf)
 }

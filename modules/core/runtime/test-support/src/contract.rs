@@ -456,6 +456,21 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         l
     }
 
+    /// Run `Service::settle` again over the keys of `mods`, the modules that are loaded now, in selection order: what a reload does before it loads the new file.
+    pub fn settle_over(&self, mods: &[&Module]) {
+        let mut sel = SettleCtx::new();
+        for (i, m) in mods.iter().enumerate() {
+            let k = (m.keys)();
+            sel.count = i + 1;
+            sel.nkeys[i] = k.nm.min(8) as u8;
+            sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+            for (kind, keys) in m.groups {
+                self.core.set_keys(i as u32, *kind, keys);
+            }
+        }
+        unsafe { S::settle(&self.core, &sel) };
+    }
+
     /// The service's own view of its state, for the checks that compare it.
     pub fn snapshot(&self) -> Snapshot {
         let core = &self.core;
@@ -703,6 +718,27 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         self.load_staged(rec, m).map(|_| OK).unwrap_or_else(|e| e)
     }
 
+    /// The DSP claim of a load and nothing else: the rows `m` takes are claimed (as `dsp_claim` does for the DSP loader), none is published.
+    pub fn claim_only(&self, rec: usize, m: &Module) {
+        let core = &self.core;
+        core.boot_index.set(m.sel);
+        unsafe {
+            let (mut job, _fxs, _voices, bank) = self.job(m);
+            if m.dsp.bank.is_some() {
+                job.bank = bank.as_ptr();
+            }
+            let mut c = Claim {
+                rec,
+                job: &mut job,
+                base: DSP_BASE,
+                byte_shift: DSP_BASE - L2_BYTE_BASE,
+                state_at: 0,
+            };
+            S::dsp_claim(core, &mut c);
+        }
+        core.boot_index.set(u32::MAX);
+    }
+
     /// `load`, giving the section the walker checked.
     pub fn load_staged(&self, rec: usize, m: &Module) -> Result<Vec<u8>, i32> {
         let core = &self.core;
@@ -844,6 +880,9 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
     reload_ten_times::<S>(f);
     leaves_no_residue::<S>(f);
     a_refusal_during_apply_leaves_nothing::<S>(f);
+    settle_over_the_live_set_changes_nothing::<S>(f);
+    teardown_refusal_leaves_no_residue::<S>(f);
+    a_reload_that_ends_leaves_no_placeholder::<S>(f);
     // leave the statics empty for the next profile
     drop(Lifecycle::<S>::new(f));
 }
@@ -1104,6 +1143,114 @@ fn a_refused_commit_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         &l.snapshot(),
     );
     l.unload(1);
+}
+
+/// Case 9: `settle` is idempotent. A reload runs it again over the modules that are loaded (the new file's keys are in the old one's slot); with modules A and B
+/// loaded, one run or two over the live set leave everything the service holds as it was, so the numbers of loaded modules do not move.
+fn settle_over_the_live_set_changes_nothing<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
+    let before = l.snapshot();
+    for run in 0..2 {
+        l.settle_over(&[&f.a, &f.b]);
+        expect(
+            &std::format!("settle over the live set (run {run}) changed what the service holds"),
+            f,
+            &before,
+            &l.snapshot(),
+        );
+    }
+    l.unload(1);
+    l.unload(0);
+}
+
+/// Case 10: `teardown_refusal` of a module that is loaded is `OK` or `E_RELOAD_ROUTED` (a module's own state, never a refusal for another record), and once the
+/// module is unloaded it is `OK`: an unload leaves nothing that holds up the reload of the record's next module.
+fn teardown_refusal_leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    let r = unsafe { S::teardown_refusal(&l.core, 1) };
+    assert!(
+        r == OK || r == dkrt_sdk::E_RELOAD_ROUTED,
+        "{}: teardown_refusal answers {r} for a loaded module",
+        f.name
+    );
+    assert_eq!(
+        unsafe { S::teardown_refusal(&l.core, 2) },
+        OK,
+        "{}: teardown_refusal refuses record 1, which holds no module",
+        f.name
+    );
+    l.unload(0);
+    assert_eq!(
+        unsafe { S::teardown_refusal(&l.core, 1) },
+        OK,
+        "{}: teardown_refusal still refuses after the unload",
+        f.name
+    );
+}
+
+/// Case 11: what a service parks during a reload (a placeholder for the module's numbers) is gone when the reload ends, in both ways it can end: the new version loads
+/// (it takes the placeholder over) or it does not (`live_done` frees what nobody took). Both leave the capacity counts, the service's view and the DSP state as
+/// they were at the start, so a row that leaks fails here. The memory words of a reload's unload hold the placeholder values (`kept` names them where a fixture
+/// has any), and are not compared.
+fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
+    let l = Lifecycle::<S>::new(f);
+    let start = l.snapshot();
+    // the new version loads: A, then the reload of A
+    assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
+    l.core.live_op.set(1);
+    l.unload(0);
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: the reload of A is refused",
+        f.name
+    );
+    unsafe { S::live_done(&l.core) };
+    l.core.live_op.set(0);
+    l.unload(0);
+    let end = l.snapshot();
+    expect_small("A, its reload, unload A", f, &start, &end);
+    assert!(
+        dsp_same(f, &start, &end),
+        "{} ({}): the DSP state after a reload and an unload differs from the start",
+        f.name,
+        profile(f)
+    );
+    // the new version does not load
+    assert_eq!(l.load(0, &f.a), OK);
+    l.core.live_op.set(1);
+    l.unload(0);
+    unsafe { S::live_done(&l.core) };
+    l.core.live_op.set(0);
+    let end = l.snapshot();
+    expect_small("A, a reload that fails", f, &start, &end);
+    assert!(
+        dsp_same(f, &start, &end),
+        "{} ({}): the DSP state after a failed reload differs from the start",
+        f.name,
+        profile(f)
+    );
+    // the module is not loaded, as after a plain unload: the firmware words are those a plain unload leaves (a machine row is the gap row, not MISSING)
+    let failed = l.snapshot();
+    let plain = Lifecycle::<S>::new(f);
+    assert_eq!(plain.load(0, &f.a), OK);
+    plain.unload(0);
+    let plain = plain.snapshot();
+    assert!(
+        plain.mem == failed.mem,
+        "{} ({}): the memory after a failed reload differs from a plain unload\n{}",
+        f.name,
+        profile(f),
+        plain.diff(&failed)
+    );
+}
+
+/// Whether the DSP state bytes of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` names.
+fn dsp_same(f: &Fixture, start: &Snapshot, end: &Snapshot) -> bool {
+    (0..start.dsp.len()).all(|i| start.dsp[i] == end.dsp[i] || (f.kept_dsp)(i, end.dsp[i]))
 }
 
 /// Case 6: case 3 ten times: no table grows and no sticky value drifts.

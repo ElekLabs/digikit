@@ -44,7 +44,7 @@
 #define DK_E_SEL_WRITE (-42) /* the firmware's block write failed */
 #define DK_E_CARD_BUSY (-43) /* a card transfer is in flight */
 #define DK_E_SAFE_MODE (-44) /* this boot is in safe mode: no module was loaded */
-#define DK_E_BOOT_ONLY (-45) /* the module set is fixed after the boot hook */
+#define DK_E_BOOT_ONLY (-45) /* the module set is fixed after the boot hook (a reload of a loaded module is the only later load) */
 #define DK_E_RANGE (-46) /* a card write outside the store range */
 #define DK_E_CARD_RO (-47) /* the card's store area is not ours and not blank */
 #define DK_E_CONTRACT (-48) /* the module needs another runtime version than this one (another major or minor, or a higher patch) */
@@ -58,6 +58,11 @@
 #define DK_E_DECL_KIND (-79) /* a service declared a record kind that the header table does not carry, or with another length */
 #define DK_E_SVC_ABI (-81) /* a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint) */
 #define DK_E_HOOK_STOCK (-82) /* a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init */
+#define DK_E_RELOAD_PLAYING (-83) /* reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read) */
+#define DK_E_RELOAD_MENUS (-84) /* reload refused: the module built menus of its own */
+#define DK_E_RELOAD_ROUTED (-85) /* reload refused: the module has a published effect row (no effect teardown yet) */
+#define DK_E_RELOAD_KEYS (-86) /* reload refused: the new file lacks a key of the file it replaces */
+#define DK_E_RELOAD_RETAINED (-87) /* reload refused: the DSP loader holds a module it could not release; restart the device */
 
 /* Replies of the upload commands ([protocol.status]). */
 #define DK_E_MSG (-50) /* body too short or malformed */

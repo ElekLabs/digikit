@@ -59,7 +59,7 @@ impl ProvRec {
     pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, dsp_image: 0 };
 }
 
-/// Which loads the loader accepts. The module set is fixed per session: only the boot hook loads (hot reload is archived, docs/plans/digikit-hot-reload.md).
+/// Which loads the loader accepts. The boot hook loads the module set; after it only a reload loads, into the record of the module it replaces.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Phase {
     /// The state after reset and after the boot's loop: `load` is `E_BOOT_ONLY`.
@@ -67,6 +67,27 @@ enum Phase {
     /// While the boot hook loads the selection: the CF part of a module with DSP code is published at once (the machine view is built soon after the
     /// hook, and the frames that carry DSP code do not flow yet); the DSP part follows over the UI-loop passes.
     Boot = 1,
+    /// While a reload loads the new file of a live module into the record of the old one (`Loader::reload_load`). Nothing else loads in this phase.
+    Reload = 2,
+}
+
+/// Where a load puts the file: the first free module record, a module's own record (a reload loads into the record of the module it replaces, so the
+/// owner ids in the machine and DSP rows do not move), or a provider record (a service file).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Slot {
+    Free,
+    Module(usize),
+    Provider(usize),
+}
+
+impl Slot {
+    /// The fixed record, if the slot names one.
+    fn fixed(self) -> Option<usize> {
+        match self {
+            Slot::Free => None,
+            Slot::Module(r) | Slot::Provider(r) => Some(r),
+        }
+    }
 }
 
 /// The module lifecycle: stage, check, place, init, commit (and DSP) with an undo for each step, and the boot's planning tables. One zero-initialised static
@@ -112,7 +133,20 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     dsp_install: DspInstaller,
     /// The selection index of each module record (`u8::MAX`: none): the late teardown of a service names the dependents' states by it.
     sel_of_rec: [u8; MAX_MODULES],
+    /// The steps of a teardown that ran for each record (`TORN_*`): a second `unload_rec` after `E_BUSY` skips them, so `fini` and the role's undo run once.
+    torn: [u8; records::REC_MAX],
+    /// The tick address of a module whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
+    saved_tick: [u32; MAX_MODULES],
+    /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
+    drain_at: [Option<u32>; MAX_MODULES],
 }
+
+/// Bits of `Loader::torn`.
+const TORN_TICK: u8 = 1;
+const TORN_FINI: u8 = 2;
+const TORN_UNDO: u8 = 4;
+/// The entries of the module are closed and the wait of a reload has started (`drain_at`).
+const TORN_DRAIN: u8 = 8;
 
 /// The loader of the device.
 type Real = Loader<RealPlatform, RealImages, RealRegistry>;
@@ -163,6 +197,112 @@ pub unsafe fn unload_rec(rec: usize) -> i32 {
     loader().unload_rec(rec)
 }
 
+/// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded (`Loader::reload_check`): the file, its keys, and the plan of
+/// the live set with the file in the old module's slot. `OK` or the refusal.
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub unsafe fn reload_check(rec: usize, path: *const u8) -> i32 {
+    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+    let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+    live_caps(&mut caps[..k], own_use(rec));
+    loader().reload_check(rec, path, &caps[..k])
+}
+
+/// The first step of a reload's teardown (`Loader::reload_quiesce`): `OK` when nothing is inside the module any more, `E_BUSY` while the caller must ask again.
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub unsafe fn reload_quiesce(rec: usize) -> i32 {
+    loader().reload_quiesce(rec)
+}
+
+/// The module record loaded from the store path `path` (NUL terminated), and its selection index: what a reload names its module by.
+pub unsafe fn rec_of_path(path: *const u8) -> Option<(usize, usize)> {
+    let l = loader();
+    let mut rec = 0;
+    while rec < MAX_MODULES {
+        if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
+            let k = l.sel_of_rec[rec] as usize;
+            return if k < SEL_MAX { Some((rec, k)) } else { None };
+        }
+        rec += 1;
+    }
+    None
+}
+
+/// Give up the DSP part of module record `rec` (`Loader::cancel_dsp`).
+pub unsafe fn cancel_dsp(rec: usize, code: i32) -> bool {
+    loader().cancel_dsp(rec, code)
+}
+
+/// Does the DSP loader hold a module it could not release? Permanent until the next boot: every load and reload is refused.
+pub unsafe fn dsp_retained() -> bool {
+    dsp::retained()
+}
+
+/// How far the DSP loader has got with its loads: a counter that moves when an image or a row goes out or a load starts.
+pub unsafe fn dsp_progress() -> u32 {
+    let d = dsp::ds();
+    d.step.wrapping_add(d.transfers).wrapping_add(d.row_writes)
+}
+
+/// Is `path` the store path of a loaded provider (a service file)?
+pub unsafe fn is_provider_path(path: *const u8) -> bool {
+    let mut j = 0;
+    while j < PROVIDER_MAX {
+        let rec = MAX_MODULES + j;
+        if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
+            return true;
+        }
+        j += 1;
+    }
+    false
+}
+
+/// A reload that cannot finish before the old code is gone: give the old module its tick back (`Loader::reload_abort`).
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub unsafe fn reload_abort(rec: usize) -> bool {
+    loader().reload_abort(rec)
+}
+
+/// Load the new file of a reload into the record of the old module, which `unload_rec` took down (`Loader::reload_load`).
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub unsafe fn reload_load(rec: usize, path: *const u8) -> i32 {
+    loader().reload_load(rec, path)
+}
+
+/// What module record `rec` holds that its reload gives back before the new file loads: (arena bytes of its image block and its record block, DSP area bytes of its
+/// range).
+pub(crate) unsafe fn own_use(rec: usize) -> (u32, u32) {
+    if rec >= MAX_MODULES {
+        return (0, 0);
+    }
+    let block = |n: u32| if n == 0 { 0 } else { dkneeds::arena_block(n).unwrap_or(n) };
+    let m = records::module(rec);
+    (block(m.size) + block(crate::collect::block_of(rec).1), dsp::ds().mod_len[rec])
+}
+
+/// The capacity as a plan of the whole live set needs it: what the live modules use is counted by the plan again, so the counts they own go back to 0. The
+/// physical resources (arena, staging buffer, DSP area, store, settings) keep their use, less `own` (the arena and DSP bytes of the module being reloaded, which its
+/// teardown frees before the new file loads, so a large module is not refused for counting itself twice). The plan still counts the record block of every other live
+/// module again, which errs on the side of refusing.
+#[allow(dead_code)] // the reload job calls it (E5 commit 8)
+pub(crate) fn live_caps(caps: &mut [DkrtCap], own: (u32, u32)) {
+    use dkrt_sdk::proto::*;
+    let mut c = 0;
+    while c < caps.len() {
+        let kind = caps[c].kind;
+        let physical = kind == CAPK_ARENA as u32 || kind == CAPK_STAGE as u32 || kind == CAPK_DSP_AREA as u32 || kind == CAPK_STORE as u32 || kind == CAPK_SETTINGS as u32;
+        if kind == CAPK_ARENA as u32 {
+            caps[c].used = caps[c].used.saturating_sub(own.0);
+        } else if kind == CAPK_DSP_AREA as u32 {
+            caps[c].used = caps[c].used.saturating_sub(own.1);
+        }
+        if !physical {
+            caps[c].used = 0;
+            caps[c].largest = if kind == CAPK_SELECTION as u32 { caps[c].limit } else { 0 };
+        }
+        c += 1;
+    }
+}
+
 /// One UI-loop pass of the DSP loader. `dsp` only advances its state and reports what it found; the module teardown, the machine
 /// listing and the boot result belong to the loader, so `dsp` depends on neither the loader nor the boot.
 pub unsafe fn dsp_step() {
@@ -192,6 +332,12 @@ pub(crate) fn test_accept(at: usize, table: &[u8]) {
     l.tables[at][..table.len()].copy_from_slice(table);
     l.table_len[at] = table.len();
     l.accepted[at] = true;
+}
+
+/// A host test seeds a record by hand: no teardown of an earlier test is half done.
+#[cfg(test)]
+pub(crate) unsafe fn test_clear_torn() {
+    loader().torn = [0; records::REC_MAX];
 }
 
 /// Forget the tables (the start of a boot's planning).
@@ -226,6 +372,38 @@ pub unsafe fn planned_dsp() -> (u32, u32) {
     *addr_of!(LOADER.planned_dsp)
 }
 
+/// What `check_file` found in a file, for the load that follows (or for a reload's checks, which only read it). The pointers are into the staging buffer.
+struct Checked {
+    f: *const u8,
+    size: u32,
+    head: image::Head,
+    role: u32,
+    /// The address of each import of the file (the runtime's table, or a provider's export).
+    import_addrs: [u32; dkneeds::MAX_CF_IMPORTS as usize],
+    reg_off: u32,
+    reg_size: u32,
+    keys: crate::collect::KeysCopy,
+    dsp_size: u32,
+    job: dsp::Job,
+}
+
+impl Checked {
+    const fn empty() -> Checked {
+        Checked {
+            f: core::ptr::null(),
+            size: 0,
+            head: image::Head { needs: 0, image_off: 0, image_size: 0, bss: 0, reloc_off: 0, reloc_n: 0, import_off: 0, import_n: 0, init: 0, fini: 0, menu: 0, tick: 0 },
+            role: 0,
+            import_addrs: [0; dkneeds::MAX_CF_IMPORTS as usize],
+            reg_off: 0,
+            reg_size: 0,
+            keys: crate::collect::KeysCopy::empty(),
+            dsp_size: 0,
+            job: dsp::Job::empty(),
+        }
+    }
+}
+
 impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     pub const fn new(p: P, m: M, r: R) -> Self {
         Loader {
@@ -247,6 +425,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             installer: Installer::new(),
             dsp_install: DspInstaller::new(),
             sel_of_rec: [u8::MAX; MAX_MODULES],
+            torn: [0; records::REC_MAX],
+            saved_tick: [0; MAX_MODULES],
+            drain_at: [None; MAX_MODULES],
         }
     }
 
@@ -280,48 +461,47 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
 
     /// Validate and load the `.dkm` at `path`. The tables are checked after every attempt, and none starts once a check has failed (`invariants::check`).
     pub unsafe fn load(&mut self, path: *const u8) -> i32 {
-        self.load_file(path, None)
+        self.load_file(path, Slot::Free)
     }
 
     /// Load the service file at `path` into provider record `j`.
     unsafe fn load_provider(&mut self, path: *const u8, j: usize) -> i32 {
-        self.load_file(path, Some(MAX_MODULES + j))
+        self.load_file(path, Slot::Provider(MAX_MODULES + j))
     }
 
-    unsafe fn load_file(&mut self, path: *const u8, fixed: Option<usize>) -> i32 {
+    unsafe fn load_file(&mut self, path: *const u8, slot: Slot) -> i32 {
         if crate::invariants::bad() {
             return E_TABLE;
         }
-        let r = self.load_inner(path, fixed);
+        let r = self.load_inner(path, slot);
         #[cfg(not(test))]
         crate::invariants::check();
         r
     }
 
-    /// `fixed`: the provider record of a service file; `None`: a module takes the first free module record. A service file loads only into a provider
-    /// record, and a module file never does.
-    unsafe fn load_inner(&mut self, path: *const u8, fixed: Option<usize>) -> i32 {
-        dsp::init_once();
-        // the module set is fixed per session: only the boot hook loads (hot reload is archived, docs/plans/digikit-hot-reload.md)
-        if self.phase != Phase::Boot {
-            return E_BOOT_ONLY;
-        }
+    /// The checks of a file: everything that can be refused before a record or a byte of the arena is taken. The staged file stays in the staging buffer (`c.f`)
+    /// until the next `stage`. `slot` says which role the file must have: a service file only for a provider record, a module file only for the others.
+    unsafe fn check_file(&mut self, path: *const u8, slot: Slot, c: &mut Checked) -> i32 {
         let staged = match self.m.stage(path) {
             Ok(s) => s,
             Err(e) => return e,
         };
         let f = staged.ptr;
         let size = staged.size;
+        c.f = f;
+        c.size = size;
 
         // ---- checks (nothing is written outside the staging buffer) ----
         let head = match image::head(f, size) {
             Ok(h) => h,
             Err(e) => return e,
         };
-        let image::Head { needs, image_off, image_size, bss, reloc_off, reloc_n, import_off, import_n, init, fini, menu, tick } = head;
+        c.head = head;
+        let image::Head { import_off, import_n, .. } = head;
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
-        if (role == 1) != fixed.is_some() {
+        c.role = role;
+        if (role == 1) != matches!(slot, Slot::Provider(_)) {
             return E_FORMAT;
         }
         let steps = RoleSteps::<P, M, R>::of(role);
@@ -329,10 +509,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return r;
         }
-        let name = f.add(H_NAME);
-        let total = image_size + bss;
         // imports: every name must be in the runtime's table
-        let mut import_addrs = [0u32; dkneeds::MAX_CF_IMPORTS as usize];
         let mut i = 0;
         while i < import_n as usize {
             let p = f.add(import_off as usize + i * dkneeds::CF_IMPORT_LEN as usize);
@@ -361,44 +538,81 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 }
                 return E_IMPORT;
             }
-            import_addrs[i] = a;
+            c.import_addrs[i] = a;
             i += 1;
         }
         // relocations: kind, bounds, import index
         if let Err(e) = image::sections(f, &head) {
             return e;
         }
-        let s = st();
         // `register` records (machines, parameters): validated now, written after the copy
         let (reg_off, reg_size) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
+        c.reg_off = reg_off;
+        c.reg_size = reg_size;
         if !in_file(reg_off, reg_size, size) {
             return E_FORMAT;
         }
         let reg = f.add(reg_off as usize);
         // the table is the keys table; the records come from the builder calls of `init` (complete)
-        let keys = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(reg, reg_size as usize)) {
+        c.keys = match crate::collect::KeysCopy::from_bytes(core::slice::from_raw_parts(reg, reg_size as usize)) {
             Ok(k) => k,
             Err(e) => return e,
         };
         // the DSP section, if any
         let (dsp_off, dsp_size) = (rd32(f.add(H_DSP_OFF)), rd32(f.add(H_DSP_SIZE)));
-        let mut job = dsp::Job::empty();
+        c.dsp_size = dsp_size;
         if dsp_size != 0 {
-            let r = dsp::check(f, dsp_off, dsp_size, size, &mut job);
+            let r = dsp::check(f, dsp_off, dsp_size, size, &mut c.job);
             if r != OK {
                 return r;
             }
-            let (v, stride) = (job.voices, job.vstride as usize);
-            let r = crate::collect::check_dsp_keys(&keys, job.nvoice as usize, |i| rd32(v.add(stride * i)), job.nfx as usize);
+            let (v, stride) = (c.job.voices, c.job.vstride as usize);
+            let r = crate::collect::check_dsp_keys(&c.keys, c.job.nvoice as usize, |i| rd32(v.add(stride * i)), c.job.nfx as usize);
             if r != OK {
                 return r;
             }
         }
+        OK
+    }
+
+    /// `slot`: where the file goes (`Slot`). A service file loads only into a provider record, and a module file never does.
+    unsafe fn load_inner(&mut self, path: *const u8, slot: Slot) -> i32 {
+        dsp::init_once();
+        // the boot loads the selection; after it only a reload loads, into the record of the module it replaces
+        if !matches!((self.phase, slot), (Phase::Boot, _) | (Phase::Reload, Slot::Module(_))) {
+            return E_BOOT_ONLY;
+        }
+        let mut c = Checked::empty();
+        let r = self.check_file(path, slot, &mut c);
+        if r != OK {
+            return r;
+        }
+        let (f, role) = (c.f, c.role);
+        let image::Head { needs, image_off, image_size, bss, reloc_off, reloc_n, init, fini, menu, tick, .. } = c.head;
+        let steps = RoleSteps::<P, M, R>::of(role);
+        let name = f.add(H_NAME);
+        let total = image_size + bss;
+        let import_addrs = &c.import_addrs;
+        let (reg_off, reg_size, dsp_size) = (c.reg_off, c.reg_size, c.dsp_size);
+        let keys = &c.keys;
+        let job = &c.job;
+        let s = st();
+        let mut i;
         // already loaded; a free record
-        let rec = match fixed {
+        let rec = match slot.fixed() {
             Some(rec) => {
                 if records::module(rec).used != 0 {
                     return E_LOADED;
+                }
+                // a reload puts the same name back; another name is another module, which the name rule checks against the other records
+                if let Slot::Module(_) = slot {
+                    let mut k = 0;
+                    while k < MAX_MODULES {
+                        if k != rec && s.modules[k].used != 0 && cstr_eq(s.modules[k].name.as_ptr(), name) {
+                            return E_LOADED;
+                        }
+                        k += 1;
+                    }
                 }
                 rec
             }
@@ -408,10 +622,12 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             },
         };
 
+        self.torn[rec] = 0;
+
         // ---- allocate, copy, relocate, zero bss ----
         // The DSP range, the relocated DSP image and the voice rows come first: nothing else is allocated yet if they fail.
         if dsp_size != 0 {
-            let r = dsp::reserve(rec, &job);
+            let r = dsp::reserve(rec, job);
             if r != OK {
                 return r;
             }
@@ -487,7 +703,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             // the CF part goes live now (rows in place before the machine view is built); the DSP code and the voice rows follow
             // when the frames flow
             m.used = 1;
-            let r = self.complete(rec, &keys, initaddr, tickaddr, image_size, steps, place);
+            let r = self.complete(rec, keys, initaddr, tickaddr, image_size, steps, place);
             if r != OK {
                 if dsp::retained() { return E_BUSY; }
                 dsp::cancel(rec);
@@ -510,7 +726,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             });
             return LOADING;
         }
-        let r = self.complete(rec, &keys, initaddr, tickaddr, image_size, steps, place);
+        let r = self.complete(rec, keys, initaddr, tickaddr, image_size, steps, place);
         if r != OK {
             if self.cannot_retire(rec) { return E_BUSY; }
             self.m.free(base);
@@ -758,6 +974,30 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
+    /// Give up the DSP part of module record `rec`: the transfer in flight is taken down and the queue goes on, or the queued load is removed, exactly as when the
+    /// DSP loader itself fails (`take_down`, the boot record's `report_dsp`, `dsp::fail_done`). `false` when `rec` has neither a load in flight nor one queued (its
+    /// DSP part has ended: the caller reads the result).
+    pub unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool {
+        let d = dsp::ds();
+        if d.phase != dsp::PH_IDLE && d.pending.rec as usize == rec {
+            let idx = d.pending.boot_idx;
+            let reclaimed = self.take_down(rec, code) == OK;
+            crate::boot::report_dsp(idx, code);
+            dsp::fail_done(reclaimed, code);
+            true
+        } else if dsp::dequeue(rec) {
+            let idx = self.sel_of_rec[rec] as u32;
+            if self.take_down(rec, code) != OK {
+                // as for the load in flight: a teardown that cannot release the rows leaves the DSP retained (`fail_done`)
+                dsp::ds().phase = dsp::PH_RETAINED;
+            }
+            crate::boot::report_dsp(idx, code);
+            true
+        } else {
+            false
+        }
+    }
+
     /// The DSP part of record `rec` failed with `code`: take the record down. A module goes through `unload_rec`. A service goes through the same `unload_rec`,
     /// after its dependents (the modules and services whose header table needs what it provides): they are failed with `E_MISSING` in their module states, their queued
     /// DSP loads are removed, and each is taken down by `unload_rec` too. The core knows no kind of service here: a need is a service name hash.
@@ -844,6 +1084,15 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         r
     }
 
+    /// Stop the tick of module record `rec` once; the address is kept for a reload that gives up.
+    unsafe fn stop_tick_once(&mut self, rec: usize) {
+        if self.torn[rec] & TORN_TICK == 0 {
+            self.saved_tick[rec] = crate::entry::tick_of(rec);
+            crate::entry::stop_tick(rec);
+            self.torn[rec] |= TORN_TICK;
+        }
+    }
+
     /// The one lifecycle of a loaded record, for modules and services (docs/plans/digikit-hot-reload.md, "Quiesce and unload protocol"): stop what calls into it (the tick
     /// of a module; the hook sites and slots of a service), drain the DSP, `fini`, the role's undo, the registry, the DSP range, the memory.
     unsafe fn unload_rec_inner(&mut self, rec: usize) -> i32 {
@@ -857,8 +1106,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let m: &mut Module = records::module(rec);
         if module {
-            // 1. clear the tick (one aligned store) so no new call starts; the UI task, where it runs, is this task
-            crate::entry::stop_tick(rec);
+            // 1. clear the tick (one aligned store) so no new call starts; the UI task, where it runs, is this task. The address is kept for a reload that gives up.
+            self.stop_tick_once(rec);
         } else if !self.uninstall(rec) {
             // 1. a service: nothing may jump into it any more (hook sites back to stock, slots zero)
             return E_BUSY;
@@ -866,7 +1115,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         // DSP rows must be invalidated before fini can mutate/release module state.
         if !dsp::quiesce(rec) { return E_BUSY; }
         // 2. fini, 3. free
-        if m.fini != 0 {
+        if m.fini != 0 && self.torn[rec] & TORN_FINI == 0 {
+            // from here the old code is gone for good: a reload cannot give the tick back
+            self.torn[rec] |= TORN_FINI;
             let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
             self.m.enter_fini(rec, m.fini, ctx);
         }
@@ -878,8 +1129,11 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         drop_tick_cb(m.base, m.size);
         crate::api::poll_drop_range(m.base, m.size);
         // the machine row first, then the DSP voice rows, then the range in the DSP area
-        (RoleSteps::<P, M, R>::of(self.roles[rec] as u32).undo)(self, rec);
-        self.r.remove(rec);
+        if self.torn[rec] & TORN_UNDO == 0 {
+            self.torn[rec] |= TORN_UNDO;
+            (RoleSteps::<P, M, R>::of(self.roles[rec] as u32).undo)(self, rec);
+            self.r.remove(rec);
+        }
         if module {
             let committed = crate::collect::release(rec);
             if committed != 0 {
@@ -893,7 +1147,215 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         m.used = 0;
         records::set_menu(rec, 0);
         crate::entry::unbind(rec);
+        self.torn[rec] = 0;
+        if module {
+            let b = crate::boot::info();
+            b.unloads = b.unloads.wrapping_add(1);
+        }
         OK
+    }
+
+    /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the
+    /// record is a live module of the boot selection; the file passes every check of a load (`check_file`), has the same name, a header table the planner can keep, and
+    /// every key of the old file (`E_RELOAD_KEYS`); the planner accepts the live set with the file in the old module's slot (`caps`: `live_caps`). `OK`, or the refusal.
+    ///
+    /// The checks of a file read the numbers the services gave its keys (`resolve` of the machines service names a voice's type by the selection index of the module that loads,
+    /// `CoreApi::boot_index`). A load has that index set and the keys numbered by `settle`; so the check sets the index to the module's, and numbers the file's keys first (the old
+    /// keys keep their numbers, a key the file adds takes a free one, as `reload_load` does again). The numbering is done only for a file that has the module's name and every old key.
+    pub unsafe fn reload_check(&mut self, rec: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        if rec >= MAX_MODULES || records::module(rec).used == 0 {
+            return E_NOT_FOUND;
+        }
+        let k = self.sel_of_rec[rec] as usize;
+        if k >= SEL_MAX || self.table_len[k] == 0 {
+            return E_NOT_FOUND;
+        }
+        if let Ok(staged) = self.m.stage(path) {
+            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+            if let Some(table) = table_of_file(file) {
+                let same_name = file.len() >= H_NAME + dkneeds::NAME_LEN as usize && file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] == records::module(rec).name[..];
+                if let (true, Ok(old), Ok(new)) = (same_name, Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(table)) {
+                    if old.first_missing_key(&new).is_none() {
+                        let saved = (self.tables[k], self.table_len[k]);
+                        self.capture(k, file);
+                        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+                        services().settle(&sel);
+                        self.tables[k] = saved.0;
+                        self.table_len[k] = saved.1;
+                    }
+                }
+            }
+        }
+        let was = read_volatile(addr_of!(BOOT_IDX));
+        crate::selection::BOOT_IDX = k as u32;
+        let r = self.reload_check_inner(rec, k, path, caps);
+        crate::selection::BOOT_IDX = was;
+        r
+    }
+
+    unsafe fn reload_check_inner(&mut self, rec: usize, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        let mut c = Checked::empty();
+        let r = self.check_file(path, Slot::Module(rec), &mut c);
+        if r != OK {
+            return r;
+        }
+        if !cstr_eq(c.f.add(H_NAME), records::module(rec).name.as_ptr()) {
+            return E_FORMAT; // another name is another module
+        }
+        if c.reg_size as usize > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        let new = match Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)) {
+            Ok(t) => t,
+            Err(_) => return E_FORMAT,
+        };
+        match Keys::parse(&self.tables[k][..self.table_len[k]]) {
+            Ok(old) => {
+                if old.first_missing_key(&new).is_some() {
+                    return E_RELOAD_KEYS;
+                }
+            }
+            Err(_) => return E_NOT_FOUND,
+        }
+        // the live set: every module that is loaded, with the new table in the old one's slot
+        let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
+        let mut r = 0;
+        while r < MAX_MODULES {
+            let at = self.sel_of_rec[r] as usize;
+            if records::module(r).used != 0 && at < SEL_MAX && self.table_len[at] != 0 {
+                mods[at] = Keys::parse(&self.tables[at][..self.table_len[at]]).ok();
+            }
+            r += 1;
+        }
+        mods[k] = Some(new);
+        // the providers that loaded
+        let np = self.found.n;
+        let mut provs = parse_provs(&self.found, np);
+        let mut j = 0;
+        while j < np.min(PROVIDER_MAX) {
+            if !self.loaded[j] {
+                provs[j] = None;
+            }
+            j += 1;
+        }
+        let env = Env { services: services(), runtime: dkrt_sdk::RUNTIME_VERSION, caps };
+        let p = plan::plan_live(&env, &mods, &provs[..np.min(PROVIDER_MAX)]);
+        // the new file first, then any live module that no longer fits with it
+        if !p.verdicts[k].is_accepted() {
+            return p.verdicts[k].result();
+        }
+        let mut i = 0;
+        while i < SEL_MAX {
+            if mods[i].is_some() && !p.verdicts[i].is_accepted() {
+                return p.verdicts[i].result();
+            }
+            i += 1;
+        }
+        OK
+    }
+
+    /// The selection indices of the modules that are loaded, and `extra` (the index a reload is about to load into).
+    unsafe fn live_at(&self, extra: usize) -> [bool; SEL_MAX] {
+        let mut live = [false; SEL_MAX];
+        let mut r = 0;
+        while r < MAX_MODULES {
+            let at = self.sel_of_rec[r] as usize;
+            if records::module(r).used != 0 && at < SEL_MAX {
+                live[at] = true;
+            }
+            r += 1;
+        }
+        if extra < SEL_MAX {
+            live[extra] = true;
+        }
+        live
+    }
+
+    /// The first step of a reload's teardown, called once per pass until it returns `OK`: close every way into the module's code, then wait until nothing is inside.
+    /// The tick stops; its SysEx commands answer `E_BUSY` from now on; its sinks, with the span clock, are cleared (under the interrupt mask); the block count is
+    /// noted. It returns `E_BUSY` until no command of the module is in flight and `DRAIN_BLOCKS` blocks have passed (no spinning: the next UI pass asks again).
+    /// Nothing is freed and no DSP row is touched, so `reload_abort` can still give the module back its tick and commands. `E_NOT_FOUND`: no such module.
+    ///
+    /// The channel sinks (`dlog::CHAN`) are cleared and an abort does not set them again: a module that owned one (the debug module's log sink) loses it until the
+    /// next boot. The legacy single sink and tick words of `dlog` (`SINK`, `TICK`) are not touched here: they point into the module's code, which stays mapped until
+    /// `unload_rec` frees it, and `dlog::sink_drop` clears them (masked) before that free, so a task that calls them in between runs code that is still there.
+    pub unsafe fn reload_quiesce(&mut self, rec: usize) -> i32 {
+        if rec >= MAX_MODULES || records::module(rec).used == 0 {
+            return E_NOT_FOUND;
+        }
+        let owner = rec as u8 + 1;
+        if self.torn[rec] & TORN_DRAIN == 0 {
+            self.stop_tick_once(rec);
+            crate::module_cmds::set_draining(owner, true);
+            crate::dlog::release_sinks(rec);
+            self.drain_at[rec] = self.p.blocks();
+            self.torn[rec] |= TORN_DRAIN;
+        }
+        if crate::module_cmds::in_flight(owner) != 0 || !crate::reload::drained(&self.p, self.drain_at[rec]) {
+            return E_BUSY;
+        }
+        OK
+    }
+
+    /// The teardown of a reload cannot go on (the DSP did not drain in time): if `fini` has not run, the old module gets its tick back and the reload ends with
+    /// the old module live. `false` when the old code is gone (`fini` ran): the caller finishes the teardown.
+    pub unsafe fn reload_abort(&mut self, rec: usize) -> bool {
+        if rec >= MAX_MODULES || self.torn[rec] & TORN_FINI != 0 {
+            return false;
+        }
+        if self.torn[rec] & TORN_TICK != 0 {
+            crate::entry::publish_tick(rec, self.saved_tick[rec]);
+        }
+        crate::module_cmds::set_draining(rec as u8 + 1, false);
+        self.torn[rec] = 0;
+        true
+    }
+
+    /// Load the new file of a reload into the record `rec` of the module that `unload_rec` took down: the file's header table replaces the old one in the selection
+    /// index of the record, so the services number its keys at `init` as they did the old file's, and the load keeps the record, its owner id and its selection index.
+    pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
+        let k = if rec < MAX_MODULES { self.sel_of_rec[rec] as usize } else { SEL_MAX };
+        if k >= SEL_MAX {
+            return E_NOT_FOUND;
+        }
+        // the file can have changed since `reload_check` (a host writes it while the module drains): the rules of the check hold for the bytes that load
+        let staged = match self.m.stage(path) {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+        if file.len() < dkneeds::HEADER as usize || file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] != records::module(rec).name[..] {
+            return E_FORMAT;
+        }
+        let (off, len) = match table_span(file) {
+            Some(s) => s,
+            None => return E_FORMAT,
+        };
+        if len > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        match (Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(&file[off..off + len])) {
+            (Ok(old), Ok(new)) => {
+                if old.first_missing_key(&new).is_some() {
+                    return E_RELOAD_KEYS;
+                }
+            }
+            (_, Err(_)) => return E_FORMAT,
+            (Err(_), _) => return E_NOT_FOUND,
+        }
+        self.capture(k, file);
+        self.accepted[k] = true;
+        // the services number the live set again: the live modules keep their numbers (sticky), a key the new file adds takes a free one
+        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+        services().settle(&sel);
+        self.phase = Phase::Reload;
+        crate::selection::BOOT_IDX = k as u32;
+        self.missing = [0; NEEDS_LEN];
+        self.decl_diff = (0, 0);
+        let r = self.load_file(path, Slot::Module(rec));
+        crate::selection::BOOT_IDX = u32::MAX;
+        self.phase = Phase::Closed;
+        r
     }
 
     /// Keep the header table of the `.dkm` `file` (the whole file in the staging buffer) for selection index `k`.
@@ -1033,6 +1495,45 @@ pub(crate) fn settle_ctx(planned: &Plan, tables: &[[u8; TABLE_MAX]; SEL_MAX], le
     let mut i = 0;
     while i < n {
         if planned.verdicts[i].is_accepted() {
+            sel.nkeys[i] = table_keys(&tables[i][..lens[i]], &mut sel.keys[i]) as u8;
+        }
+        i += 1;
+    }
+    sel
+}
+
+/// The header table of a `.dkm`: its offset and length in `file`, `None` when the header is short, the table empty or outside the file.
+fn table_span(file: &[u8]) -> Option<(usize, usize)> {
+    if file.len() < dkneeds::HEADER as usize {
+        return None;
+    }
+    let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
+    let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
+    if len == 0 || off > file.len() || len > file.len() - off {
+        None
+    } else {
+        Some((off, len))
+    }
+}
+
+/// The header table of `file` when it fits the planner's limit.
+fn table_of_file(file: &[u8]) -> Option<&[u8]> {
+    let (off, len) = table_span(file)?;
+    if len > TABLE_MAX {
+        None
+    } else {
+        Some(&file[off..off + len])
+    }
+}
+
+/// What a reload's `settle` hands to the services: the keys of the modules in `live` (selection indices), in selection order. The count reaches the last live one.
+#[inline(never)]
+pub(crate) fn live_settle_ctx(tables: &[[u8; TABLE_MAX]; SEL_MAX], lens: &[usize; SEL_MAX], live: &[bool; SEL_MAX]) -> dkrt_abi::service::SettleCtx {
+    let mut sel = dkrt_abi::service::SettleCtx::new();
+    let mut i = 0;
+    while i < SEL_MAX {
+        if live[i] {
+            sel.count = i + 1;
             sel.nkeys[i] = table_keys(&tables[i][..lens[i]], &mut sel.keys[i]) as u8;
         }
         i += 1;

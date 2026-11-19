@@ -560,6 +560,16 @@ mark = "O"
 rule = "fw/project:cf_func"
 
 [[anchor]]
+name = "cf.project.fn.transport_state"
+cpu = "cf"
+kind = "code"
+addr = 0x4008b838
+len = 4
+sha256 = "68a065482acab679291a1ecdc271f97c5f8098e46078db808cad161e442a8c67"
+mark = "D"
+rule = "fw/project:cf_func"
+
+[[anchor]]
 name = "cf.rtos.fn.create_main"
 cpu = "cf"
 kind = "data"

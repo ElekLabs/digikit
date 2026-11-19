@@ -240,16 +240,18 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
         return r;
     }
     // a command a module registered
-    match service(cmd) {
-        Some(h) => {
+    match crate::module_cmds::begin_cmd(cmd) {
+        Err(()) => reply(cmd, seq, E_BUSY, 0), // its module is being reloaded: the host asks again
+        Ok(Some((h, owner))) => {
             let out = (addr_of_mut!(RBODY) as *mut u8).add(1);
             // what the handler logs carries its module's source (owner 255: registered by no module)
-            let owner = service_of(cmd).map_or(255, |s| s.owner);
             let prev = if owner != 255 && owner > 0 { dlog::enter_module(owner as usize - 1, dlog::PHASE_CALLBACK) } else { 0 };
             let r = h(cmd as u32, seq, body, blen as u32, out);
             if owner != 255 && owner > 0 {
                 dlog::leave_module(prev);
             }
+            // counted since `begin_cmd`: a reload of the module waits for it
+            crate::module_cmds::end_cmd(owner);
             if r < 0 {
                 reply(cmd, seq, r, 0)
             } else if r as usize > REPLY_BODY_MAX - 1 {
@@ -258,7 +260,7 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
                 reply(cmd, seq, OK, r as usize)
             }
         }
-        None => reply(cmd, seq, E_PROTO, 0),
+        Ok(None) => reply(cmd, seq, E_PROTO, 0),
     }
 }
 
@@ -281,7 +283,7 @@ pub(crate) struct Cmd {
 }
 
 /// The built-in commands, looked up one after the other (a jump table is not ColdFire code).
-pub(crate) static CMDS: [Cmd; 19] = [
+pub(crate) static CMDS: [Cmd; 21] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG | STORE, h: h_info },
     Cmd { cmd: CMD_LIST, flags: STORE, h: h_list },
     Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },
@@ -301,6 +303,8 @@ pub(crate) static CMDS: [Cmd; 19] = [
     Cmd { cmd: CMD_FAULT, flags: 0, h: h_fault },
     Cmd { cmd: CMD_SELECT, flags: BIG, h: h_select },
     Cmd { cmd: CMD_RESTART, flags: 0, h: h_restart },
+    Cmd { cmd: CMD_RELOAD, flags: 0, h: h_reload },
+    Cmd { cmd: CMD_RELOAD_STATE, flags: NOLOG, h: h_reload_state },
 ];
 
 pub(crate) fn find(cmd: u8) -> Option<&'static Cmd> {

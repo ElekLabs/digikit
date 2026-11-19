@@ -121,7 +121,8 @@ impl Registry for DeviceRegistry {
         RealRegistry.add(rec, row)
     }
     unsafe fn remove(&mut self, rec: usize) {
-        RealRegistry.remove(rec)
+        // a module's registry rows are the scripted cleanup tests' (`registry_remove` asserts their event order); a provider's row is real
+        crate::svc_rows::remove(rec)
     }
     unsafe fn module_begin(&mut self, rec: usize) {
         RealRegistry.module_begin(rec)
@@ -265,6 +266,7 @@ unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
 struct Nothing;
 impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
     dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_teardown!();
 }
 
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
@@ -707,6 +709,40 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         got.sort();
         want.sort();
         assert_eq!(got, want, "{}: the BIND items of lfo.dks", dev.name);
+    }
+}
+
+/// The reload seam (docs/plans/extension-model.md E5): a real packed module of the boot is checked against the live set, taken down and loaded again into its
+/// record, twice; a service file at a module's path is refused by the role check before anything is unloaded.
+#[test]
+fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refused() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (mut l, mut plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
+            let _dsp = dsp_env(*dev, &l, &plan);
+            l.load_providers(&plan);
+            l.settle(&mut plan, 1);
+            let path = "modules/lfo-shape.dkm\0";
+            l.phase = Phase::Boot;
+            crate::selection::BOOT_IDX = 0;
+            assert_eq!(l.load(path.as_ptr()), OK, "{}", dev.name);
+            crate::selection::BOOT_IDX = u32::MAX;
+            l.phase = Phase::Closed;
+            let mut caps = capacity(&l.p);
+            crate::loader::live_caps(&mut caps, crate::loader::own_use(0));
+            // a service file is no module: refused, and the module is as it was
+            assert_eq!(l.reload_check(0, "services/lfo.dks\0".as_ptr(), &caps), E_FORMAT, "{}", dev.name);
+            assert_eq!(records::module(0).used, 1);
+            for round in 0..2 {
+                assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
+                assert_eq!(l.unload_rec(0), OK, "{} round {round}", dev.name);
+                assert_eq!(l.reload_load(0, path.as_ptr()), OK, "{} round {round}", dev.name);
+                assert_eq!((records::module(0).used, l.sel_of_rec[0]), (1, 0));
+            }
+        }
+        let _ = clean_state();
     }
 }
 

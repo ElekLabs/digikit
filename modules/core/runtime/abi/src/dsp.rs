@@ -15,6 +15,14 @@ pub const GRANULE: u32 = dkneeds::GRANULE;
 /// Words of a voice row of `core/dsp-voice`: 0 type, 1 pc, 2 to 9 the range of knob 0 to 7 (min | max << 16), 10 the type the guard disabled, then its counters,
 /// 16 note_on pc, 17 state base, 18 state stride, 19 clear bytes, 20 generation, 21 log level, 22 parameter latch mask, 23 the tracks whose state the adapter has zeroed since the load (bit t; the runtime writes 0).
 pub const ROW_WORDS: u32 = 24;
+
+/// The owner byte of a voice row that no module record owns: a MISSING placeholder (docs/plans/extension-model.md E5 item 7), a disabled row that keeps the machine
+/// type of an unloaded module silent until the module's new code publishes its own row. No record has it (records are `1..=MAX_MODULES`); the service that parked
+/// the row frees it.
+pub const PLACEHOLDER_OWNER: u8 = 0xfe;
+
+/// The pc word of a placeholder row: any non-zero value (a disabled row is never called).
+pub const PLACEHOLDER_PC: u32 = L2_SW_BASE;
 /// The layout of a DSP section (`[format]` of sdk/sdk.toml): magic, versions, header words, entry sizes and the fields of a voice and an effect record.
 pub use dkneeds::{
     DSP_HEADER, DSP_H_ALIGN, DSP_H_BANK_OFF, DSP_H_BSS, DSP_H_DEVICE, DSP_H_FX_N, DSP_H_FX_OFF,
