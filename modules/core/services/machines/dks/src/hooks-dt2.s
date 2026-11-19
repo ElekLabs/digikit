@@ -1,8 +1,8 @@
 | machines.dks on the Digitakt II (1.17): the ColdFire routines the service's hooks run. They were in core/machines (`src/cf/dt2/machines.s`).
 |
-| Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (`patchkit bind` made the hook raw: no trampoline). The routine takes the whole
+| Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline). The routine takes the whole
 | control flow of the site and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by
-| `patchkit bind`) or, when a branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address `patchkit bind` resolves:
+| the port file) or, when a branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves:
 | the jump changes no register or flag). The aliases `mf_x_*`, `mf_spt` are the `[object.externs]` of module.toml.
 | `MF_TAB` is the image table `machines_info` of core/machines, copied by `setup` (lib.rs); its words give the registry rows and counts and the addresses of the
 | adapter's routines. Offsets T_* below; the same layout is in hooks-dn2.s and in `image.rs`.
@@ -94,7 +94,7 @@ mf_typearg:
     bra.s   9f
 7:  movem.l (%sp),%d1-%d2/%a0/%a2
     lea     16(%sp),%sp
-9:  jmp     dk_tail_09514a38            | the stock instructions of the site, made by `patchkit bind`, and on
+9:  jmp     dk_tail_09514a38            | the stock instructions of the site, copied by the runtime from the port file, and on
 
 | ---- SRC page count (docs/findings/50). The page list of a `ParameterPageView` is a vector of 4-byte entries at view+0x7c (begin) and view+0x80 (end); the current page is
 | view+0x90. `SourcePageView` has two entries (the knob page and the sample view). An added machine has ONE SRC page: at the start of `SourcePageView::vfunc_4` the vector is cut

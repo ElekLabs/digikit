@@ -1,9 +1,10 @@
-import { golden, pollUntil, repoRoot } from '@digi/test-support';
+import { golden, pollUntil, repoRoot, type Device } from '@digi/test-support';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { decodeSettings, settingsMap, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -25,13 +26,13 @@ export function pinFrame(name: string, hash: string, png: string): void {
 /** The shape fixtures: RAMP (`test/lfo-shape`) first, STEP (`test/lfo-shape-b`) second, so the service gives them the wave numbers 7 and 8. */
 export const SHAPE_A = 'test/lfo-shape';
 export const SHAPE_B = 'test/lfo-shape-b';
-export const storePath = (id: string) => `modules/${id.split('/').at(-1)}.dkm`;
+export const storePath = (device: Device, id: string) => moduleStorePath(device, id);
 /** The settings key of the service's sticky map (`records::SETTING`): 8 words, big endian, `hash24 << 8 | wave number`. */
 export const SHAPES_KEY = 'lfo.shapes';
 
 /** Boot a card that holds `ids` (bound `lfo.dks` goes on it with them) and selects them in this order; every module must load. */
 export async function bootWith(h: CardRig, tag: string, ids: string[]): Promise<TestRuntime> {
-  const rt = await h.load(tag, { modules: ids, selection: ids.map(storePath) });
+  const rt = await h.load(tag, { modules: ids, selection: ids.map((id) => storePath(h.device, id)) });
   const info = await bootInfo(rt.session, h.plan);
   expect(info.results.slice(0, ids.length), `${ids.join(' and ')} load`).toEqual(ids.map(() => 0));
   return rt;

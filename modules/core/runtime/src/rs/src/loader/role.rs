@@ -1,14 +1,14 @@
 //! The role of a `.dkm` or `.dks` file (docs/plans/runtime-and-services.md section 13.2): the role word of the header and what the header table may hold for it.
-//! `RoleSteps` are the steps that differ by role, chosen from the role word: a module has only a check (its table has no PROVIDES, HOOKS, KINDS, SLOTS, BIND or FW item), a service (`.dks`) checks, keeps its table, publishes its exports and
+//! `RoleSteps` are the steps that differ by role, chosen from the role word: a module has only a check (its table has no PROVIDES, HOOKS, KINDS, SLOTS, BIND, FW, FWNAMES or SITES item), a service (`.dks`) checks, keeps its table, publishes its exports and
 //! installs its hooks (the row of the service is R12-4).
 //! The service search (`discover.rs`) uses `role_of` and `role_ok`; the loader runs the steps.
 use super::exports::EXPORTS_MAX;
 use super::image::Head;
-use super::install::{Backend, CfItems, DspItems};
+use super::install::{Backend, CfItems, DspItems, HookItem, SITES_MAX};
 use super::{Images, Loader, ProvRec, Registry};
-use dkneeds::keys::{tag, BindRef, Keys};
+use dkneeds::keys::{tag, Keys, FLAG_ABSENT};
 use dkrt_abi::platform::Platform;
-use dkrt_sdk::{E_FORMAT, E_HOOK_STOCK, E_NOMEM, E_SVC_ABI, OK};
+use dkrt_sdk::{E_FORMAT, E_HOOK_STOCK, E_IMPORT, E_NOMEM, E_PLAN_FIT, E_RANGE, E_SVC_ABI, OK};
 
 /// What a role step may need of the file besides the record: the staged file (valid until `init` runs) and where its table and image are.
 #[derive(Clone, Copy)]
@@ -19,6 +19,10 @@ pub struct PlaceArgs {
     pub image_size: u32,
     /// Bytes of the file's DSP image (0: no DSP section).
     pub dsp_image: u32,
+    /// The loaded image block (host pointer) and the address a module sees it at; the image is `image_size` bytes, `bss` bytes of zeros follow it.
+    pub mem: *mut u8,
+    pub base: u32,
+    pub bss: u32,
 }
 
 /// The steps of one role, in the order the loader runs them. `check` runs after the header parse and before anything is allocated (`file` is the staged
@@ -39,21 +43,29 @@ impl<P: Platform, M: Images, R: Registry> Clone for RoleSteps<P, M, R> {
 impl<P: Platform, M: Images, R: Registry> Copy for RoleSteps<P, M, R> {}
 
 impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
-    /// The steps of the role word `role`: 1 is a service; every other word is a module, as before the table (`role_ok` refuses another word in the search).
+    /// The steps of the role word `role`: 1 is a service, 2 the port file; every other word is a module, as before the table (`role_ok` refuses another word in the
+    /// search).
     pub const fn of(role: u32) -> Self {
         if role == 1 {
             Self::SERVICE
+        } else if role == 2 {
+            Self::PORT
         } else {
             Self::MODULE
         }
     }
 
-    /// A module has only a check: its header table has no PROVIDES, HOOKS, KINDS, SLOTS, BIND or FW item.
+    /// A module has only a check: its header table has no PROVIDES, HOOKS, KINDS, SLOTS, BIND, FW, FWNAMES or SITES item.
     pub const MODULE: Self = RoleSteps { check: module_check, place: no_place, activate: no_activate, undo: no_undo };
 
     /// A service (a provider record): the check refuses an unknown ABI, a bad table and a hook site that is not stock, all before anything is
     /// allocated; place keeps the table; activate publishes the exports and installs the hooks, last; undo withdraws and frees.
     pub const SERVICE: Self = RoleSteps { check: service_check, place: service_place, activate: service_activate, undo: service_undo };
+}
+
+impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
+    /// The port file (a provider with no code): the check refuses another firmware and a bad table; place keeps the table; it publishes and installs nothing.
+    pub const PORT: Self = RoleSteps { check: port_check, place: port_place, activate: no_activate, undo: service_undo };
 }
 
 unsafe fn module_check<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, file: *const u8, _: &Head) -> i32 {
@@ -82,47 +94,62 @@ unsafe fn table_of<'a>(file: *const u8, off: u32, len: u32) -> Result<Keys<'a>, 
     Keys::parse(core::slice::from_raw_parts(file.add(off as usize), len as usize)).map_err(|_| E_FORMAT)
 }
 
-/// The `BIND` items of `keys` into `out`; their count.
+/// The hook sites a service takes, into `out`; their count. Each `HOOKS` item (hook name hash, entry) takes the `SITES` item of the loaded port file for that hook: its address,
+/// displaced length and check value. A hook the firmware lacks (the item has the `absent` flag) is skipped. A hook the port file does not list (or no port file loaded) is
+/// `E_IMPORT`, the hash kept for the log; a site the runtime cannot use is `E_RANGE`; more sites than the installer holds is `E_PLAN_FIT`.
 #[inline(never)]
-fn binds_of<'a>(keys: &Keys<'a>, out: &mut [BindRef<'a>; BIND_MAX]) -> usize {
+unsafe fn hook_items<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, keys: &Keys, out: &mut [HookItem; SITES_MAX]) -> Result<usize, i32> {
     let mut n = 0;
-    while n < BIND_MAX {
-        match keys.bind(n) {
-            Some(b) => out[n] = b,
-            None => break,
+    let mut i = 0;
+    while let Some((hash, entry, _)) = keys.words(tag::HOOKS, i) {
+        i += 1;
+        let entry = entry & dkneeds::keys::HOOK_ENTRY_MASK;
+        let site = match l.port_keys() {
+            Some((port, ..)) => port.find_site(hash),
+            None => None,
+        };
+        let Some(s) = site else {
+            l.import_hash = hash;
+            return Err(E_IMPORT);
+        };
+        if s.flags & FLAG_ABSENT != 0 {
+            continue;
         }
+        if !super::port::site_ok(&s) {
+            return Err(E_RANGE);
+        }
+        if n == SITES_MAX {
+            return Err(E_PLAN_FIT);
+        }
+        out[n] = HookItem { addr: s.addr, len: s.len as u32, check: s.check, entry };
         n += 1;
     }
-    n
+    Ok(n)
 }
 
-const BIND_MAX: usize = dkneeds::BIND_MAX as usize;
-const NO_BIND: BindRef<'static> = BindRef { site: 0, addr: 0, len: 0, tramp: 0, stock: &[] };
-
-/// The `FW` item of a bound file against the `fw_id` entry of the image's info table (the first 8 bytes of the SHA-256 of the stock firmware, two words). A file
-/// with `BIND` items and no `FW` item, or with more than one, is `E_FORMAT`; a file with no `FW` and no `BIND` holds no firmware address and is accepted. An `FW`
-/// item that the image does not match (another firmware, or an image with no `fw_id`) is `E_HOOK_STOCK`, the text of a site that is not stock.
+/// The `FW` item of the port file against the `fw_id` entry of the image's info table (the first 8 bytes of the SHA-256 of the stock firmware, two words). A port file
+/// for another firmware, or an image with no `fw_id`, is `E_HOOK_STOCK`, the text of a site that is not stock. (`role_ok` made sure the file has one `FW` item.)
 #[inline(never)]
 unsafe fn fw_check<P: Platform>(p: &P, keys: &Keys) -> Result<(), i32> {
-    let n = keys.fw_count();
-    if n > 1 || (n == 0 && keys.bind_count() != 0) {
-        return Err(E_FORMAT);
-    }
     let Some(id) = keys.fw(0) else {
-        return Ok(());
-    };
-    let at = p.info(dkneeds::keys::name_hash("fw_id"));
-    if at.is_null() {
         return Err(E_HOOK_STOCK);
-    }
-    let want = [
-        u32::from_be_bytes([id[0], id[1], id[2], id[3]]),
-        u32::from_be_bytes([id[4], id[5], id[6], id[7]]),
-    ];
-    if core::ptr::read_volatile(at) != want[0] || core::ptr::read_volatile(at.add(1)) != want[1] {
+    };
+    if image_fw_id(p) != Some(id) {
         return Err(E_HOOK_STOCK);
     }
     Ok(())
+}
+
+/// The `fw_id` entry of the image's info table: the first 8 bytes of the SHA-256 of the stock firmware (two words, kept big endian); `None` for an image that has none.
+pub unsafe fn image_fw_id<P: Platform>(p: &P) -> Option<[u8; 8]> {
+    let at = p.info(dkneeds::keys::name_hash("fw_id"));
+    if at.is_null() {
+        return None;
+    }
+    let mut id = [0u8; 8];
+    id[..4].copy_from_slice(&core::ptr::read_volatile(at).to_be_bytes());
+    id[4..].copy_from_slice(&core::ptr::read_volatile(at.add(1)).to_be_bytes());
+    Some(id)
 }
 
 unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
@@ -141,20 +168,46 @@ unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
     if let Err(e) = role_ok(1, &keys) {
         return e;
     }
-    if keys.bind_count() > BIND_MAX || keys.count(tag::EXPORTS) > EXPORTS_MAX {
+    if keys.count(tag::EXPORTS) > EXPORTS_MAX {
         return E_FORMAT;
     }
-    // the firmware the file was bound to is the firmware this image was patched from: checked before the stock bytes of the sites and before `init`
-    if let Err(e) = fw_check(&l.p, &keys) {
-        return e;
-    }
-    // every hook site holds the stock bytes the bind recorded: checked here, before `init` runs, and again under the mask at the install
-    let mut binds = [NO_BIND; BIND_MAX];
-    let n = binds_of(&keys, &mut binds);
-    match l.installer.check(&l.p, &binds[..n], 0, head.image_size) {
+    // every hook site holds the stock bytes the port file's check value is of: checked here, before `init` runs, and again under the mask at the install
+    let mut hooks = core::mem::zeroed::<[HookItem; SITES_MAX]>();
+    let n = match hook_items(l, &keys, &mut hooks) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    match l.installer.check(&l.p, &hooks[..n], head.image_size) {
         Ok(()) => OK,
         Err(e) => e,
     }
+}
+
+/// What `init` of a service file declares is compared with the file's header table. The table's `HOOKS` items carry a device mask in the top byte of the entry and list
+/// the hooks of every device; this device's declarations hold the bare entry and only the hooks the firmware has. The copy of the table that is compared is made to
+/// match: the mask is dropped, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it).
+#[inline(never)]
+pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::collect::KeysCopy) {
+    let port = l.port_keys();
+    let d = &mut keys.decl;
+    let (mut from, mut to) = (0, 0);
+    while from < d.n {
+        let mut it = d.items[from];
+        from += 1;
+        if it.tag == tag::HOOKS {
+            it.b &= dkneeds::keys::HOOK_ENTRY_MASK;
+            let gone = match &port {
+                Some((p, ..)) => matches!(p.find_site(it.a), Some(s) if s.flags & FLAG_ABSENT != 0),
+                None => false,
+            };
+            if gone {
+                continue;
+            }
+        }
+        d.items[to] = it;
+        to += 1;
+    }
+    d.n = to;
 }
 
 /// The provider index of record `rec`.
@@ -179,10 +232,10 @@ unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
         }
         i += 1;
     }
-    if keys.bind_count() == 0 && keys.count(tag::EXPORTS) == 0 && keys.count(tag::SLOTS) == 0 {
+    if keys.count(tag::HOOKS) == 0 && keys.count(tag::EXPORTS) == 0 && keys.count(tag::SLOTS) == 0 {
         return OK;
     }
-    // the staged file is overwritten while `init` reads from the store: BIND, EXPORTS and SLOTS are kept in an arena block (the whole table)
+    // the staged file is overwritten while `init` reads from the store: HOOKS, EXPORTS and SLOTS are kept in an arena block (the whole table)
     let blk = match l.m.alloc(a.keys_len) {
         Some(b) => b,
         None => return E_NOMEM,
@@ -190,6 +243,81 @@ unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
     core::ptr::copy_nonoverlapping(a.file.add(a.keys_off as usize), blk.ptr, a.keys_len as usize);
     l.provs[idx].block = Some(blk);
     l.provs[idx].len = a.keys_len;
+    OK
+}
+
+/// The port file's checks, all before anything is allocated: the table fits the role; the file is for this image's firmware (`FW` against `fw_id`, `E_HOOK_STOCK`
+/// otherwise); the image starts with the `rts` that every `dk_ret_` resolves to and its bss holds the copies of the sites; every site is one the runtime can use; and
+/// the live bytes of each site that is copied are the stock ones (the check value, `E_HOOK_STOCK`).
+unsafe fn port_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
+    let (off, len) = (crate::rd32(file.add(super::H_REG_OFF)), crate::rd32(file.add(super::H_REG_SIZE)));
+    let size = crate::rd32(file.add(dkneeds::H_SIZE as usize));
+    if !super::in_file(off, len, size) {
+        return E_FORMAT;
+    }
+    let keys = match table_of(file, off, len) {
+        Ok(k) => k,
+        Err(e) => return e,
+    };
+    if let Err(e) = role_ok(2, &keys) {
+        return e;
+    }
+    if let Err(e) = fw_check(&l.p, &keys) {
+        return e;
+    }
+    let first = core::ptr::read_unaligned(file.add(head.image_off as usize) as *const u16);
+    if head.image_size < 2 || u16::from_be(first) != super::port::RTS || head.bss < super::port::tails_total(&keys) {
+        return E_FORMAT;
+    }
+    let mut i = 0;
+    while let Some(s) = keys.site(i) {
+        i += 1;
+        if s.flags & dkneeds::keys::FLAG_ABSENT != 0 {
+            continue;
+        }
+        if !super::port::site_ok(&s) {
+            return E_RANGE;
+        }
+        if super::port::copies(&s) && super::port::site_check(&l.p, s.addr, s.len as usize) != s.check {
+            return E_HOOK_STOCK;
+        }
+    }
+    OK
+}
+
+/// The port file keeps its whole table in an arena block (the staged file is overwritten while `init` reads from the store, and the imports of the services that load
+/// after it are looked up in it), and fills the copies of its tail and stock sites in the bss of its image: the displaced bytes from flash, then `jmp.l` behind the site.
+/// The check of the file compared those bytes with the check value; the caches are written back at the end.
+unsafe fn port_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, a: &PlaceArgs) -> i32 {
+    let idx = index_of(rec);
+    l.provs[idx] = ProvRec::EMPTY;
+    l.provs[idx].image_size = a.image_size;
+    let blk = match l.m.alloc(a.keys_len) {
+        Some(b) => b,
+        None => return E_NOMEM,
+    };
+    core::ptr::copy_nonoverlapping(a.file.add(a.keys_off as usize), blk.ptr, a.keys_len as usize);
+    l.provs[idx].block = Some(blk);
+    l.provs[idx].len = a.keys_len;
+    let keys = match table_of(a.file, a.keys_off, a.keys_len) {
+        Ok(k) => k,
+        Err(e) => return e,
+    };
+    let mut off = a.image_size;
+    let mut i = 0;
+    while let Some(s) = keys.site(i) {
+        i += 1;
+        if s.flags & dkneeds::keys::FLAG_ABSENT != 0 || !super::port::copies(&s) {
+            continue;
+        }
+        let len = s.len as usize;
+        let at = a.mem.add(off as usize);
+        l.p.read_code(s.addr, core::slice::from_raw_parts_mut(at, len));
+        core::ptr::copy_nonoverlapping(0x4ef9u16.to_be_bytes().as_ptr(), at.add(len), 2);
+        core::ptr::copy_nonoverlapping(s.addr.wrapping_add(s.len as u32).to_be_bytes().as_ptr(), at.add(len + 2), 4);
+        off += super::port::tail_bytes(&s);
+    }
+    l.p.flush(a.base.wrapping_add(a.image_size), off - a.image_size);
     OK
 }
 
@@ -212,8 +340,11 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
         }
         i += 1;
     }
-    let mut binds = [NO_BIND; BIND_MAX];
-    let nb = binds_of(&keys, &mut binds);
+    let mut hooks = core::mem::zeroed::<[HookItem; SITES_MAX]>();
+    let nh = match hook_items(l, &keys, &mut hooks) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
     // the pointer slots the file fills: a SLOTS item is the name hash of a `[[slot]]` of an image adapter (the image's info table gives the address of its word) and the entry
     // of this file. A slot the image does not have, or a name that is an `[[info]]` data table, refuses the file, before anything is installed.
     let mut slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
@@ -249,7 +380,7 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
     if let Err(e) = Backend::install(&mut l.dsp_install, &l.p, rec as u8, &DspItems { slots: &dsp_slots[..nd] }) {
         return e;
     }
-    let cf = CfItems { binds: &binds[..nb], image_base: base, image_size: pr.image_size, slots: &slots[..ns] };
+    let cf = CfItems { hooks: &hooks[..nh], image_base: base, image_size: pr.image_size, slots: &slots[..ns] };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
         Ok(()) => OK,
         Err(e) => {
@@ -268,30 +399,42 @@ unsafe fn service_undo<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M,
     l.provs[idx] = ProvRec::EMPTY;
 }
 
-/// The role word of a file: 0 a module, 1 a service (`.dks`). `head` is the first 64 bytes of the file; the word is big endian, like every header field.
+/// The role word of a file: 0 a module, 1 a service (`.dks`), 2 the port file (`.dkport`). `head` is the first 64 bytes of the file; the word is big endian, like every header field.
 pub fn role_of(head: &[u8; 64]) -> u32 {
     let at = dkneeds::H_ROLE as usize;
     u32::from_be_bytes([head[at], head[at + 1], head[at + 2], head[at + 3]])
 }
 
-/// Whether the header table `keys` fits the role: a module (0) has no PROVIDES, HOOKS, KINDS, SLOTS, BIND or FW item; a service (1) has table version 2 and exactly one
-/// PROVIDES item. Another role is `E_FORMAT`, like the other refusals.
+/// Whether the header table `keys` fits the role: a module (0) has no PROVIDES, HOOKS, KINDS, SLOTS, BIND, FW, FWNAMES or SITES item; a service (1) has table version 2 and
+/// exactly one PROVIDES item and no BIND or FW item (a bound file, which this runtime does not load); the port file (2) has version 3, one PROVIDES and one FW item and no item of a module or a service. Another role is `E_FORMAT`, like the other refusals.
 pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
+    // the entries the table has, one bit per tag
+    let mut has = 0u32;
+    let mut t = tag::NEEDS;
+    while t <= tag::SITES {
+        if keys.count(t) != 0 {
+            has |= 1 << t;
+        }
+        t += 1;
+    }
+    let bit = |t: u16| 1u32 << t;
+    let port = bit(tag::FWNAMES) | bit(tag::SITES);
     if role == 0 {
         // No packer writes HOOKS, KINDS or SLOTS for a module (patchkit major3.rs writes only USES and KEYS, dkm.rs adds NEEDS): they are a service's (role 1).
         // A content module owns no firmware hook, record kind or plug-in point, so two modules can clash only on keys and capacity.
-        if keys.count(tag::PROVIDES) != 0
-            || keys.count(tag::HOOKS) != 0
-            || keys.count(tag::KINDS) != 0
-            || keys.count(tag::SLOTS) != 0
-            || keys.count(tag::BIND) != 0
-            || keys.count(tag::FW) != 0
-        {
+        let service = bit(tag::PROVIDES) | bit(tag::HOOKS) | bit(tag::KINDS) | bit(tag::SLOTS) | bit(tag::BIND) | bit(tag::FW);
+        if has & (service | port) != 0 {
             return Err(E_FORMAT);
         }
         Ok(())
     } else if role == 1 {
-        if keys.version() != 2 || keys.count(tag::PROVIDES) != 1 {
+        if keys.version() != 2 || keys.count(tag::PROVIDES) != 1 || has & (port | bit(tag::BIND) | bit(tag::FW)) != 0 {
+            return Err(E_FORMAT);
+        }
+        Ok(())
+    } else if role == 2 {
+        // the port file: version 3, the one name it provides and the firmware it is for, its names and sites; nothing a service or a module declares
+        if keys.version() != 3 || keys.count(tag::PROVIDES) != 1 || keys.count(tag::FW) != 1 || has & !(bit(tag::PROVIDES) | bit(tag::FW) | port) != 0 {
             return Err(E_FORMAT);
         }
         Ok(())
@@ -308,7 +451,7 @@ mod tests {
     use std::vec::Vec;
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[] };
 
     fn bytes(t: &Table) -> Vec<u8> {
         let mut b = vec![0u8; dkneeds::keys::table_size(t)];
@@ -362,7 +505,25 @@ mod tests {
 
     #[test]
     fn another_role_is_refused() {
-        assert_eq!(check(2, &Table { provides: ONE, ..KEEP }), Err(E_FORMAT));
+        assert_eq!(check(3, &Table { provides: ONE, ..KEEP }), Err(E_FORMAT));
         assert_eq!(check(u32::MAX, &KEEP), Err(E_FORMAT));
+    }
+
+    #[test]
+    fn the_port_file_has_version_3_one_provides_and_one_fw_and_no_item_of_a_service() {
+        use dkneeds::keys::{NameRec, SiteRec};
+        const NAMES: &[NameRec] = &[NameRec { hash: 1, addr: 0x100, n: 0, kind: 0, flags: 0 }];
+        const SITES: &[SiteRec] = &[SiteRec { hash: 2, addr: 0x200, len: 6, kind: 0, flags: 0, check: [0; 8] }];
+        let port = Table { provides: ONE, fw: &[[7; 8]], names: NAMES, sites: SITES, ..KEEP };
+        assert_eq!(check(2, &port), Ok(()));
+        assert_eq!(check(2, &Table { fw: &[], ..port }), Err(E_FORMAT), "a port file names its firmware");
+        assert_eq!(check(2, &Table { provides: &[], ..port }), Err(E_FORMAT));
+        assert_eq!(check(2, &Table { hooks: &[Pair { a: 9, b: 4 }], ..port }), Err(E_FORMAT));
+        assert_eq!(check(2, &Table { exports: &[Pair { a: 9, b: 4 }], ..port }), Err(E_FORMAT));
+        // a version 2 table has no port entries, so a port file without them is a version 2 table: refused
+        assert_eq!(check(2, &Table { names: &[], sites: &[], ..port }), Err(E_FORMAT));
+        // a module or a service holds none of the port's entries
+        assert_eq!(check(0, &Table { names: NAMES, ..KEEP }), Err(E_FORMAT));
+        assert_eq!(check(1, &Table { provides: ONE, sites: SITES, ..KEEP }), Err(E_FORMAT));
     }
 }

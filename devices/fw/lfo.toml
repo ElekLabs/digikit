@@ -258,7 +258,7 @@ mark = "D"
 users = ["core/lfo", "core/services/lfo"]
 doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq 0x40137852`. Dead at the clear (0x40137852): D2, D6 and N Z V C; at the SPH phase code (0x4013783c): D0, D2, D6 and N Z V C."
 
-# ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/149-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (bound by `patchkit bind`), not interrupt stubs.
+# ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/149-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (listed in the port file), not interrupt stubs.
 # The name formatters are outside the functions that the Ghidra database of the image keeps (`catalog declare` finds no containing function), so each site is a `cf_words` signature of the stock
 # words from the function entry. A wildcard `"*"` is a whole 32-bit word: the one after `pea table` covers the low half of the name table's address (DN2 1.11 has other table addresses) and the opcode
 # half `0x486e` of the next instruction (`pea -0x1c(A6)`), which the DT2 word 0x3ffc486e shows. The high half of the address stays in the word before it: it tells the

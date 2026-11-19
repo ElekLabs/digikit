@@ -12,7 +12,7 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store ls [PREFIX]
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store put LOCAL REMOTE
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] store rm REMOTE
-//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer install ID... [--stock STOCK.syx] [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH...   (modules with the services they need; tools/devtools/wb_transfer.mjs)
+//     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH...   (modules with the services they need; tools/devtools/wb_transfer.mjs)
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer restart
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer delete PATH...
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
@@ -75,7 +75,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--stock STOCK.syx] [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE]';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -107,7 +107,6 @@ for (let i = 0; i < args.length; i++) {
     a === '--bulk-bin' ||
     a === '--speed' ||
     a === '--out' ||
-    a === '--stock' ||
     a === '--library' ||
     [
       '--format',

@@ -11,7 +11,7 @@ pub const VERSION: u32 = 3;
 pub const WORDS: usize = 20;
 
 /// Word indexes of the table (byte offset = 4 * index; `hooks-dt2.s` and `hooks-dn2.s` name the byte offsets `T_*`, and a test compares them). The hooks leave through the
-/// imports `patchkit bind` resolves, so the table has no word for a firmware address.
+/// imports the port file resolves, so the table has no word for a firmware address.
 pub mod w {
     pub const MAGIC: usize = 0;
     pub const VERSION: usize = 1;

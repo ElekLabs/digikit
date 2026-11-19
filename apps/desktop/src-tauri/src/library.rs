@@ -34,7 +34,10 @@ fn walk(dir: &Path, base: &Path, out: &mut Vec<LibFile>) -> std::io::Result<()> 
         let meta = entry.metadata()?;
         if meta.is_dir() {
             walk(&path, base, out)?;
-        } else if path.extension().is_some_and(|e| e == "dkm" || e == "dks") {
+        } else if path
+            .extension()
+            .is_some_and(|e| e == "dkm" || e == "dks" || e == "dkport")
+        {
             let rel = path.strip_prefix(base).unwrap_or(&path);
             let rel = rel
                 .components()
@@ -50,7 +53,7 @@ fn walk(dir: &Path, base: &Path, out: &mut Vec<LibFile>) -> std::io::Result<()> 
     Ok(())
 }
 
-/// The `.dkm` module files and the `.dks` service files (unbound) under the device's folder, by path. A missing folder is an empty library.
+/// The `.dkm` module files, the `.dks` service files and the `.dkport` port files under the device's folder, by path. A missing folder is an empty library.
 pub fn scan(root: &Path, device: &str) -> Result<Vec<LibFile>, String> {
     let dir = device_dir(root, device)?;
     let mut out = vec![];
@@ -69,7 +72,7 @@ pub fn read(root: &Path, device: &str, rel: &str) -> Result<Vec<u8>, String> {
     if rel
         .split('/')
         .any(|p| p.is_empty() || p == "." || p == "..")
-        || !(rel.ends_with(".dkm") || rel.ends_with(".dks"))
+        || !(rel.ends_with(".dkm") || rel.ends_with(".dks") || rel.ends_with(".dkport"))
     {
         return Err(format!("not a library file: {rel:?}"));
     }
@@ -277,13 +280,38 @@ fn record(
     kept.insert(rel);
 }
 
-/// Where the built `.dks` services (unbound) of a device are, relative to the repository root: `dist/modules/<device>/<stem>.dks`.
+/// Where the built `.dks` services of a device are, relative to the repository root: `dist/modules/<device>/<stem>.dks`.
 const SERVICES_DIST_DIR: &str = "dist/modules";
+/// Where the port files are (`patchkit:ports`): `dist/ports/<device>-<version>.dkport`.
+const PORTS_DIST_DIR: &str = "dist/ports";
 
-/// Copy the unbound `.dks` files of `dist/modules/<device>/` into the device's library folder when their bytes changed (as for a `.dkm`).
-/// A missing source folder is no services. A failure goes to `report.failed`.
+/// Copy the `.dks` files of `dist/modules/<device>/` and the `.dkport` files of `dist/ports/` for the device (`<device>-<version>.dkport`) into the device's library
+/// folder when their bytes changed (as for a `.dkm`). A missing source folder is none. A failure goes to `report.failed`.
 fn copy_services(root: &Path, device: &str, dir: &Path, report: &mut LibBuildReport) {
-    let source = root.join(SERVICES_DIST_DIR).join(device);
+    copy_files(
+        &root.join(SERVICES_DIST_DIR).join(device),
+        "dks",
+        None,
+        dir,
+        report,
+    );
+    copy_files(
+        &root.join(PORTS_DIST_DIR),
+        "dkport",
+        Some(device),
+        dir,
+        report,
+    );
+}
+
+/// The files of `source` with the extension `ext` (and, with `prefix`, a name that starts with `<prefix>-`) copied into `dir` when their bytes changed.
+fn copy_files(
+    source: &Path,
+    ext: &str,
+    prefix: Option<&str>,
+    dir: &Path,
+    report: &mut LibBuildReport,
+) {
     let entries = match std::fs::read_dir(&source) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
@@ -297,12 +325,15 @@ fn copy_services(root: &Path, device: &str, dir: &Path, report: &mut LibBuildRep
     };
     for entry in entries.flatten() {
         let from = entry.path();
-        if !from.is_file() || from.extension().is_none_or(|e| e != "dks") {
+        if !from.is_file() || from.extension().is_none_or(|e| e != ext) {
             continue;
         }
         let Some(name) = from.file_name() else {
             continue;
         };
+        if prefix.is_some_and(|p| !name.to_string_lossy().starts_with(&format!("{p}-"))) {
+            continue;
+        }
         let to = dir.join(name);
         let result = std::fs::read(&from).and_then(|bytes| {
             if std::fs::read(&to).ok().as_deref() == Some(bytes.as_slice()) {
@@ -419,20 +450,6 @@ pub async fn patchkit_wasm() -> Result<tauri::ipc::Response, String> {
         std::fs::read(&path)
             .map(tauri::ipc::Response::new)
             .map_err(|e| format!("{}: {e} (build it: mise run wasm:patchkit)", path.display()))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-/// The bind bundle of the site build, `apps/web/public/modules/bind.json` (`{ports, fw}`, written by `apps/web/scripts/gen-bind.mjs`, Nx target `@digi/web:bind-bundle`): what `pk_bind` reads
-/// beside the user's stock image to bind a service file. It holds no firmware.
-#[tauri::command]
-pub async fn bind_bundle() -> Result<tauri::ipc::Response, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let path = root()?.join("apps/web/public/modules/bind.json");
-        std::fs::read(&path)
-            .map(tauri::ipc::Response::new)
-            .map_err(|e| format!("{}: {e}", path.display()))
     })
     .await
     .map_err(|e| e.to_string())?

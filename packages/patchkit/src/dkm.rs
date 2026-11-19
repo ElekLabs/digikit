@@ -220,13 +220,26 @@ fn table_with_needs(
     slots_add: &[dkneeds::keys::Slot],
     kinds_add: &[dkneeds::keys::KindDecl],
 ) -> Result<Vec<u8>> {
-    use dkneeds::keys::{Bind, KeyGroup, Keys, Pair, Table, write_table};
+    use dkneeds::keys::{KeyGroup, Keys, Pair, Table, write_table};
     let keys = if reg.is_empty() {
         None
     } else {
         Some(Keys::parse(reg).map_err(|e| err!("header table: {e:?}"))?)
     };
     let mut needs = needs_of_imports(imports.iter().copied());
+    // a service that names the firmware (an import `dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_`, `dk_ret_`) or takes a hook needs the port file of the firmware
+    if !hooks_add.is_empty()
+        || imports
+            .iter()
+            .any(|i| crate::fwnames::parse_import(i).is_some())
+    {
+        needs.push(dkneeds::keys::Need {
+            service: dkneeds::keys::name_hash(crate::portfile::PORT_SERVICE),
+            min_version: crate::portfile::PORT_VERSION,
+            hard: true,
+        });
+        needs.sort_by_key(|n| n.service);
+    }
     if let Some(k) = &keys {
         let kinds: Vec<u32> = k.key_groups().map(|g| g.0).collect();
         record_kind_needs(&mut needs, &kinds);
@@ -235,17 +248,8 @@ fn table_with_needs(
         (vec![], vec![], vec![], vec![], vec![], vec![]);
     let mut groups: Vec<(u32, Vec<u32>)> = vec![];
     let mut provided: Vec<Pair> = vec![];
-    let mut binds: Vec<Bind> = vec![];
-    let mut fw_items: Vec<[u8; 8]> = vec![];
     if let Some(k) = &keys {
-        fw_items.extend((0..k.fw_count()).filter_map(|i| k.fw(i)));
         provided.extend(k.provides().map(|(a, b)| Pair { a, b }));
-        binds.extend((0..k.bind_count()).filter_map(|i| k.bind(i)).map(|b| Bind {
-            site: b.site,
-            addr: b.addr,
-            tramp: b.tramp,
-            stock: b.stock,
-        }));
         uses.extend(k.uses());
         kinds.extend(k.kinds());
         slots.extend(k.slots());
@@ -267,8 +271,6 @@ fn table_with_needs(
         .collect();
     let t = Table {
         provides: &provided,
-        bind: &binds,
-        fw: &fw_items,
         needs: &needs,
         uses: &uses,
         keys: &key_groups,
@@ -277,6 +279,7 @@ fn table_with_needs(
         hooks: &hooks,
         exports: &exports,
         resources: &resources,
+        ..Table::default()
     };
     let mut out = vec![0u8; dkneeds::keys::table_size(&t)];
     write_table(&t, &mut out).map_err(|e| err!("header table: {e:?}"))?;
@@ -312,11 +315,10 @@ pub struct Options {
 }
 
 /// The low 24 bits of a `HOOKS` entry of a service file: the handler's image offset. The top byte is the device mask of the hook.
-pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
+pub const HOOK_ENTRY_MASK: u32 = dkneeds::keys::HOOK_ENTRY_MASK;
 
 /// The device mask of a hook: bit `i` is the device `i` of `devdata::all()` (file-name order); no device is mask 0, which means every device. The packer writes it
-/// in the top byte of the hook's `HOOKS` entry and `patchkit bind` reads it (and writes the bound file's entry without it), so a hook for the device of the firmware
-/// that the port lacks is refused wherever bind runs.
+/// in the top byte of the hook's `HOOKS` entry; the loader drops it (the port file's `absent` flag says which hooks the firmware has).
 pub fn hook_device_mask(devices: &[String]) -> Result<u32> {
     let all = crate::devdata::all();
     let mut mask = 0u32;
@@ -341,7 +343,7 @@ pub struct Provided {
     pub service: String,
     pub exports: Vec<String>,
     /// The hooks the service takes (`[[hook]]`): (hook name of the port, global function of the object that handles it, devices it is for; empty: every
-    /// device). A `patchkit bind` of the file gives each a trampoline; the devices are the device mask in the top byte of the `HOOKS` entry
+    /// device). The runtime installs a jump to the entry at the hook's site from the port file; the devices are the device mask in the top byte of the `HOOKS` entry
     /// ([`hook_device_mask`]).
     pub hooks: Vec<(String, String, Vec<String>)>,
     /// The pointer slots the service fills (`[[fill]]`): (slot name of the image adapter, global function of the object whose address goes in the slot).

@@ -36,7 +36,6 @@ const EXPECTED_CONFIG = (() => {
     Buffer.from('09040200 02ff000000 07050202000200 07058202000200'.replaceAll(' ', ''), 'hex'),
   ]);
 })();
-const SELECTION = ['modules/usb-echo.dkm'];
 
 const pattern = (n: number, seed: number) => Buffer.from(Uint8Array.from({ length: n }, (_, i) => (i * 7 + (i >> 8) + seed) & 255));
 
@@ -92,7 +91,7 @@ for (const device of DEVICES) {
       };
     };
     const boot = async (tag: string, selected: boolean) => {
-      const rt = await kit.load(tag, { modules: ['test/usb-echo'], selection: selected ? SELECTION : [] });
+      const rt = await kit.load(tag, { modules: ['test/usb-echo'], selection: selected ? [kit.mod('test/usb-echo').name] : [] });
       if (selected) expect((await bootInfo(rt.session, kit.plan)).results, 'the module loads').toEqual([0]);
       return rt;
     };

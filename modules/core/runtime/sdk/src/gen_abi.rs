@@ -123,7 +123,7 @@ pub const FIT_MEM: usize = 8;
 /// Paths of the selection (`[limits.max] modules` of sdk/sdk.toml).
 pub const SEL_MAX: usize = 8;
 /// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.
-pub const PROVIDER_MAX: usize = 6;
+pub const PROVIDER_MAX: usize = 8;
 
 /// dkrt_status result. The caller owns the memory; the layout only grows at the end.
 #[repr(C)]

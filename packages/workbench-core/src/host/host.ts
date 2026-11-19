@@ -129,8 +129,6 @@ export interface FirmwareHost {
   /** The system's save dialog for an image; the path, or null when the user cancels. */
   save(bytes: Uint8Array, name: string): Promise<string | null>;
   patchkitWasm(): Promise<ArrayBuffer>;
-  /** `modules/bind.json` of the site build (`{ports, fw}`, no firmware): what `pk_bind` reads to bind a service file. */
-  bindBundle(): Promise<ArrayBuffer>;
   /** `dkprof.wasm`: address lookup and load table decoding (the Log pane's names). */
   dkprofWasm(): Promise<ArrayBuffer>;
   sampleWasm(): Promise<ArrayBuffer>;

@@ -5,7 +5,7 @@ import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
-import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
@@ -37,9 +37,15 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof"). The sample-pool case is in the tests of the module that uses the pool (DT2).
  */
 /** A module that needs no service and builds no menu (`init` logs one line; no builder call, no menu, no DSP part): the code-only case needs no service of the boot. */
-const SHAPE_PATH = 'modules/c-demo.dkm';
 const SHAPE_ID = 'test/c-demo';
-const SINE_PATH = 'modules/sine.dkm';
+/** The store paths (`modules/<kind>/<author>-<name>.dkm`, the device's packed files): set at the start of each test. */
+let SHAPE_PATH = '';
+let SINE_PATH = '';
+const setPaths = (rt: TestRuntime): void => {
+  const device = rt.session.options.device as 'dt2' | 'dn2';
+  SHAPE_PATH = moduleStorePath(device, SHAPE_ID);
+  SINE_PATH = moduleStorePath(device, 'test/sine');
+};
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 const E_MISSING = loadCode('E_MISSING');
 const SOAK_CYCLES = process.env.DIGIKIT_TIER === 'full' ? 20 : 5;
@@ -120,6 +126,7 @@ async function liveChecked(
 // ---- test 1: code-only modules, E_MISSING, the CLI -------------------------------------------------------------------------------------
 
 async function expectLiveCodeOnly(rt: TestRuntime): Promise<void> {
+  setPaths(rt);
   const artifacts = liveArtifacts(rt.session, 'live-code');
   await cliInstall(rt.session, DEBUG_MODULE, artifacts, 300_000);
   // the files go on the card (with the services they need), the selection stays the debug module alone
@@ -210,13 +217,14 @@ async function notePitch(rt: TestRuntime, artifacts: string, tag: string, hold =
 }
 
 async function expectLiveMachine(rt: TestRuntime): Promise<void> {
+  setPaths(rt);
   const artifacts = liveArtifacts(rt.session, 'live-machine');
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
   const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT']);
   const epoch = await epochOf(rt);
   const start = await rt.dk.capacity();
   // the next boot would load the debug module alone: the machine is outside the saved selection from here on
-  await rt.dk.select([`modules/${nameOf(DEBUG_MODULE)}.dkm`]);
+  await rt.dk.select([moduleStorePath(rt.session.options.device as 'dt2' | 'dn2', DEBUG_MODULE)]);
   const sine = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
   await pickSine(rt);
   const device = rt.session.options.device as 'dt2' | 'dn2';

@@ -37,10 +37,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          with --fx-max the effect budget of the tightest device): JSON from devices/*.toml and devices/cycle-factors.json
   uses    set --id MODULE --device SHORT [--dsp-cost-voice N] [--dsp-cost-fx N]   write the measured DSP cost (instructions per block) into
                                          [uses.<device>] of the module's module.toml (only those lines change; comments stay); prints wrote/unchanged PATH
-  services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...   the card services that the .dkm files need (the NEEDS of their header
+  services --device SHORT [--pack-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...   the card services that the .dkm files need (the NEEDS of their header
                                          tables, matched to the modules with `role = \"service\"` and `service = NAME`) and those named by --module (id) or --service (name): one JSON line each
-                                         {service, module_id, store_path}; with --firmware and --bind-dir each is packed and bound to the stock image in DIR
-                                         (kept while its .src.json sidecar matches), and the line has bound_path
+                                         {service, module_id, store_path}; with --pack-dir each is also packed as DIR/<name>.dks and the line has file
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm
                                          (a `role = \"service\"` module packs to a .dks: OUT must end in .dks; any other module: not .dks);
                                          builds the objects that are stale first (content modules: cache out/cache/dko)
@@ -53,16 +52,13 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
-  bind    IN.dks --firmware FW.syx -o OUT.dks [--addrmap IN.addrmap.json]   bind a packed service to the firmware: a trampoline and a BIND item for each hook it declares;
-                                         prints the bound hooks as JSON (a hook the file lists for this device that the port lacks is an error); --addrmap writes the address map moved by the appended code to OUT.addrmap.json; OUT.dks holds firmware bytes: -o is refused in the source tree
-                                         unless under dist/ or out/
   port    facts --firmware FW.syx [--port FILE|-]   the site facts (len, kind, check) of the hooks that services use, as JSON; the port TOML on stdin or in FILE
                                          (`tools/patchkit/port_resolve.py` calls it and writes them into devices/ports/*.toml)
-  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dks (role 2) of each committed port (with --all, only of devices that a service targets), from devices/ports and
-                                         devices/fw only (no firmware); one JSON line each {port, file, bytes, sha256, names, sites}
-  port    check --firmware FW.syx [--names-only] SERVICE.dks...   one-time equivalence: the port file of this firmware says what `bind` does for each unbound
-                                         service (site, return, check value, kind, tail bytes, exits, names); with --names-only (no firmware) only that each
-                                         firmware name a service uses is in the port set of every committed port; exit 1 on a difference
+  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dkport (role 2) of each committed port (with --all, only of devices that a service targets), from devices/ports and
+                                         devices/fw only (no firmware); one JSON line each {port, file, bytes, sha256, names, sites}; --with-test-hooks also lists the hooks of the test fixture service (the port file of the test image)
+  port    stock --firmware FW.syx --port FILE   the site facts as TOML with the address and the stock bytes of each site (firmware bytes: for host tests, never committed)
+  port    check [--with-test-hooks] SERVICE.dks...   every firmware name and hook a service takes is in the port file of every committed port that a service targets (an absent one
+                                         counts as listed); exit 1 on a difference
   dkm-identity BEFORE_DIR AFTER_DIR      do two sets of .dkm (patchkit pack-all) differ only in the header table? (image, relocs, imports, DSP section compared)
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
   records --json FILE|-                  the decoded records (counts, params, machines, pages, effects, and `problems`) of a committed record block
@@ -665,43 +661,6 @@ plan.json {}",
             if !found.is_empty() {
                 std::process::exit(1);
             }
-        }
-        "bind" => {
-            let dks = read(need(rest)?)?;
-            let fwp = flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?;
-            let out = flag(rest, "-o").ok_or_else(|| Error(USAGE.into()))?;
-            if !patchkit::bind::output_allowed(&a.root, Path::new(&out)) {
-                return Err(Error(format!(
-                    "{out}: the bound file holds firmware bytes and must never be committed: write it under dist/ or out/ (or outside the source tree)"
-                )));
-            }
-            let reg = registry(&a.root)?;
-            let texts = patchkit::fwgen::fw_texts(&a.root)?;
-            let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
-            let (file, hooks) = patchkit::bind::bind(&dks, &read(&fwp)?, &reg, &decls)?;
-            if let Some(d) = Path::new(&out)
-                .parent()
-                .filter(|d| !d.as_os_str().is_empty())
-            {
-                std::fs::create_dir_all(d).map_err(|e| Error(format!("{}: {e}", d.display())))?;
-            }
-            write(&out, &file)?;
-            // the sidecar `<name>.src.json`: what the bound file was made from (the unbound file and the firmware image, by sha256), so a harness can tell a stale copy by content
-            let sidecar = patchkit::bind::sidecar_path(Path::new(&out));
-            write(
-                &sidecar.to_string_lossy(),
-                patchkit::bind::sidecar_json(&dks, &read(&fwp)?).as_bytes(),
-            )?;
-            // the address map of the packed file (`--addrmap`), moved by what bind appended, is written beside the bound file
-            if let Some(m) = flag(rest, "--addrmap") {
-                let old = patchkit::dkm::Dkm::parse(&dks)?.image.len();
-                let new = patchkit::dkm::Dkm::parse(&file)?.image.len();
-                let text = String::from_utf8_lossy(&read(&m)?).into_owned();
-                let shifted = patchkit::bind::shift_addrmap(&text, old, new - old)?;
-                let dest = out.trim_end_matches(".dks").to_string() + ".addrmap.json";
-                write(&dest, shifted.as_bytes())?;
-            }
-            print!("{}", patchkit::bind::bind_json(&hooks));
         }
         #[cfg(not(target_arch = "wasm32"))]
         "port" => port_cmd(&a.root, rest)?,
@@ -1542,6 +1501,8 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
     let sub = rest.first().map(String::as_str).unwrap_or("");
     let texts = patchkit::fwgen::fw_texts(root)?;
     let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+    // `--with-test-hooks`: the port file of the test image, which also lists the hooks of the test fixture service
+    let with_test = rest.iter().any(|x| x == "--with-test-hooks");
     match sub {
         "facts" => {
             let fw = read(&flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?)?;
@@ -1571,6 +1532,22 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
             }
             println!("{}", serde_json::Value::Object(o));
         }
+        // `port stock`: the same facts as TOML with the site address and the stock bytes, for a host test that puts them in a fake firmware (the output holds firmware
+        // bytes: it goes to a test, never into the repository)
+        "stock" => {
+            let fw = read(&flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?)?;
+            let src = flag(rest, "--port").ok_or_else(|| Error(USAGE.into()))?;
+            let text = String::from_utf8_lossy(&read(&src)?).into_owned();
+            for f in portfile::site_facts(&fw, &text, &decls)? {
+                println!(
+                    "[\"{}\"]\naddr = {}\nlen = {}\nstock = \"{}\"\n",
+                    f.hook,
+                    f.addr,
+                    f.len,
+                    patchkit::error::hex(&f.stock)
+                );
+            }
+        }
         "build" => {
             let reg = registry(root)?;
             let out = PathBuf::from(flag(rest, "--out").ok_or_else(|| Error(USAGE.into()))?);
@@ -1589,7 +1566,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                     eprintln!("{}: no service targets this device: no port file", p.id());
                     continue;
                 }
-                let data = portfile::build_data(&reg, p, &decls)?;
+                let data = portfile::build_data(&reg, p, &decls, with_test)?;
                 let bytes = portfile::pack(&data)?;
                 let file = out.join(portfile::file_name(p));
                 std::fs::write(&file, &bytes)
@@ -1606,63 +1583,41 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
         }
         "check" => {
             let reg = registry(root)?;
-            let names_only = rest.iter().any(|x| x == "--names-only");
-            let files: Vec<&String> = {
-                let mut v = vec![];
-                let mut it = rest.iter().skip(1);
-                while let Some(x) = it.next() {
-                    match x.as_str() {
-                        "--firmware" => {
-                            it.next();
-                        }
-                        "--names-only" => {}
-                        _ => v.push(x),
-                    }
-                }
-                v
-            };
+            let files: Vec<&String> = rest
+                .iter()
+                .skip(1)
+                .filter(|x| *x != "--names-only")
+                .collect();
             if files.is_empty() {
                 return Err(Error(USAGE.into()));
             }
+            // every firmware name and hook a service takes is in the port file of every committed port that a service targets (a name or hook that only some devices
+            // have is listed and absent on the others)
             let mut bad = 0;
-            if names_only {
-                for p in reg
-                    .ports
-                    .iter()
-                    .filter(|p| portfile::targeted(p, &decls).unwrap_or(false))
-                {
-                    let data = portfile::build_data(&reg, p, &decls)?;
-                    for f in &files {
-                        let d = patchkit::dkm::Dkm::parse(&read(f)?)?;
-                        for n in portfile::outside_set(&d, &data) {
-                            println!("{}: {f}: {n} is outside the port set", p.id());
-                            bad += 1;
-                        }
-                    }
-                }
-            } else {
-                let fwp = flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?;
-                let fw = read(&fwp)?;
-                let f = Firmware::parse(&fw)?;
-                let port = reg
-                    .find(&f.syx_sha256)
-                    .ok_or_else(|| Error(format!("no port for firmware {}", f.syx_sha256)))?;
-                let data = portfile::build_data(&reg, port, &decls)?;
-                // the file as it would be on the card must parse back to the same data
-                if portfile::parse(&portfile::pack(&data)?)? != data {
-                    return Err(Error("the port file does not read back to its data".into()));
-                }
-                for file in &files {
-                    let (diff, n) = portfile::equals_bind(&read(file)?, &fw, &reg, &decls, &data)?;
+            for p in reg
+                .ports
+                .iter()
+                .filter(|p| portfile::targeted(p, &decls).unwrap_or(false))
+            {
+                let data = portfile::build_data(&reg, p, &decls, with_test)?;
+                for f in &files {
+                    let bytes = read(f)?;
+                    let d = patchkit::dkm::Dkm::parse(&bytes)?;
+                    let outside = portfile::outside_set(&d, &data);
+                    let unlisted = portfile::unlisted_hooks(&d, &data)?;
                     println!(
-                        "{} {file}: {n} facts compared, {} difference(s)",
-                        port.id(),
-                        diff.len()
+                        "{} {f}: {} firmware reference(s) outside the port set, {} hook(s) not listed",
+                        p.id(),
+                        outside.len(),
+                        unlisted.len()
                     );
-                    for d in &diff {
-                        println!("  {d}");
+                    for n in &outside {
+                        println!("  {n} is outside the port set");
                     }
-                    bad += diff.len();
+                    for h in &unlisted {
+                        println!("  hook {h:#010x} is not listed");
+                    }
+                    bad += outside.len() + unlisted.len();
                 }
             }
             if bad != 0 {

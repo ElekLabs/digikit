@@ -129,60 +129,20 @@ c-symbol  dkrt_poll_set
 
 `--format json` prints `{identical, functions, data_objects, differences: [{kind, name, detail}]}`.
 
-### Bind a service to your firmware
+### Services and the port file
 
-`patchkit bind IN.dks --firmware FW.syx -o OUT.dks` binds a packed service (`.dks`) to the firmware of the user. A service is packed without
-firmware. Each hook it declares (the `HOOKS` list of its header table) needs a trampoline, and the trampoline copies the stock bytes of the
-hook site. Bind adds both from your own image. The bound file holds firmware bytes: never commit it.
+A service (`.dks`) is packed without firmware and stays so: `patchkit pack SERVICE-ID -o dist/service.dks` writes a file that holds no firmware address and no firmware
+byte. It names the firmware by imports (`dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_`, `dk_ret_`, below) and takes its hook sites by the `HOOKS` list of its header table: the
+hook name hash and the entry of the routine that the site jumps to. A service that names the firmware or takes a hook has a hard need of `port`.
 
-What it writes:
+The firmware specifics are in the port file (`.dkport`, role 2), one for each device and firmware version, built from committed data only (see "Port file" below). The
+runtime picks the port file whose `FW` item equals the image's `fw_id`, resolves the imports of a service against it at load, copies the displaced bytes of the tail and
+stock sites from flash after it compared them with the check value, and installs the hooks at the sites that the port file lists. There is no binding step, no trampoline
+in a service file and no firmware byte in any file that goes on a card or into the repository. A service takes raw hooks only: a hook with a `handler` in `devices/fw/` is
+refused when the port file is built.
 
-- For each declared hook, a trampoline appended to the image (4-byte aligned). It saves the registers the hook may not clobber, calls the
-  service handler with the arguments the hook declares, restores, runs the displaced instructions (mode `before`) and jumps back to the
-  return address. Mode `replace` has no displaced instructions.
-- One `BIND` item per hook in the v2 header table: the hook name hash, the site address, the trampoline offset and the stock bytes. Every other
-  list of the table stays.
-- The image grows, so the `.bss` moves: base-relative relocations that point into `.bss` are shifted by the growth.
-
-From a clean checkout, with your image in `firmware/` (git ignores it) and the output in `dist/`:
-
-```text
-patchkit pack SERVICE-ID -o dist/service.dks
-patchkit bind dist/service.dks --firmware firmware/IMAGE.syx -o dist/service.bound.dks
-```
-
-`SERVICE-ID` is a service module that declares hooks. The test fixture `test/svc-test` declares one: `cf.menu.hook.settings_list.tail`, the last step of the
-SETTINGS list rebuild.
-Bind creates the output directory and prints one JSON object per hook. This is the format the command prints, not a captured run:
-
-```text
-[
-  {
-    "hook": "cf.menu.hook.settings_list.tail",
-    "site_hash": "0x........",
-    "site_addr": "0x........",
-    "site_len": 8,
-    "stock": "<hex of the stock bytes at the site>",
-    "tramp_off": 1234,
-    "displaced": ["<one line per displaced instruction>"],
-    "ret": "0x........"
-  }
-]
-```
-
-`site_hash` is the name hash of the hook, `tramp_off` the offset of the trampoline in the image, `ret` the address the trampoline jumps back
-to. `displaced` is empty for mode `replace`.
-
-Bind refuses, with an error and no output file:
-
-- The input is not a service (role is not service).
-- The service declares more than 24 hooks. A service that declares none (lfo) is returned unchanged: its bound file is its built file.
-- The service is bound already (it has `BIND` items).
-- The firmware is not a stock image with a port, or a hook name is not declared on that firmware.
-- A hook handler offset is outside the image.
-- A site holds more than 64 stock bytes.
-- A displaced instruction depends on its address (PC-relative), or the hook mode is not `before` or `replace`.
-- The output path is inside the source tree and not under `dist/` or `out/`. A path outside the tree is allowed.
+The test fixture `test/svc-test` takes one hook, `cf.menu.hook.settings_list.test`, on the site of the last step of the SETTINGS list rebuild. That hook is in the port file of
+the test image only (`patchkit port build --with-test-hooks`, Nx `patchkit:ports-test`), because the site is `core/digikit-menu`'s too.
 
 ### Run it in the emulator
 
@@ -368,18 +328,19 @@ bytes, 16 hex digits). The decoder is patchkit's, so `port_resolve` calls `dist/
 ### Port file
 
 ```sh
-pnpm nx:pilot run patchkit:ports                                   # dist/ports/<device>-<version>.dks for every committed port (cached)
-dist/patchkit/patchkit port build --all --out DIR                  # the same without Nx; --device SHORT --version V for one
-dist/patchkit/patchkit port check --firmware FW.syx SERVICE.dks... # one-time: the port file says what `patchkit bind` does
-dist/patchkit/patchkit port check --names-only SERVICE.dks...      # no firmware: every firmware name a service uses is in the port set
+pnpm nx:pilot run patchkit:ports                                   # dist/ports/<device>-<version>.dkport for every committed port (cached)
+pnpm nx:pilot run patchkit:ports-test                              # dist/ports-test/...: the same plus the hooks of the test fixture service (test image only)
+dist/patchkit/patchkit port build --all --out DIR                  # the same without Nx; --device SHORT --version V for one; --with-test-hooks
+dist/patchkit/patchkit port check SERVICE.dks...                   # every firmware name and hook of a service is in the port file of every committed port
+dist/patchkit/patchkit port stock --firmware FW.syx --port devices/ports/NAME.toml   # the sites' stock bytes as TOML, for host tests (firmware bytes: never commit)
 ```
 
-The port file (docs/plans/port-file.md) is a `.dks` of role 2 with the service `port`, the firmware identity (`FW`) and two table entries: FWNAMES (name and exit
-hash to address, with an `absent` flag for a name that only another device's firmware has) and SITES (per hook: site address, displaced length, kind, check value).
-`port build` reads only `devices/ports` and `devices/fw`: no firmware, so CI builds it. `port check` needs the stock `.syx`: for each unbound service it runs
-`patchkit bind` and compares the port file with it (site, return address, check value, kind, tail bytes, every `dk_fw_` and `dk_exit_` place, `dk_stock_` and `dk_ret_`
-references); it prints `N facts compared, 0 difference(s)` and exits 1 on any difference. Pack the unbound services first with
-`patchkit pack-all --device SHORT --out DIR core/services/lfo core/services/machines core/services/fx`.
+The port file (docs/plans/port-file.md) is a `.dkport` of role 2 that provides the name `port` (a provider, not a service), with the firmware identity (`FW`) and two entries of a
+version 3 header table: FWNAMES (name and exit hash to address, with an `absent` flag for a name that only another device's firmware has) and SITES (per hook: site address,
+displaced length, kind, check value). Its image is an `rts` and its bss holds the copies of the displaced bytes of the tail and stock sites, which the runtime fills.
+`port build` reads only `devices/ports` and `devices/fw`: no firmware, so CI builds it. `port check` reads no firmware either: for each service file it prints how many
+firmware references are outside the port set and how many hooks are not listed, and exits 1 on any. A `patchkit apply` image carries the `fw_id` entry, and the INFO reply
+of the runtime carries it too (capability `FW_ID`), which is how Transfer picks the port file for a device.
 
 ### Web gallery
 
@@ -491,36 +452,32 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   limits before any service file is loaded. The runtime names no adapter or service: it builds the entry name from the generic
   kind table (`CAP_INFO_HASHES`).
 - **Raw hooks and their tails.** A hook with no `handler` in `devices/fw/` is a raw hook: its entry takes the whole control
-  flow of the site (mode `replace`), so `patchkit bind` makes the entry itself the `BIND` trampoline and the runtime writes
+  flow of the site (mode `replace`), so the entry itself is the target of the jump that the runtime writes
   `jmp entry` at the site. When the entry falls through to the displaced stock instructions, the hook declares the exit
-  `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`
-  (`bind::tail_import`), which `patchkit pack` keeps as an import. `bind` appends the tail, the displaced instructions of the
-  site as in the user's firmware (PC-relative forms are refused as for a `before` hook) followed by `jmp.l` to site + length,
-  turns each reference into a base-relative relocation to it and drops the import. The `BIND` item carries the stock bytes of
-  the site as for any hook, so the runtime refuses a firmware that differs with E_HOOK_STOCK before it installs anything. An
-  unbound `.dks` has no firmware bytes.
-- **Firmware references.** A service names firmware in five ways, all resolved by `patchkit bind` (`bind::FwRef`); `patchkit pack` makes the import names
+  `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`, which `patchkit pack` keeps as an import. The runtime resolves it at load to the copy of the
+  displaced instructions of the site that the port file holds in its bss (followed by a jump to site + length); the port file lists the site with its stock bytes check value, so the loader refuses a
+  firmware that differs with E_HOOK_STOCK before it installs anything. A `.dks` has no firmware bytes.
+- **Firmware references.** A service names firmware in five ways, all resolved at load by the runtime from the port file (`fwnames::FwRef`); `patchkit pack` makes the import names
   from the `[object.externs]` of the service module (`alias = "target"`) and renames the `cf.*` symbols a Rust service takes from the `dkfw` crate to `dk_fw_`.
   H is the 8 hex digits of `name_hash`.
 
   | import | extern target | resolves to |
   | --- | --- | --- |
-  | `dk_fw_<H(name)>` | `cf.draw.fn.blit` | the address of the anchor; an offset is the addend; absolute word, no relocation |
-  | `dk_exit_<H(hook)>_<n>` | `hook.<hook>.exit` (n = 0), `hook.<hook>.exit.<n>` | n = 0: the end of the site; n >= 1: `exits[n-1]` of the hook; absolute word |
-  | `dk_tail_<H(hook)>` | `hook.<hook>.tail` | the generated tail (`tail = true`); base-relative |
-  | `dk_stock_<H(hook)>` | `hook.<hook>.stock` | the same code, called with `jsr`; control comes back; base-relative |
-  | `dk_ret_<H(hook)>` | `hook.<hook>.ret` | one `rts` that bind appends; base-relative |
+  | `dk_fw_<H(name)>` | `cf.draw.fn.blit` | the address of the anchor; an offset is the addend |
+  | `dk_exit_<H(hook)>_<n>` | `hook.<hook>.exit` (n = 0), `hook.<hook>.exit.<n>` | n = 0: the end of the site; n >= 1: `exits[n-1]` of the hook |
+  | `dk_tail_<H(hook)>` | `hook.<hook>.tail` | the copy of the displaced instructions with a jump behind the site (`tail = true`), in the bss of the port file |
+  | `dk_stock_<H(hook)>` | `hook.<hook>.stock` | the same code, called with `jsr`; control comes back |
+  | `dk_ret_<H(hook)>` | `hook.<hook>.ret` | one `rts`, the first word of the port file's image |
 
-  A name that only another device has, and a hook listed only for another device, resolve to 0; any other unknown name is a bind error naming it. A file with a
-  hook or a resolved reference gets the table item `FW`; `patchkit apply` adds the info entry `fw_id`, and the loader refuses a file bound to another firmware with E_HOOK_STOCK.
+  A name that only another device has, and a hook listed only for another device, resolve to 0; a name the port file does not list refuses the service file (`E_IMPORT`, the hash
+  in the provider log). `patchkit apply` adds the info entry `fw_id`, and the loader refuses a port file for another firmware with E_HOOK_STOCK.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
-  the running device. The packer writes the device set of each hook into the unbound file: an item of `HOOKS` is `{name hash, word}`,
+  the running device. The packer writes the device set of each hook into the file: an item of `HOOKS` is `{name hash, word}`,
   and the top byte of the word is a device mask (bit `i` is device `i` of the device files in file-name order; 0: every device), the low
-  24 bits the handler's image offset. `bind` reads the mask from the file: it skips a hook for another device, refuses a hook for the
-  firmware's device that the port does not declare (naming it), and writes the remaining hooks into `HOOKS` of the bound file with the
-  plain offset (no mask), which is what the runtime reads. The CLI, the Nx `bind` target and the page (`pk_bind`) share this rule.
-  A reader of an unbound file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
+  24 bits the entry's image offset. The loader drops the mask (`HOOK_ENTRY_MASK`): the port file's `absent` flag says which hooks the firmware has, and a hook that the port
+  file does not list at all refuses the service file (`E_IMPORT`).
+  A reader of the file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
 - **Sections copied from the image.** `[[section]]` copies bytes of the user's image at patch time (a stock table),
   may append one row per registry entry, and places the result. This is how a framework extends a firmware table
   without storing it.
@@ -1080,7 +1037,7 @@ The device on the desk is a Digitakt II on 1.17: the DT2 1.17 port is the one th
 
 ### Which services a module needs
 
-`patchkit services --device SHORT [--firmware FW.syx --bind-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...` is the one rule for the card
+`patchkit services --device SHORT [--pack-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...` is the one rule for the card
 services of a module. A module that needs a service has a hard `NEEDS` item for its name hash in the header table of its `.dkm`. The service of a name is
 the module whose `module.toml` has `role = "service"` and `service = "NAME"`. The command prints one JSON line for each service that the files need or
 that `--module` (id) or `--service` (name) names, in name order. This is the format, not a captured run:
@@ -1089,7 +1046,5 @@ that `--module` (id) or `--service` (name) names, in name order. This is the for
 {"service":"fx","module_id":"core/services/fx","store_path":"services/fx.dks"}
 ```
 
-With `--firmware` and `--bind-dir` it also packs each service for the device, binds it to the stock image as `DIR/<name>.dks` and adds `bound_path`. A file
-whose `DIR/<name>.src.json` sidecar names the same packed bytes and image is kept; any other is bound again. The device tests, `dk:dev` and `module:check`
-all call it. The Nx target `<module id>:pack` runs it on each packed file and writes `dist/modules/<device>/<leaf>.services.json` beside it; the device tests read that file (they run no patchkit) and take the bound file from the target `<service id>:bind`. Its Rust tests are
+With `--pack-dir` it also packs each service for the device as `DIR/<name>.dks` and adds `file`. The device tests, `dk:dev` and `module:check` all call it. The Nx target `<module id>:pack` runs it on each packed file and writes `dist/modules/<device>/<leaf>.services.json` beside it; the device tests read that file (they run no patchkit), take the service as packed from `dist/modules/<device>/` and the port file from `dist/ports/` (Nx `patchkit:ports`; the fixture service takes `dist/ports-test/`). Its Rust tests are
 `packages/patchkit/tests/services.rs` (they skip without the m68k-elf toolchain).

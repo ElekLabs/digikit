@@ -117,6 +117,20 @@ mark = "D"
 users = ["core/digikit-menu"]
 doc = "Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item."
 
+# The hook of the test service `test/svc-test` (tests/fixtures/modules/svc-test): the same site as the hook above, as a raw hook of a service file (its routine calls a C
+# function with a2, then the tail runs the displaced instructions). Only the test fixture takes it.
+[[hook]]
+name = "cf.menu.hook.settings_list.test"
+site = "cf.menu.site.settings_list.tail"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = ["a2"], clobbers = ["d0-d1", "a0-a1", "ccr"] }   # d0, d1, a0 and a1 are saved around the call
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["test/svc-test"]
+doc = "Test only: the last step of the SETTINGS item list rebuild, as a service hook. The fixture counts the runs and runs the displaced instructions through the tail."
+
 # ---- CompactVerticalMenuView and MenuWithPopoutSideBarsView (PRESET MANAGER, KIT MANAGER, PROJECT MANAGER; finding 71 section 8) ----
 
 [[fn]]

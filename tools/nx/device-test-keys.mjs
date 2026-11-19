@@ -104,6 +104,8 @@ const SHARED_BUILT = [
   'dist/bytes/core-objects.sha256',
   'dist/modules/*/*.dkm',
   'dist/modules/*/*.dks',
+  'dist/ports/*.dkport',
+  'dist/ports-test/*.dkport',
   'dist/plusdrive/plusdrive',
   'apps/web/public/dksample.wasm',
 ];
@@ -168,11 +170,10 @@ export const builtSourceExclusions = (root, base = '.') =>
 export const serviceLeaves = (byId) =>
   new Set([...byId].filter(([, { manifest }]) => manifest.role === 'service').map(([id]) => id.split('/').at(-1)));
 
-// Every service is bound to the firmware before it goes on a card (target `bind`, module-build.mjs): the harness binds each service a module needs, and a
-// service with no hook and no firmware name (lfo) is bound unchanged. Hooks do not decide: samples refers to firmware names and has none. `bindableIds`: the ids.
-export const isBindable = (manifest) => manifest.role === 'service';
-export const bindableIds = (byId) =>
-  new Set([...byId].filter(([, { manifest }]) => isBindable(manifest)).map(([id]) => id));
+// A service goes on a card as packed, with the port file of the firmware (`patchkit:ports`, dist/ports): a device test that selects a service depends on that target.
+// `serviceIds`: the ids of the modules with role "service".
+export const serviceIds = (byId) =>
+  new Set([...byId].filter(([, { manifest }]) => manifest.role === 'service').map(([id]) => id));
 
 // The cache inputs of one device test target, and whether its key follows patchkit (`patchkitLive`).
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
@@ -234,6 +235,13 @@ export const deviceInputs = (
             dependentTasksOutputFiles: `dist/modules/*/${leaf}.${opts.services?.has(leaf) ? 'dks' : 'dkm'}`,
             transitive: true,
           })),
+          // the port files that go on the card with a service (the fixture service takes the port file of the test image)
+          ...(recs.some((r) => (r.modules ?? []).some((id) => opts.services?.has(id.split('/').at(-1))))
+            ? [
+                { dependentTasksOutputFiles: 'dist/ports/*.dkport', transitive: true },
+                { dependentTasksOutputFiles: 'dist/ports-test/*.dkport', transitive: true },
+              ]
+            : []),
           // tools the test runs directly
           ...(recs.some((r) => r.plusdrive)
             ? [{ dependentTasksOutputFiles: 'dist/plusdrive/plusdrive', transitive: true }]

@@ -37,7 +37,6 @@ const COMMIT_THEN_END = 0; // mode: dk_files_commit after the last close
 const END_JOB = 1; // mode: the job ends after the last close (the runtime commits at the end of the job)
 const WAIT_IDLE = 2; // mode: the job sleeps after the last close (the runtime's 1 s idle commit names the files)
 const REPLACE = 0x40; // added to the case: DK_FILE_REPLACE
-const SELECTION = ['modules/file-write.dkm', 'modules/file-write-b.dkm'];
 const pattern = (n: number) => Buffer.from(Uint8Array.from({ length: n }, (_, i) => (i * 7 + (i >> 8)) & 255));
 /** File i of a batch job: the pattern shifted by 13 * i bytes. */
 const shifted = (n: number, i: number) => Buffer.from(Uint8Array.from({ length: n }, (_, k) => (((k + 13 * i) * 7) + ((k + 13 * i) >> 8)) & 255));
@@ -54,7 +53,7 @@ for (const device of DEVICES) {
       uploads: true,
       relaxFs: true,
     });
-    const spec = { modules: ['test/file-write', 'test/file-write-b'], selection: SELECTION };
+    const spec = { modules: ['test/file-write', 'test/file-write-b'], selection: ['test/file-write', 'test/file-write-b'].map((id) => kit.mod(id).name) };
     const usb = <T>(rt: TestRuntime, run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
 
     const start = async (rt: TestRuntime, kind: number, size: number, path: string, base = CMD) =>
@@ -91,7 +90,7 @@ for (const device of DEVICES) {
     };
     /** The store's files besides the module itself. */
     const files = async (rt: TestRuntime) =>
-      new Map((await usb(rt, (dk) => dk.list())).filter((e) => !SELECTION.includes(e.path)).map((e) => [e.path, e]));
+      new Map((await usb(rt, (dk) => dk.list())).filter((e) => !spec.selection.includes(e.path)).map((e) => [e.path, e]));
     const boot = async (tag: string) => {
       const rt = await kit.load(tag, spec);
       expect((await bootInfo(rt.session, kit.plan)).results, 'both modules load').toEqual([0, 0]);

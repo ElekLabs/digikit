@@ -29,8 +29,8 @@ Make it a real service:
 2. Add the workspace member in `Cargo.toml`. A service file needs no entry in the runtime's dependencies or `owners.toml`.
 3. A service that takes hooks: one `[[hook]]` in `dks/module.toml` for each, the `service!(..., setup = f, hooks = [("cf.x.hook.y", hooks::entry), ("cf.x.hook.z", hooks::z_dn2, dn2)])` list (an entry with `dt2` or `dn2` is for that device),
    and the entry as assembler in `dks/src/hooks.rs`. A hook that takes the whole control flow of its site (no handler in `devices/fw/`) may continue in the stock code of the site with the exit `tail = true`;
-   its assembler refers to `dk_tail_<8 hex digits of name_hash(hook)>`, which `patchkit bind` resolves to code generated from the user's firmware (docs/PATCHING.md "Raw hooks").
-   Firmware references (resolved by `patchkit bind`; one example each, aliases in `[object.externs]` of `dks/module.toml`, H = hash of the hook):
+   its assembler refers to `dk_tail_<8 hex digits of name_hash(hook)>`, which the port file resolves to code generated from the user's firmware (docs/PATCHING.md "Raw hooks").
+   Firmware references (resolved by the port file; one example each, aliases in `[object.externs]` of `dks/module.toml`, H = hash of the hook):
    `_blit = "cf.draw.fn.blit"` then `jsr _blit` (`dk_fw_`, a firmware address; Rust takes `dkfw::draw::blit` and needs no alias);
    `_x = "hook.cf.x.hook.y.exit.1"` then `jmp _x` (`dk_exit_`, leave at the declared exit 1 of the hook's `exits`; `.exit` is the end of the site);
    `_t = "hook.cf.x.hook.y.tail"` then `jmp _t` (`dk_tail_`, the displaced instructions, then on);

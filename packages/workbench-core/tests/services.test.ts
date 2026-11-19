@@ -5,12 +5,14 @@ import { HEADER_BYTES, TABLE_MAGIC } from '@digi/dk-session';
 import {
   PROVIDER_MAX,
   nameHash,
+  portFileOf,
   planDelete,
   readNeeds,
   readProvides,
   resolveServices,
   serviceFileOf,
   type Need,
+  type PortFile,
   type RuntimeIdentity,
   type ServiceFile,
 } from '../src/modules/services.ts';
@@ -27,6 +29,8 @@ function build(opts: {
   magic?: number;
   abi?: number;
   builtFor?: number;
+  /** The FW item (8 bytes) of a port file. */
+  fw?: number[];
 }): Uint8Array {
   const entries: number[][] = [];
   const u32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
@@ -40,6 +44,7 @@ function build(opts: {
     ]);
   if (opts.provides)
     entries.push([...u16(9), ...u16(1), ...u32(8), ...u32(opts.provides[0]), ...u32(opts.provides[1])]);
+  if (opts.fw) entries.push([...u16(11), ...u16(1), ...u32(8), ...opts.fw]);
   const table = [
     ...u32(opts.magic ?? TABLE_MAGIC),
     ...u16(opts.version ?? 2),
@@ -57,6 +62,18 @@ function build(opts: {
   return f;
 }
 
+/** A port file of the firmware `fw` (role 2, a version 3 table with PROVIDES `port` and the FW item). */
+function port(stem: string, fw: number[]): PortFile {
+  const bytes = build({ version: 3, role: 2, provides: [nameHash('port'), v(0, 1)], fw });
+  const p = portFileOf(stem, bytes, `h-${stem}`);
+  assert.ok(p);
+  return p;
+}
+
+const FW_A = [1, 2, 3, 4, 5, 6, 7, 8];
+const FW_B = [9, 9, 9, 9, 9, 9, 9, 9];
+const hexOf = (b: number[]) => b.map((x) => x.toString(16).padStart(2, '0')).join('');
+
 function svc(stem: string, version: number, needs: Need[] = [], abi = 0, builtFor = 0): ServiceFile {
   const bytes = build({ role: 1, provides: [nameHash(stem), version], needs, abi, builtFor });
   const s = serviceFileOf(stem, bytes, `h-${stem}`);
@@ -64,7 +81,7 @@ function svc(stem: string, version: number, needs: Need[] = [], abi = 0, builtFo
   return s;
 }
 
-const RT: RuntimeIdentity = { version: v(0, 9), fingerprint: null };
+const RT: RuntimeIdentity = { version: v(0, 9), fingerprint: null, fw: null };
 const RUNTIME = new Set([nameHash('runtime')]);
 
 test('nameHash is FNV-1a 32', () => {
@@ -86,7 +103,7 @@ test('readNeeds reads v1 and v2 tables and gives [] without a table', () => {
 test('a table with the wrong magic or version is not read', () => {
   const needs = [need('fx')];
   assert.deepEqual(readNeeds(build({ needs, magic: 0x12345678 })), []);
-  assert.deepEqual(readNeeds(build({ needs, version: 3 })), []);
+  assert.deepEqual(readNeeds(build({ needs, version: 4 })), []);
   assert.equal(readProvides(build({ provides: [1, 2], magic: 0x12345678 })), null);
 });
 
@@ -173,7 +190,7 @@ test('an older minor or another major of a service is refused as version', () =>
 test('a service built for another ABI fingerprint refuses that module only', () => {
   const fx = svc('fx', v(1, 0), [], 0xaaaa, v(0, 5));
   const lfo = svc('lfo', v(1, 0), [], 0xbbbb, v(0, 5));
-  const rt: RuntimeIdentity = { version: (0 << 16) | (5 << 8) | 2, fingerprint: 0xbbbb };
+  const rt: RuntimeIdentity = { version: (0 << 16) | (5 << 8) | 2, fingerprint: 0xbbbb, fw: null };
   const r = resolveServices(
     [
       { id: 'a', needs: [need('fx')] },
@@ -191,7 +208,7 @@ test('a service built for another ABI fingerprint refuses that module only', () 
 
 test('a service without a fingerprint (abi 0, a service in C) is accepted like the loader does', () => {
   const c = svc('svc-test', v(1, 0), [], 0, v(0, 5));
-  const rt: RuntimeIdentity = { version: (0 << 16) | (5 << 8) | 2, fingerprint: 0xbbbb };
+  const rt: RuntimeIdentity = { version: (0 << 16) | (5 << 8) | 2, fingerprint: 0xbbbb, fw: null };
   const r = resolveServices([{ id: 'a', needs: [need('svc-test')] }], [c], rt, RUNTIME);
   assert.deepEqual(r.refused, []);
   assert.deepEqual(r.order, [c]);
@@ -246,4 +263,75 @@ test('deleting a module and its service together deletes both', () => {
   assert.deepEqual(p.delete.sort(), ['modules/a.dkm', 'services/fx.dks']);
   assert.deepEqual(p.refused, []);
   assert.deepEqual(p.kept, []);
+});
+
+test('a port file is read: role 2, the name `port` and its FW item as 16 hex digits', () => {
+  const p = port('dt-1', FW_A);
+  assert.equal(p.fw, hexOf(FW_A));
+  assert.equal(p.path, 'ports/dt-1.dkport');
+  // another role, no FW item or another provided name is no port file
+  assert.equal(portFileOf('x', build({ version: 3, role: 1, provides: [nameHash('port'), 0], fw: FW_A }), 'h'), null);
+  assert.equal(portFileOf('x', build({ version: 3, role: 2, provides: [nameHash('port'), 0] }), 'h'), null);
+  assert.equal(portFileOf('x', build({ version: 3, role: 2, provides: [nameHash('fx'), 0], fw: FW_A }), 'h'), null);
+});
+
+test('a service that needs `port` gets the port file whose FW equals the device, whatever the file names', () => {
+  const lfo = svc('lfo', v(1, 0), [need('port')]);
+  const ports = [port('other-1.16', FW_B), port('any-name', FW_A)];
+  const rt = { version: v(0, 9), fingerprint: null, fw: hexOf(FW_A) };
+  const r = resolveServices([{ id: 'a', needs: [need('lfo')] }], [lfo], rt, RUNTIME, ports);
+  assert.deepEqual(r.refused, []);
+  assert.equal(r.port?.stem, 'any-name');
+  assert.deepEqual(r.order, [lfo]);
+  // a module that needs no service-with-port has none
+  const plain = svc('samples', v(1, 0));
+  assert.equal(resolveServices([{ id: 'a', needs: [need('samples')] }], [plain], rt, RUNTIME, ports).port, null);
+});
+
+test('no port file for the device refuses the modules that need one, with the firmware named', () => {
+  const lfo = svc('lfo', v(1, 0), [need('port')]);
+  const plain = svc('samples', v(1, 0));
+  const mods = [
+    { id: 'a', needs: [need('lfo')] },
+    { id: 'b', needs: [need('samples')] },
+  ];
+  const rt = { version: v(0, 9), fingerprint: null, fw: hexOf(FW_A) };
+  const r = resolveServices(mods, [lfo, plain], rt, RUNTIME, [port('other', FW_B)]);
+  assert.deepEqual(r.refused, [{ module: 'a', service: 'port', kind: 'no-port', fw: hexOf(FW_A) }]);
+  assert.deepEqual(r.order, [plain], 'the other module still installs');
+  assert.equal(r.port, null);
+  // a runtime that reports no firmware identity has no port file to pick
+  const none = resolveServices(mods, [lfo, plain], { ...rt, fw: null }, RUNTIME, [port('a', FW_A)]);
+  assert.deepEqual(none.refused, [{ module: 'a', service: 'port', kind: 'no-port' }]);
+});
+
+test('the port file takes a provider slot: PROVIDER_MAX services that need it do not fit', () => {
+  const set = Array.from({ length: PROVIDER_MAX }, (_, i) => svc(`s${i}`, v(1, 0), [need('port')]));
+  const mods = set.map((s, i) => ({ id: `m${i}`, needs: [need(s.stem)] }));
+  const rt = { version: v(0, 9), fingerprint: null, fw: hexOf(FW_A) };
+  const r = resolveServices(mods, set, rt, RUNTIME, [port('p', FW_A)]);
+  assert.equal(r.order.length, PROVIDER_MAX - 1);
+  assert.deepEqual(
+    r.refused.map((x) => [x.module, x.kind]),
+    [[`m${PROVIDER_MAX - 1}`, 'too-many']],
+  );
+});
+
+test('the port file goes with the last module that needs a service, and stays while one does', () => {
+  const c = card(
+    ['modules/a.dkm', [need('lfo')]],
+    ['modules/b.dkm', [need('lfo')]],
+    ['services/lfo.dks', [need('port')]],
+    ['ports/dt-1.dkport', []],
+  );
+  const one = planDelete(c, ['modules/a.dkm']);
+  assert.deepEqual(one.delete, ['modules/a.dkm']);
+  assert.deepEqual(one.kept.map((k) => k.path).sort(), ['ports/dt-1.dkport', 'services/lfo.dks']);
+  const both = planDelete(c, ['modules/a.dkm', 'modules/b.dkm']);
+  assert.deepEqual(both.delete.sort(), ['modules/a.dkm', 'modules/b.dkm', 'ports/dt-1.dkport', 'services/lfo.dks']);
+  // the port file alone is refused while a service needs it
+  assert.deepEqual(
+    planDelete(c, ['ports/dt-1.dkport']).refused.map((r) => r.path),
+    ['ports/dt-1.dkport'],
+  );
 });

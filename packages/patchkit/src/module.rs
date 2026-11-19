@@ -66,7 +66,7 @@ pub struct Manifest {
     #[serde(default, rename = "export")]
     pub exports: Vec<ExportDef>,
     /// `[[hook]] name = "cf.menu.hook.settings_list.tail"`, `entry = "my_handler"`: the hook sites a service module takes and the global function of the object
-    /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; `patchkit bind` gives each a trampoline.
+    /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; the port file gives each a trampoline.
     #[serde(default, rename = "hook")]
     pub hooks: Vec<ServiceHook>,
     /// `[[fill]] slot = "frametype"`, `entry = "mf_frametype"`: a pointer slot of an image adapter (`[[slot]]` of its module.toml) that a service module fills with the address

@@ -5,7 +5,7 @@ import { openSamples } from '@digi/dk-session/samples';
 import { repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { installWithDebug } from '@digi/regression/runtime/install.ts';
+import { installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { AUDIBLE, RATE, captureNote, onset, selectDynamicMachine, tone, trackApi, until, wav } from './shot-support.ts';
 
@@ -19,7 +19,6 @@ import { AUDIBLE, RATE, captureNote, onset, selectDynamicMachine, tone, trackApi
 // 4. The capacity counts after the cycle are those before it.
 //
 // Run only with the go of the owner (docs/plans/extension-model.md, "Device proof").
-const SHOT_PATH = 'modules/shot.dkm';
 const FOLDER = 'shotlive';
 const SECONDS = 4;
 
@@ -27,6 +26,7 @@ runtimeTests(
   'LOAD and UNLOAD of a sample-pool module: unloaded with the voice sounding, loaded again, the sample bound and played again',
   async (runtime) => {
     const { session, dk } = runtime;
+    const SHOT_PATH = moduleStorePath(session.options.device, 'digikit/shot');
     const artifacts = liveArtifacts(session, 'shot-live-dt2');
     const api = trackApi(runtime);
     await installWithDebug(runtime, 'digikit/shot', 'test/track-select', 'test/stock-pool');
@@ -67,7 +67,7 @@ runtimeTests(
     for (const t of l) expect(t, `the tones of the sample before the unload (${l.join(' ')})`).toBeGreaterThan(AUDIBLE);
     await session.expectNoFault('unload with the voice sounding');
     expect((await dk.modules()).map((m) => m.name), 'shot is not loaded').not.toContain('digikit/shot');
-    expect((await dk.loadStates()).find((m) => m.name === 'shot.dkm'), 'LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
+    expect((await dk.loadStates()).find((m) => m.name === SHOT_PATH.split('/').at(-1)), 'LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
     const after = [440, 660].map((hz) => Math.max(tone(held.l, hz, pressedBeforeUnload + RATE / 4, held.l.length), tone(held.r, hz, pressedBeforeUnload + RATE / 4, held.l.length)));
     for (const t of after) expect(t, `the sample does not play after the unload (${after.join(' ')})`).toBeLessThan(AUDIBLE / 4);
 

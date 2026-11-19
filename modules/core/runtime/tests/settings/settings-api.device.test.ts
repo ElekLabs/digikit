@@ -22,7 +22,6 @@ import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 
 const A = 'test/settings-a';
 const B = 'test/settings-b';
-const SELECTION = ['modules/settings-a.dkm', 'modules/settings-b.dkm'];
 const CMD = { [A]: 0x38, [B]: 0x3a };
 const PUT = 1;
 const GET = 2;
@@ -41,7 +40,7 @@ for (const device of DEVICES) {
       initial: () => ({ selection: [] }),
       storeExtra: [s.setA, s.setB],
     });
-    const spec = { modules: ['test/settings-a', 'test/settings-b'], selection: SELECTION };
+    const spec = { modules: ['test/settings-a', 'test/settings-b'], selection: ['test/settings-a', 'test/settings-b'].map((id) => kit.mod(id).name) };
 
     /** One request of a fixture module: queued by the service command, run by `tick`, then read back. */
     async function call(
@@ -54,9 +53,13 @@ for (const device of DEVICES) {
       const usb = <T>(run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
       const body = Buffer.concat([Buffer.from([op, key.length]), text(key), value]);
       expect((await usb((dk) => dk.request(CMD[module], body))).status, 'the request is queued').toBe(0);
-      await rt.ui.wait({ ms: 200, why: SETTLE }); // tick runs about 120 times a second
-      const r = await usb((dk) => dk.request(CMD[module] + 1));
-      const b = Buffer.from(r.body);
+      // tick runs about 120 times a second; right after a boot the first passes can take longer, so the answer is asked again (emulated time) until the request ran
+      let b = Buffer.alloc(0);
+      for (let tries = 0; tries < 10; tries++) {
+        await rt.ui.wait({ ms: 200, why: SETTLE });
+        b = Buffer.from((await usb((dk) => dk.request(CMD[module] + 1))).body);
+        if (b[0] === 0) break;
+      }
       expect(b[0], 'tick ran the request').toBe(0);
       const rc = b.readInt32BE(1);
       return { rc, initRc: b.readInt32BE(5), init: b.subarray(9, 25), val: b.subarray(25, 25 + Math.max(rc, 0)) };

@@ -513,7 +513,7 @@ impl Ops for RealOps {
         let r = if op == LIVE_LOAD { crate::loader::live_load(k, path) } else { crate::loader::reload_load(rec, path) };
         let missing = if r == E_IMPORT { crate::loader::missing() } else { [0u8; dkrt_sdk::NEEDS_LEN] };
         crate::boot::states().finished(k, r);
-        crate::boot::report_module(k, path, r, &missing);
+        crate::boot::report_module(k, path, r, &missing, &crate::loader::last_name());
         r
     }
     unsafe fn unloaded(&mut self, k: usize) {

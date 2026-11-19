@@ -17,7 +17,6 @@ const OUT_ONLY = 0x40; // DK_USB_BULK_OUT_ONLY
 const WRONG_MODE = 0x04; // DK_USB_BULK_WRONG_MODE
 const ENDPTCTRL2 = 0xfc0b01c8;
 const FEEDBACK_TX = 0x00c40000; // the stock port 5 connect: EP2 TX iso enabled
-const SELECTION = ['modules/usb-echo.dkm'];
 
 for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} core/usb-bulk-audio`, () => {
@@ -37,7 +36,7 @@ for (const device of DEVICES) {
     };
 
     test('entry 5 serves interface 5, the state shows OUT-only mode, and the connect callback keeps the feedback endpoint', async () => {
-      const rt = await kit.load('audio-bulk', { modules: ['test/usb-echo'], selection: SELECTION });
+      const rt = await kit.load('audio-bulk', { modules: ['test/usb-echo'], selection: [kit.mod('test/usb-echo').name] });
       expect((await bootInfo(rt.session, kit.plan)).results, 'the module loads').toEqual([0]);
       const word = async (addr: number) => {
         const w = await rt.session.client.memPeek(addr);

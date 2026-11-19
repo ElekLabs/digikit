@@ -21,9 +21,8 @@ export const DSP_SLACK = 8;
 export const ARENA_HDR = 16;
 export const COLLECT_BYTES = 1618;
 export const TABLE_MAGIC = 1145787458;
-export const TABLE_VERSION = 2;
-export const PROVIDER_MAX = 6;
-export const BIND_MAX = 24;
+export const TABLE_VERSION = 3;
+export const PROVIDER_MAX = 8;
 export const INSTALL_SITES = 48;
 export const SLOTS_MAX = 16;
 export const INFO_MAX = 64;
@@ -243,6 +242,7 @@ export const CAP = {
   LOADS: 15,
   SVC_ABI: 16,
   RELOAD: 17,
+  FW_ID: 18,
   LIVE: 19,
 } as const;
 

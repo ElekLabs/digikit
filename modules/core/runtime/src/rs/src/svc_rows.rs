@@ -188,16 +188,17 @@ mod tests {
             assert_eq!(r.add(&mut t, 1, &ORDER, 1, row!("b")), E_PLAN_OWNER);
             assert_eq!(r.len(), 1);
             // the room is PROVIDER_MAX: fill it with a longer order list
-            let long = ["a", "b", "c", "d", "e", "f", "g", "h"];
-            assert_eq!(r.add(&mut t, 1, &long, 2, row!("c")), OK);
-            assert_eq!(r.add(&mut t, 1, &long, 3, row!("d")), OK);
-            assert_eq!(r.add(&mut t, 1, &long, 4, row!("e")), OK);
-            assert_eq!(r.add(&mut t, 1, &long, 5, row!("f")), OK);
-            assert_eq!(r.add(&mut t, 1, &long, 6, row!("g")), OK);
-            assert_eq!(r.add(&mut t, 1, &long, 7, row!("h")), E_PLAN_FIT);
+            let long = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"];
+            let rows = [row!("c"), row!("d"), row!("e"), row!("f"), row!("g"), row!("h"), row!("i"), row!("j")];
+            let mut owner = 2;
+            while r.len() < PROVIDER_MAX {
+                assert_eq!(r.add(&mut t, 1, &long, owner, rows[owner - 2]), OK);
+                owner += 1;
+            }
+            assert_eq!(r.add(&mut t, 1, &long, owner, row!("k")), E_PLAN_FIT);
         }
         assert_eq!(r.len(), PROVIDER_MAX);
-        assert_eq!(names(&t, 1 + r.len()), ["a", "b", "c", "d", "e", "f", "g"]);
+        assert_eq!(names(&t, 1 + r.len()), ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"][..1 + PROVIDER_MAX]);
     }
 
     // ---- the lifecycle walkers of interface B ----------------------------------------------------------------------------------

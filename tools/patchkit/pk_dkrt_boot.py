@@ -422,8 +422,8 @@ class BootRig(M.Rig):
     def service_symbol(self, service: str, name: str) -> int:
         """The address of NAME in the loaded service SERVICE (`services/<service>.dks`): its load address from the device load table (the ship map
         and symbols of `runtime.maps`, the table's bytes peeked and decoded by `patchkit addr`, docs/ADDRMAP.md) plus the offset in the address map
-        of the bound file (`dist/svc-bound/<device>/<service>.addrmap.json`, written by `nx run core/services/<service>:bind`, as the TypeScript
-        device tests read it)."""
+        of the packed file (`dist/modules/<device>/<service>.addrmap.json`, written by `nx run core/services/<service>:pack`, as the TypeScript
+        device tests read it: a service loads as packed, the port file resolves its firmware references)."""
         maps = self.emu.call("runtime.maps")
         ship = self.work / f"{self.tag}.ship.json"
         ship.write_text(maps["ship"])
@@ -441,13 +441,13 @@ class BootRig(M.Rig):
                 f"{self.tag}: service {service} is not in the load table: {[m['id'] for m in loads]}"
             )
         # the offsets are relative to the load address, the base of the load table (as `loadAddress` + `serviceMapEntries` of
-        # tests/regression/runtime/service-symbols.ts). The map is the Nx bind's: it must describe the file on this card.
-        bound = (
-            Path(__file__).resolve().parents[2] / "dist" / "svc-bound" / self.env.device
+        # tests/regression/runtime/service-symbols.ts). The map is the Nx pack's: it must describe the file on this card.
+        packed = (
+            Path(__file__).resolve().parents[2] / "dist" / "modules" / self.env.device
         )
-        card_file = self.work / "svc-bound" / f"{service}.dks"
-        nx_file = bound / f"{service}.dks"
-        stale = f"stale or missing Nx bind: run `pnpm nx:pilot run core/services/{service}:bind`"
+        card_file = self.work / "services" / f"{service}.dks"
+        nx_file = packed / f"{service}.dks"
+        stale = f"stale or missing Nx pack: run `pnpm nx:pilot run core/services/{service}:pack`"
         if not (card_file.exists() and nx_file.exists()):
             raise Fail(f"{stale} ({card_file} or {nx_file} is missing)")
         if (
@@ -455,9 +455,9 @@ class BootRig(M.Rig):
             != hashlib.sha256(nx_file.read_bytes()).digest()
         ):
             raise Fail(f"{stale} ({nx_file} differs from the card's {service}.dks)")
-        mapfile = bound / f"{service}.addrmap.json"
+        mapfile = packed / f"{service}.addrmap.json"
         if not mapfile.exists():
-            raise Fail(f"{mapfile}: run nx run core/services/{service}:bind")
+            raise Fail(f"{mapfile}: run nx run core/services/{service}:pack")
         entries = json.loads(mapfile.read_text())["entries"]
         off = [e["addr"] for e in entries if e["cpu"] == "cf" and e["name"] == name]
         if not off:

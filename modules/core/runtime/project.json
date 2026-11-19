@@ -54,7 +54,7 @@
         "{workspaceRoot}/modules/core/services/{fx,machines,lfo,samples}/dks/{Cargo.toml,src/**/*}",
         "{workspaceRoot}/tools/nx/device-images.mjs",
         { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
-        { "dependentTasksOutputFiles": "dist/svc-bound/*/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
         "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
@@ -71,11 +71,8 @@
         "core/services/lfo:pack",
         "core/services/samples:pack",
         "test/track-select:pack",
-        "core/services/fx:bind",
-        "core/services/machines:bind",
-        "core/services/samples:bind",
-        "core/services/lfo:bind",
-        "test/svc-test:bind",
+        "patchkit:ports-test",
+        "patchkit:cli",
         "patchkit:device-images"
       ],
       "outputs": [],

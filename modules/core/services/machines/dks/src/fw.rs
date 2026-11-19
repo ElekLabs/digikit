@@ -1,5 +1,5 @@
 //! The firmware calls of the machines service file: `DkFw`, the firmware's parameter page as the service reaches it (`dkrt_abi::fw::Fw`; the page's vtable slots as
-//! `RuntimeFw` did, the same offsets, and the three firmware functions through the `dkfw` crate, whose names `patchkit pack` turns into `dk_fw_` imports that `patchkit bind`
+//! `RuntimeFw` did, the same offsets, and the three firmware functions through the `dkfw` crate, whose names `patchkit pack` turns into `dk_fw_` imports that the port file
 //! resolves), and the entries that use it: the page's key and turn (called by the hooks), and the exports `dk_param_get` and `dk_param_set`. A host build has no firmware, and a firmware function that is not bound (address 0, `guard.rs`):
 //! the calls are no-ops with the neutral answer.
 use core::ptr::read_volatile;

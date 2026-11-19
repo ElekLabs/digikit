@@ -2,18 +2,19 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { LOAD_STATUS, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
+import type { Device } from '@digi/test-support';
 import type { PatchedSession } from '@digi/regression/support.ts';
-import { DEBUG_MODULE, installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, installModule, moduleArtifact, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { boundService, neededServices } from '@digi/regression/runtime/service-files.ts';
+import { neededServices, portFile } from '@digi/regression/runtime/service-files.ts';
 import { entry, nameHash, patched } from '../refusal/dkm-patch.ts';
 
 const A = 'test/lfo-shape';
 /** The same file under another module name: the same shape key, so a second owner of it. */
 const B = 'test/lfo-shape-copy';
 /** The lfo service is a file of the card, `services/lfo.dks` (R12-4): the runtime finds it by its name when a selected module needs the service. It has hooks, so the
- * file on the card is the one bound to the stock firmware (`patchkit bind`, the Nx target `core/services/lfo:bind`); the two broken copies below are made from its bytes. */
+ * file on the card is the packed one, with the port file of the firmware (`ports/<device>-<version>.dkport`, `patchkit:ports`); the two broken copies below are made from its bytes. */
 const SERVICE_PATH = 'services/lfo.dks';
 /** Header words of a `.dks` (packages/dkneeds/src/gen_limits.rs): the sha256 and the ABI fingerprint. */
 const H_SHA = 0x10;
@@ -22,7 +23,8 @@ const H_SVC_ABI = 0x3c;
 const TAG_KINDS = 4;
 /** The `MOD_LOAD` index of a provider (`loader::PROVIDER_IDX`): args are [index, result, file name, service hash, base]. */
 const PROVIDER_IDX = 0xfffffffe;
-const stored = (id: string) => `modules/${id.split('/').at(-1)}.dkm`;
+/** The store path of fixture `id` (`installModule` puts a module there): B is the file of A under B's name, in the folder of A's kind. */
+const stored = (device: Device, id: string) => (id === B ? moduleStorePath(device, A, B.replace('/', '-')) : moduleStorePath(device, id));
 const code = (name: string) => LOAD_STATUS.find((s) => s[1] === name)![0];
 
 /** A copy of the service file whose ABI word is `word`, with its sha256 made right again, so that only the ABI word is wrong. */
@@ -36,15 +38,15 @@ function withAbiWord(file: Buffer, word: number): Buffer {
 
 /** The debug module on the card (a provider has no record in MODULES or LOADS: its result is the log event MOD_LOAD with the provider marker, so the debug module is selected too). */
 async function putDebug(dk: PatchedSession['dk'], device: PatchedSession['session']['options']['device']): Promise<string> {
-  const debug = `modules/${DEBUG_MODULE.split('/').at(-1)}.dkm`;
+  const debug = moduleStorePath(device, DEBUG_MODULE);
   await dk.put(debug, fs.readFileSync(moduleArtifact(device, DEBUG_MODULE)));
   return debug;
 }
 
 /** Select the debug module and the fixture, restart, and check that the fixture did not load and is REFUSED with E_MISSING and the hash of its service. Returns the results of the provider's MOD_LOAD events. */
-async function expectFixtureRefused(dk: PatchedSession['dk'], debug: string, why: string): Promise<{ result: number; hash: number }[]> {
-  const leafA = stored(A).split('/').at(-1)!;
-  await dk.select([debug, stored(A)]);
+async function expectFixtureRefused(dk: PatchedSession['dk'], device: Device, debug: string, why: string): Promise<{ result: number; hash: number }[]> {
+  const leafA = stored(device, A).split('/').at(-1)!;
+  await dk.select([debug, stored(device, A)]);
   await dk.restart();
   await dk.waitForBoot();
   expect(
@@ -57,7 +59,8 @@ async function expectFixtureRefused(dk: PatchedSession['dk'], debug: string, why
     `${why}: the fixture is REFUSED with the hash of its service`,
   ).toEqual([['REFUSED', code('E_MISSING'), nameHash('lfo')]]);
   return ofKind(await dk.readLog(), LOG_KIND.MOD_LOAD)
-    .filter((e) => e.args[0] === PROVIDER_IDX)
+    // the port file is a provider too (it loads before the service); this test is about the service
+    .filter((e) => e.args[0] === PROVIDER_IDX && (e.args[3]! >>> 0) !== (nameHash('port') >>> 0))
     .map((e) => ({ result: e.args[1]! | 0, hash: e.args[3]! }));
 }
 
@@ -65,9 +68,9 @@ async function expectFixtureRefused(dk: PatchedSession['dk'], debug: string, why
 async function expectNoServiceFile({ session, dk }: PatchedSession): Promise<void> {
   await expectRuntimeReady(session);
   const device = session.options.device;
-  await dk.put(stored(A), fs.readFileSync(moduleArtifact(device, A)));
+  await dk.put(stored(device, A), fs.readFileSync(moduleArtifact(device, A)));
   const debug = await putDebug(dk, device);
-  expect(await expectFixtureRefused(dk, debug, 'no service file'), 'no provider event').toEqual([]);
+  expect(await expectFixtureRefused(dk, device, debug, 'no service file'), 'no provider event').toEqual([]);
   await session.expectNoFault('lfo without a service file');
 }
 
@@ -85,9 +88,13 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   // the service file goes on the card; the fixtures that emit lfo_shape need it
   const [needed] = neededServices([moduleArtifact(device, A)]);
   expect(needed?.service, 'the fixture needs the lfo service').toBe('lfo');
-  const service = fs.readFileSync(await boundService(device, needed!, moduleArtifact(device, needed!.moduleId)));
+  const service = fs.readFileSync(moduleArtifact(device, needed!.moduleId));
+  const port = portFile(device);
+  const portBytes = fs.readFileSync(port.file);
+  await dk.put(port.name, portBytes);
+  expect(await dk.verifyFile(port.name, portBytes), 'fresh card read matches the port file').toBe(true);
   await dk.put(SERVICE_PATH, service);
-  expect(await dk.verifyFile(SERVICE_PATH, service), 'fresh card read matches the bound service file').toBe(true);
+  expect(await dk.verifyFile(SERVICE_PATH, service), 'fresh card read matches the packed service file').toBe(true);
 
   // one fixture: loaded, no machine type, a record block in the arena
   await installModule(dk, A, moduleArtifact(device, A), { device });
@@ -102,8 +109,8 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   expect(await dk.loadFailures(), 'nothing was refused').toEqual([]);
 
   // a second owner of the shape key (the file of A under another name): both selected, the first loads and the plan refuses the second before it runs
-  await dk.put(stored(B), patched(fs.readFileSync(moduleArtifact(device, A)), B));
-  await dk.select([stored(A), stored(B)]);
+  await dk.put(stored(device, B), patched(fs.readFileSync(moduleArtifact(device, A)), B));
+  await dk.select([stored(device, A), stored(device, B)]);
   await dk.restart();
   await dk.waitForBoot();
   expect(
@@ -111,7 +118,7 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
     'only the first owner loaded',
   ).toEqual([A]);
   expect(await dk.loadFailures(), 'the second owner is refused with the plan status').toEqual([
-    { name: stored(B).split('/').at(-1)!, result: code('E_PLAN_KEY') },
+    { name: stored(device, B).split('/').at(-1)!, result: code('E_PLAN_KEY') },
   ]);
 
   // unload: no selection, a restart: MODULES and CAPACITY are what they were before the first load
@@ -127,10 +134,10 @@ async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   // a service file built for another ABI: the loader refuses the provider with E_SVC_ABI, so the service is missing and the fixture that needs it is REFUSED.
   // A provider has no record in MODULES or LOADS (R12-3): its result is the log event MOD_LOAD with the provider marker, so the debug module is selected too.
   const abi = service.readUInt32BE(H_SVC_ABI);
-  expect(abi, 'the bound file carries the ABI word (0 would skip the check)').not.toBe(0);
+  expect(abi, 'the packed file carries the ABI word (0 would skip the check)').not.toBe(0);
   const debug = await putDebug(dk, device);
   const lfoHash = nameHash('lfo');
-  const expectNotLoaded = (why: string) => expectFixtureRefused(dk, debug, why);
+  const expectNotLoaded = (why: string) => expectFixtureRefused(dk, device, debug, why);
   await dk.put(SERVICE_PATH, withAbiWord(service, abi ^ 1));
   expect(await expectNotLoaded('a service file of another ABI'), 'the provider is refused with E_SVC_ABI').toEqual([{ result: code('E_SVC_ABI'), hash: lfoHash }]);
 

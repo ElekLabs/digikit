@@ -110,17 +110,10 @@ export function serviceRefusalText(r: ServiceRefusal): string {
         `Nothing was uploaded for ${r.module}. Update the workbench, or flash a matching runtime from the Firmware page.`
       );
     }
-    case 'no-stock':
-      return (
-        `${r.module} not installed. It needs the ${r.service} service, and the workbench prepares services from your own firmware file. ` +
-        `Choose that file once on the Firmware page. Nothing was uploaded for ${r.module}.`
-      );
-    case 'bind-failed':
-      return (
-        `${r.module} not installed. The ${r.service} service could not be prepared: ${r.error ?? 'unknown error'}. ` +
-        `Nothing was uploaded for ${r.module}.` +
-        (r.hint === 'bind-data' ? ' Build the bind data with: pnpm nx:pilot run @digi/web:bind-bundle.' : '')
-      );
+    case 'no-port':
+      return r.fw
+        ? `${r.module} not installed. It needs the ${r.service} service, which needs the port file for this firmware version (${r.fw}), and this workbench has none for it. Nothing was uploaded for ${r.module}.`
+        : `${r.module} not installed. It needs the ${r.service} service, which needs the port file for the firmware on your device, and the device does not report its firmware: flash a newer digikit firmware from the Firmware page. Nothing was uploaded for ${r.module}.`;
     default:
       return `${r.module} not installed. It needs the ${r.service} service, which this workbench does not have.`;
   }
@@ -160,8 +153,20 @@ export function eventText(e: TransferEvent): string {
       return serviceRefusalText(e.refusal!);
     case 'keep':
       return `Kept ${e.path} (${(e.by ?? []).join(', ')} needs it)`;
+    case 'rename':
+      return `Moving ${e.path} to ${s(e.to)}`;
+    case 'select':
+      return `Writing the selection again with the new paths`;
+    case 'conflict':
+      return `${s(e.id)}: ${e.path} should be ${s(e.to)}, which holds another file; not uploaded (delete one of the two)`;
+    case 'stale-selection':
+      return `The selection names ${s(e.names)}, which are not on the card any more`;
     case 'delete':
-      return e.why === 'unused-service' ? `Deleted ${e.path} (no module on the card needs it)` : `Deleting ${e.path}`;
+      return e.why === 'duplicate'
+        ? `Deleted ${e.path} (the same module is at its new path)`
+        : e.why === 'unused-service'
+          ? `Deleted ${e.path} (no module on the card needs it)`
+          : `Deleting ${e.path}`;
     case 'verify':
       return e.ok ? `Verified ${e.path} on the card` : `Verify failed: ${e.path} differs on the card`;
     case 'reload':
@@ -339,7 +344,14 @@ export function deviceTags(r: TransferRow): RowTag[] {
       title: r.not_loaded,
       tone: 'warn',
     });
-  if (r.needed_by?.length)
+  if (r.for_firmware)
+    out.push({
+      text: `for firmware ${r.for_firmware}`,
+      title:
+        'A port file of another firmware version: it stays on the card and serves no module while the device runs another firmware',
+      tone: 'dim',
+    });
+  else if (r.needed_by?.length)
     out.push({
       text: `needed by ${r.needed_by.join(', ')}`,
       title: 'A module on the card needs this service; delete that module first',

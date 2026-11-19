@@ -24,6 +24,20 @@ const NONE: u32 = dkneeds::NONE;
 // header field offsets (big endian): `[format]` of sdk/sdk.toml; the parse in `image.rs` reads the rest
 const H_VERSION: usize = dkneeds::H_VERSION as usize;
 const H_NAME: usize = dkneeds::H_NAME as usize;
+/// Bytes of a module's name in a log event (three words).
+pub const LOG_NAME: usize = 12;
+
+/// The name part of the module id in `head` (the NAME_LEN bytes of the header's name): after the last `/`, cut to `LOG_NAME`, NUL padded.
+fn name_part(head: &[u8]) -> [u8; LOG_NAME] {
+    let n = head.iter().position(|b| *b == 0).unwrap_or(head.len());
+    let id = &head[..n];
+    let from = id.iter().rposition(|b| *b == b'/').map_or(0, |i| i + 1);
+    let mut out = [0u8; LOG_NAME];
+    let name = &id[from..];
+    let m = name.len().min(LOG_NAME);
+    out[..m].copy_from_slice(&name[..m]);
+    out
+}
 const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
 const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
 const H_DSP_OFF: usize = dkneeds::H_DSP_OFF as usize;
@@ -33,6 +47,7 @@ pub(crate) mod discover;
 pub(crate) mod exports;
 mod image;
 pub(crate) mod install;
+mod port;
 mod records;
 pub(crate) mod role;
 mod seams;
@@ -44,7 +59,7 @@ pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
 /// The index the log shows for a provider file (`MOD_LOAD` and the events of its load): not a selection index, and not `u32::MAX` (no load running).
 pub const PROVIDER_IDX: u32 = 0xffff_fffe;
 
-/// What a provider record keeps after its load started: the copy of its header table (BIND, EXPORTS and SLOTS; the staged file is gone once `init` reads
+/// What a provider record keeps after its load started: the copy of its header table (HOOKS, EXPORTS and SLOTS; for the port file the whole table; the staged file is gone once `init` reads
 /// from the store) and the size of its image.
 #[derive(Clone, Copy)]
 pub(crate) struct ProvRec {
@@ -102,7 +117,7 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     m: M,
     r: R,
     phase: Phase,
-    /// The role word of each record's file (0 module, 1 service): which `RoleSteps` its undo uses.
+    /// The role word of each record's file (0 module, 1 service, 2 port): which `RoleSteps` its undo uses.
     roles: [u8; records::REC_MAX],
     /// The name of the missing module of the last load that failed with E_IMPORT (`import_needs`), NUL padded; empty when none. The boot clears it before
     /// each load and takes it after.
@@ -110,6 +125,8 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// The first item that `init`'s declarations and the header table do not both hold, of the last load that failed with E_DECL_KIND: (tag of the item, its first
     /// word), and 0x100 added to the tag when only the header has it. `(0, 0)`: none (`report_provider` logs it).
     decl_diff: (u32, u32),
+    /// The name hash that the port file did not list, of the last service file that failed with E_IMPORT for it (`port::Lookup::Unlisted`); 0: none.
+    import_hash: u32,
     /// The header table of the module at each selection index, kept while the boot reads each file once (`capture`); `table_len` 0: none (the file
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
@@ -122,6 +139,10 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     planned_dsp: (u32, u32),
     /// The providers the boot's search found: their paths and tables. Provider `j` is record `MAX_MODULES + j`.
     found: Found,
+    /// The name part of the module id (after the `/`, 12 bytes: the log's width, NUL padded) of the file at each selection index, kept by `capture` for a plan refusal; all zero: no header was read.
+    log_name: [[u8; LOG_NAME]; SEL_MAX],
+    /// The same for the last file `check_file` read a header of (zero when the last check did not get that far).
+    last_name: [u8; LOG_NAME],
     /// Whether provider `j` of the plan loaded (settle reads it).
     loaded: [bool; PROVIDER_MAX],
     /// The table copy of each provider record (`role.rs`).
@@ -133,6 +154,7 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// The slots of the providers' DSP code in core/dsp-link's slot block (the DSP backend).
     dsp_install: DspInstaller,
     /// The selection index of each module record (`u8::MAX`: none): the late teardown of a service names the dependents' states by it.
+    /// Stored as the index plus 1, so that 0 (none) is the zero fill of the static: a non-zero initial value would put the whole loader in `.data` (read it with `sel_of`).
     sel_of_rec: [u8; MAX_MODULES],
     /// The steps of a teardown that ran for each record (`TORN_*`): a second `unload_rec` after `E_BUSY` skips them, so `fini` and the role's undo run once.
     torn: [u8; records::REC_MAX],
@@ -161,6 +183,11 @@ fn loader() -> &'static mut Real {
 /// The address a loaded service file published for the export `hash`, if any (`handlers::exports::find_export`).
 pub fn find_export(hash: u32) -> Option<u32> {
     loader().exports.resolve(hash)
+}
+
+/// The name part of the module id of the last file whose header a check read (zero: none); a live or reload job reports it.
+pub fn last_name() -> [u8; LOG_NAME] {
+    loader().last_name
 }
 
 /// The boot's load loop over the selection in plan order (`Loader::boot`).
@@ -219,7 +246,7 @@ pub unsafe fn rec_of_path(path: *const u8) -> Option<(usize, usize)> {
     let mut rec = 0;
     while rec < MAX_MODULES {
         if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
-            let k = l.sel_of_rec[rec] as usize;
+            let k = l.sel_of(rec) as usize;
             return if k < SEL_MAX { Some((rec, k)) } else { None };
         }
         rec += 1;
@@ -433,6 +460,11 @@ impl Checked {
 }
 
 impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+    /// The selection index of module record `rec`, `u8::MAX` when it has none.
+    fn sel_of(&self, rec: usize) -> u8 {
+        self.sel_of_rec[rec].wrapping_sub(1)
+    }
+
     pub const fn new(p: P, m: M, r: R) -> Self {
         Loader {
             p,
@@ -442,20 +474,51 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             roles: [0; records::REC_MAX],
             missing: [0; NEEDS_LEN],
             decl_diff: (0, 0),
+            import_hash: 0,
             tables: [[0; TABLE_MAX]; SEL_MAX],
             table_len: [0; SEL_MAX],
             accepted: [false; SEL_MAX],
             planned_dsp: (0, 0),
             found: Found::new(),
+            log_name: [[0; LOG_NAME]; SEL_MAX],
+            last_name: [0; LOG_NAME],
             loaded: [false; PROVIDER_MAX],
             provs: [ProvRec::EMPTY; PROVIDER_MAX],
             exports: Exports::new(),
             installer: Installer::new(),
             dsp_install: DspInstaller::new(),
-            sel_of_rec: [u8::MAX; MAX_MODULES],
+            sel_of_rec: [0; MAX_MODULES],
             torn: [0; records::REC_MAX],
             saved_tick: [0; MAX_MODULES],
             drain_at: [None; MAX_MODULES],
+        }
+    }
+
+    /// The port file that is loaded: its record, the copy of its table and the base and image size of its block. `None` when no port file is loaded.
+    unsafe fn port_keys(&self) -> Option<(Keys<'static>, u32, u32)> {
+        let mut j = 0;
+        while j < PROVIDER_MAX {
+            let rec = MAX_MODULES + j;
+            if self.roles[rec] == 2 && records::module(rec).used != 0 {
+                let pr = &self.provs[j];
+                let blk = pr.block?;
+                let keys = Keys::parse(core::slice::from_raw_parts(blk.ptr as *const u8, pr.len as usize)).ok()?;
+                return Some((keys, records::module(rec).base, pr.image_size));
+            }
+            j += 1;
+        }
+        None
+    }
+
+    /// Resolve the import `name` of a service file against the loaded port file. A name that is no firmware reference is `NotPort`; a firmware reference with no port
+    /// file loaded is `Unlisted` (the hash is the reference's), as a name the port file does not list.
+    unsafe fn port_lookup(&self, name: &[u8]) -> port::Lookup {
+        let Some(r) = port::parse_import(name) else {
+            return port::Lookup::NotPort;
+        };
+        match self.port_keys() {
+            Some((keys, base, image_size)) => port::lookup(&keys, base, image_size, r),
+            None => port::Lookup::Unlisted(r.hash),
         }
     }
 
@@ -473,6 +536,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             crate::selection::BOOT_IDX = k as u32;
             crate::boot::note_boot_path(k, r.paths[k].as_ptr());
             self.missing = [0; NEEDS_LEN];
+            self.last_name = self.log_name[k];
             let res = match planned.verdicts[k] {
                 dkrt_abi::plan::Verdict::Accepted => {
                     crate::boot::states().init(k);
@@ -482,7 +546,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 }
                 dkrt_abi::plan::Verdict::Refused(why) => why.code(),
             };
-            crate::boot::report_module(k, r.paths[k].as_ptr(), res, &self.missing);
+            crate::boot::report_module(k, r.paths[k].as_ptr(), res, &self.missing, &self.last_name);
             pos += 1;
         }
         self.phase = Phase::Closed;
@@ -519,6 +583,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let size = staged.size;
         c.f = f;
         c.size = size;
+        self.last_name = [0; LOG_NAME];
 
         // ---- checks (nothing is written outside the staging buffer) ----
         let head = match image::head(f, size) {
@@ -526,11 +591,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Err(e) => return e,
         };
         c.head = head;
+        // the header is read: the log names the module by its id, not by its file
+        self.last_name = name_part(core::slice::from_raw_parts(f.add(H_NAME), dkneeds::NAME_LEN as usize));
         let image::Head { import_off, import_n, .. } = head;
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
         c.role = role;
-        if (role == 1) != matches!(slot, Slot::Provider(_)) {
+        if (role == 1 || role == 2) != matches!(slot, Slot::Provider(_)) {
             return E_FORMAT;
         }
         let steps = RoleSteps::<P, M, R>::of(role);
@@ -549,6 +616,21 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             if a == 0 && role == 1 {
                 // a service file also links the service-only imports (`SVC_IMPORTS`)
                 a = self.m.svc_import_addr(p);
+            }
+            if a == 0 && role == 1 {
+                // the firmware references of a service file are the port file's: an address, 0 for a name that this firmware lacks, or a refusal
+                let n = cstr_len(p, dkneeds::CF_IMPORT_LEN as usize);
+                let found = self.port_lookup(core::slice::from_raw_parts(p, n));
+                if let port::Lookup::Addr(x) = found {
+                    a = x;
+                } else if found == port::Lookup::Absent {
+                    c.import_addrs[i] = 0;
+                    i += 1;
+                    continue;
+                } else if let port::Lookup::Unlisted(h) = found {
+                    self.import_hash = h;
+                    return E_IMPORT;
+                }
             }
             if a == 0 {
                 // the runtime's table has no such name: a loaded provider may export it
@@ -587,6 +669,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Ok(k) => k,
             Err(e) => return e,
         };
+        if role == 1 {
+            role::filter_hooks(self, &mut c.keys);
+        }
         // the DSP section, if any
         let (dsp_off, dsp_size) = (rd32(f.add(H_DSP_OFF)), rd32(f.add(H_DSP_SIZE)));
         c.dsp_size = dsp_size;
@@ -699,10 +784,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         self.p.flush(base, total);
 
         // ---- record, init, publish ----
-        self.roles[rec] = (role == 1) as u8;
+        self.roles[rec] = if role == 2 { 2 } else { (role == 1) as u8 };
         if rec < MAX_MODULES {
             let k = read_volatile(addr_of!(BOOT_IDX));
-            self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 } else { u8::MAX };
+            self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 + 1 } else { 0 };
         }
         let m: &mut Module = records::module(rec);
         m.used = 1;
@@ -725,7 +810,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         m.fini = if fini == NONE { 0 } else { base + fini };
         crate::entry::bind(rec);
         records::set_menu(rec, if menu == NONE { 0 } else { base + menu });
-        let place = PlaceArgs { file: f, keys_off: reg_off, keys_len: reg_size, image_size, dsp_image: if dsp_size != 0 { job.image_size } else { 0 } };
+        let place = PlaceArgs { file: f, keys_off: reg_off, keys_len: reg_size, image_size, dsp_image: if dsp_size != 0 { job.image_size } else { 0 }, mem, base, bss };
         let initaddr = if init == NONE { 0 } else { base + init };
         let tickaddr = if tick == NONE { 0 } else { base + tick };
         if dsp_size != 0 {
@@ -1015,7 +1100,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             dsp::fail_done(reclaimed, code);
             true
         } else if dsp::dequeue(rec) {
-            let idx = self.sel_of_rec[rec] as u32;
+            let idx = self.sel_of(rec) as u32;
             if self.take_down(rec, code) != OK {
                 // as for the load in flight: a teardown that cannot release the rows leaves the DSP retained (`fail_done`)
                 dsp::ds().phase = dsp::PH_RETAINED;
@@ -1043,7 +1128,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                         return r;
                     }
                     if d < MAX_MODULES {
-                        let k = self.sel_of_rec[d];
+                        let k = self.sel_of(d);
                         if k != u8::MAX {
                             crate::boot::report_taken_down(k as u32, E_MISSING);
                         }
@@ -1066,7 +1151,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// Whether the loaded record `rec` has a hard NEED of the service `hash` (from the header table the boot kept: the selection's for a module, the search's for a provider).
     unsafe fn needs_hash(&self, rec: usize, hash: u32) -> bool {
         let table: &[u8] = if rec < MAX_MODULES {
-            let k = self.sel_of_rec[rec] as usize;
+            let k = self.sel_of(rec) as usize;
             if k >= SEL_MAX || self.table_len[k] == 0 {
                 return false;
             }
@@ -1195,7 +1280,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if rec >= MAX_MODULES || records::module(rec).used == 0 {
             return E_NOT_FOUND;
         }
-        let k = self.sel_of_rec[rec] as usize;
+        let k = self.sel_of(rec) as usize;
         if k >= SEL_MAX || self.table_len[k] == 0 {
             return E_NOT_FOUND;
         }
@@ -1251,7 +1336,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
         let mut r = 0;
         while r < MAX_MODULES {
-            let at = self.sel_of_rec[r] as usize;
+            let at = self.sel_of(r) as usize;
             if records::module(r).used != 0 && at < SEL_MAX && self.table_len[at] != 0 {
                 mods[at] = Keys::parse(&self.tables[at][..self.table_len[at]]).ok();
             }
@@ -1289,7 +1374,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut live = [false; SEL_MAX];
         let mut r = 0;
         while r < MAX_MODULES {
-            let at = self.sel_of_rec[r] as usize;
+            let at = self.sel_of(r) as usize;
             if records::module(r).used != 0 && at < SEL_MAX {
                 live[at] = true;
             }
@@ -1344,7 +1429,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// Load the new file of a reload into the record `rec` of the module that `unload_rec` took down: the file's header table replaces the old one in the selection
     /// index of the record, so the services number its keys at `init` as they did the old file's, and the load keeps the record, its owner id and its selection index.
     pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
-        let k = if rec < MAX_MODULES { self.sel_of_rec[rec] as usize } else { SEL_MAX };
+        let k = if rec < MAX_MODULES { self.sel_of(rec) as usize } else { SEL_MAX };
         if k >= SEL_MAX {
             return E_NOT_FOUND;
         }
@@ -1513,8 +1598,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         self.accepted[k] = false;
         let mut rec = 0;
         while rec < MAX_MODULES {
-            if self.sel_of_rec[rec] as usize == k && records::module(rec).used == 0 {
-                self.sel_of_rec[rec] = u8::MAX;
+            if self.sel_of(rec) as usize == k && records::module(rec).used == 0 {
+                self.sel_of_rec[rec] = 0;
             }
             rec += 1;
         }
@@ -1525,6 +1610,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX || file.len() < dkneeds::HEADER as usize {
             return;
         }
+        self.log_name[k] = name_part(&file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize]);
         let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
         let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
         if len == 0 || len > TABLE_MAX || off > file.len() || len > file.len() - off {
@@ -1568,7 +1654,18 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut want = [0u32; WANT_MAX];
         let nw = unmet_needs(&mods[..n], &mut want);
         if nw != 0 {
-            discover::find(&mut self.m, &services(), &want[..nw], &mut self.found);
+            discover::find(&mut self.m, &services(), &want[..nw], role::image_fw_id(&self.p), &mut self.found);
+            // a limit of the search was passed: a need may be unmet for that reason, not for a missing file; each cause has its own name word (`(tab`, `(fil`, `(nee`) and its `TRUNC_*` bit as the hash word, which `loadFailureText` of runtime-log.ts turns into text
+            let t = self.found.truncated;
+            if t & discover::TRUNC_TABLE != 0 {
+                crate::boot::report_provider(b"(tab", E_PLAN_FIT, discover::TRUNC_TABLE as u32, 0);
+            }
+            if t & discover::TRUNC_FILES != 0 {
+                crate::boot::report_provider(b"(fil", E_PLAN_FIT, discover::TRUNC_FILES as u32, 0);
+            }
+            if t & discover::TRUNC_NEEDS != 0 {
+                crate::boot::report_provider(b"(nee", E_PLAN_FIT, discover::TRUNC_NEEDS as u32, 0);
+            }
         }
         let provs = parse_provs(&self.found, self.found.n);
         let env = Env { services: services(), runtime: dkrt_sdk::RUNTIME_VERSION, caps };
@@ -1602,6 +1699,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             pos += 1;
             self.missing = [0; NEEDS_LEN];
             self.decl_diff = (0, 0);
+            self.import_hash = 0;
             let res = match planned.provider_verdicts[j] {
                 dkrt_abi::plan::Verdict::Refused(why) => why.code(),
                 dkrt_abi::plan::Verdict::Accepted => {
@@ -1616,7 +1714,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             self.loaded[j] = res == OK || res == LOADING;
             let base = if res == OK || res == LOADING { records::module(MAX_MODULES + j).base } else { 0 };
             // a refusal of the declare-check names the item that differs, in the words of the base (the tag) and the service hash (the item's first word)
-            let (hash, base) = if res == E_DECL_KIND && self.decl_diff.0 != 0 { (self.decl_diff.1, self.decl_diff.0) } else { (hashes[j], base) };
+            let (hash, base) = if res == E_DECL_KIND && self.decl_diff.0 != 0 {
+                (self.decl_diff.1, self.decl_diff.0)
+            } else if res == E_IMPORT && self.import_hash != 0 {
+                (self.import_hash, 0)
+            } else {
+                (hashes[j], base)
+            };
             crate::boot::report_provider(self.found.path(j), res, hash, base);
         }
         crate::selection::BOOT_IDX = u32::MAX;

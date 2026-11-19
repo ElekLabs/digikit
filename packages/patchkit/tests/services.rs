@@ -1,5 +1,5 @@
 //! `patchkit services`: the services that packed fixture modules need, from their NEEDS and the manifests. The packing tests skip when the m68k-elf
-//! toolchain is not installed. The sidecar check of a bound file is unit-tested in src/services.rs.
+//! toolchain is not installed. The sidecar check of a packed file is unit-tested in src/services.rs.
 
 use patchkit::build::toolchain::Env;
 use std::path::{Path, PathBuf};
@@ -59,10 +59,6 @@ fn services(files: &[String]) -> Vec<String> {
             assert_eq!(
                 v["store_path"],
                 format!("services/{}.dks", v["service"].as_str().unwrap())
-            );
-            assert!(
-                v.get("bound_path").is_none(),
-                "no bound file without --bind-dir"
             );
             v["service"].as_str().unwrap().to_string()
         })

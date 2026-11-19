@@ -56,7 +56,7 @@ const fn fnv1a(s: &[u8]) -> u32 {
 
 /// Words of the table (byte offsets / 4); the value indices are bytes from byte 80. Words 0 to `IMAGE_WORDS` - 1 are the image's `fxpages_info` (version 4: data only,
 /// the indices and the device numbers; the words 10, 11 and 49 to 60 held firmware addresses in version 3 and are 0 in the image: the service names the firmware and
-/// `patchkit bind` resolves it; `set_firmware` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the rows, the list, the counters)
+/// the port file resolves it; `set_firmware` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the rows, the list, the counters)
 /// and the three computed words are this service's (`bind_table`): the state lives in this file's bss, next to the hooks that use it.
 mod w {
     pub const MAGIC: usize = 0;

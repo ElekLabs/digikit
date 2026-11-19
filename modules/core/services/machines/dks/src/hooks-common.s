@@ -1,4 +1,4 @@
-| machines.dks, the hooks both devices share: the machine page's draw, code, key and turn entries. Each continues in the stock code through the tail `patchkit bind` makes
+| machines.dks, the hooks both devices share: the machine page's draw, code, key and turn entries. Each continues in the stock code through the tail the port file makes
 | (`dk_tail_<hash of the hook>`) and leaves as `rts` through `jmp mf_ret_*` (`dk_ret_<hash>`; the aliases are the `[object.externs]` of module.toml), so the routines hold no
 | firmware bytes and one routine serves both devices. `MF_TAB` is the image table `machines_info` (`image.rs`).
 
@@ -9,7 +9,7 @@
     .equ T_N_DRAW,    44
     .equ T_N_OVERLAY, 48
 
-| ---- the machine page's draw, code, key and turn entries (SourcePageView and MultiSourcePageView, vfunc_4, vfunc_47, vfunc_2, vfunc_17: the same code on both devices; `patchkit bind` makes the stock tail of each hook for the firmware it binds to). The stock path is the tail `patchkit bind` makes. At the entry 0(sp) = the return address, 4(sp) = the view, 8(sp) = the event (or canvas); d0/d1/a0/a1 are free.
+| ---- the machine page's draw, code, key and turn entries (SourcePageView and MultiSourcePageView, vfunc_4, vfunc_47, vfunc_2, vfunc_17: the same code on both devices; the port file makes the stock tail of each hook for the firmware it binds to). The stock path is the tail the port file makes. At the entry 0(sp) = the return address, 4(sp) = the view, 8(sp) = the event (or canvas); d0/d1/a0/a1 are free.
 | The native page seams are the adapter's C functions (`mf_native_*` of the image, table words N_*); -1 from code means pass through; 0 is an intentional unused/LOCAL
 | mapping. `dks_page_key` and `dks_page_turn` are Rust (lib.rs).
     .globl mf_draw_hook

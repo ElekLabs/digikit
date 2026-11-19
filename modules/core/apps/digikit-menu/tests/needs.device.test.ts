@@ -39,12 +39,14 @@ cardRigs('a module that needs a missing module', { roots: [...RT, 'core/digikit-
     // the event after MOD_LOAD (error level), and the host's reading of it
     const ring = await readSmallRing(session, rig.plan);
     const failures = loadFailures(ring);
-    expect(failures).toEqual([{ name: 'usb-fast.dkm', result: -7, needs: 'usb-bulk' }]);
+    // the log names the module by its id (12 characters), LOADS by the file: `modules/tool/digikit-usb-fast.dkm`
+    const leaf = mod.name.split('/').at(-1)!;
+    expect(failures).toEqual([{ name: 'usb-fast', result: -7, needs: 'usb-bulk' }]);
     expect(ofKind(ring, LOG_KIND.MOD_NEEDS)).toHaveLength(1);
     expect(loadFailureText(failures[0]!)).toBe('usb-fast not loaded: this firmware has no core/usb-bulk. Flash firmware from the Firmware page.');
 
     // the LOADS command (no debug module needed)
-    expect(await rig.usb(rt, (dk) => dk.loadFailures())).toEqual(failures);
+    expect(await rig.usb(rt, (dk) => dk.loadFailures())).toEqual([{ ...failures[0]!, name: leaf }]);
 
     // SETTINGS > DIGIKIT > ABOUT (the first row): the BOOT lines
     await openDigikitMenu(rt);

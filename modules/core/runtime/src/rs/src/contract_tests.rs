@@ -356,7 +356,7 @@ mod service_fixtures {
         let mut fs = crate::loader::discover::fake::cards(vec![("services/svc-test.dks".into(), svc.clone())]);
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
-        unsafe { find(&mut fs, &services, &[name_hash("svc-test")], &mut out) };
+        unsafe { find(&mut fs, &services, &[name_hash("svc-test")], None, &mut out) };
         (svc, out)
     }
 
@@ -375,12 +375,21 @@ mod service_fixtures {
         for (dev, _) in DEVICES {
             let user = packed(dev, "svc-test-user");
             let (svc, _) = found(dev);
-            let (mods, provs) = ([Some(Keys::parse(table(&user)).unwrap())], [Some(Keys::parse(table(&svc)).unwrap())]);
+            // the service names the firmware, so it needs the port file: a provider of `port` (the planner reads only its PROVIDES)
+            let port = {
+                let t = dkneeds::keys::Table { provides: &[dkneeds::keys::Pair { a: name_hash("port"), b: 0x000100 }], ..Default::default() };
+                let mut b = vec![0u8; dkneeds::keys::table_size(&t)];
+                dkneeds::keys::write_table(&t, &mut b).unwrap();
+                b
+            };
+            let (mods, provs) = ([Some(Keys::parse(table(&user)).unwrap())], [Some(Keys::parse(table(&svc)).unwrap()), Some(Keys::parse(&port).unwrap())]);
             let c = caps();
             let env = Env { services: ServiceTable::new(&ROWS_P.0, &REAL_CORE), runtime: 0x000900, caps: &c };
             let p = plan_with(&env, &mods, &provs);
-            assert_eq!((p.n, p.np), (1, 1), "{dev}");
-            assert_eq!((p.provider_verdicts[0], p.verdicts[0]), (Verdict::Accepted, Verdict::Accepted), "{dev}");
+            assert_eq!((p.n, p.np), (1, 2), "{dev}");
+            assert_eq!((p.provider_verdicts[0], p.provider_verdicts[1], p.verdicts[0]), (Verdict::Accepted, Verdict::Accepted, Verdict::Accepted), "{dev}");
+            // the port file loads first, then the service that needs it
+            assert_eq!((p.provider_order[0], p.provider_order[1]), (1, 0), "{dev}");
             let p = plan_with(&env, &mods, &[]);
             assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("svc-test"))), "{dev}");
             assert_eq!(p.verdicts[0].result(), E_MISSING, "{dev}");

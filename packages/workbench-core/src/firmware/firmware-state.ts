@@ -82,8 +82,6 @@ export function createFirmwareState({
       // a device without a boot screen patch set gets the plain device set, whatever the stored toggle says
       const patchSet = record && !record.patchSets['device-introblank'] ? 'device' : defaults.patchSet();
       const p = await env.prepare(bytes, restore(), patchSet);
-      // a stock image patchkit knows is kept for binding services (Transfer); a failed write is not a failed prepare
-      void transfer.stock.remember(p.device, p.shaStock, bytes).catch(() => {});
       if (mine !== preparing) return;
       setPrepared({ kind: 'ready', name, size: bytes.length, p });
     } catch (e) {
@@ -241,7 +239,7 @@ export function createFirmwareState({
         detail: final.message,
       });
     else if (final.phase === 'failed') log({ level: 'error', text: `${what} failed: ${final.message}` });
-    // the flash is done: the services on the card are bound again for the new runtime and the unused ones go (the same code on the desktop and the site)
+    // the flash is done: the services and port files on the card are replaced for the new runtime and the unused ones go (the same code on the desktop and the site)
     if (final.phase === 'done' && !p.restore) {
       try {
         const replaced = await transfer.backend.refreshServices(p.device, () => {});

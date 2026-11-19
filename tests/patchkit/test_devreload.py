@@ -142,7 +142,7 @@ def store_build(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "stock", Mock(return_value=tmp_path / "stock.syx"))
     # the services of the card come from `patchkit services` (needs the stock firmware): none here
     monkeypatch.setattr(pk_services, "is_service", Mock(return_value=False))
-    monkeypatch.setattr(pk_services, "bound_services", Mock(return_value=[]))
+    monkeypatch.setattr(pk_services, "card_services", Mock(return_value=[]))
     card_build = Mock(side_effect=build_card)
     selection = Mock()
     stop = Mock()

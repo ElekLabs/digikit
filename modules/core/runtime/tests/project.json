@@ -66,9 +66,7 @@
           "packages/dk-session/src/identify.ts",
           "packages/dk-session/src/dkupload-core.ts",
           "packages/workbench-core/src/modules/dktransfer.ts",
-          "packages/workbench-core/src/modules/dkbind.ts",
           "packages/workbench-core/src/node/node-host.ts",
-          "packages/workbench-core/src/node/bind-bundle.ts",
           "packages/workbench-core/src/node/stock-image.ts"
         ]
       },

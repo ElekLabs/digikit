@@ -42,6 +42,8 @@ export class FakeDevice implements DkTransport {
   caps: number | null = null; // INFO's capability word (null: every capability)
   loadFailures: { name: string; result: number; needs?: string; state?: number; detail?: [number, number] }[] = []; // LOADS: the modules of the boot selection that did not load (state: [load.state], default FAILED; version 2 record)
   imageId: string | null = null; // INFO's image id as 16 hex digits (null: the runtime before 0.5.2, which sends none)
+  svcAbi: number | null = null; // INFO's service ABI fingerprint after the image id (null: none; needs `imageId`)
+  fwId: string | null = null; // INFO's firmware identity as 16 hex digits after `svcAbi` (null: none; needs `svcAbi`)
   arenaLimit = 1000; // CAPACITY's ARENA and DSP_AREA limits (bytes)
   dspLimit = 1000;
   arenaLargest = 300; // the largest free block of each
@@ -124,6 +126,8 @@ export class FakeDevice implements DkTransport {
             be32(0x000204),
             be32(this.caps ?? Object.values(CAP).reduce((a: number, bit) => a | (1 << bit), 0)),
             this.imageId ? Uint8Array.from(Buffer.from(this.imageId, 'hex')) : [],
+            this.imageId && this.svcAbi !== null ? be32(this.svcAbi) : [],
+            this.imageId && this.svcAbi !== null && this.fwId ? Uint8Array.from(Buffer.from(this.fwId, 'hex')) : [],
           ),
         );
       }
@@ -184,6 +188,16 @@ export class FakeDevice implements DkTransport {
       case CMD.DELETE: {
         const [path] = this.pathOf(body);
         return this.files.delete(path) || this.dirs.delete(path) ? ok() : err(ST.E_NOFILE);
+      }
+      case CMD.RENAME: {
+        const [from, at] = this.pathOf(body);
+        const [to] = this.pathOf(body.subarray(at));
+        const f = this.files.get(from);
+        if (!f) return err(ST.E_NOFILE);
+        if (this.files.has(to)) return err(-51);
+        this.files.delete(from);
+        this.files.set(to, f);
+        return ok();
       }
       case CMD.READ: {
         const [path, at] = this.pathOf(body);

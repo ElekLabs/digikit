@@ -142,7 +142,7 @@ fn the_tail_a_hook_names_is_the_hash_of_its_hook() {
 }
 
 /// The aliases the assembler files use for firmware (`mf_x_*` exits, `mf_ret_*`, `mf_stock_*`, `mf_spt`, `mf_rc<n>`) are exactly the `[object.externs]` of module.toml: an alias
-/// without an entry would stay an unresolved import, an entry without a use is stale. Each target resolves to an import family of `patchkit bind` (`hook.<hook>.exit[.n]|ret|stock|tail`
+/// without an entry would stay an unresolved import, an entry without a use is stale. Each target resolves to an import family of the port file (`hook.<hook>.exit[.n]|ret|stock|tail`
 /// or `cf.<name>`), and its hook is one the service takes or the fill (`frametype`) enters.
 #[test]
 fn the_firmware_aliases_of_the_assembler_are_the_externs_of_the_module() {

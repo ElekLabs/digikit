@@ -5,7 +5,7 @@ import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
-import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
@@ -31,8 +31,14 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *
  * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof").
  */
-const MODULE_PATH = 'modules/sine.dkm';
-const SHAPE_PATH = 'modules/lfo-shape.dkm';
+/** The store paths (`modules/<kind>/<author>-<name>.dkm`), set at the start of each test. */
+let MODULE_PATH = '';
+let SHAPE_PATH = '';
+const setPaths = (rt: TestRuntime): void => {
+  const device = rt.session.options.device as 'dt2' | 'dn2';
+  MODULE_PATH = moduleStorePath(device, 'test/sine');
+  SHAPE_PATH = moduleStorePath(device, 'test/lfo-shape');
+};
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 const SOAK_CYCLES = process.env.DIGIKIT_TIER === 'full' ? 20 : 5;
 /** Byte offsets in DkrtBootInfo (modules/core/runtime/abi.toml) and in `dynreg_info` (word 48: the view variable, word 49: the builder). */
@@ -101,6 +107,7 @@ const peakOf = (xs: Float32Array, from: number, to: number): number => {
 };
 
 async function expectReloadLive(rt: TestRuntime): Promise<void> {
+  setPaths(rt);
   const artifacts = liveArtifacts(rt.session, 'reload-live');
   await cliInstall(rt.session, 'test/lfo-shape', artifacts, 300_000, [DEBUG_MODULE, 'test/sine']);
   const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
@@ -214,6 +221,7 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
 }
 
 async function expectReloadSoak(rt: TestRuntime): Promise<void> {
+  setPaths(rt);
   const artifacts = liveArtifacts(rt.session, 'reload-soak');
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
   const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);

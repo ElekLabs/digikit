@@ -88,15 +88,15 @@ struct Hook {
     regs: Regs,
     handler: Option<Handler>,
     /// A hook without a `handler` (a raw hook, entered at its own entry) may continue in the displaced stock instructions of the site: `tail = true`.
-    /// `patchkit bind` then generates that code from the user's firmware and resolves the `dk_tail_<hash>` references of the service to it.
+    /// The runtime copies that code from flash after the hash check (the port file) and resolves the `dk_tail_<hash>` references of the service to it.
     #[serde(default)]
     tail: bool,
     /// A raw hook whose service calls the stock path (`dk_stock_<hash>`, `jsr`) and takes no `tail`: `stock = true`. The port file marks the site as kind `stock`
-    /// (the displaced instructions are copied from flash after the hash check). `patchkit bind` infers it from the references of the file.
+    /// (the displaced instructions are copied from flash after the hash check). `patchkit port build` lists it in the port file.
     #[serde(default)]
     stock: bool,
     /// The places a raw hook may leave the site besides its end (`dk_exit_<hook>_<n>` of a service, `n` from 1): each is an expression like the ones of a module manifest,
-    /// an anchor name with an optional offset (`"cf.machine.site.clone.5 + 12"`), evaluated on the port of the firmware that is bound.
+    /// an anchor name with an optional offset (`"cf.machine.site.clone.5 + 12"`), evaluated on the port of the firmware of the port file.
     #[serde(default)]
     exits: Vec<String>,
     #[serde(default)]
@@ -238,7 +238,7 @@ pub fn handler_plan(decls: &[&str], device_short: &str, hook: &str) -> Result<Ha
     Err(err!("{hook}: no declared hook with a handler"))
 }
 
-/// Does the declared hook `hook` have a `handler` (a C-callable function the trampoline calls)? A hook without one is a raw hook: entered at its `entry` itself (`bind`).
+/// Does the declared hook `hook` have a `handler` (a C-callable function the trampoline calls)? A hook without one is a raw hook: entered at its `entry` itself.
 pub fn hook_has_handler(decls: &[&str], device_short: &str, hook: &str) -> Result<bool> {
     Ok(declared_hook(decls, device_short, hook, |h| {
         h.handler.is_some()
@@ -270,6 +270,8 @@ pub struct HookDecl {
     pub devices: Vec<String>,
     pub tail: bool,
     pub stock: bool,
+    /// The declaration has a `handler`: a trampoline calls a C function. The port file has no trampolines, so a service may not take such a hook.
+    pub handler: bool,
     pub exits: Vec<String>,
     /// The `users` of the declaration (module ids).
     pub users: Vec<String>,
@@ -277,11 +279,27 @@ pub struct HookDecl {
 
 /// The prefix of a `users` entry that is a service module id.
 pub const SERVICE_USER_PREFIX: &str = "core/services/";
+/// The test fixture that takes a hook of its own (`test/svc-test`): a service for the port set like the core services.
+pub const TEST_SERVICE_USER: &str = "test/svc-test";
 
 /// The ColdFire names and hooks of `devices/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
 /// device (the same name, `devices` apart).
+///
+/// The test fixture's names and hooks (`users` has `test/svc-test`) are not in this set: a production port file lists none of them, because they sit on sites that image modules patch
+/// (the test hook shares the site of `core/digikit-menu`'s). [`service_decls_with`] adds them for the port file of the test image.
 pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
-    let is_service = |u: &[String]| u.iter().any(|x| x.starts_with(SERVICE_USER_PREFIX));
+    service_decls_with(decls, false)
+}
+
+/// [`service_decls`], and with `test_users` the names and hooks of the test fixture service too.
+pub fn service_decls_with(
+    decls: &[&str],
+    test_users: bool,
+) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
+    let is_service = |u: &[String]| {
+        u.iter()
+            .any(|x| x.starts_with(SERVICE_USER_PREFIX) || (test_users && x == TEST_SERVICE_USER))
+    };
     let (mut names, mut hooks) = (vec![], vec![]);
     for text in decls.iter().copied() {
         let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
@@ -307,6 +325,7 @@ pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
                     devices: h.devices.clone(),
                     tail: h.tail,
                     stock: h.stock,
+                    handler: h.handler.is_some(),
                     exits: h.exits.clone(),
                     users: h.users.clone(),
                 });
@@ -1823,4 +1842,27 @@ doc = "A probe."
             "an entry with codegen = false is not in the reference"
         );
     }
+}
+
+/// The ColdFire hooks of `devices/fw/` that a module of the image takes (a `users` entry that is no service file and no test fixture): name and devices. A port file's copied
+/// sites must not lie on the site of any of them, or the image's patch makes the site bytes differ from the check value.
+pub fn image_hooks(decls: &[&str]) -> Result<Vec<(String, Vec<String>)>> {
+    let mut out = vec![];
+    for text in decls.iter().copied() {
+        let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
+        for h in &f.hook {
+            let cf = h
+                .cpu
+                .as_deref()
+                .map_or(h.name.starts_with("cf."), |c| c == "cf");
+            let image = h
+                .users
+                .iter()
+                .any(|u| !u.starts_with(SERVICE_USER_PREFIX) && u != TEST_SERVICE_USER);
+            if cf && image {
+                out.push((h.name.clone(), h.devices.clone()));
+            }
+        }
+    }
+    Ok(out)
 }

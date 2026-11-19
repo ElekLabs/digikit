@@ -302,9 +302,7 @@ def prepare_store(
             spec = run_dir / f"{name}.toml"
             spec.write_text(f'name = "dev/{name}"\nbss = {int(bss) // 4 * 4}\n')
             pack_store("synth-dkm", spec, "--device", device, "-o", out)
-        elif pk_services.is_service(
-            device, mid
-        ):  # a service is a bound file of the card
+        elif pk_services.is_service(device, mid):  # a service is a file of the card
             explicit.append(mid)
             continue
         else:
@@ -321,7 +319,7 @@ def prepare_store(
         if pick:
             selected.append(f"modules/{out.name}")
     # the services of the card: those named, then those the packed modules need (as the device tests put them on the card)
-    for svc in pk_services.bound_services(
+    for svc in pk_services.card_services(
         device,
         ROOT / "out" / "cache" / "devreload-svc" / device,
         files=sorted((folder / "digikit" / "modules").glob("*.dkm")),
@@ -329,7 +327,7 @@ def prepare_store(
     ):
         to = folder / "digikit" / svc["store_path"]
         to.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(svc["bound_path"], to)
+        shutil.copyfile(svc["file"], to)
     files = {}
     for path in sorted(folder.rglob("*")):
         if path.is_file():

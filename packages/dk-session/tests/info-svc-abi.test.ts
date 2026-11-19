@@ -1,4 +1,4 @@
-// INFO: the ABI fingerprint of service files follows the image id, and is read only when the runtime sets the capability SVC_ABI.
+// INFO: the ABI fingerprint of service files follows the image id, and is read only when the runtime sets the capability SVC_ABI; the firmware identity follows it (FW_ID).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { CAP } from '../src/gen_proto.ts';
@@ -55,4 +55,23 @@ test('the fingerprint after the image id is read when the capability is set', as
 test('a runtime without the capability, or with a shorter reply, reports none', async () => {
   assert.equal((await read(info(0, 0xdeadbeef))).svc_abi, null);
   assert.equal((await read(info(1 << CAP.SVC_ABI))).svc_abi, null);
+});
+
+/** An INFO body with the fingerprint and, after it, the 8 bytes of the firmware identity. */
+function infoWithFw(caps: number, fw?: number[]): Uint8Array {
+  const b = info(caps, 0xdeadbeef);
+  if (fw === undefined) return b;
+  const out = new Uint8Array(53);
+  out.set(b);
+  out.set(fw, 45);
+  return out;
+}
+
+test('the firmware identity after the fingerprint is read when the capability FW_ID is set', async () => {
+  const fw = [0xd1, 0x5e, 0xa5, 0xe0, 1, 2, 3, 4];
+  const i = await read(infoWithFw((1 << CAP.SVC_ABI) | (1 << CAP.FW_ID), fw));
+  assert.equal(i.fw_id, 'd15ea5e001020304');
+  // without the capability, or with a shorter reply, there is none
+  assert.equal((await read(infoWithFw(1 << CAP.SVC_ABI, fw))).fw_id, null);
+  assert.equal((await read(infoWithFw((1 << CAP.SVC_ABI) | (1 << CAP.FW_ID)))).fw_id, null);
 });

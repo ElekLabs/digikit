@@ -157,7 +157,7 @@ pub unsafe fn reset_param_row(m: &impl FwMem, inf: *const u32, code: u32) {
 }
 
 /// The address in the RAM copy of the parameter table (`P_TABLE` of `dynreg_info`) of the stock row at `row`, where `table` is the address of the stock table (both firmware
-/// addresses, resolved by `patchkit bind`). `None` for a null `inf` or table, a row that is not on a row boundary of the stock table, and a row at or above `P_FIRST`: only a
+/// addresses, resolved by the port file). `None` for a null `inf` or table, a row that is not on a row boundary of the stock table, and a row at or above `P_FIRST`: only a
 /// stock row has a stock address, the rows from `P_FIRST` on belong to the registry's writers.
 unsafe fn stock_row(inf: *const u32, table: u32, row: u32) -> Option<u32> {
     if inf.is_null() || table == 0 || row < table {

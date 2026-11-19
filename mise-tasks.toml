@@ -21,7 +21,7 @@ description = "Build once and open the desktop app with nothing loaded (DN2 and 
 ["workbench:inputs"]
 hide = true
 run = "pnpm nx:pilot run @digi/desktop:workbench-inputs --output-style=stream"
-description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist), apps/web/public/{patchkit,dkupload,dksample}.wasm and apps/web/public/modules/bind.json (the service binder's data, Nx target @digi/web:bind-bundle)"
+description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist), apps/web/public/{patchkit,dkupload,dksample}.wasm"
 
 ["emu:serve"]
 run = "uv run python -m tools.emulator.native_emu --daemon"
@@ -422,7 +422,7 @@ description = "Press keys through the digikit remote, record the device's USB au
 [transfer]
 depends = ["dkmidi:build"]
 run = "node tools/devtools/wb.mjs transfer"
-description = "Install, restart and delete run-time modules on a target, through the workbench's own code (wb transfer): mise run transfer -- install ID... [--restart] [--stock STOCK.syx] [--library DIR] | restart | delete PATH... (the target is --port NAME, default Digitakt, or --emu [--run-dir DIR]; the services a module needs go on the card bound to the stock firmware of the device)"
+description = "Install, restart and delete run-time modules on a target, through the workbench's own code (wb transfer): mise run transfer -- install ID... [--restart] [--library DIR] | restart | delete PATH... (the target is --port NAME, default Digitakt, or --emu [--run-dir DIR]; the services a module needs go on the card as built, with the port file of the device's firmware)"
 
 ["dk:store"]
 run = "uv run --with python-rtmidi python -m tools.device.dkupload"

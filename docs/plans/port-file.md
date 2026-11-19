@@ -1,6 +1,6 @@
 # Port file: device and firmware specifics in one file built from committed data
 
-Status: PR1 merged (PR #621); PR2, PR3, PR4 todo. Words, card paths and the repo tree: [taxonomy](../design/taxonomy.md). PR2 and PR3 start after PR D (lfo shapes) and E5 ([extension-model.md](extension-model.md)); both are merged.
+Status: PR1 merged (PR #621); PR2 on branch `pf/pr2-runtime` and PR3 on `pf/pr3-workbench` (a stack: PR3 is merged from PR2, one device gate for both) are done on the host; the device proof is not run. PR2: table version 3 in `dkneeds`; role 2, the port steps, the search of `ports/` by `FW`, the import lookup, the installer on `SITES`, the commit filter, NEED `port`, INFO `fw_id`, runtime 0.10.0 and a new `SVC_ABI`, assembly cases, the `svc-test` hook and `providers.device.test.ts`, `PROVIDER_MAX` 8. PR3: the harness and Transfer put the packed services and the matching port file on a card, modules move to `modules/<kind>/<author>-<name>.dkm` (the one-time `RENAME` runs at the start of an install; a view only reads), and the binding is deleted. PR4 todo. Words, card paths and the repo tree: [taxonomy](../design/taxonomy.md). PR2 and PR3 start after PR D (lfo shapes) and E5 ([extension-model.md](extension-model.md)); both are merged.
 
 ## 1. Problem
 
@@ -50,15 +50,39 @@ Hook sites per device (counted from the `[[hook]]` entries of each service's `dk
 
 Displaced instructions: only 7 (DT2) or 9 (DN2) of these hooks need a stock copy: lfo `graph_vec` (`tail`) and fx `page_desc` (`stock`), machines `source_key`, `source_turn`, `source_draw` and `source_code` (`tail`), `param_code.args` (DT2) or `param_code.map`, `type_page.count` and `type_page.desc` (DN2) (`tail`). All are plain copies: `patchkit port check` compares the copy that `bind` makes with the displaced bytes and `jmp.l` for every site, and the port resolve fails when a copied site is not a plain copy. The other 11 (DT2) or 13 (DN2), including the five branching sites, redo their instructions in the routine and exit through `dk_exit_` or `dk_ret_`. The first build has no fixup encoder. `patchkit` fails the port build when a site needs a form the runtime lacks. A form (`(d16,PC)` to abs.l, bra/bsr/bcc to 32-bit) is about 15 lines when first needed.
 
-PR1 data (done): each hook of a service in `devices/ports/*.toml` carries `len`, `kind` and `check` (written by `port_resolve` through `patchkit port facts`) and a reserved `fixups` list (empty, refused by the port build). `stock = true` in `devices/fw` declares the `dk_stock_` hooks; the `users` of every name a service uses names the service (the port set is every such name). The `absent` flag is not committed: the port build derives it from the ports of the other devices (a name that only another device has). The port file is built by `patchkit port build` from committed data only (Nx `patchkit:ports`, `dist/ports/<device>-<version>.dks` today; PR2 writes `.dkport`); its FWNAMES and SITES layout is in `packages/patchkit/src/portfile.rs` (tags 12 and 13, items of 12 and 20 bytes; PR2 moves them into `dkneeds` with the runtime reader). A port file is about 2 KiB.
+PR1 data (done): each hook of a service in `devices/ports/*.toml` carries `len`, `kind` and `check` (written by `port_resolve` through `patchkit port facts`) and a reserved `fixups` list (empty, refused by the port build). `stock = true` in `devices/fw` declares the `dk_stock_` hooks; the `users` of every name a service uses names the service (the port set is every such name). The `absent` flag is not committed: the port build derives it from the ports of the other devices (a name that only another device has). The port file is built by `patchkit port build` from committed data only (Nx `patchkit:ports`, `dist/ports/<device>-<version>.dks` today; now `.dkport`); its FWNAMES and SITES layout is in `packages/dkneeds/src/keys.rs` (tags 12 and 13, items of 12 and 20 bytes, header table version 3), which patchkit writes and the runtime reads. The file has a 4-byte image (`rts`, the target of every `dk_ret_`) and a bss for the copies of the tail and stock sites; the runtime fills them from flash after it compared the live bytes with the check value (`E_HOOK_STOCK`). A service file that holds `BIND` or `FW` is `E_FORMAT`. The assembly cases read the packed service files and the port file; the bound files of `patchkit bind` only give the stock bytes that the host test puts at the sites (until PR3 deletes the binding). A port file is about 2 KiB.
 
 ## 6. Runtime work and size
 
-Port role steps; name lookup in the existing import seam (`loader/seams.rs:28-36`); tail copy from flash after the hash check; the installer takes site facts from SITES (`loader/install.rs` keeps the masked check, the `jmp.l` write, the flush and the restore); the commit step compares declared hooks with the HOOKS entries that have a port record. Size: +0.5 to +1 KiB text on about 216 KiB, under 1 KiB arena RAM. It stays in the runtime. Removed: BIND parsing in services (`fw_check`, `binds_of`). Service hooks stay raw-only.
+Port role steps; name lookup in the existing import seam (`loader/seams.rs:28-36`); tail copy from flash after the hash check; the installer takes site facts from SITES (`loader/install.rs` keeps the masked check, the `jmp.l` write, the flush and the restore); the commit step compares declared hooks with the HOOKS entries that have a port record. Size, measured on the runtime object (text 192518 bytes before, 196640 after, +4122; arena RAM: the port file's table copy and its bss, about 2 KiB with the 65 names and 22 sites):
+
+| Group | Bytes |
+| --- | --- |
+| Port provider: check (`port_check` 528), place (356), `site_check` (256), `Sha::new` and `finish` outlined (386) | 1526 |
+| Import lookup: `check_file` +524, `port_keys` 204, `Keys::name` 210, `find_name` and `find_site` 146, `parse_import` with `hex8` and `strip` about 180 | about 1260 |
+| Hooks from `SITES`: `hook_items` 340, `filter_hooks` 256 | about 600 |
+| Search by `FW`: `read_provider` 296, `plan_with_caps` +142, `table_of` +52, `has` 70 | about 560 |
+| Readers and other: `Keys::site` 262, `role_ok` 282, `image_fw_id` 198, INFO +92, `load_inner` +98 | about 930 |
+| Removed: `binds_of`, `Keys::bind`, the service `fw_check` and other bind code | about -1500 |
+
+It stays in the runtime; the growth is accepted. Cuts that were measured or estimated and not taken: a bitmask `role_ok` (+84), dropping the search by `FW` (about -560), dropping the hash check of the copied sites (about -900, unsafe). It stays in the runtime. Removed: BIND parsing in services (`fw_check`, `binds_of`). Service hooks stay raw-only.
 
 Who installs sites: the init of the port file builds the name table and the tails only. Each service's load installs its own hooks and takes the site facts from the port records. The one-owner rule of the planner and the install lifecycle do not change.
 
-`PROVIDER_MAX` is 6 (`sdk/sdk.toml:1862`). The service files today are lfo, machines, fx and samples, so the port provider makes 5, and the test fixture `svc-test` makes 6 at most: the limit holds and PR2 leaves it at 6. `SLOT_WORDS_MAX` (`loader/install.rs:53`) and the provider rows stay as they are. If a later service file or a test with more fixtures reaches 7, raise the limit then (+128 bytes of installer RAM for one more provider).
+`PROVIDER_MAX` is 8 (`provider_max` in `sdk/sdk.toml`; it was 6). The service files are lfo, machines, fx and samples, the port file makes 5, and the test fixture `svc-test` and its second copy in `providers.device.test.ts` make 7. The raise from 6 to 8 costs 2361 bytes of runtime RAM and 426 bytes of text. By symbol (growth of the object sections, `runtime.dko.json`):
+
+| Symbol | Bytes | Why |
+| --- | --- | --- |
+| `LOADER` (the loader static) | +1968 | per provider 984: the copy of the header table `Found::tables` 640, the claim row of the DSP installer 140, the slot words of the installer 128 (`SLOTS_MAX` 16 x 8), the path and its length 67, the table length and `ProvRec` 9; and 16 for `WANT_MAX` (4 x `PROVIDER_MAX` words) in all |
+| `PROVIDER_PATHS` | +128 | 64 per provider |
+| `DKRT_PROVIDERS` | +104 | 52 per provider (the module record) |
+| `DKRT_DSP` | +104 | one DSP record per provider |
+| `DKRT_CTXS` | +16 | one context per provider |
+| other tables | +41 | small constant tables and padding |
+
+The table copy of 640 bytes per provider is the largest part; `TABLE_MAX` is the planner's limit for one header table and stays. `LOADER` was in `.data`, not `.bss`: two of its fields started non-zero (`Installer::armed` true and `sel_of_rec` filled with 255), and one non-zero byte puts the whole static in `.data`, so the object carried 19.6 KB of zeros in its image. Both fields are stored inverted now (`disarmed`, index plus 1), `LOADER` is in `.bss`, and the runtime object holds 17.6 KB less data (`data` 31603 to 13996 bytes at PROVIDER_MAX 6 against 8 and zero fill; `data + bss` is 739775 bytes against 737414 before the raise). A static with a non-zero initial value must be checked in `runtime.dko.json` (`.data.` against `.bss.` sections). A search that finds no slot for a need or for the port file sets `Found::truncated`, and the boot logs one `MOD_LOAD` provider event with `E_PLAN_FIT` for each cause (`Found::truncated` bits: provider table full `(tab`, more files than `CAND_MAX` in `services/` or `ports/` `(fil`, more needs than `WANT_MAX` `(nee`; the log carries the first four characters, and `loadFailureText` of `runtime-log.ts` gives the text), so the user sees the cause and not a silent unmet need.
+
+A production port file lists no hook of the test fixture: the fixture's hook sits on the site of `core/digikit-menu`'s hook, and `port_check` compares every copied site with its check value, which a patched image changes. `patchkit port build --with-test-hooks` (Nx `patchkit:ports-test`, `dist/ports-test/`) builds the port file of the test image, which runs without digikit-menu; the assembly tests and `providers.device.test.ts` use it. A host test (`patchkit` unit test) checks that no copied site of a production port file lies on a site that an image module patches.
 
 `BIND_MAX` leaves with BIND: PR2 deletes `bind_max` in `[limits]` of `sdk/sdk.toml` (line 1863), the generated `BIND_MAX` (`packages/dkneeds/src/gen_limits.rs`, `packages/dk-session/src/gen_proto.ts`) and the runtime copy (`loader/role.rs`).
 
@@ -75,6 +99,8 @@ All use existing codes at MOD_LOAD. A name that the firmware lacks is not a refu
 | Full site table | `E_PLAN_FIT` |
 | Port file for another firmware | `E_HOOK_STOCK` |
 | Port file missing | the planner refuses the dependents |
+| Service file bound by an older patchkit (`BIND` or `FW` item) | skipped by the search and logged as a refused provider: `E_SVC_ABI` (a Rust service, which carries the ABI word that changed) or `E_FORMAT` (a C service, ABI word 0) |
+| Provider table full | `E_PLAN_FIT` in the provider log, with the unmet need left unmet |
 
 ## 8. Format and ABI
 

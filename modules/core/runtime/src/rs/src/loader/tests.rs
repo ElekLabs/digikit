@@ -467,7 +467,7 @@ fn a_module_file_with_provides_or_hooks_is_refused_before_anything_is_allocated(
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         for hooks_only in [false, true] {
-            let mut table = svc_table(&[]);
+            let mut table = svc_table();
             if hooks_only {
                 table.provides = &[];
             }
@@ -537,12 +537,11 @@ fn service_file_of(mut v: Vec<u8>, table: &dkneeds::keys::Table, dsp: u32) -> Ve
 const SITE: u32 = 0x400a_5eac;
 const STOCK: [u8; 6] = [0x20, 0x52, 0x48, 0x78, 0x00, 0x02];
 const SVC: &str = "svc-test";
-/// The `FW` item of the service and the `fw_id` words of the image it matches (the first 8 bytes of the stock firmware's SHA-256, as two big endian words).
+/// The `fw_id` words of the image (the first 8 bytes of the stock firmware's SHA-256, as two big endian words) and of the port file made for it.
 const FW_ID: [u8; 8] = [0xd1, 0x5e, 0xa5, 0xe0, 0x11, 0x22, 0x33, 0x44];
-const FW_ITEMS: &[[u8; 8]] = &[FW_ID];
 
-/// The table of a service `SVC` that exports `ping` (image offset 8) and binds one hook at `SITE` (handler at 4, trampoline at 16).
-fn svc_table<'a>(bind: &'a [dkneeds::keys::Bind<'a>]) -> dkneeds::keys::Table<'a> {
+/// The table of a service `SVC` that exports `ping` (image offset 8) and takes one hook (`hook.a`, entry 4); the site comes from the port file.
+fn svc_table<'a>() -> dkneeds::keys::Table<'a> {
     use dkneeds::keys::{name_hash, Pair, Table};
     static PROVIDES: std::sync::OnceLock<[Pair; 1]> = std::sync::OnceLock::new();
     static EXPORTS: std::sync::OnceLock<[Pair; 1]> = std::sync::OnceLock::new();
@@ -551,14 +550,8 @@ fn svc_table<'a>(bind: &'a [dkneeds::keys::Bind<'a>]) -> dkneeds::keys::Table<'a
         provides: PROVIDES.get_or_init(|| [Pair { a: name_hash(SVC), b: 0x000802 }]),
         exports: EXPORTS.get_or_init(|| [Pair { a: name_hash("dk_svctest_ping"), b: 8 }]),
         hooks: HOOKS.get_or_init(|| [Pair { a: name_hash("hook.a"), b: 4 }]),
-        bind,
-        fw: FW_ITEMS,
         ..Default::default()
     }
-}
-
-fn svc_bind(stock: &[u8]) -> Vec<dkneeds::keys::Bind<'_>> {
-    vec![dkneeds::keys::Bind { site: dkneeds::keys::name_hash("hook.a"), addr: SITE, tramp: 16, stock }]
 }
 
 /// What `init` of that service declares: its hook (entry 4) and its export (entry 8).
@@ -569,12 +562,29 @@ fn svc_init() -> Init {
     Init::Declare(Box::leak(items.into_boxed_slice()))
 }
 
-/// A loader over a service file in the provider record `j`: the stock bytes are at the site.
+/// A loader over a service file in the provider record `j`: the stock bytes are at the site, and the port file of the image is loaded in the last provider record
+/// (put there by hand: no block of the arena is taken, so the counts of the tests stay those of the service file alone). It lists the site of `hook.a`.
 unsafe fn provider_loader(file: Vec<u8>, init: Init) -> Fake {
-    let l = loader_of(init, file);
+    let mut l = loader_of(init, file);
     l.p.put_code(SITE, &STOCK);
     set_fw_id(&l, Some(FW_ID));
+    put_port(&mut l, &[(("hook.a", SITE, STOCK.len() as u16, dkneeds::keys::SITE_RAW, check8(&STOCK)), 0)]);
     l
+}
+
+/// A port file in provider record `PROVIDER_MAX - 1` with the sites `((hook, address, length, kind, check value), flags)` and no name: its table copy is leaked.
+unsafe fn put_port(l: &mut Fake, sites: &[((&str, u32, u16, u8, [u8; 8]), u8)]) {
+    use dkneeds::keys::{name_hash, write_table, Pair, SiteRec, Table};
+    let recs: Vec<SiteRec> = sites.iter().map(|&((h, addr, len, kind, check), flags)| SiteRec { hash: name_hash(h), addr, len, kind, flags, check }).collect();
+    let t = Table { provides: &[Pair { a: name_hash("port"), b: 0x000100 }], fw: &[FW_ID], sites: &recs, ..Default::default() };
+    let mut bytes = vec![0u8; dkneeds::keys::table_size(&t)];
+    write_table(&t, &mut bytes).unwrap();
+    let j = PROVIDER_MAX - 1;
+    let bytes: &'static mut [u8] = Box::leak(bytes.into_boxed_slice());
+    l.provs[j] = ProvRec { block: Some(Block { ptr: bytes.as_mut_ptr(), addr: 0 }), len: bytes.len() as u32, image_size: 16, dsp_image: 0 };
+    l.roles[MAX_MODULES + j] = 2;
+    records::module(MAX_MODULES + j).used = 1;
+    records::module(MAX_MODULES + j).base = 0x7000_0000;
 }
 
 /// The `fw_id` entry of the image's info table (a data table of two words): the first 8 bytes of the stock firmware's SHA-256; `None`: the image has none.
@@ -599,8 +609,7 @@ fn site_bytes(l: &Fake, n: usize) -> Vec<u8> {
 fn a_provider_loads_into_its_own_record_publishes_its_exports_and_installs_its_hooks_last() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK);
         let rec = MAX_MODULES + 1;
         let base = records::module(rec).base;
@@ -612,9 +621,9 @@ fn a_provider_loads_into_its_own_record_publishes_its_exports_and_installs_its_h
         assert_eq!((published[1].used, published[1].base), (1, base));
         assert_ne!(name[0], 0, "the record carries the file's name");
         assert_eq!(published[0].used, 0);
-        // the export resolves to base + 8; the site jumps to base + 16 (4ef9 and the address, big endian)
+        // the export resolves to base + 8; the site jumps to the entry of the hook, base + 4 (4ef9 and the address, big endian)
         assert_eq!(l.exports.resolve(dkneeds::keys::name_hash("dk_svctest_ping")), Some(base + 8));
-        let t = base + 16;
+        let t = base + 4;
         assert_eq!(site_bytes(&l, 6), [0x4e, 0xf9, (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8]);
         assert_eq!(l.installer.count(), 1);
         // the install is the last step: it comes after the init of the provider
@@ -635,8 +644,7 @@ fn a_slot_fill_of_an_info_data_entry_is_refused_and_writes_nothing() {
     unsafe {
         let slots = SLOTS.get_or_init(|| [Slot { id: name_hash("the.entry"), flags: 0, entry: 4 }]);
         for (data, want) in [(false, OK), (true, E_FORMAT)] {
-            let bind = svc_bind(&STOCK);
-            let table = Table { slots, ..svc_table(&bind) };
+            let table = Table { slots, ..svc_table() };
             let mut items = vec![(dkrt_abi::service::Declare::SLOT, name_hash("the.entry"), 4)];
             items.extend_from_slice(match svc_init() {
                 Init::Declare(i) => i,
@@ -662,13 +670,12 @@ fn a_service_import_is_linked_for_a_service_file_only() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the word at 12 holds 4, plus the import
-        let bind = svc_bind(&STOCK);
         let base = || {
             let mut f = module_file_with(&[(12, 1 << 24)], &[b"dkc_device_id"]);
             f[IMAGE_OFF + 15] = 4;
             f
         };
-        let mut svc = service_file_of(base(), &svc_table(&bind), 0);
+        let mut svc = service_file_of(base(), &svc_table(), 0);
         seal(&mut svc);
         let mut l = provider_loader(svc, svc_init());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
@@ -749,8 +756,7 @@ fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
 fn a_hook_site_that_is_not_stock_refuses_the_provider_before_anything_is_allocated() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.p.put_code(SITE + 3, &[0x99]);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_HOOK_STOCK);
         assert_eq!(l.m.allocs, 0, "the check runs before the image is placed");
@@ -760,75 +766,56 @@ fn a_hook_site_that_is_not_stock_refuses_the_provider_before_anything_is_allocat
     }
 }
 
-/// A bound file holds the identity of the firmware it was bound to. A file for another firmware, or an image that has no `fw_id`, is refused as a site that is not
-/// stock (`E_HOOK_STOCK`), before anything is allocated and before `init`; the stock bytes of the sites are not even looked at.
+/// A bound file (a `BIND` or an `FW` item in a service file) is a file of the old format: `E_FORMAT` before anything is allocated. The identity of the firmware and the
+/// site facts are the port file's.
 #[test]
-fn a_provider_bound_to_another_firmware_is_refused_before_anything_is_allocated() {
+fn a_bound_service_file_is_refused_before_anything_is_allocated() {
+    use dkneeds::keys::{Bind, Table};
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let mut other = FW_ID;
-        other[7] ^= 1;
-        for id in [Some(other), None] {
-            let bind = svc_bind(&STOCK);
-            let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
-            set_fw_id(&l, id);
-            assert_eq!(
-                l.load_provider(PATH.as_ptr(), 0),
-                E_HOOK_STOCK,
-                "image id {id:?}"
-            );
-            assert_eq!(l.m.allocs, 0);
-            assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))));
+        let stock = STOCK;
+        let bind = [Bind { site: dkneeds::keys::name_hash("hook.a"), addr: SITE, tramp: 16, stock: &stock }];
+        let fw = [FW_ID];
+        for (table, what) in [(Table { bind: &bind, fw: &fw, ..svc_table() }, "BIND and FW"), (Table { fw: &fw, ..svc_table() }, "FW")] {
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT, "{what}");
+            assert_eq!(l.m.allocs, 0, "{what}");
             assert_eq!(site_bytes(&l, 6), STOCK);
-            assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
         }
-        // the identity is checked before the stock bytes: the stock check never runs when the identity differs (a non-stock site and the right id is the other test)
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
-        set_fw_id(&l, Some(other));
-        l.p.put_code(SITE + 3, &[0x99]);
-        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_HOOK_STOCK);
-        assert!(
-            !l.p.calls
-                .borrow()
-                .iter()
-                .any(|c| matches!(c, crate::fake_platform::Call::Mask))
-        );
     }
 }
 
-/// `BIND` items without an `FW` item are `E_FORMAT` (a file bound by an older patchkit), and so are two `FW` items; both come before the stock check. A file with no
-/// `FW` and no `BIND` has no firmware address and loads on any image.
+/// A hook that the port file does not list at all (a port file older than the service) refuses the service with `E_IMPORT` and keeps the hash; a hook that it lists as
+/// absent on this firmware is skipped: the service loads and the site stays stock. A site the runtime cannot use is `E_RANGE`.
 #[test]
-fn the_fw_item_rules_are_format_errors_and_a_file_with_no_firmware_reference_loads_anywhere() {
-    use dkneeds::keys::Table;
+fn a_hook_the_port_file_does_not_list_is_refused_and_one_it_lists_as_absent_is_skipped() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        for (fw, what) in [
-            (&[][..], "BIND without FW"),
-            (&[FW_ID, FW_ID][..], "two FW items"),
-        ] {
-            let table = Table {
-                fw,
-                ..svc_table(&bind)
-            };
-            let mut l = provider_loader(service_file(&table, 0), svc_init());
-            l.p.put_code(SITE + 3, &[0x99]);
-            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT, "{what}");
-            assert_eq!(l.m.allocs, 0, "{what}");
-        }
-        // no FW and no BIND: accepted, whatever the image's fw_id is (or even if it has none)
-        let table = Table {
-            bind: &[],
-            hooks: &[],
-            exports: &[],
-            fw: &[],
-            ..svc_table(&bind)
-        };
-        let mut l = provider_loader(service_file(&table, 0), Init::Ok);
-        set_fw_id(&l, None);
+        let hook = |flags: u8, len: u16| (("hook.a", SITE, len, dkneeds::keys::SITE_RAW, check8(&STOCK)), flags);
+        // not listed (the port lists another hook)
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
+        put_port(&mut l, &[(("hook.other", SITE, 6, 0, check8(&STOCK)), 0)]);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_IMPORT);
+        assert_eq!(l.import_hash, dkneeds::keys::name_hash("hook.a"));
+        assert_eq!(l.m.allocs, 0);
+        // no port file loaded at all
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
+        l.roles[MAX_MODULES + PROVIDER_MAX - 1] = 0;
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_IMPORT);
+        assert_eq!(l.m.allocs, 0);
+        // absent on this firmware: the service loads, installs no site and keeps its export
+        // (its `init` declares what the firmware has: the export, not the hook)
+        let export_only: Vec<(u16, u32, u32)> = vec![(dkrt_abi::service::Declare::EXPORT, dkneeds::keys::name_hash("dk_svctest_ping"), 8)];
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::Declare(Box::leak(export_only.into_boxed_slice())));
+        put_port(&mut l, &[hook(dkneeds::keys::FLAG_ABSENT, 0)]);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
+        assert_eq!((l.installer.count(), l.exports.count()), (0, 1));
+        assert_eq!(site_bytes(&l, 6), STOCK);
+        // a site of 4 bytes has no room for the jump
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
+        put_port(&mut l, &[hook(0, 4)]);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_RANGE);
+        assert_eq!(l.m.allocs, 0);
     }
 }
 
@@ -836,8 +823,7 @@ fn the_fw_item_rules_are_format_errors_and_a_file_with_no_firmware_reference_loa
 fn a_provider_whose_init_fails_leaves_no_export_no_site_and_no_block() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), Init::Fails(E_INIT));
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::Fails(E_INIT));
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_INIT);
         assert!(l.m.live.is_empty(), "the image and the table copy are free");
         assert_eq!(records::module(MAX_MODULES).used, 0);
@@ -851,9 +837,8 @@ fn a_provider_whose_init_fails_leaves_no_export_no_site_and_no_block() {
 fn a_declaration_that_differs_from_the_table_refuses_the_provider_and_the_site_stays_stock() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
         // init declares nothing: the HOOKS and EXPORTS of the table are not repeated
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), Init::Ok);
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::Ok);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_DECL_KIND);
         assert!(l.m.live.is_empty());
         assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
@@ -865,8 +850,7 @@ fn a_declaration_that_differs_from_the_table_refuses_the_provider_and_the_site_s
 fn a_provider_in_safe_mode_installs_nothing() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.installer.set_armed(false);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
         assert_eq!(site_bytes(&l, 6), STOCK);
@@ -878,8 +862,7 @@ fn a_provider_in_safe_mode_installs_nothing() {
 fn a_service_file_loads_only_as_a_provider_and_a_module_file_only_as_a_module() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let svc = service_file(&svc_table(&bind), 0);
+        let svc = service_file(&svc_table(), 0);
         let mut l = provider_loader(svc.clone(), svc_init());
         assert_eq!(l.load(PATH.as_ptr()), E_FORMAT);
         assert_eq!(l.m.allocs, 0);
@@ -895,7 +878,7 @@ fn a_service_file_loads_only_as_a_provider_and_a_module_file_only_as_a_module() 
         let mut l = loader(Init::Ok);
         assert_eq!(l.load(PATH.as_ptr()), OK);
         assert!(l.r.asked.borrow().is_empty());
-        let mut svc3 = service_file(&svc_table(&bind), 0);
+        let mut svc3 = service_file(&svc_table(), 0);
         put(&mut svc3, dkneeds::H_SVC_ABI, 1);
         seal(&mut svc3);
         let mut l = provider_loader(svc3, svc_init());
@@ -971,8 +954,7 @@ fn user_table() -> dkneeds::keys::Table<'static> {
 fn the_boot_finds_the_provider_for_a_hard_need_loads_it_first_and_the_consumer_resolves_its_import() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = staged_boot(service_file(&svc_table(&bind), 0), consumer_file(&user_table()));
+        let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
         let mut plan = l.plan_with_caps(1, &wide_caps());
         assert_eq!((plan.n, plan.np), (1, 1), "the search found the provider");
         assert_eq!(l.found.path(0), SVC_PATH);
@@ -996,13 +978,12 @@ fn no_search_without_an_unmet_need_and_a_failed_provider_refuses_its_dependents_
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // a selection with no need: no listing, no provider, the plan as before
-        let mut l = staged_boot(service_file(&svc_table(&svc_bind(&STOCK)), 0), module_file());
+        let mut l = staged_boot(service_file(&svc_table(), 0), module_file());
         let allocs = l.m.allocs;
         let plan = l.plan_with_caps(1, &wide_caps());
         assert_eq!((plan.np, l.m.allocs), (0, allocs), "nothing was searched");
         // the provider's site is not stock: the provider fails, and its dependent is refused before the module stage
-        let bind = svc_bind(&STOCK);
-        let mut l = staged_boot(service_file(&svc_table(&bind), 0), consumer_file(&user_table()));
+        let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
         l.p.put_code(SITE, &[0u8; 6]);
         let mut plan = l.plan_with_caps(1, &wide_caps());
         assert_eq!(plan.np, 1);
@@ -1223,8 +1204,7 @@ fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty
 fn a_provider_the_plan_refused_is_reported_and_never_staged_and_its_dependents_are_refused() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = staged_boot(service_file(&svc_table(&bind), 0), consumer_file(&user_table()));
+        let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
         let mut plan = l.plan_with_caps(1, &wide_caps());
         assert_eq!(plan.np, 1);
         plan.provider_verdicts[0] = dkrt_abi::plan::Verdict::Refused(dkrt_abi::plan::Reason::Fit(dkrt_sdk::proto::CAPK_MACHINE_ROWS));
@@ -1273,8 +1253,7 @@ fn the_search_list_keeps_the_first_24_distinct_hard_needs_the_runtime_does_not_m
 unsafe fn slot_provider(entry: u32) -> Fake {
     use dkneeds::keys::{name_hash, Slot, Table};
     let slots: &'static [Slot] = Box::leak(Box::new([Slot { id: name_hash("the.entry"), flags: 0, entry }]));
-    let bind = svc_bind(&STOCK);
-    let table = Table { slots, ..svc_table(&bind) };
+    let table = Table { slots, ..svc_table() };
     let mut items = vec![(dkrt_abi::service::Declare::SLOT, name_hash("the.entry"), entry)];
     items.extend_from_slice(match svc_init() {
         Init::Declare(i) => i,
@@ -1297,9 +1276,8 @@ fn a_service_file_with_a_table_outside_the_file_or_of_the_wrong_shape_is_refused
     use dkneeds::keys::{Pair, Table};
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
         // the table lies outside the file
-        let mut f = service_file(&svc_table(&bind), 0);
+        let mut f = service_file(&svc_table(), 0);
         let end = f.len() as u32;
         put(&mut f, dkneeds::H_REG_OFF, end + 64);
         seal(&mut f);
@@ -1324,14 +1302,13 @@ fn a_provider_with_an_export_past_the_image_or_a_table_copy_that_does_not_fit_is
     unsafe {
         // the export entry is the image size (32): past the last byte
         let exports: &'static [Pair] = Box::leak(Box::new([Pair { a: name_hash("dk_svctest_ping"), b: 32 }]));
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&Table { exports, ..svc_table(&bind) }, 0), svc_init());
+        let mut l = provider_loader(service_file(&Table { exports, ..svc_table() }, 0), svc_init());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT);
         assert_provider_undone(&l, 0);
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Init(..))), "place runs before init");
 
         // the arena has room for the image but not for the copy of the table
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.m.fail_alloc = Some(2);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_NOMEM);
         assert_eq!(l.m.allocs, 2);
@@ -1359,8 +1336,7 @@ fn a_slot_fill_past_the_image_or_of_a_slot_the_image_lacks_undoes_the_load() {
 fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other_export() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let bind = svc_bind(&STOCK);
-        let mut l = provider_loader(service_file(&svc_table(&bind), 0), svc_init());
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.exports.publish(MAX_MODULES + 1, dkneeds::keys::name_hash("dk_svctest_ping"), 0x7000).unwrap();
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_PLAN_OWNER);
         assert_provider_undone(&l, 1);
@@ -1588,7 +1564,7 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
             assert_eq!(st().modules[0].used, 0);
             assert_eq!(l.reload_load(0, PATH.as_ptr()), OK, "round {round}");
             // the same record, owner and selection index; the table is the new one; the phase is closed again
-            assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.phase == Phase::Closed), (1, 0, true));
+            assert_eq!((st().modules[0].used, l.sel_of(0), l.phase == Phase::Closed), (1, 0, true));
             assert_eq!(crate::entry::tick_of(0), st().modules[0].base + 8);
             let mut out = [0u32; 8];
             assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), keys.len());
@@ -1808,14 +1784,14 @@ fn a_live_load_takes_the_first_free_record_at_the_given_index_and_the_check_chan
         assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
         // the load: the record is the first free one, whatever the index; the table and the acceptance are kept at the index
         assert_eq!(l.live_load(4, PATH_B.as_ptr()), OK);
-        assert_eq!((st().modules[1].used, l.sel_of_rec[1], l.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
+        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
         assert_eq!(crate::entry::tick_of(1), st().modules[1].base + 8);
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(4, dkneeds::KIND_MACHINE, &mut out), 1);
         assert_eq!(out[0], 9);
         assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
         // the module that was live is untouched, and both are live at their indices
-        assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.accepted[0]), (1, 0, true));
+        assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true));
         assert_eq!(l.live_at(SEL_MAX), [true, false, false, false, true, false, false, false]);
         assert!(cstr_eq(records::path(1).as_ptr(), PATH_B.as_ptr()), "the record keeps the path it was loaded from");
     }
@@ -1858,7 +1834,7 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
         let mut l = live_a_with_b();
         l.m.init = Init::Fails(E_INIT);
         assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_INIT);
-        assert_eq!((st().modules[1].used, l.accepted[1], l.sel_of_rec[1], l.phase == Phase::Closed), (0, false, u8::MAX, true));
+        assert_eq!((st().modules[1].used, l.accepted[1], l.sel_of(1), l.phase == Phase::Closed), (0, false, u8::MAX, true));
         assert_eq!(l.m.live.len(), 1, "nothing leaked: the image block of module a only");
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(1, dkneeds::KIND_MACHINE, &mut out), 0);
@@ -1873,7 +1849,7 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
         assert_eq!((st().modules[1].used, l.accepted[1]), (0, false));
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
         assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
-        assert_eq!((st().modules[1].used, l.sel_of_rec[1], l.accepted[1]), (1, 1, true));
+        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[1]), (1, 1, true));
         // a loaded name is refused by the loader itself, with the index free again
         l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), keyed_file(b'b', &[11]));
         assert_eq!(l.live_load(2, PATH_C.as_ptr()), E_LOADED);
@@ -1892,7 +1868,7 @@ fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_ag
         assert_eq!(l.reload_quiesce(0), OK);
         assert_eq!(l.unload_rec(0), OK);
         l.retire_index(0);
-        assert_eq!((st().modules[0].used, l.accepted[0], l.sel_of_rec[0]), (0, false, u8::MAX));
+        assert_eq!((st().modules[0].used, l.accepted[0], l.sel_of(0)), (0, false, u8::MAX));
         assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false], "only b is live");
         assert_eq!(crate::entry::tick_of(0), 0);
         let mut out = [0u32; 8];
@@ -1900,12 +1876,12 @@ fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_ag
         assert_eq!(l.m.live.len(), 1, "its image block is freed");
         // another module's retire leaves b alone
         l.retire_index(3);
-        assert_eq!((st().modules[1].used, l.sel_of_rec[1], l.accepted[1]), (1, 1, true));
+        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[1]), (1, 1, true));
         // the same file loads again into the free record, at the same index, and again after another unload
         for round in 0..2 {
             assert_eq!(l.live_check_load(0, PATH.as_ptr(), &wide()), OK, "round {round}");
             assert_eq!(l.live_load(0, PATH.as_ptr()), OK, "round {round}");
-            assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.accepted[0]), (1, 0, true), "round {round}");
+            assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true), "round {round}");
             assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), 2);
             assert_eq!(l.unload_rec(0), OK);
             l.retire_index(0);
@@ -1964,4 +1940,260 @@ fn a_live_check_answers_e_missing_for_a_service_nobody_provides_before_it_looks_
         assert_eq!(l.live_check_load(1, PATH_C.as_ptr(), &wide()), OK);
         assert_eq!((st().modules[1].used, l.table_len[1], l.accepted[1]), (0, 0, false), "nothing was kept");
     }
+}
+
+// ---- the port file (role 2): the check, the copies of its sites, and the firmware imports of the service files that load after it ----
+
+const PORT_PATH: &[u8] = b"ports/x-1.17.dkport\0";
+const IMP_PATH: &[u8] = b"services/imp.dks\0";
+/// The hook and the name the port file lists.
+const HOOK_H: &str = "hook.a";
+const NAME_H: &str = "cf.thing";
+
+/// The first 8 bytes of the SHA-256 of `b`: the check value of a site.
+fn check8(b: &[u8]) -> [u8; 8] {
+    let mut sha = Sha::new();
+    let mut out = [0u8; 32];
+    unsafe {
+        sha.update(b.as_ptr(), b.len() as u32);
+        sha.finish(out.as_mut_ptr());
+    }
+    out[..8].try_into().unwrap()
+}
+
+/// A port file for `FW_ID`: the name `NAME_H` at 0x1234, an absent name, and the sites `HOOK_H` (a tail copy of `STOCK` at `SITE`), a raw one and an absent one.
+/// The image is the `rts` and 30 bytes; `bss` holds the copy.
+fn port_file_with(bss: u32, tweak: impl Fn(&mut Vec<dkneeds::keys::SiteRec>)) -> Vec<u8> {
+    use dkneeds::keys::{name_hash, NameRec, Pair, SiteRec, Table, FLAG_ABSENT, SITE_RAW, SITE_TAIL};
+    let names = [
+        NameRec { hash: name_hash(NAME_H), addr: 0x1234, n: 0, kind: 0, flags: 0 },
+        NameRec { hash: name_hash("cf.other"), addr: 0, n: 0, kind: 0, flags: FLAG_ABSENT },
+        NameRec { hash: name_hash(HOOK_H), addr: SITE + 6, n: 0, kind: 1, flags: 0 },
+    ];
+    let mut sites = vec![
+        SiteRec { hash: name_hash(HOOK_H), addr: SITE, len: 6, kind: SITE_TAIL, flags: 0, check: check8(&STOCK) },
+        SiteRec { hash: name_hash("hook.raw"), addr: 0x400b_0000, len: 6, kind: SITE_RAW, flags: 0, check: [0; 8] },
+        SiteRec { hash: name_hash("hook.gone"), addr: 0, len: 0, kind: SITE_RAW, flags: FLAG_ABSENT, check: [0; 8] },
+    ];
+    tweak(&mut sites);
+    let provides = [Pair { a: name_hash("port"), b: 0x000100 }];
+    let table = Table { provides: &provides, fw: &[FW_ID], names: &names, sites: &sites, ..Default::default() };
+    let mut v = service_file_of(module_file(), &table, 0);
+    put(&mut v, dkneeds::H_ROLE, 2);
+    put(&mut v, dkneeds::H_BSS, bss);
+    put(&mut v, dkneeds::H_INIT, dkneeds::NONE);
+    put(&mut v, dkneeds::H_FINI, dkneeds::NONE);
+    v[IMAGE_OFF] = 0x4e;
+    v[IMAGE_OFF + 1] = 0x75;
+    seal(&mut v);
+    v
+}
+
+fn port_file() -> Vec<u8> {
+    port_file_with(12, |_| {})
+}
+
+/// A loader with the port file at `PORT_PATH` and the stock bytes at the site.
+unsafe fn port_loader(file: Vec<u8>) -> Fake {
+    let mut l = loader_of(Init::Ok, Vec::new());
+    l.m.files.clear();
+    l.m.files.insert(PORT_PATH[..PORT_PATH.len() - 1].to_vec(), file);
+    l.p.put_code(SITE, &STOCK);
+    set_fw_id(&l, Some(FW_ID));
+    l
+}
+
+#[test]
+fn a_port_file_loads_as_a_provider_copies_its_tail_sites_and_unloads_clean() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = port_loader(port_file());
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+        let rec = MAX_MODULES;
+        let base = records::module(rec).base;
+        assert_eq!((records::module(rec).used, l.roles[rec], st().loads), (1, 2, 0));
+        // the image block (32 bytes of image and 12 of bss) and the table copy
+        assert_eq!(l.m.live.len(), 2);
+        // the copy of the site follows the image: the stock bytes, then `jmp.l` behind the site
+        let mem = core::slice::from_raw_parts(l.m.live[0].1.as_ptr() as *const u8, 44);
+        assert_eq!(&mem[..2], [0x4e, 0x75], "the return stub");
+        assert_eq!(&mem[32..38], STOCK);
+        assert_eq!(&mem[38..40], [0x4e, 0xf9]);
+        assert_eq!(rd32(mem.as_ptr().add(40)), SITE + 6);
+        assert!(l.p.calls.borrow().contains(&crate::fake_platform::Call::Flush { addr: base + 32, len: 12 }), "the copy is written back");
+        // the port file installs nothing and publishes nothing
+        assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
+        assert_eq!(site_bytes(&l, 6), STOCK);
+        // taken down, it gives both blocks back
+        assert_eq!(l.unload_rec(rec), OK);
+        assert!(l.m.live.is_empty());
+        assert_eq!(records::module(rec).used, 0);
+    }
+}
+
+#[test]
+fn a_port_file_for_another_firmware_or_over_other_stock_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // another firmware, an image with no fw_id
+        let mut other = FW_ID;
+        other[0] ^= 1;
+        for id in [Some(other), None] {
+            let mut l = port_loader(port_file());
+            set_fw_id(&l, id);
+            assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_HOOK_STOCK, "image id {id:?}");
+            assert_eq!(l.m.allocs, 0);
+        }
+        // the live bytes of the copied site are not the stock ones: the check value names them
+        let mut l = port_loader(port_file());
+        l.p.put_code(SITE + 1, &[0x99]);
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_HOOK_STOCK);
+        assert_eq!(l.m.allocs, 0);
+        // a raw site is not copied: its bytes are not read at the load of the port file (the installer checks them)
+        let mut l = port_loader(port_file());
+        l.p.put_code(0x400b_0000, &[0x77; 6]);
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+    }
+}
+
+#[test]
+fn a_port_file_that_does_not_fit_its_image_or_its_sites_is_refused_before_anything_is_allocated() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // the bss is smaller than the copies need
+        let mut l = port_loader(port_file_with(11, |_| {}));
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        // a site of 5 bytes (not whole instructions) and one of 4 (no room for jmp.l)
+        for len in [5u16, 4] {
+            let mut l = port_loader(port_file_with(12, |s| s[1].len = len));
+            assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_RANGE, "len {len}");
+            assert_eq!(l.m.allocs, 0);
+        }
+        // the image does not start with `rts`
+        let mut f = port_file();
+        f[IMAGE_OFF] = 0;
+        seal(&mut f);
+        let mut l = port_loader(f);
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+        // a port file only loads into a provider record, and a service file never takes a port file's role
+        let mut l = port_loader(port_file());
+        assert_eq!(l.load(PORT_PATH.as_ptr()), E_FORMAT);
+        assert_eq!(l.m.allocs, 0);
+    }
+}
+
+/// A service file of `provides` only, with the firmware imports `names` (each word of the 32-byte image at 4, 8, ... holds 4 and is relocated against the import).
+fn importing_service(names: &[&str]) -> Vec<u8> {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    static PROVIDES: std::sync::OnceLock<[Pair; 1]> = std::sync::OnceLock::new();
+    let table = Table { provides: PROVIDES.get_or_init(|| [Pair { a: name_hash(SVC), b: 0x000802 }]), ..Default::default() };
+    let imports: Vec<Vec<u8>> = names.iter().map(|n| n.as_bytes().to_vec()).collect();
+    let refs: Vec<&[u8]> = imports.iter().map(|v| &v[..]).collect();
+    let relocs: Vec<(u32, u32)> = (0..names.len()).map(|i| (4 + 4 * i as u32, 1 << 24 | i as u32)).collect();
+    let mut f = module_file_with(&relocs, &refs);
+    for i in 0..names.len() {
+        f[IMAGE_OFF + 7 + 4 * i] = 4;
+    }
+    service_file_of(f, &table, 0)
+}
+
+fn fw_import(prefix: &str, name: &str) -> String {
+    std::format!("{prefix}{:08x}", dkneeds::keys::name_hash(name))
+}
+
+#[test]
+fn the_firmware_imports_of_a_service_file_resolve_through_the_port_file() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let names = [
+            fw_import("dk_fw_", NAME_H),           // an address
+            fw_import("dk_fw_", "cf.other"),       // absent: 0
+            fw_import("dk_exit_", HOOK_H) + "_0",  // the end of the site
+            fw_import("dk_tail_", HOOK_H),         // the copy
+            fw_import("dk_stock_", HOOK_H),        // the same copy
+            fw_import("dk_ret_", HOOK_H),          // the return stub
+            fw_import("dk_ret_", "hook.gone"),     // an absent site: 0
+        ];
+        let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let mut l = port_loader(port_file());
+        l.m.files.insert(IMP_PATH[..IMP_PATH.len() - 1].to_vec(), importing_service(&refs));
+        assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+        let port_base = records::module(MAX_MODULES).base;
+        assert_eq!(l.load_provider(IMP_PATH.as_ptr(), 1), OK);
+        // the service's image block is the one allocated for provider 1: the third block (port image, port table, service image)
+        let mem = core::slice::from_raw_parts(l.m.live[2].1.as_ptr() as *const u8, 32);
+        let word = |i: usize| rd32(mem.as_ptr().add(4 + 4 * i));
+        assert_eq!(word(0), 0x1234 + 4);
+        assert_eq!(word(1), 4, "an absent name is 0 plus the addend");
+        assert_eq!(word(2), SITE + 6 + 4);
+        assert_eq!(word(3), port_base + 32 + 4);
+        assert_eq!(word(4), port_base + 32 + 4);
+        assert_eq!(word(5), port_base + 4);
+        assert_eq!(word(6), 4);
+    }
+}
+
+#[test]
+fn a_firmware_import_the_port_file_does_not_list_or_that_has_no_port_file_refuses_the_service_file() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // a name the port file lacks, and a tail of a raw site (it has no copy)
+        for bad in [fw_import("dk_fw_", "cf.unknown"), fw_import("dk_tail_", "hook.raw"), fw_import("dk_ret_", "hook.unknown")] {
+            let mut l = port_loader(port_file());
+            l.m.files.insert(IMP_PATH[..IMP_PATH.len() - 1].to_vec(), importing_service(&[&bad]));
+            assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
+            let allocs = l.m.allocs;
+            assert_eq!(l.load_provider(IMP_PATH.as_ptr(), 1), E_IMPORT, "{bad}");
+            assert_eq!(l.m.allocs, allocs, "refused before anything is allocated");
+            assert_ne!(l.import_hash, 0, "the hash of the missing name is kept for the log");
+        }
+        // no port file loaded: the same import is refused
+        let mut l = port_loader(port_file());
+        l.m.files.insert(IMP_PATH[..IMP_PATH.len() - 1].to_vec(), importing_service(&[&fw_import("dk_fw_", NAME_H)]));
+        assert_eq!(l.load_provider(IMP_PATH.as_ptr(), 1), E_IMPORT);
+        assert_eq!(l.m.allocs, 0);
+        // a module with such an import is not a service file: the port file is not asked, and the name stays unknown
+        let mut f = module_file_with(&[(8, 1 << 24)], &[fw_import("dk_fw_", NAME_H).as_bytes()]);
+        seal(&mut f);
+        let mut l = loader_of(Init::Ok, f);
+        assert_eq!(l.load(PATH.as_ptr()), E_IMPORT);
+        assert_eq!(l.m.allocs, 0);
+    }
+}
+
+/// The packer writes a device mask in the top byte of a `HOOKS` entry: the loader ignores it (the port file's `absent` flag does its work), compares the bare entry
+/// with what `init` declares and jumps to the bare entry.
+#[test]
+fn the_device_mask_in_a_hooks_entry_is_dropped() {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let hooks = [Pair { a: name_hash("hook.a"), b: 4 | 0x02 << 24 }];
+        let table = Table { hooks: &hooks, ..svc_table() };
+        let mut l = provider_loader(service_file(&table, 0), svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
+        let t = records::module(MAX_MODULES).base + 4;
+        assert_eq!(site_bytes(&l, 6), [0x4e, 0xf9, (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8]);
+    }
+}
+
+
+#[test]
+fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_log_width() {
+    let field = |id: &[u8]| {
+        let mut f = [0u8; dkneeds::NAME_LEN as usize];
+        f[..id.len()].copy_from_slice(id);
+        f
+    };
+    let want = |s: &[u8]| {
+        let mut n = [0u8; super::LOG_NAME];
+        n[..s.len()].copy_from_slice(s);
+        n
+    };
+    assert_eq!(super::name_part(&field(b"digikit/usb-fast")), want(b"usb-fast"));
+    assert_eq!(super::name_part(&field(b"tools/bootscreen_long_name")), want(b"bootscreen_l"));
+    assert_eq!(super::name_part(&field(b"plain")), want(b"plain"));
+    assert_eq!(super::name_part(&field(b"")), want(b""));
 }

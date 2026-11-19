@@ -60,7 +60,7 @@
     "ports": {
       "executor": "nx:run-commands",
       "cache": true,
-      "description": "The port file (role 2, docs/plans/port-file.md) of every committed port: dist/ports/<device>-<version>.dks, from devices/ports and devices/fw only (no firmware).",
+      "description": "The port file (role 2, docs/plans/port-file.md) of every committed port: dist/ports/<device>-<version>.dkport, from devices/ports and devices/fw only (no firmware).",
       "inputs": [
         "{workspaceRoot}/devices/ports/*.toml",
         "{workspaceRoot}/devices/fw/**/*.toml",
@@ -73,6 +73,25 @@
       "outputs": ["{workspaceRoot}/dist/ports"],
       "options": {
         "command": "rm -rf dist/ports && dist/patchkit/patchkit --root . port build --all --out dist/ports",
+        "cwd": "."
+      }
+    },
+    "ports-test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "The port file of the test image: dist/ports-test/<device>-<version>.dkport, as `ports` plus the hooks of the test fixture service (test/svc-test), whose site is a site that image modules patch. Only the test fixtures and the device tests of providers use it; a production port file lists none of them.",
+      "inputs": [
+        "{workspaceRoot}/devices/ports/*.toml",
+        "{workspaceRoot}/devices/fw/**/*.toml",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "dependsOn": ["cli"],
+      "outputs": ["{workspaceRoot}/dist/ports-test"],
+      "options": {
+        "command": "rm -rf dist/ports-test && dist/patchkit/patchkit --root . port build --all --with-test-hooks --out dist/ports-test",
         "cwd": "."
       }
     },

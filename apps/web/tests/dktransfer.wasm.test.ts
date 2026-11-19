@@ -22,7 +22,7 @@ test('header, library module, the merged list (the real fit rule)', async () => 
   const lm = (await libraryModule(mach, needsOf))!;
   assert.deepEqual(
     [lm.id, lm.label, lm.test, lm.path, lm.file_size, lm.hash],
-    ['someone/machine', 'machine', false, 'modules/machine.dkm', 900, hex(sha(mach))],
+    ['someone/machine', 'machine', false, 'modules/machine/someone-machine.dkm', 900, hex(sha(mach))],
   );
   assert.deepEqual([lm.needs?.ARENA, lm.needs?.DSP_AREA, lm.needs?.file_size], [120, 64, 900]);
   // no reader, or a file the reader says the loader would refuse: no needs, so no fit verdict (the device still refuses what does not load)
@@ -39,8 +39,8 @@ test('header, library module, the merged list (the real fit rule)', async () => 
 
   const library = [(await libraryModule(sine, needsOf))!, lm, (await libraryModule(tool, needsOf))!];
   const card = [
-    { path: 'modules/machine.dkm', size: 900, hash: hex(sha(mach)) }, // same file
-    { path: 'modules/tool.dkm', size: 500, hash: 'ff' }, // same path, other bytes
+    { path: 'modules/machine/someone-machine.dkm', size: 900, hash: hex(sha(mach)) }, // same file
+    { path: 'modules/tool/someone-tool.dkm', size: 500, hash: 'ff' }, // same path, other bytes
     { path: 'modules/other.dkm', size: 700, hash: 'aa' }, // not from the library
     { path: 'modules/junk.dkm', size: 9, hash: 'bb' },
   ];
@@ -72,12 +72,12 @@ test('header, library module, the merged list (the real fit rule)', async () => 
   );
   // a file the last boot selected and the loader refused says why; a loaded one and an unrelated one do not
   const failed: ModuleState[] = [
-    { index: 0, name: 'tool.dkm', state: 'FAILED', result: -7, detail: [0, 0], needs: 'usb-bulk' },
+    { index: 0, name: 'someone-tool.dkm', state: 'FAILED', result: -7, detail: [0, 0], needs: 'usb-bulk' },
   ];
   const why = mergeView(library, card, ['someone/machine', 'someone/effect'], cap, headers, failed);
   assert.equal(
     why.modules.find((r) => r.id === 'someone/tool')!.not_loaded,
-    'tool not loaded: this firmware has no core/usb-bulk. Flash firmware from the Firmware page.',
+    'someone-tool not loaded: this firmware has no core/usb-bulk. Flash firmware from the Firmware page.',
   );
   assert.equal(why.modules.filter((r) => r.not_loaded).length, 1);
   assert.equal(

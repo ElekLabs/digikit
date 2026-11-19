@@ -7141,6 +7141,52 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4009fe24"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009ff88"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a5eac"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Test only: the last step of the SETTINGS item list rebuild, as a service hook. The fixture counts the runs and runs the displaced instructions through the tail.",
+      "file": "devices/fw/menu.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.menu.hook.settings_list.test",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": [
+          "a2"
+        ]
+      },
+      "site": "cf.menu.site.settings_list.tail",
+      "subsystem": "menu",
+      "users": [
+        "test/svc-test"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4009fdfe",
             "len": 6
           }
@@ -22870,7 +22916,7 @@
       "name": "mem"
     },
     {
-      "count": 31,
+      "count": 32,
       "cpu": "cf",
       "file": "devices/fw/menu.toml",
       "meaning": "Menu, MenuItem, menu views, the SETTINGS menu",

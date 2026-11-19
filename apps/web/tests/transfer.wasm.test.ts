@@ -11,6 +11,7 @@ await useFitWasm();
 // The pure logic of the Transfer page (packages/workbench-core/src/transfer/transfer-core.ts).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { PROVIDER_MAX } from '@digi/workbench-core/modules/services.ts';
 import {
   DONE_ON_CARD,
   applyEvent,
@@ -442,10 +443,10 @@ test('services: tickedFit counts the services once and enforces the provider lim
     tickedFit(v, new Set(['a/pluck', 'a/shot']))!.text,
     'The 2 ticked modules and their 2 services fit the device together.',
   );
-  const many = Array.from({ length: 7 }, (_, i) => ({ ...fx, stem: `s${i}`, label: `s${i} service` }));
+  const many = Array.from({ length: PROVIDER_MAX + 1 }, (_, i) => ({ ...fx, stem: `s${i}`, label: `s${i} service` }));
   const big = { ...v, modules: [{ ...pluck, needs, services: many }] };
   assert.deepEqual(tickedFit(big, new Set(['a/pluck'])), {
-    text: 'The selection needs more than 6 services.',
+    text: `The selection needs more than ${PROVIDER_MAX} services.`,
     tone: 'warn',
   });
   assert.equal(tickedLoad(big, new Set(['a/pluck'])), null);
@@ -478,7 +479,7 @@ test('services: refusal texts, the service mismatch tag, the needed-by tag', () 
   );
   assert.equal(
     serviceRefusalText({ module: 'pluck', service: 'fx', kind: 'too-many' }),
-    'pluck not installed. The selection needs more than 6 services.',
+    `pluck not installed. The selection needs more than ${PROVIDER_MAX} services.`,
   );
   const refusal = { ...r, kind: 'fingerprint', runtime: '0.5.2', builtFor: '0.5.0' } as const;
   const [tag] = localTags({ ...pluck, service_refusal: refusal }).filter((t) => t.text === 'service mismatch');

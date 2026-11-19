@@ -2,6 +2,9 @@
 //! looked up as `services/<name>.dks` in the store. NEEDS carries only the hash of a service name, so the boot lists `services/` once and matches
 //! `name_hash_bytes(stem)` of each file against the needs. A provider found adds its own hard needs to the search (transitively), up to `PROVIDER_MAX` providers.
 //!
+//! The port file is the one provider that is no service file: a need of `port` (`PORT_NAME`) is met by the file of `ports/` whose `FW` item equals the image's `fw_id`
+//! (the name of the file does not matter, and the other port files are not read further). No such file: the need stays unmet and the planner refuses its dependents.
+//!
 //! The listing and the file read are the runtime's own (`Cards`: `store::list` with the prefix `services/`, and `Images::stage`, the read that loads a module),
 //! so the search links no code of its own for the card. Nothing is allocated: the candidates, the search list and the result are fixed arrays. A provider is
 //! checked in this order, and the first failure skips the file (the planner then reports the need as missing): the file's header and role word, the header
@@ -16,14 +19,25 @@ use dkrt_sdk::{DkrtStoreEntry, PROVIDER_MAX};
 /// The folder of the provider files in the store root, and the file extension.
 const DIR: &[u8] = b"services/";
 const EXT: &[u8] = b".dks";
+/// The name a port file provides (`PROVIDES`), and the folder and extension of its files.
+pub const PORT_NAME: &[u8] = b"port";
+const PORT_DIR: &[u8] = b"ports/";
+const PORT_EXT: &[u8] = b".dkport";
 /// Longest file stem the search considers (50: `services/<stem>.dks` and its NUL fit the 64 bytes of a selection path), and the longest path it builds.
 const STEM_MAX: usize = 50;
 pub const PATH_CAP: usize = DIR.len() + STEM_MAX + EXT.len();
-/// Most `.dks` files of the folder the search remembers. A folder with more `.dks` files sets `Found::truncated`; the files past the limit are not looked at.
+/// Most `.dks` files of the folder the search remembers. A folder with more `.dks` files sets `Found::truncated`; the files past the limit are not looked at. `truncated` is also
+/// set when every provider slot (`PROVIDER_MAX`) is taken and a need is left unsearched, or the port file has no slot: `plan_with_caps` logs it (`E_PLAN_FIT`).
 const CAND_MAX: usize = 32;
 /// Most service hashes the search keeps. Distinct non-runtime needs beyond the provider slots can never all be met; 4 times `PROVIDER_MAX` leaves room for
 /// needs of refused or unmatched services. A need past the limit sets `Found::truncated`.
 const WANT_MAX: usize = 4 * PROVIDER_MAX;
+
+/// The causes of `Found::truncated` (a set of bits): the provider table has no slot left for a service or the port file, the folder has more files than `CAND_MAX`,
+/// the search list has no room for a need (`WANT_MAX`). Each has its own text in the provider log (`Loader::plan_with_caps`).
+pub const TRUNC_TABLE: u8 = 1;
+pub const TRUNC_FILES: u8 = 2;
+pub const TRUNC_NEEDS: u8 = 4;
 
 /// What the search needs of the card: the runtime's store listing (`prefix` NUL-terminated, files only, in path order) and the read of one whole file into
 /// the staging buffer. Every `Images` is one (the real one lists and reads the store; the fakes of the host tests list and read a map).
@@ -44,8 +58,8 @@ impl<M: Images> Cards for M {
 /// The providers found: for provider `k`, its store path and its header table (the bytes the planner parses).
 pub struct Found {
     pub n: usize,
-    /// A limit of the search was passed (more `.dks` files than `CAND_MAX`, more needs than `WANT_MAX`): a provider may be missing from the result.
-    pub truncated: bool,
+    /// The limits of the search that were passed (`TRUNC_*` bits: no provider slot left, more `.dks` files than `CAND_MAX`, more needs than `WANT_MAX`): a provider may be missing from the result.
+    pub truncated: u8,
     // the search's work arrays live here, not on the boot thread's stack: the files of the folder and whether each is taken, and the service hashes searched for
     cands: [DkrtStoreEntry; CAND_MAX + 1],
     c_used: [bool; CAND_MAX],
@@ -60,7 +74,7 @@ impl Found {
     pub const fn new() -> Found {
         Found {
             n: 0,
-            truncated: false,
+            truncated: 0,
             cands: unsafe { core::mem::zeroed() },
             c_used: [false; CAND_MAX],
             search: [0; WANT_MAX],
@@ -113,10 +127,10 @@ fn stem_of(path: &[u8]) -> Option<&[u8]> {
 }
 
 #[inline(never)]
-/// Check the staged file `file` as a provider and put its table, without the BIND and FW entries, into slot `k` of `out`; false when the file is not a usable provider.
-fn table_of(file: &[u8], k: usize, out: &mut Found) -> bool {
+/// Check the staged file `file` as a provider and put its table, without the FW, FWNAMES and SITES entries, into slot `k` of `out`; false when the file is not a usable provider.
+fn table_of(file: &[u8], k: usize, out: &mut Found, role: u32, fw: Option<[u8; 8]>) -> bool {
     let be = |p: usize| u32::from_be_bytes([file[p], file[p + 1], file[p + 2], file[p + 3]]);
-    if file.len() < dkneeds::H_REG_SIZE as usize + 4 || be(dkneeds::H_ROLE as usize) != 1 {
+    if file.len() < dkneeds::H_REG_SIZE as usize + 4 || be(dkneeds::H_ROLE as usize) != role {
         return false;
     }
     let (off, len) = (be(dkneeds::H_REG_OFF as usize) as usize, be(dkneeds::H_REG_SIZE as usize) as usize);
@@ -124,24 +138,27 @@ fn table_of(file: &[u8], k: usize, out: &mut Found) -> bool {
         return false;
     }
     let src = &file[off..off + len];
-    // The full table must parse (heads and sizes fit, the entries use it up exactly). The planner's copy is the table without its BIND entry: a service with
-    // many BIND items has a table over TABLE_MAX, and the planner never needs BIND (the load reads it). The entries are in ascending tag order and BIND has
-    // the highest tag, so it is the last entry: the copy is the table up to it, with one entry less.
+    // The full table must parse (heads and sizes fit, the entries use it up exactly). The planner's copy is the table without its FW, FWNAMES and SITES entries: the
+    // port file's table has many names and is over TABLE_MAX, and the planner never needs them (the load reads them). The entries are in ascending tag order and these
+    // have the highest tags, so they are the last entries: the copy is the table up to the first of them, with fewer entries.
     let full = match Keys::parse(src) {
         Ok(k) => k,
         Err(_) => return false,
     };
-    if role_ok(1, &full).is_err() {
+    if role_ok(role, &full).is_err() {
+        return false;
+    }
+    // a port file is for one firmware: the one whose `FW` is the image's `fw_id`
+    if role == 2 && (fw.is_none() || full.fw(0) != fw) {
         return false;
     }
     let mut n_entries = u16::from_be_bytes([src[6], src[7]]) as usize;
     let mut end = len;
-    if full.count(tag::BIND) != 0 || full.count(tag::FW) != 0 {
-        // BIND and FW have the highest tags, so they are the last entries: the copy ends at the first entry of a tag from BIND up
+    if full.count(tag::FW) != 0 {
         let mut pos = 8;
         let mut e = 0;
         while e < n_entries {
-            if u16::from_be_bytes([src[pos], src[pos + 1]]) >= tag::BIND {
+            if u16::from_be_bytes([src[pos], src[pos + 1]]) >= tag::FW {
                 break;
             }
             pos += 8 + u32::from_be_bytes([src[pos + 4], src[pos + 5], src[pos + 6], src[pos + 7]]) as usize;
@@ -161,7 +178,7 @@ fn table_of(file: &[u8], k: usize, out: &mut Found) -> bool {
 }
 
 /// Read provider candidate `c` into slot `out.n` of `out`; false when the file is not a usable provider.
-unsafe fn read_provider<C: Cards>(cards: &mut C, c: usize, out: &mut Found) -> bool {
+unsafe fn read_provider<C: Cards>(cards: &mut C, c: usize, out: &mut Found, role: u32, fw: Option<[u8; 8]>) -> bool {
     let k = out.n;
     let at = path_of(&out.cands[c]).len();
     out.paths[k][..at].copy_from_slice(path_of(&out.cands[c]));
@@ -172,25 +189,93 @@ unsafe fn read_provider<C: Cards>(cards: &mut C, c: usize, out: &mut Found) -> b
         Ok(s) => s,
         Err(_) => return false,
     };
-    table_of(core::slice::from_raw_parts(staged.ptr, staged.size as usize), k, out)
+    let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+    if table_of(file, k, out, role, fw) {
+        return true;
+    }
+    // a service file of the old format is skipped, and the boot log says why
+    if role == 1 {
+        if let Some((code, hash)) = stale(file) {
+            crate::boot::report_provider(out.path(k), code, hash, 0);
+        }
+    }
+    false
 }
 
-/// Find the providers for the service hashes `want` (the unresolved hard needs of the selection). No `services/` folder, a busy store (`E_BUSY`) or any
+/// A service file bound to one firmware (`BIND` or `FW` items, the format before the port file): why this runtime does not take it, and the service it provides. A Rust service
+/// carries the ABI fingerprint, which `FIRMWARE_REFERENCES` changed, so the refusal is `E_SVC_ABI`; a C service has the word 0 and is `E_FORMAT`.
+fn stale(file: &[u8]) -> Option<(i32, u32)> {
+    let be = |p: usize| u32::from_be_bytes([file[p], file[p + 1], file[p + 2], file[p + 3]]);
+    if file.len() < dkneeds::HEADER as usize || be(dkneeds::H_ROLE as usize) != 1 {
+        return None;
+    }
+    let (off, len) = (be(dkneeds::H_REG_OFF as usize) as usize, be(dkneeds::H_REG_SIZE as usize) as usize);
+    if len < 8 || off > file.len() || len > file.len() - off {
+        return None;
+    }
+    let keys = Keys::parse(&file[off..off + len]).ok()?;
+    if keys.count(tag::BIND) == 0 && keys.count(tag::FW) == 0 {
+        return None;
+    }
+    let code = if be(dkneeds::H_SVC_ABI as usize) != 0 { dkrt_sdk::E_SVC_ABI } else { dkrt_sdk::E_FORMAT };
+    Some((code, keys.words(tag::PROVIDES, 0).map_or(0, |w| w.0)))
+}
+
+/// Is `path` a file `ports/<name>.dkport`: the stem within `STEM_MAX`, no subfolder.
+fn is_port_path(path: &[u8]) -> bool {
+    if path.len() <= PORT_DIR.len() + PORT_EXT.len() || !path.starts_with(PORT_DIR) || !path.ends_with(PORT_EXT) {
+        return false;
+    }
+    let stem = &path[PORT_DIR.len()..path.len() - PORT_EXT.len()];
+    stem.len() <= STEM_MAX && !stem.contains(&b'/')
+}
+
+/// Find the port file for the firmware `fw` (the image's `fw_id`): the first file of `ports/` that is a port file whose `FW` item equals it. Other files are skipped,
+/// and a folder with more files than `CAND_MAX` sets `truncated`. The file is provider `out.n`.
+unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Found) {
+    if fw.is_none() {
+        return;
+    }
+    if out.n >= PROVIDER_MAX {
+        // no slot left for the port file
+        out.truncated |= TRUNC_TABLE;
+        return;
+    }
+    let found = cards.list(b"ports/\0".as_ptr(), out.cands.as_mut_ptr(), (CAND_MAX + 1) as u32);
+    if found <= 0 {
+        return;
+    }
+    let nc = if found as usize > CAND_MAX {
+        out.truncated |= TRUNC_FILES;
+        CAND_MAX
+    } else {
+        found as usize
+    };
+    let mut c = 0;
+    while c < nc {
+        if is_port_path(path_of(&out.cands[c])) && read_provider(cards, c, out, 2, fw) {
+            out.n += 1;
+            return;
+        }
+        c += 1;
+    }
+}
+
+/// Find the providers for the service hashes `want` (the unresolved hard needs of the selection); `fw` is the image's `fw_id`, which picks the port file. No `services/` folder, a busy store (`E_BUSY`) or any
 /// listing error finds nothing, without an error. `services` is the runtime's own table: a need of a runtime service is not searched for.
-pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32], out: &mut Found) {
+pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
     out.n = 0;
-    out.truncated = false;
+    out.truncated = 0;
     if want.is_empty() {
         return;
     }
     // the folder is listed once: the `.dks` files are remembered
     out.c_used = [false; CAND_MAX];
     let found = cards.list(b"services/\0".as_ptr(), out.cands.as_mut_ptr(), (CAND_MAX + 1) as u32);
-    if found <= 0 {
-        return;
-    }
-    let nc = if found as usize > CAND_MAX {
-        out.truncated = true;
+    let nc = if found <= 0 {
+        0
+    } else if found as usize > CAND_MAX {
+        out.truncated |= TRUNC_FILES;
         CAND_MAX
     } else {
         found as usize
@@ -204,7 +289,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
                 out.search[ns] = want[i];
                 ns += 1;
             } else {
-                out.truncated = true;
+                out.truncated |= TRUNC_NEEDS;
             }
         }
         i += 1;
@@ -218,7 +303,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
             let hit = !out.c_used[c] && matches!(stem_of(path_of(&out.cands[c])), Some(stem) if name_hash_bytes(stem) == h);
             if hit {
                 out.c_used[c] = true;
-                if read_provider(cards, c, out) {
+                if read_provider(cards, c, out, 1, None) {
                     let k = out.n;
                     if let Ok(t) = Keys::parse(&out.tables[k][..out.table_len[k]]) {
                         let mut ni = 0;
@@ -229,7 +314,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
                                     out.search[ns] = n.0;
                                     ns += 1;
                                 } else {
-                                    out.truncated = true;
+                                    out.truncated |= TRUNC_NEEDS;
                                 }
                             }
                         }
@@ -240,6 +325,14 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
             }
             c += 1;
         }
+    }
+    // needs left unsearched because every provider slot is taken: the table is full (the planner reports it)
+    if w < ns && out.n >= PROVIDER_MAX {
+        out.truncated |= TRUNC_TABLE;
+    }
+    // the port file is the provider of `port`, found by its firmware identity, after the services (it reuses the listing buffer)
+    if has(&out.search, ns, name_hash_bytes(PORT_NAME)) {
+        find_port(cards, fw, out);
     }
 }
 
@@ -311,7 +404,7 @@ mod tests {
     static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[] };
 
     /// A role `role` file with `table` as it is.
     fn raw_file(role: u32, table: &[u8]) -> Vec<u8> {
@@ -344,8 +437,102 @@ mod tests {
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
         let mut out = Found::new();
-        unsafe { find(c, &services, &want, &mut out) };
+        unsafe { find(c, &services, &want, None, &mut out) };
         out
+    }
+
+    /// A port file (role 2) for the firmware `fw`: the table of the port file with one name and one site.
+    fn port_file(fw: [u8; 8]) -> Vec<u8> {
+        use dkneeds::keys::{NameRec, SiteRec};
+        let names = [NameRec { hash: 1, addr: 0x100, n: 0, kind: 0, flags: 0 }];
+        let sites = [SiteRec { hash: 2, addr: 0x200, len: 6, kind: 0, flags: 0, check: [0; 8] }];
+        let t = Table { provides: &[Pair { a: name_hash("port"), b: 0x000100 }], fw: &[fw], names: &names, sites: &sites, ..KEEP };
+        raw_file(2, &table_of_t(&t))
+    }
+
+    const FW_A: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    const FW_B: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
+
+    fn run_fw(c: &mut FakeCards, want: &[&str], fw: Option<[u8; 8]>) -> Found {
+        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+        let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
+        let mut out = Found::new();
+        unsafe { find(c, &services, &want, fw, &mut out) };
+        out
+    }
+
+    #[test]
+    fn the_port_file_whose_fw_is_the_images_is_found_whatever_its_name_and_the_others_are_ignored() {
+        let mut fs = cards(vec![
+            ("ports/p-1.16.dkport".into(), port_file(FW_B)),
+            ("ports/z-any-name.dkport".into(), port_file(FW_A)),
+            ("ports/notes.txt".into(), port_file(FW_A)),
+        ]);
+        let out = run_fw(&mut fs, &["port"], Some(FW_A));
+        assert_eq!(out.n, 1);
+        assert_eq!(out.path(0), b"ports/z-any-name.dkport");
+        // the planner's copy keeps the PROVIDES item and not the firmware entries
+        let keys = Keys::parse(out.table(0)).unwrap();
+        assert_eq!(keys.words(tag::PROVIDES, 0).unwrap().0, name_hash("port"));
+        assert_eq!((keys.fw_count(), keys.site_count(), keys.name_count()), (0, 0, 0));
+    }
+
+    #[test]
+    fn no_port_file_for_the_firmware_finds_no_provider_and_a_service_is_still_found() {
+        let mut fs = cards(vec![("ports/p-1.16.dkport".into(), port_file(FW_B)), ("services/lfo.dks".into(), file(1, "lfo", &["port"]))]);
+        // another firmware, and an image with no fw_id
+        for fw in [Some(FW_A), None] {
+            let out = run_fw(&mut fs, &["lfo"], fw);
+            assert_eq!((out.n, out.path(0)), (1, &b"services/lfo.dks"[..]), "{fw:?}");
+        }
+        // with the matching port file the service and the port file are both providers
+        fs.files.push((b"ports/p-1.17.dkport".to_vec(), port_file(FW_A)));
+        let out = run_fw(&mut fs, &["lfo"], Some(FW_A));
+        assert_eq!((out.n, out.path(0), out.path(1)), (2, &b"services/lfo.dks"[..], &b"ports/p-1.17.dkport"[..]));
+    }
+
+    #[test]
+    fn a_service_file_in_ports_and_a_port_file_in_services_are_no_providers() {
+        // a role 1 file in ports/ and a role 2 file in services/ (the stem `port`)
+        let mut fs = cards(vec![("ports/a.dkport".into(), file(1, "port", &[])), ("services/port.dks".into(), port_file(FW_A))]);
+        assert_eq!(run_fw(&mut fs, &["port"], Some(FW_A)).n, 0);
+    }
+
+    #[test]
+    fn a_full_provider_table_sets_truncated_for_a_service_and_for_the_port_file() {
+        let names: Vec<std::string::String> = (0..PROVIDER_MAX + 1).map(|i| std::format!("s{i}")).collect();
+        let files: Vec<(&str, u32, &[&str])> = names.iter().map(|n| (n.as_str(), 1, &[][..])).collect();
+        let want: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+        let out = run(&mut store_with(&files), &want);
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, TRUNC_TABLE), "one need too many");
+        // exactly PROVIDER_MAX needs: nothing is left unsearched
+        let out = run(&mut store_with(&files), &want[..PROVIDER_MAX]);
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, 0));
+        // every slot taken by services and the port file wanted: it has no slot
+        let mut fs = store_with(&files[..PROVIDER_MAX]);
+        fs.files.push((b"ports/p.dkport".to_vec(), port_file(FW_A)));
+        let mut w: Vec<&str> = want[..PROVIDER_MAX].to_vec();
+        w.push("port");
+        let out = run_fw(&mut fs, &w, Some(FW_A));
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, TRUNC_TABLE));
+    }
+
+    #[test]
+    fn a_service_file_of_the_old_format_is_named_with_the_code_that_refuses_it() {
+        let table = |abi: u32| {
+            let stock = [0u8; 6];
+            let binds = [dkneeds::keys::Bind { site: 1, addr: 0x1000, tramp: 0x20, stock: &stock }];
+            let mut f = raw_file(1, &table_of_t(&Table { provides: &[Pair { a: name_hash("lfo"), b: 0x010000 }], bind: &binds, fw: &[[7; 8]], ..KEEP }));
+            f.resize(0xa0 + f.len().max(0), 0);
+            f[dkneeds::H_SVC_ABI as usize..][..4].copy_from_slice(&abi.to_be_bytes());
+            f
+        };
+        // a Rust service carries the ABI word that the port file change moved, a C service has 0
+        assert_eq!(stale(&table(0x1234_5678)), Some((dkrt_sdk::E_SVC_ABI, name_hash("lfo"))));
+        assert_eq!(stale(&table(0)), Some((dkrt_sdk::E_FORMAT, name_hash("lfo"))));
+        // the search does not take it, and a file of the new format is no stale file
+        assert_eq!(run(&mut cards(vec![("services/lfo.dks".into(), table(1))]), &["lfo"]).n, 0);
+        assert_eq!(stale(&file(1, "lfo", &[])), None);
     }
 
     #[test]
@@ -374,35 +561,34 @@ mod tests {
         assert_eq!(out.path(1), b"services/base.dks");
     }
 
-    /// The file of a service whose BIND entry holds `n` items of 64 stock bytes: its table is over `TABLE_MAX`.
-    fn file_with_bind(name: &str, n: usize) -> Vec<u8> {
-        let stock = [0xa5u8; 64];
-        let binds: Vec<dkneeds::keys::Bind> =
-            (0..n).map(|i| dkneeds::keys::Bind { site: i as u32 + 1, addr: 0x1000, tramp: 0x20, stock: &stock }).collect();
-        raw_file(1, &table_of_t(&Table { provides: &[Pair { a: name_hash(name), b: 0x010000 }], bind: &binds, fw: &[[7; 8]], ..KEEP }))
+    /// The port file with `n` names: its table is over `TABLE_MAX` (12 bytes a name).
+    fn big_port_file(n: usize) -> Vec<u8> {
+        let names: Vec<dkneeds::keys::NameRec> =
+            (0..n).map(|i| dkneeds::keys::NameRec { hash: i as u32 + 1, addr: 0x1000 + i as u32, n: 0, kind: 0, flags: 0 }).collect();
+        raw_file(2, &table_of_t(&Table { provides: &[Pair { a: name_hash("port"), b: 0x000100 }], fw: &[FW_A], names: &names, ..KEEP }))
     }
 
     #[test]
-    fn a_provider_whose_full_table_is_over_the_planner_limit_because_of_bind_is_found_and_planned() {
-        let f = file_with_bind("big", 8);
+    fn a_port_file_whose_full_table_is_over_the_planner_limit_is_found_and_planned() {
+        let f = big_port_file(80);
         let full = u32::from_be_bytes(f[dkneeds::H_REG_SIZE as usize..][..4].try_into().unwrap()) as usize;
         assert!(full > TABLE_MAX, "{full}");
-        let mut fs = cards(vec![("services/big.dks".into(), f)]);
-        let out = run(&mut fs, &["big"]);
+        let mut fs = cards(vec![("ports/big.dkport".into(), f)]);
+        let out = run_fw(&mut fs, &["port"], Some(FW_A));
         assert_eq!(out.n, 1);
-        // the planner's copy is the table without BIND and FW, still version 2 with its one PROVIDES
+        // the planner's copy is the table without FW, FWNAMES and SITES (their tags are the highest), with its one PROVIDES
         let keys = Keys::parse(out.table(0)).unwrap();
-        assert_eq!(keys.version(), 2);
-        assert_eq!((keys.count(tag::BIND), keys.count(tag::FW)), (0, 0));
+        assert_eq!((keys.count(tag::FW), keys.name_count(), keys.site_count()), (0, 0, 0));
         assert_eq!(keys.count(tag::PROVIDES), 1);
         assert!(out.table(0).len() <= TABLE_MAX);
-        let user = table_of_t(&Table { needs: &[Need { service: name_hash("big"), min_version: 0x010000, hard: true }], ..KEEP });
+        let user = table_of_t(&Table { needs: &[Need { service: name_hash("port"), min_version: 0x000100, hard: true }], ..KEEP });
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let caps = [dkrt_sdk::DkrtCap { kind: dkrt_sdk::proto::CAPK_MODULES as u32, limit: 8, used: 0, largest: 8 }];
         let env = crate::plan::Env { services, runtime: 0x000900, caps: &caps };
         let p = crate::plan::plan_with(&env, &[Some(Keys::parse(&user).unwrap())], &[Some(keys)]);
         assert_eq!((p.provider_verdicts[0], p.verdicts[0]), (dkrt_abi::plan::Verdict::Accepted, dkrt_abi::plan::Verdict::Accepted));
     }
+
 
     #[test]
     fn a_stem_over_50_bytes_is_skipped_so_its_path_fits_a_selection_path() {
@@ -465,15 +651,15 @@ mod tests {
     fn a_folder_with_more_files_than_the_search_remembers_sets_truncated() {
         let names: Vec<std::string::String> = (0..CAND_MAX + 1).map(|k| std::format!("c{k}")).collect();
         let files: Vec<(&str, u32, &[&str])> = names.iter().map(|n| (n.as_str(), 1u32, &[][..])).collect();
-        assert!(run(&mut store_with(&files), &["c0"]).truncated);
+        assert_eq!(run(&mut store_with(&files), &["c0"]).truncated, TRUNC_FILES);
         let mut fs = store_with(&files[..CAND_MAX]);
-        assert!(!run(&mut fs, &["c0"]).truncated);
+        assert_eq!(run(&mut fs, &["c0"]).truncated, 0);
         // more distinct needs than the search list holds
         let want: Vec<u32> = (0..WANT_MAX as u32 + 1).collect();
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
-        unsafe { find(&mut fs, &services, &want, &mut out) };
-        assert!(out.truncated);
+        unsafe { find(&mut fs, &services, &want, None, &mut out) };
+        assert_eq!(out.truncated, TRUNC_NEEDS);
     }
 
     #[test]
@@ -512,7 +698,7 @@ mod tests {
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
         let mut out = Found::new();
-        unsafe { find(c, &services, &want, &mut out) };
+        unsafe { find(c, &services, &want, None, &mut out) };
         out
     }
 
@@ -562,7 +748,7 @@ mod tests {
         tiny[dkneeds::H_REG_SIZE as usize..][..4].copy_from_slice(&4u32.to_be_bytes());
         assert_eq!(run(&mut store(tiny), &["bad"]).n, 0);
         assert_eq!(run(&mut store(good[..dkneeds::H_REG_SIZE as usize].to_vec()), &["bad"]).n, 0);
-        // a table over the planner's limit without a BIND entry to cut
+        // a table over the planner's limit without an entry to cut
         let needs: Vec<Need> = (0..TABLE_MAX as u32 / 8).map(|k| Need { service: 1000 + k, min_version: 0, hard: false }).collect();
         let big = table_of_t(&Table { needs: &needs, provides: &one, ..KEEP });
         assert!(big.len() > TABLE_MAX);

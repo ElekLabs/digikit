@@ -24,7 +24,7 @@ import { plusdriveBinary } from './card-kit.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices } from './service-files.ts';
+import { neededServices, portFile } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { deviceProfile } from './device-data.ts';
 import type { FxExpectations } from './dkm-parse.ts';
@@ -83,17 +83,17 @@ async function baseline(
     }
   });
   const selection = ['modules/sine.dkm', ...(wet ? ['modules/dyn-fx-gain.dkm'] : [])];
-  // the services the gain effect needs (fx.dks), bound to the stock firmware, go to digikit/services
-  const services = await Promise.all(
-    neededServices(files.map((f) => f.file)).map(async (needed) => ({
-      name: (cardServices.add(needed.service), `${needed.service}.dks`),
-      file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
-    })),
-  );
+  // the services the gain effect needs (fx.dks), go to digikit/services as packed, with the port file in digikit/ports
+  const services = neededServices(files.map((f) => f.file)).map((needed) => ({
+    name: (cardServices.add(needed.service), `${needed.service}.dks`),
+    file: moduleArtifact(device, needed.moduleId),
+  }));
+  const port = services.length ? portFile(device) : undefined;
   const key = cardKey(device, {
     kind: 'fx-live-reuse',
     modules: files.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
     services: services.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
+    port: port ? fileSha(port.file) : undefined,
     selection,
   });
   const cardImage = await cachedCard(key, async (work) => {
@@ -105,6 +105,11 @@ async function baseline(
     const serviceDir = path.join(seed, 'digikit', 'services');
     fs.mkdirSync(serviceDir, { recursive: true });
     for (const f of services) fs.copyFileSync(f.file, path.join(serviceDir, f.name));
+    if (port) {
+      const portDir = path.join(seed, 'digikit', 'ports');
+      fs.mkdirSync(portDir, { recursive: true });
+      fs.copyFileSync(port.file, path.join(portDir, path.basename(port.name)));
+    }
     fs.writeFileSync(path.join(seed, 'digikit', 'selection.txt'), selection.join('\n') + '\n');
     const out = path.join(work, 'card', 'card.img');
     fs.mkdirSync(path.dirname(out), { recursive: true });

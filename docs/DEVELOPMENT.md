@@ -237,7 +237,7 @@ Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrma
 Usage of the object compare for moves of runtime code (`patchkit objdiff OLD NEW`): [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move).
 Usage of the register liveness of stock code at a patch site (`tools/coldfire/liveness.py`): [PATCHING.md](PATCHING.md#register-liveness-at-a-hook-site).
 Usage of the port file (`patchkit port build|check`, `patchkit:ports`): [PATCHING.md](PATCHING.md#port-file).
-Usage of the service binder (`patchkit bind IN.dks --firmware FW.syx -o OUT.dks`): [PATCHING.md](PATCHING.md#bind-a-service-to-your-firmware). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
+Services and the port file (no binding step; `patchkit port build|check|stock`): [PATCHING.md](PATCHING.md#services-and-the-port-file). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
 Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
 
 Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).

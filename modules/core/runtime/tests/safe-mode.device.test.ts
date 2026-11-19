@@ -147,7 +147,7 @@ for (const held of [true, false]) {
       roots: RT, // default tier: these two cases run in the normal gate
       symbols: CARD_SYMBOLS,
       startEmpty: true,
-      initial: () => ({ modules: ['test/c-demo'], selection: ['modules/c-demo.dkm'] }),
+      initial: ({ mod }) => ({ modules: ['test/c-demo'], selection: [mod('test/c-demo').name] }),
       initialButtons: held
         ? [{ code: button('RECORD'), down: true }]
         : [

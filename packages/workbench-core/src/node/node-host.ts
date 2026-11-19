@@ -3,7 +3,6 @@
 // checkout and sends the emulator RPC over the control socket (packages/control-client). A command with no headless meaning (a dialog, the build of
 // the library, the emulator session of the app) fails with `NodeHostUnsupported`. `wb` (tools/devtools/wb.mjs) uses it, so a command line and the
 // workbench run the same code over the same interfaces.
-import { buildBindBundle } from './bind-bundle.ts';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -141,19 +140,28 @@ function nodeLibrary(root: string, libraryDir?: string): LibraryHost {
       const dir = deviceDir(device);
       const out: { path: string; size: number }[] = [];
       if (existsSync(dir)) walk(dir, dir, out);
-      // the unbound services are packed into dist/modules/<device>/ (the desktop copies them into its library)
+      // the services are packed into dist/modules/<device>/ and the port files built into dist/ports/ (the desktop copies them into its library)
       const services = path.join(root, 'dist/modules', device);
       if (existsSync(services)) walk(services, services, out, '.dks');
+      const ports = path.join(root, 'dist/ports');
+      if (existsSync(ports))
+        for (const e of readdirSync(ports))
+          if (e.endsWith('.dkport') && e.startsWith(`${device}-`))
+            out.push({ path: e, size: statSync(path.join(ports, e)).size });
       return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     },
     async read(device, rel) {
       const dir = deviceDir(device);
       if (
         rel.split('/').some((p) => p === '' || p === '.' || p === '..') ||
-        !(rel.endsWith('.dkm') || rel.endsWith('.dks'))
+        !(rel.endsWith('.dkm') || rel.endsWith('.dks') || rel.endsWith('.dkport'))
       )
         throw new Error(`not a library file: ${JSON.stringify(rel)}`);
-      const base = rel.endsWith('.dks') ? path.join(root, 'dist/modules', device) : dir;
+      const base = rel.endsWith('.dkport')
+        ? path.join(root, 'dist/ports')
+        : rel.endsWith('.dks')
+          ? path.join(root, 'dist/modules', device)
+          : dir;
       return toBuffer(await readFile(path.join(base, rel)));
     },
   };
@@ -301,8 +309,6 @@ function nodeFirmware(root: string, outDir: string | undefined): FirmwareHost {
     prepare: unsupported('firmware.prepare'),
     save: (bytes, name) => saveTo(outDir, 'firmware.save', bytes, name),
     patchkitWasm: () => wasm('patchkit.wasm'),
-    // from the checkout's devices/ files, as `apps/web/scripts/gen-modules.mjs` writes bind.json for the site
-    bindBundle: async () => toBuffer(new TextEncoder().encode(JSON.stringify(buildBindBundle(root)))),
     sampleWasm: () => wasm('dksample.wasm'),
     dkprofWasm: () => wasm('dkprof.wasm'),
   };
