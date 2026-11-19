@@ -436,3 +436,43 @@ fn a_reloaded_effect_keeps_its_knob_values_route_and_send_cell() {
         core::ptr::write_volatile(n, 0);
     }
 }
+
+/// The parked values are stamped for each row with the module's name, the effect id and the kit: another module with the same effect id does not inherit them, and the removal
+/// of another module's effect later does not refresh the stamp of a row that was parked before a kit was loaded.
+#[test]
+fn parked_knob_values_belong_to_the_module_and_the_row_that_left() {
+    let _g = locked();
+    let mut f = fixture(DT2.id);
+    f.image = image_with_kit;
+    let mut l = Lifecycle::<Fx>::new(&f);
+    let knob = |l: &Lifecycle<Fx>, row: u32| unsafe { l.core.rd16(kit_array(KIT_A) + 2 * 8 * row) };
+    unsafe {
+        l.core.wr(KIT_CELL, KIT_A);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        let default = knob(&l, 0);
+        l.core.wr16(kit_array(KIT_A), 0x1234);
+        // the same effect id from a module of another name: the defaults
+        l.unload(0);
+        l.core.name = String::from("other\0");
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(
+            knob(&l, 0),
+            default,
+            "a module of another name does not inherit the values"
+        );
+        l.unload(0);
+        l.core.name = String::from("fake\0");
+        // a row parked, a kit loaded, then another module's effect removed: the row keeps its own stamp
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+        l.core.wr16(kit_array(KIT_A), 0x1234);
+        l.unload(0);
+        let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
+        core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
+        l.unload(1);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(knob(&l, 0), default, "a kit was loaded after the row was parked: the removal of another effect does not refresh its stamp");
+        l.unload(0);
+        core::ptr::write_volatile(n, 0);
+    }
+}

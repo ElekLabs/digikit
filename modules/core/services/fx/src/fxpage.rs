@@ -208,11 +208,13 @@ pub struct FxpState {
     short: [[u8; 16]; MAX_FX * WORDS],
     rep_tab: [[u8; REP_SIZE]; MAX_FX],
     rep_title: [[u8; REP_SIZE]; MAX_FX],
-    /// What `remove` found at a row: the effect ID that left (0: none), the live kit object, and the count of kit loads and initialisations at that time. A load of
-    /// the same effect into the row finds the user's values still in the kit's array and keeps them (`apply`), unless a kit was loaded or the live kit changed in between.
+    /// What `remove` found at a row, one stamp for each row: the effect ID that left (0: none), a hash of the module's name, the live kit object, and the count of kit loads and
+    /// initialisations at that time. A load of the same effect of the same module into the row finds the user's values still in the kit's array and keeps them (`apply`),
+    /// unless a kit was loaded or the live kit changed in between. A row another module's effect takes, or one that is removed again, has its own stamp.
     parked_id: [u32; MAX_FX],
-    parked_kit: u32,
-    parked_hooks: u32,
+    parked_mod: [u32; MAX_FX],
+    parked_kit: [u32; MAX_FX],
+    parked_hooks: [u32; MAX_FX],
 }
 
 #[no_mangle]
@@ -583,11 +585,13 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, b: *const u8) -> i32 {
     let back = live != 0
         && id != 0
         && s.parked_id[k] == id
-        && s.parked_kit == live
-        && s.parked_hooks == hook_runs()
+        && s.parked_mod[k] == fxsend::name_hash(core.module_name(owner))
+        && s.parked_kit[k] == live
+        && s.parked_hooks[k] == hook_runs()
         && core.rd16(live + iw(inf, w::ARRAY_OFF) + 2 * iw(inf, w::MARK_INDEX))
             == iw(inf, w::MARK_VALUE) as i32;
     s.parked_id[k] = 0;
+    s.parked_mod[k] = 0;
     if live != 0 && !back {
         // a kit object is live already and holds nothing of this effect (the init hook ran before the effect was here): its defaults now
         seed_row(core, inf, k, live + iw(inf, w::ARRAY_OFF));
@@ -622,6 +626,9 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
         if s.owner[k] == owner {
             s.owner[k] = 0;
             s.parked_id[k] = s.id[k];
+            s.parked_mod[k] = fxsend::module_hash(k);
+            s.parked_kit[k] = kit(core, inf);
+            s.parked_hooks[k] = hook_runs();
             gone |= 1 << k;
         }
         k += 1;
@@ -629,8 +636,6 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     if gone == 0 {
         return;
     }
-    s.parked_kit = kit(core, inf);
-    s.parked_hooks = hook_runs();
     rebuild_list(core, inf);
     k = 0;
     while k < MAX_FX {
