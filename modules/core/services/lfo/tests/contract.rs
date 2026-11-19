@@ -128,6 +128,7 @@ fn fixture(device: u32) -> Fixture {
         // none: `check` refuses a table that is too full or an id kept already, and `apply_record` has no other limit
         bad_late: None,
         rules: true,
+        parked_knobs: None,
     }
 }
 

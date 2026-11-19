@@ -191,7 +191,7 @@ fn a_key_that_the_module_does_not_provide_or_a_bad_name_or_a_key_twice_is_refuse
 }
 
 #[test]
-fn a_number_that_a_module_keeps_already_and_a_full_table_are_refused() {
+fn a_key_without_a_number_and_a_full_table_are_refused() {
     let (_g, core) = fresh();
     let keys: Vec<u32> = (0..MAX_SHAPES as u32)
         .map(|i| 0x0010_0000 + (i << 8))
@@ -201,14 +201,6 @@ fn a_number_that_a_module_keeps_already_and_a_full_table_are_refused() {
     assert_eq!(
         apply(&core, 1, KIND_LFO_SHAPE, &body(keys[0], b"A   ", 0)),
         OK
-    );
-    assert_eq!(
-        apply(&core, 2, KIND_LFO_SHAPE, &body(keys[0], b"B   ", 0)),
-        E_TYPE_USED
-    );
-    assert_eq!(
-        check(&core, check_step::ROWS, &section(&[(keys[0], 0)])),
-        E_TYPE_USED
     );
     // a key that settle gave no number (a ninth key of the boot) has no place
     let nine: Vec<u32> = (0..MAX_SHAPES as u32 + 1)
@@ -229,6 +221,73 @@ fn a_number_that_a_module_keeps_already_and_a_full_table_are_refused() {
             &body(nine[MAX_SHAPES], b"X   ", 0)
         ),
         E_TABLE_FULL
+    );
+}
+
+/// Defence in depth: a slot held by another module is not overwritten, while the module being reloaded may still hold its own.
+#[test]
+fn a_slot_of_another_module_is_not_overwritten() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A]]);
+    core.boot_index.set(0);
+    assert_eq!(
+        apply(&core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"A   ", 0)),
+        OK
+    );
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_A, b"B   ", 0)),
+        E_TYPE_USED
+    );
+    assert_eq!(owner_of(number_of(0, KEY_A)), 1, "the holder is unchanged");
+    core.live_op.set(1);
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(KEY_A, b"B   ", 0)),
+        OK,
+        "the module being reloaded"
+    );
+    core.live_op.set(0);
+}
+
+/// A reload of a module that keeps shapes: its own shapes are still in the table at the check of its new file (the teardown that precedes the load gives them back),
+/// so they do not count against the table; another module's shapes do. No other number check exists: `settle` gives each key its own number.
+#[test]
+fn the_shapes_of_the_module_being_reloaded_do_not_count_against_the_table() {
+    let (_g, core) = fresh();
+    let keys: Vec<u32> = (0..MAX_SHAPES as u32)
+        .map(|i| 0x0010_0000 + (i << 8))
+        .collect();
+    settle(&core, &[&keys[..5], &keys[5..]]);
+    core.boot_index.set(0);
+    for (i, k) in keys[..5].iter().enumerate() {
+        assert_eq!(
+            apply(&core, 1, KIND_LFO_SHAPE, &body(*k, b"A   ", i as i16)),
+            OK
+        );
+    }
+    core.boot_index.set(1); // the second module's shape has its number under its own selection index
+    assert_eq!(
+        apply(&core, 2, KIND_LFO_SHAPE, &body(keys[5], b"B   ", 0)),
+        OK
+    );
+    core.boot_index.set(0);
+    // module 1 (owner 1) is replaced by a file of the same five shapes: the table holds six, one more would make nine
+    let same: Vec<(u32, i16)> = keys[..5].iter().map(|k| (*k, 0)).collect();
+    let run = |op: u32| {
+        core.live_op.set(op);
+        let r = check(&core, check_step::ROWS, &section(&same));
+        core.live_op.set(0);
+        r
+    };
+    assert_eq!(run(1), OK, "the reload of the owner");
+    assert_eq!(
+        run(0),
+        E_TABLE_FULL,
+        "a load of the same five (as another module) does not fit: 6 + 5 > 8"
+    );
+    assert_eq!(
+        run(2),
+        E_TABLE_FULL,
+        "the reload of the module that keeps one shape frees one"
     );
 }
 

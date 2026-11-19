@@ -245,6 +245,26 @@ unsafe fn publish_count<C: CoreApi>(core: &C, inf: *const u32) {
     core.wr(iw(inf, w::COUNT), if ss().used != 0 { 2 } else { 0 });
 }
 
+/// FNV-1a 32 of the NUL-terminated module name at `name` (at most 32 bytes): what tells the module of an effect row from another module with the same effect id.
+pub unsafe fn name_hash(name: *const u8) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < 32 && *name.add(i) != 0 {
+        h = (h ^ *name.add(i) as u32).wrapping_mul(0x0100_0193);
+        i += 1;
+    }
+    h
+}
+
+/// The name hash of the module that owns effect row `k` (kept at `apply`); 0 for a row nobody owns.
+pub fn module_hash(k: usize) -> u32 {
+    let s = ss();
+    if k >= dsp::MAX_FX || s.idlen[k] == 0 {
+        return 0;
+    }
+    unsafe { name_hash(s.id[k].as_ptr()) }
+}
+
 /// Effect row `k` (module record `owner - 1`, tab string `tab`) has been registered: read its route and amounts from the settings and, for a send effect within the limit, give it a
 /// cell of the send page. The route and the four amount words go to the DSP with the row (`dsp::fx_set_route`).
 pub unsafe fn apply<C: CoreApi>(core: &C, k: usize, owner: u8, tab: *const u8) {

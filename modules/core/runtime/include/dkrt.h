@@ -156,7 +156,7 @@
 #define DKRT_E_TYPE_IN_USE (-26)         /* reserved (hot reload is archived); never returned */
 #define DKRT_E_DECL_ID (-27)             /* a builder call names a machine or effect id that the keys table of the header lacks */
 #define DKRT_E_DECL_USES (-28)           /* init declared more machine, param or page rows than the [uses] counts of the header say */
-#define DKRT_E_FX_ID_DUP (-29)           /* an effect id of the module is already loaded (or twice in the module) */
+#define DKRT_E_FX_ID_DUP (-29)           /* reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned */
 #define DKRT_E_NO_DSP (-30)              /* DSP code in the file, no DSP loader in the image */
 #define DKRT_E_DSP_FORMAT (-31)          /* the DSP section is malformed */
 #define DKRT_E_DSP_IMPORT (-32)          /* a DSP symbol is not exported by the image */
@@ -186,7 +186,7 @@
 #define DKRT_E_HOOK_STOCK (-82)          /* a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init */
 #define DKRT_E_RELOAD_PLAYING (-83)      /* reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read) */
 #define DKRT_E_RELOAD_MENUS (-84)        /* reload refused: the module built menus of its own */
-#define DKRT_E_RELOAD_ROUTED (-85)       /* reload refused: the module has a published effect row (no effect teardown yet) */
+#define DKRT_E_RELOAD_ROUTED (-85)       /* reload refused: a service cannot give back the module's state now */
 #define DKRT_E_RELOAD_KEYS (-86)         /* reload refused: the new file lacks a key of the file it replaces */
 #define DKRT_E_RELOAD_RETAINED (-87)     /* reload refused: the DSP loader holds a module it could not release; restart the device */
 
@@ -651,6 +651,12 @@ int32_t dkrt_poll_add(uintptr_t f);
 
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
 void dkrt_poll_remove(uintptr_t f);
+
+/* A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect. */
+void dkrt_menu_built(uintptr_t code, uintptr_t data);
+
+/* Undo one dkrt_menu_built for the same addresses: the module record whose loaded range holds `code`, else `data`, owns one menu less (it stops at 0; a load into the record starts it at 0). The DIGIKIT menu holds a module while the module's SETTINGS page is open (dkrt_menu_built with the module's `menu` function: the page's rows point into the module's code) and releases it when the page is left, so a module is not unloaded or reloaded while its page is open. */
+void dkrt_menu_release(uintptr_t code, uintptr_t data);
 
 /* Look a store file up by path (NUL-terminated) and fill out: OK, E_NOT_FOUND (no store, no such file, a folder), or a card error. It reads the store headers and scans the table through the runtime's staging buffer, so call it only at the start of a load, not while a staged module read is in progress. A file of size 0 is found. */
 int32_t dkrt_store_stat(const uint8_t *path, DkrtStoreFile *out);

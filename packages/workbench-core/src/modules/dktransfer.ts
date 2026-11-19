@@ -19,7 +19,7 @@ import {
   type ModuleStateName,
 } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
-import { fitsNow, type Caps, type Needs } from './fit.ts';
+import { fitsNow, keyWarnings, type Caps, type Needs } from './fit.ts';
 import {
   planDelete,
   readFw,
@@ -800,6 +800,45 @@ export function uploadProgress(
 }
 
 /**
+ * Before the upload, one `{ event: 'keys', id, text }` for each key rule a module of `ids` breaks (`keyWarnings`, fit.ts: the Rust rules of `pk_keys_check`): a key twice, a key that a module
+ * of the device's selection has (`selected`: file names; modules that are only on the card are not loaded together), a key the version on the card has and the new file lacks (that version is
+ * read from the card, only when its hash differs from the new file's). Only a warning: the device refuses the module itself, at the
+ * next boot or at a reload. A read that fails gives no warning for that file.
+ */
+async function warnAboutKeys(
+  s: DkSession,
+  ids: string[],
+  by: Map<string, LibraryModule>,
+  library: LibraryModule[],
+  have: Map<string, { path: string; size: number; hash: string }>,
+  selected: Set<string>,
+  emit: Emit,
+): Promise<void> {
+  for (const id of ids) {
+    const m = by.get(id)!;
+    const others = library
+      .filter(
+        (o) =>
+          o.path !== m.path &&
+          selected.has(o.path.split('/').pop()!.slice(0, 27)) &&
+          have.get(o.path)?.hash === o.hash &&
+          have.get(o.path)?.size === o.file_size,
+      )
+      .map((o) => ({ name: o.label, bytes: o.bytes }));
+    const there = have.get(m.path);
+    let old: Uint8Array | undefined;
+    if (there && !(there.size === m.file_size && there.hash === m.hash)) {
+      try {
+        old = await readStoreFile(s, m.path);
+      } catch {
+        old = undefined;
+      }
+    }
+    for (const text of keyWarnings(m.label, m.bytes, others, old)) emit({ event: 'keys', id, text });
+  }
+}
+
+/**
  * For each of `ids`, in order: upload unless the card has the same file hash (a `skip` event), then VERIFY (the device hashes the file from a
  * fresh read of the card; a mismatch is an error). Nothing else: the device's selection is not touched.
  *
@@ -890,6 +929,9 @@ export async function install(
     }
   }
   const have = new Map((await listModules(s, info)).map((c) => [c.path, c]));
+  // the modules of the device's selection (the next boot loads them together with the new file): LOADS names them by file name
+  const selected = new Set(hasCap(info, 'LOADS') ? (await s.loadStates()).map((x) => x.name) : []);
+  await warnAboutKeys(s, ids, by, library, have, selected, emit);
   const uploaded: string[] = [];
   const onCard: string[] = [];
   for (const id of ids) {

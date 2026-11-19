@@ -70,6 +70,10 @@ pub static mut DKRT_PATHS: [[u8; 64]; MAX_MODULES] = [[0; 64]; MAX_MODULES];
 /// The address of each module record's `menu` (0: none), apart from `State` for the same reason.
 #[no_mangle]
 pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
+/// The menu objects built for each module record (`dkrt_menu_built`): a menu keeps pointers into the module's code and data, so a module with one is not unloaded or
+/// reloaded. Cleared when a module loads into the record.
+#[no_mangle]
+pub static mut DKRT_MENU_OBJS: [u8; MAX_MODULES] = [0; MAX_MODULES];
 /// Bit 31 of the `.dkm` header word at 0x30: the module was built with `DK_TRACE`; the other bits are the runtime version it needs.
 pub const FLAG_TRACE: u32 = 1 << 31;
 /// Whether this runtime loads a module that needs runtime version `needs` (the header word at 0x30, packed major << 16 | minor << 8 | patch,

@@ -3,7 +3,7 @@
 use crate::platform::st;
 use crate::PLATFORM;
 use dkrt_abi::platform::Platform;
-use crate::state::{init_once, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_PATHS};
+use crate::state::{init_once, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
 use crate::{boot, dlog, dsp, entry, loader, scan, settings};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
@@ -49,6 +49,35 @@ pub unsafe extern "C" fn dkrt_poll_add(f: usize) -> i32 {
     t[free] = f;
     (*addr_of_mut!(DKRT_POLL_OWNER))[free] = poll_owner(f);
     OK
+}
+
+/// A menu object was built for the module that holds `code`, else `data` (`dkrt_menu_built`): that module has one more menu, so it is not unloaded or reloaded
+/// (`reload::refusal`). Neither address in a module (a menu of the firmware image, of the DIGIKIT menu): no effect. UI task.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_menu_built(code: usize, data: usize) {
+    if let Some(rec) = menu_owner(code, data) {
+        let n = &mut (*addr_of_mut!(DKRT_MENU_OBJS))[rec];
+        *n = n.saturating_add(1);
+    }
+}
+
+/// The matching undo of `dkrt_menu_built` (`dkrt_menu_release`): the module that holds `code`, else `data`, has one menu less; the count stops at 0, so a release after a load
+/// into the record (which starts the count at 0) changes nothing. UI task.
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_menu_release(code: usize, data: usize) {
+    if let Some(rec) = menu_owner(code, data) {
+        let n = &mut (*addr_of_mut!(DKRT_MENU_OBJS))[rec];
+        *n = n.saturating_sub(1);
+    }
+}
+
+/// The module record that owns a menu of `code`, else of `data`; `None` when neither address is in a module.
+unsafe fn menu_owner(code: usize, data: usize) -> Option<usize> {
+    let mut rec = poll_owner(code);
+    if rec == POLL_OWNER_RUNTIME {
+        rec = poll_owner(data);
+    }
+    (rec != POLL_OWNER_RUNTIME).then_some(rec as usize)
 }
 
 /// The module record whose loaded range holds `f`, or `POLL_OWNER_RUNTIME`.

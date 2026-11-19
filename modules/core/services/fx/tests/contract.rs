@@ -13,7 +13,9 @@ use dkrt_svc_fx::build::{self, ROUTE_MASTER, ROUTE_SEND};
 use dkrt_svc_fx::fxpage::{self, INFO_HASH};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::records::Fx;
-use dkrt_test_support::contract::{contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module};
+use dkrt_test_support::contract::{
+    contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module, ParkedKnobs,
+};
 use dkrt_test_support::FakeCore;
 
 /// The effect ids of the keys tables of the two modules (what `DK_FX_ID_GAIN` is the index of).
@@ -280,6 +282,7 @@ fn fixture(device: u32) -> Fixture {
             beside_b: false,
         }),
         rules: true,
+        parked_knobs: Some(parked_knobs()),
     }
 }
 
@@ -345,4 +348,104 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     let word = |off: usize| unsafe { dkrt_abi::mem::rd32(at.add(off)) };
     assert_eq!((word(0), word(4), word(8)), (0, 0, 0xffff_ffff));
     assert_eq!(unsafe { *at.add(12) }, 0);
+}
+
+const KIT_CELL: u32 = 0x7000;
+const KIT_A: u32 = 0x4000_1000;
+const KIT_B: u32 = 0x4000_3000;
+
+/// The live kit in the image: the cell `KIT_CELL` is the kit pointer cell of `fxpages_info` (word 19), and word `j` of effect row `k` lives at array index `8k + j`.
+fn with_kit(core: &mut FakeCore) {
+    let t = &mut core
+        .info_tables
+        .iter_mut()
+        .find(|(h, _)| *h == INFO_HASH)
+        .unwrap()
+        .1;
+    t[19] = KIT_CELL;
+    let bytes = unsafe { core::slice::from_raw_parts_mut(t.as_mut_ptr() as *mut u8, 4 * t.len()) };
+    for i in 0..24 {
+        bytes[80 + i] = i as u8;
+    }
+}
+
+/// `image` with a live kit.
+fn image_with_kit(core: &mut FakeCore) {
+    image(core);
+    with_kit(core);
+}
+
+/// A live kit: the first effect word's index, the kit array, and the mark the pages put in it.
+fn kit_array(kit: u32) -> u32 {
+    kit + 0x14
+}
+
+/// The hooks of the contract's case 13: the knob of effect row 0 in the live kit (`KIT_CELL` holds kit `KIT_A` or `KIT_B`), and the firmware's kit-load count.
+fn parked_knobs() -> ParkedKnobs {
+    ParkedKnobs {
+        image: with_kit,
+        kit: |core, n| unsafe { core.wr(KIT_CELL, if n == 0 { KIT_A } else { KIT_B }) },
+        get: |core| unsafe { core.rd16(kit_array(core.rd(KIT_CELL))) },
+        set: |core, v| unsafe { core.wr16(kit_array(core.rd(KIT_CELL)), v) },
+        kit_loaded: |_| unsafe {
+            let n = core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD);
+            core::ptr::write_volatile(n, core::ptr::read_volatile(n) + 1);
+        },
+        kit_reset: || unsafe {
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(fxpage::DKRT_FXP_NLOAD), 0)
+        },
+    }
+}
+
+/// An effect with a send route that is reloaded gets its send cell back with the module (the unload gives the cell and the page row back, the load takes them again).
+/// Docs: docs/plans/extension-model.md, E5b.
+#[test]
+fn a_reloaded_effect_gets_its_send_cell_and_page_row_back() {
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Fx>::new(&f);
+    unsafe {
+        // the effect with the default route "send": a send cell
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(fxsend::used(), 1, "the effect has its send cell");
+        l.core.live_op.set(1);
+        assert_eq!(
+            <Fx as dkrt_abi::service::Service<FakeCore>>::teardown_refusal(&l.core, 1),
+            dkrt_sdk::OK,
+            "an effect with a send route is torn down"
+        );
+        l.unload(0);
+        assert_eq!(fxsend::used(), 0, "the cell is given back with the module");
+        assert_eq!(fxpage::page_owner(0), 0);
+        l.core.live_op.set(0);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!(fxsend::used(), 1, "the route comes back");
+        assert_eq!(fxpage::page_owner(0), 1);
+        l.unload(0);
+    }
+}
+
+/// The parked values are stamped for each row with the module's name, the effect id and the kit (the contract's case 13 covers the module and kit parts): the removal
+/// of another module's effect later does not refresh the stamp of a row that was parked before a kit was loaded.
+#[test]
+fn the_removal_of_another_effect_does_not_refresh_the_stamp_of_a_parked_row() {
+    let _g = locked();
+    let mut f = fixture(DT2.id);
+    f.image = image_with_kit;
+    let l = Lifecycle::<Fx>::new(&f);
+    let k = parked_knobs();
+    unsafe {
+        (k.kit)(&l.core, 0);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        let default = (k.get)(&l.core);
+        assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+        (k.set)(&l.core, 0x1234);
+        l.unload(0);
+        (k.kit_loaded)(&l.core);
+        l.unload(1);
+        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+        assert_eq!((k.get)(&l.core), default, "a kit was loaded after the row was parked: the removal of another effect does not refresh its stamp");
+        l.unload(0);
+        (k.kit_reset)();
+    }
 }

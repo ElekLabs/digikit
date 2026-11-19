@@ -48,6 +48,7 @@ unsafe fn reset(now: u32, step: u32) {
     TICKED = 0;
     (*addr_of_mut!(EMITS)).clear();
     *crate::st() = core::mem::zeroed();
+    *addr_of_mut!(crate::state::DKRT_MENU_OBJS) = [0; crate::state::MAX_MODULES];
     let mut i = 0;
     while i < POLLS {
         (*addr_of_mut!(DKRT_POLLS))[i] = 0;
@@ -236,6 +237,97 @@ fn a_poll_slot_records_the_module_that_registered_it() {
         assert_eq!(crate::dkrt_poll_add(0x1020), OK);
         assert_eq!(crate::report::debug_poll(0, &mut f), 2);
         assert_eq!(f, 0x1020);
+        reset(0, 5);
+    }
+}
+
+/// `dkrt_menu_built` counts a menu for the module record that holds the fill function, else the descriptor; an address in no module counts for none.
+#[test]
+fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        let s = crate::st();
+        for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
+            s.modules[rec].used = 1;
+            s.modules[rec].base = base;
+            s.modules[rec].size = 0x100;
+        }
+        let n = |rec: usize| core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec]));
+        crate::dkrt_menu_built(0x1010, 0x2010);
+        assert_eq!((n(1), n(3)), (1, 0), "the fill function decides");
+        crate::dkrt_menu_built(0x9000, 0x2010);
+        assert_eq!((n(1), n(3)), (1, 1), "no module holds the fill function: the descriptor does");
+        crate::dkrt_menu_built(0x9000, 0x9100);
+        assert_eq!((n(1), n(3)), (1, 1), "a menu of the firmware image counts for no module");
+        reset(0, 5);
+    }
+}
+
+/// The DIGIKIT menu holds a module while its SETTINGS page is open (`dkrt_menu_built` with the module's `menu` function) and gives the hold back when the page is left
+/// (`dkrt_menu_release`): the job refuses the module while the count is above 0 (`menu_built`, the fact `reload::refusal` turns into `E_RELOAD_MENUS`, and the read before the teardown),
+/// a release lets it through, releases never take the count below 0, and a load into the record starts at 0, so a release that arrives after it changes nothing.
+#[test]
+fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
+    use crate::reload::{Ops, RealOps};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        let s = crate::st();
+        for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
+            s.modules[rec].used = 1;
+            s.modules[rec].base = base;
+            s.modules[rec].size = 0x100;
+        }
+        let n = |rec: usize| core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec]));
+        let mut ops = RealOps;
+        crate::dkrt_menu_built(0x1020, 0); // the page opens: the module's menu function is the code address
+        assert!(ops.menu_built(1) && !ops.menu_built(3), "held: the job refuses module 1 only");
+        crate::dkrt_menu_release(0x1020, 0); // the page is left
+        assert!(!ops.menu_built(1), "released: the job goes on");
+        // a menu object the module built itself and the page hold together: both must go
+        crate::dkrt_menu_built(0x1010, 0x2000);
+        crate::dkrt_menu_built(0x1020, 0);
+        crate::dkrt_menu_release(0x1020, 0);
+        assert_eq!(n(1), 1, "the module's own menu object still holds it");
+        // releases past 0 stay at 0; an address in no module counts for nothing
+        crate::dkrt_menu_release(0x1020, 0);
+        crate::dkrt_menu_release(0x1020, 0);
+        crate::dkrt_menu_release(0x9000, 0x9100);
+        assert_eq!((n(1), n(3)), (0, 0), "the count stops at 0");
+        // a load into the record reset the count to 0: the release of the old page does not go below
+        crate::dkrt_menu_built(0x2020, 0);
+        crate::state::DKRT_MENU_OBJS[3] = 0; // `set_menu` at a load
+        crate::dkrt_menu_release(0x2020, 0);
+        assert_eq!(n(3), 0);
+        reset(0, 5);
+    }
+}
+
+/// The live job reads the count of its own record again before the teardown (`RealOps::menu_built`): a menu built for another module does not end it, one for its module does,
+/// a record number past the table is no menu, and the count does not wrap after many menus.
+#[test]
+fn the_job_reads_the_menu_count_of_its_own_record() {
+    use crate::reload::{Ops, RealOps};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        let s = crate::st();
+        for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
+            s.modules[rec].used = 1;
+            s.modules[rec].base = base;
+            s.modules[rec].size = 0x100;
+        }
+        let mut ops = RealOps;
+        assert!(!ops.menu_built(1) && !ops.menu_built(3), "no menu yet");
+        crate::dkrt_menu_built(0x2010, 0);
+        assert!(!ops.menu_built(1), "a menu of module 3 is no menu of module 1");
+        assert!(ops.menu_built(3));
+        assert!(!ops.menu_built(crate::MAX_MODULES), "a record past the table has no menu");
+        for _ in 0..300 {
+            crate::dkrt_menu_built(0x1010, 0);
+        }
+        assert!(ops.menu_built(1), "the count stays at its top and does not wrap to 0");
         reset(0, 5);
     }
 }

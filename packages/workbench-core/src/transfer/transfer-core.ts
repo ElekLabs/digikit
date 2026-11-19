@@ -157,6 +157,8 @@ export function eventText(e: TransferEvent): string {
       return `Uploading ${e.kind === 'service' ? (e.path ?? e.id) : e.id}`;
     case 'refuse':
       return serviceRefusalText(e.refusal!);
+    case 'keys':
+      return String(e.text);
     case 'keep':
       return `Kept ${e.path} (${(e.by ?? []).join(', ')} needs it)`;
     case 'rename':

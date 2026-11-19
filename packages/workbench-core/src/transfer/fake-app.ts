@@ -55,6 +55,7 @@ const stubNeeds: NeedsLike = {
   read: () => ({ error: 'stub needs reader' }),
   of: () => null,
   fit: () => ({ each: [], set: null, line: '' }),
+  keys: () => ({ repeat: null, shared: null, missing: null }),
 };
 
 /** `env` replaces parts of the stub environment; `storage` and `sessions` replace the fakes (the app's own are returned). */

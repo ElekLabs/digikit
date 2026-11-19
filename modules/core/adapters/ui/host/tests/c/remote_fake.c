@@ -1,5 +1,6 @@
 /* Host test of digikit/remote's settings: the module's own C source, compiled here with fakes of core/input and of the runtime's
    imports (the new entry of <dk/core/module.h>). The fake <dk/platform/ui.h> (src/lib.rs) shows the page, and modules/core/adapters/ui/host/tests/remote.rs presses the keys. */
+#include <string.h>
 #include "../../../../../../tools/remote/src/c/remote.c"
 
 static dk_host_cmd_fn *handlers[256];
@@ -71,6 +72,17 @@ static void fill_page(dk_ui_menu *m, void *arg)
 
 static const dk_ui_menu_desc page = {
     .name = "RemoteSettings", .title = "REMOTE CONTROL", .fill = fill_page};
+
+/* The module's state back to a fresh load (the fake includes remote.c): the keys held, the last command and the fake's counters, so the tests do not depend on their order. */
+void r_reset(void)
+{
+    memset(held, 0, sizeof held);
+    memset(pending, 0, sizeof pending);
+    memset(stamp, 0, sizeof stamp);
+    last_is(0, 0, 0, 0);
+    key_calls = 0;
+    next_result = 0;
+}
 
 int r_init(void)
 {

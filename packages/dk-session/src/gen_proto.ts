@@ -151,7 +151,7 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-26, 'E_TYPE_IN_USE', 'reserved (hot reload is archived); never returned'],
   [-27, 'E_DECL_ID', 'a builder call names a machine or effect id that the keys table of the header lacks'],
   [-28, 'E_DECL_USES', 'init declared more machine, param or page rows than the [uses] counts of the header say'],
-  [-29, 'E_FX_ID_DUP', 'an effect id of the module is already loaded (or twice in the module)'],
+  [-29, 'E_FX_ID_DUP', 'reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned'],
   [-30, 'E_NO_DSP', 'DSP code in the file, no DSP loader in the image'],
   [-31, 'E_DSP_FORMAT', 'the DSP section is malformed'],
   [-32, 'E_DSP_IMPORT', 'a DSP symbol is not exported by the image'],
@@ -205,7 +205,7 @@ export const LOAD_STATUS: [number, string, string][] = [
     "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
   ],
   [-84, 'E_RELOAD_MENUS', 'reload refused: the module built menus of its own'],
-  [-85, 'E_RELOAD_ROUTED', 'reload refused: the module has a published effect row (no effect teardown yet)'],
+  [-85, 'E_RELOAD_ROUTED', "reload refused: a service cannot give back the module's state now"],
   [-86, 'E_RELOAD_KEYS', 'reload refused: the new file lacks a key of the file it replaces'],
   [-87, 'E_RELOAD_RETAINED', 'reload refused: the DSP loader holds a module it could not release; restart the device'],
 ];

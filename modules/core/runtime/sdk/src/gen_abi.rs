@@ -700,6 +700,12 @@ pub mod sig {
     /// Remove a function added with dkrt_poll_add; no effect when it is not in the table.
     pub type dkrt_poll_remove = unsafe extern "C" fn(f: usize);
 
+    /// A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect.
+    pub type dkrt_menu_built = unsafe extern "C" fn(code: usize, data: usize);
+
+    /// Undo one dkrt_menu_built for the same addresses: the module record whose loaded range holds `code`, else `data`, owns one menu less (it stops at 0; a load into the record starts it at 0). The DIGIKIT menu holds a module while the module's SETTINGS page is open (dkrt_menu_built with the module's `menu` function: the page's rows point into the module's code) and releases it when the page is left, so a module is not unloaded or reloaded while its page is open.
+    pub type dkrt_menu_release = unsafe extern "C" fn(code: usize, data: usize);
+
     /// Look a store file up by path (NUL-terminated) and fill out: OK, E_NOT_FOUND (no store, no such file, a folder), or a card error. It reads the store headers and scans the table through the runtime's staging buffer, so call it only at the start of a load, not while a staged module read is in progress. A file of size 0 is found.
     pub type dkrt_store_stat = unsafe extern "C" fn(path: *const u8, out: *mut DkrtStoreFile) -> i32;
 

@@ -54,6 +54,39 @@ pub fn needs_json(f: &[u8]) -> Result<serde_json::Value> {
     Ok(serde_json::Value::Object(o))
 }
 
+/// The keys of the header table of a file (the bytes at `H_REG_OFF`, `H_REG_SIZE`): no hash check, as `needs` has none (the card's files are read the same way).
+fn keys_of(f: &[u8]) -> Result<dkneeds::keys::Keys<'_>> {
+    if f.len() < dkneeds::HEADER as usize || get(f, dkneeds::H_MAGIC as usize) != MAGIC {
+        return Err(err!("not a .dkm file (magic)"));
+    }
+    let off = get(f, dkneeds::H_REG_OFF as usize) as usize;
+    let size = get(f, dkneeds::H_REG_SIZE as usize) as usize;
+    let table = off
+        .checked_add(size)
+        .and_then(|end| f.get(off..end))
+        .ok_or_else(|| err!("the header table is outside the file"))?;
+    dkneeds::keys::Keys::parse(table).map_err(|e| err!("header table: {e:?}"))
+}
+
+/// The key rules of a file against another, as JSON, for the workbench before an upload: `repeat` is the first (kind, key) that `new` provides twice (the planner
+/// refuses it with `E_PLAN_KEY`); with `other` not empty, `shared` is the first (kind, key) that both files provide (two modules of one selection: `E_PLAN_KEY` at
+/// the next boot) and `missing` the first that `other` provides and `new` does not (`other` is the old version of the same module: a reload refuses a file that
+/// lacks it, `E_RELOAD_KEYS`). Each is `null` or `{kind, key}`.
+pub fn keys_check_json(new: &[u8], other: &[u8]) -> Result<serde_json::Value> {
+    use serde_json::{Value, json};
+    let pair = |p: Option<(u32, u32)>| {
+        p.map_or(Value::Null, |(kind, key)| json!({"kind": kind, "key": key}))
+    };
+    let a = keys_of(new)?;
+    let (shared, missing) = if other.is_empty() {
+        (None, None)
+    } else {
+        let b = keys_of(other)?;
+        (a.first_shared_key(&b), b.first_missing_key(&a))
+    };
+    Ok(json!({"repeat": pair(a.first_repeat()), "shared": pair(shared), "missing": pair(missing)}))
+}
+
 // header field offsets
 pub const H_MAGIC: usize = dkneeds::H_MAGIC as usize;
 pub const H_FORMAT: usize = dkneeds::H_FORMAT as usize;
@@ -1289,6 +1322,57 @@ mod tests {
             .unwrap()
             .needs()
             .collect()
+    }
+
+    /// A packed file whose KEYS are `groups` (kind, keys).
+    fn file_with_keys(groups: &[(u32, &[u32])]) -> Vec<u8> {
+        use dkneeds::keys::{KeyGroup, Table, table_size, write_table};
+        let g: Vec<KeyGroup> = groups
+            .iter()
+            .map(|(kind, keys)| KeyGroup { kind: *kind, keys })
+            .collect();
+        let t = Table {
+            keys: &g,
+            ..Table::default()
+        };
+        let mut reg = vec![0u8; table_size(&t)];
+        write_table(&t, &mut reg).unwrap();
+        pack_keys(Some(&object()), &reg, &[], &opts()).unwrap()
+    }
+
+    #[test]
+    fn the_key_check_names_a_repeated_a_shared_and_a_dropped_key() {
+        use serde_json::json;
+        let m = dkneeds::KIND_MACHINE;
+        let old = file_with_keys(&[(m, &[1, 2, 3])]);
+        let same = keys_check_json(&old, &[]).unwrap();
+        assert_eq!(
+            same,
+            json!({"repeat": null, "shared": null, "missing": null})
+        );
+        // a file that provides a key twice, in one group
+        let twice = file_with_keys(&[(m, &[1, 2, 2])]);
+        assert_eq!(
+            keys_check_json(&twice, &[]).unwrap()["repeat"],
+            json!({"kind": m, "key": 2})
+        );
+        // another module that has a key of the file: the first of the new file's keys the other has
+        let other = file_with_keys(&[(m, &[9, 3, 8])]);
+        let r = keys_check_json(&old, &other).unwrap();
+        assert_eq!(r["shared"], json!({"kind": m, "key": 3}));
+        // the old version has a key the new file lacks: the first such key of the old file
+        let new = file_with_keys(&[(m, &[1, 3, 4])]);
+        let r = keys_check_json(&new, &old).unwrap();
+        assert_eq!(r["missing"], json!({"kind": m, "key": 2}));
+        assert_eq!(
+            keys_check_json(&old, &new).unwrap()["missing"],
+            json!({"kind": m, "key": 4})
+        );
+        // the same key of another kind is another key
+        let fx = file_with_keys(&[(dkneeds::KIND_EFFECT, &[3])]);
+        assert_eq!(keys_check_json(&old, &fx).unwrap()["shared"], json!(null));
+        // not a .dkm
+        assert!(keys_check_json(b"nope", &[]).is_err());
     }
 
     #[test]

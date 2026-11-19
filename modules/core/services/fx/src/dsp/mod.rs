@@ -238,6 +238,20 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     OK
 }
 
+/// The effect rows (below the image's limit) that the module being reloaded owns (`CoreApi::live_op`: its record + 1; 0 when no live job runs).
+unsafe fn own_rows<C: CoreApi>(core: &C) -> u32 {
+    let (d, op, limit) = (core.dsp(), core.live_op() as u8, fx_free_rows(core));
+    let mut n = 0;
+    let mut k = 0;
+    while op != 0 && k < MAX_FX {
+        if d.fx_owner[k] == op && (k as u32) < limit {
+            n += 1;
+        }
+        k += 1;
+    }
+    n
+}
+
 /// DSP section: the image must have the chain's table, and a free row for each record.
 pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
     let nfx = sec.nfx;
@@ -247,7 +261,9 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         if core.fx_info().is_null() {
             return E_NO_DSP;
         }
-        let r = capacity::dsp_rows(nfx, capacity::free_rows(&d.fx_owner, fx_free_rows(core)));
+        // the module being reloaded (`CoreApi::live_op`) still owns its rows at the check: the teardown that comes before the load frees them, so they count as free
+        let free = capacity::free_rows(&d.fx_owner, fx_free_rows(core)) + own_rows(core);
+        let r = capacity::dsp_rows(nfx, free);
         if r != OK {
             return r;
         }

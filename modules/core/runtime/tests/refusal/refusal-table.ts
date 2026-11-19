@@ -29,7 +29,6 @@ const COMMIT = 'modules/core/runtime/tests/capacity/commit.device.test.ts';
 const NEEDS = 'modules/core/apps/digikit-menu/tests/needs.device.test.ts';
 const SAFE = 'modules/core/runtime/tests/safe-mode.device.test.ts';
 const COLLECT = 'modules/core/runtime/src/rs/src/collect/tests.rs';
-const FX_BUILD = 'modules/core/services/fx/tests/build.rs';
 const MACHINES_BUILD = 'modules/core/services/machines/tests/build.rs';
 const CAP_RS = 'modules/core/runtime/sdk/src/capacity/tests.rs';
 const STORE_RS = 'modules/core/runtime/sdk/src/store/tests.rs';
@@ -73,7 +72,7 @@ export const ROWS: Record<string, Row> = {
   E_TYPE_IN_USE: { kind: 'reserved', reason: 'hot reload is archived; never returned' },
   E_DECL_ID: { fail: { file: COMMIT, test: 'a machine index that the keys table lacks is E_DECL_ID' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_DECL_USES: { fail: { file: COMMIT, test: 'more rows than [uses] is E_DECL_USES' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
-  E_FX_ID_DUP: { kind: 'host', reason: 'the boot plan refuses a repeated effect id first (E_PLAN_KEY); the commit check stays until a run-time load runs the planner (E5)', covered: [{ file: FX_BUILD, test: 'commit_refuses_an_unknown_id_an_id_another_loaded_module_has_and_an_id_twice' }] },
+  E_FX_ID_DUP: { kind: 'reserved', reason: 'the planner refuses a repeated effect id (E_PLAN_KEY) at the boot and at a live load or reload (plan.rs `an_effect_id_a_live_module_has_is_refused_like_any_key`); never returned' },
   E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: MACHINES_BUILD, test: 'E_DECL_FULL' }] },
   E_PLAN_KIND: { fail: mine('keys for a kind nobody owns are refused'), pass: loads },
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },
@@ -110,7 +109,7 @@ export const ROWS: Record<string, Row> = {
   E_SVC_ABI: { fail: { file: LFO_DEVICE, test: 'another ABI' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
   E_RELOAD_PLAYING: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it; `reload.device.test.ts` drives it on both devices (the transport plays)', covered: [{ file: RELOAD_RS, test: 'playing_paused_mixed_or_unreadable' }] },
   E_RELOAD_MENUS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_refusals_come_in_the_documented_order' }] },
-  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_services_refuse_after_the_generic_refusals' }, { file: 'modules/core/services/fx/tests/records.rs', test: 'a_reload_is_refused_while_the_module_has_a_published_effect_row' }] },
+  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_services_refuse_after_the_generic_refusals' }] },
   E_RELOAD_RETAINED: { kind: 'host', reason: 'only a DSP loader that could not clear rows causes it', covered: [{ file: RELOAD_RS, test: 'a_retained_dsp_refuses_at_the_queue' }] },
   E_RELOAD_KEYS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: 'packages/dkneeds/src/keys.rs', test: 'a_reload_may_add_keys_but_not_drop_one' }] },
 };

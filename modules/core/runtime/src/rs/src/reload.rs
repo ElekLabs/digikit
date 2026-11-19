@@ -46,13 +46,14 @@ pub struct Facts {
     pub upload_open: bool,
     /// A card transfer or a store job is in flight.
     pub card_busy: bool,
-    /// The module built menus of its own (its header names a menu entry): they keep pointers into its code.
+    /// A menu object was built for the module (`dkrt_menu_built`: it called `dk_ui_menu_new`, or the DIGIKIT menu holds it while its SETTINGS page is open until `dkrt_menu_release`; the DIGIKIT menu's own menus count for no content module): the menu keeps
+    /// pointers into the module's code and data.
     pub menus: bool,
 }
 
 /// The refusal of a live job (a load, an unload or a reload), or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
 /// readable), an open upload, card operations, menus of the module (`Facts::menus`: false for a load, which has no module yet). The first that holds names the status.
-/// The services' own refusals (`Service::teardown_refusal`, for example an effect on a route) come after it, for an unload and a reload: `refusal_with_services`.
+/// The services' own refusals (`Service::teardown_refusal`: a service that cannot give back the module's state now) come after it, for an unload and a reload: `refusal_with_services`.
 pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {
         return Some(E_SAFE_MODE);
@@ -107,6 +108,9 @@ pub trait Ops {
     unsafe fn quiesce(&mut self, rec: usize) -> i32;
     /// `Loader::reload_abort`: the old module gets its tick and commands back; false when its `fini` ran.
     unsafe fn abort(&mut self, rec: usize) -> bool;
+    /// Was a menu object built for module record `rec` since the refusal was read (`dkrt_menu_built`)? The drain lasts many UI passes, and a menu built meanwhile points into the
+    /// module's code, so the job asks again right before the teardown.
+    unsafe fn menu_built(&mut self, rec: usize) -> bool;
     /// `Loader::unload_rec`.
     unsafe fn unload(&mut self, rec: usize) -> i32;
     /// Does the DSP loader hold a module it could not release? Permanent until the next boot.
@@ -343,6 +347,12 @@ impl Job {
                 self.end(o, r, false);
             }
         } else if self.step == step::UNLOAD {
+            if !self.torn && o.menu_built(self.rec) {
+                // a page of the module's menus was built during the drain: nothing was freed, the old module gets its tick and commands back
+                o.abort(self.rec);
+                self.end(o, E_RELOAD_MENUS, false);
+                return;
+            }
             let r = o.unload(self.rec);
             if r == OK {
                 self.torn = true;
@@ -467,7 +477,7 @@ impl Ops for RealOps {
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
         let menus = match rec {
-            Some(r) => core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENUS[r])) != 0,
+            Some(r) => core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[r])) != 0,
             None => false,
         };
         let f = Facts {
@@ -496,6 +506,9 @@ impl Ops for RealOps {
     }
     unsafe fn abort(&mut self, rec: usize) -> bool {
         crate::loader::reload_abort(rec)
+    }
+    unsafe fn menu_built(&mut self, rec: usize) -> bool {
+        rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec])) != 0
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
         crate::loader::unload_rec(rec)
@@ -668,11 +681,13 @@ mod tests {
         now: Option<u32>,
         /// The block clock never advances.
         stalled: bool,
+        /// `menu_built` answers true from this many calls on (`u32::MAX`: never).
+        menu_after: u32,
     }
 
     impl Script {
         fn new() -> Script {
-            Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false }
+            Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX }
         }
     }
 
@@ -727,6 +742,15 @@ mod tests {
         unsafe fn abort(&mut self, _: usize) -> bool {
             self.log.push("abort");
             self.can_abort
+        }
+        unsafe fn menu_built(&mut self, _: usize) -> bool {
+            if self.menu_after == 0 {
+                return true;
+            }
+            if self.menu_after != u32::MAX {
+                self.menu_after -= 1;
+            }
+            false
         }
         unsafe fn unload(&mut self, _: usize) -> i32 {
             self.log.push("unload");
@@ -933,6 +957,22 @@ mod tests {
         assert!(!s.torn_seen, "before fini the old module is live");
         assert_eq!(s.log.iter().filter(|l| **l == "finish failed").count(), 1);
         assert!(!s.phase_on);
+    }
+
+    /// The drain lasts many passes: a menu built for the module meanwhile (its settings page opened) ends the job before the teardown, for an unload and a reload, and the old module stays.
+    #[test]
+    fn a_menu_built_during_the_drain_gives_the_old_module_back() {
+        for op in [LIVE_RELOAD, LIVE_UNLOAD] {
+            let mut s = Script::new();
+            s.quiesce_busy = 3;
+            s.menu_after = 2; // not at the first pass of the unload step, then yes
+            s.unload_busy = 5;
+            assert_eq!(run_op(&mut s, op), (2, E_RELOAD_MENUS, step::DONE), "op {op}");
+            assert!(s.log.contains(&"abort") && !s.log.contains(&"load"));
+            assert!(!s.torn_seen);
+            assert!(!s.phase_on);
+            assert_eq!(s.log.iter().filter(|l| **l == "finish failed").count(), 1);
+        }
     }
 
     #[test]

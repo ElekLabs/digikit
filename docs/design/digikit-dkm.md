@@ -107,6 +107,8 @@ Who calls it: the DIGIKIT menu (`modules/core/apps/digikit-menu`, on the card's 
 The rule that compares the needs with a device is `fits_now` (docs/plans/what-fits.md; `dkrt_fit` in `modules/core/runtime/fit`, vectors in `modules/core/runtime/vectors/fit-vectors.json`; the compare and the needs are each written once, in Rust: the web app calls the compare through `pk_fit` and the tools through `patchkit fit --json -`): the staging buffer holds the file, a module record and a selection path are free,
 the DSP range (with up to `DSP_ALIGN - 8` bytes for alignment) is at most the largest free range, the arena holds the module's block and the block of its DSP image together (each block at most the largest free block), and every row count is at most
 limit - used. A kind that a device's CAPACITY lacks is not judged.
+
+The key rules (`Keys::first_repeat`, `first_shared_key`, `first_missing_key`: the planner's and the reload's) are asked by the Transfer page before an upload through `pk_keys_check` of `patchkit.wasm` (`keyWarnings` in `packages/workbench-core/src/modules/fit.ts`): a key the file has twice, a key of another module that is on the card, a key of the version on the card that the new file lacks. They show as `keys` events of the install, which only warn: the device refuses the module itself.
 The `inferred needs` tests of `modules/core/runtime/tests/capacity/inferred/inferred-needs.device.test.ts` (full tier) load a set of run-time modules and fixtures alone, coupled, and compare
 CAPACITY and MODULES with `needs_of` of the file (rows of a DSP module come in after the DSP acknowledges). The Rust tests of `dkneeds` cover the arithmetic and malformed files (truncated sections, absurd counts, every cut of a file).
 

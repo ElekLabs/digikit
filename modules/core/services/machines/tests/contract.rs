@@ -339,6 +339,7 @@ fn fixture(device: u32) -> Fixture {
             beside_b: true,
         }),
         rules: true,
+        parked_knobs: None,
     }
 }
 

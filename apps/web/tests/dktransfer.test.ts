@@ -343,6 +343,40 @@ test('install: skip the same file hash, upload the rest with capped progress, VE
   );
 });
 
+test('install: a key rule the new file breaks is a `keys` warning before the upload, and the upload goes on', async () => {
+  const dev = new FakeDevice();
+  const a = dkm('x/a', { machine: 1, size: 900 });
+  const b = dkm('x/b', { machine: 1, size: 900, salt: 3 });
+  const c = dkm('x/c', { machine: 1, size: 900, salt: 5 });
+  const pathA = modulePath('x/a', 'Machines'); // modules/<kind>/<author>-<name>.dkm
+  dev.files.set(pathA, a); // on the card already
+  dev.files.set(modulePath('x/c', 'Machines'), c); // on the card, not in the selection
+  dev.loadFailures = [{ name: pathA.split('/').pop()!, result: 0, state: 1 }]; // LOADS: the selection holds a
+  // the Rust rules run in dkneeds.wasm.test.ts; here a reader that finds one shared key with any other file
+  setFitReader({
+    ...everythingFits,
+    keys: (_bytes, other) => ({ repeat: null, shared: other ? { kind: 2, key: 0x00a10100 } : null, missing: null }),
+  });
+  try {
+    const events: any[] = [];
+    const out = await install(
+      session(dev),
+      ['x/b'],
+      [(await libraryModule(a, needsOf))!, (await libraryModule(b, needsOf))!, (await libraryModule(c, needsOf))!],
+      (e) => events.push(e),
+    );
+    assert.deepEqual(out.uploaded, ['x/b']);
+    const keys = events.filter((e) => e.event === 'keys');
+    assert.deepEqual(
+      keys.map((e) => [e.id, e.text]),
+      [['x/b', 'b and a both have the machine key 0x00a10100: the second is refused at the next boot']],
+    );
+    assert.ok(events.findIndex((e) => e.event === 'keys') < events.findIndex((e) => e.event === 'upload'));
+  } finally {
+    setFitReader(everythingFits);
+  }
+});
+
 test('install: a VERIFY that does not match is an error', async () => {
   const dev = new FakeDevice();
   dev.corrupt = true;

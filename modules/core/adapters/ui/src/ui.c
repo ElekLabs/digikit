@@ -694,6 +694,8 @@ dk_ui_menu *dk_ui_menu_new(dk_ui *ui, const dk_ui_menu_desc *d)
                                                    : K_MENU;
     if (!build_menu(m, d))
         return 0; /* the partly built objects stay: the firmware heap is not given back */
+    /* the menu keeps d, its fill and its arg: the runtime does not unload or reload the module that owns them */
+    dkrt_menu_built((uintptr_t)d->fill, (uintptr_t)d);
     return m;
 }
 
