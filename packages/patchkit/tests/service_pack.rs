@@ -434,3 +434,44 @@ fn a_dsp_fill_without_a_dsp_object_for_the_device_is_refused() {
     assert!(e.contains("no DSP section that defines it"), "{e}");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// The lfo service is one file for every device: the fills of the other device's slots stay in it under a device mask in the flags of their `SLOTS` items (the loader skips
+/// them), so the packs for the two devices are the same bytes.
+#[test]
+fn the_lfo_service_packs_to_the_same_file_for_every_device() {
+    if !toolchain() {
+        return;
+    }
+    let d = scratch("lfo-same");
+    let here = root();
+    let packs: Vec<Vec<u8>> = ["dt2", "dn2"]
+        .iter()
+        .map(|dev| {
+            pack_for(
+                &here,
+                "core/services/lfo",
+                dev,
+                &d.join(format!("lfo-{dev}.dks")),
+            )
+        })
+        .collect();
+    assert!(packs[0] == packs[1], "lfo.dks differs between the devices");
+    let keys_bytes = Dkm::parse(&packs[0]).unwrap().register;
+    let slots: Vec<_> = Keys::parse(&keys_bytes).unwrap().slots().collect();
+    assert_eq!(slots.len(), 12);
+    let masks: Vec<u32> = slots
+        .iter()
+        .map(|s| (s.flags & dkneeds::keys::SLOT_DEVICES_MASK) >> dkneeds::keys::SLOT_DEVICES_SHIFT)
+        .collect();
+    assert_eq!(
+        masks.iter().filter(|m| **m == 1).count(),
+        6,
+        "fills of the first device"
+    );
+    assert_eq!(
+        masks.iter().filter(|m| **m == 2).count(),
+        6,
+        "fills of the second device"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}

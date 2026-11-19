@@ -370,6 +370,29 @@ pub fn hook_device_mask(devices: &[String]) -> Result<u32> {
     Ok(mask)
 }
 
+/// The device mask of a `SLOTS` item, in place in the flags word: bit `id - 1` for each device with runtime id `id` (`[digikit] id`); no device is 0 (every device).
+pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
+    let all = crate::devdata::all();
+    let mut mask = 0u32;
+    for d in devices {
+        let id = all
+            .iter()
+            .find(|x| x.short == *d)
+            .and_then(|x| x.digikit_id)
+            .ok_or_else(|| {
+                err!(
+                    "slot device {d:?} is not a device the runtime runs on ({})",
+                    crate::devdata::short_list()
+                )
+            })?;
+        if !(1..=8).contains(&id) {
+            return Err(err!("slot device {d:?}: the runtime id {id} is not 1 to 8"));
+        }
+        mask |= 1 << (id - 1);
+    }
+    Ok(mask << dkneeds::keys::SLOT_DEVICES_SHIFT)
+}
+
 /// What a service file provides: the service name (`[module] service`) and the functions it exports (`[[export]]`), each a global function of the object.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Provided {
@@ -380,8 +403,8 @@ pub struct Provided {
     /// ([`hook_device_mask`]).
     pub hooks: Vec<(String, String, Vec<String>)>,
     /// The pointer slots the service fills (`[[fill]]`): (slot name of the image adapter, global function of the object whose address goes in the slot).
-    /// A `SLOTS` item of the table is the name hash and the entry offset. The third item lists the devices the fill is for (empty: every device); [`Provided::for_device`]
-    /// drops the others, because a slot that the image of another device lacks is an unknown slot to the loader.
+    /// A `SLOTS` item of the table is the name hash and the entry offset. The third item lists the devices the fill is for (empty: every device); they are the device mask in the
+    /// flags of the item ([`slot_device_flags`]), and the loader skips an item for another device, so one file serves every device.
     pub fills: Vec<(String, String, Vec<String>)>,
     /// The DSP slots the service fills (`[[fill]] space = "dsp"`): its dispatch code in the file's DSP section. The packer sets `offset` from the DSP object.
     pub dsp_fills: Vec<DspFill>,
@@ -399,10 +422,9 @@ pub struct DspFill {
 }
 
 impl Provided {
-    /// The service as packed for `device`: the fills limited to other devices are left out.
+    /// The service as packed for `device`: the DSP fills limited to other devices are left out (the DSP section is built from the object of this device; a ColdFire fill
+    /// keeps its device mask instead).
     pub fn for_device(mut self, device: &str) -> Provided {
-        self.fills
-            .retain(|(_, _, devs)| devs.is_empty() || devs.iter().any(|d| d == device));
         self.dsp_fills
             .retain(|f| f.devices.is_empty() || f.devices.iter().any(|d| d == device));
         self
@@ -699,7 +721,7 @@ fn pack_inner(
             }
             hk.sort_by_key(|p| p.a);
             let mut sl: Vec<dkneeds::keys::Slot> = vec![];
-            for (slot, entry, _) in &s.fills {
+            for (slot, entry, devices) in &s.fills {
                 let at = sym(entry)?.ok_or_else(|| {
                     err!("the service fills {slot} with {entry}, which the object does not define")
                 })?;
@@ -709,7 +731,7 @@ fn pack_inner(
                 }
                 sl.push(dkneeds::keys::Slot {
                     id,
-                    flags: 0,
+                    flags: slot_device_flags(devices)?,
                     entry: at,
                 });
             }
@@ -1276,28 +1298,51 @@ mod tests {
     }
 
     #[test]
-    fn a_fill_limited_to_a_device_is_in_the_pack_for_that_device_only() {
-        use dkneeds::keys::Keys;
+    fn a_fill_limited_to_a_device_stays_in_every_pack_with_the_device_mask_in_its_flags() {
+        use dkneeds::keys::{Keys, SLOT_DEVICES_MASK, SLOT_DEVICES_SHIFT};
         let o = object();
-        let slots_for = |device: &str| {
+        let flags_for = |device: &str| {
             let opts = Options {
                 service: Some(
                     Provided {
                         service: "svc-test".into(),
                         exports: vec![],
                         hooks: vec![],
-                        fills: vec![("frametype".into(), "tick_fn".into(), vec!["dn2".into()])],
+                        fills: vec![
+                            ("frametype".into(), "tick_fn".into(), vec!["dn2".into()]),
+                            ("other".into(), "tick_fn".into(), vec![]),
+                        ],
                         dsp_fills: vec![],
                     }
                     .for_device(device),
                 ),
                 ..opts()
             };
-            let d = Dkm::parse(&pack(&o, &opts).unwrap()).unwrap();
-            Keys::parse(&d.register).unwrap().slots().count()
+            let bytes = pack(&o, &opts).unwrap();
+            let d = Dkm::parse(&bytes).unwrap();
+            let mut f: Vec<(u32, u32)> = Keys::parse(&d.register)
+                .unwrap()
+                .slots()
+                .map(|s| (s.id, (s.flags & SLOT_DEVICES_MASK) >> SLOT_DEVICES_SHIFT))
+                .collect();
+            f.sort();
+            (bytes, f)
         };
-        assert_eq!(slots_for("dt2"), 0);
-        assert_eq!(slots_for("dn2"), 1);
+        let (a, fa) = flags_for("dt2");
+        let (b, fb) = flags_for("dn2");
+        assert_eq!(a, b, "one file for every device");
+        let mask_of = |name: &str| {
+            fa.iter()
+                .find(|x| x.0 == dkneeds::keys::name_hash(name))
+                .unwrap()
+                .1
+        };
+        assert_eq!((fa.len(), mask_of("other")), (2, 0));
+        assert_eq!(fa, fb);
+        assert_eq!(
+            mask_of("frametype"),
+            slot_device_flags(&["dn2".into()]).unwrap() >> SLOT_DEVICES_SHIFT
+        );
     }
 
     /// The table of a module whose KEYS name the record kinds `kinds` (one key each), packed as a `.dkm`.

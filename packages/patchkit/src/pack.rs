@@ -171,7 +171,7 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
         gate: false,
         service: crate::module::service_of(m)?,
     };
-    // a fill for a slot that only some devices have is left out of the file of the others
+    // a DSP fill is built from the DSP object of this device and is left out of the file of the others; a ColdFire fill keeps its device mask
     if let Some(dev) = &o.device {
         opts.service = opts.service.take().map(|s| s.for_device(dev));
     }
