@@ -653,6 +653,11 @@ patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device-peer
 patchkit flash STOCK.syx --port NAME --set device --dry-run --save OUT.syx   # patch and check only; then `patchkit preflight OUT.syx`
 ```
 
+The public site does not offer a patched Syntakt image: which devices it offers is a publication decision kept in one place, `SITE_PATCHED_DEVICES` in
+`apps/web/src/firmware/site-policy.ts` (device ids; the Digitakt II and Digitone II are in it, the Syntakt is not). The site's Firmware page prepares no patched image for another
+device and says so; restoring stock stays available for every device. To offer a device after its hardware proof, add its `[device] short` to that list in a change of its own.
+The desktop workbench has no such list.
+
 After a flash of an image without the runtime (`device-peer`) the workbench and `patchkit flash` do not look for a runtime: a patch without the runtime has no image id, so INFO is not asked.
 The restart is confirmed by the stock identity instead (MidiRpc Ping names the model, [finding 144](findings/144-stock-device-identity.md)), the page reports the flash as done
 ("patched without a runtime"), and it skips binding services and installing the default modules (`leavesRuntime` in `firmware-core.ts`, `Prepared::leaves_runtime`).
