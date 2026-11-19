@@ -4,8 +4,9 @@ import { expect, test } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { cardRig, RT, CARD_SYMBOLS } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
+import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { captureNote, frames, readFloatWav } from '@digi/regression/runtime/fx-live.ts';
+import { captureNote, frames, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { buildPanelProject, dynType, loadPanelProject, savePanelProject, trackType } from '@digi/regression/runtime/project-kit.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -89,9 +90,12 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} reload: a project that uses the reloaded 
 
     // queue the reload over the paused protocol, then let emulated time run until the job finishes: the job needs the DSP, and the paused protocol's
     // short steps under its 30 s wall deadline do not reach the end of a DT2 reload with a DSP load
+    // DkrtBootInfo.reloads (offset 252) moves when a live job finished; with phase 2 it tells this job's end from the state an earlier job left
+    const reloads = planSymbol(run.plan, 'DKRT_BOOT') + 252;
+    const reloads0 = await word(rt.session, reloads);
     await run.usb(rt, (dk) => dk.reload(PATH));
-    const end = await pollUntil(rt.clock, () => run.usb(rt, (dk) => dk.reloadState()), (st) => st.phase === 2, { withinMs: 20_000, message: 'the reload of the machine finished' });
-    expect({ result: end.result, unloaded: end.unloaded }, 'the reload of the machine').toEqual({ result: 0, unloaded: true });
+    const end = await pollUntil(rt.clock, async () => ({ st: await run.usb(rt, (dk) => dk.reloadState()), n: await word(rt.session, reloads) }), (v) => v.st.phase === 2 && v.n > reloads0, { withinMs: 20_000, message: 'the reload of the machine finished' });
+    expect({ result: end.st.result, unloaded: end.st.unloaded }, 'the reload of the machine').toEqual({ result: 0, unloaded: true });
     await loadPanelProject(rt);
     expect(await trackType(rt.session, 1), 'after the project load track 1 holds the type of the reloaded machine').toBe(type);
     const after = await note(rt, artifacts, 'after');

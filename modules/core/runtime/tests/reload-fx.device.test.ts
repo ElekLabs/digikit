@@ -176,11 +176,9 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   for (let f = mark.start; f + step <= mark.end; f += step) windows.push(peakOf(pcm, Math.floor(f * perBlock), Math.ceil((f + step) * perBlock)));
   record(artifacts, 'swap-windows', { start: mark.start, end: mark.end, windows, half });
   expect(Math.min(...windows), `no window of the swap is silent: peaks ${windows.map((p) => p.toFixed(4)).join(' ')} against ${half.toFixed(4)} before`).toBeGreaterThan(half * 0.3);
-  const after = peakOf(pcm, Math.floor((mark.end + 150) * perBlock), Math.floor((mark.end + 450) * perBlock));
-  // the frame marks place the window only roughly in the capture (on DN2 it lands on the attack of the new note), so the check separates the two outcomes: the turned value
-  // gives about the level of `half`, a lost value the default level, about twice `half` (wet)
-  expect(after / half, `the level after the reload (${after.toFixed(4)}) is near the turned level (${half.toFixed(4)}), not the default (${wet.toFixed(4)}): the knob value survived`).toBeGreaterThan(0.67);
-  expect(after / half).toBeLessThan(1.5);
+  // the level after the reload: a fresh note, measured as `half` was (the frame marks place a window in the swap capture only roughly)
+  const after = await level('after-reload');
+  expect(Math.abs(after / half - 1), `the level after the reload (${after.toFixed(4)}) is the turned level (${half.toFixed(4)}), not the default (${wet.toFixed(4)}): the knob value survived`).toBeLessThan(0.05);
 
   // an unload and a load keep it too (no kit was loaded in between)
   await job(rt, plan, 'unload', MASTER_PATH, 'unload with the knob turned', epoch, 0);
