@@ -19,6 +19,8 @@ const ROLE_PORT = 2;
 /** The name a port file provides: the hard need of `port` is met by a port file (a provider, not a service). */
 export const PORT_NAME = 'port';
 
+const abiHex = (h: number) => (h >>> 0).toString(16).padStart(8, '0');
+
 export interface Need {
   hash32: number;
   /** Packed major<<16|minor<<8|patch. */
@@ -75,6 +77,9 @@ export interface ServiceRefusal {
   runtime?: string;
   /** `no-port`: the firmware identity of the device (16 hex digits), or undefined when the runtime reports none. */
   fw?: string;
+  /** `fingerprint`: the runtime's svc_abi and the service file's abi word, 8 lowercase hex digits. */
+  runtimeAbi?: string;
+  serviceAbi?: string;
 }
 
 export type ServiceState = 'not on device' | 'on device' | 'differs';
@@ -248,6 +253,8 @@ export function resolveServices(
             kind: 'fingerprint',
             runtime: fmtVersion(rt.version),
             builtFor: fmtVersion(s.builtFor),
+            runtimeAbi: abiHex(rt.fingerprint),
+            serviceAbi: abiHex(s.abi),
           };
         if (seen.has(s)) continue;
         seen.add(s);

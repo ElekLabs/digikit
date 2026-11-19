@@ -201,7 +201,15 @@ test('a service built for another ABI fingerprint refuses that module only', () 
     RUNTIME,
   );
   assert.deepEqual(r.refused, [
-    { module: 'a', service: 'fx', kind: 'fingerprint', runtime: '0.5.2', builtFor: '0.5.0' },
+    {
+      module: 'a',
+      service: 'fx',
+      kind: 'fingerprint',
+      runtime: '0.5.2',
+      builtFor: '0.5.0',
+      runtimeAbi: '0000bbbb',
+      serviceAbi: '0000aaaa',
+    },
   ]);
   assert.deepEqual(r.order, [lfo]);
 });

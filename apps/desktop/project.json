@@ -29,6 +29,10 @@
         {
           "projects": ["patchkit"],
           "target": "ports"
+        },
+        {
+          "projects": ["core/services/machines", "core/services/fx", "core/services/lfo", "core/services/samples"],
+          "target": "pack"
         }
       ]
     },

@@ -462,8 +462,15 @@ test('services: tickedFit counts the services once and enforces the provider lim
 test('services: refusal texts, the service mismatch tag, the needed-by tag', () => {
   const r = { module: 'pluck', service: 'machines' } as const;
   assert.equal(
-    serviceRefusalText({ ...r, kind: 'fingerprint', runtime: '0.5.2', builtFor: '0.5.0' }),
-    'pluck not installed. It needs the machines service, and this workbench has no machines service for the runtime on your device (runtime 0.5.2, service built for 0.5.0). Nothing was uploaded for pluck. Update the workbench, or flash a matching runtime from the Firmware page.',
+    serviceRefusalText({
+      ...r,
+      kind: 'fingerprint',
+      runtime: '0.5.2',
+      builtFor: '0.5.0',
+      runtimeAbi: '5dbf8e20',
+      serviceAbi: '16be0e73',
+    }),
+    'pluck not installed. It needs the machines service, and this workbench has no machines service for the runtime on your device (runtime 0.5.2, ABI 5dbf8e20; service built for 0.5.0, ABI 16be0e73). Nothing was uploaded for pluck. Update the workbench, or flash a matching runtime from the Firmware page.',
   );
   assert.equal(
     serviceRefusalText({ module: 'pluck', service: 'fx', kind: 'missing' }),
@@ -481,10 +488,17 @@ test('services: refusal texts, the service mismatch tag, the needed-by tag', () 
     serviceRefusalText({ module: 'pluck', service: 'fx', kind: 'too-many' }),
     `pluck not installed. The selection needs more than ${PROVIDER_MAX} services.`,
   );
-  const refusal = { ...r, kind: 'fingerprint', runtime: '0.5.2', builtFor: '0.5.0' } as const;
+  const refusal = {
+    ...r,
+    kind: 'fingerprint',
+    runtime: '0.5.2',
+    builtFor: '0.5.0',
+    runtimeAbi: '5dbf8e20',
+    serviceAbi: '16be0e73',
+  } as const;
   const [tag] = localTags({ ...pluck, service_refusal: refusal }).filter((t) => t.text === 'service mismatch');
   assert.equal(tag.tone, 'warn');
-  assert.equal(tag.title, 'machines service built for 0.5.0, device runtime is 0.5.2');
+  assert.equal(tag.title, 'machines service built for 0.5.0 (ABI 16be0e73), device runtime is 0.5.2 (ABI 5dbf8e20)');
   const dks = { ...row(null, 'Tools'), path: 'services/machines.dks', needed_by: ['shot'] };
   assert.deepEqual(
     deviceTags(dks).map((t) => [t.text, t.tone]),

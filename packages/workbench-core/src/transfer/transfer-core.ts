@@ -104,7 +104,13 @@ export function serviceRefusalText(r: ServiceRefusal): string {
     case 'too-many':
       return `${r.module} not installed. The selection needs more than ${PROVIDER_MAX} services.`;
     case 'fingerprint': {
-      const versions = r.runtime && r.builtFor ? ` (runtime ${r.runtime}, service built for ${r.builtFor})` : '';
+      const abi = r.runtimeAbi && r.serviceAbi;
+      const versions =
+        r.runtime && r.builtFor
+          ? abi
+            ? ` (runtime ${r.runtime}, ABI ${r.runtimeAbi}; service built for ${r.builtFor}, ABI ${r.serviceAbi})`
+            : ` (runtime ${r.runtime}, service built for ${r.builtFor})`
+          : '';
       return (
         `${r.module} not installed. It needs the ${r.service} service, and this workbench has no ${r.service} service for the runtime on your device${versions}. ` +
         `Nothing was uploaded for ${r.module}. Update the workbench, or flash a matching runtime from the Firmware page.`
@@ -259,7 +265,9 @@ export function localTags(r: TransferRow): RowTag[] {
       text: 'service mismatch',
       title:
         sr.builtFor && sr.runtime
-          ? `${sr.service} service built for ${sr.builtFor}, device runtime is ${sr.runtime}`
+          ? sr.runtimeAbi && sr.serviceAbi
+            ? `${sr.service} service built for ${sr.builtFor} (ABI ${sr.serviceAbi}), device runtime is ${sr.runtime} (ABI ${sr.runtimeAbi})`
+            : `${sr.service} service built for ${sr.builtFor}, device runtime is ${sr.runtime}`
           : serviceRefusalText(sr),
       tone: 'warn',
     });
