@@ -601,7 +601,9 @@ class Uploader:
             "unloaded": b[6],
         }
 
-    def _wait_live(self, what: str, step: Callable[[], None], limit: int) -> tuple[int, bool]:
+    def _wait_live(
+        self, what: str, step: Callable[[], None], limit: int
+    ) -> tuple[int, bool]:
         for _ in range(limit):
             s = self.reload_state()
             if s["phase"] == 2:

@@ -34,7 +34,7 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * - (d) refusals: while the transport plays `UNLOAD` and `LOAD` are refused with `E_RELOAD_PLAYING`, the module is as it was and nothing is counted.
  * - the soak: unload and load of the machine, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`), the capacity counts unchanged each cycle.
  *
- * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof"). The sample-pool case is `modules/machines/shot/tests/shot-live-dt2.device.test.ts` (DT2).
+ * Run only with the go of the owner (docs/plans/extension-model.md, "Device proof"). The sample-pool case is in the tests of the module that uses the pool (DT2).
  */
 const SHAPE_PATH = 'modules/lfo-shape.dkm';
 const SINE_PATH = 'modules/sine.dkm';

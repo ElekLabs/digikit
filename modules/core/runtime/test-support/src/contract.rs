@@ -1261,9 +1261,19 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
         l.unload(1);
         unsafe { S::live_done(&l.core) };
         l.settle_over(&[&f.a, &f.b]);
-        assert_eq!(l.load(1, &f.b), OK, "{}: B is refused when loaded again (round {round})", f.name);
+        assert_eq!(
+            l.load(1, &f.b),
+            OK,
+            "{}: B is refused when loaded again (round {round})",
+            f.name
+        );
         unsafe { S::live_done(&l.core) };
-        expect(&std::format!("unload and load of B (round {round}) changed what the service holds"), f, &both, &l.snapshot());
+        expect(
+            &std::format!("unload and load of B (round {round}) changed what the service holds"),
+            f,
+            &both,
+            &l.snapshot(),
+        );
     }
     l.unload(1);
     l.unload(0);
@@ -1274,9 +1284,19 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
     l.unload(0);
     unsafe { S::live_done(&l.core) };
     l.settle_over(&[&f.a]);
-    assert_eq!(l.load(0, &f.a), OK, "{}: A is refused when loaded again", f.name);
+    assert_eq!(
+        l.load(0, &f.a),
+        OK,
+        "{}: A is refused when loaded again",
+        f.name
+    );
     unsafe { S::live_done(&l.core) };
-    expect("unload and load of A changed what the service holds", f, &alone, &l.snapshot());
+    expect(
+        "unload and load of A changed what the service holds",
+        f,
+        &alone,
+        &l.snapshot(),
+    );
     l.unload(0);
 }
 
