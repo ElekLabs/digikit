@@ -4,6 +4,7 @@ import { expect, test } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { cardRig, RT, CARD_SYMBOLS } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
+import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { captureNote, frames, readFloatWav } from '@digi/regression/runtime/fx-live.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { buildPanelProject, dynType, loadPanelProject, savePanelProject, trackType } from '@digi/regression/runtime/project-kit.ts';
@@ -18,7 +19,8 @@ import type { TestRuntime } from '@digi/regression/support.ts';
  * Written, not run (docs/plans/extension-model.md, "Device proof"). The Digitone II half is not written: `trackType` reads a Digitakt II track object.
  */
 const ID = 'test/sine';
-const PATH = 'modules/sine.dkm';
+/** The store path of the module on the card (`modules/<kind>/<author>-<name>.dkm`). */
+const PATH = moduleStorePath('dt2', ID);
 const NOTE = 57;
 const MIDI_CHANNEL = 1;
 const CAPTURE_BLOCKS = 4000;

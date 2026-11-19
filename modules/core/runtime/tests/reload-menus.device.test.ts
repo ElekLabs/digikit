@@ -2,22 +2,26 @@ import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { REDRAW } from '@digi/regression/runtime/fx-live.ts';
-import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 
 /**
- * The menu refusal of a live job (docs/plans/extension-model.md E5b item 1): a menu keeps pointers into the code of the module that built it and menus are never freed, so a module with a menu object is
- * not unloaded or reloaded. `digikit/remote` has a settings page (the `menu` function of its header) that the DIGIKIT menu builds when the user opens it.
- * - before the page is opened the module has no menu object: `RELOAD` goes through (a header entry alone no longer refuses);
+ * What only the firmware shows of the menu refusal (docs/plans/extension-model.md E5b item 1): `dk_ui_menu_new` of the real core/ui reports the module that built the menu object
+ * to the runtime (`dkrt_menu_built`), and the live job then refuses that module. Everything else is a unit test: the count by module record (`spans_tests.rs`
+ * `a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor`, `the_job_reads_the_menu_count_of_its_own_record`), its reset at a load (`loader/records.rs`), the
+ * order of the refusals (`reload.rs` `the_refusals_come_in_the_documented_order`) and the second read before the teardown (`a_menu_built_during_the_drain_gives_the_old_module_back`).
+ *
+ * The fixture `test/entry-demo` owns a menu: its `menu` function (the module's SETTINGS... page) builds a submenu object with `dk_ui_menu_new` and its own fill function. The DIGIKIT
+ * menu's own page fills the module's rows only while it is open and counts for no module (E5c-2), so the module's own `dk_ui_menu_new` is the call that counts.
+ * - before the page is opened the module has built no menu object: `RELOAD` goes through (a `menu` entry alone does not refuse);
  * - after SETTINGS... of the module in the DIGIKIT menu was opened and left, `UNLOAD` and `RELOAD` are refused with `E_RELOAD_MENUS`, the module is still in MODULES, and the counters did not move.
  *
  * Written, not run, and the key path is not looked at yet: `openModuleSettings` goes SETTINGS (the stock menu, whose last row the core/ui hook adds is DIGIKIT), DIGIKIT, MODULES, the module's row, RIGHT, the
  * panel row SETTINGS..., and `DIGIKIT_ROW_DOWNS`/`MODULE_ROW_DOWNS` are guesses: take one `dk:dev` screenshot of each step before the first run (docs/plans/extension-model.md, "Device proof").
  */
-const REMOTE_ID = 'digikit/remote';
-const REMOTE_PATH = 'modules/remote.dkm';
+const MENU_ID = 'test/entry-demo';
 const E_RELOAD_MENUS = loadCode('E_RELOAD_MENUS');
 const DIGIKIT_ROW_DOWNS = 0;
 const MODULE_ROW_DOWNS = 0;
@@ -39,17 +43,18 @@ async function openModuleSettings(rt: TestRuntime): Promise<void> {
 
 async function expectMenuRefusal(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(rt.session, 'reload-menus');
-  await cliInstall(rt.session, REMOTE_ID, artifacts, 300_000, [DEBUG_MODULE]);
+  const path = moduleStorePath(rt.session.options.device as 'dt2' | 'dn2', MENU_ID);
+  await cliInstall(rt.session, MENU_ID, artifacts, 300_000, [DEBUG_MODULE]);
   const before = (await rt.dk.modules()).map((m) => m.name).sort();
-  expect(before, 'the remote module is loaded').toContain(REMOTE_ID);
+  expect(before, 'the menu module is loaded').toContain(MENU_ID);
   // no menu object yet: a reload goes through
-  expect(await rt.dk.reloadAndWait(REMOTE_PATH), 'before the settings page is opened').toEqual({ result: 0, unloaded: true });
+  expect(await rt.dk.reloadAndWait(path), 'before the settings page is opened').toEqual({ result: 0, unloaded: true });
   await openModuleSettings(rt);
   const counters = (await rt.dk.reloadState()).step;
-  expect(await rt.dk.unloadAndWait(REMOTE_PATH), 'after the settings page was built: UNLOAD').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
-  expect(await rt.dk.reloadAndWait(REMOTE_PATH), 'after the settings page was built: RELOAD').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
+  expect(await rt.dk.unloadAndWait(path), 'after the settings page was built: UNLOAD').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
+  expect(await rt.dk.reloadAndWait(path), 'after the settings page was built: RELOAD').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
   expect((await rt.dk.modules()).map((m) => m.name).sort(), 'the module is still loaded').toEqual(before);
   record(artifacts, 'menu-refusal', { before, step: counters });
 }
 
-runtimeTests('UNLOAD and RELOAD of a module whose settings page was built are refused with E_RELOAD_MENUS', expectMenuRefusal, { dsp: 'zero' });
+runtimeTests('UNLOAD and RELOAD of a module that built a menu object are refused with E_RELOAD_MENUS', expectMenuRefusal, { dsp: 'zero' });
