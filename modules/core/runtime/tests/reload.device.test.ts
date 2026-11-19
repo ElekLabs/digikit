@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav, runFrames, word } from '@digi/regression/runtime/fx-live.ts';
@@ -78,6 +79,8 @@ async function expectReloadLeftNothing(rt: TestRuntime, plan: RuntimePlan, why: 
   const [cap, mods] = [await rt.dk.capacity(), await moduleRows(rt)];
   const named = mods.reduce((n, m) => n + popcount(m.rows), 0);
   expect(cap['VOICE_ROWS']?.used, `${why}: voice rows in use (the row masks of the modules name ${named}; a placeholder row would be one more)`).toBe(named);
+  // the runtime's table checks ran over the real firmware tables (host tests run them over fakes only)
+  expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
   const info = planSymbol(plan, 'dynreg_info');
   const viewVar = await word(rt.session, info + DYNREG_VIEW_VAR);
   expect(viewVar, `${why}: dynreg_info word 48 (the variable that holds the machine selection view)`).not.toBe(0);

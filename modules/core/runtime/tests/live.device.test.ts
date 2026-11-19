@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav } from '@digi/regression/runtime/fx-live.ts';
@@ -13,7 +14,7 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * Load and unload of a content module while the device runs (docs/plans/extension-model.md E5c): `LOAD` and `UNLOAD` run the same job as `RELOAD`.
  *
  * After every job the checks of what only the firmware shows: the job ends with the expected result and `unloaded` flag; no new boot (the epoch); the voice rows in use are those
- * the modules' row masks name (no row of an unloaded module is left, and no placeholder: a plain unload writes none). What the runtime keeps on the host is not read here: the
+ * the modules' row masks name (no row of an unloaded module is left, and no placeholder: a plain unload writes none). The runtime's table checks found no damage in the real firmware tables (no `TABLE_BAD` in the log). What the runtime keeps on the host is not read here: the
  * job's phases, refusals (`E_MISSING`, `E_LOADED`, `E_RELOAD_PLAYING`) and counters are unit and assembly tests (`reload.rs`, `loader`), a service's rows across an unload and a load
  * are the service contract suite (`dkrt_test_support::contract`); the one real transport refusal is in `reload.device.test.ts`.
  *
@@ -71,6 +72,8 @@ async function expectJobLeftNothing(rt: TestRuntime, why: string, epoch: number,
   const [cap, mods] = [await rt.dk.capacity(), await moduleRows(rt)];
   const named = mods.reduce((n, m) => n + popcount(m.rows), 0);
   expect(cap['VOICE_ROWS']?.used, `${why}: voice rows in use (the row masks of the modules name ${named}; a row of an unloaded module or a placeholder would be one more)`).toBe(named);
+  // the runtime's table checks ran over the real firmware tables (host tests run them over fakes only)
+  expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
 }
 
 /** One job and its checks: `LOAD`, `UNLOAD`. */
