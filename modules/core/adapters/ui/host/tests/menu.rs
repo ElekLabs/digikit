@@ -45,6 +45,10 @@ extern "C" {
     fn fk_boot_rename(k: c_int, name: *const c_char);
     fn fk_boot_count(n: u32);
     fn fk_poll_slots(n: c_int);
+    fn fk_settings_poll();
+    fn fk_set_open(k: c_int) -> c_int;
+    fn fk_unload_module(path: *const c_char);
+    fn fk_set_refresh(k: c_int);
 }
 
 // dkrt_live ops
@@ -941,4 +945,87 @@ fn a_queue_that_cannot_be_polled_shows_the_status_and_offers_the_restart() {
     );
     answer_confirm(false);
     assert_eq!(dialog().unwrap().1, "RESTART TO APPLY?");
+}
+
+#[test]
+fn a_settings_page_holds_no_module_rows_once_it_is_left() {
+    let _g = digikit();
+    store_of_three();
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/tool.dkm");
+    open_modules();
+    press_right(0);
+    choose_panel_row(1);
+    assert_eq!(render(), ["HELD 0", "RELEASE"]);
+    assert_eq!(
+        (unsafe { fk_settings_runs() }, unsafe { fk_set_open(0) }),
+        (1, 1)
+    );
+    // while the page is open nothing is released
+    unsafe { fk_settings_poll() };
+    assert_eq!(unsafe { fk_set_open(0) }, 1);
+    press_no(); // the page is left
+    unsafe { fk_settings_poll() };
+    // released: the page was filled again without the module (the module's menu function did not run) and nothing keeps it open
+    assert_eq!(
+        (unsafe { fk_settings_runs() }, unsafe { fk_set_open(0) }),
+        (1, 0)
+    );
+    assert_eq!(unsafe { fk_poll_on() }, 0);
+    // opened again, the page works as before
+    press_right(0);
+    choose_panel_row(1);
+    assert_eq!(render(), ["HELD 0", "RELEASE"]);
+    assert_eq!(unsafe { fk_settings_runs() }, 2);
+    press_yes(1);
+    assert_eq!(unsafe { fk_settings_acts() }, 1);
+}
+
+#[test]
+fn a_settings_page_of_a_module_that_is_gone_shows_not_loaded_and_calls_nothing() {
+    let _g = digikit();
+    store_of_three();
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/tool.dkm");
+    open_modules();
+    press_right(0);
+    choose_panel_row(1);
+    assert_eq!(unsafe { fk_settings_runs() }, 1);
+    // the module goes away while its page is filled again
+    let path = CString::new("modules/tool.dkm").unwrap();
+    unsafe { fk_unload_module(path.as_ptr()) };
+    unsafe { fk_set_refresh(0) };
+    assert_eq!(render(), ["MODULE NOT LOADED"]);
+    assert_eq!(
+        unsafe { fk_settings_runs() },
+        1,
+        "no call reached the old module"
+    );
+    // loaded again: the page works
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    unsafe { fk_set_refresh(0) };
+    assert_eq!(render(), ["HELD 0", "RELEASE"]);
+    assert_eq!(unsafe { fk_settings_runs() }, 2);
+}
+
+#[test]
+fn applying_releases_an_open_settings_page_before_the_jobs() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/tool.dkm");
+    open_modules();
+    press_right(0);
+    choose_panel_row(1);
+    press_no(); // back to the list; the page is left but not released yet
+    assert_eq!(unsafe { fk_set_open(0) }, 1);
+    press_yes(0);
+    press_no();
+    answer_confirm(true);
+    assert_eq!(
+        unsafe { fk_set_open(0) },
+        0,
+        "no page keeps rows of the module the batch unloads"
+    );
+    poll_until_idle();
 }

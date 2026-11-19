@@ -118,6 +118,8 @@ static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first op
    another module is unloaded. A module that has menus cannot be unloaded (E_RELOAD_MENUS), so a slot stays valid. A menu is never freed: a slot is built once. */
 static dk_ui_menu *g_set[MAX_SET];
 static uint8_t g_set_path[MAX_SET][64];
+static uint8_t g_set_open
+    [MAX_SET]; /* 1 while the page was opened and not yet released: only then does its fill call the module */
 static char g_set_title[MAX_SET][NAME_ROW];
 static dk_ui_menu_desc g_set_desc[MAX_SET];
 
@@ -1364,12 +1366,40 @@ static void fill_settings(dk_ui_menu *m, void *ctx)
 {
     static DkrtModule mod;
     uint32_t slot = (uint32_t)(uintptr_t)ctx;
-    for (uint32_t k = 0; dkrt_module(k, &mod) == DKRT_OK; k++)
-        if (same_text(mod.path, g_set_path[slot], 63)) {
-            if (mod.menu)
-                DK_CALL_MENU(mod.menu, mod.ctx, m);
-            return;
+    /* The rows a module adds hold pointers into its code (callbacks) and data. They exist only while the page is open: g_set_open is set at the open and cleared
+       when the page is left (settings_release), and a fill after that, or one for a module that is gone, adds a text row only. So the page keeps no pointer into a
+       module that can be unloaded. */
+    if (g_set_open[slot])
+        for (uint32_t k = 0; dkrt_module(k, &mod) == DKRT_OK; k++)
+            if (same_text(mod.path, g_set_path[slot], 63)) {
+                if (mod.menu) {
+                    DK_CALL_MENU(mod.menu, mod.ctx, m);
+                    return;
+                }
+                break;
+            }
+    dk_ui_menu_add_text(m, g_set_open[slot] ? "MODULE NOT LOADED" : "CLOSED");
+}
+
+/* The page of a slot that was left: fill it again without the module, which drops the module's rows. All of them at once. */
+static void settings_release(void)
+{
+    for (int k = 0; k < MAX_SET; k++)
+        if (g_set_open[k] && (!g_set[k] || !dk_ui_menu_is_open(g_set[k]))) {
+            g_set_open[k] = 0;
+            if (g_set[k])
+                dk_ui_menu_refresh(g_set[k]);
         }
+}
+
+/* The UI loop's per-pass call while a settings page is open: release the pages the user left. */
+static void settings_poll(void)
+{
+    settings_release();
+    for (int k = 0; k < MAX_SET; k++)
+        if (g_set_open[k])
+            return;
+    dkrt_poll_remove((uintptr_t)settings_poll);
 }
 
 /* The cache slot of the module at store path p: the slot that holds it, else a free one (taken for it), else -1. */
@@ -1416,8 +1446,11 @@ static void panel_settings(void *ctx, int32_t row)
         if (!g_set[k])
             g_set_path[k][0] = 0; /* the slot is free again */
     }
-    if (g_set[k])
+    if (g_set[k]) {
+        g_set_open[k] = 1;
+        dkrt_poll_add((uintptr_t)settings_poll);
         dk_ui_menu_open(g_set[k]);
+    }
 }
 
 static void panel_info(void *ctx, int32_t row)
@@ -1782,6 +1815,7 @@ static void apply(void)
         dk_ui_menu_close(g_modules);
         return;
     }
+    settings_release(); /* no page keeps rows of a module the batch may unload */
     g_lq_state = LQ_START;
     r = dkrt_poll_add((uintptr_t)live_poll);
     if (r != DKRT_OK) { /* the batch cannot run: the selection is saved, so a restart applies it */

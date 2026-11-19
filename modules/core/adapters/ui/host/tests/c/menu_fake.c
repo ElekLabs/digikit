@@ -325,6 +325,7 @@ void fk_reset(void)
     g_main = g_about = DK_HEALTH_MENU = g_mem = g_modules = g_info = 0;
     memset(g_set, 0, sizeof g_set);
     memset(g_set_path, 0, sizeof g_set_path);
+    memset(g_set_open, 0, sizeof g_set_open);
     g_say_pending = 0;
     g_lq_state = LQ_IDLE;
     g_lq_n = g_lq_pos = g_lq_wait = 0;
@@ -585,4 +586,28 @@ int fk_busy_row(void)
 void fk_poll_slots(int n)
 {
     poll_slots = n;
+}
+
+/* The settings pages: one pass of the callback that releases a page the user left; whether a slot is open; the module leaves the runtime; the page is filled again. */
+void fk_settings_poll(void)
+{
+    if (poll_is_on((uintptr_t)settings_poll))
+        settings_poll();
+}
+int fk_set_open(int k)
+{
+    return g_set_open[k];
+}
+void fk_unload_module(const char *path)
+{
+    for (int m = 0; m < fk.mod_n; m++)
+        if (strcmp((const char *)fk.mod[m].path, path) == 0) {
+            memmove(&fk.mod[m], &fk.mod[m + 1], (size_t)(fk.mod_n - m - 1) * sizeof fk.mod[0]);
+            fk.mod_n--;
+            return;
+        }
+}
+void fk_set_refresh(int k)
+{
+    dk_ui_menu_refresh(g_set[k]);
 }
