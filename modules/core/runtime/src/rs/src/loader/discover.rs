@@ -26,7 +26,8 @@ const PORT_EXT: &[u8] = b".dkport";
 /// Longest file stem the search considers (50: `services/<stem>.dks` and its NUL fit the 64 bytes of a selection path), and the longest path it builds.
 const STEM_MAX: usize = 50;
 pub const PATH_CAP: usize = DIR.len() + STEM_MAX + EXT.len();
-/// Most `.dks` files of the folder the search remembers. A folder with more `.dks` files sets `Found::truncated`; the files past the limit are not looked at.
+/// Most `.dks` files of the folder the search remembers. A folder with more `.dks` files sets `Found::truncated`; the files past the limit are not looked at. `truncated` is also
+/// set when every provider slot (`PROVIDER_MAX`) is taken and a need is left unsearched, or the port file has no slot: `plan_with_caps` logs it (`E_PLAN_FIT`).
 const CAND_MAX: usize = 32;
 /// Most service hashes the search keeps. Distinct non-runtime needs beyond the provider slots can never all be met; 4 times `PROVIDER_MAX` leaves room for
 /// needs of refused or unmatched services. A need past the limit sets `Found::truncated`.
@@ -182,7 +183,36 @@ unsafe fn read_provider<C: Cards>(cards: &mut C, c: usize, out: &mut Found, role
         Ok(s) => s,
         Err(_) => return false,
     };
-    table_of(core::slice::from_raw_parts(staged.ptr, staged.size as usize), k, out, role, fw)
+    let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+    if table_of(file, k, out, role, fw) {
+        return true;
+    }
+    // a service file of the old format is skipped, and the boot log says why
+    if role == 1 {
+        if let Some((code, hash)) = stale(file) {
+            crate::boot::report_provider(out.path(k), code, hash, 0);
+        }
+    }
+    false
+}
+
+/// A service file bound to one firmware (`BIND` or `FW` items, the format before the port file): why this runtime does not take it, and the service it provides. A Rust service
+/// carries the ABI fingerprint, which `FIRMWARE_REFERENCES` changed, so the refusal is `E_SVC_ABI`; a C service has the word 0 and is `E_FORMAT`.
+fn stale(file: &[u8]) -> Option<(i32, u32)> {
+    let be = |p: usize| u32::from_be_bytes([file[p], file[p + 1], file[p + 2], file[p + 3]]);
+    if file.len() < dkneeds::HEADER as usize || be(dkneeds::H_ROLE as usize) != 1 {
+        return None;
+    }
+    let (off, len) = (be(dkneeds::H_REG_OFF as usize) as usize, be(dkneeds::H_REG_SIZE as usize) as usize);
+    if len < 8 || off > file.len() || len > file.len() - off {
+        return None;
+    }
+    let keys = Keys::parse(&file[off..off + len]).ok()?;
+    if keys.count(tag::BIND) == 0 && keys.count(tag::FW) == 0 {
+        return None;
+    }
+    let code = if be(dkneeds::H_SVC_ABI as usize) != 0 { dkrt_sdk::E_SVC_ABI } else { dkrt_sdk::E_FORMAT };
+    Some((code, keys.words(tag::PROVIDES, 0).map_or(0, |w| w.0)))
 }
 
 /// Is `path` a file `ports/<name>.dkport`: the stem within `STEM_MAX`, no subfolder.
@@ -197,7 +227,12 @@ fn is_port_path(path: &[u8]) -> bool {
 /// Find the port file for the firmware `fw` (the image's `fw_id`): the first file of `ports/` that is a port file whose `FW` item equals it. Other files are skipped,
 /// and a folder with more files than `CAND_MAX` sets `truncated`. The file is provider `out.n`.
 unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Found) {
-    if fw.is_none() || out.n >= PROVIDER_MAX {
+    if fw.is_none() {
+        return;
+    }
+    if out.n >= PROVIDER_MAX {
+        // no slot left for the port file
+        out.truncated = true;
         return;
     }
     let found = cards.list(b"ports/\0".as_ptr(), out.cands.as_mut_ptr(), (CAND_MAX + 1) as u32);
@@ -284,6 +319,10 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
             }
             c += 1;
         }
+    }
+    // needs left unsearched because every provider slot is taken: the table is full (the planner reports it)
+    if w < ns && out.n >= PROVIDER_MAX {
+        out.truncated = true;
     }
     // the port file is the provider of `port`, found by its firmware identity, after the services (it reuses the listing buffer)
     if has(&out.search, ns, name_hash_bytes(PORT_NAME)) {
@@ -451,6 +490,43 @@ mod tests {
         // a role 1 file in ports/ and a role 2 file in services/ (the stem `port`)
         let mut fs = cards(vec![("ports/a.dkport".into(), file(1, "port", &[])), ("services/port.dks".into(), port_file(FW_A))]);
         assert_eq!(run_fw(&mut fs, &["port"], Some(FW_A)).n, 0);
+    }
+
+    #[test]
+    fn a_full_provider_table_sets_truncated_for_a_service_and_for_the_port_file() {
+        let names: Vec<std::string::String> = (0..PROVIDER_MAX + 1).map(|i| std::format!("s{i}")).collect();
+        let files: Vec<(&str, u32, &[&str])> = names.iter().map(|n| (n.as_str(), 1, &[][..])).collect();
+        let want: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+        let out = run(&mut store_with(&files), &want);
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, true), "one need too many");
+        // exactly PROVIDER_MAX needs: nothing is left unsearched
+        let out = run(&mut store_with(&files), &want[..PROVIDER_MAX]);
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, false));
+        // every slot taken by services and the port file wanted: it has no slot
+        let mut fs = store_with(&files[..PROVIDER_MAX]);
+        fs.files.push((b"ports/p.dkport".to_vec(), port_file(FW_A)));
+        let mut w: Vec<&str> = want[..PROVIDER_MAX].to_vec();
+        w.push("port");
+        let out = run_fw(&mut fs, &w, Some(FW_A));
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, true));
+    }
+
+    #[test]
+    fn a_service_file_of_the_old_format_is_named_with_the_code_that_refuses_it() {
+        let table = |abi: u32| {
+            let stock = [0u8; 6];
+            let binds = [dkneeds::keys::Bind { site: 1, addr: 0x1000, tramp: 0x20, stock: &stock }];
+            let mut f = raw_file(1, &table_of_t(&Table { provides: &[Pair { a: name_hash("lfo"), b: 0x010000 }], bind: &binds, fw: &[[7; 8]], ..KEEP }));
+            f.resize(0xa0 + f.len().max(0), 0);
+            f[dkneeds::H_SVC_ABI as usize..][..4].copy_from_slice(&abi.to_be_bytes());
+            f
+        };
+        // a Rust service carries the ABI word that the port file change moved, a C service has 0
+        assert_eq!(stale(&table(0x1234_5678)), Some((dkrt_sdk::E_SVC_ABI, name_hash("lfo"))));
+        assert_eq!(stale(&table(0)), Some((dkrt_sdk::E_FORMAT, name_hash("lfo"))));
+        // the search does not take it, and a file of the new format is no stale file
+        assert_eq!(run(&mut cards(vec![("services/lfo.dks".into(), table(1))]), &["lfo"]).n, 0);
+        assert_eq!(stale(&file(1, "lfo", &[])), None);
     }
 
     #[test]

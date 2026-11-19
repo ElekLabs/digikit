@@ -284,10 +284,21 @@ pub const TEST_SERVICE_USER: &str = "test/svc-test";
 
 /// The ColdFire names and hooks of `devices/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
 /// device (the same name, `devices` apart).
+///
+/// The test fixture's names and hooks (`users` has `test/svc-test`) are not in this set: a production port file lists none of them, because they sit on sites that image modules patch
+/// (the test hook shares the site of `core/digikit-menu`'s). [`service_decls_with`] adds them for the port file of the test image.
 pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
+    service_decls_with(decls, false)
+}
+
+/// [`service_decls`], and with `test_users` the names and hooks of the test fixture service too.
+pub fn service_decls_with(
+    decls: &[&str],
+    test_users: bool,
+) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
     let is_service = |u: &[String]| {
         u.iter()
-            .any(|x| x.starts_with(SERVICE_USER_PREFIX) || x == TEST_SERVICE_USER)
+            .any(|x| x.starts_with(SERVICE_USER_PREFIX) || (test_users && x == TEST_SERVICE_USER))
     };
     let (mut names, mut hooks) = (vec![], vec![]);
     for text in decls.iter().copied() {
@@ -1831,4 +1842,27 @@ doc = "A probe."
             "an entry with codegen = false is not in the reference"
         );
     }
+}
+
+/// The ColdFire hooks of `devices/fw/` that a module of the image takes (a `users` entry that is no service file and no test fixture): name and devices. A port file's copied
+/// sites must not lie on the site of any of them, or the image's patch makes the site bytes differ from the check value.
+pub fn image_hooks(decls: &[&str]) -> Result<Vec<(String, Vec<String>)>> {
+    let mut out = vec![];
+    for text in decls.iter().copied() {
+        let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
+        for h in &f.hook {
+            let cf = h
+                .cpu
+                .as_deref()
+                .map_or(h.name.starts_with("cf."), |c| c == "cf");
+            let image = h
+                .users
+                .iter()
+                .any(|u| !u.starts_with(SERVICE_USER_PREFIX) && u != TEST_SERVICE_USER);
+            if cf && image {
+                out.push((h.name.clone(), h.devices.clone()));
+            }
+        }
+    }
+    Ok(out)
 }

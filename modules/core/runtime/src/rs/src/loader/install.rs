@@ -139,6 +139,9 @@ impl Installer {
         if !self.armed {
             return Ok(());
         }
+        // The check hashes every site (SHA-256 of at most 64 bytes: two blocks) with interrupts masked, once per provider and only at boot: a service is installed by
+        // the boot's provider stage, and a run-time load (E5) takes content modules only, never a service, so no site is hashed while the device plays. At most `SITES_MAX`
+        // sites are hashed in all (18 and 22 today). The mask time is not measured: a host run says nothing about the ColdFire, and the hash code is the one of the file check.
         let sr = p.irq_mask();
         if let Err(e) = self.check(p, hooks, image_size) {
             p.irq_restore(sr);

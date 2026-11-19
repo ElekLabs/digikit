@@ -1542,6 +1542,8 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
     let sub = rest.first().map(String::as_str).unwrap_or("");
     let texts = patchkit::fwgen::fw_texts(root)?;
     let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+    // `--with-test-hooks`: the port file of the test image, which also lists the hooks of the test fixture service
+    let with_test = rest.iter().any(|x| x == "--with-test-hooks");
     match sub {
         "facts" => {
             let fw = read(&flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?)?;
@@ -1605,7 +1607,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                     eprintln!("{}: no service targets this device: no port file", p.id());
                     continue;
                 }
-                let data = portfile::build_data(&reg, p, &decls)?;
+                let data = portfile::build_data(&reg, p, &decls, with_test)?;
                 let bytes = portfile::pack(&data)?;
                 let file = out.join(portfile::file_name(p));
                 std::fs::write(&file, &bytes)
@@ -1647,7 +1649,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                     .iter()
                     .filter(|p| portfile::targeted(p, &decls).unwrap_or(false))
                 {
-                    let data = portfile::build_data(&reg, p, &decls)?;
+                    let data = portfile::build_data(&reg, p, &decls, with_test)?;
                     for f in &files {
                         let d = patchkit::dkm::Dkm::parse(&read(f)?)?;
                         for n in portfile::outside_set(&d, &data) {
@@ -1663,7 +1665,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                 let port = reg
                     .find(&f.syx_sha256)
                     .ok_or_else(|| Error(format!("no port for firmware {}", f.syx_sha256)))?;
-                let data = portfile::build_data(&reg, port, &decls)?;
+                let data = portfile::build_data(&reg, port, &decls, with_test)?;
                 // the file as it would be on the card must parse back to the same data
                 if portfile::parse(&portfile::pack(&data)?)? != data {
                     return Err(Error("the port file does not read back to its data".into()));

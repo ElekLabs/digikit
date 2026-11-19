@@ -57,7 +57,10 @@ export const deviceTarget = (
   for (const rec of recs) {
     for (const id of rec.modules ?? []) {
       dependsOn.push(`${id}:pack`);
-      if (opts.serviceIds?.has(id) && !dependsOn.includes('patchkit:ports')) dependsOn.push('patchkit:ports'); // a service: the port file that goes on the card with it
+      // a service: the port file that goes on the card with it; the test fixture service takes the port file of the test image (it lists the fixture's hook, which a
+      // production port file does not)
+      const portTask = id === 'test/svc-test' ? 'patchkit:ports-test' : 'patchkit:ports';
+      if (opts.serviceIds?.has(id) && !dependsOn.includes(portTask)) dependsOn.push(portTask);
     }
     if (Object.keys(rec.aliases ?? {}).length) dependsOn.push('pack-aliases');
     if (rec.plusdrive) dependsOn.push('plusdrive-format:cli');

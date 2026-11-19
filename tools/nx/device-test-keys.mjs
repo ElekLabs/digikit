@@ -105,6 +105,7 @@ const SHARED_BUILT = [
   'dist/modules/*/*.dkm',
   'dist/modules/*/*.dks',
   'dist/ports/*.dkport',
+  'dist/ports-test/*.dkport',
   'dist/plusdrive/plusdrive',
   'apps/web/public/dksample.wasm',
 ];
@@ -234,9 +235,12 @@ export const deviceInputs = (
             dependentTasksOutputFiles: `dist/modules/*/${leaf}.${opts.services?.has(leaf) ? 'dks' : 'dkm'}`,
             transitive: true,
           })),
-          // the port files that go on the card with a service
+          // the port files that go on the card with a service (the fixture service takes the port file of the test image)
           ...(recs.some((r) => (r.modules ?? []).some((id) => opts.services?.has(id.split('/').at(-1))))
-            ? [{ dependentTasksOutputFiles: 'dist/ports/*.dkport', transitive: true }]
+            ? [
+                { dependentTasksOutputFiles: 'dist/ports/*.dkport', transitive: true },
+                { dependentTasksOutputFiles: 'dist/ports-test/*.dkport', transitive: true },
+              ]
             : []),
           // tools the test runs directly
           ...(recs.some((r) => r.plusdrive)

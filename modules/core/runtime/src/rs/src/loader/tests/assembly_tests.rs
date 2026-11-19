@@ -99,7 +99,7 @@ fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
         .collect()
 }
 
-/// The port file of the device's firmware as the card holds it.
+/// The port file of the test image for the device's firmware, as the card holds it: the production port file and the hooks of the fixture service `test/svc-test`.
 fn port_file(dev: Dev) -> Vec<u8> {
     read(&repo().join(format!("dist/ports/{}.dkport", dev.port())), "pnpm nx:pilot run patchkit:ports")
 }

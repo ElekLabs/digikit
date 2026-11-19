@@ -25,7 +25,7 @@ use crate::bind::{BoundHook, FwRef, Place, bind_with_refs, eval_exit_with, parse
 use crate::dkm::{Dkm, EmitParts, ROLE_PORT, emit, max_file};
 use crate::error::*;
 use crate::firmware::Firmware;
-use crate::fwgen::{HookDecl, service_decls};
+use crate::fwgen::{HookDecl, image_hooks, service_decls, service_decls_with};
 use crate::port::{Hook, Port, Registry};
 use crate::prim;
 use dkneeds::keys::{
@@ -150,7 +150,8 @@ pub fn site_facts(fw: &[u8], port_text: &str, decls: &[&str]) -> Result<Vec<Fact
     let reg = Registry {
         ports: vec![port.clone()],
     };
-    let (_, hooks) = service_decls(decls)?;
+    // the facts of the test fixture's hook too: the port file of the test image lists it
+    let (_, hooks) = service_decls_with(decls, true)?;
     let device = port.port.device.clone();
     let mut out = vec![];
     for h in &port.hook {
@@ -235,9 +236,25 @@ fn unported_only(reg: &Registry, devices: &[String]) -> bool {
             .all(|d| !reg.ports.iter().any(|p| p.port.device == *d))
 }
 
-/// The data of the port file of `port`, from the committed ports `reg` and the declarations `decls`.
-pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortData> {
-    let (names, hooks) = service_decls(decls)?;
+/// The data of the port file of `port`, from the committed ports `reg` and the declarations `decls`. `test_hooks`: the port file of the test image, which also lists the hooks of
+/// the test fixture service (a production port file lists none).
+pub fn build_data(
+    reg: &Registry,
+    port: &Port,
+    decls: &[&str],
+    test_hooks: bool,
+) -> Result<PortData> {
+    let (names, hooks) = service_decls_with(decls, test_hooks)?;
+    build_from(reg, port, &names, &hooks)
+}
+
+/// [`build_data`] over the parsed declarations.
+fn build_from(
+    reg: &Registry,
+    port: &Port,
+    names: &[crate::fwgen::NameDecl],
+    hooks: &[HookDecl],
+) -> Result<PortData> {
     let device = port.port.device.as_str();
     let who = port.id();
     let mut out = PortData {
@@ -246,7 +263,7 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
         sites: vec![],
     };
     let mut seen = BTreeSet::new();
-    for d in &names {
+    for d in names {
         if !seen.insert(d.name.clone()) {
             continue;
         }
@@ -294,7 +311,7 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
             .ok_or_else(|| err!("no ColdFire anchor {n} on {who}"))
     };
     let mut seen = BTreeSet::new();
-    for d in &hooks {
+    for d in hooks {
         if !seen.insert(d.name.clone()) {
             continue;
         }
@@ -309,7 +326,14 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
                     d.name
                 ));
             }
-            // listed for another device only: the hook and its exits resolve to 0
+            // listed for another device only: the hook and its exits resolve to 0. The exits are the most that any declaration of the hook has (`d` may be the declaration of
+            // another device, with fewer exits), so an exit that this device never had still resolves to 0 and is not unlisted.
+            let most = hooks
+                .iter()
+                .filter(|x| x.name == d.name)
+                .map(|x| x.exits.len())
+                .max()
+                .unwrap_or(0);
             out.sites.push(SiteItem {
                 hash,
                 addr: 0,
@@ -318,7 +342,7 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
                 absent: true,
                 check: [0; 8],
             });
-            for n in 0..=d.exits.len() {
+            for n in 0..=most {
                 out.names.push(NameItem {
                     hash,
                     addr: 0,
@@ -894,6 +918,57 @@ mod tests {
         );
     }
 
+    /// A hook that only device `b` has, with more exits there than the declaration of device `a` lists: on `a` every exit of the hook, also the one only `b`'s declaration has,
+    /// is listed as absent and resolves to 0 (it is not unlisted, which would refuse the service file).
+    #[test]
+    fn the_absent_exits_of_a_hook_cover_the_most_that_any_declaration_has() {
+        let hex = "a".repeat(64);
+        let port = |dev: &str, hook: &str| {
+            Port::parse(&format!(
+                "[port]\ndevice=\"{dev}\"\nversion=\"1\"\nsyx_sha256=\"{hex}\"\nmain_sha256=\"{hex}\"\nresolved_by=\"t\"\n[limits]\ncontainer_max=1\nmain_staged_max=1\n[[anchor]]\nname=\"cf.x.site.y\"\ncpu=\"cf\"\naddr=0x4000_0200\nlen=6\nsha256=\"{hex}\"\nmark=\"D\"\nrule=\"r\"\n{hook}"
+            ))
+            .unwrap()
+        };
+        let a = port("a", "");
+        let b = port(
+            "b",
+            "[[hook]]\nname=\"cf.x.hook.h\"\nsite=\"cf.x.site.y\"\nmode=\"replace\"\nlen=6\nkind=\"raw\"\ncheck=\"0000000000000000\"\n",
+        );
+        let reg = Registry {
+            ports: vec![a.clone(), b.clone()],
+        };
+        let decl = |dev: &str, exits: &[&str]| HookDecl {
+            name: "cf.x.hook.h".into(),
+            devices: vec![dev.into()],
+            tail: false,
+            stock: false,
+            handler: false,
+            exits: exits.iter().map(|e| e.to_string()).collect(),
+            users: vec![],
+        };
+        // the declaration of `a` comes first and has one exit; that of `b` has two
+        let hooks = [
+            decl("a", &["cf.x.site.y"]),
+            decl("b", &["cf.x.site.y + 8", "cf.x.site.y + 10"]),
+        ];
+        let on_a = build_from(&reg, &a, &[], &hooks).unwrap();
+        let h = name_hash("cf.x.hook.h");
+        assert!(on_a.site(h).unwrap().absent);
+        for n in 0..=2 {
+            assert!(
+                on_a.exit(h, n).is_some_and(|x| x.absent),
+                "exit {n} of the hook on a"
+            );
+        }
+        assert!(on_a.exit(h, 3).is_none());
+        // on `b` the hook and its two exits are present
+        let on_b = build_from(&reg, &b, &[], &hooks).unwrap();
+        assert!(
+            on_b.exit(h, 2)
+                .is_some_and(|x| !x.absent && x.addr == 0x4000_020a)
+        );
+    }
+
     #[test]
     fn a_service_name_outside_the_port_set_is_listed() {
         let d = data();
@@ -963,6 +1038,58 @@ mod tests {
         (reg, crate::fwgen::fw_texts(&root).unwrap())
     }
 
+    /// A copied site (a tail or a stock path) is compared with its check value at the load of the port file, so it must hold the stock bytes on a patched image: no site that a
+    /// module of the image patches. The test fixture's hook shares the site of `core/digikit-menu`'s hook, so a production port file lists none of the fixture's hooks; the
+    /// port file of the test image (which runs without digikit-menu) lists them.
+    #[test]
+    fn a_production_port_file_has_no_test_hook_and_no_copied_site_on_a_site_an_image_module_patches()
+     {
+        let (reg, texts) = committed();
+        let decls: Vec<&str> = texts.iter().map(String::as_str).collect();
+        let images = image_hooks(&decls).unwrap();
+        assert!(
+            images
+                .iter()
+                .any(|(n, _)| n == "cf.menu.hook.settings_list.tail"),
+            "digikit-menu's hook is an image hook"
+        );
+        let test_hook = name_hash("cf.menu.hook.settings_list.test");
+        let mut checked = 0;
+        for p in &reg.ports {
+            let prod = build_data(&reg, p, &decls, false).unwrap();
+            assert!(
+                prod.site(test_hook).is_none(),
+                "{}: a production port file lists the test hook",
+                p.id()
+            );
+            let test = build_data(&reg, p, &decls, true).unwrap();
+            assert!(
+                test.sites.len() > prod.sites.len()
+                    || p.hook("cf.menu.hook.settings_list.test").is_none(),
+                "{}: the test port file lists the test hook",
+                p.id()
+            );
+            for s in prod.sites.iter().filter(|s| !s.absent && s.kind.copies()) {
+                let (lo, hi) = (u64::from(s.addr), u64::from(s.addr) + u64::from(s.len));
+                for (name, _) in &images {
+                    let Some(h) = p.hook(name) else { continue };
+                    let Some(a) = p.anchor(&h.site) else { continue };
+                    let at = (a.addr as i64 + h.offset) as u64;
+                    assert!(
+                        hi <= at || at + a.len <= lo,
+                        "{}: the copied site {:#x}..{:#x} lies on the site of {name} ({at:#x}, {} bytes), which an image module patches",
+                        p.id(),
+                        lo,
+                        hi,
+                        a.len
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0);
+    }
+
     #[test]
     fn the_committed_ports_build_a_port_file_without_firmware() {
         let (reg, texts) = committed();
@@ -970,7 +1097,7 @@ mod tests {
         let built: Vec<(&Port, PortData)> = reg
             .ports
             .iter()
-            .map(|p| (p, build_data(&reg, p, &decls).unwrap()))
+            .map(|p| (p, build_data(&reg, p, &decls, false).unwrap()))
             .collect();
         for (_, d) in &built {
             assert_eq!(parse(&pack(d).unwrap()).unwrap(), *d);
@@ -1014,7 +1141,9 @@ doc = "x"
 users = ["core/services/lfo"]
 "#;
         decls.push(extra);
-        let e = build_data(&reg, &reg.ports[0], &decls).unwrap_err().0;
+        let e = build_data(&reg, &reg.ports[0], &decls, false)
+            .unwrap_err()
+            .0;
         assert!(
             e.contains("cf.nowhere.fn.x") && e.contains("no committed port"),
             "{e}"
@@ -1023,7 +1152,7 @@ users = ["core/services/lfo"]
         let only = extra.replace("users =", "devices = [\"zz\"]\nusers =");
         let mut decls: Vec<&str> = texts.iter().map(String::as_str).collect();
         decls.push(&only);
-        assert!(build_data(&reg, &reg.ports[0], &decls).is_ok());
+        assert!(build_data(&reg, &reg.ports[0], &decls, false).is_ok());
     }
 
     #[test]

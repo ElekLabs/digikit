@@ -1457,6 +1457,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let nw = unmet_needs(&mods[..n], &mut want);
         if nw != 0 {
             discover::find(&mut self.m, &services(), &want[..nw], role::image_fw_id(&self.p), &mut self.found);
+            if self.found.truncated {
+                // a limit of the search was passed (the provider table is full, or more files or needs than it remembers): a need may be unmet for that reason, not for a missing file
+                crate::boot::report_provider(b"(provider table full)", E_PLAN_FIT, 0, 0);
+            }
         }
         let provs = parse_provs(&self.found, self.found.n);
         let env = Env { services: services(), runtime: dkrt_sdk::RUNTIME_VERSION, caps };
