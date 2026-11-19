@@ -973,7 +973,7 @@ runtime-and-services.md.
 | 8 | Flash waits for the device write | none | host tests of the flash flow | open: after the last SysEx block the device still writes the image to flash while the workbench can already report done (`packages/workbench-core/src/firmware/firmware-flow.ts` `afterSend`: if the port does not leave within `leaveMs` 10 s it asks INFO, and the old image can answer). Show "the device is writing, keep it powered" and accept an answer only after the port left and came back, or after a minimum write time; size it from a device log of the "rebooting: <stage> · ports:" lines (real write time unknown, finding 75) |
 | 8 | Python tests red on main | none | python-tests | done: PR #622 (test_dktiming fake INFO layout, test_core_fx section list, menu-dkrun-pluck binds its services) |
 | 8 | test_pk_current fails on main | none | python-tests | done: PR #621 (container_max hex case) |
-| 8 | E6c WAVE maximum as a row write | E6, E5 | lfo device tests (below) | active: branch e6c/row-write, host checks done, device proof pending |
+| 8 | E6c WAVE maximum as a row write | E6, E5 | lfo device tests (below) | done: branch e6c/row-write (host checks; the lfo device tests below are not run yet) |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
 | 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8, port file | filter test plus subset | todo |
