@@ -185,7 +185,8 @@ unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
 
 /// What `init` of a service file declares is compared with the file's header table. The table's `HOOKS` items carry a device mask in the top byte of the entry and list
 /// the hooks of every device; this device's declarations hold the bare entry and only the hooks the firmware has. The copy of the table that is compared is made to
-/// match: the mask is dropped, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it).
+/// match: the mask is dropped, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it). A `SLOTS` item
+/// carries a device mask too (bits 16 to 23 of its flags): an item for another device is dropped, and the mask of the others is cleared (`init` declares flags without it).
 #[inline(never)]
 pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::collect::KeysCopy) {
     let port = l.port_keys();
@@ -194,6 +195,12 @@ pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loade
     while from < d.n {
         let mut it = d.items[from];
         from += 1;
+        if it.tag == tag::SLOTS {
+            if !dkneeds::keys::slot_for_device(it.b, l.p.device_id()) {
+                continue;
+            }
+            it.b &= !dkneeds::keys::SLOT_DEVICES_MASK;
+        }
         if it.tag == tag::HOOKS {
             it.b &= dkneeds::keys::HOOK_ENTRY_MASK;
             let gone = match &port {
@@ -351,6 +358,10 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
     let mut dsp_slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
     let (mut ns, mut nd) = (0, 0);
     for sl in keys.slots() {
+        // a slot of another device's image: the file serves every device, and its mask says which fills are for this one
+        if !dkneeds::keys::slot_for_device(sl.flags, l.p.device_id()) {
+            continue;
+        }
         if sl.flags & dkneeds::keys::SLOT_DSP != 0 {
             // a DSP slot: the name is a `[[slot]] space = "dsp"` of an image adapter (its index in the slot block comes from the info table) and the entry is a byte offset in
             // this file's DSP image, which must be there and even (a pc is whole words)

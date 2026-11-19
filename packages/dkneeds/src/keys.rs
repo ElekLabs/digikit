@@ -177,6 +177,16 @@ pub struct Pair {
 /// Flag of a `SLOTS` item: the slot is a DSP slot (a word of the slot block of core/dsp-link, `[[slot]] space = "dsp"` of an image adapter) and the entry is an offset in the
 /// file's DSP section (the byte offset of a text symbol in the DSP image), not in the ColdFire image.
 pub const SLOT_DSP: u32 = 0x100;
+/// The device mask of a `SLOTS` item, in bits 16 to 23 of its flags: bit `id - 1` is the device whose runtime id (`[digikit] id` of its device file) is `id`. No bit is every
+/// device. The loader skips an item whose mask lacks its own device: the slot belongs to the image of another device, and an unmasked slot that the image lacks is still refused.
+pub const SLOT_DEVICES_SHIFT: u32 = 16;
+pub const SLOT_DEVICES_MASK: u32 = 0xff << SLOT_DEVICES_SHIFT;
+
+/// Whether a `SLOTS` item with `flags` is for the device with runtime id `device_id` (1 to 8).
+pub fn slot_for_device(flags: u32, device_id: u32) -> bool {
+    let mask = (flags & SLOT_DEVICES_MASK) >> SLOT_DEVICES_SHIFT;
+    mask == 0 || (1..=8).contains(&device_id) && mask & (1 << (device_id - 1)) != 0
+}
 
 /// One `SLOTS` item: the slot id, its flags ([`SLOT_DSP`]) and (version 2 only) the entry (image offset; 0 in a version 1 table).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1064,6 +1074,16 @@ mod tests {
     use super::*;
     use crate::{KIND_EFFECT, KIND_MACHINE, RES_DSP_COST_FX, RES_DSP_COST_VOICE, RES_MACHINE_ROWS};
     use std::{vec, vec::Vec};
+
+    #[test]
+    fn a_slot_device_mask_selects_devices_by_runtime_id_and_none_means_all() {
+        let first = 1 << SLOT_DEVICES_SHIFT;
+        let second = 2 << SLOT_DEVICES_SHIFT;
+        assert!(slot_for_device(0, 1) && slot_for_device(SLOT_DSP, 2));
+        assert!(slot_for_device(first, 1) && !slot_for_device(first, 2));
+        assert!(slot_for_device(first | second | SLOT_DSP, 2) && !slot_for_device(second, 1));
+        assert!(!slot_for_device(first, 0) && !slot_for_device(first, 9));
+    }
 
     fn table_with(groups: &[(u32, &[u32])]) -> Vec<u8> {
         let kg: Vec<KeyGroup> = groups

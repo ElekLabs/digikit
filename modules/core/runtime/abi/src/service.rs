@@ -527,6 +527,11 @@ macro_rules! accepts_teardown {
 /// firmware by the port file. The constant is part of the boundary files, so a change of it changes `SVC_ABI` and the runtime refuses the older files (`E_SVC_ABI`).
 pub const FIRMWARE_REFERENCES: u32 = 2;
 
+/// The device mask in the flags of a `SLOTS` item of a service file (`dkneeds::keys::slot_for_device`): bits 16 to 23, bit `id - 1` for the device with runtime id `id`, none for
+/// every device. The loader skips an item for another device, so one file serves every device. The constant is part of the boundary files: a runtime without the mask would
+/// refuse such an item, so the change of this layout changes `SVC_ABI` and the install refuses the mismatch before boot.
+pub const SLOT_DEVICES_MASK: u32 = dkneeds::keys::SLOT_DEVICES_MASK;
+
 /// A service. Every method but `validate_records` and `teardown_refusal` has a default that declares nothing; a service implements the ones it owns.
 /// The core is passed by reference to every method that may touch it (`declare` reads nothing but its argument); a service
 /// that a host test drives is generic over `C: CoreApi` and the test passes a `FakeCore`.
