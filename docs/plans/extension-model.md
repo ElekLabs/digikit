@@ -764,10 +764,16 @@ What:
    menu: `dkrt_live(op, path)` (queue a job on the same `Job::queue`) and `dkrt_live_state(out)`.
 10. Clients: `DkSession.load`, `unload`, `loadAndWait`, `unloadAndWait` (TypeScript, with `liveModules` in `dktransfer.ts`), `Uploader.load`, `unload`, `load_and_wait`, `unload_and_wait` (`tools/device/dkupload.py`), `wb transfer load|unload PATH`. The Rust `dkupload` crate has no uploader method for reload either: it carries the generated command and capability constants only.
 
-PR 1 (E5c-1) is items 1 to 10 without the menu. PR 2 (E5c-2): `menu.c` `apply()` keeps the save, queues the changed rows through `dkrt_live` (unloads first), polls with the per-pass
-callback and restarts directly only for a route change or to leave safe mode. The user sees "APPLY n CHANGES?"; rows read LOADING; a refusal or failure shows "<NAME> NOT APPLIED" and
-the status text, then "RESTART TO APPLY?" ("STOP PLAYBACK" for the transport refusal). New `status_text` rows -83 to -87. The same PR maps the boot results by the saved selection index
-(`g_sel_of`; read results by path) and drops the `g_set[k]` settings-menu cache when the `unloads` or `reloads` counters change. The menu is an image change: named-subset gate.
+PR 1 (E5c-1) is items 1 to 10 without the menu. PR 2 (E5c-2): `menu.c` `apply()` saves the selection and the routes and flushes, then queues the changed rows through `dkrt_live`
+(the unloads first, then the loads, one job at a time from a per-pass callback). The device restarts directly only for an effect route change and to leave safe mode (`APPLY & RESTART?`).
+The user sees:
+- the confirm `APPLY n CHANGES?` (text `NO RESTART`) when leaving the list; the row of the running job reads `LOADING` or `UNLOADING`, and the list is read-only until the batch ends;
+- after each job the menu scans again (loaded rows, counters, routes) and refreshes the list; after the last job the list closes;
+- a job the runtime refuses at the queue or that fails ends the batch with the dialog `<NAME> NOT APPLIED` and the status text (`STOP PLAYBACK` for the transport, `NO SERVICE` for `E_MISSING`,
+  `HAS MENUS`, `ON AN FX ROUTE`, `KEYS CHANGED`, `RESTART DEVICE`, `UPLOAD OPEN`), then `RESTART TO APPLY?`. YES restarts, NO keeps the device running with the selection saved.
+The same PR maps the boot results by the boot's selection index (`g_bsel`, read once before the first save of the boot; a live load takes an index of its own) and drops the `g_set[k]`
+settings-menu cache when the `unloads` or `reloads` counter changes (a module's index in `dkrt_module` order moves when another module is unloaded). Host tests: `modules/core/adapters/ui/host/tests/menu.rs`;
+device test: `modules/core/apps/digikit-menu/tests/apply-live.device.test.ts`. The menu is an image change: named-subset gate.
 
 Tests: job unit tests over the scripted `Ops` for each operation and each refusal; loader tests (load into a free record with index allocation: a path seen at boot, a new path, `SEL_MAX`;
 the unload end state; a load after an unload keeps the sticky number; the `dsp_clear` abort case); assembly cases in `core/runtime:test-assembly` (a packed fixture loaded at run time, unloaded,
@@ -988,7 +994,7 @@ runtime-and-services.md.
 | 6 | E5 reload of content modules (machine work) | E3, E4, E0b, R12-8 | reload test, soak, subset | done: PR #623 (device: reload test on DT2 and DN2 incl. PCM swap check and soak; named subset 35 halves, gate-smoke, gate-pins) |
 | 7 | E5b reload follow-ups | E5 | fx reload test, soak | todo |
 | 7 | E5c-1 live job: load, unload and reload (runtime, protocol, clients) | E5 | live test (list in E5c), subset | done: PR (device: live, shot-live, reload, C:loading subset, gate-smoke, gate-pins on DT2 and DN2) |
-| 7 | E5c-2 MODULES applies live (menu) | E5c-1 | menu device test, subset | todo |
+| 7 | E5c-2 MODULES applies live (menu) | E5c-1 | menu device test, subset | active: branch e5c/menu-live (host tests and checks done; the device test is written, not run) |
 | 8 | E6 LFO shapes | E0b, E3, E4 | lfo test plus subset | done: PR #612 (test image fix for the refusal test: PR #613) |
 | 8 | Service record validators | E3 | none | done: PR #614. `validate_records` is a required method of the `Service` trait (ABI word changed); every service implements it; `patchkit records --check` runs the owning service's validator (patchkit feature `record-rules`, CLI only) |
 | 8 | LFO shape template and first module | E6 | lfo test | done: PR #618: module kind `lfo-shape` (`mise run module:new -- lfo-shape AUTHOR/NAME`, `sdk/templates/lfo-shape`; `module:check` runs the service validator), module `digikit/lfo_shapes_1` with 7 shapes (STP4 PULS HSIN ABSN SOFT DUCK WOBL), Transfer group "LFO shapes"; `mise run lfo:report -- <author/name>` measures each shape's output on the emulator (DN2 report: all seven shapes OK) |
