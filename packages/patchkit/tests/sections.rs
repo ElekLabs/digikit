@@ -249,3 +249,73 @@ fn a_main_stream_with_room_is_packed_exactly_as_before() {
     );
     assert_eq!(made.margin, None, "the output stays below the stage");
 }
+
+/// A MAIN stream of `n` zeros with the last `tail` bytes as literals: the cut falls inside the long zero match.
+fn zeros_with_tail(n: usize, tail: usize) -> (Vec<u8>, Vec<u8>) {
+    let data = vec![0u8; n];
+    let toks = patchkit::aplib::plan_with(&data, 24, 96);
+    let body = patchkit::aplib::emit(&data, &toks, n - tail);
+    (data, patchkit::aplib::section_of(body))
+}
+
+#[test]
+fn a_margin_of_exactly_the_floor_passes_and_one_byte_less_is_refused() {
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    let room = (stage - dest) as usize;
+    let margin = |n: usize, tail: usize| {
+        let (_, s) = zeros_with_tail(n, tail);
+        patchkit::aplib::inplace_margin(&s, dest, stage).unwrap()
+    };
+    // output 100,000 bytes past the stage: the tail of literals buys the margin, 9/8 of a byte per tail byte
+    let mut n = room + 100_000;
+    let (mut lo, mut hi) = (1usize, 200_000usize);
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        if margin(n, mid).unwrap() >= floor as i64 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    let tail = hi;
+    // the margin falls by one for each more byte of output: bring it to exactly the floor
+    while margin(n, tail).unwrap() > floor as i64 {
+        n += 1;
+    }
+    assert_eq!(margin(n, tail), Some(floor as i64));
+    let check = |n: usize| {
+        let (data, s) = zeros_with_tail(n, tail);
+        let mut fw = image(dev, &[3]);
+        fw.replace_main_stored(data, s).unwrap();
+        patchkit::verify::main_budget(&fw, 0, 1 << 22)
+    };
+    assert!(check(n).is_ok(), "margin == floor passes");
+    assert_eq!(margin(n + 1, tail), Some(floor as i64 - 1));
+    let e = check(n + 1).unwrap_err().0;
+    assert!(e.contains("in-place margin"), "{e}");
+}
+
+#[test]
+fn the_literal_tail_is_cut_inside_a_long_match_and_is_nearly_minimal() {
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    let n = (stage - dest) as usize + 100_000;
+    let data = vec![0u8; n];
+    let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
+    // the output crosses the stage inside the tail: the margin there is 9/8 of the tail bytes before the crossing, so the tail is 100,000 + floor * 8 / 9
+    // bytes, not the whole token of up to a MiB that a cut at token boundaries would literalize
+    let want = 100_000 + floor as usize * 8 / 9;
+    assert!(
+        made.literal_tail + 64 > want && made.literal_tail < want + 64,
+        "tail {}",
+        made.literal_tail
+    );
+    assert!(
+        made.margin.unwrap() >= floor as i64 && made.margin.unwrap() < floor as i64 + 16,
+        "{:?}",
+        made.margin
+    );
+    let back = dt2_firmware_loader::depack_section(&made.stream, 0, 1 << 24).unwrap();
+    assert!(back == data);
+}

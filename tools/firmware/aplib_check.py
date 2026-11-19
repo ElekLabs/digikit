@@ -88,9 +88,15 @@ def native_binary() -> pathlib.Path:
     return target / "release" / "examples" / "depack_check"
 
 
-def firmware_depack(binary, bootstrap_path, stream: bytes, patch: dict) -> dict:
+def firmware_depack(
+    binary, bootstrap_path, stream: bytes, patch: dict, sid: int
+) -> dict:
     boot = bootstrap_path.read_bytes()
     entry = depacker_entry(boot, patch["boot_load"])
+    # The device's `main_stage` is where the bootstrap stages the MAIN OS (section 3). The other sections are unpacked by the bootstrap and by
+    # MAIN into their own buffers, which are not device data; for them the check only needs a stage that does not overlap the output, the default
+    # of depack_check (0x40400000, past every section).
+    stage = ["--stage", hex(patch["main_stage"])] if sid == 3 else []
     with tempfile.TemporaryDirectory() as tmp:
         f = pathlib.Path(tmp) / "stream.bin"
         f.write_bytes(stream)
@@ -100,8 +106,7 @@ def firmware_depack(binary, bootstrap_path, stream: bytes, patch: dict) -> dict:
                 str(bootstrap_path),
                 str(f),
                 hex(entry),
-                "--stage",
-                hex(patch["main_stage"]),
+                *stage,
                 "--base",
                 hex(patch["boot_load"]),
             ],
@@ -130,7 +135,7 @@ def check_image(image: str, ids: list[int], binary) -> int:
         ok_py = elz.depack_section(stream) == data
         ok_fw = None
         if binary is not None:
-            fw = firmware_depack(binary, bootstrap, stream, patch)
+            fw = firmware_depack(binary, bootstrap, stream, patch, sid)
             ok_fw = (
                 fw["len"] == len(data)
                 and fw["sha256"] == hashlib.sha256(data).hexdigest()

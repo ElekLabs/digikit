@@ -289,12 +289,28 @@ pub fn plan_with(data: &[u8], depth: usize, nice: usize) -> Vec<Tok> {
     path
 }
 
-/// The stream of a path. Every token that starts at or after `literal_from` is written as literals instead (a match is cut into its bytes): a tail of
-/// literals consumes one stream byte per output byte, which is what an in-place unpack needs at the end. `literal_from == data.len()` is the plain stream.
+/// The stream of a path with everything from output position `literal_from` on written as literals: a token that starts at or after it becomes literals,
+/// and a match that straddles it is cut there (a shorter match keeps the part before the cut, the rest is literals), so the tail is as short as asked.
+/// A tail of literals consumes one stream byte per output byte, which is what an in-place unpack needs at the end. `literal_from == data.len()` is the
+/// plain stream.
 pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
     let mut out = Bits::new();
     let mut last = 1i64;
     for t in toks {
+        let mut to = t.to;
+        if t.off != 0 && t.from < literal_from && t.to > literal_from {
+            // the cut falls inside this match: keep a shorter match when it is still a match, else all of it goes to literals
+            let min = 2 + (t.off > FAR) as usize;
+            if literal_from - t.from >= min {
+                to = literal_from;
+            } else {
+                for &b in &data[t.from..t.to] {
+                    out.bit(true);
+                    out.byte(b);
+                }
+                continue;
+            }
+        }
         if t.off == 0 || t.from >= literal_from {
             for &b in &data[t.from..t.to] {
                 out.bit(true);
@@ -302,7 +318,7 @@ pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
             }
             continue;
         }
-        let copies = (t.to - t.from) as i64;
+        let copies = (to - t.from) as i64;
         out.bit(false);
         if t.off == last {
             out.gamma(2);
@@ -313,6 +329,10 @@ pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
             last = t.off;
         }
         out.length(copies - 1 - (t.off > FAR) as i64);
+        for &b in &data[to..t.to] {
+            out.bit(true);
+            out.byte(b);
+        }
     }
     out.bit(false);
     out.gamma(END_GAMMA);
@@ -325,7 +345,7 @@ pub fn pack(data: &[u8]) -> Vec<u8> {
 }
 
 /// `body` (a packed stream) with the section header `[u32 stream length][u32 byte sum]`.
-fn section_of(body: Vec<u8>) -> Vec<u8> {
+pub fn section_of(body: Vec<u8>) -> Vec<u8> {
     let sum = body.iter().fold(0u32, |s, &b| s.wrapping_add(b as u32));
     let mut out = Vec::with_capacity(body.len() + 8);
     out.extend_from_slice(&(body.len() as u32).to_be_bytes());
@@ -373,9 +393,8 @@ pub fn pack_section_in_place(
             plain_len,
         });
     }
-    // the stream from token k on as literals: k = 0 is all literals, k = toks.len() the plain stream
-    let at = |k: usize| {
-        let from = toks.get(k).map_or(data.len(), |t| t.from);
+    // the stream with the data from output position `from` on as literals: `from` = 0 is all literals, `from` = data.len() the plain stream
+    let at = |from: usize| {
         let s = section_of(emit(data, &toks, from));
         let m = inplace_margin(&s, dest, stage);
         (s, m, data.len() - from)
@@ -389,7 +408,8 @@ pub fn pack_section_in_place(
             data.len()
         ));
     }
-    let (mut lo, mut hi) = (0usize, toks.len());
+    // binary search for the largest `from` (the shortest tail) that keeps the margin: lo is known good, hi is known bad (the plain stream)
+    let (mut lo, mut hi) = (0usize, data.len());
     let mut best = (s0, m0, tail0);
     while hi - lo > 1 {
         let mid = lo + (hi - lo) / 2;

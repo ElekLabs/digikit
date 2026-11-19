@@ -2450,13 +2450,21 @@ pub fn apply_with(
         fw.replace_main_stored(mem.main.clone(), packed.stream)?;
     }
     store_repacked(&mut fw, &repacks)?;
-    let syx = fw.build(opts.flash_cap.then_some(lim.container_max as usize)).map_err(|e| match main_tail {
-        Some((tail, extra)) if tail > 0 && e.0.contains("over the") => err!(
-            "{}: MAIN OS needs a tail of {tail} bytes stored as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs more than the container allows: trim the runtime or move it out of MAIN",
-            e.0
-        ),
-        _ => e,
-    })?;
+    // the cap of the OS-upgrade stage; when MAIN carries a literal tail for the bootstrap's margin, say what it cost
+    if opts.flash_cap {
+        let n = fw.container()?.len();
+        let max = lim.container_max as usize;
+        if n > max {
+            return Err(match main_tail {
+                Some((tail, extra)) if tail > 0 => err!(
+                    "container is {n} bytes, over the {max}-byte limit: MAIN OS needs a tail of {tail} bytes stored as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs {} bytes more than the container allows: trim the runtime or move it out of MAIN",
+                    n - max
+                ),
+                _ => err!("container is {n} bytes, over the {max}-byte limit"),
+            });
+        }
+    }
+    let syx = fw.build(None)?;
     let regions = allocs
         .iter()
         .map(|(k, v)| (k.clone(), (v.used, v.cap)))

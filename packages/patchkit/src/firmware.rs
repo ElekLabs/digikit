@@ -142,15 +142,20 @@ impl Firmware {
         Ok(s.stored.len())
     }
 
-    /// The container (sealed) and the full `.syx`.
-    pub fn build(&self, max_container: Option<usize>) -> Result<Vec<u8>> {
+    /// The sealed container of the sections as they are stored now.
+    pub fn container(&self) -> Result<Vec<u8>> {
         let entries: Vec<(u32, u32, &[u8])> = self
             .sections
             .iter()
             .map(|s| (s.id, s.dest, s.stored.as_slice()))
             .collect();
         let c = syx::build_container(&self.header, &entries, self.first_offset, self.device)?;
-        let c = syx::seal(c, self.device);
+        Ok(syx::seal(c, self.device))
+    }
+
+    /// The container (sealed) and the full `.syx`.
+    pub fn build(&self, max_container: Option<usize>) -> Result<Vec<u8>> {
+        let c = self.container()?;
         if let Some(max) = max_container
             && c.len() > max
         {
