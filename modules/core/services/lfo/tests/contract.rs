@@ -134,8 +134,15 @@ fn fixture(device: u32) -> Fixture {
 #[test]
 fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // the service's firmware addresses are a static: clear them even when the contract panics
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            set_firmware(0, [0; 3]);
+        }
+    }
+    let _reset = Reset;
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
         contract::<Lfo>(&fixture(p.id));
     }
-    set_firmware(0, [0; 3]);
 }

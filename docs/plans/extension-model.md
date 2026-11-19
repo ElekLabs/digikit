@@ -853,11 +853,10 @@ is made at run time, never at patch time, so with no shape loaded the maximum st
   `cf.param.data.descriptor_table`; `patchkit bind` resolves the four words (`DKRT_LFO_FW` in `hooks-ui.s`) and `setup` gives them to the crate.
   `patchkit service-check` fails a row anchor that lists two services in `users`.
 - `apply_record` and `remove` call `sync_range`: max = the highest loaded shape number << 8 while a shape is loaded; the stock pair goes back with the last
-  shape (contract cases 3 and 7 compare the word with its start value). Without `dynreg_info` the ROWS check and `apply_record` refuse with `E_NO_REGISTRY`.
-- Deleted: the `t1_range` site and hook, its routine in `hooks-ui.s`, `dk_lfo_range_max` and its slot (lfo binds two hooks on DT2, three on DN2).
+  shape (contract cases 3 and 7 compare the word with its start value). `lfo.dks` requires `core/dynreg` (it provides `dynreg_info` and the table copy), so a patch set without it is refused at plan time; an image without `dynreg_info` still refuses a shape with `E_NO_REGISTRY`.
 
 Tests: unit (the helper over `FakeCore` memory: set, restore, refusals; lfo: the maximum follows the highest loaded shape over apply, remove and reload; the contract
-suite with the rows in the fixture image), assembly (`lfo.dks` binds without `t1_range`, the four words of `DKRT_LFO_FW` resolve), device (existing: lfo-shape-panel,
+suite with the rows in the fixture image), assembly (`lfo.dks` binds two hooks on DT2 and three on DN2, the four words of `DKRT_LFO_FW` resolve to the table and its rows), device (existing: lfo-shape-panel,
 lfo-shape-output, lfo-shape-project, lfo.device; goldens unchanged). Depends on: E6, E5.
 
 ### E6d Custom LFO graphics through the SDK

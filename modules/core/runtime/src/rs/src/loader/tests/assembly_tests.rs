@@ -708,6 +708,17 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         got.sort();
         want.sort();
         assert_eq!(got, want, "{}: the BIND items of lfo.dks", dev.name);
+        // the four firmware words of the WAVE maximum (`DKRT_LFO_FW`): the stock parameter table and the rows of the codes 79, 89 and 99, resolved by `bind`. A zero word would
+        // make the service write nothing (it takes 0 for a build without firmware), so each must be set; the rows lie 60 bytes apart in the table
+        let map = std::fs::read_to_string(repo().join(format!("dist/svc-bound/{}/lfo.addrmap.json", dev.name))).expect("the address map of the bound lfo.dks");
+        let at = map.find("\"name\":\"DKRT_LFO_FW\"").expect("DKRT_LFO_FW is in the address map");
+        let from = map[..at].rfind("\"addr\":").unwrap() + 7;
+        let off: u32 = map[from..].split(',').next().unwrap().parse().unwrap();
+        let words: Vec<u32> = (0..4).map(|k| be(&bound, be(&bound, dkneeds::H_IMAGE_OFF) + off + 4 * k)).collect();
+        assert!(words.iter().all(|w| *w != 0), "{}: a DKRT_LFO_FW word is 0: {words:x?}", dev.name);
+        for (k, code) in [79u32, 89, 99].into_iter().enumerate() {
+            assert_eq!(words[1 + k], words[0] + 60 * code, "{}: WAVE row {} is not table + 60 * {code}", dev.name, k + 1);
+        }
     }
 }
 
