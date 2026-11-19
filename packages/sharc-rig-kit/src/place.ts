@@ -284,7 +284,7 @@ function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2', with
     fxObject(FX_ADAPTER),
     fxObject(FX_SEND[device]!),
     fxObject(FX_DISPATCH[device]!, withoutSpans),
-    ...sources.map(fxObject),
+    ...sources.map((s) => fxObject(s)),
   ];
   const layout = placeData(objs, DATA_BASE);
   let { end: addr } = layout;

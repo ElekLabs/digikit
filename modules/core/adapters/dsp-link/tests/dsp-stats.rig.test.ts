@@ -22,7 +22,6 @@ import {
   placeData,
   sharcIncludeDirs,
   type CallResult,
-  type Init,
   type Op,
   type RigPort,
 } from '@digi/sharc-rig-kit';

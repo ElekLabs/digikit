@@ -591,7 +591,9 @@ def test_profile_elapsed_counts_clock_ticks_across_wraps_while_running(harness):
 
 def dsp_reply(reply: str):
     raw = bytes.fromhex(reply.split()[2])
-    version, flags, gen, rows, sweep, sweeps, gaps, ignored = struct.unpack(">BBBBIIII", raw[:20])
+    version, flags, gen, rows, sweep, sweeps, gaps, ignored = struct.unpack(
+        ">BBBBIIII", raw[:20]
+    )
     assert (version, rows) == (1, 16)
     words = struct.unpack(f">{(len(raw) - 20) // 4}I", raw[20:])
     assert len(words) == (100 if flags & 2 else 0)
@@ -599,13 +601,36 @@ def dsp_reply(reply: str):
 
 
 def test_profile_dsp_start_takes_the_span_channel_and_sends_the_control(harness):
-    out = run(harness, ["sinkstat", "dspctl", "cmd 27 00", "cmd 27 01", "sinkstat", "dspctl", "cmd 27 02", "sinkstat", "dspctl"])
+    out = run(
+        harness,
+        [
+            "sinkstat",
+            "dspctl",
+            "cmd 27 00",
+            "cmd 27 01",
+            "sinkstat",
+            "dspctl",
+            "cmd 27 02",
+            "sinkstat",
+            "dspctl",
+        ],
+    )
     assert out[2:4] == ["sink 0 0", "ctl 0 0 0"]
-    assert dsp_reply(out[4]) == (0, 0, 0, (0, 2, 3), ())  # off: no sweep, the mirror's counters
+    assert dsp_reply(out[4]) == (
+        0,
+        0,
+        0,
+        (0, 2, 3),
+        (),
+    )  # off: no sweep, the mirror's counters
     assert dsp_reply(out[5]) == (1, 0, 0, (0, 2, 3), ())  # on, no sweep yet
-    assert out[6:8] == ["sink 1 1", "ctl 1 0 1"], "start owns the channel, as PROFILE_STATE start does"
+    assert out[6:8] == ["sink 1 1", "ctl 1 0 1"], (
+        "start owns the channel, as PROFILE_STATE start does"
+    )
     assert dsp_reply(out[8])[0] == 0
-    assert out[9:] == ["sink 1 1", "ctl 0 0 2"], "stopping the DSP counters keeps the spans"
+    assert out[9:] == ["sink 1 1", "ctl 0 0 2"], (
+        "stopping the DSP counters keeps the spans"
+    )
 
 
 def test_profile_dsp_reply_carries_the_sweep_when_one_is_complete(harness):
@@ -615,24 +640,54 @@ def test_profile_dsp_reply_carries_the_sweep_when_one_is_complete(harness):
     assert words == tuple(3000 + i for i in range(100))
 
 
-def test_profile_dsp_clear_is_a_new_generation_and_only_reaches_the_dsp_when_on(harness):
-    out = run(harness, ["cmd 27 03", "dspctl", "cmd 27 01", "cmd 27 03", "dspctl", "cmd 27 02", "cmd 27 03", "dspctl"])
-    assert dsp_reply(out[2])[1] == 1 and out[3] == "ctl 0 0 0", "off: the generation moves, the DSP is told at the next start"
+def test_profile_dsp_clear_is_a_new_generation_and_only_reaches_the_dsp_when_on(
+    harness,
+):
+    out = run(
+        harness,
+        [
+            "cmd 27 03",
+            "dspctl",
+            "cmd 27 01",
+            "cmd 27 03",
+            "dspctl",
+            "cmd 27 02",
+            "cmd 27 03",
+            "dspctl",
+        ],
+    )
+    assert dsp_reply(out[2])[1] == 1 and out[3] == "ctl 0 0 0", (
+        "off: the generation moves, the DSP is told at the next start"
+    )
     assert dsp_reply(out[4])[:2] == (1, 1), "start sends the generation"
     assert dsp_reply(out[5])[1] == 2 and out[6] == "ctl 1 2 2"
-    assert dsp_reply(out[8])[1] == 3 and out[9] == "ctl 0 3 4", "stopped, the spans still on: the new generation reaches the DSP with on = 0"
+    assert dsp_reply(out[8])[1] == 3 and out[9] == "ctl 0 3 4", (
+        "stopped, the spans still on: the new generation reaches the DSP with on = 0"
+    )
 
 
 def test_profile_dsp_stops_with_the_spans_and_with_the_module(harness):
-    out = run(harness, ["cmd 27 01", "cmd 30 02", "dspctl", "cmd 27 01", "fini", "dspctl"])
-    assert out[4] == "ctl 0 0 2", "PROFILE_STATE stop stops the DSP counters before it gives up the channel"
+    out = run(
+        harness, ["cmd 27 01", "cmd 30 02", "dspctl", "cmd 27 01", "fini", "dspctl"]
+    )
+    assert out[4] == "ctl 0 0 2", (
+        "PROFILE_STATE stop stops the DSP counters before it gives up the channel"
+    )
     assert dsp_reply(out[5])[0] == 1
     assert out[6:] == ["fini 1 1", "ctl 0 0 4"], "fini stops them too"
 
 
-def test_profile_dsp_start_gets_the_runtime_busy_code_and_bad_bodies_are_refused(harness):
-    out = run(harness, ["cmd 27 01", "cmd 27 00", "cmd 27 09", "cmd 27", "cmd 27 0001"], args=["busy"])
+def test_profile_dsp_start_gets_the_runtime_busy_code_and_bad_bodies_are_refused(
+    harness,
+):
+    out = run(
+        harness,
+        ["cmd 27 01", "cmd 27 00", "cmd 27 09", "cmd 27", "cmd 27 0001"],
+        args=["busy"],
+    )
     assert out[2].split()[1] == "-12", "another module owns the span channel"
     assert dsp_reply(out[3])[0] == 0
     assert out[4].startswith("reply -60"), "an op past clear"
-    assert out[5].startswith("reply -50") and out[6].startswith("reply -50"), "a body of another length"
+    assert out[5].startswith("reply -50") and out[6].startswith("reply -50"), (
+        "a body of another length"
+    )

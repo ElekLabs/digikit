@@ -67,7 +67,9 @@ typedef uint8_t u8;
 #define CMD_PROFILE_DSP 0x1bu
 #define DSP_ROWS 16u
 #define DSP_WINDOW_WORDS 100u
-#define DSP_READ_WORDS (DSP_WINDOW_WORDS + 3u) /* the window, then the mirror's counters: sweeps, gaps, ignored records */
+#define DSP_READ_WORDS                                                                             \
+    (DSP_WINDOW_WORDS +                                                                            \
+     3u) /* the window, then the mirror's counters: sweeps, gaps, ignored records */
 
 #if !defined(DK_MAX_MODULES)
 #error                                                                                             \
