@@ -728,6 +728,54 @@ fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
     out
 }
 
+/// The row anchors of `devices/fw` that name the service `name` in `users` and another service too. A row anchor is a `[[data]]` entry found by the words of its row
+/// (`rule.kind = "cf_words"`, not a code site): a service that writes such a row owns it, and two services that write one row would overwrite each other's words.
+/// A missing folder gives no problem (the service folder is checked outside the repository in tests).
+pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
+    let me = format!("core/services/{name}");
+    let mut out = vec![];
+    let Ok(rd) = std::fs::read_dir(fw) else {
+        return out;
+    };
+    let mut files: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+        .collect();
+    files.sort();
+    for f in files {
+        let Some(t) = std::fs::read_to_string(&f)
+            .ok()
+            .and_then(|t| t.parse::<toml::Table>().ok())
+        else {
+            continue;
+        };
+        for d in t.get("data").and_then(|d| d.as_array()).into_iter().flatten() {
+            let Some(d) = d.as_table() else { continue };
+            let rule = d.get("rule").and_then(|r| r.as_table());
+            let words = rule
+                .and_then(|r| r.get("kind"))
+                .and_then(|k| k.as_str())
+                .is_some_and(|k| k == "cf_words")
+                && rule.and_then(|r| r.get("as")).is_none();
+            let services: Vec<String> = strings(d.get("users"))
+                .into_iter()
+                .filter(|u| u.starts_with(crate::fwgen::SERVICE_USER_PREFIX))
+                .collect();
+            if words && services.len() > 1 && services.contains(&me) {
+                out.push(format!(
+                    "{}: the row anchor `{}` has {} services in `users` ({}): one service writes a row",
+                    f.file_name().and_then(|n| n.to_str()).unwrap_or("devices/fw"),
+                    d.get("name").and_then(|n| n.as_str()).unwrap_or("?"),
+                    services.len(),
+                    services.join(", ")
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// Every problem of the service crate at `dir`; empty when it is as the layout says. The image adapters are at `../../adapters` of the service folder
 /// (`modules/core/adapters`).
 pub fn check(dir: &Path, sdk: &Path) -> Result<Vec<String>> {
@@ -831,6 +879,9 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
         problem(p);
     }
     for p in fill_problems(dir, adapters) {
+        problem(p);
+    }
+    for p in row_anchor_problems(&name, &adapters.join("../../../devices/fw")) {
         problem(p);
     }
     match row {
