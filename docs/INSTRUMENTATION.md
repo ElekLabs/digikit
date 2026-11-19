@@ -705,7 +705,7 @@ hash lists and the input hash; a row (DSP) must have equal calls per block, a sp
 Fit. DSP: one factor per device, `cycles ~ f * instructions`, from the worst-case statistics (largest call, largest block). `fit` minimises the squared relative error, `budget` is the worst observed
 ratio, so it never underpredicts a measured pair. Steady means are paired apart (`steady`) and do not enter the fit. `error`: `n`, `mean` of `(f*insn - cyc)/cyc`, `worst_under` (the fit factor), `loo_worst`
 (each row of each case predicted by a fit without it) and `loo_budget_under` (the same with the others' budget factor). `spread` is the worst ratio over the best, minus one; above 10% the report warns
-that one factor is too coarse. `stock`: per case the device header's largest stock block delta minus the largest blocks of the module rows; `avg` and `max` over the cases (the budget uses `max`).
+that one factor is too coarse. `stock`: only from module-free cases, device runs with a `dsp` header and no row with calls (no machine or effect playing); each gives its header's largest stock block delta directly, nothing is subtracted. `avg` and `max` run over those cases (the budget uses `max`). Without such a case `stock` is null and the file warns `no module-free case: budget keeps the configured stock_busy`. A module-free case needs no model profile.
 ColdFire: the same over span owners, in time (ticks over `span_clock_hz`, in microseconds), without `stock`. An emulator-against-emulator run gives exactly 1.000 and warns that it is no
 device calibration (`key.device_unit` is `insn`).
 

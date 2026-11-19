@@ -81,7 +81,7 @@ pub struct Steady {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct Stock {
-    /// Per case: the largest stock block delta of the device minus the largest blocks of the module rows.
+    /// From the module-free cases only (no row with calls): their header's largest stock block delta; `avg` and `max` over those cases.
     pub avg: f64,
     pub max: f64,
     pub cases: usize,
@@ -657,7 +657,28 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
     let (mut target, mut firmware, mut unit): (Option<String>, Option<String>, Option<String>) =
         (None, None, None);
     for (case, d) in &dev {
+        if let Some(t) = &target {
+            if *t != d.target || firmware != d.firmware {
+                return Err(format!(
+                    "calibrate: case {case} was captured on {:?} firmware {:?}, the others on {t:?} {firmware:?}: one file holds one device and firmware",
+                    d.target, d.firmware
+                ));
+            }
+        } else {
+            target = Some(d.target.clone());
+            firmware = d.firmware.clone();
+        }
+        // A module-free case (a stock-only run: a header and no row with calls) gives the stock figure directly.
+        if let Some(delta) = d
+            .stock_delta
+            .filter(|_| d.rows.values().all(|r| r.calls == 0))
+        {
+            stocks.push(delta as f64);
+        }
         let Some(m) = mdl.get(case) else {
+            if d.rows.values().all(|r| r.calls == 0) && d.spans.is_empty() {
+                continue; // stock-only, no model needed
+            }
             refuse(
                 &mut refused,
                 "case",
@@ -677,17 +698,6 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
             );
             continue;
         }
-        if let Some(t) = &target {
-            if *t != d.target || firmware != d.firmware {
-                return Err(format!(
-                    "calibrate: case {case} was captured on {:?} firmware {:?}, the others on {t:?} {firmware:?}: one file holds one device and firmware",
-                    d.target, d.firmware
-                ));
-            }
-        } else {
-            target = Some(d.target.clone());
-            firmware = d.firmware.clone();
-        }
         if let Some(mu) = m.unit.as_ref().filter(|mu| *mu != "insn") {
             refuse(
                 &mut refused,
@@ -706,18 +716,6 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
         }
         dsp_pairs(case, d, m, &mut raw_dsp, &mut refused);
         cf_pairs(case, d, m, &mut raw_cf, &mut refused);
-        match (d.stock_delta, d.unit.as_deref()) {
-            (Some(delta), _) => {
-                let rows: u64 = d.rows.values().map(|r| r.max_block).sum();
-                stocks.push(delta.saturating_sub(rows) as f64);
-            }
-            (None, _) if !d.rows.is_empty() => {
-                warnings.push(format!(
-                    "case {case}: the device profile has no dsp header, no stock figure"
-                ));
-            }
-            _ => {}
-        }
     }
     let mut dsp = section(raw_dsp);
     let cf = section(raw_cf);
@@ -735,12 +733,16 @@ pub fn fit(req: &Request) -> Result<Calibration, String> {
             }
         ));
     }
-    if let (Some(s), false) = (dsp.as_mut(), stocks.is_empty()) {
-        s.stock = Some(Stock {
-            avg: stocks.iter().sum::<f64>() / stocks.len() as f64,
-            max: stocks.iter().copied().fold(0.0, f64::max),
-            cases: stocks.len(),
-        });
+    if let Some(s) = dsp.as_mut() {
+        if stocks.is_empty() {
+            warnings.push("no module-free case: budget keeps the configured stock_busy".into());
+        } else {
+            s.stock = Some(Stock {
+                avg: stocks.iter().sum::<f64>() / stocks.len() as f64,
+                max: stocks.iter().copied().fold(0.0, f64::max),
+                cases: stocks.len(),
+            });
+        }
     }
     for (name, s) in [("DSP", &dsp), ("ColdFire", &cf)] {
         if let Some(s) = s.as_ref().filter(|s| s.spread > SPREAD_LIMIT) {
@@ -946,13 +948,13 @@ mod tests {
             .map(|&(r, call, block)| row(r, 10, call * 10, call, block))
             .collect();
         (
-            prof("dn2", case, "cycles", 5, 400_000, d, json!([])),
-            prof("dn2", case, "insn", 5, 300_000, m, json!([])),
+            prof("dev-a", case, "cycles", 5, 400_000, d, json!([])),
+            prof("dev-a", case, "insn", 5, 300_000, m, json!([])),
         )
     }
 
     #[test]
-    fn a_known_factor_is_recovered_and_the_stock_is_the_header_minus_the_rows() {
+    fn a_known_factor_is_recovered_and_without_a_module_free_case_there_is_no_stock() {
         let (d, m) = pair_for(2.0, "shot", &[(0, 1000, 3000), (8, 500, 900)]);
         let c = fit(&req(vec![d], vec![m])).unwrap();
         let s = c.dsp.unwrap();
@@ -961,9 +963,36 @@ mod tests {
         assert!(s.error.mean.abs() < 1e-9 && s.error.worst_under < 1e-9);
         assert_eq!(s.pairs.iter().filter(|p| p.stat == "mean").count(), 2);
         assert_eq!(s.steady.n, 2);
-        // 400000 - (6000 + 1800)
-        assert_eq!(s.stock.unwrap().max, 392_200.0);
-        assert!(c.refused.is_empty() && c.warnings.is_empty());
+        assert!(
+            s.stock.is_none(),
+            "no subtraction: the rows' cases give no stock"
+        );
+        assert_eq!(
+            c.warnings,
+            ["no module-free case: budget keeps the configured stock_busy"]
+        );
+        assert!(c.refused.is_empty());
+    }
+
+    #[test]
+    fn the_stock_comes_from_module_free_cases_only() {
+        let (d, m) = pair_for(2.0, "shot", &[(0, 1000, 3000)]);
+        // two stock-only device runs (a header, no row with calls); no model run is needed
+        let idle =
+            |case: &str, stock: u64| prof("dev-a", case, "cycles", 5, stock, vec![], json!([]));
+        let c = fit(&req(
+            vec![d, idle("idle", 300_000), idle("held", 340_000)],
+            vec![m],
+        ))
+        .unwrap();
+        let k = c.dsp.unwrap().stock.unwrap();
+        assert_eq!((k.avg, k.max, k.cases), (320_000.0, 340_000.0, 2));
+        assert!(
+            c.warnings.is_empty() && c.refused.is_empty(),
+            "{:?} {:?}",
+            c.warnings,
+            c.refused
+        );
     }
 
     #[test]
@@ -1082,7 +1111,7 @@ mod tests {
             {"owner": 1, "kind": "module", "name": "m", "calls": 40, "sum_ticks": 123_457, "max_ticks": 9_001},
             {"owner": 0x101, "kind": "phase", "name": "late", "calls": 40, "sum_ticks": 77_777, "max_ticks": 3_333}
         ]);
-        let m = prof("dt2", "e", "insn", 9, 600_000, rows, spans);
+        let m = prof("dev-b", "e", "insn", 9, 600_000, rows, spans);
         let mut d = m.clone();
         d["dsp"]["unit"] = json!("insn");
         let c = fit(&req(vec![d], vec![m])).unwrap();
@@ -1103,8 +1132,8 @@ mod tests {
     #[test]
     fn colfire_spans_compare_time_so_two_clocks_give_the_ratio_of_time() {
         let sp = |ticks: u64| json!([{"owner": 1, "kind": "module", "name": "m", "calls": 10, "sum_ticks": ticks * 10, "max_ticks": ticks}]);
-        let mut d = prof("dn2", "s", "cycles", 1, 0, vec![], sp(3000));
-        let m = prof("dn2", "s", "insn", 1, 0, vec![], sp(1000));
+        let mut d = prof("dev-a", "s", "cycles", 1, 0, vec![], sp(3000));
+        let m = prof("dev-a", "s", "insn", 1, 0, vec![], sp(1000));
         d["span_clock_hz"] = json!(3_000_000);
         // 3000 ticks at 3 MHz = 1000 us; 1000 ticks at 1 MHz = 1000 us
         let c = fit(&req(vec![d.clone()], vec![m.clone()])).unwrap();
@@ -1129,8 +1158,7 @@ mod tests {
 
     #[test]
     fn a_profile_without_dsp_rows_is_read_without_error() {
-        let p =
-            json!({"schema": "dk.profile/1", "run": {"id": "x", "target": "dn2", "case_id": "c"}});
+        let p = json!({"schema": "dk.profile/1", "run": {"id": "x", "target": "dev-a", "case_id": "c"}});
         let (case, s) = read_side(&p).unwrap();
         assert_eq!(case.as_deref(), Some("c"));
         assert!(s.rows.is_empty() && s.spans.is_empty());
