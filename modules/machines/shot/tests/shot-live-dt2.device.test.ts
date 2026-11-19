@@ -91,5 +91,5 @@ runtimeTests(
     }
     record(artifacts, 'live-samples', { before: l, after, again: back });
   },
-  { dsp: 'sharc' },
+  { dsp: 'sharc', devices: ['dt2'] },
 );
