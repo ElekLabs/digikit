@@ -80,19 +80,22 @@ pub fn parse_reply(msg: &[u8]) -> Option<(u16, u8, Vec<u8>)> {
     ))
 }
 
-/// The model name in the payload of a Ping reply. The reply is `u8 blobLen`, the blob of advertised request types, then NUL-ended strings; the first
-/// string is the name. A real Syntakt 1.42 reply has one more byte in front (`1e 16 <22 types> "Syntakt" 00`: the byte is the length of what follows
-/// `blobLen`), so the name is looked for at both offsets, and only a printable ASCII string counts. `parsePing` of
-/// `packages/dk-session/src/identify.ts` is the same rule. `None` when the payload is empty, cut short or has no such name.
+/// The model name in the payload of a Ping reply. Two layouts, told apart by the framing and not by their content:
+/// - plain: `u8 blobLen`, the blob of request types, NUL-ended strings (the first is the name);
+/// - length-prefixed: `u8 rest`, then the plain layout, where `rest` is the number of bytes after the `blobLen` byte (the Syntakt 1.42 reply,
+///   `1e 16 <22 types> "Syntakt" 00`, finding 144). A payload whose first byte is two less than its length is this one.
+///
+/// `None` when the payload is empty, cut short or has no name. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parsePing` of
+/// `packages/dk-session/src/identify.ts`.
 pub fn parse_ping(payload: &[u8]) -> Option<String> {
-    (0..2).find_map(|skip| {
-        let start = skip + 1 + *payload.get(skip)? as usize;
-        let rest = payload.get(start..)?;
-        let end = rest.iter().position(|&b| b == 0)?;
-        let name = &rest[..end];
-        (end > 0 && name.iter().all(|b| (0x20..0x7f).contains(b)))
-            .then(|| name.iter().map(|&b| b as char).collect())
-    })
+    let body = match payload.split_first() {
+        Some((&rest, body)) if payload.len() >= 2 && rest as usize == payload.len() - 2 => body,
+        _ => payload,
+    };
+    let start = 1 + *body.first()? as usize;
+    let strings = body.get(start..)?;
+    let end = strings.iter().position(|&b| b == 0)?;
+    (end > 0).then(|| strings[..end].iter().map(|&b| b as char).collect())
 }
 
 /// Why a run ended without a flash.
@@ -564,21 +567,23 @@ mod ping_tests {
         assert_eq!(parse_ping(&payload).as_deref(), Some("Syntakt"));
     }
 
+    /// The vectors shared with the TypeScript parser.
     #[test]
-    fn the_ping_reply_names_the_model_after_the_request_type_blob() {
-        // blob of 3 request types, then the name and another string
-        let p = [
-            3, 1, 2, 80, b'S', b'y', b'n', b't', b'a', b'k', b't', 0, b'x', 0,
-        ];
-        assert_eq!(parse_ping(&p).as_deref(), Some("Syntakt"));
-        assert_eq!(parse_ping(&[]), None);
-        assert_eq!(parse_ping(&[3, 1, 2, 80]), None);
-        assert_eq!(parse_ping(&[0, 0]), None, "an empty name");
-        assert_eq!(parse_ping(&[0, b'a']), None, "no terminator");
-        // the Syntakt's reply has a length byte in front of blobLen
-        let mut st = vec![0x1e, 2, 7, 8];
-        st.extend(b"Syntakt\0");
-        assert_eq!(parse_ping(&st).as_deref(), Some("Syntakt"));
+    fn the_shared_ping_vectors() {
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/ping-vectors.json"))
+                .unwrap();
+        let cases = doc["cases"].as_array().unwrap();
+        assert!(cases.len() >= 8);
+        for c in cases {
+            let payload = unhex(c["payload"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                parse_ping(&payload).as_deref(),
+                c["model"].as_str(),
+                "{}",
+                c["name"]
+            );
+        }
     }
 }
 

@@ -9,22 +9,21 @@ export const RPC_PING = 0x01;
 export const RPC_SOFTWARE_VERSION = 0x02;
 
 /**
- * The model name in the reply of Ping. The payload is `u8 blobLen`, the blob of request types the device answers, then NUL-ended strings; the first
- * string is the name. A real Syntakt 1.42 reply has one more byte in front (`1e 16 <22 types> "Syntakt" 00`), so the name is looked for at both
- * offsets, and only a printable ASCII string counts. The blob and what follows the name are not read. Undefined when the reply is empty, cut short or
- * has no such name.
+ * The model name in the reply of Ping. Two layouts, told apart by the framing and not by their content:
+ * - plain: `u8 blobLen`, the blob of request types, NUL-ended strings (the first is the name);
+ * - length-prefixed: `u8 rest`, then the plain layout, where `rest` is the number of bytes after the `blobLen` byte (the Syntakt 1.42 reply,
+ *   `1e 16 <22 types> "Syntakt" 00`, finding 144). A payload whose first byte is two less than its length is this one.
+ * Undefined when the payload is empty, cut short or has no name. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parse_ping` of
+ * `packages/patchkit/src/flash_rpc.rs`.
  */
 export function parsePing(payload: Uint8Array): string | undefined {
-  for (const skip of [0, 1]) {
-    const first = payload[skip];
-    if (first === undefined) return undefined;
-    const start = skip + 1 + first;
-    const end = payload.indexOf(0, start);
-    if (start >= payload.length || end < 0 || end === start) continue;
-    const name = payload.subarray(start, end);
-    if (name.every((b) => b >= 0x20 && b < 0x7f)) return new TextDecoder('latin1').decode(name);
-  }
-  return undefined;
+  const body = payload.length >= 2 && payload[0] === payload.length - 2 ? payload.subarray(1) : payload;
+  const first = body[0];
+  if (first === undefined) return undefined;
+  const start = 1 + first;
+  const end = body.indexOf(0, start);
+  if (start >= body.length || end < 0 || end === start) return undefined;
+  return new TextDecoder('latin1').decode(body.subarray(start, end));
 }
 
 /** The OS version in the reply of SoftwareVersion (`"00"`, `"79"`, `"1.17"`: the string that looks like a version), or undefined. */

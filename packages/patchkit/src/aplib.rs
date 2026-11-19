@@ -582,3 +582,76 @@ mod margin_tests {
         assert!(inplace_margin(&s[..10], 0, 16).is_err());
     }
 }
+
+#[cfg(test)]
+mod tail_tests {
+    use super::*;
+    use dt2_firmware_loader::depack_section;
+
+    /// Pseudo-random bytes (no matches inside).
+    fn noise(n: usize, seed: u32) -> Vec<u8> {
+        let mut x = seed;
+        (0..n)
+            .map(|_| {
+                x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+                (x >> 24) as u8
+            })
+            .collect()
+    }
+
+    /// Data with a far match (distance above FAR) and matches that set a new offset after another.
+    fn mixed() -> Vec<u8> {
+        let a = noise(9000, 1);
+        let mut d = a.clone();
+        d.extend_from_slice(&a[..6000]); // distance 9000 > FAR: a far match
+        d.extend(noise(50, 2));
+        d.extend_from_slice(&a[1000..4000]); // another distance: a new offset
+        d.extend(noise(30, 3));
+        d.extend_from_slice(&a[200..2200]); // and another
+        d.extend(noise(40, 4));
+        d
+    }
+
+    #[test]
+    fn a_cut_inside_a_far_match_or_a_match_with_a_new_offset_still_decodes_to_the_input() {
+        let data = mixed();
+        let toks = plan_with(&data, DEFAULT_DEPTH, DEFAULT_NICE);
+        let far = toks
+            .iter()
+            .find(|t| t.off > FAR && t.to - t.from > 100)
+            .expect("a far match");
+        let shifted: Vec<&Tok> = toks
+            .iter()
+            .filter(|t| t.off != 0 && t.off != far.off && t.to - t.from > 100)
+            .collect();
+        assert!(!shifted.is_empty(), "a match with another offset");
+        let mut cuts = vec![far.from + 1, far.from + (far.to - far.from) / 2, far.to - 1];
+        for t in shifted {
+            cuts.extend([t.from + 3, t.from + (t.to - t.from) / 2, t.to - 1]);
+        }
+        for cut in cuts {
+            let s = section_of(emit(&data, &toks, cut));
+            assert_eq!(
+                depack_section(&s, 0, 1 << 20).unwrap(),
+                data,
+                "cut at {cut}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_in_place_tail_reaches_the_floor_when_the_cut_falls_in_such_matches() {
+        let data = mixed();
+        // a stage inside the data and a floor that needs a tail
+        let mut tails = 0;
+        for (dest, stage, floor) in [(0u64, 11_000u64, 64i64), (0, 13_000, 200), (0, 9_500, 32)] {
+            let made = pack_section_in_place(&data, dest, stage, floor).unwrap();
+            assert_eq!(depack_section(&made.stream, 0, 1 << 20).unwrap(), data);
+            assert!(made.margin.is_none_or(|m| m >= floor), "{:?}", made.margin);
+            assert_eq!(
+                inplace_margin(&made.stream, dest, stage).unwrap(),
+                made.margin
+            );
+        }
+    }
+}
