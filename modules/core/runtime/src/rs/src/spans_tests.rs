@@ -239,3 +239,26 @@ fn a_poll_slot_records_the_module_that_registered_it() {
         reset(0, 5);
     }
 }
+
+/// `dkrt_menu_built` counts a menu for the module record that holds the fill function, else the descriptor; an address in no module counts for none.
+#[test]
+fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        let s = crate::st();
+        for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
+            s.modules[rec].used = 1;
+            s.modules[rec].base = base;
+            s.modules[rec].size = 0x100;
+        }
+        let n = |rec: usize| core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec]));
+        crate::dkrt_menu_built(0x1010, 0x2010);
+        assert_eq!((n(1), n(3)), (1, 0), "the fill function decides");
+        crate::dkrt_menu_built(0x9000, 0x2010);
+        assert_eq!((n(1), n(3)), (1, 1), "no module holds the fill function: the descriptor does");
+        crate::dkrt_menu_built(0x9000, 0x9100);
+        assert_eq!((n(1), n(3)), (1, 1), "a menu of the firmware image counts for no module");
+        reset(0, 5);
+    }
+}

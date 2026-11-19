@@ -24,10 +24,10 @@
      It must point at static or module memory, never at the stack.
    - Callbacks run on the UI task. A dialog's callback runs after the dialog has closed.
    - Menus are never freed. Dialogs free themselves after they close.
-   - A content module (a .dkm) has no unload at run time, so no UI object of the module is freed. Every
-     arg, callback and descriptor a module passes must still point at its own memory (static data or
-     code of the module), never at the stack or at a heap block that is freed later. Build a menu when
-     the user opens it (in `menu`, or from a callback), after all modules are loaded.
+   - A menu is never freed and keeps its descriptor, `fill` and `arg`. A module that built a menu with `dk_ui_menu_new` (or whose settings menu the DIGIKIT menu
+     has opened) is therefore not unloaded or reloaded while the device runs: the runtime refuses with DK_E_RELOAD_MENUS until the next restart. A module that builds
+     none can be. Every arg, callback and descriptor a module passes must still point at its own memory (static data or code of the module), never at the stack or at a heap block
+     that is freed later. Build a menu when the user opens it (in `menu`, or from a callback), after all modules are loaded.
 
    A module with settings sets the `menu` field of `dk_module`. The DIGIKIT menu shows SETTINGS... for the loaded module and calls it only when the user
    opens it; it adds the rows of that menu:

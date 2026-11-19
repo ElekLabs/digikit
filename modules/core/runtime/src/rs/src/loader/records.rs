@@ -2,7 +2,7 @@
 //! the tables the proof tools read stay as they are); the records after them are the provider files' (R12-3), kept in `DKRT_PROVIDERS`, a symbol of the patch plan beside `DKRT_STATE`, so host tools read them with the same layout.
 //! Only the loader writes them. Provider records have no menu and no runtime-version cell: those tables stay `MAX_MODULES` long.
 
-use crate::state::{DKRT_MENUS, DKRT_MODULE_RUNTIME, DKRT_PATHS};
+use crate::state::{DKRT_MENUS, DKRT_MENU_OBJS, DKRT_MODULE_RUNTIME, DKRT_PATHS};
 use crate::{st, Module, MAX_MODULES};
 pub use crate::state::REC_MAX;
 use core::ptr::addr_of_mut;
@@ -38,10 +38,11 @@ pub unsafe fn set_runtime(rec: usize, v: u32) {
     }
 }
 
-/// The address of record `rec`'s `menu` (0: none); a provider has none.
+/// The address of record `rec`'s `menu` (0: none); a provider has none. The record's menu objects (`dkrt_menu_built`) start at 0 with the module in it.
 pub unsafe fn set_menu(rec: usize, addr: u32) {
     if rec < MAX_MODULES {
         (*addr_of_mut!(DKRT_MENUS))[rec] = addr;
+        (*addr_of_mut!(DKRT_MENU_OBJS))[rec] = 0;
     }
 }
 
@@ -72,8 +73,10 @@ mod tests {
             // a provider has no menu or runtime cell: the call is a no-op
             set_menu(MAX_MODULES, 7);
             set_runtime(REC_MAX - 1, 7);
+            DKRT_MENU_OBJS[0] = 3;
             set_menu(0, 9);
             assert_eq!(DKRT_MENUS[0], 9);
+            assert_eq!(DKRT_MENU_OBJS[0], 0, "a module that loads into the record starts with no menu objects");
             *st() = core::mem::zeroed();
             *addr_of_mut!(DKRT_PROVIDERS) = core::mem::zeroed();
             *addr_of_mut!(PROVIDER_PATHS) = [[0; 64]; PROVIDER_MAX];
