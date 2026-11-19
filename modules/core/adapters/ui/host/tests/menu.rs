@@ -47,6 +47,7 @@ extern "C" {
     fn fk_poll_slots(n: c_int);
     fn fk_settings_poll();
     fn fk_set_open(k: c_int) -> c_int;
+    fn fk_menu_held() -> c_int;
     fn fk_unload_module(path: *const c_char);
     fn fk_set_refresh(k: c_int);
 }
@@ -979,6 +980,51 @@ fn a_settings_page_holds_no_module_rows_once_it_is_left() {
     assert_eq!(unsafe { fk_settings_runs() }, 2);
     press_yes(1);
     assert_eq!(unsafe { fk_settings_acts() }, 1);
+}
+
+/// While a module's SETTINGS page is open the page holds the module with the runtime (`dkrt_menu_built`: its rows point into the module's code, so a live unload or reload is
+/// refused with `E_RELOAD_MENUS`); leaving the page gives the hold back (`dkrt_menu_release`), once, and opening it again holds again.
+#[test]
+fn an_open_settings_page_holds_its_module_and_leaving_it_gives_the_hold_back() {
+    let _g = digikit();
+    store_of_three();
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/tool.dkm");
+    open_modules();
+    assert_eq!(unsafe { fk_menu_held() }, 0, "no page open: no hold");
+    press_right(0);
+    choose_panel_row(1);
+    assert_eq!(render(), ["HELD 0", "RELEASE"]);
+    assert_eq!(unsafe { fk_menu_held() }, 1, "the open page holds the module");
+    unsafe { fk_settings_poll() };
+    assert_eq!(unsafe { fk_menu_held() }, 1, "polling an open page keeps the hold and takes no second one");
+    press_no(); // the page is left
+    unsafe { fk_settings_poll() };
+    assert_eq!(unsafe { fk_menu_held() }, 0, "the left page gave the hold back");
+    unsafe { fk_settings_poll() };
+    assert_eq!(unsafe { fk_menu_held() }, 0, "once");
+    press_right(0);
+    choose_panel_row(1);
+    assert_eq!(unsafe { fk_menu_held() }, 1, "opened again: held again");
+}
+
+/// A live apply releases an open page before its jobs (`applying_releases_an_open_settings_page_before_the_jobs`): the hold goes with the page.
+#[test]
+fn the_release_before_an_apply_gives_the_hold_back_too() {
+    let _g = digikit();
+    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
+    loaded_menu("modules/tool.dkm", "digikit/tool");
+    select("modules/tool.dkm");
+    open_modules();
+    press_right(0);
+    choose_panel_row(1);
+    press_no();
+    assert_eq!(unsafe { fk_menu_held() }, 1, "the page is left but not released yet");
+    press_yes(0);
+    press_no();
+    answer_confirm(true);
+    assert_eq!(unsafe { fk_menu_held() }, 0, "the batch that unloads the module finds no hold");
+    poll_until_idle();
 }
 
 #[test]

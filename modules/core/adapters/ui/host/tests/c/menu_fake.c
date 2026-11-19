@@ -213,6 +213,26 @@ void dkrt_live_state(DkrtLive *out)
     out->result = fk.live_phase == 2 ? fk.live_job_result[fk.live_cur] : 0;
 }
 
+/* The menu owner count of the runtime for the one module of a test: what dkrt_menu_built and dkrt_menu_release leave (the release stops at 0, as the runtime's). */
+static int menu_held;
+void dkrt_menu_built(uintptr_t code, uintptr_t data)
+{
+    (void)code;
+    (void)data;
+    menu_held++;
+}
+void dkrt_menu_release(uintptr_t code, uintptr_t data)
+{
+    (void)code;
+    (void)data;
+    if (menu_held > 0)
+        menu_held--;
+}
+int fk_menu_held(void)
+{
+    return menu_held;
+}
+
 void dkrt_diag(DkrtDiag *out)
 {
     memset(out, 0, sizeof *out);
@@ -326,6 +346,8 @@ void fk_reset(void)
     memset(g_set, 0, sizeof g_set);
     memset(g_set_path, 0, sizeof g_set_path);
     memset(g_set_open, 0, sizeof g_set_open);
+    memset(g_set_hold, 0, sizeof g_set_hold);
+    menu_held = 0;
     g_say_pending = 0;
     g_lq_state = LQ_IDLE;
     g_lq_n = g_lq_pos = g_lq_wait = 0;

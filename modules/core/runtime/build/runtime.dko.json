@@ -31924,7 +31924,7 @@
   },
   {
    "addend": 0,
-   "offset": 90,
+   "offset": 86,
    "section": ".text.dkrt_menu_built",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3api10poll_owner",
    "type": "cf.32"
@@ -31938,8 +31938,43 @@
   },
   {
    "addend": 0,
-   "offset": 124,
+   "offset": 122,
    "section": ".text.dkrt_menu_built",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.dkrt_menu_release",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3api10poll_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.dkrt_menu_release",
+   "symbol": ".sec..bss.DKRT_MENU_OBJS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.dkrt_menu_release",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3api10poll_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.dkrt_menu_release",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.dkrt_menu_release",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
@@ -45338,10 +45373,17 @@
   },
   {
    "align": 2,
-   "hex": "598f2f022f2f000c4eb900000000588f73800c81000000ff673a73807407b481654a2041d1fc0000000012102001528074011f42000773817580b481650642011f410007122f0007448180811080241f588f4e752f2f00104eb900000000588f73800c81000000ff67e460ae4879000000004878000871802f004eb900000000",
+   "hex": "598f2f022f2f000c4eb900000000588f73800c81000000ff673671807407b480654a2040d1fc0000000012102001528074011f42000773817580b481650642011f410007122f000744818081108060162f2f00104eb900000000588f73800c81000000ff6618241f588f4e75487900000000487800082f004eb9000000007180609a",
    "kind": "text",
    "name": ".text.dkrt_menu_built",
-   "size": 128
+   "size": 130
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00044eb900000000588f73800c81000000ff671a71807207b280652a2040d1fc00000000101056c1d081108060162f2f00084eb900000000588f73800c81000000ff66144e75487900000000487800082f004eb900000000718060ba",
+   "kind": "text",
+   "name": ".text.dkrt_menu_release",
+   "size": 94
   },
   {
    "align": 2,
@@ -49222,7 +49264,7 @@
    "size": 24
   }
  ],
- "source_sha256": "addb36fda4df4ac49e6290da4db1381c8cc3bb92ec94a160b23b41edd6c98926",
+ "source_sha256": "d554410add693b8b681d07ed22e7cd9890a7009577f88a0aa2956963d8a295d1",
  "symbols": [
   {
    "global": false,
@@ -56414,6 +56456,12 @@
   },
   {
    "global": true,
+   "name": "dkrt_menu_release",
+   "section": ".text.dkrt_menu_release",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dkrt_midi_rx",
    "section": ".text.dkrt_midi_rx",
    "value": 0
@@ -56690,9 +56738,9 @@
   }
  ],
  "toolchain": {
-  "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "61270",
-  "isa_check": "a26e3b03219f1bd8a658c9e23d902eaef1998d0840293026f749ce30fdfb800b",
+  "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
+  "instructions_redecoded": "61301",
+  "isa_check": "e7270a03e9af35593689699bb9d2c90b5f9cf8025fb6664657eed9e188addadb",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

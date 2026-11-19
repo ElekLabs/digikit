@@ -264,6 +264,46 @@ fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
     }
 }
 
+/// The DIGIKIT menu holds a module while its SETTINGS page is open (`dkrt_menu_built` with the module's `menu` function) and gives the hold back when the page is left
+/// (`dkrt_menu_release`): the job refuses the module while the count is above 0 (`menu_built`, the fact `reload::refusal` turns into `E_RELOAD_MENUS`, and the read before the teardown),
+/// a release lets it through, releases never take the count below 0, and a load into the record starts at 0, so a release that arrives after it changes nothing.
+#[test]
+fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
+    use crate::reload::{Ops, RealOps};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        let s = crate::st();
+        for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
+            s.modules[rec].used = 1;
+            s.modules[rec].base = base;
+            s.modules[rec].size = 0x100;
+        }
+        let n = |rec: usize| core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec]));
+        let mut ops = RealOps;
+        crate::dkrt_menu_built(0x1020, 0); // the page opens: the module's menu function is the code address
+        assert!(ops.menu_built(1) && !ops.menu_built(3), "held: the job refuses module 1 only");
+        crate::dkrt_menu_release(0x1020, 0); // the page is left
+        assert!(!ops.menu_built(1), "released: the job goes on");
+        // a menu object the module built itself and the page hold together: both must go
+        crate::dkrt_menu_built(0x1010, 0x2000);
+        crate::dkrt_menu_built(0x1020, 0);
+        crate::dkrt_menu_release(0x1020, 0);
+        assert_eq!(n(1), 1, "the module's own menu object still holds it");
+        // releases past 0 stay at 0; an address in no module counts for nothing
+        crate::dkrt_menu_release(0x1020, 0);
+        crate::dkrt_menu_release(0x1020, 0);
+        crate::dkrt_menu_release(0x9000, 0x9100);
+        assert_eq!((n(1), n(3)), (0, 0), "the count stops at 0");
+        // a load into the record reset the count to 0: the release of the old page does not go below
+        crate::dkrt_menu_built(0x2020, 0);
+        crate::state::DKRT_MENU_OBJS[3] = 0; // `set_menu` at a load
+        crate::dkrt_menu_release(0x2020, 0);
+        assert_eq!(n(3), 0);
+        reset(0, 5);
+    }
+}
+
 /// The live job reads the count of its own record again before the teardown (`RealOps::menu_built`): a menu built for another module does not end it, one for its module does,
 /// a record number past the table is no menu, and the count does not wrap after many menus.
 #[test]

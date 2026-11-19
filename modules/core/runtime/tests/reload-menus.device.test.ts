@@ -20,6 +20,9 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * - before the page is opened the module has built no menu object: `RELOAD` goes through (a `menu` entry alone does not refuse);
  * - after SETTINGS... of the module in the DIGIKIT menu was opened and left, `UNLOAD` and `RELOAD` are refused with `E_RELOAD_MENUS`, the module is still in MODULES, and the counters did not move.
  *
+ * Not covered here: the hold of an open settings page of a module that only adds rows (`dkrt_menu_release`). It is unit tests: `menu.rs` `an_open_settings_page_holds_its_module_and_leaving_it_gives_the_hold_back`
+ * (the DIGIKIT menu), `spans_tests.rs` `an_open_page_holds_the_module_and_the_release_lets_it_go` and the drain re-check in `reload.rs`. No fixture has a rows-only settings page, so there is no device step.
+ *
  * Written, not run, and the key path is not looked at yet: `openModuleSettings` goes SETTINGS (the stock menu, whose last row the core/ui hook adds is DIGIKIT), DIGIKIT, MODULES, the module's row, RIGHT, the
  * panel row SETTINGS..., and `DIGIKIT_ROW_DOWNS`/`MODULE_ROW_DOWNS` are guesses: take one `dk:dev` screenshot of each step before the first run (docs/plans/extension-model.md, "Device proof").
  */

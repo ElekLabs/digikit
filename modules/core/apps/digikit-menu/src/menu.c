@@ -104,7 +104,7 @@ static dk_ui_menu *g_main, *g_about, *g_mem, *g_modules, *g_info;
 static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
 
 /* The settings menu of each loaded module that has a menu function, by the module's index in dkrt_module order. Each is built the first
-   time the user opens it and kept. The page holds no row of the module once it is left (the module's menu function runs only while the page is open), so this menu keeps no pointer into the module's code;
+   time the user opens it and kept. The page holds no row of the module once it is left (the module's menu function runs only while the page is open), so this menu keeps no pointer into the module's code then, and while it is open it holds the module (g_set_hold: dkrt_menu_built, then dkrt_menu_release), so the runtime does not unload or reload the module under its rows;
    a menu object that the module builds itself (dk_ui_menu_new in its menu function) is counted by core/ui (dkrt_menu_built) and the runtime refuses to unload or reload that module (E_RELOAD_MENUS). The index of a module changes when another module is unloaded, so the cache is dropped then (panel_settings). */
 #define MAX_SET 16
 #define NAME_ROW 32 /* a module name (31 characters at most) without its author */
@@ -120,6 +120,9 @@ static dk_ui_menu *g_set[MAX_SET];
 static uint8_t g_set_path[MAX_SET][64];
 static uint8_t g_set_open
     [MAX_SET]; /* 1 while the page was opened and not yet released: only then does its fill call the module */
+/* The address of the module's `menu` function that the open page holds (dkrt_menu_built), 0: none. While the page is open its rows point into the module's code, so the
+   runtime refuses to unload or reload the module (E_RELOAD_MENUS); settings_release gives the hold back when the page is left. */
+static uintptr_t g_set_hold[MAX_SET];
 static char g_set_title[MAX_SET][NAME_ROW];
 static dk_ui_menu_desc g_set_desc[MAX_SET];
 
@@ -1388,7 +1391,11 @@ static void settings_release(void)
         if (g_set_open[k] && (!g_set[k] || !dk_ui_menu_is_open(g_set[k]))) {
             g_set_open[k] = 0;
             if (g_set[k])
-                dk_ui_menu_refresh(g_set[k]);
+                dk_ui_menu_refresh(g_set[k]); /* the rows of the module are gone before the module can be unloaded */
+            if (g_set_hold[k]) {
+                dkrt_menu_release(g_set_hold[k], 0);
+                g_set_hold[k] = 0;
+            }
         }
 }
 
@@ -1447,6 +1454,10 @@ static void panel_settings(void *ctx, int32_t row)
             g_set_path[k][0] = 0; /* the slot is free again */
     }
     if (g_set[k]) {
+        if (!g_set_hold[k]) {
+            g_set_hold[k] = (uintptr_t)mod.menu; /* before the module adds its rows: the module stays loaded while the page is open */
+            dkrt_menu_built(g_set_hold[k], 0);
+        }
         g_set_open[k] = 1;
         dkrt_poll_add((uintptr_t)settings_poll);
         dk_ui_menu_open(g_set[k]);

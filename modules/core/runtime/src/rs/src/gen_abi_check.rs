@@ -16,6 +16,7 @@ const _: sig::dkrt_diag = crate::dkrt_diag;
 const _: sig::dkrt_poll_add = crate::dkrt_poll_add;
 const _: sig::dkrt_poll_remove = crate::dkrt_poll_remove;
 const _: sig::dkrt_menu_built = crate::dkrt_menu_built;
+const _: sig::dkrt_menu_release = crate::dkrt_menu_release;
 const _: sig::dkrt_store_stat = crate::store::dkrt_store_stat;
 const _: sig::dkrt_store_lease = crate::store::dkrt_store_lease;
 const _: sig::dkrt_store_unlease = crate::store::dkrt_store_unlease;
