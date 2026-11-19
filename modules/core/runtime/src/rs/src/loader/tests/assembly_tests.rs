@@ -101,7 +101,7 @@ fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
 
 /// The port file of the test image for the device's firmware, as the card holds it: the production port file and the hooks of the fixture service `test/svc-test`.
 fn port_file(dev: Dev) -> Vec<u8> {
-    read(&repo().join(format!("dist/ports/{}.dkport", dev.port())), "pnpm nx:pilot run patchkit:ports")
+    read(&repo().join(format!("dist/ports-test/{}.dkport", dev.port())), "pnpm nx:pilot run patchkit:ports-test")
 }
 
 fn be(f: &[u8], at: u32) -> u32 {
@@ -792,7 +792,7 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
                 assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
                 assert_eq!(l.unload_rec(0), OK, "{} round {round}", dev.name);
                 assert_eq!(l.reload_load(0, path.as_ptr()), OK, "{} round {round}", dev.name);
-                assert_eq!((records::module(0).used, l.sel_of_rec[0]), (1, 0));
+                assert_eq!((records::module(0).used, l.sel_of(0)), (1, 0));
             }
         }
         let _ = clean_state();

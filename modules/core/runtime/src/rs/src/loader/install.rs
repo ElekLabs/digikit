@@ -67,17 +67,17 @@ pub struct Installer {
     n: usize,
     slot_words: [(u8, u32); SLOT_WORDS_MAX],
     ns: usize,
-    /// False in safe mode: `install` does nothing.
-    armed: bool,
+    /// True in safe mode: `install` does nothing. (Stored inverted: the zero fill of the static keeps the whole loader out of `.data`.)
+    disarmed: bool,
 }
 
 impl Installer {
     pub const fn new() -> Installer {
-        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, armed: true }
+        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false }
     }
 
     pub fn set_armed(&mut self, armed: bool) {
-        self.armed = armed;
+        self.disarmed = !armed;
     }
 
     /// Installed sites of all records.
@@ -136,7 +136,7 @@ impl Installer {
         image_size: u32,
         slots: &[(u32, u32)],
     ) -> Result<(), i32> {
-        if !self.armed {
+        if self.disarmed {
             return Ok(());
         }
         // The check hashes every site (SHA-256 of at most 64 bytes: two blocks) with interrupts masked, once per provider and only at boot: a service is installed by

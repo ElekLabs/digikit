@@ -1564,7 +1564,7 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
             assert_eq!(st().modules[0].used, 0);
             assert_eq!(l.reload_load(0, PATH.as_ptr()), OK, "round {round}");
             // the same record, owner and selection index; the table is the new one; the phase is closed again
-            assert_eq!((st().modules[0].used, l.sel_of_rec[0], l.phase == Phase::Closed), (1, 0, true));
+            assert_eq!((st().modules[0].used, l.sel_of(0), l.phase == Phase::Closed), (1, 0, true));
             assert_eq!(crate::entry::tick_of(0), st().modules[0].base + 8);
             let mut out = [0u32; 8];
             assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), keys.len());

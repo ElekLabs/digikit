@@ -33,6 +33,12 @@ const CAND_MAX: usize = 32;
 /// needs of refused or unmatched services. A need past the limit sets `Found::truncated`.
 const WANT_MAX: usize = 4 * PROVIDER_MAX;
 
+/// The causes of `Found::truncated` (a set of bits): the provider table has no slot left for a service or the port file, the folder has more files than `CAND_MAX`,
+/// the search list has no room for a need (`WANT_MAX`). Each has its own text in the provider log (`Loader::plan_with_caps`).
+pub const TRUNC_TABLE: u8 = 1;
+pub const TRUNC_FILES: u8 = 2;
+pub const TRUNC_NEEDS: u8 = 4;
+
 /// What the search needs of the card: the runtime's store listing (`prefix` NUL-terminated, files only, in path order) and the read of one whole file into
 /// the staging buffer. Every `Images` is one (the real one lists and reads the store; the fakes of the host tests list and read a map).
 pub trait Cards {
@@ -52,8 +58,8 @@ impl<M: Images> Cards for M {
 /// The providers found: for provider `k`, its store path and its header table (the bytes the planner parses).
 pub struct Found {
     pub n: usize,
-    /// A limit of the search was passed (more `.dks` files than `CAND_MAX`, more needs than `WANT_MAX`): a provider may be missing from the result.
-    pub truncated: bool,
+    /// The limits of the search that were passed (`TRUNC_*` bits: no provider slot left, more `.dks` files than `CAND_MAX`, more needs than `WANT_MAX`): a provider may be missing from the result.
+    pub truncated: u8,
     // the search's work arrays live here, not on the boot thread's stack: the files of the folder and whether each is taken, and the service hashes searched for
     cands: [DkrtStoreEntry; CAND_MAX + 1],
     c_used: [bool; CAND_MAX],
@@ -68,7 +74,7 @@ impl Found {
     pub const fn new() -> Found {
         Found {
             n: 0,
-            truncated: false,
+            truncated: 0,
             cands: unsafe { core::mem::zeroed() },
             c_used: [false; CAND_MAX],
             search: [0; WANT_MAX],
@@ -232,7 +238,7 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
     }
     if out.n >= PROVIDER_MAX {
         // no slot left for the port file
-        out.truncated = true;
+        out.truncated |= TRUNC_TABLE;
         return;
     }
     let found = cards.list(b"ports/\0".as_ptr(), out.cands.as_mut_ptr(), (CAND_MAX + 1) as u32);
@@ -240,7 +246,7 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
         return;
     }
     let nc = if found as usize > CAND_MAX {
-        out.truncated = true;
+        out.truncated |= TRUNC_FILES;
         CAND_MAX
     } else {
         found as usize
@@ -259,7 +265,7 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
 /// listing error finds nothing, without an error. `services` is the runtime's own table: a need of a runtime service is not searched for.
 pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
     out.n = 0;
-    out.truncated = false;
+    out.truncated = 0;
     if want.is_empty() {
         return;
     }
@@ -269,7 +275,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
     let nc = if found <= 0 {
         0
     } else if found as usize > CAND_MAX {
-        out.truncated = true;
+        out.truncated |= TRUNC_FILES;
         CAND_MAX
     } else {
         found as usize
@@ -283,7 +289,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
                 out.search[ns] = want[i];
                 ns += 1;
             } else {
-                out.truncated = true;
+                out.truncated |= TRUNC_NEEDS;
             }
         }
         i += 1;
@@ -308,7 +314,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
                                     out.search[ns] = n.0;
                                     ns += 1;
                                 } else {
-                                    out.truncated = true;
+                                    out.truncated |= TRUNC_NEEDS;
                                 }
                             }
                         }
@@ -322,7 +328,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
     }
     // needs left unsearched because every provider slot is taken: the table is full (the planner reports it)
     if w < ns && out.n >= PROVIDER_MAX {
-        out.truncated = true;
+        out.truncated |= TRUNC_TABLE;
     }
     // the port file is the provider of `port`, found by its firmware identity, after the services (it reuses the listing buffer)
     if has(&out.search, ns, name_hash_bytes(PORT_NAME)) {
@@ -498,17 +504,17 @@ mod tests {
         let files: Vec<(&str, u32, &[&str])> = names.iter().map(|n| (n.as_str(), 1, &[][..])).collect();
         let want: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
         let out = run(&mut store_with(&files), &want);
-        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, true), "one need too many");
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, TRUNC_TABLE), "one need too many");
         // exactly PROVIDER_MAX needs: nothing is left unsearched
         let out = run(&mut store_with(&files), &want[..PROVIDER_MAX]);
-        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, false));
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, 0));
         // every slot taken by services and the port file wanted: it has no slot
         let mut fs = store_with(&files[..PROVIDER_MAX]);
         fs.files.push((b"ports/p.dkport".to_vec(), port_file(FW_A)));
         let mut w: Vec<&str> = want[..PROVIDER_MAX].to_vec();
         w.push("port");
         let out = run_fw(&mut fs, &w, Some(FW_A));
-        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, true));
+        assert_eq!((out.n, out.truncated), (PROVIDER_MAX, TRUNC_TABLE));
     }
 
     #[test]
@@ -645,15 +651,15 @@ mod tests {
     fn a_folder_with_more_files_than_the_search_remembers_sets_truncated() {
         let names: Vec<std::string::String> = (0..CAND_MAX + 1).map(|k| std::format!("c{k}")).collect();
         let files: Vec<(&str, u32, &[&str])> = names.iter().map(|n| (n.as_str(), 1u32, &[][..])).collect();
-        assert!(run(&mut store_with(&files), &["c0"]).truncated);
+        assert_eq!(run(&mut store_with(&files), &["c0"]).truncated, TRUNC_FILES);
         let mut fs = store_with(&files[..CAND_MAX]);
-        assert!(!run(&mut fs, &["c0"]).truncated);
+        assert_eq!(run(&mut fs, &["c0"]).truncated, 0);
         // more distinct needs than the search list holds
         let want: Vec<u32> = (0..WANT_MAX as u32 + 1).collect();
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
         unsafe { find(&mut fs, &services, &want, None, &mut out) };
-        assert!(out.truncated);
+        assert_eq!(out.truncated, TRUNC_NEEDS);
     }
 
     #[test]

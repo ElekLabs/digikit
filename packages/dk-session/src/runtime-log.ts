@@ -328,6 +328,7 @@ export interface LoadFailure {
 }
 
 const E_IMPORT = -7;
+const E_PLAN_FIT = -78;
 
 /** The modules that failed to load in the last boot of `events` (an ordered log): every MOD_LOAD with a result below 0 after the last BOOT_START. */
 export function loadFailures(events: DkLogEvent[]): LoadFailure[] {
@@ -353,12 +354,21 @@ export function loadFailures(events: DkLogEvent[]): LoadFailure[] {
   return [...out.values()];
 }
 
+/** The limits of the provider search (`discover.rs` `TRUNC_*`), logged as a provider event named by its first four characters with E_PLAN_FIT. */
+const SEARCH_LIMITS: Record<string, string> = {
+  '(tab': 'the provider table is full (PROVIDER_MAX files provide for this selection)',
+  '(fil': 'services/ or ports/ holds more files than the search reads',
+  '(nee': 'the selection needs more services than the search remembers',
+};
+
 /** The module name of a failure without its `.dkm`: `usb-fast.dkm` is `usb-fast`. */
 export const failureModule = (f: Pick<LoadFailure, 'name'>): string => f.name.replace(/\.dkm$/, '');
 
 /** Why a module is not loaded, in one line: the missing module for E_IMPORT with a name (`usb-fast not loaded: this firmware has no core/usb-bulk. Flash
  * firmware from the Firmware page.`), else the loader's own text for the code. The one place of these texts; the apps show it. */
 export function loadFailureText(f: LoadFailure): string {
+  const cut = SEARCH_LIMITS[f.name];
+  if (cut && f.result === E_PLAN_FIT) return `a service or port file may be missing from the search: ${cut}`;
   const name = failureModule(f);
   if (f.result === E_IMPORT && f.needs)
     return `${name} not loaded: this firmware has no core/${f.needs}. Flash firmware from the Firmware page.`;

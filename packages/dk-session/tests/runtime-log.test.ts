@@ -158,6 +158,20 @@ test('a module that needs a missing module is reported once, with the module it 
   expect(loadFailureShort(f!)).toBe('usb-fast not loaded (needs usb-bulk)');
 });
 
+test('a limit of the provider search is named by its cause', () => {
+  const events = [
+    ev(1, 'BOOT_START'),
+    ev(2, 'MOD_LOAD', [0xfffffffe, 0xffffffb2, word('(tab'), 1, 0], 1),
+    ev(3, 'MOD_LOAD', [0xfffffffe, 0xffffffb2, word('(fil'), 2, 0], 1),
+    ev(4, 'MOD_LOAD', [0xfffffffe, 0xffffffb2, word('(nee'), 4, 0], 1),
+  ];
+  const texts = loadFailures(events).map(loadFailureText);
+  expect(texts).toHaveLength(3);
+  expect(texts[0]).toMatch(/provider table is full/);
+  expect(texts[1]).toMatch(/holds more files/);
+  expect(texts[2]).toMatch(/needs more services/);
+});
+
 test('only the last boot counts, and other codes keep the loader text', () => {
   const events = [
     ev(1, 'BOOT_START'),

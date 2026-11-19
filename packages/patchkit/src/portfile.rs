@@ -769,8 +769,9 @@ mod tests {
     }
 
     /// A copied site (a tail or a stock path) is compared with its check value at the load of the port file, so it must hold the stock bytes on a patched image: no site that a
-    /// module of the image patches. The test fixture's hook shares the site of `core/digikit-menu`'s hook, so a production port file lists none of the fixture's hooks; the
-    /// port file of the test image (which runs without digikit-menu) lists them.
+    /// module of the image patches, by a hook, a stub, a write or a retarget of a module of any patch set of the device (`devices/*.toml` `[patch_sets]`, with their requires).
+    /// The test fixture's hook shares the site of `core/digikit-menu`'s hook, so a production port file lists none of the fixture's hooks; the port file of the test image
+    /// (which runs without digikit-menu) lists them.
     #[test]
     fn a_production_port_file_has_no_test_hook_and_no_copied_site_on_a_site_an_image_module_patches()
      {
@@ -783,8 +784,16 @@ mod tests {
                 .any(|(n, _)| n == "cf.menu.hook.settings_list.tail"),
             "digikit-menu's hook is an image hook"
         );
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let lib = crate::module::library_with(
+            &root,
+            &crate::module::LibrarySource::default(),
+            true,
+            Some(&[]),
+        )
+        .unwrap();
         let test_hook = name_hash("cf.menu.hook.settings_list.test");
-        let mut checked = 0;
+        let mut with_sites = 0;
         for p in &reg.ports {
             let prod = build_data(&reg, p, &decls, false).unwrap();
             assert!(
@@ -799,25 +808,48 @@ mod tests {
                 "{}: the test port file lists the test hook",
                 p.id()
             );
-            for s in prod.sites.iter().filter(|s| !s.absent && s.kind.copies()) {
+            let copied: Vec<_> = prod
+                .sites
+                .iter()
+                .filter(|s| !s.absent && s.kind.copies())
+                .collect();
+            // a port whose firmware has no service hook that copies bytes (a device without services) has no site to check
+            if copied.is_empty() {
+                continue;
+            }
+            with_sites += 1;
+            // the ranges that the modules of every patch set of this device change
+            let info = crate::devdata::by_short(&p.port.device).expect("the device of a port");
+            let mut ids: Vec<String> = info.patch_sets.values().flatten().cloned().collect();
+            ids.sort();
+            ids.dedup();
+            let (ids, _) = lib.with_requires(&ids).unwrap();
+            let mut ranges = vec![];
+            for id in &ids {
+                ranges.extend(crate::apply::patched_ranges(lib.get(id).unwrap(), p).unwrap());
+            }
+            assert!(!ranges.is_empty(), "{}: no patched range found", p.id());
+            for s in copied {
                 let (lo, hi) = (u64::from(s.addr), u64::from(s.addr) + u64::from(s.len));
-                for (name, _) in &images {
-                    let Some(h) = p.hook(name) else { continue };
-                    let Some(a) = p.anchor(&h.site) else { continue };
-                    let at = (a.addr as i64 + h.offset) as u64;
+                for r in &ranges {
                     assert!(
-                        hi <= at || at + a.len <= lo,
-                        "{}: the copied site {:#x}..{:#x} lies on the site of {name} ({at:#x}, {} bytes), which an image module patches",
+                        hi <= r.lo || r.hi <= lo,
+                        "{}: the copied site {:#x}..{:#x} overlaps {} of {} ({:#x}..{:#x}), which an image module patches",
                         p.id(),
                         lo,
                         hi,
-                        a.len
+                        r.what,
+                        r.module,
+                        r.lo,
+                        r.hi
                     );
-                    checked += 1;
                 }
             }
         }
-        assert!(checked > 0);
+        assert!(
+            with_sites >= 2,
+            "the copied sites of at least one port of each service device were checked"
+        );
     }
 
     #[test]
