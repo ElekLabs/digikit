@@ -48,6 +48,7 @@ unsafe fn reset(now: u32, step: u32) {
     TICKED = 0;
     (*addr_of_mut!(EMITS)).clear();
     *crate::st() = core::mem::zeroed();
+    *addr_of_mut!(crate::state::DKRT_MENU_OBJS) = [0; crate::state::MAX_MODULES];
     let mut i = 0;
     while i < POLLS {
         (*addr_of_mut!(DKRT_POLLS))[i] = 0;
@@ -259,6 +260,34 @@ fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
         assert_eq!((n(1), n(3)), (1, 1), "no module holds the fill function: the descriptor does");
         crate::dkrt_menu_built(0x9000, 0x9100);
         assert_eq!((n(1), n(3)), (1, 1), "a menu of the firmware image counts for no module");
+        reset(0, 5);
+    }
+}
+
+/// The live job reads the count of its own record again before the teardown (`RealOps::menu_built`): a menu built for another module does not end it, one for its module does,
+/// a record number past the table is no menu, and the count does not wrap after many menus.
+#[test]
+fn the_job_reads_the_menu_count_of_its_own_record() {
+    use crate::reload::{Ops, RealOps};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        let s = crate::st();
+        for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
+            s.modules[rec].used = 1;
+            s.modules[rec].base = base;
+            s.modules[rec].size = 0x100;
+        }
+        let mut ops = RealOps;
+        assert!(!ops.menu_built(1) && !ops.menu_built(3), "no menu yet");
+        crate::dkrt_menu_built(0x2010, 0);
+        assert!(!ops.menu_built(1), "a menu of module 3 is no menu of module 1");
+        assert!(ops.menu_built(3));
+        assert!(!ops.menu_built(crate::MAX_MODULES), "a record past the table has no menu");
+        for _ in 0..300 {
+            crate::dkrt_menu_built(0x1010, 0);
+        }
+        assert!(ops.menu_built(1), "the count stays at its top and does not wrap to 0");
         reset(0, 5);
     }
 }
