@@ -45,7 +45,7 @@ One meaning per word. A second use gets a new word.
 
 ```text
 <store root>                   card: the area of [card.store]; host mirror: plus_drive/<device>/digikit/
-  modules/<author>/<name>.dkm  path = modules/<module id>.dkm
+  modules/<kind>/<author>-<name>.dkm   file name = module id with "/" as "-"
   services/<service>.dks       stem = service name
   ports/<device>-<version>.dkport   <version> is the firmware version string; picked by the FW hash == fw_id
   projects/<slot>.dkp          slot 000..127; header: device, slot, name, save stamp
@@ -57,7 +57,8 @@ fixed sectors outside the table, two copies each: the settings record, the selec
 
 - The folder shows the role. The role word in the header decides. A file in the wrong folder is not found.
 - Port files of several firmware versions sit side by side. `<version>` is only the firmware version string, for people; the match is on the `FW` hash (the first 8 bytes of the stock image's SHA-256), which must equal the image `fw_id`. The runtime ignores the other files. With no match, the planner refuses every service that needs `port`. It never loads a non-matching port file.
-- The module path carries the author, so two authors can use the same name. Module ids are at most 31 characters; the longest path, `modules/` + id + `.dkm`, is 43 characters. A selection entry holds at most 55 characters (`SEL_PATH` 56 with the NUL, `gen_abi.rs`), so every module path fits.
+- Module files are grouped by module kind (machine, fx, filter, lfo-shape, tool). The file name is the module id with "/" replaced by "-" (`modules/machine/fadedlimes-analog.dkm`, `modules/lfo-shape/digikit-lfo_shapes_1.dkm`, `modules/tool/digikit-remote.dkm`; `tools/bootscreen` is `modules/tool/tools-bootscreen.dkm`). The author is in the name, so two authors can use the same module name. Path length: at most 8 (`modules/`) + 10 (kind and `/`) + 31 (id) + 4 (`.dkm`) = 53 characters, under the 55 of a selection entry (`SEL_PATH` 56 with the NUL, `gen_abi.rs`).
+- Trade-off: the kind is derived from a module's records at pack time. If a later version of a module changes its kind, Transfer moves the file to the new folder with the same one-time RENAME it uses for the migration, and rewrites the selection.
 - Scopes: device scope is the settings record. Project scope is a section of the `.dkp`. Keys are `<owner>/<key>`, with a service name or a module id as owner. Elektron files stay stock.
 - A store belongs to one device. Each structure keeps its own version; paths carry none.
 - Migration: Transfer renames existing module files once with the store's RENAME and rewrites the selection. Sticky maps and settings are keyed by module id, not by path, so nothing else moves. `services/port.dks` was never shipped.
@@ -125,7 +126,7 @@ Rules:
 2. Never a bare kind, key, slot, image, port, project or service where two meanings are possible.
 3. A record kind is singular snake case, unique, with one owner service and a constant `KIND_<NAME>`.
 4. Settings keys and `.dkp` sections start with the owner: `<service>/...` or `<author>/<name>/...`. An author may not be a service name, `core` or `test`; patchkit refuses it.
-5. A module id is `<author>/<name>`. The repo folder, the `dist` file and the card path are the id plus a prefix. (`tools/bootscreen` predates the rule: its first part is not its author. Its id stays.)
+5. A module id is `<author>/<name>`. The repo folder is `modules/<kind>/<id>`; the card path is `modules/<kind>/<author>-<name>.dkm`. (`tools/bootscreen` predates the rule: its first part is not its author. Its id stays.)
 6. Module kind names are the template names. `category` has the same value where it can change (E8 checks that). `type` goes.
 7. Extensions: `.dkm` role 0, `.dks` role 1, `.dkport` role 2, `.dkp` project file.
 
@@ -133,7 +134,7 @@ Rules:
 
 1. This document and the plan edits.
 2. E5 (merged).
-3. Port file PR 2 (search of `ports/` by `FW`) and PR 3 (port pick in Transfer, `modulePath` with the author, the rename migration, the harness cards; about 3-4 h more than planned).
+3. Port file PR 2 (search of `ports/` by `FW`) and PR 3 (port pick in Transfer, `modulePath` = `modules/<kind>/<author>-<name>.dkm`, the rename migration, the harness cards; about 3-4 h more than planned).
 4. E5c and E5b. They do not depend on the layout and come before E8.
 5. E8, the top-level lift. The merge gate is a byte manifest (it proves no behaviour change), the host stage, `mise run test:plan`, gate-smoke and one device test per device, with the skips named in the PR ([extension model](../plans/extension-model.md) E8). The full device set reruns in the next batch's `test:full`. Merge `test/t1i-rig-read-hook` first (it edits `dsp-stereo-proof`).
 6. After E8: port step 3 (`ports/routines/`), the project service ([digikit project](../plans/digikit-project.md)) and E7.

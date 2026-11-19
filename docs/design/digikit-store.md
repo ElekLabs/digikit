@@ -27,7 +27,7 @@ The area is not a path filesystem: **folders are in the paths.** The folders and
 
 | Folder | Holds |
 | --- | --- |
-| `modules/<author>/<name>.dkm` | content modules; the path is `modules/<module id>.dkm` |
+| `modules/<kind>/<author>-<name>.dkm` | content modules, grouped by module kind; the file name is the module id with "/" as "-" |
 | `services/<service>.dks` | service files; the stem is the service name |
 | `ports/<device>-<version>.dkport` | port files, several side by side; `<version>` is the firmware version string, the runtime picks the one whose `FW` hash equals the image `fw_id` |
 | `projects/<slot>.dkp` | project files, slot 000 to 127 |
@@ -35,7 +35,7 @@ The area is not a path filesystem: **folders are in the paths.** The folders and
 | `data/<module id>/` | reserved for files that a module writes; not enforced |
 | `logs/` | reserved |
 
-The role word in the header decides what a file is; a file in the wrong folder is not found. A module id is at most 31 characters, so a module path is at most 43 characters; a selection entry holds at most 55 (`SEL_PATH` 56 with the NUL).
+The role word in the header decides what a file is; a file in the wrong folder is not found. A module path is at most 8 (`modules/`) + 10 (kind and `/`) + 31 (id) + 4 (`.dkm`) = 53 characters; a selection entry holds at most 55 (`SEL_PATH` 56 with the NUL). The kind comes from the module's records at pack time; if a later version changes it, Transfer moves the file with RENAME.
 
 ## Format
 
