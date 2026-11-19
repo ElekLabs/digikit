@@ -102,9 +102,12 @@ def test_core_fx_applies_and_verifies(patchkit, tmp_path, fw):
     v = patchkit("verify", out, "--base", fw)
     assert "record: base" in v.stdout
     assert roundtrip.check_authenticity(out.read_bytes(), str(out))
-    # sections 2, 4 and 8 are the stock bytes
+    # the main section (3) and the DSP stream (7) carry the patch; sections 2, 4, 5 and 8 are the stock bytes
     secs, stock = port_resolve.sections_of(out), port_resolve.sections_of(fw)
-    assert all(secs[k] == stock[k] for k in (2, 3, 4, 5, 8))
+    assert all(secs[k] == stock[k] for k in (2, 4, 5, 8))
+    assert all(
+        secs[k] != stock[k] for k in (3, 7)
+    )  # the patch is in the main section and the DSP stream, on both devices
     # a patched image is never patched again
     again = patchkit("apply", "--firmware", out, "--modules", "core/fx", check=False)
     assert again.returncode != 0 and "no port" in again.stderr

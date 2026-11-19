@@ -57,6 +57,25 @@
         "cwd": "."
       }
     },
+    "ports": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "The port file (role 2, docs/plans/port-file.md) of every committed port: dist/ports/<device>-<version>.dks, from devices/ports and devices/fw only (no firmware).",
+      "inputs": [
+        "{workspaceRoot}/devices/ports/*.toml",
+        "{workspaceRoot}/devices/fw/**/*.toml",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "dependsOn": ["cli"],
+      "outputs": ["{workspaceRoot}/dist/ports"],
+      "options": {
+        "command": "rm -rf dist/ports && dist/patchkit/patchkit --root . port build --all --out dist/ports",
+        "cwd": "."
+      }
+    },
     "sdk-coverage": {
       "executor": "nx:run-commands",
       "cache": false,
@@ -73,7 +92,13 @@
           "transitive": true
         }
       ],
-      "dependsOn": ["cli", { "target": "pack", "projects": ["tag:module"] }],
+      "dependsOn": [
+        "cli",
+        {
+          "target": "pack",
+          "projects": ["tag:module"]
+        }
+      ],
       "outputs": [],
       "options": {
         "command": "dist/patchkit/patchkit --root . coverage --sdk sdk/sdk.toml --allow sdk/coverage-allow.toml dist/modules/*/*.dkm dist/modules/*/*.dks",

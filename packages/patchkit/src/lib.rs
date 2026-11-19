@@ -49,6 +49,7 @@ pub mod objdiff;
 pub mod owners;
 pub mod pack;
 pub mod port;
+pub mod portfile;
 pub mod preflight;
 pub mod prim;
 pub mod protect;

@@ -317,6 +317,7 @@ name = "cf.lfo.hook.t1_range"
 site = "cf.lfo.site.t1_range"
 cpu = "cf"
 mode = "replace"
+stock = true
 regs = { in = ["a0"], clobbers = ["d0", "d1", "ccr"] }   # a0 is the buffer the stock code returns; the hook saves d1, a0 and a1 around its Rust call
 devices = ["dt2", "dn2"]
 mark = "D"

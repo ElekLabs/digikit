@@ -59,7 +59,7 @@ cpu = "cf"
 sig = "u32 (const u8 *track_ref)"
 rule = { kind = "cf_func", hash = "cedb2a1ea2dbc72965b79e3f95f41157", ordinal = 1, offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/services/machines"]
 doc = "The track of a parameter page: called with the page's reference at view+0x74, it returns the track number (the stock code clamps it to 0 to 15 and uses it as the track index into the project's sound array, FUN_40035cca on the Digitakt II). Same function body on both devices (DT2 0x4004abb8, DN2 0x40046bfe)."
 
 [[site]]
@@ -181,6 +181,7 @@ name = "cf.page.hook.page_desc"
 site = "cf.page.fn.page_desc"
 cpu = "cf"
 mode = "replace"
+stock = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # page at 4(sp); own pages rts, others re-enter at site+6
 devices = ["dt2", "dn2"]
 mark = "D"

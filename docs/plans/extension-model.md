@@ -961,13 +961,14 @@ runtime-and-services.md.
 | 8 | Boot window | none | none | done: PR #611, #613 |
 | 8 | Test-speed follow-up | wait audit | none | open: replace the fixed waits of the wait audit with waits on firmware state: fx-routes-persist 44,000-frame steps, project-kit load/save fixed 6 s and 3.5 s waits, machine-rows `stableFrameHash` used as a wait, boot-restart fixed settle, LFO rig waits |
 | 8 | Flash waits for the device write | none | host tests of the flash flow | open: after the last SysEx block the device still writes the image to flash while the workbench can already report done (`packages/workbench-core/src/firmware/firmware-flow.ts` `afterSend`: if the port does not leave within `leaveMs` 10 s it asks INFO, and the old image can answer). Show "the device is writing, keep it powered" and accept an answer only after the port left and came back, or after a minimum write time; size it from a device log of the "rebooting: <stage> · ports:" lines (real write time unknown, finding 75) |
-| 8 | test_pk_current fails on main | none | python-tests | open: `tests/patchkit/test_pk_current.py::test_ports_are_current` reports a generated ports file that differs from the committed one (a `dsp_st` line); regenerate or fix the generator |
+| 8 | Python tests red on main | none | python-tests | done: PR #622 (test_dktiming fake INFO layout, test_core_fx section list, menu-dkrun-pluck binds its services) |
+| 8 | test_pk_current fails on main | none | python-tests | done: PR #621 (container_max hex case) |
 | 8 | E6c parameter range override | E6 | none until E7 | todo (design step now, build when E7 starts; before E7) |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
 | 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8, port file | filter test plus subset | todo |
 | 10 | E8 regroup and names (class per module, `fixes/`, shared `dyndsp`, requires edges, patch-set lists; 6-8 h) | E1, open branches merged | full run of its batch | todo |
-| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | todo |
+| 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | active: PR1 done (PR #621); PR2 next after E5 |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
 
 E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item starts, its status becomes `active` with the branch; when it lands, `done` with the PR, set in that PR.

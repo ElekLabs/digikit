@@ -28,7 +28,7 @@ rule.dt2 = { kind = "cf_func", hash = "89d965df70565c490efde3016d66a843", offset
 rule.dn2 = { kind = "cf_func", hash = "89d965df70565c490efde3016d66a843", offset = 0x0, len = 4 }
 rule.st = { kind = "cf_func", hash = "88d9b1f3648a5f06762e48e5f2470ea7", offset = 0x0, len = 4, mark = "O" }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/services/machines"]
 doc = "The absolute parameter setter the stock page uses after a turn and the sample list uses after a pick: (obj, code, raw, track, 1, 1, 1). Clamps raw to the row range, stores it in the sound, notifies the project and the observers. obj is the parameter object of the page (view vtable 0xc4 (view, code, track)). DT2 0x4003b570, DN2 0x40037326."
 
 [[fn]]

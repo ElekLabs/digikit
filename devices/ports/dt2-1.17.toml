@@ -9,7 +9,7 @@ dsp_sha256 = "0f514a12a2255f5c081e292c47f1f29462003177658da4bbae0a22fd737fffa2"
 resolved_by = "tools/patchkit/port_resolve.py 1"
 
 [limits]
-container_max = 0x1FFE00
+container_max = 0x1ffe00
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
@@ -3871,54 +3871,81 @@ name = "cf.lfo.hook.graph_vec"
 site = "cf.lfo.site.graph_vec"
 mode = "replace"
 clobbers = ["d6", "ccr"]
+len = 6
+kind = "tail"
+check = "b6318922cdf8d53b"
 
 [[hook]]
 name = "cf.lfo.hook.read_call"
 site = "cf.lfo.site.read_call"
 mode = "replace"
 clobbers = ["d0", "d2", "ccr"]
+len = 6
+kind = "raw"
+check = "c0a706b60f9c27e1"
 
 [[hook]]
 name = "cf.lfo.hook.read_slew"
 site = "cf.lfo.site.read_slew"
 mode = "replace"
 clobbers = ["d2", "ccr"]
+len = 6
+kind = "raw"
+check = "c70bafcd9b83f19c"
 
 [[hook]]
 name = "cf.lfo.hook.read_start"
 site = "cf.lfo.site.read_start"
 mode = "replace"
 clobbers = ["d2", "ccr"]
+len = 6
+kind = "raw"
+check = "eca5788a5083a2d5"
 
 [[hook]]
 name = "cf.lfo.hook.t1_range"
 site = "cf.lfo.site.t1_range"
 mode = "replace"
 clobbers = ["d0", "d1", "ccr"]
+len = 6
+kind = "stock"
+check = "d6c9f1f60272197a"
 
 [[hook]]
 name = "cf.lfo.hook.tick_call"
 site = "cf.lfo.site.tick_call"
 mode = "replace"
 clobbers = ["d0", "d2", "ccr"]
+len = 6
+kind = "raw"
+check = "5da2f246bd0554f1"
 
 [[hook]]
 name = "cf.lfo.hook.tick_slew"
 site = "cf.lfo.site.tick_slew"
 mode = "replace"
 clobbers = ["d2", "ccr"]
+len = 6
+kind = "raw"
+check = "1fb6b7f3a3c46442"
 
 [[hook]]
 name = "cf.lfo.hook.tick_start"
 site = "cf.lfo.site.tick_start"
 mode = "replace"
 clobbers = ["d2", "ccr"]
+len = 6
+kind = "raw"
+check = "6ec1bf39f9f59443"
 
 [[hook]]
 name = "cf.lfo.hook.wave_name"
 site = "cf.lfo.site.wave_name"
 mode = "replace"
 clobbers = ["d0", "ccr"]
+len = 6
+kind = "raw"
+check = "4fdd4081a0412168"
 
 [[hook]]
 name = "cf.link.hook.block_isr"
@@ -3937,6 +3964,9 @@ name = "cf.machine.hook.clone.5"
 site = "cf.machine.site.clone.5"
 mode = "replace"
 clobbers = ["d0", "ccr"]
+len = 6
+kind = "raw"
+check = "a6af7832255431aa"
 
 [[hook]]
 name = "cf.machine.hook.dispatch"
@@ -3967,12 +3997,18 @@ name = "cf.machine.hook.param_code.args"
 site = "cf.machine.site.param_code.args"
 mode = "replace"
 clobbers = ["d0", "ccr"]
+len = 8
+kind = "tail"
+check = "619ff3d560aa3491"
 
 [[hook]]
 name = "cf.machine.hook.srcpage"
 site = "cf.machine.site.srcpage"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 8
+kind = "raw"
+check = "3ea856aea73810f4"
 
 [[hook]]
 name = "cf.machine.hook.view.build"
@@ -3996,78 +4032,117 @@ name = "cf.page.hook.filter_graph_test"
 site = "cf.page.site.filter_graph_test"
 mode = "replace"
 clobbers = ["ccr"]
+len = 6
+kind = "raw"
+check = "53ffbbb789c1ba82"
 
 [[hook]]
 name = "cf.page.hook.fx_array.init_exit"
 site = "cf.page.site.fx_array.init_exit"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 8
+kind = "raw"
+check = "4a577f7d4e224f5b"
 
 [[hook]]
 name = "cf.page.hook.fx_array.load"
 site = "cf.page.site.fx_array.load"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a2", "a3", "ccr"]
+len = 6
+kind = "raw"
+check = "1bf979bceba284eb"
 
 [[hook]]
 name = "cf.page.hook.fx_array.save"
 site = "cf.page.site.fx_array.save"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 6
+kind = "raw"
+check = "4a7a0b462f93dfe8"
 
 [[hook]]
 name = "cf.page.hook.fx_key_list.load"
 site = "cf.page.site.fx_key_list.load"
 mode = "replace"
 clobbers = ["d0", "ccr"]
+len = 6
+kind = "raw"
+check = "9951c87f5e3da5a8"
 
 [[hook]]
 name = "cf.page.hook.fx_view_list.load"
 site = "cf.page.site.fx_view_list.load"
 mode = "replace"
 clobbers = ["d0", "ccr"]
+len = 6
+kind = "raw"
+check = "cb9235a0e00ad183"
 
 [[hook]]
 name = "cf.page.hook.page_desc"
 site = "cf.page.fn.page_desc"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 6
+kind = "stock"
+check = "4804747ca9c54fb6"
 
 [[hook]]
 name = "cf.page.hook.sound_load_exit"
 site = "cf.page.site.sound_load_exit"
 mode = "replace"
 clobbers = ["ccr"]
+len = 8
+kind = "raw"
+check = "e29c1ee7f8818f91"
 
 [[hook]]
 name = "cf.page.hook.source_code"
 site = "cf.page.fn.source_code"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 8
+kind = "tail"
+check = "aafc8f979f6aeb11"
 
 [[hook]]
 name = "cf.page.hook.source_draw"
 site = "cf.page.fn.source_draw"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 8
+kind = "tail"
+check = "0a19a633070732de"
 
 [[hook]]
 name = "cf.page.hook.source_key"
 site = "cf.page.fn.source_key"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 8
+kind = "tail"
+check = "827861b302ed5053"
 
 [[hook]]
 name = "cf.page.hook.source_turn"
 site = "cf.page.fn.source_turn"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 8
+kind = "tail"
+check = "210e23c2057834e4"
 
 [[hook]]
 name = "cf.page.hook.tab_label_test"
 site = "cf.page.site.tab_label_test"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "ccr"]
+len = 6
+kind = "raw"
+check = "35f57655f91d71a8"
 
 [[hook]]
 name = "cf.param.hook.value_class"

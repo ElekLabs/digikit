@@ -359,6 +359,28 @@ one stock image. It is generated from the rules declared in `devices/fw/` and is
 supported firmware again leaves `git status` clean. A rule that matches nothing, or more than one place, is an error;
 that is how a new firmware shows which rules need work. A firmware without a port file has no compatible modules.
 
+`port_resolve` also writes the site facts of the hooks that a service uses (`users` of the hook in `devices/fw/` names `core/services/*`): `len` (bytes of the
+displaced whole instructions), `kind` (`raw`, `tail` from `tail = true`, `stock` from `stock = true`) and `check` (the first 8 bytes of the sha256 of the displaced
+bytes, 16 hex digits). The decoder is patchkit's, so `port_resolve` calls `dist/patchkit/patchkit port facts` (build it with `pnpm nx:pilot run patchkit:cli`, or set
+`PATCHKIT_BIN`). A `tail` or `stock` site must be a plain copy: the resolve fails when its displaced instructions need a fixup. A hook that a service reaches with
+`dk_stock_` and that declares no `tail` declares `stock = true`.
+
+### Port file
+
+```sh
+pnpm nx:pilot run patchkit:ports                                   # dist/ports/<device>-<version>.dks for every committed port (cached)
+dist/patchkit/patchkit port build --all --out DIR                  # the same without Nx; --device SHORT --version V for one
+dist/patchkit/patchkit port check --firmware FW.syx SERVICE.dks... # one-time: the port file says what `patchkit bind` does
+dist/patchkit/patchkit port check --names-only SERVICE.dks...      # no firmware: every firmware name a service uses is in the port set
+```
+
+The port file (docs/plans/port-file.md) is a `.dks` of role 2 with the service `port`, the firmware identity (`FW`) and two table entries: FWNAMES (name and exit
+hash to address, with an `absent` flag for a name that only another device's firmware has) and SITES (per hook: site address, displaced length, kind, check value).
+`port build` reads only `devices/ports` and `devices/fw`: no firmware, so CI builds it. `port check` needs the stock `.syx`: for each unbound service it runs
+`patchkit bind` and compares the port file with it (site, return address, check value, kind, tail bytes, every `dk_fw_` and `dk_exit_` place, `dk_stock_` and `dk_ret_`
+references); it prints `N facts compared, 0 difference(s)` and exits 1 on any difference. Pack the unbound services first with
+`patchkit pack-all --device SHORT --out DIR core/services/lfo core/services/machines core/services/fx`.
+
 ### Web gallery
 
 ```sh
