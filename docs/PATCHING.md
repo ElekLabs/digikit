@@ -452,7 +452,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   limits before any service file is loaded. The runtime names no adapter or service: it builds the entry name from the generic
   kind table (`CAP_INFO_HASHES`).
 - **Raw hooks and their tails.** A hook with no `handler` in `devices/fw/` is a raw hook: its entry takes the whole control
-  flow of the site (mode `replace`), so `patchkit bind` makes the entry itself the `BIND` trampoline and the runtime writes
+  flow of the site (mode `replace`), so the entry itself is the target of the jump that the runtime writes
   `jmp entry` at the site. When the entry falls through to the displaced stock instructions, the hook declares the exit
   `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`
   (`bind::tail_import`), which `patchkit pack` keeps as an import. `bind` appends the tail, the displaced instructions of the
