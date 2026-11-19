@@ -181,9 +181,10 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn live_done(core: &C) {
-        // the placeholder rows the new version did not take over (a type it no longer has, or a load that failed)
+        // the placeholder rows whose number the sticky map no longer holds
         dsp::free_placeholders(core);
-        // the machine rows of a module that did not come back: gap rows, as after a plain unload
+        // the machine rows of a pinned number whose module did not come back (a MISSING row with no voice row would play the first stock machine's sound): gap rows. A
+        // number the map holds stays MISSING (E5d), and `tick` parks its voice row if it has none.
         let inf = dkrt_svc_params::dynreg(core);
         if !inf.is_null() {
             let s = rstate();
@@ -196,6 +197,7 @@ impl<C: CoreApi> Service<C> for Machines {
             }
         }
         MISSING_ROWS = 0;
+        PARK_TRIES = 0;
         // the machine selection view caches the list: build it again, after a failed load too (the cached list would keep an entry the rows no longer have)
         refresh_view(core);
     }
@@ -216,6 +218,7 @@ impl<C: CoreApi> Service<C> for Machines {
     unsafe fn tick(core: &C, phase: u32) {
         if phase == tick_phase::LAST {
             slots::tick(core);
+            park_absent(core);
         }
     }
 
@@ -876,9 +879,58 @@ unsafe fn refresh_view<C: CoreApi>(core: &C) {
     }
 }
 
-/// The machine rows (bit k) that a reload left as a MISSING placeholder: the new version's rows clear the bit, and the end of the reload writes a gap row for the rest, so a
-/// type whose module did not come back reads as after a plain unload (a MISSING row with no voice row would play the first stock machine's sound).
+/// The machine rows (bit k) of a pinned number that a reload left as a MISSING placeholder: the new version's rows clear the bit, and the end of the reload writes a gap row
+/// for the rest (a MISSING row with no voice row would play the first stock machine's sound). A number the sticky map holds stays MISSING and is not in this mask.
 static mut MISSING_ROWS: u32 = 0;
+
+/// How many passes in a row the DSP did not take a placeholder write (`park_absent`); it stops trying at `PARK_MAX` until a removal or the end of a reload.
+static mut PARK_TRIES: u32 = 0;
+const PARK_MAX: u32 = 3;
+
+/// The machine rows and voice rows of the numbers the sticky map holds that no module has: MISSING and silent (docs/plans/extension-model.md E5d). A module that is not
+/// loaded at boot, or failed before its rows were written, has no unload to leave them. Called from every UI-loop pass: the machine row is written when it does not read
+/// MISSING yet (and the machine list is built again once), and the voice row is parked when the DSP loader is idle, a free row exists and the write is taken. Nothing runs during a live operation.
+unsafe fn park_absent<C: CoreApi>(core: &C) {
+    let inf = dkrt_svc_params::dynreg(core);
+    if inf.is_null() || core.live_op() != 0 {
+        return;
+    }
+    let s = rstate();
+    let empty = iw(inf, w::EMPTY);
+    let first = iw(inf, w::M_FIRST);
+    let mut changed = false;
+    let mut voices = PARK_TRIES < PARK_MAX && dsp::loader_idle(core);
+    let mut i = 0;
+    while i < dkrt_sdk::sel::MAP_N {
+        let t = crate::assign::number_at(i);
+        i += 1;
+        let d0 = iw(inf, w::M_DYN0);
+        if t < d0 || (t - d0) as usize >= MAX_MACH {
+            continue;
+        }
+        let k = (t - d0) as usize;
+        if s.mach_owner[k] != 0 || dsp::module_of_type(core, t).is_some() {
+            continue;
+        }
+        let row = iw(inf, w::M_ROWS) + (t - first) * iw(inf, w::M_ROW_SIZE);
+        if core.rd(row + iw(inf, w::O_NAME)) != empty || core.rd(row + iw(inf, w::O_OWN)) != 1 {
+            reset_machine_row(core, inf, k, true);
+            changed = true;
+        }
+        if voices {
+            match dsp::park_missing(core, t) {
+                Some(_) => PARK_TRIES = 0,
+                None => {
+                    PARK_TRIES += 1;
+                    voices = false;
+                }
+            }
+        }
+    }
+    if changed {
+        refresh_view(core);
+    }
+}
 
 /// The long and short names of the MISSING placeholder of a machine type whose module is not there.
 const MISSING_LONG: [u8; MACH_TEXT] = *b"MISSING\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
@@ -962,11 +1014,14 @@ unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
         if s.mach_owner[k] == owner {
             let t = iw(inf, w::M_DYN0) + k as u32;
             nativepage::remove(core, t); // callbacks must go before code/strings can be released
-            let missing = core.live_op() != 0;
+            // an absent module reads MISSING and plays silence while its number is in the sticky map (E5d), and during a reload; a pinned number is a gap row after the reload
+            let held = crate::assign::holds(t);
+            let missing = held || core.live_op() != 0;
             reset_machine_row(core, inf, k, missing);
-            if missing {
+            if missing && !held {
                 MISSING_ROWS |= 1 << k;
             }
+            PARK_TRIES = 0;
             s.mach_owner[k] = 0;
         }
         k += 1;

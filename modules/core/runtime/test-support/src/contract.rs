@@ -200,7 +200,7 @@ impl Snapshot {
 
     /// What `self` wrote and `other` does not hold any more: every word, link word and DSP state byte that is not 0 in `self` and has another value in `other`.
     /// `other` may have more (rows a module cleared hold the service's free values, rows that were never used hold 0). Each area lists its first 8.
-    pub fn lost_in(&self, other: &Snapshot) -> String {
+    pub fn lost_in(&self, other: &Snapshot, kept_dsp: fn(usize, u8) -> bool) -> String {
         let mut out = String::new();
         let mut n = 0;
         for (k, v) in &self.mem {
@@ -220,7 +220,7 @@ impl Snapshot {
         }
         let mut n = 0;
         for (i, b) in self.dsp.iter().enumerate() {
-            if *b != 0 && other.dsp[i] != *b && n < 8 {
+            if *b != 0 && other.dsp[i] != *b && !kept_dsp(i, other.dsp[i]) && n < 8 {
                 out.push_str(&std::format!(
                     "  dsp state byte {i}: {b:#x} -> {:#x}\n",
                     other.dsp[i]
@@ -528,7 +528,17 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         let mut caps = Vec::new();
         for kind in 0..32u8 {
             if let Some((l, u)) = unsafe { S::cap(core, kind) } {
-                caps.push((kind, l, u));
+                // a MISSING placeholder takes a voice row for each absent number (docs/plans/extension-model.md E5d): the figure compared is the rows modules use, so
+                // that "A, unload A" is the start for the counts whether or not the number keeps a placeholder (the services' own tests count the placeholders)
+                let parked = if kind == dkrt_sdk::proto::CAPK_VOICE_ROWS {
+                    d.row_owner
+                        .iter()
+                        .filter(|o| **o == dkrt_abi::dsp::PLACEHOLDER_OWNER)
+                        .count() as u32
+                } else {
+                    0
+                };
+                caps.push((kind, l, u - parked));
             }
         }
         Snapshot {
@@ -1075,13 +1085,16 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     );
     // what `A` held and released stays as the service's free values (a machine row is `A`'s by its key, whatever loads next), which `B` alone never wrote: `B`'s own
     // words, DSP state and ids are what is compared, and the capacity counts
-    let lost = after_b.lost_in(&l.snapshot());
-    assert!(
-        lost.is_empty(),
-        "{} ({}): A, unload A, B differs from B\n{lost}",
-        f.name,
-        profile(f)
-    );
+    // (a service that parks the rows of an absent module keeps A's row, so B has the next one: B's words are in another row and are not compared)
+    if !f.parks_rows {
+        let lost = after_b.lost_in(&l.snapshot(), f.kept_dsp);
+        assert!(
+            lost.is_empty(),
+            "{} ({}): A, unload A, B differs from B\n{lost}",
+            f.name,
+            profile(f)
+        );
+    }
     expect_small("A, unload A, B", f, &after_b, &l.snapshot());
     l.unload(0);
 }
@@ -1114,7 +1127,7 @@ fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
         f.name
     );
     l.unload(0);
-    let lost = b_alone.lost_in(&l.snapshot());
+    let lost = b_alone.lost_in(&l.snapshot(), f.kept_dsp);
     assert!(
         lost.is_empty(),
         "{} ({}): A's unload changed what B holds\n{lost}",
@@ -1226,10 +1239,10 @@ fn teardown_refusal_leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     );
 }
 
-/// Case 11: what a service parks during a reload (a placeholder for the module's numbers) is gone when the reload ends, in both ways it can end: the new version loads
-/// (it takes the placeholder over) or it does not (`live_done` frees what nobody took). Both leave the capacity counts, the service's view and the DSP state as
-/// they were at the start, so a row that leaks fails here. The memory words of a reload's unload hold the placeholder values (`kept` names them where a fixture
-/// has any), and are not compared.
+/// Case 11: what a service parks during a reload (a placeholder for the module's numbers) is, when the reload ends, what a plain unload leaves, in both ways it can end:
+/// the new version loads (it takes the placeholder over) or it does not (`live_done` keeps the placeholder of a number the service holds: the module is absent, E5d). Both
+/// leave the capacity counts and the service's view as they were at the start, and the DSP state but for the bytes `kept_dsp` names (the parked rows), so a row that leaks
+/// fails here. The memory words of an unload hold the placeholder values (`kept` names them where a fixture has any), and are not compared.
 fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
@@ -1268,7 +1281,7 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
         f.name,
         profile(f)
     );
-    // the module is not loaded, as after a plain unload: the firmware words are those a plain unload leaves (a machine row is the gap row, not MISSING)
+    // the module is not loaded, as after a plain unload: the firmware words are those a plain unload leaves (a machine row is MISSING in both)
     let failed = l.snapshot();
     let plain = Lifecycle::<S>::new(f);
     assert_eq!(plain.load(0, &f.a), OK);
@@ -1409,26 +1422,43 @@ fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Ser
     );
     l.core.live_op.set(0);
     l.unload(0);
-    gap_rows_after_an_unload(f, &on, &l.snapshot());
+    gap_rows_after_an_unload(f, &on, &loaded, &l.snapshot());
     // a reload that ends without A: what nobody took over is freed
     assert_eq!(l.load(0, &f.a), OK);
     l.core.live_op.set(1);
     l.unload(0);
     unsafe { S::live_done(&l.core) };
     l.core.live_op.set(0);
-    gap_rows_after_an_unload(f, &on, &l.snapshot());
+    gap_rows_after_an_unload(f, &on, &loaded, &l.snapshot());
 }
 
-/// The rows a module left with its unload (or with a reload that ended without it) run no more. This is the half of case 12b that says what a gone module's rows are:
-/// off, with no placeholder. E5d changes the machine row of a reload's end to the MISSING text; the DSP side stays as asserted here.
-fn gap_rows_after_an_unload(f: &Fixture, on: &dyn Fn(&Snapshot) -> Vec<bool>, s: &Snapshot) {
-    assert!(
-        on(s).iter().all(|o| !o),
-        "{} ({}): a row of A still runs after its unload: {:x?}",
-        f.name,
-        profile(f),
-        s.enable
-    );
+/// What a module's rows are after its unload, or after a reload that ended without it (E5d: the module is absent either way): where the service parks the rows of an
+/// absent module (`Fixture::parks_rows`) the words that run a row stay on, as with A loaded (the rows are disabled by other means, which the service's own tests check);
+/// where it does not they are off. This is the half of case 12b that says what a gone module's rows are.
+fn gap_rows_after_an_unload(
+    f: &Fixture,
+    on: &dyn Fn(&Snapshot) -> Vec<bool>,
+    loaded: &Snapshot,
+    s: &Snapshot,
+) {
+    if f.parks_rows {
+        assert_eq!(
+            s.enable,
+            loaded.enable,
+            "{} ({}): the rows of an absent module do not keep their words: {:x?}",
+            f.name,
+            profile(f),
+            s.enable
+        );
+    } else {
+        assert!(
+            on(s).iter().all(|o| !o),
+            "{} ({}): a row of A still runs after its unload: {:x?}",
+            f.name,
+            profile(f),
+            s.enable
+        );
+    }
 }
 
 /// Case 13 (`Fixture::parked_knobs`): the values the user turned survive a reload of the same module, as the firmware's kit array keeps them, and only that: they are the defaults
@@ -1581,12 +1611,14 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
             .filter(|(e, w)| **w != 0 && **w != e.2)
             .count()
     };
+    // a service that parks the rows of an absent module (`parks_rows`) leaves A's row words on the link as they were: the row is parked, disabled by other means
     assert_eq!(
         on(&end_a),
-        0,
-        "{} ({}): a row of A is not turned off after its unload: {:x?}",
+        if f.parks_rows { on(&loaded_a) } else { 0 },
+        "{} ({}): the rows of A after its unload (parks_rows {}): {:x?}",
         f.name,
         profile(f),
+        f.parks_rows,
         end_a.enable
     );
     assert!(
@@ -1712,7 +1744,14 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         );
         let refused = l.snapshot();
         expect_small("a refusal during apply", f, &before, &refused);
-        if let Err(d) = reference.same_after_unload(&refused, false) {
+        // (a service that parks the rows of an absent module keeps the voice row of the module that unloaded and frees the claim of the one that was refused before its
+        // row was published: the DSP state differs by that row, which the service's own tests check)
+        let (mut reference_cmp, mut refused_cmp) = (reference.clone(), refused.clone());
+        if f.parks_rows {
+            reference_cmp.dsp.clear();
+            refused_cmp.dsp.clear();
+        }
+        if let Err(d) = reference_cmp.same_after_unload(&refused_cmp, false) {
             panic!(
                 "{} ({}): the undo of a refusal during apply differs from an unload of the same rows{}\n{d}",
                 f.name,

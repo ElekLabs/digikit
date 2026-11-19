@@ -80,6 +80,30 @@ pub fn map_used() -> u32 {
     n
 }
 
+/// Whether the map holds machine type number `t`: an absent module of that number keeps a MISSING placeholder (a machine row and a parked voice row) while it does.
+/// A pinned number is in no map entry.
+pub fn holds(t: u32) -> bool {
+    let mut i = 0;
+    while i < MAP_N {
+        let e = st().map[i];
+        if e != 0 && e & 0xff == t {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// The type number of map entry `i` (0 when the entry is empty).
+pub fn number_at(i: usize) -> u32 {
+    let e = st().map[i];
+    if e == 0 {
+        0
+    } else {
+        e & 0xff
+    }
+}
+
 fn words(raw: &[u8; MAP_N * 4]) -> [u32; MAP_N] {
     let mut map = [0u32; MAP_N];
     let mut i = 0;
