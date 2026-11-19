@@ -478,6 +478,9 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   24 bits the entry's image offset. The loader drops the mask (`HOOK_ENTRY_MASK`): the port file's `absent` flag says which hooks the firmware has, and a hook that the port
   file does not list at all refuses the service file (`E_IMPORT`).
   A reader of the file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
+  A `[[fill]]` of a ColdFire slot with `devices` works the same way: the `SLOTS` item keeps the device set in bits 16 to 23 of its flags (bit `id - 1` for the device with `[digikit] id` `id`;
+  0: every device), and the loader skips an item whose mask lacks its own device before it looks the slot up, and leaves it out of the table copy that it compares with the declarations of `init`.
+  An unmasked slot that the image lacks still refuses the file (`E_FORMAT`). A DSP fill is built from the DSP object of its device, so the packer leaves the DSP fills of other devices out.
 - **Sections copied from the image.** `[[section]]` copies bytes of the user's image at patch time (a stock table),
   may append one row per registry entry, and places the result. This is how a framework extends a firmware table
   without storing it.

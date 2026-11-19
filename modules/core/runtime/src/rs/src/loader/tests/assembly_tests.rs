@@ -302,16 +302,19 @@ struct Card {
     staged_path: Vec<u8>,
     live: Vec<(u32, Vec<u128>)>,
     allocs: u32,
+    /// The runtime id of the device whose `init` the card replays.
+    device: u32,
 }
 
 impl Card {
-    fn new(files: Vec<(String, Vec<u8>)>) -> Card {
+    fn new(files: Vec<(String, Vec<u8>)>, device: u32) -> Card {
         Card {
             files: files.into_iter().map(|(n, b)| (n.into_bytes(), b)).collect(),
             staged: Vec::new(),
             staged_path: Vec::new(),
             live: Vec::new(),
             allocs: 0,
+            device,
         }
     }
 }
@@ -381,7 +384,7 @@ impl Images for Card {
         let at = |off: u32| (base + off) as usize as *const u8;
         let ctx = core::ptr::addr_of_mut!(crate::entry::DKRT_CTXS[rec]) as *mut u8;
         let mut kinds: Vec<(u32, u32)> = Vec::new();
-        // the init of a service declares the hooks that its device has, with the bare entry: the packed table lists the hooks of every device, with a device mask
+        // the init of a service declares the hooks that its device has, with the bare entry: the packed table lists the hooks of every device, with a device mask in the entry
         let port = self.files.iter().find(|(n, _)| n.starts_with(b"ports/")).map(|(_, f)| table_of(f));
         let port = port.as_ref().map(|t| Keys::parse(t).unwrap());
         for i in 0..keys.decl.n {
@@ -391,6 +394,13 @@ impl Images for Card {
                 if port.as_ref().is_some_and(|p| p.find_site(d.a).is_some_and(|x| x.flags & dkneeds::keys::FLAG_ABSENT != 0)) {
                     continue;
                 }
+            }
+            // and the slots of its device, with the flags of the file's item without the device mask
+            if d.tag == Declare::SLOT {
+                if !dkneeds::keys::slot_for_device(d.b, self.device) {
+                    continue;
+                }
+                d.b &= !dkneeds::keys::SLOT_DEVICES_MASK;
             }
             let r = if d.tag == Declare::KIND {
                 kinds.push((d.a, d.b));
@@ -495,7 +505,7 @@ unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fix
     for (addr, bytes) in stock_sites(dev).values() {
         p.put_code(*addr, bytes);
     }
-    let mut l = Loader::new(p, Card::new(files), DeviceRegistry { runtime: runtime_object() });
+    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: runtime_object() });
     l.reset_plan();
     for (k, m) in modules.iter().enumerate() {
         l.capture(k, &packed(dev, m.leaf, "dkm", m.nx));
@@ -706,6 +716,9 @@ fn an_effect_loads_with_the_fx_service_file() {
 #[test]
 fn an_lfo_loads_with_the_lfo_service_file() {
     let _g = clean();
+    // one file for every device: each device above loads the same bytes (the fills of the other device's slots carry a device mask that the loader skips)
+    let files: Vec<Vec<u8>> = DEVICES.iter().map(|d| service_file(*d, "lfo", "core/services/lfo")).collect();
+    assert!(files.len() > 1 && files.iter().all(|f| *f == files[0]), "lfo.dks differs between devices");
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         // the image half (core/lfo) has the six slots of the device, kind 1 in the info table; `fits` loads the file, whose declared fills must name them, and installs each
         let image = Image::read(*dev, "emulator");
@@ -1272,7 +1285,7 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
         .collect();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         for (s, declare) in &services {
-            // the packed file carries the hooks of both devices (with a device mask in the entry): the loader drops the mask and the hooks the port file lists as absent
+            // the packed file carries the hooks of both devices (with a device mask in the entry) and the slot fills of both (with a device mask in the flags): the loader drops the masks, the hooks the port file lists as absent and the slots of the other device
             let file = service_file(*dev, s.leaf, s.nx);
             let header = crate::collect::KeysCopy::from_bytes(&table_of(&file)).unwrap().decl;
             let pf = port_file(*dev);
@@ -1281,9 +1294,11 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
             let mut want: Vec<(u16, u32, u32)> = (0..header.n)
                 .filter(|i| {
                     let d = header.items[*i];
+                    // a slot fill of another device's image is skipped by the loader
                     !(d.tag == Declare::HOOK && port.find_site(d.a).is_some_and(|x| x.flags & dkneeds::keys::FLAG_ABSENT != 0))
+                        && !(d.tag == Declare::SLOT && !dkneeds::keys::slot_for_device(d.b, dev.profile.id))
                 })
-                .map(|i| plain(header.items[i].tag, header.items[i].a, header.items[i].b))
+                .map(|i| plain(header.items[i].tag, header.items[i].a, header.items[i].b & !dkneeds::keys::SLOT_DEVICES_MASK))
                 .collect();
             let mut got: Vec<(u16, u32, u32)> = Vec::new();
             unsafe {

@@ -4743,35 +4743,49 @@
   },
   {
    "addend": 0,
-   "offset": 70,
+   "offset": 64,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 84,
+   "offset": 78,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 210,
+   "offset": 84,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": "dkrt_device_id",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
+   "symbol": "_RNvNtCs7RjeRL46GKI_7dkneeds4keys15slot_for_device",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 248,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys9find_site",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 240,
+   "offset": 278,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 252,
+   "offset": 290,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
@@ -18939,315 +18953,329 @@
   },
   {
    "addend": 0,
-   "offset": 148,
+   "offset": 152,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5words",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 164,
+   "offset": 168,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": ".sec..text._RNvMNtNtCs7sxP7D8NSdT_4dkrt6loader7exportsNtB2_7Exports7resolve",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 308,
+   "offset": 314,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "memset",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 326,
+   "offset": 332,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": ".sec..text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role10hook_itemsNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1j_12RealRegistryEB6_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 438,
+   "offset": 440,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5slots",
    "type": "cf.32"
   },
   {
-   "addend": 52,
-   "offset": 460,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..bss.DKRT_DSP",
-   "type": "cf.32"
-  },
-  {
    "addend": 0,
-   "offset": 484,
+   "offset": 478,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "_RNvMs_NtCs7RjeRL46GKI_7dkneeds4keysNtB4_4Keys5words",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 498,
+   "offset": 548,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
+   "symbol": "dkrt_device_id",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 512,
+   "offset": 556,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "symbol": "_RNvNtCs7RjeRL46GKI_7dkneeds4keys15slot_for_device",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 576,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.1D",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 584,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "memcpy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 706,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "dkrt_irq_mask",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 736,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..text._RINvMNtNtCs7sxP7D8NSdT_4dkrt6loader7installNtB3_9Installer5checkNtNtB7_8platform12RealPlatformEB7_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 814,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 874,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 912,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 944,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1074,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "memcpy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1140,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "memcpy",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1214,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "dkrt_flush",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1298,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "dkrt_flush",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1332,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1346,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1506,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1522,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1528,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1542,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1556,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "dkrt_irq_restore",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1572,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..text._RINvXs1_NtNtCs7sxP7D8NSdT_4dkrt6loader7installNtB6_12DspInstallerNtB6_7Backend7restoreNtNtBa_8platform12RealPlatformEBa_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1590,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "dkrt_irq_restore",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1676,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1688,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1694,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1710,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1716,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1728,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1750,
+   "offset": 594,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "dkrt_info_table",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1774,
+   "offset": 618,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi8platform14info_find_slot",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1910,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "dkrt_info_table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1934,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi8platform18info_find_dsp_slot",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1956,
-   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp2iw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2018,
+   "offset": 672,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2030,
+   "offset": 686,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 752,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.1D",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 760,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 890,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "dkrt_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 918,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..text._RINvMNtNtCs7sxP7D8NSdT_4dkrt6loader7installNtB3_9Installer5checkNtNtB7_8platform12RealPlatformEB7_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 992,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1042,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1056,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1212,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1226,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1232,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1248,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1262,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "dkrt_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1278,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..text._RINvXs1_NtNtCs7sxP7D8NSdT_4dkrt6loader7installNtB6_12DspInstallerNtB6_7Backend7restoreNtNtBa_8platform12RealPlatformEBa_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1318,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "dkrt_flush",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1404,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "dkrt_flush",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1428,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "dkrt_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1514,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1526,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2036,
+   "offset": 1532,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 2048,
+   "offset": 1546,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1564,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1628,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1692,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1730,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1764,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1880,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1892,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1924,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "dkrt_info_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1948,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi8platform18info_find_dsp_slot",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1970,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt3dsp2iw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 1976,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2044,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2058,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2064,
+   "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2076,
    "section": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
@@ -43245,10 +43273,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffac48d744fc246f005c2f2f005841ef00244eb900000000242a0494588f4a8267124dea0114428342822c0f0686000000206068254204944cd744fc4fef00544e7548790000000048780040487800404eb900000000703fb08265000090700e4c020800204041e801143f4400302f4700322f450036d1ca20ef003020ef003420ef003830af003c52825283b6aa049464a24dee000e7040b08367a641ee00082f5800383f50003c38162e2e00022a2e000671c47206b280669c028500ffffff4aaf002067902f072f0641ef00464eb900000000508f4a6f003e6700ff7a102f00530800000066a26000ff6c487900000000487800402f024eb900000000",
+   "hex": "4fefffb048d7447c246f00582f2f005441ef00204eb900000000262a0494588f4a83670c4dea01144282428360000084254304944cd7447c4fef00504e7548790000000048780040487800404eb9000000002f39000000002f054eb900000000508f4a00673a0285ff00ffff703fb083650000a2700e4c030800204041e801143f44002c2f46002e2f450032d1ca20ef002c20ef003020ef003430af003852835282b4aa049464884dee000e7040b082678c204e2f58002c2f5800302f5800343f50003838162c2e00022a2e000671c47205b2806700ff7c71c47206b280668c028500ffffff4aaf001c67802f06486f002041ef00424eb900000000508f4a6f003a6700ff68102f004f0800000066906000ff5a487900000000487800402f034eb900000000",
    "kind": "text",
    "name": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role12filter_hooksNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1l_12RealRegistryEB6_",
-   "size": 256
+   "size": 294
   },
   {
    "align": 2,
@@ -44750,10 +44778,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56f8a448d73cfc2c2e000c200651807207b280651674164c020800206e0008d1c04a5066184283600007dc487900000000487800082f004eb900000000242800022628000a2868000e2d4cf8da206800122d48f8d62f064eb9000000002a402e2d00282f032f0241eef8f44eb900000000202ef8f4222ef8f84fef000c4a806700075a2d40f8fe2d41f902428247eef8fe45f900000000282e0008068400004a3c49f9000000002a6e00082d4df8de601c5282720a4c0108002044d1c02083da87214500041146000852ad4cbc2f02487800072f0b41eef9064e924fef000c4a6ef9066734262ef9082a2ef90c2f032f0441eefdfa4e94508f71eefdfa7201b280670007002a6ef8de202d4cbc723fb280649e76f2600006ee286ef8de2d4c0008240e0682fffff914487803c042a72f024eb9000000002f02486ef8fe2f0c41eefdf44eb900000000242efdf62d42f8de4fef00184a6efdf467062602600006a649eefcd42d4cf8e2200e0680fffffd54204c2a6e00082d4df8e6429042a800045088b08866f4206ef8e62d480008200e0680fffffdd441eefd54429042a800045088b08866f42a6ef8e6486ef8fe41eefdd44eb90000000043eefde441eefdd422d822d822d8229041f90000000047f06c00588f428499cc260e0683fffffde445f9000000002d4df8e66000052a487900000000487800102f0442a74eb90000000016102202528141e800884a036714240122080681ffffff7bb08166e476b2600005e2206ef8d62d4800082a0e0685fffffe0e263c000000882f034879000000002f0545f9000000004e921d46fe9270011d40fe932d44fe8e2f2ef8ea486efd542f054e92280e0684fffffe962f032f052f044e924c0328004fef00242f032f042a6ef8e6487528004e924fef000c7230b2aef8de650003467010b08c650003542a6e00084a2d357e6600fd78240d068200004cf94bed25562d4df8ea4eb9000000002d40f8f02f2ef8da2f2ef8de486ef9142f022f0d41eeffec4eb9000000004fef00144a6effec6600031c4aaef8de6700020c2a6e00082c2d32764beef91c2d4df8d6202ef8de72144c010800d08d2d40f8de47eeff1e260b068300000040280e0684ffffff5e45f9000000004beeff662d4df8d22d46f8e62c0c286e00082d4cf8ce286ef8d6242c00042d42f8da41eeff1e4218b68866fa240b3a3c4e713d45ff5e487900000000487800022f04487800022f024e9254824fef0014b48366de327c4ef93d49ff6048790000000048780002486eff60487800022f0b4e922a6c0008dbc72d4dff6248790000000048780004486eff6248780004486b00024e924fef002841eeff66200e0680ffffffa64218b08866fa24147040b0aef8da650002b64aaef8da6736223cffffff66d28ed2aef8da41eeff66224293eef8d21031880010c0b1c166f6222ef8dad28b204b2002908b43f008001298b1c166f648780040486eff66486effa64eb900000000286ef8ce202c32764fef000c722fb2806500026a72464c0108002d42ffe6142ef8ef1d42ffea1d6ef8ddffeb48780046486effa6286ef8ea487408004eb9000000002a6ef8ce202d327652802b4032767214d3aef8d64fef000c286ef8d6b9eef8de6600feae28462c2ef8e62d4d0008b0866358200d06800000259672464c0618002441d5c047f9000000002d4df8d6702fb086650001be201272f0c28075aa00052a404bf5280f200d74f0c08290812f002f014e93528645ea0046508f2a6ef8d6bcad327665c82d4d00084a8c6700012a240ce78ad4aef8e245f900000000266ef8e2286e00082d4cf8d66000012276b4600002dc76d2600002d6487900000000487800102f0842a74eb9000000004a88670c5088b0a8fff867d4b1c966f006810000008845ea0088b283671a4a2a000567ec20527410b48865c02408e78a2241d3c2204160d4240326052a062c2ef8d641eefd54600c4a88670c5088b0a8fff8678cb1cb66f0206ef8f0508bb7c567202013720fb2806500ff7c246ef8f045ea219622032d46f8d62c052a03260260982d480008200241e8219b42822a6e00082d4df8d66000fc36487900000000487800302f2ef8de42a74eb900000000487900000000487800102f0c42a74eb900000000262effee2f2ef8f04eb9000000007d862f062f022f2ef8e64eb9000000004fef0010600001d82f2ef8f04eb900000000588f6000f9e8508bb48b67ea205320ab00044878001070f0c0932f004e92286ef8d6202c357a508f727fb28065d872064c010800204041e80d24d1eef8ea10aef8ef21530002286ef8d652ac357a60b6487900000000487800302f064eb900000000487900000000487800402f2ef8da42a74eb900000000487900000000487800302f004eb9000000007010b08c67000112b4aef8da6400010a41f9000000002d48fff2200e0680fffffff22f012f2efff24eb900000000508f4a80670000e42207d282740fb48c650000dc240ce78a41eefcd4d1c2208021410004528c202efdecb0aefdf0640000f0220052812d41fdec2f00487800052f0341eefe004e924fef000c4a6efe0067d4222efe02242efe0a202efe060280000001004a806700ff6a7010b084677a4aaef8d66774b4aef8d6646e08020000666841f9000000002d48fffc200e59802f012f2efffc41eefff64eb9000000002a2efff8508f4a6efff6673e487800034eb90000000022130681e0000000d280e289e28a068200b80000d481588f700fb084652c2004e78841eefd54d1c020852142000452846000ff3e76fb6026487900000000487800102f0c4eb900000000487900000000487800102f044eb90000000076b420034cee3cfcf8a44e5e4e752a6ef8e62d4d00087010b0846500f9d01d46f8ef2a6e00084bed21162d4df8e64a846700fa5c2404e78a2d42f8ea2a3cfffffd54da8eda8247eefd54242e0008068200002556262ef8e62a6e00082d4df8f06000fd42",
+   "hex": "4e56f8a448d73cfc2c2e000c200651807207b280651674164c020800206e0008d1c04a50661897cb600007fa487900000000487800082f004eb900000000242800022628000a2868000e2d4cf8da206800122d48f8d62f064eb9000000002a40286d00282f032f0241eef8f44eb900000000202ef8f4222ef8f84fef000c4a80670007722d40f8fe2d41f90242822e0e0687fffff8fe45f900000000282e0008068400004a3c47f9000000002a6e00082d4df8de601c5282720a4c0108002044d1c02083da8c214500041146000852ad4cbc2f02487800072f0741eef9064e924fef000c4a6ef9066736262ef9082a2ef90c2f032f0441eefdfa4e93508f71eefdfa7201b280670007182a6ef8de202d4cbc723fb280649e367cfff2600007062a6ef8de2d4d0008240e0682fffff914487803c042a72f024eb9000000002f02486ef8fe2f0d41eefdf44eb900000000266efdf64fef00184a6efdf4660006c64beefcd42d4df8e2200e0680fffffd54204d2a6e00082d4df8de429042a800045088b1c066f4206ef8de2d480008200e0680fffffdd441eefd54429042a800045088b1c066f4206ef8de2d480008486ef8fe41eefdd44eb90000000043eefde441eefdd422d822d822d82290588f428742aef8de240e0682fffffde445f9000000002a6e00082d4df8e6202efdecb0aefdf06400063c220052812d41fdec2f00487800052f0241eefe004e924fef000c4a6efe0067d42a2efe02262efe06282efe0a2f39000000002f034eb900000000508f4a0067b4080300086600052c7010b0aef8de670005aeb8aef8da640005a6263c000000002d43fff2200e0680fffffff22f052f2efff24eb900000000508f4a8067000580220cd284760fb6aef8de65000578262ef8dee78b41eefcd4d1c320802141000452aef8de6000ff4e487900000000487800102f0742a74eb90000000012102002528041e800884a016716240020080680ffffff7bb08466e4367cffb260000550206ef8d62d4800082a0e0685fffffe0e283c000000882f044879000000002f05263c0000000022434e911d46fe9270011d40fe932d47fe8e2f2ef8ec486efd542f0520434e902e0e0687fffffe962f042f052f0722434e914c0428004fef00242f042f072a6ef8e64875280020434e904fef000c7430b48b6500016a7010b0aef8de650001742a6e00084a2d357e6600fcc0240d068200004cf94bed25562d4df8d64eb9000000002d40f8ec2f2ef8da2f0b486ef9142f022f0d41eeffec4eb9000000004fef00144a6effec660001404a8b670001c02a6e00082c2d32762e0e0687fffff91c200b72144c010800d0872d40f8da47eeff1e260b0683000000402a0e0685ffffff5e45f9000000004beeff662d4df8d22d4cf8e62d46f8f0286e00082d4cf8ce60000282367cffb46000041e367cffd260000416487900000000487800102f0842a74eb9000000004a88670c5088b0a8fff867d0b1c966f006810000008845ea0088b284671a4a2a000567ec20527410b48865c02408e78a2241d3c2204160d4240326062c2ef8d641eefd54600c4a88670c5088b0a8fff8678ab1cb66f0206ef8f0508bb7c3671e2013720fb2806500ff7c246ef8f045ea219622022d46f8d62c032602609c26452d48000841e8219b42822a6e00082d4df8d66000fe0a487900000000487800302f0b42a74eb900000000487900000000487800102f2ef8de42a74eb900000000266effee2f2ef8ec4eb9000000007d862f062f022f2ef8e64eb9000000004fef00106000031c2c2ef8f02d4d0008b0866354244d45ea259670464c060800d5c047f9000000002d4df8da702fb086650000b4201272f0c28075aa00052a404bf5280f200d74f0c08290812f002f014e93528645ea0046508f286ef8dabcac327665c82d4c00084aaef8de671e242ef8dee78ad4aef8e245f900000000266ef8e2286e00082d4cf8da60162f2ef8ec4eb900000000588f6000fa8a508bb7c267ea205320ab00044878001070f0c0932f004e92286ef8da202c357a508f727fb28065d876064c030800204041e80d24d1eef8d610aef8eb21530002286ef8da52ac357a60b6487900000000487800302f064eb900000000487900000000487800402f0642a74eb90000000048780040486eff66486effa64eb900000000286ef8ce202c32764fef000c722fb2806500012472464c0108002d42ffe6142ef8eb1d42ffea1d46ffeb48780046486effa6286ef8d6487408004eb9000000002a6ef8ce202d327652802b4032760687000000144fef000cbeaef8da6700fe8c28472c2c000441eeff1e4218b68866fa240b383c4e713d44ff5e487900000000487800022f05487800022f024e9254824fef0014b48366de327c4ef93d49ff6048790000000048780002486eff60487800022f0b4e922a6ef8e6dbec00082d4dff6248790000000048780004486eff6248780004486b00024e924fef002841eeff66200e0680ffffffa64218b08866fa24147040b0866500fee24a866700fef0223cffffff66d28ed28641eeff66224293eef8d21031880010c0b1c166f62206d28b204b2002908b43f008001298b1c166f66000feba487900000000487800302f004eb9000000007210b287670000864aaef8d6677eb8aef8d6647808040000667241f9000000002d48fffc200e59802f052f2efffc41eefff64eb900000000262efff8508f4a6efff66748487800034eb90000000041f90000000022306c000681e0000000d280e289e28c2004068000b80000d081588f720fb28765302207e78941eefd54d1c120832140000452876000f9f8367cfffb602a487900000000487800102f2ef8de4eb900000000487900000000487800102f074eb900000000367cffb4200b4cee3cfcf8a44e5e4e752a6ef8e62d4d00087010b0876500fa601d46f8eb2a6e00084bed21162d4df8e64a876700faf62407e78a2d42f8ec203cfffffd54d08ed082260e0683fffffd54282e0008068400002556242ef8e62a0b264326002a6e00082d4df8f06000fbf6",
    "kind": "text",
    "name": ".text._RINvNtNtCs7sxP7D8NSdT_4dkrt6loader4role16service_activateNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1p_12RealRegistryEB6_",
-   "size": 2152
+   "size": 2192
   },
   {
    "align": 2,
@@ -48110,6 +48138,13 @@
   },
   {
    "align": 2,
+   "hex": "2f02222f00082001028000ff00004a80672c4aaf000c6604420060247008b0af000c65f4206f000c538870012408e5a842414841c0814a8056c04480600270017201c081241f4e75",
+   "kind": "text",
+   "name": ".text._RNvNtCs7RjeRL46GKI_7dkneeds4keys15slot_for_device",
+   "size": 72
+  },
+  {
+   "align": 2,
    "hex": "2f2f00082f2f00084eb900000000508f4e75",
    "kind": "text",
    "name": ".text._RNvNtCs7RjeRL46GKI_7dkneeds4keys9name_hash",
@@ -49264,7 +49299,7 @@
    "size": 24
   }
  ],
- "source_sha256": "ec2833f38c05bcbfc4dfa44f0de5b4c6011f18232ac965f6e5b60f0c519a5777",
+ "source_sha256": "72c9b83b1429fb66c6f68a7b69ae5759cfddc3d6e49356e43b29913374d66fe0",
  "symbols": [
   {
    "global": false,
@@ -55460,6 +55495,12 @@
   },
   {
    "global": false,
+   "name": "_RNvNtCs7RjeRL46GKI_7dkneeds4keys15slot_for_device",
+   "section": ".text._RNvNtCs7RjeRL46GKI_7dkneeds4keys15slot_for_device",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvNtCs7RjeRL46GKI_7dkneeds4keys9name_hash",
    "section": ".text._RNvNtCs7RjeRL46GKI_7dkneeds4keys9name_hash",
    "value": 0
@@ -56739,8 +56780,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick",
-  "instructions_redecoded": "61301",
-  "isa_check": "e7270a03e9af35593689699bb9d2c90b5f9cf8025fb6664657eed9e188addadb",
+  "instructions_redecoded": "61350",
+  "isa_check": "9bfde655f88e5c5985d1fa23c2a9f15dc597a81ff2ada520f84c8b57a001927f",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

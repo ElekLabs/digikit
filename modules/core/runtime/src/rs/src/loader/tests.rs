@@ -1332,6 +1332,50 @@ fn a_slot_fill_past_the_image_or_of_a_slot_the_image_lacks_undoes_the_load() {
     }
 }
 
+/// The service of `slot_provider` with the flags of its one `SLOTS` item given, and a `init` that declares the slot only when `declared`.
+unsafe fn masked_slot_provider(flags: u32, declared: bool) -> Fake {
+    use dkneeds::keys::{name_hash, Slot, Table};
+    let slots: &'static [Slot] = Box::leak(Box::new([Slot { id: name_hash("the.entry"), flags, entry: 4 }]));
+    let table = Table { slots, ..svc_table() };
+    let mut items = vec![];
+    if declared {
+        items.push((dkrt_abi::service::Declare::SLOT, name_hash("the.entry"), 4));
+    }
+    items.extend_from_slice(match svc_init() {
+        Init::Declare(i) => i,
+        _ => unreachable!(),
+    });
+    provider_loader(service_file(&table, 0), Init::Declare(Box::leak(items.into_boxed_slice())))
+}
+
+/// The device mask of a `SLOTS` item: a slot for another device is skipped (the image of this device lacks it, and `init` does not declare it), a slot for this device is
+/// filled, and an unmasked slot that the image lacks is still refused.
+#[test]
+fn a_slot_masked_for_another_device_is_skipped_and_an_unmasked_unknown_slot_is_refused() {
+    use dkneeds::keys::SLOT_DEVICES_SHIFT;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let me = masked_slot_provider(0, false).p.device_id();
+        let other = if me == 1 { 2 } else { 1 };
+        let bit = |id: u32| (1u32 << (id - 1)) << SLOT_DEVICES_SHIFT;
+        // for the other device only: the image has no such slot, nothing is declared, the file loads and no word is written
+        let mut l = masked_slot_provider(bit(other), false);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK);
+        assert!(!l.p.calls.borrow().iter().any(|c| matches!(c, crate::fake_platform::Call::Word { .. })), "no slot word is written");
+        // for this device (among others): filled; the declared copy has the flags without the mask
+        let mut l = masked_slot_provider(bit(me) | bit(other), true);
+        l.p.info_entries.borrow_mut().push((dkneeds::keys::name_hash("the.entry"), vec![0]));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK);
+        assert!(l.p.calls.borrow().iter().any(|c| matches!(c, crate::fake_platform::Call::Word { .. })), "the slot word is written");
+        // for this device but the image lacks it: refused
+        let mut l = masked_slot_provider(bit(me), true);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), E_FORMAT);
+        // no mask and the image lacks it: refused as before
+        let mut l = masked_slot_provider(0, true);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), E_FORMAT);
+    }
+}
+
 #[test]
 fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other_export() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
