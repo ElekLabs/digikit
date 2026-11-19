@@ -135,6 +135,7 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     /// The slots of the providers' DSP code in core/dsp-link's slot block (the DSP backend).
     dsp_install: DspInstaller,
     /// The selection index of each module record (`u8::MAX`: none): the late teardown of a service names the dependents' states by it.
+    /// Stored as the index plus 1, so that 0 (none) is the zero fill of the static: a non-zero initial value would put the whole loader in `.data` (read it with `sel_of`).
     sel_of_rec: [u8; MAX_MODULES],
     /// The steps of a teardown that ran for each record (`TORN_*`): a second `unload_rec` after `E_BUSY` skips them, so `fini` and the role's undo run once.
     torn: [u8; records::REC_MAX],
@@ -222,7 +223,7 @@ pub unsafe fn rec_of_path(path: *const u8) -> Option<(usize, usize)> {
     let mut rec = 0;
     while rec < MAX_MODULES {
         if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
-            let k = l.sel_of_rec[rec] as usize;
+            let k = l.sel_of(rec) as usize;
             return if k < SEL_MAX { Some((rec, k)) } else { None };
         }
         rec += 1;
@@ -408,6 +409,11 @@ impl Checked {
 }
 
 impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+    /// The selection index of module record `rec`, `u8::MAX` when it has none.
+    fn sel_of(&self, rec: usize) -> u8 {
+        self.sel_of_rec[rec].wrapping_sub(1)
+    }
+
     pub const fn new(p: P, m: M, r: R) -> Self {
         Loader {
             p,
@@ -428,7 +434,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             exports: Exports::new(),
             installer: Installer::new(),
             dsp_install: DspInstaller::new(),
-            sel_of_rec: [u8::MAX; MAX_MODULES],
+            sel_of_rec: [0; MAX_MODULES],
             torn: [0; records::REC_MAX],
             saved_tick: [0; MAX_MODULES],
             drain_at: [None; MAX_MODULES],
@@ -723,7 +729,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         self.roles[rec] = if role == 2 { 2 } else { (role == 1) as u8 };
         if rec < MAX_MODULES {
             let k = read_volatile(addr_of!(BOOT_IDX));
-            self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 } else { u8::MAX };
+            self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 + 1 } else { 0 };
         }
         let m: &mut Module = records::module(rec);
         m.used = 1;
@@ -1036,7 +1042,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             dsp::fail_done(reclaimed, code);
             true
         } else if dsp::dequeue(rec) {
-            let idx = self.sel_of_rec[rec] as u32;
+            let idx = self.sel_of(rec) as u32;
             if self.take_down(rec, code) != OK {
                 // as for the load in flight: a teardown that cannot release the rows leaves the DSP retained (`fail_done`)
                 dsp::ds().phase = dsp::PH_RETAINED;
@@ -1064,7 +1070,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                         return r;
                     }
                     if d < MAX_MODULES {
-                        let k = self.sel_of_rec[d];
+                        let k = self.sel_of(d);
                         if k != u8::MAX {
                             crate::boot::report_taken_down(k as u32, E_MISSING);
                         }
@@ -1087,7 +1093,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// Whether the loaded record `rec` has a hard NEED of the service `hash` (from the header table the boot kept: the selection's for a module, the search's for a provider).
     unsafe fn needs_hash(&self, rec: usize, hash: u32) -> bool {
         let table: &[u8] = if rec < MAX_MODULES {
-            let k = self.sel_of_rec[rec] as usize;
+            let k = self.sel_of(rec) as usize;
             if k >= SEL_MAX || self.table_len[k] == 0 {
                 return false;
             }
@@ -1216,7 +1222,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if rec >= MAX_MODULES || records::module(rec).used == 0 {
             return E_NOT_FOUND;
         }
-        let k = self.sel_of_rec[rec] as usize;
+        let k = self.sel_of(rec) as usize;
         if k >= SEL_MAX || self.table_len[k] == 0 {
             return E_NOT_FOUND;
         }
@@ -1271,7 +1277,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
         let mut r = 0;
         while r < MAX_MODULES {
-            let at = self.sel_of_rec[r] as usize;
+            let at = self.sel_of(r) as usize;
             if records::module(r).used != 0 && at < SEL_MAX && self.table_len[at] != 0 {
                 mods[at] = Keys::parse(&self.tables[at][..self.table_len[at]]).ok();
             }
@@ -1309,7 +1315,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut live = [false; SEL_MAX];
         let mut r = 0;
         while r < MAX_MODULES {
-            let at = self.sel_of_rec[r] as usize;
+            let at = self.sel_of(r) as usize;
             if records::module(r).used != 0 && at < SEL_MAX {
                 live[at] = true;
             }
@@ -1364,7 +1370,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// Load the new file of a reload into the record `rec` of the module that `unload_rec` took down: the file's header table replaces the old one in the selection
     /// index of the record, so the services number its keys at `init` as they did the old file's, and the load keeps the record, its owner id and its selection index.
     pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
-        let k = if rec < MAX_MODULES { self.sel_of_rec[rec] as usize } else { SEL_MAX };
+        let k = if rec < MAX_MODULES { self.sel_of(rec) as usize } else { SEL_MAX };
         if k >= SEL_MAX {
             return E_NOT_FOUND;
         }
@@ -1457,9 +1463,16 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let nw = unmet_needs(&mods[..n], &mut want);
         if nw != 0 {
             discover::find(&mut self.m, &services(), &want[..nw], role::image_fw_id(&self.p), &mut self.found);
-            if self.found.truncated {
-                // a limit of the search was passed (the provider table is full, or more files or needs than it remembers): a need may be unmet for that reason, not for a missing file
-                crate::boot::report_provider(b"(provider table full)", E_PLAN_FIT, 0, 0);
+            // a limit of the search was passed: a need may be unmet for that reason, not for a missing file; each cause has its own name word (`(tab`, `(fil`, `(nee`) and its `TRUNC_*` bit as the hash word, which `loadFailureText` of runtime-log.ts turns into text
+            let t = self.found.truncated;
+            if t & discover::TRUNC_TABLE != 0 {
+                crate::boot::report_provider(b"(tab", E_PLAN_FIT, discover::TRUNC_TABLE as u32, 0);
+            }
+            if t & discover::TRUNC_FILES != 0 {
+                crate::boot::report_provider(b"(fil", E_PLAN_FIT, discover::TRUNC_FILES as u32, 0);
+            }
+            if t & discover::TRUNC_NEEDS != 0 {
+                crate::boot::report_provider(b"(nee", E_PLAN_FIT, discover::TRUNC_NEEDS as u32, 0);
             }
         }
         let provs = parse_provs(&self.found, self.found.n);

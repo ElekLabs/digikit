@@ -69,7 +69,18 @@ It stays in the runtime; the growth is accepted. Cuts that were measured or esti
 
 Who installs sites: the init of the port file builds the name table and the tails only. Each service's load installs its own hooks and takes the site facts from the port records. The one-owner rule of the planner and the install lifecycle do not change.
 
-`PROVIDER_MAX` is 8 (`provider_max` in `sdk/sdk.toml`; it was 6). The service files are lfo, machines, fx and samples, the port file makes 5, and the test fixture `svc-test` and its second copy in `providers.device.test.ts` make 7. The raise costs about 2.3 KiB of runtime RAM (`data` +1991, `bss` +370 bytes, from the search tables `Found`, the provider records, the claim rows of the DSP installer and `SLOT_WORDS_MAX`) and 426 bytes of text. A search that finds no slot for a need or for the port file sets `Found::truncated`, and the boot logs one `MOD_LOAD` provider event with `E_PLAN_FIT` ("(provider table full)"), so the user sees the cause and not a silent unmet need.
+`PROVIDER_MAX` is 8 (`provider_max` in `sdk/sdk.toml`; it was 6). The service files are lfo, machines, fx and samples, the port file makes 5, and the test fixture `svc-test` and its second copy in `providers.device.test.ts` make 7. The raise from 6 to 8 costs 2361 bytes of runtime RAM and 426 bytes of text. By symbol (growth of the object sections, `runtime.dko.json`):
+
+| Symbol | Bytes | Why |
+| --- | --- | --- |
+| `LOADER` (the loader static) | +1968 | per provider 984: the copy of the header table `Found::tables` 640, the claim row of the DSP installer 140, the slot words of the installer 128 (`SLOTS_MAX` 16 x 8), the path and its length 67, the table length and `ProvRec` 9; and 16 for `WANT_MAX` (4 x `PROVIDER_MAX` words) in all |
+| `PROVIDER_PATHS` | +128 | 64 per provider |
+| `DKRT_PROVIDERS` | +104 | 52 per provider (the module record) |
+| `DKRT_DSP` | +104 | one DSP record per provider |
+| `DKRT_CTXS` | +16 | one context per provider |
+| other tables | +41 | small constant tables and padding |
+
+The table copy of 640 bytes per provider is the largest part; `TABLE_MAX` is the planner's limit for one header table and stays. `LOADER` was in `.data`, not `.bss`: two of its fields started non-zero (`Installer::armed` true and `sel_of_rec` filled with 255), and one non-zero byte puts the whole static in `.data`, so the object carried 19.6 KB of zeros in its image. Both fields are stored inverted now (`disarmed`, index plus 1), `LOADER` is in `.bss`, and the runtime object holds 17.6 KB less data (`data` 31603 to 13996 bytes at PROVIDER_MAX 6 against 8 and zero fill; `data + bss` is 739775 bytes against 737414 before the raise). A static with a non-zero initial value must be checked in `runtime.dko.json` (`.data.` against `.bss.` sections). A search that finds no slot for a need or for the port file sets `Found::truncated`, and the boot logs one `MOD_LOAD` provider event with `E_PLAN_FIT` for each cause (`Found::truncated` bits: provider table full `(tab`, more files than `CAND_MAX` in `services/` or `ports/` `(fil`, more needs than `WANT_MAX` `(nee`; the log carries the first four characters, and `loadFailureText` of `runtime-log.ts` gives the text), so the user sees the cause and not a silent unmet need.
 
 A production port file lists no hook of the test fixture: the fixture's hook sits on the site of `core/digikit-menu`'s hook, and `port_check` compares every copied site with its check value, which a patched image changes. `patchkit port build --with-test-hooks` (Nx `patchkit:ports-test`, `dist/ports-test/`) builds the port file of the test image, which runs without digikit-menu; the assembly tests and `providers.device.test.ts` use it. A host test (`patchkit` unit test) checks that no copied site of a production port file lies on a site that an image module patches.
 
