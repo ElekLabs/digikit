@@ -79,7 +79,7 @@ const peakOf = (xs: Float32Array, from: number, to: number): number => {
 
 type Op = 'reload' | 'unload' | 'load';
 
-/** One live job on `file`, then what every job leaves (see the header). `counted` is whether the `reloads` counter moves (a load and a reload do, an unload moves `unloads` only). */
+/** One live job on `file`, then what every job leaves (see the header). The `reloads` counter moves by one for every live job (load, reload and unload), as in live.device.test.ts. */
 async function job(rt: TestRuntime, plan: RuntimePlan, op: Op, file: string, why: string, epoch: number, send: 0 | 1): Promise<void> {
   const before = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
   const end = await (op === 'reload' ? rt.dk.reloadAndWait(file) : op === 'unload' ? rt.dk.unloadAndWait(file) : rt.dk.loadAndWait(file));
@@ -87,7 +87,7 @@ async function job(rt: TestRuntime, plan: RuntimePlan, op: Op, file: string, why
   const st = await rt.dk.reloadState();
   expect([st.phase, st.result], `${why}: RELOAD_STATE (phase 2 = finished, result 0)`).toEqual([2, 0]);
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
-  expect(await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS), `${why}: the reloads counter`).toBe(before + (op === 'unload' ? 0 : 1));
+  expect(await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS), `${why}: the reloads counter`).toBe(before + 1);
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
   const cap = await rt.dk.capacity();
   expect({ fx: cap['FX_SLOTS']?.used, send: cap['SEND_SLOTS']?.used }, `${why}: FX_SLOTS and SEND_SLOTS in use`).toEqual(op === 'unload' ? { fx: 0, send: 0 } : { fx: 1, send });

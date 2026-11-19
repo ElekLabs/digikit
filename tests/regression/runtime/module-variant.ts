@@ -31,7 +31,11 @@ export async function packModuleVariant(opts: {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-variant-'));
   const copy = path.join(work, path.basename(from));
   // the module's sources and its generated headers (`build/gen`); its own tests and objects stay behind
-  fs.cpSync(from, copy, { recursive: true, filter: (src) => !/[\\/]tests([\\/]|$)/.test(src) });
+  // the filter sees paths below the module directory: the fixture itself lives under `tests/fixtures/`
+  fs.cpSync(from, copy, {
+    recursive: true,
+    filter: (src) => !/(^|[\\/])tests([\\/]|$)/.test(path.relative(from, src)),
+  });
   for (const e of opts.edits) {
     const file = path.join(copy, e.file);
     const text = fs.readFileSync(file, 'utf8');
