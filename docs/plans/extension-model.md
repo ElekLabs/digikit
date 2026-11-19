@@ -756,10 +756,10 @@ What:
      before the table call.
    - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses; routines in `services/lfo/dks/src/hooks-ui.s`, sites in `devices/fw/lfo.toml`,
      finding 149 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
-     0x4000766c, the first three characters), and the T1 range accessor (`t1_range`: DT2 0x400da368, DN2 0x400dc154, 172 callers on DT2 and 191 on DN2, among them
-     the live-set clamp the encoder reaches), which raises the maximum of the codes 79, 89 and 99 to the highest loaded wave number << 8 at run time and
-     leaves the T1 row untouched, so with the service absent the maximum stays 0x600. The hook reads the status register first and runs the stock code in interrupt
-     context. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
+     0x4000766c, the first three characters). The maximum of the WAVE parameter is no hook: the service writes the max word of the three WAVE rows (codes 79, 89 and 99) in the
+     RAM copy of the parameter table that `core/params` makes, to the highest loaded wave number << 8, and puts the stock pair back when the last shape is gone (E6c), so
+     with the service absent the maximum stays 0x600. The firmware's range accessor (DT2 0x400da368, DN2 0x400dc154, 172 callers on DT2 and 191 on DN2, among them the live-set
+     clamp the encoder reaches) reads that copy. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
      whose module is not loaded is reachable; the page shows "----" ("---" on the three-character formatter) for it and the tick plays TRI. DT2 binds two sites, DN2 three (installed sites DT2 18, DN2 22 of 48 before the graph site below; table in [port-file.md](port-file.md) section 5).
    - Graph (decided, O7): see item 1b.
@@ -816,7 +816,7 @@ What:
 8b. The lfo service checks a record's body key against the module's KEYS entry. Today nothing ties them: a literal body id bypasses the planner's key rule, so the check refuses a record whose key is not in the module's table. The service reads the keys with the kind-free `CoreApi::keys_of(at, kind, out)` (the keys of record kind `kind` in the header table of the accepted module at selection index `at`); the `Service` ABI names no LFO field (rule 12).
 9. Template `sdk/templates/lfo/` and a fixture `tests/fixtures/modules/test/lfo-shape`.
 
-Follow-ups after the device check: E6c (parameter range override), E6d (custom LFO graphics through the SDK) and E6e (clean-up), below.
+Follow-ups after the device check: E6c (WAVE maximum as a row write), E6d (custom LFO graphics through the SDK) and E6e (clean-up), below.
 
 Tests: unit (lfo service: lookup, interpolation, the delta table against the plain formula, the tile builder against the stock TRI tiles, fallback, contract suite); assembly (one case, the lfo fixture binds its hooks and the image
 stub slot is filled); device (written, not yet run; project `core/runtime-lfo-tests`, `modules/core/runtime/tests/lfo/`, tag `S:lfo`, both devices, no SHARC; the fixtures are `test/lfo-shape` (RAMP) and `test/lfo-shape-b` (STEP, a second shape key)).
@@ -838,17 +838,27 @@ loads safely without the module.
 Estimate: 2-3 days. Payoff: proves the "value of an existing knob" shape. Confidence: medium-high (all sites found on both devices; the
 interrupt cost is the open risk). Depends on: E3; E4. Open first: which field the tick clamp reads (finding [O]).
 
-### E6c Parameter range override
+### E6c WAVE maximum as a row write
 
-What: the `t1_range` hook of E6 sits on the firmware's shared T1 range accessor and the lfo service owns it. Only one service may hook a site (planner
-owner rule), so a second user (E7's filter knob ranges, or any later service) would be refused. One owner hooks the accessor once and offers a
-registration call, code to maximum (or a full range override), per owner, removed on unload. lfo registers its codes 79, 89 and 99; machines register
-the filter codes later. For an unregistered code the accessor runs the stock code, and the hook keeps the interrupt guard (the status register mask check).
+What: the maximum of the LFO WAVE parameter is a word of the firmware's parameter table, so the lfo service writes it and hooks nothing. The service writes
+the max word (+0xc) of the three WAVE rows (codes 79, 89 and 99; row layout: owner +0, mirror +4, min +8, max +0xc, default +0x10, stride 0x3c) in the RAM copy of
+the table that `core/params` makes (every reference of the stock table points into the copy). Only the range accessor reads min, max and default of those rows,
+apart from the default read in `ParameterPageView::vfunc_2`, which the write does not touch (finding 149, "Direct readers of the parameter table"). The write
+is made at run time, never at patch time, so with no shape loaded the maximum stays 0x600 (RAND).
 
-Design step first: who owns the hook. Candidates: the shared params/rows layer, or the machines service. Settle it with the ownership rule of
-docs/plans/sdk.md section 10, then write the call (an interface C call on `CoreApi`, so the `Service` ABI names no LFO field, rule 12) and the removal on unload.
+- No new `Service` method, record kind, `CoreApi` call or `SVC_ABI` change. The shared library crate `dkrt-svc-params` has the helper: `set_stock_range` sets the
+  (min, max) of a stock row of the copy and returns the pair it held, `stock_range` reads it; both refuse a row at or above `P_FIRST` (not a stock row), a row off the
+  row grid and a null table. The copy's base is `P_TABLE` of `dynreg_info`; the row's place is `row - table` of the stock addresses.
+- The rows are named by anchors, not by numbers in the service: `cf.lfo.data.wave_row.1` to `.3` in `devices/fw/lfo.toml` (a `cf_words` signature of each row) and
+  `cf.param.data.descriptor_table`; `patchkit bind` resolves the four words (`DKRT_LFO_FW` in `hooks-ui.s`) and `setup` gives them to the crate.
+  `patchkit service-check` fails a row anchor that lists two services in `users`.
+- `apply_record` and `remove` call `sync_range`: max = the highest loaded shape number << 8 while a shape is loaded; the stock pair goes back with the last
+  shape (contract cases 3 and 7 compare the word with its start value). Without `dynreg_info` the ROWS check and `apply_record` refuse with `E_NO_REGISTRY`.
+- Deleted: the `t1_range` site and hook, its routine in `hooks-ui.s`, `dk_lfo_range_max` and its slot (lfo binds two hooks on DT2, three on DN2).
 
-Build it when E7 starts, so the second user shapes the API. Depends on: E6. Must land before E7.
+Tests: unit (the helper over `FakeCore` memory: set, restore, refusals; lfo: the maximum follows the highest loaded shape over apply, remove and reload; the contract
+suite with the rows in the fixture image), assembly (`lfo.dks` binds without `t1_range`, the four words of `DKRT_LFO_FW` resolve), device (existing: lfo-shape-panel,
+lfo-shape-output, lfo-shape-project, lfo.device; goldens unchanged). Depends on: E6, E5.
 
 ### E6d Custom LFO graphics through the SDK
 
@@ -890,9 +900,9 @@ What:
 5. DSP: a stub at the filter-type site with a slot, dispatch in the `machines.dks` DSP section (R12-8 pattern). Filter DSP is a new contract
    in `sdk/dsp/contract/` (input and output buffers per voice, state per voice).
 6. Hook budget: the six new hooks go through the port file ([port-file.md](port-file.md)). `machines.dks` declares 13 hooks; `BIND` items leave the services with the port file, so no per-file limit applies. The runtime's `install_sites` 48 still bounds the
-   installed hook sites: 19 are taken on DT2 and 23 on DN2 today (table in port-file.md section 5), and E7 adds at most 6 per device, which gives 25 and 29.
+   installed hook sites: 18 are taken on DT2 and 22 on DN2 today (table in port-file.md section 5), and E7 adds at most 6 per device, which gives 24 and 28.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
-8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges use the registration call of E6c.
+8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges are rows of the machines service (the rows its builder calls write), so they need no range call.
 
 Tests: unit (machines service filter lowering, contract suite with a filter fixture); rig (filter DSP conformance in `@digi/sharc-rig-kit`);
 assembly (filter fixture loads); device (one test per device: select the filter, render, PCM report against the fixture's expected response).
@@ -963,10 +973,10 @@ runtime-and-services.md.
 | 8 | Flash waits for the device write | none | host tests of the flash flow | open: after the last SysEx block the device still writes the image to flash while the workbench can already report done (`packages/workbench-core/src/firmware/firmware-flow.ts` `afterSend`: if the port does not leave within `leaveMs` 10 s it asks INFO, and the old image can answer). Show "the device is writing, keep it powered" and accept an answer only after the port left and came back, or after a minimum write time; size it from a device log of the "rebooting: <stage> · ports:" lines (real write time unknown, finding 75) |
 | 8 | Python tests red on main | none | python-tests | done: PR #622 (test_dktiming fake INFO layout, test_core_fx section list, menu-dkrun-pluck binds its services) |
 | 8 | test_pk_current fails on main | none | python-tests | done: PR #621 (container_max hex case) |
-| 8 | E6c parameter range override | E6 | none until E7 | todo (design step now, build when E7 starts; before E7) |
+| 8 | E6c WAVE maximum as a row write | E6, E5 | lfo device tests (below) | active: branch e6c/row-write, host checks done, device proof pending |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
-| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8, port file | filter test plus subset | todo |
+| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8, port file | filter test plus subset | todo |
 | 10 | E8 regroup and names (class per module, `fixes/`, shared `dyndsp`, requires edges, patch-set lists; 6-8 h) | E1, open branches merged | full run of its batch | todo |
 | 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | active: PR1 done (PR #621); PR2 next after E5 |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
