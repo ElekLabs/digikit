@@ -156,7 +156,7 @@ async function expectNothing(
   ).toEqual(loaded);
   expect(
     [cap.MACHINE_ROWS!.used, cap.PARAM_ROWS!.used, cap.VOICE_ROWS!.used],
-    'the refused module wrote no machine, parameter or voice row',
+    'the refused module owns no machine, parameter or voice row (its number may hold a MISSING placeholder, which CAPACITY does not count)',
   ).toEqual([rows, rows * 3, rows]);
   expect(cap.DSP_AREA!.used > 0, 'and holds no DSP range unless an earlier module does').toBe(rows > 0);
   expect(cap.ARENA!.used, 'and no arena block beyond the providers and the modules that loaded').toBe(

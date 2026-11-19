@@ -265,7 +265,10 @@ impl Snapshot {
     /// Voice rows that are MISSING placeholders in this snapshot.
     fn placeholder_rows(&self) -> usize {
         let d = self.state_of_dsp();
-        d.row_owner.iter().filter(|o| **o == dkrt_abi::dsp::PLACEHOLDER_OWNER).count()
+        d.row_owner
+            .iter()
+            .filter(|o| **o == dkrt_abi::dsp::PLACEHOLDER_OWNER)
+            .count()
     }
 
     fn small(&self) -> (Vec<(u8, u32, u32)>, Vec<u32>) {
@@ -1159,7 +1162,9 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     // words, DSP state and ids are what is compared, and the capacity counts
     // (a service that parks the rows of an absent module keeps A's row, so B has the next one: B's words are in another row and are not compared)
     if !f.parks_rows {
-        let lost = after_b.by_type().lost_in(&l.snapshot().by_type(), &|o, v| (f.kept_dsp)(&l.core, o, v));
+        let lost = after_b
+            .by_type()
+            .lost_in(&l.snapshot().by_type(), &|o, v| (f.kept_dsp)(&l.core, o, v));
         assert!(
             lost.is_empty(),
             "{} ({}): A, unload A, B differs from B\n{lost}",
@@ -1728,7 +1733,9 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
         end_a.live,
         end_a.reqs
     );
-    let left = loaded_a.survivors(&start, &end_a, &|a, v| (f.kept)(&l.core, a, v), &|o, v| (f.kept_dsp)(&l.core, o, v));
+    let left = loaded_a.survivors(&start, &end_a, &|a, v| (f.kept)(&l.core, a, v), &|o, v| {
+        (f.kept_dsp)(&l.core, o, v)
+    });
     assert!(
         left.is_empty(),
         "{} ({}): the unload of A left what A wrote\n{left}",
@@ -1770,7 +1777,9 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     assert!(wrong.is_empty(), "{} ({}): {wrong:?}", f.name, profile(f));
     l.unload(0);
     let end_a2 = l.snapshot();
-    let left = loaded_a2.survivors(&start, &end_a2, &|a, v| (f.kept)(&l.core, a, v), &|o, v| (f.kept_dsp)(&l.core, o, v));
+    let left = loaded_a2.survivors(&start, &end_a2, &|a, v| (f.kept)(&l.core, a, v), &|o, v| {
+        (f.kept_dsp)(&l.core, o, v)
+    });
     assert!(
         left.is_empty(),
         "{} ({}): the unload of a2 left what a2 wrote\n{left}",
@@ -1833,7 +1842,10 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         let refused = l.snapshot();
         expect_small("a refusal during apply", f, &before, &refused);
         // (a service that parks the rows of an absent module keeps the voice row of the module that unloaded: only the placeholder rows' bytes are left out of the compare)
-        let (reference_cmp, refused_cmp) = (reference.without_placeholders(), refused.without_placeholders());
+        let (reference_cmp, refused_cmp) = (
+            reference.without_placeholders(),
+            refused.without_placeholders(),
+        );
         if let Err(d) = reference_cmp.same_after_unload(&refused_cmp, false) {
             panic!(
                 "{} ({}): the undo of a refusal during apply differs from an unload of the same rows{}\n{d}",

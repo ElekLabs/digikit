@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { waitClock, type Device } from '@digi/test-support';
+import { pollUntil, waitClock, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -7,7 +7,7 @@ import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
-import { TRACK_OBJ_WORD, decodeTables } from '@digi/regression/runtime/project-kit.ts';
+import { TRACK_OBJ_WORD } from '@digi/regression/runtime/project-kit.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
@@ -16,12 +16,17 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * An absent machine module reads MISSING and plays silence (docs/plans/extension-model.md E5d), on both devices. The machine is `test/sine` (the machine the other live tests use;
  * the plan names the pluck machine, whose pitch report needs the sample pool: the sine has the same row lifecycle).
  *
- * `UNLOAD` of the machine with the module outside the saved selection:
- * - the machine row's short name (the text the track label draws) is `MISS`, and the machine is not in the selection list (the rows with a list name, `decodeTables`);
+ * Before the unload the machine is in the selection list (its row has a list name). `UNLOAD` of the machine with the module outside the saved selection:
+ * - the machine row's short name (the text the track label draws) is `MISS`, and the machine is not in the selection list (the row's list name is the empty string);
  * - a note on the track renders digital silence: the peak over the held note is below 1e-4 (the placeholder voice row: DT2 through the disabled word, DN2 through the row's own number
  *   that no engine has), against the audible note before the unload;
- * - `LOAD` of it again: the short name is the machine's own, the note plays at the level it had (at least half), and the words of the track object (the kit's stored bytes, DT2: the
- *   track object `TRACK_OBJ_WORD`) are the words before the unload, the type byte included: the unload and the load wrote nothing to the track.
+ * - `LOAD` of it again: the short name is the machine's own, the note plays at the level it had (at least half), and the kit's stored knob bytes of track 1 (the sound array, DT2:
+ *   `+0x14`, 0x8c bytes of the track object) are the bytes before the unload: the unload and the load wrote nothing to the track.
+ *
+ * Boot path: the saved selection is the debug module alone, the device restarts, and the number of the machine is still in the sticky map with no module: once the loads of the
+ * boot are over the machines service parks it, so the row's short name reads `MISS` (waited on firmware state) and the log holds no `MACHINE_TYPE_EVICTED` error (no number was left
+ * without a row). The silence of that row is the unit test of the service and the rig case (a track cannot hold the type after a restart without a saved project). Then the module is
+ * selected again, the device restarts, and the machine plays.
  *
  * Replaces the "a plain unload leaves a gap row that plays the first stock machine" assertions of `live.device.test.ts`.
  *
@@ -30,8 +35,8 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 const MIDI_CHANNEL = 1;
 const AMP_CC = { dt2: { hold: 80, decay: 81 }, dn2: { hold: 85, decay: 86 } } as const;
 const SEND_CC = { dt2: [84, 85, 12], dn2: [30, 31, 29] } as const;
-/** Where the stored bytes of track 1 can be read: only the Digitakt II track object is mapped in the tests. */
-const TRACK_OBJECT: Partial<Record<Device, { at: number; words: number }>> = { dt2: { at: TRACK_OBJ_WORD, words: 0x450 / 4 } };
+/** Where the kit's stored knob bytes of track 1 can be read (the sound array, finding 02): only the Digitakt II track object is mapped in the tests. */
+const KNOB_BYTES: Partial<Record<Device, { at: number; words: number }>> = { dt2: { at: TRACK_OBJ_WORD + 0x14, words: 0x8c / 4 } };
 const NOTE = 57;
 const CAPTURE_BLOCKS = 4000;
 const SILENT = 1e-4;
@@ -48,10 +53,26 @@ async function cstr(rt: TestRuntime, addr: number): Promise<string> {
   return Buffer.from(end < 0 ? out : out.slice(0, end)).toString('latin1');
 }
 
-/** The short name of the machine row of `type` (the row's word at +60: what the page and the track label draw). */
+/** Row layout from `dynreg_info` (words: M_ROWS 3, M_ROW_SIZE 4, M_FIRST 5, O_NAME 18, O_SNAME 19, EMPTY 29): the machine row of `type`. */
+const INFO = { rows: 3, size: 4, first: 5, name: 18, sname: 19, empty: 29 } as const;
+
+async function machineRow(rt: TestRuntime, plan: RuntimePlan, type: number) {
+  const info = planSymbol(plan, 'dynreg_info');
+  const w = (i: number) => word(rt.session, info + 4 * i);
+  const row = (await w(INFO.rows)) + ((await w(INFO.size)) * (type - (await w(INFO.first))));
+  return { row, name: await w(INFO.name), sname: await w(INFO.sname), empty: await w(INFO.empty) };
+}
+
+/** The short name of the machine row of `type` (the text the page and the track label draw). */
 async function shortName(rt: TestRuntime, plan: RuntimePlan, type: number): Promise<string> {
-  const [rows, first, size] = ['machines.rows', 'machines.first', 'machines.row_size'].map((s) => planSymbol(plan, s)) as [number, number, number];
-  return cstr(rt, await word(rt.session, rows + size * (type - first) + 60));
+  const r = await machineRow(rt, plan, type);
+  return cstr(rt, await word(rt.session, r.row + r.sname));
+}
+
+/** Whether the machine row of `type` has a list name (the selection list shows it). */
+async function listed(rt: TestRuntime, plan: RuntimePlan, type: number): Promise<boolean> {
+  const r = await machineRow(rt, plan, type);
+  return (await word(rt.session, r.row + r.name)) !== r.empty;
 }
 
 /** The peak of the left channel over a held note (blocks 250 .. 700 after the trigger). */
@@ -78,7 +99,7 @@ async function notePeak(rt: TestRuntime, artifacts: string, tag: string): Promis
 }
 
 async function trackWords(rt: TestRuntime, device: Device): Promise<number[] | undefined> {
-  const where = TRACK_OBJECT[device];
+  const where = KNOB_BYTES[device];
   if (!where) return undefined;
   return Promise.all(Array.from({ length: where.words }, (_, i) => word(rt.session, where.at + 4 * i)));
 }
@@ -88,15 +109,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(rt.session, 'missing');
   const sinePath = moduleStorePath(device as 'dt2' | 'dn2', 'test/sine');
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
-  const plan = await prepareRuntimePlan(rt.session, artifacts, [
-    'machines.rows',
-    'machines.count',
-    'machines.first',
-    'machines.row_size',
-    'pf_table',
-    'params.first',
-    'params.count',
-  ]);
+  const plan = await prepareRuntimePlan(rt.session, artifacts, ['dynreg_info']);
   // the next boot would load the debug module alone: the machine is outside the saved selection
   await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE)]);
   const sine = (await rt.dk.modules()).find((m) => m.name === 'test/sine')!;
@@ -106,6 +119,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   await sendCc(rt, MIDI_CHANNEL, AMP_CC[device as 'dt2' | 'dn2'].decay, 64);
   for (const cc of SEND_CC[device as 'dt2' | 'dn2']) await sendCc(rt, MIDI_CHANNEL, cc, 0);
 
+  expect(await listed(rt, plan, type), 'the loaded machine is in the selection list').toBe(true);
   const heard = await notePeak(rt, artifacts, 'before');
   expect(heard, `the machine is audible (peak ${heard.toFixed(4)})`).toBeGreaterThan(0.01);
   const ownShort = await shortName(rt, plan, type);
@@ -115,7 +129,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   const gone = await rt.dk.unloadAndWait(sinePath);
   expect(gone, 'the unload').toEqual({ result: 0, unloaded: true });
   expect(await shortName(rt, plan, type), 'the track label of the absent machine').toBe('MISS');
-  expect(Object.keys((await decodeTables(rt.session, plan)).machines).map((n) => n.toLowerCase()), 'the absent machine is not in the selection list').not.toContain('sine');
+  expect(await listed(rt, plan, type), 'the absent machine is not in the selection list').toBe(false);
   const silent = await notePeak(rt, artifacts, 'absent');
   record(artifacts, 'missing-pcm', { heard, silent });
   expect(silent, `a note on the absent machine is silent (peak ${silent.toExponential(2)})`).toBeLessThan(SILENT);
@@ -128,7 +142,27 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
   const again = await notePeak(rt, artifacts, 'after');
   expect(again, `the machine plays again (peak ${again.toFixed(4)} against ${heard.toFixed(4)} before)`).toBeGreaterThan(heard * 0.5);
   const after = await trackWords(rt, device);
-  if (stored) expect(after, 'the track object holds the words it held before the unload (the load restores the sound only)').toEqual(stored);
+  if (stored) expect(after, "the kit's stored knob bytes are the bytes before the unload (the load restores the sound only)").toEqual(stored);
+
+  // the boot path: the selection is the debug module alone, the machine's number stays in the sticky map, and the machines service parks it once the boot's loads are over
+  await rt.dk.unloadAndWait(sinePath);
+  await restart(rt);
+  const parked = await pollUntil(rt.clock, () => shortName(rt, plan, type), (n) => n === 'MISS', { withinMs: 30_000, message: 'the absent machine reads MISS after the restart' });
+  expect(parked).toBe('MISS');
+  expect(await listed(rt, plan, type), 'the absent machine is not in the selection list after the restart').toBe(false);
+  const errors = (await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.MACHINE_TYPE_EVICTED);
+  expect(errors, 'no number was left without a row (MACHINE_TYPE_EVICTED)').toEqual([]);
+  await rt.dk.select([moduleStorePath(device as 'dt2' | 'dn2', DEBUG_MODULE), sinePath]);
+  await restart(rt);
+  await pollUntil(rt.clock, async () => (await rt.dk.modules()).some((m) => m.name === 'test/sine'), (v) => v, { withinMs: 30_000, message: 'the machine is loaded after the second restart' });
+  expect(await shortName(rt, plan, type), 'the machine is its own again after the boot').toBe(ownShort);
+  await rt.session.expectNoFault('the boot path of an absent machine');
+}
+
+/** `RESTART`, then the wait for the new boot in emulated time (the session's clock). */
+async function restart(rt: TestRuntime): Promise<void> {
+  await rt.dk.restart();
+  await rt.dk.waitForRestart();
 }
 
 runtimeTests('an unloaded machine reads MISSING and plays silence, and the load restores the sound only', expectMissingAndSilent, { dsp: 'sharc' });

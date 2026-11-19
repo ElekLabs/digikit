@@ -896,7 +896,7 @@ const PARK_MAX: u32 = 3;
 /// placeholder, not one for each pass.
 static mut LOGGED: u32 = 0;
 
-/// Why a number holds no placeholder (the second argument of the `MACHINE_TYPE_EVICTED` event of the machines service): a real load took the row, no voice row is free,
+/// Why a number holds no placeholder (the third argument of the `MACHINE_TYPE_EVICTED` event of the machines service: hash, type, why): a real load took the row, no voice row is free,
 /// the DSP did not take the write `PARK_MAX` passes in a row.
 const WHY_GAVE_WAY: u32 = 1;
 const WHY_NO_ROW: u32 = 2;
@@ -908,7 +908,7 @@ unsafe fn log_gap<C: CoreApi>(core: &C, k: usize, t: u32, why: u32) {
         core.log(
             dkrt_sdk::logk::MACHINE_TYPE_EVICTED,
             dkrt_sdk::logk::F_ERROR,
-            [t, why, 0, 0, 0],
+            [crate::assign::hash_of(t), t, why, 0, 0],
         );
     }
 }

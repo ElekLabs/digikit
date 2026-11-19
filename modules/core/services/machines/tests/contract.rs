@@ -354,7 +354,10 @@ fn kept_dsp(core: &FakeCore, off: usize, value: u8) -> bool {
     use core::mem::offset_of;
     use dkrt_abi::dsp::{DspState, MAX_ROWS, PLACEHOLDER_OWNER, PLACEHOLDER_PC};
     let d = core.dsp();
-    let row_of = |base: usize, size: usize| (off >= base && off < base + size * MAX_ROWS).then(|| ((off - base) / size, (off - base) % size));
+    let row_of = |base: usize, size: usize| {
+        (off >= base && off < base + size * MAX_ROWS)
+            .then(|| ((off - base) / size, (off - base) % size))
+    };
     if let Some((r, _)) = row_of(offset_of!(DspState, row_owner), 1) {
         return d.row_owner[r] == PLACEHOLDER_OWNER && value == PLACEHOLDER_OWNER;
     }
@@ -378,7 +381,9 @@ fn absent_rows(core: &FakeCore) -> (usize, usize) {
         .filter(|t| {
             *t != 0
                 && !(0..dkrt_abi::dsp::MAX_ROWS).any(|k| {
-                    d.row_owner[k] != 0 && d.row_owner[k] != dkrt_abi::dsp::PLACEHOLDER_OWNER && d.row_type[k] == *t as u32
+                    d.row_owner[k] != 0
+                        && d.row_owner[k] != dkrt_abi::dsp::PLACEHOLDER_OWNER
+                        && d.row_type[k] == *t as u32
                 })
         })
         .count();
@@ -613,7 +618,10 @@ fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_l
         // the loader is busy with a module: the machine rows are written, the voice rows wait
         l.core.dsp().phase = PH_IDLE + 1;
         tick();
-        assert!(!missing_row(&l.core).2, "dev {dev}: no MISSING row before the voice row is parked");
+        assert!(
+            !missing_row(&l.core).2,
+            "dev {dev}: no MISSING row before the voice row is parked"
+        );
         assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
         l.core.dsp().phase = PH_IDLE;
         tick();
@@ -674,11 +682,21 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
     assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), held);
     let free = unsafe { dkrt_abi::mem::iw(l.core.dsp_info(), I_VFREE) } as usize;
     // modules of numbers that have no row (pinned, in no map entry) load until the rows are full: a placeholder gives way to a real load, never the other way
-    for (rec, keys) in [(2usize, keys_pinned_other as fn() -> KeysCopy), (3, keys_pinned_third)] {
+    for (rec, keys) in [
+        (2usize, keys_pinned_other as fn() -> KeysCopy),
+        (3, keys_pinned_third),
+    ] {
         let m = module(rec as u32, keys, sine, 3);
-        assert_eq!(l.load(rec, &m), dkrt_sdk::OK, "a placeholder gives way to a real load");
+        assert_eq!(
+            l.load(rec, &m),
+            dkrt_sdk::OK,
+            "a placeholder gives way to a real load"
+        );
     }
-    assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), held.min(free - 2));
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+        held.min(free - 2)
+    );
     // the number that lost its row: the gap row and an error event
     let gave: Vec<(u32, u32)> = l
         .core
@@ -686,20 +704,37 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
         .borrow()
         .iter()
         .filter_map(|c| match c {
-            dkrt_test_support::Call::Log { kind, args } if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED => Some((args[0], args[1])),
+            dkrt_test_support::Call::Log { kind, args }
+                if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
+            {
+                Some((args[1], args[2]))
+            }
             _ => None,
         })
         .collect();
-    assert_eq!(gave.len(), held + 2 - free, "one event for each row a load took");
+    assert_eq!(
+        gave.len(),
+        held + 2 - free,
+        "one event for each row a load took"
+    );
     assert_eq!(gave[0].1, 1, "reason: a real load took the row");
     let lost = gave[0].0;
-    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).iter().all(|r| l.core.dsp().row_type[*r] != lost));
+    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER)
+        .iter()
+        .all(|r| l.core.dsp().row_type[*r] != lost));
     tick();
-    assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), held.min(free - 2), "no row is free: the number stays without one");
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+        held.min(free - 2),
+        "no row is free: the number stays without one"
+    );
     // a module goes: its row is free, and the number is parked again at the next pass
     l.unload(3);
     tick();
-    assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), held.min(free - 1));
+    assert_eq!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
+        held.min(free - 1)
+    );
     l.unload(2);
 }
 
@@ -728,7 +763,10 @@ fn a_boot_that_fits_exactly_loads_every_selected_module_beside_a_parked_number()
     assert_eq!(l.load(3, &p2), dkrt_sdk::OK);
     assert_eq!(free, 4);
     unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
-    assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty(), "no free row: no placeholder, every module loaded");
+    assert!(
+        rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty(),
+        "no free row: no placeholder, every module loaded"
+    );
     for rec in (0..4).rev() {
         l.unload(rec);
     }
@@ -766,16 +804,31 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
             .borrow()
             .iter()
             .filter_map(|c| match c {
-                dkrt_test_support::Call::Log { kind, args } if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED => Some((args[0], args[1])),
+                dkrt_test_support::Call::Log { kind, args }
+                    if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
+                {
+                    Some((args[1], args[2]))
+                }
                 _ => None,
             })
             .collect::<Vec<_>>()
     };
     let held = dkrt_svc_machines::assign::map_used() as usize;
-    assert_eq!(events().len(), held - 1, "one event for each number without a row");
-    assert!(events().iter().all(|(_, why)| *why == 2), "the reason is: no free row");
+    assert_eq!(
+        events().len(),
+        held - 1,
+        "one event for each number without a row"
+    );
+    assert!(
+        events().iter().all(|(_, why)| *why == 2),
+        "the reason is: no free row"
+    );
     tick();
-    assert_eq!(events().len(), held - 1, "an event is logged once, not at every pass");
+    assert_eq!(
+        events().len(),
+        held - 1,
+        "an event is logged once, not at every pass"
+    );
     for k in 1..free {
         l.core.dsp().row_owner[k] = 0;
         l.core.dsp().row_type[k] = FREE_TYPE;

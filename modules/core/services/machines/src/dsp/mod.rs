@@ -254,9 +254,7 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
         let t = crate::assign::resolve(core, rd32(e.add(VOICE_TYPE as usize)));
         let mut k = 0;
         while k < MAX_ROWS {
-            if d.row_owner[k] as u32 == core.live_op()
-                && d.row_owner[k] != 0
-                && d.row_type[k] == t
+            if d.row_owner[k] as u32 == core.live_op() && d.row_owner[k] != 0 && d.row_type[k] == t
             {
                 own += 1;
                 break;
@@ -274,11 +272,7 @@ pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
 /// `Service::dsp_admit`: a real load always wins a voice row. When fewer free rows exist than voices that have no placeholder or own row of their type, the placeholders of
 /// other numbers are freed (the type word first, then the disabled word) until the rows are there, and `gave` is told each type: the caller turns its machine row into a gap
 /// row and logs it. `E_BUSY` when the DSP did not take a write (nothing is reserved yet; the load is tried again).
-pub(crate) unsafe fn make_room<C: CoreApi>(
-    core: &C,
-    job: &Job,
-    gave: &mut dyn FnMut(u32),
-) -> i32 {
+pub(crate) unsafe fn make_room<C: CoreApi>(core: &C, job: &Job, gave: &mut dyn FnMut(u32)) -> i32 {
     if core.dsp_info().is_null() {
         return OK;
     }

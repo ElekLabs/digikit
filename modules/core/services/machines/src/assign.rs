@@ -94,6 +94,19 @@ pub fn holds(t: u32) -> bool {
     false
 }
 
+/// The hash of the machine that holds number `t` in the map (0: none).
+pub fn hash_of(t: u32) -> u32 {
+    let mut i = 0;
+    while i < MAP_N {
+        let e = st().map[i];
+        if e != 0 && e & 0xff == t {
+            return e >> 8;
+        }
+        i += 1;
+    }
+    0
+}
+
 /// The type number of map entry `i` (0 when the entry is empty).
 pub fn number_at(i: usize) -> u32 {
     let e = st().map[i];

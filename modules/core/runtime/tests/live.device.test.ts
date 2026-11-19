@@ -14,7 +14,7 @@ import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-c
  * Load and unload of a content module while the device runs (docs/plans/extension-model.md E5c): `LOAD` and `UNLOAD` run the same job as `RELOAD`.
  *
  * After every job the checks of what only the firmware shows: the job ends with the expected result and `unloaded` flag; no new boot (the epoch); the voice rows in use are those
- * the modules' row masks name (no row of an unloaded module is left but the MISSING placeholder of an absent number: the sticky map holds the number, E5d, so the rows in use are the rows the masks name and one for each absent number). The runtime's table checks found no damage in the real firmware tables (no `TABLE_BAD` in the log). What the runtime keeps on the host is not read here: the
+ * the modules' row masks name (an unloaded module leaves the MISSING placeholder of its number, E5d, which CAPACITY does not count: the rows in use are the rows the masks name). The runtime's table checks found no damage in the real firmware tables (no `TABLE_BAD` in the log). What the runtime keeps on the host is not read here: the
  * job's phases, refusals (`E_MISSING`, `E_LOADED`, `E_RELOAD_PLAYING`) and counters are unit and assembly tests (`reload.rs`, `loader`), a service's rows across an unload and a load
  * are the service contract suite (`dkrt_test_support::contract`); the one real transport refusal is in `reload.device.test.ts`.
  *
@@ -71,9 +71,8 @@ async function expectJobLeftNothing(rt: TestRuntime, why: string, epoch: number,
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
   const [cap, mods] = [await rt.dk.capacity(), await moduleRows(rt)];
   const named = mods.reduce((n, m) => n + popcount(m.rows), 0);
-  // an absent module keeps a placeholder voice row for each number the sticky map holds (E5d): the map entries (CAPACITY) less the machine types loaded now
-  const absent = (cap['MAP_ENTRIES']?.used ?? 0) - mods.reduce((n, m) => n + m.types.length, 0);
-  expect(cap['VOICE_ROWS']?.used, `${why}: voice rows in use (the row masks of the modules name ${named}, and ${absent} parked rows of absent numbers)`).toBe(named + absent);
+  // a MISSING placeholder row of an absent number is no row in use (it gives way to a real load, E5d): CAPACITY counts the rows the modules own
+  expect(cap['VOICE_ROWS']?.used, `${why}: voice rows in use (the row masks of the modules name ${named}; a placeholder is not counted)`).toBe(named);
   // the runtime's table checks ran over the real firmware tables (host tests run them over fakes only)
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
 }
