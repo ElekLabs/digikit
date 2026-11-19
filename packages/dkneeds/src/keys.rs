@@ -72,6 +72,9 @@ pub mod tag {
 /// Bytes of one `FWNAMES` item and of one `SITES` item.
 pub const NAME_BYTES: usize = 12;
 pub const SITE_BYTES: usize = 20;
+/// The low 24 bits of a `HOOKS` entry of a service file are the image offset of the entry; the top byte is the device mask the packer wrote (the port file's `absent`
+/// flag does the work of the mask at run time, so the loader drops it).
+pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
 /// Bit 0 of the flags of a `FWNAMES` or `SITES` item: the name or hook is absent on this firmware.
 pub const FLAG_ABSENT: u8 = 1;
 /// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).

@@ -804,7 +804,9 @@ fn a_hook_the_port_file_does_not_list_is_refused_and_one_it_lists_as_absent_is_s
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_IMPORT);
         assert_eq!(l.m.allocs, 0);
         // absent on this firmware: the service loads, installs no site and keeps its export
-        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
+        // (its `init` declares what the firmware has: the export, not the hook)
+        let export_only: Vec<(u16, u32, u32)> = vec![(dkrt_abi::service::Declare::EXPORT, dkneeds::keys::name_hash("dk_svctest_ping"), 8)];
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::Declare(Box::leak(export_only.into_boxed_slice())));
         put_port(&mut l, &[hook(dkneeds::keys::FLAG_ABSENT, 0)]);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
         assert_eq!((l.installer.count(), l.exports.count()), (0, 1));
@@ -1975,5 +1977,21 @@ fn a_firmware_import_the_port_file_does_not_list_or_that_has_no_port_file_refuse
         let mut l = loader_of(Init::Ok, f);
         assert_eq!(l.load(PATH.as_ptr()), E_IMPORT);
         assert_eq!(l.m.allocs, 0);
+    }
+}
+
+/// The packer writes a device mask in the top byte of a `HOOKS` entry: the loader ignores it (the port file's `absent` flag does its work), compares the bare entry
+/// with what `init` declares and jumps to the bare entry.
+#[test]
+fn the_device_mask_in_a_hooks_entry_is_dropped() {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let hooks = [Pair { a: name_hash("hook.a"), b: 4 | 0x02 << 24 }];
+        let table = Table { hooks: &hooks, ..svc_table() };
+        let mut l = provider_loader(service_file(&table, 0), svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
+        let t = records::module(MAX_MODULES).base + 4;
+        assert_eq!(site_bytes(&l, 6), [0x4e, 0xf9, (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8]);
     }
 }

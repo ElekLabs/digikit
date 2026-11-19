@@ -23,7 +23,6 @@ export const COLLECT_BYTES = 1618;
 export const TABLE_MAGIC = 1145787458;
 export const TABLE_VERSION = 3;
 export const PROVIDER_MAX = 6;
-export const BIND_MAX = 24;
 export const INSTALL_SITES = 48;
 export const SLOTS_MAX = 16;
 export const INFO_MAX = 64;

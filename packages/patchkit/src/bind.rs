@@ -18,8 +18,8 @@ use dkneeds::keys::{
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-/// Most `BIND` items of one service (`[limits.format] bind_max` of sdk/sdk.toml; the runtime sizes its copy with it).
-pub const BIND_MAX: usize = dkneeds::BIND_MAX as usize;
+/// Most `BIND` items of one service. The binding leaves with PR3 of the port file stack ([port-file.md](../../../docs/plans/port-file.md)); the runtime reads none.
+pub const BIND_MAX: usize = 24;
 
 /// One bound hook, for the report.
 #[derive(Clone, Debug)]

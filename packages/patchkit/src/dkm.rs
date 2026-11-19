@@ -227,6 +227,19 @@ fn table_with_needs(
         Some(Keys::parse(reg).map_err(|e| err!("header table: {e:?}"))?)
     };
     let mut needs = needs_of_imports(imports.iter().copied());
+    // a service that names the firmware (an import `dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_`, `dk_ret_`) or takes a hook needs the port file of the firmware
+    if !hooks_add.is_empty()
+        || imports
+            .iter()
+            .any(|i| crate::bind::parse_import(i).is_some())
+    {
+        needs.push(dkneeds::keys::Need {
+            service: dkneeds::keys::name_hash(crate::portfile::PORT_SERVICE),
+            min_version: crate::portfile::PORT_VERSION,
+            hard: true,
+        });
+        needs.sort_by_key(|n| n.service);
+    }
     if let Some(k) = &keys {
         let kinds: Vec<u32> = k.key_groups().map(|g| g.0).collect();
         record_kind_needs(&mut needs, &kinds);
@@ -313,7 +326,7 @@ pub struct Options {
 }
 
 /// The low 24 bits of a `HOOKS` entry of a service file: the handler's image offset. The top byte is the device mask of the hook.
-pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
+pub const HOOK_ENTRY_MASK: u32 = dkneeds::keys::HOOK_ENTRY_MASK;
 
 /// The device mask of a hook: bit `i` is the device `i` of `devdata::all()` (file-name order); no device is mask 0, which means every device. The packer writes it
 /// in the top byte of the hook's `HOOKS` entry and `patchkit bind` reads it (and writes the bound file's entry without it), so a hook for the device of the firmware

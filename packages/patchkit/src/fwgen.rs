@@ -270,6 +270,8 @@ pub struct HookDecl {
     pub devices: Vec<String>,
     pub tail: bool,
     pub stock: bool,
+    /// The declaration has a `handler`: a trampoline calls a C function. The port file has no trampolines, so a service may not take such a hook.
+    pub handler: bool,
     pub exits: Vec<String>,
     /// The `users` of the declaration (module ids).
     pub users: Vec<String>,
@@ -277,11 +279,16 @@ pub struct HookDecl {
 
 /// The prefix of a `users` entry that is a service module id.
 pub const SERVICE_USER_PREFIX: &str = "core/services/";
+/// The test fixture that takes a hook of its own (`test/svc-test`): a service for the port set like the core services.
+pub const TEST_SERVICE_USER: &str = "test/svc-test";
 
 /// The ColdFire names and hooks of `devices/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
 /// device (the same name, `devices` apart).
 pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
-    let is_service = |u: &[String]| u.iter().any(|x| x.starts_with(SERVICE_USER_PREFIX));
+    let is_service = |u: &[String]| {
+        u.iter()
+            .any(|x| x.starts_with(SERVICE_USER_PREFIX) || x == TEST_SERVICE_USER)
+    };
     let (mut names, mut hooks) = (vec![], vec![]);
     for text in decls.iter().copied() {
         let f: Files = toml::from_str(text).map_err(|e| err!("devices/fw: {e}"))?;
@@ -307,6 +314,7 @@ pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
                     devices: h.devices.clone(),
                     tail: h.tail,
                     stock: h.stock,
+                    handler: h.handler.is_some(),
                     exits: h.exits.clone(),
                     users: h.users.clone(),
                 });

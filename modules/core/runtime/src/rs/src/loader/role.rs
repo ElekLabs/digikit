@@ -103,6 +103,7 @@ unsafe fn hook_items<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R
     let mut i = 0;
     while let Some((hash, entry, _)) = keys.words(tag::HOOKS, i) {
         i += 1;
+        let entry = entry & dkneeds::keys::HOOK_ENTRY_MASK;
         let site = match l.port_keys() {
             Some((port, ..)) => port.find_site(hash),
             None => None,
@@ -180,6 +181,33 @@ unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
         Ok(()) => OK,
         Err(e) => e,
     }
+}
+
+/// What `init` of a service file declares is compared with the file's header table. The table's `HOOKS` items carry a device mask in the top byte of the entry and list
+/// the hooks of every device; this device's declarations hold the bare entry and only the hooks the firmware has. The copy of the table that is compared is made to
+/// match: the mask is dropped, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it).
+#[inline(never)]
+pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::collect::KeysCopy) {
+    let port = l.port_keys();
+    let d = &mut keys.decl;
+    let (mut from, mut to) = (0, 0);
+    while from < d.n {
+        let mut it = d.items[from];
+        from += 1;
+        if it.tag == tag::HOOKS {
+            it.b &= dkneeds::keys::HOOK_ENTRY_MASK;
+            let gone = match &port {
+                Some((p, ..)) => matches!(p.find_site(it.a), Some(s) if s.flags & FLAG_ABSENT != 0),
+                None => false,
+            };
+            if gone {
+                continue;
+            }
+        }
+        d.items[to] = it;
+        to += 1;
+    }
+    d.n = to;
 }
 
 /// The provider index of record `rec`.

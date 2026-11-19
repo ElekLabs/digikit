@@ -4033,6 +4033,15 @@ mode = "before"
 clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
+name = "cf.menu.hook.settings_list.test"
+site = "cf.menu.site.settings_list.tail"
+mode = "replace"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
+len = 6
+kind = "tail"
+check = "c7589861366d298d"
+
+[[hook]]
 name = "cf.midi.hook.rx"
 site = "cf.midi.site.rx"
 mode = "before"

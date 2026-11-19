@@ -605,6 +605,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Ok(k) => k,
             Err(e) => return e,
         };
+        if role == 1 {
+            role::filter_hooks(self, &mut c.keys);
+        }
         // the DSP section, if any
         let (dsp_off, dsp_size) = (rd32(f.add(H_DSP_OFF)), rd32(f.add(H_DSP_SIZE)));
         c.dsp_size = dsp_size;

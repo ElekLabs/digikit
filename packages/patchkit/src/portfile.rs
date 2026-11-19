@@ -325,6 +325,12 @@ pub fn build_data(reg: &Registry, port: &Port, decls: &[&str]) -> Result<PortDat
         };
         let decl = decl_for(&hooks, &d.name, device)
             .ok_or_else(|| err!("{}: not declared for {device}", d.name))?;
+        if decl.handler {
+            return Err(err!(
+                "{who}: the hook {} has a handler: a service takes raw hooks only (the port file has no trampolines)",
+                d.name
+            ));
+        }
         let (site, ret) = site_of(port, h, decl, &who)?;
         out.sites.push(site);
         out.names.push(NameItem {
@@ -908,6 +914,7 @@ mod tests {
             fixups: vec![],
         };
         let decl = HookDecl {
+            handler: false,
             name: h.name.clone(),
             devices: vec![],
             tail: true,

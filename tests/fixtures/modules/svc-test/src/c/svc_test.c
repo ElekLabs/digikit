@@ -1,8 +1,8 @@
 /* test/svc-test: a service provider of the test-only service svc-test (docs/plans/runtime-and-services.md section 13.2).
  *
  * It exports dk_svctest_ping, which returns 42, and dk_svctest_hits, how often its hook ran. The hook is the firmware's `cf.menu.hook.settings_list.tail`
- * (the last step of the SETTINGS list rebuild): `patchkit bind` puts a trampoline in front of `svc_test_settings_tail`, and the runtime installs the jump to
- * it after `init`. `init` repeats the hook and the exports with dk_service_declare_*: the runtime compares them with the HOOKS and EXPORTS of the header
+ * (the last step of the SETTINGS list rebuild) as the test-only hook `cf.menu.hook.settings_list.test`: the runtime installs a jump to the routine `svc_test_hook`
+ * (src/cf/hook.s) after `init`; it calls `svc_test_settings_tail` and runs the tail. `init` repeats the hook and the exports with dk_service_declare_*: the runtime compares them with the HOOKS and EXPORTS of the header
  * table at the commit. The test-only imports have no public header, so the prototypes are declared here.
  */
 
@@ -12,6 +12,7 @@
 int dk_svctest_ping(void);
 uint32_t dk_svctest_hits(void);
 void svc_test_settings_tail(uint8_t *menu);
+void svc_test_hook(void); /* src/cf/hook.s: saves registers, calls svc_test_settings_tail(a2), runs the tail */
 
 static uint32_t hits;
 
@@ -45,8 +46,8 @@ static uint32_t name_hash(const char *s)
 
 static int32_t init(dk_module_ctx *ctx)
 {
-    int32_t r = dk_service_declare_hook(ctx, name_hash("cf.menu.hook.settings_list.tail"),
-                                        (const void *)svc_test_settings_tail);
+    int32_t r = dk_service_declare_hook(ctx, name_hash("cf.menu.hook.settings_list.test"),
+                                        (const void *)svc_test_hook);
     if (r != 0)
         return r;
     r = dk_service_declare_export(ctx, name_hash("dk_svctest_ping"), (const void *)dk_svctest_ping);
