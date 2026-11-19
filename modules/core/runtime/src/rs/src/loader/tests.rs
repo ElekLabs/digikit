@@ -2178,3 +2178,22 @@ fn the_device_mask_in_a_hooks_entry_is_dropped() {
         assert_eq!(site_bytes(&l, 6), [0x4e, 0xf9, (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8]);
     }
 }
+
+
+#[test]
+fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_log_width() {
+    let field = |id: &[u8]| {
+        let mut f = [0u8; dkneeds::NAME_LEN as usize];
+        f[..id.len()].copy_from_slice(id);
+        f
+    };
+    let want = |s: &[u8]| {
+        let mut n = [0u8; super::LOG_NAME];
+        n[..s.len()].copy_from_slice(s);
+        n
+    };
+    assert_eq!(super::name_part(&field(b"digikit/usb-fast")), want(b"usb-fast"));
+    assert_eq!(super::name_part(&field(b"tools/bootscreen_long_name")), want(b"bootscreen_l"));
+    assert_eq!(super::name_part(&field(b"plain")), want(b"plain"));
+    assert_eq!(super::name_part(&field(b"")), want(b""));
+}

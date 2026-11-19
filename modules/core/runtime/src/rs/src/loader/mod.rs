@@ -24,6 +24,20 @@ const NONE: u32 = dkneeds::NONE;
 // header field offsets (big endian): `[format]` of sdk/sdk.toml; the parse in `image.rs` reads the rest
 const H_VERSION: usize = dkneeds::H_VERSION as usize;
 const H_NAME: usize = dkneeds::H_NAME as usize;
+/// Bytes of a module's name in a log event (three words).
+pub const LOG_NAME: usize = 12;
+
+/// The name part of the module id in `head` (the NAME_LEN bytes of the header's name): after the last `/`, cut to `LOG_NAME`, NUL padded.
+fn name_part(head: &[u8]) -> [u8; LOG_NAME] {
+    let n = head.iter().position(|b| *b == 0).unwrap_or(head.len());
+    let id = &head[..n];
+    let from = id.iter().rposition(|b| *b == b'/').map_or(0, |i| i + 1);
+    let mut out = [0u8; LOG_NAME];
+    let name = &id[from..];
+    let m = name.len().min(LOG_NAME);
+    out[..m].copy_from_slice(&name[..m]);
+    out
+}
 const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
 const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
 const H_DSP_OFF: usize = dkneeds::H_DSP_OFF as usize;
@@ -125,6 +139,10 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     planned_dsp: (u32, u32),
     /// The providers the boot's search found: their paths and tables. Provider `j` is record `MAX_MODULES + j`.
     found: Found,
+    /// The name part of the module id (after the `/`, 12 bytes: the log's width, NUL padded) of the file at each selection index, kept by `capture` for a plan refusal; all zero: no header was read.
+    log_name: [[u8; LOG_NAME]; SEL_MAX],
+    /// The same for the last file `check_file` read a header of (zero when the last check did not get that far).
+    last_name: [u8; LOG_NAME],
     /// Whether provider `j` of the plan loaded (settle reads it).
     loaded: [bool; PROVIDER_MAX],
     /// The table copy of each provider record (`role.rs`).
@@ -165,6 +183,11 @@ fn loader() -> &'static mut Real {
 /// The address a loaded service file published for the export `hash`, if any (`handlers::exports::find_export`).
 pub fn find_export(hash: u32) -> Option<u32> {
     loader().exports.resolve(hash)
+}
+
+/// The name part of the module id of the last file whose header a check read (zero: none); a live or reload job reports it.
+pub fn last_name() -> [u8; LOG_NAME] {
+    loader().last_name
 }
 
 /// The boot's load loop over the selection in plan order (`Loader::boot`).
@@ -457,6 +480,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             accepted: [false; SEL_MAX],
             planned_dsp: (0, 0),
             found: Found::new(),
+            log_name: [[0; LOG_NAME]; SEL_MAX],
+            last_name: [0; LOG_NAME],
             loaded: [false; PROVIDER_MAX],
             provs: [ProvRec::EMPTY; PROVIDER_MAX],
             exports: Exports::new(),
@@ -511,6 +536,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             crate::selection::BOOT_IDX = k as u32;
             crate::boot::note_boot_path(k, r.paths[k].as_ptr());
             self.missing = [0; NEEDS_LEN];
+            self.last_name = self.log_name[k];
             let res = match planned.verdicts[k] {
                 dkrt_abi::plan::Verdict::Accepted => {
                     crate::boot::states().init(k);
@@ -520,7 +546,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 }
                 dkrt_abi::plan::Verdict::Refused(why) => why.code(),
             };
-            crate::boot::report_module(k, r.paths[k].as_ptr(), res, &self.missing);
+            crate::boot::report_module(k, r.paths[k].as_ptr(), res, &self.missing, &self.last_name);
             pos += 1;
         }
         self.phase = Phase::Closed;
@@ -557,6 +583,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let size = staged.size;
         c.f = f;
         c.size = size;
+        self.last_name = [0; LOG_NAME];
 
         // ---- checks (nothing is written outside the staging buffer) ----
         let head = match image::head(f, size) {
@@ -564,6 +591,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Err(e) => return e,
         };
         c.head = head;
+        // the header is read: the log names the module by its id, not by its file
+        self.last_name = name_part(core::slice::from_raw_parts(f.add(H_NAME), dkneeds::NAME_LEN as usize));
         let image::Head { import_off, import_n, .. } = head;
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
@@ -1581,6 +1610,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX || file.len() < dkneeds::HEADER as usize {
             return;
         }
+        self.log_name[k] = name_part(&file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize]);
         let be = |at: usize| u32::from_be_bytes([file[at], file[at + 1], file[at + 2], file[at + 3]]) as usize;
         let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
         if len == 0 || len > TABLE_MAX || off > file.len() || len > file.len() - off {

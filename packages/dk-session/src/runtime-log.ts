@@ -318,7 +318,7 @@ export function moduleNames(events: DkLogEvent[]): Map<number, string> {
   return out;
 }
 
-/** A module of the boot selection that did not load: `name` as MOD_LOAD keeps it (the file name, 12 characters at most, maybe with `.dkm`), the
+/** A module of the boot selection that did not load: `name` as MOD_LOAD keeps it (the name part of the module id when the runtime read the file's header, else the file name without `.dkm`; 12 characters at most), the
  * load `result` (a negative code) and, for E_IMPORT, `needs`: the module its imports need that is not in the image, without the `core/`
  * prefix (usb-bulk), from the MOD_NEEDS event the runtime logs after it. */
 export interface LoadFailure {
