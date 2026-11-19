@@ -1,6 +1,8 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
+import { moduleStorePathOf } from '@digi/test-support';
 import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
@@ -35,9 +37,11 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     const dir = path.join(rig.artifacts, 'apply-live');
     const names = ['a', 'b', 'c'];
     const files = await Promise.all(names.map((k) => packSynth(rig.device, { name: `live/${k}`, pad: 64 }, dir, `${k}.dkm`)));
+    // `modules/<kind>/<k>.dkm`: the kind folder comes from the packed file's records (the store rule of Transfer)
+    const storePath = names.map((k, i) => moduleStorePathOf(`live/${k}`, fs.readFileSync(files[i]!), k));
     const rt = await rig.load('apply-live', {
-      modules: names.map((k, i) => ({ name: `modules/${k}.dkm`, file: files[i]! })),
-      selection: ['modules/a.dkm'],
+      modules: names.map((_, i) => ({ name: storePath[i]!, file: files[i]! })),
+      selection: [storePath[0]!],
     });
     const { session, ui } = rt;
     const peek = async (symbol: string) => (await session.client.memPeek(planSymbol(rig.plan, symbol)))! >>> 0;
@@ -112,7 +116,7 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
     await ui.tap('PLAY', { until: drained });
     // the transport state has no address to read: a reload of b (loaded, no menus) is refused while it plays, and harmless while it does not
     await ui.wait({
-      state: async () => (await rig.usb(rt, (dk) => dk.reloadAndWait('modules/b.dkm'))).result,
+      state: async () => (await rig.usb(rt, (dk) => dk.reloadAndWait(storePath[1]!))).result,
       done: (r) => r === E_RELOAD_PLAYING,
       withinMs: 30_000,
       what: 'the transport plays',
