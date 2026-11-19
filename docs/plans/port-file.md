@@ -1,6 +1,6 @@
 # Port file: device and firmware specifics in one file built from committed data
 
-Status: design, todo. Stack PR1-PR3 and PR4 start after PR D (lfo shapes) and E5 ([extension-model.md](extension-model.md)).
+Status: PR1 done on branch pf/pr1-patchkit (not merged); PR2, PR3, PR4 todo. Stack PR1-PR3 and PR4 start after PR D (lfo shapes) and E5 ([extension-model.md](extension-model.md)).
 
 ## 1. Problem
 
@@ -48,7 +48,9 @@ Hook sites per device (counted from the `[[hook]]` entries of each service's `dk
 | fx | 9 | 9 |
 | Total | 19 | 23 |
 
-Displaced instructions: only 7 of these hooks per device need a stock copy (lfo `graph_vec` tail, lfo `t1_range` stock, fx `page_desc` stock, machines `source_key`, `source_turn`, `source_draw` and `source_code` tails). All 7 are plain copies by their declared text. The other 12 (DT2) or 16 (DN2), including the five branching sites, redo their instructions in the routine and exit through `dk_exit_` or `dk_ret_`. The first build has no fixup encoder. `patchkit` fails the port build when a site needs a form the runtime lacks. A form (`(d16,PC)` to abs.l, bra/bsr/bcc to 32-bit) is about 15 lines when first needed.
+Displaced instructions: only 8 (DT2) or 10 (DN2) of these hooks need a stock copy: lfo `graph_vec` (`tail`), lfo `t1_range` and fx `page_desc` (`stock`), machines `source_key`, `source_turn`, `source_draw` and `source_code` (`tail`), `param_code.args` (DT2) or `param_code.map`, `type_page.count` and `type_page.desc` (DN2) (`tail`). All are plain copies: `patchkit port check` compares the copy that `bind` makes with the displaced bytes and `jmp.l` for every site, and the port resolve fails when a copied site is not a plain copy. The other 11 (DT2) or 13 (DN2), including the five branching sites, redo their instructions in the routine and exit through `dk_exit_` or `dk_ret_`. The first build has no fixup encoder. `patchkit` fails the port build when a site needs a form the runtime lacks. A form (`(d16,PC)` to abs.l, bra/bsr/bcc to 32-bit) is about 15 lines when first needed.
+
+PR1 data (done): each hook of a service in `devices/ports/*.toml` carries `len`, `kind` and `check` (written by `port_resolve` through `patchkit port facts`) and a reserved `fixups` list (empty, refused by the port build). `stock = true` in `devices/fw` declares the `dk_stock_` hooks; the `users` of every name a service uses names the service (the port set is every such name). The `absent` flag is not committed: the port build derives it from the ports of the other devices (a name that only another device has). The port file is built by `patchkit port build` from committed data only (Nx `patchkit:ports`, `dist/ports/<device>-<version>.dks`); its FWNAMES and SITES layout is in `packages/patchkit/src/portfile.rs` (tags 12 and 13, items of 12 and 20 bytes; PR2 moves them into `dkneeds` with the runtime reader). A port file is about 2 KiB.
 
 ## 6. Runtime work and size
 
@@ -56,7 +58,7 @@ Port role steps; name lookup in the existing import seam (`loader/seams.rs:28-36
 
 Who installs sites: the init of the port file builds the name table and the tails only. Each service's load installs its own hooks and takes the site facts from the port records. The one-owner rule of the planner and the install lifecycle do not change.
 
-`PROVIDER_MAX` is 6 (`sdk/sdk.toml:1862`). The port provider needs one more slot, so it becomes 7. `SLOT_WORDS_MAX` (`loader/install.rs:53`) is `SLOTS_MAX` (16) times `PROVIDER_MAX`: 96 entries of 8 bytes (768 bytes) become 112 entries (896 bytes), +128 bytes of RAM in the installer. `REC_MAX` and the provider rows grow by one entry each.
+`PROVIDER_MAX` is 6 (`sdk/sdk.toml:1862`). The service files today are lfo, machines, fx and samples, so the port provider makes 5, and the test fixture `svc-test` makes 6 at most: the limit holds and PR2 leaves it at 6. `SLOT_WORDS_MAX` (`loader/install.rs:53`) and the provider rows stay as they are. If a later service file or a test with more fixtures reaches 7, raise the limit then (+128 bytes of installer RAM for one more provider).
 
 `BIND_MAX` leaves with BIND: PR2 deletes `bind_max` in `[limits]` of `sdk/sdk.toml` (line 1863), the generated `BIND_MAX` (`packages/dkneeds/src/gen_limits.rs`, `packages/dk-session/src/gen_proto.ts`) and the runtime copy (`loader/role.rs`).
 
@@ -108,12 +110,12 @@ PR D (lfo shapes) lands first. PR1-PR3 are one stack with one device subset gate
 | PR | Content | Size | Confidence |
 | --- | --- | --- | --- |
 | 1 | patchkit and data: port fields (displaced length, kind, fixups) written by `port_resolve` from local firmware; `stock = true` declaration (bind infers `dk_stock_` today, `bind.rs:931-938`); role 2 with FWNAMES and SITES; `patchkit pack` for the port from committed data; a `--firmware` check that equals today's bind output once (site address, return, tail bytes, exits per service and device); Nx target | 6-8 h | high |
-| 2 | Runtime and pack: port role steps, import lookup, tail copy, installer on SITES, commit filter, NEED `port`, BIND out of services, ABI and minor bump; assembly cases in `core/runtime:test-assembly` (fits, other firmware, missing name, port absent) | 8-10 h | medium-high |
+| 2 | Runtime and pack: port role steps, import lookup, tail copy, installer on SITES, commit filter, NEED `port`, BIND out of services, ABI and minor bump; assembly cases in `core/runtime:test-assembly` (fits, other firmware, missing name, port absent); the `test/svc-test` fixture's hook `cf.menu.hook.settings_list.tail` has no SITES item (its `users` lists only core/digikit-menu, and the fixture id does not match `core/services/`), and PR2 decides whether the port lists fixture hooks or the check skips them | 8-10 h | medium-high |
 | 3 | Workbench and deletion: Transfer picks the port file by firmware identity; delete binding in `bind.rs` (keep import naming), `pk_bind`, `dkbind.ts`, `refuseUnbound`, `no-stock`, stock store use for services, Nx `bindTarget` and `dist/svc-bound`, the Nx target `@digi/web:bind-bundle` and its dependency in `@digi/desktop:workbench-inputs`, `apps/web/scripts/gen-bind.mjs` (and its call from `gen-modules.mjs`), `apps/web/public/modules/bind.json`, the `bind-failed` refusal kind with its `bind-data` hint, `BindUnavailableError` in `dkbind.ts`; the test harness puts the port file on the card; docs | 6-8 h | medium-high |
 | 4 | One `.dks` for all devices for services with no DSP section (lfo) | 2-3 h | medium |
 | 5 | Step 3 after E8: lfo 6-8 h, fx 0.5-1 day, machines 1-2 days | | medium |
 
-Before PR2, the `displaced` lines of the `patchkit bind` report for the 7 sites on DT2 1.17 and DN2 1.12 must confirm "copy only".
+The `displaced` lines of the `patchkit bind` report for the copied sites on DT2 1.17 and DN2 1.12 confirm "copy only" (PR1).
 
 Device subset, on DT2 and DN2: `S:lfo`, `S:machines`, fx contract and fxpages, `C:loading` (providers, refusal, safe-mode, transfer-live), `gate-smoke`, `gate-pins`. PCM pins must not move.
 
@@ -121,8 +123,8 @@ Device subset, on DT2 and DN2: `S:lfo`, `S:machines`, fx contract and fxpages, `
 
 | Risk | Close with |
 | --- | --- |
-| A current tail needs the abs.l form | the bind report for the 7 sites |
-| `PROVIDER_MAX` has no room for one more provider | raise 6 to 7 (section 6); +128 bytes RAM |
+| A current tail needs the abs.l form | closed in PR1: none of the 8 (DT2) or 10 (DN2) copied sites does |
+| `PROVIDER_MAX` has no room for one more provider | closed in PR1: 5 of 6 with the port file (section 6) |
 | The workbench cannot learn the firmware identity without the `.syx` | INFO has no `fw_id` today; PR2 adds it (section 4) |
 | Service and port file from different releases | `E_IMPORT` with the name hash (name not listed); Transfer uploads both |
 | Import limit of a service file: `MAX_CF_IMPORTS` 128 (`loader/image.rs:94`, `packages/dkneeds/src/gen_limits.rs`) | read `H_IMPORT_N` (big-endian u32 at header byte 124) of the packed file: the unbound `machines.dks` has 59, `fx.dks` 37, `lfo.dks` 29 in this tree, so the limit is not near |
