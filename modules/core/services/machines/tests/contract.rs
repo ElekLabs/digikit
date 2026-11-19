@@ -390,6 +390,11 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
         assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
         let row = rows_owned_by(&l.core, 1)[0];
         let ty = l.core.dsp().row_type[row];
+        assert_eq!(
+            voice_row_word(&l.core, row, 0),
+            Some(ty),
+            "the row is published with its type"
+        );
         l.core.live_op.set(1);
         l.unload(0);
         let d = l.core.dsp();
@@ -398,7 +403,8 @@ fn a_voice_row_unloaded_in_a_reload_is_a_disabled_placeholder_that_keeps_its_typ
             (PLACEHOLDER_OWNER, ty, 0),
             "dev {dev}: parked, not freed"
         );
-        // the DSP: the disabled word (10) names the type, the pc is the placeholder's (the type word that stays is the contract suite's case 12b)
+        // the DSP: the type word stays, the disabled word (10) names the type, the pc is the placeholder's
+        assert_eq!(voice_row_word(&l.core, row, 0), Some(ty));
         assert_eq!(
             voice_row_word(&l.core, row, 10),
             Some(ty),
@@ -491,7 +497,8 @@ fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_le
         Some(0),
         "the disabled word is cleared when the row is published"
     );
-    // that the row, its words and what the service holds are those of the first load, and that nothing is left to free at the end, is the contract suite's case 12b
+    assert_eq!(voice_row_word(&l.core, row, 0), Some(d.row_type[row]));
+    // that the row's enable words and what the service holds are those of the first load is the contract suite's case 12b; nothing is left to free at the end
     unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
     assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
     l.core.live_op.set(0);
