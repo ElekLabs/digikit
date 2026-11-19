@@ -1,8 +1,8 @@
-| lfo.dks, the hooks of the UI task (both devices, the same code): the name of a shape on the MOD page, and the maximum of the WAVE parameter so that the encoder reaches the shapes.
+| lfo.dks, the hooks of the UI task (both devices, the same code): the name of a shape on the MOD page, and the tile vector of its graph.
 | They are `.dks` hooks (`HOOKS` of the service, bound by `patchkit bind` to the firmware it runs on), not interrupt slots: the UI task runs them, one at a time. Each runs in place of the first
 | 6 bytes of a stock function and leaves by `jmp` to `lfo_x_*`, the end of its site (`[object.externs]` of module.toml, the hooks of devices/fw/lfo.toml). With no shape loaded, the stock code
 | runs unchanged. Register facts (docs/findings/149-lfo-waveforms.md, "The panel hooks", from `tools/coldfire/liveness.py` on the stock bytes): at the entry of each function the displaced
-| instructions leave d0 (and for the range accessor d1) written before they are read, and the flags dead; every other register the routines use is saved.
+| instructions leave d0 written before they are read, and the flags dead; every other register the routines use is saved.
 
     .text
     .balignw 4, 0x4e71
@@ -38,42 +38,6 @@
 
     lfo_name_hook lfo_ui_name4, 4, lfo_x_name4
     lfo_name_hook lfo_ui_name3, 3, lfo_x_name3
-
-| The range accessor `void *range(int code)` with A0 = the buffer for 12 bytes min, max and default copied from the code's T1 row (offset 8): it returns the buffer in d0. Entry: 4(sp) = code.
-| The displaced instructions are `move.l d2,-(sp); move.l 8(sp),d1` (6 bytes). The codes 79, 89 and 99 are the WAVE parameter of the three LFOs: the routine calls the stock accessor (`lfo_stock_range`: the
-| displaced instructions and the stock code from behind them, with the code pushed again for the extra return address), and with a shape loaded replaces the maximum (offset 4 of the buffer) by
-| `dk_lfo_range_max()`, the highest loaded wave number << 8. Any other code runs the stock code. The registers the stock accessor leaves (d1, a1) are saved around the Rust call.
-| The hook never runs in interrupt context: the status register is read first, and a non-zero interrupt mask (bits 8 to 10; an interrupt handler runs at its own level, the tasks at level 0,
-| and the runtime's critical sections at 7) sends the call to the stock code. d1 is dead here (the displaced `move.l 8(SP),D1` writes it) and the flags too.
-    .globl lfo_ui_range
-lfo_ui_range:
-    move.w  %sr,%d1
-    andi.l  #0x700,%d1
-    bne.b   9f
-    move.l  4(%sp),%d0
-    cmpi.l  #79,%d0
-    beq.b   1f
-    cmpi.l  #89,%d0
-    beq.b   1f
-    cmpi.l  #99,%d0
-    bne.b   9f
-1:  move.l  %d0,-(%sp)                  | the code again: the stock path reads it at 8(sp) behind its return address
-    jsr     lfo_stock_range
-    addq.l  #4,%sp
-    movea.l %d0,%a0                     | the buffer
-    lea     -12(%sp),%sp
-    movem.l %d1/%a0/%a1,(%sp)
-    jsr     dk_lfo_range_max
-    movem.l (%sp),%d1/%a0/%a1
-    lea     12(%sp),%sp
-    tst.l   %d0
-    beq.b   2f                          | no shape loaded: the stock maximum
-    move.l  %d0,4(%a0)
-2:  move.l  %a0,%d0
-    rts
-9:  move.l  %d2,-(%sp)                  | the displaced instructions
-    move.l  8(%sp),%d1
-    jmp     lfo_x_range
 
 | The vector pick of the LFO page's cell (the shape graph, docs/plans/extension-model.md E6 item 1b). The site is `addi.l #TABLE,D6` (6 bytes) before `move.l D6,-(SP); jsr (A5)`:
 | D6 = 12 * the clamped wave, the base of the firmware's RAM table of seven tile vectors is added, and the accessor picks a tile from the vector. The cell's frame (A6) holds the wave
@@ -134,3 +98,11 @@ lfo_ui_graph:
 9:  movem.l (%sp),%d0/%d1/%a0/%a1
     lea     16(%sp),%sp
     jmp     lfo_t_graph
+
+| The firmware words of the WAVE maximum (`setup` of hooks.rs): the stock parameter table and the stock rows of the WAVE parameters of the three LFOs. `bind` resolves the four names
+| (`[object.externs]` of module.toml; anchors of devices/fw/lfo.toml and param.toml). The service writes the maximum into the RAM copy of the table at run time (docs/plans/extension-model.md E6c).
+    .data
+    .balign 4
+    .globl DKRT_LFO_FW
+DKRT_LFO_FW:
+    .long   lfo_wave_table, lfo_wave_row1, lfo_wave_row2, lfo_wave_row3

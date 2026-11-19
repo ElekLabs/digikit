@@ -129,6 +129,36 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.lfo.data.wave_row.1"
+cpu = "cf"
+kind = "data"
+addr = 0x40210820
+len = 60
+sha256 = "6522b3f5c1d7bcb91ce8f5a849bffd6d230daeb9b400a79d756b4b95b6e928fa"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
+name = "cf.lfo.data.wave_row.2"
+cpu = "cf"
+kind = "data"
+addr = 0x40210a78
+len = 60
+sha256 = "2fdb597b2e66231f5608d83923783e8427a97bfed6fe836a05a1ddcb7d3ffa34"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
+name = "cf.lfo.data.wave_row.3"
+cpu = "cf"
+kind = "data"
+addr = 0x40210cd0
+len = 60
+sha256 = "9c2aa53755d9ae790184f8fd219632eae067042ae494511463bc126bfe0224d3"
+mark = "D"
+rule = "fw/lfo:cf_words"
+
+[[anchor]]
 name = "cf.lfo.site.graph_vec"
 cpu = "cf"
 kind = "code"
@@ -197,16 +227,6 @@ len = 2
 sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
 mark = "D"
 rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.t1_range"
-cpu = "cf"
-kind = "code"
-addr = 0x400da368
-len = 6
-sha256 = "d6c9f1f60272197a17511f496fc19dd21ddd7df5f1f1ec0cab7a16cad60b0609"
-mark = "D"
-rule = "fw/lfo:cf_words"
 
 [[anchor]]
 name = "cf.lfo.site.tick_call"
@@ -3901,15 +3921,6 @@ clobbers = ["d2", "ccr"]
 len = 6
 kind = "raw"
 check = "eca5788a5083a2d5"
-
-[[hook]]
-name = "cf.lfo.hook.t1_range"
-site = "cf.lfo.site.t1_range"
-mode = "replace"
-clobbers = ["d0", "d1", "ccr"]
-len = 6
-kind = "stock"
-check = "d6c9f1f60272197a"
 
 [[hook]]
 name = "cf.lfo.hook.tick_call"

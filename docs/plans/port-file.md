@@ -33,7 +33,7 @@ Firmware identity in Transfer: the INFO reply carries no `fw_id` today. It has t
 
 ## 5. Port file contents
 
-1. FWNAMES: name hash to address, for every anchor, exit and hook site that services may use. About 65 entries today: 47 hook references, 13 anchor aliases and at least 3 `dkfw` names (lfo, machines, fx). Source: every entry in `devices/fw/*.toml` whose `users` names a `core/services/*` id. The file lists every name known to the build. A name that the firmware of this port does not have (for example `cf.lfo.hook.wave_name3`, which only the Digitone II has) stays in the list with an `absent` flag and no address. `patchkit service-check` fails a service that references a name outside this set.
+1. FWNAMES: name hash to address, for every anchor, exit and hook site that services may use. About 65 entries today: 45 hook references, 17 anchor aliases (among them the parameter table and the three WAVE rows of the lfo service) and at least 3 `dkfw` names (lfo, machines, fx). Source: every entry in `devices/fw/*.toml` whose `users` names a `core/services/*` id. The file lists every name known to the build. A name that the firmware of this port does not have (for example `cf.lfo.hook.wave_name3`, which only the Digitone II has) stays in the list with an `absent` flag and no address. `patchkit service-check` fails a service that references a name outside this set.
 2. SITES: per hook site the address, the displaced length (whole instructions), a stock check value, the kind (raw, tail, stock) and an optional fixup list (reserved, empty today). A site of an absent name carries the `absent` flag.
 3. Step 3 (section 9): the device-specific hook adapter routines, as code built from our sources.
 
@@ -43,12 +43,12 @@ Hook sites per device (counted from the `[[hook]]` entries of each service's `dk
 
 | Service | DT2 | DN2 |
 | --- | --- | --- |
-| lfo | 3 | 4 |
+| lfo | 2 | 3 |
 | machines | 7 | 10 |
 | fx | 9 | 9 |
-| Total | 19 | 23 |
+| Total | 18 | 22 |
 
-Displaced instructions: only 8 (DT2) or 10 (DN2) of these hooks need a stock copy: lfo `graph_vec` (`tail`), lfo `t1_range` and fx `page_desc` (`stock`), machines `source_key`, `source_turn`, `source_draw` and `source_code` (`tail`), `param_code.args` (DT2) or `param_code.map`, `type_page.count` and `type_page.desc` (DN2) (`tail`). All are plain copies: `patchkit port check` compares the copy that `bind` makes with the displaced bytes and `jmp.l` for every site, and the port resolve fails when a copied site is not a plain copy. The other 11 (DT2) or 13 (DN2), including the five branching sites, redo their instructions in the routine and exit through `dk_exit_` or `dk_ret_`. The first build has no fixup encoder. `patchkit` fails the port build when a site needs a form the runtime lacks. A form (`(d16,PC)` to abs.l, bra/bsr/bcc to 32-bit) is about 15 lines when first needed.
+Displaced instructions: only 7 (DT2) or 9 (DN2) of these hooks need a stock copy: lfo `graph_vec` (`tail`) and fx `page_desc` (`stock`), machines `source_key`, `source_turn`, `source_draw` and `source_code` (`tail`), `param_code.args` (DT2) or `param_code.map`, `type_page.count` and `type_page.desc` (DN2) (`tail`). All are plain copies: `patchkit port check` compares the copy that `bind` makes with the displaced bytes and `jmp.l` for every site, and the port resolve fails when a copied site is not a plain copy. The other 11 (DT2) or 13 (DN2), including the five branching sites, redo their instructions in the routine and exit through `dk_exit_` or `dk_ret_`. The first build has no fixup encoder. `patchkit` fails the port build when a site needs a form the runtime lacks. A form (`(d16,PC)` to abs.l, bra/bsr/bcc to 32-bit) is about 15 lines when first needed.
 
 PR1 data (done): each hook of a service in `devices/ports/*.toml` carries `len`, `kind` and `check` (written by `port_resolve` through `patchkit port facts`) and a reserved `fixups` list (empty, refused by the port build). `stock = true` in `devices/fw` declares the `dk_stock_` hooks; the `users` of every name a service uses names the service (the port set is every such name). The `absent` flag is not committed: the port build derives it from the ports of the other devices (a name that only another device has). The port file is built by `patchkit port build` from committed data only (Nx `patchkit:ports`, `dist/ports/<device>-<version>.dks` today; PR2 writes `.dkport`); its FWNAMES and SITES layout is in `packages/patchkit/src/portfile.rs` (tags 12 and 13, items of 12 and 20 bytes; PR2 moves them into `dkneeds` with the runtime reader). A port file is about 2 KiB.
 
@@ -84,7 +84,7 @@ Table tags BIND (10) and FW (11) leave services. New port tags FWNAMES and SITES
 
 - The code section of the port file holds the device-specific hook routines that are in the services today.
 - A service lists the hooks it takes in HOOKS without an entry. The planner one-owner rule and the install lifecycle stay as they are. The installer takes the entry from the port file by hook name. Image interrupt slots work the same way.
-- Each routine calls the service through a pointer slot in the data of the port file. The service fills the slot by name with a neutral C function. These functions exist for lfo: `dk_lfo_eval`, `dk_lfo_name`, `dk_lfo_range_max`, `dk_lfo_graph` (`modules/core/services/lfo/dks/src/hooks.rs:56-87`). They become a declared callback group in `sdk/sdk.toml` (name, signature, task or interrupt context). An empty slot takes the stock path that each routine already has.
+- Each routine calls the service through a pointer slot in the data of the port file. The service fills the slot by name with a neutral C function. These functions exist for lfo: `dk_lfo_eval`, `dk_lfo_name`, `dk_lfo_graph` (`modules/core/services/lfo/dks/src/hooks.rs:56-87`). They become a declared callback group in `sdk/sdk.toml` (name, signature, task or interrupt context). An empty slot takes the stock path that each routine already has.
 - One port file per device and firmware holds the routines of all services.
 - Hot reload: the site jump never points into a service, so a service replace is a slot swap. The entry and exit counter is a macro around the callback call in our adapter source. The runtime builds no gates. Replacing the port file needs a restart ([digikit-hot-reload.md](digikit-hot-reload.md)).
 - Order: lfo first (with E6e item 2), then fx, then machines. Decide fx and machines from the size and cost of the lfo slice.
@@ -123,7 +123,7 @@ Device subset, on DT2 and DN2: `S:lfo`, `S:machines`, fx contract and fxpages, `
 
 | Risk | Close with |
 | --- | --- |
-| A current tail needs the abs.l form | closed in PR1: none of the 8 (DT2) or 10 (DN2) copied sites does |
+| A current tail needs the abs.l form | closed in PR1: none of the 7 (DT2) or 9 (DN2) copied sites does |
 | `PROVIDER_MAX` has no room for one more provider | closed in PR1: 5 of 6 with the port file (section 6) |
 | The workbench cannot learn the firmware identity without the `.syx` | INFO has no `fw_id` today; PR2 adds it (section 4) |
 | Service and port file from different releases | `E_IMPORT` with the name hash (name not listed); Transfer uploads both |

@@ -86,6 +86,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
+ "dkrt-svc-params",
 ]
 
 [[package]]

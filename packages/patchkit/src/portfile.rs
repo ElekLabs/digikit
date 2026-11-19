@@ -1003,7 +1003,6 @@ mod tests {
         // the declared kinds: a tail hook and a stock hook copy their displaced bytes, a raw hook does not
         let kind = |d: &PortData, n: &str| d.site(name_hash(n)).unwrap().kind;
         assert_eq!(kind(a, "cf.lfo.hook.graph_vec"), SiteKind::Tail);
-        assert_eq!(kind(a, "cf.lfo.hook.t1_range"), SiteKind::Stock);
         assert_eq!(kind(a, "cf.page.hook.page_desc"), SiteKind::Stock);
         assert!(!kind(a, "cf.lfo.hook.read_call").copies());
         // exit 0 is the end of the site

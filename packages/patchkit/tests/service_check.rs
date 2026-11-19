@@ -751,3 +751,34 @@ fn a_fill_without_the_adapters_folder_is_an_error() {
     assert!(mentions(&found, "the adapters folder"), "{found:?}");
     assert!(mentions(&found, "is missing"), "{found:?}");
 }
+
+#[test]
+fn a_row_anchor_has_one_service_in_its_users() {
+    let fw = scratch("row-anchor").join("fw");
+    fs::create_dir_all(&fw).unwrap();
+    let row = |name: &str, users: &str, rule: &str| {
+        format!("[[data]]\nname = \"{name}\"\ncpu = \"cf\"\nrule = {rule}\nusers = {users}\n\n")
+    };
+    let words = "{ kind = \"cf_words\", words = [\"*\", 5] }";
+    fs::write(
+        fw.join("a.toml"),
+        row("cf.a.data.row_ok", "[\"core/services/lfo\"]", words)
+            + &row("cf.a.data.row_shared", "[\"core/services/lfo\", \"core/services/fx\"]", words)
+            // a row that no service names, a service and a core module, and a code site (not a row)
+            + &row("cf.a.data.row_core", "[\"core/params\", \"core/services/lfo\"]", words)
+            + &row(
+                "cf.a.data.site",
+                "[\"core/services/lfo\", \"core/services/fx\"]",
+                "{ kind = \"cf_words\", as = \"code\", words = [1], offset = 0, len = 2 }",
+            ),
+    )
+    .unwrap();
+    let found = patchkit::svccheck::row_anchor_problems("lfo", &fw);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        mentions(&found, "`cf.a.data.row_shared` has 2 services in `users`"),
+        "{found:?}"
+    );
+    // a missing folder is no problem
+    assert!(patchkit::svccheck::row_anchor_problems("lfo", &fw.join("none")).is_empty());
+}
