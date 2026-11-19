@@ -32,7 +32,7 @@ A digikit project holds the digikit data that belongs to one Elektron project: t
    - Modules on the card but not selected: offer "load" as one button ([one-button flows]). With E5c (live load and unload, DIGIKIT MODULES applies live) the load is applied live. The restore uses the E5c live jobs. A restart happens only when the live load is refused (missing service, does not fit); then the same "RESTART TO APPLY?" flow as the menu runs.
    - Transport playing: the live apply is refused while playing. The project loads as stock. The offer changes to "load on stop": the apply runs when the transport stops. The restart path stays in the offer.
 7. **A `project` service and an optional tool module.** Words and card paths: [taxonomy](../design/taxonomy.md).
-   - `project` is a service (`services/project`, file `services/project.dks`, crate `dkrt-svc-project`). Its hooks on the stock project save and load are names in `devices/fw/project.toml` `[[hook]]` entries, resolved into the port file ([port-file](port-file.md)); they are not addresses. Before port step 3, the hook routines are per-device `.s` files in the service, as for lfo, machines and fx. Port step 3 moves them later. The slot setter and the save are the sites of the "Firmware facts" table and [finding 110](../findings/110-project-identity.md) section 4.
+   - `project` is a service (`services/project`, file `services/project.dks`, crate `dkrt-svc-project`). Its hooks on the stock project save and load are names in `devices/fw/project.toml` `[[hook]]` entries, resolved into the port file ([port-file](port-file.md)); they are not addresses. Before port step 3, the hook routines are per-device `.s` files in the service, as for lfo, machines and fx. Port step 3 moves them later. There are four hooks per device: slot setter, save exit, clear and paste. There is no delete or format hook. The sites are in the "Firmware facts" table and [finding 110](../findings/110-project-identity.md) sections 4 and 5.
    - The service writes and reads `projects/<slot>-<name>.dkp` in the store, beside the stock files, by the rules of decision 5. The slot is three digits, `000` to `127`. The file name maps the bytes `c5 c4 d6 dc df c6 d8 c7 d1` and any byte not safe in a store path to `_`. The header holds device, slot, name and save stamp. A project gets a `.dkp` only when there is digikit data to keep.
    - The service, not the runtime, tells modules about project changes (`dkm_project`).
    - It restores the digikit state of the project through the runtime's live job (E5c): the module list and the filter choices.
@@ -59,7 +59,7 @@ Words and card paths: [taxonomy](../design/taxonomy.md). Hooks and anchors: [por
 | --- | --- | --- | --- |
 | SDK settings API (`dk_settings_open`, `dk_settings_open_project`, `dk_settings_get`, `dk_settings_put`, `dk_settings_remove`) | The one module-facing API for saved data. The scope is chosen at open. | The runtime. | Add a second API. Let a module reach another module's keys. |
 | Runtime | Module scope: the settings record, keys `<owner>/<key>`. The project-scope opener: one optional pointer to the project service's data entry points, set when the service loads and cleared when it unloads; it forwards to them. The live jobs (E5c). | The service's data entry points, when the pointer is set. | Know the `.dkp` format, project names or hook sites. Make modules need the service. |
-| `project` service | The `.dkp` files under `projects/`. Project-scope data in RAM. The hooks on the stock project setter and the stock save. The LOADED and SAVED events to modules. | Hook sites by name (port file). The store writer. The runtime live job for the restore. The module export `dkm_project`. | Change stock project storage or the `Value<T>` project-data classes. Call module code from inside a hook. |
+| `project` service | The `.dkp` files under `projects/`. Project-scope data in RAM. The four hooks (stock project setter, stock save exit, clear, paste). The LOADED and SAVED events to modules. | Hook sites by name (port file). The store writer. The runtime live job for the restore. The module export `dkm_project`. | Change stock project storage or the `Value<T>` project-data classes. Call module code from inside a hook. |
 | `digikit/project-manager` (tool module, UI only) | First version: nothing beyond selecting the service. Later: a list of `projects/*.dkp`, then a load from the list. | The service's exports `dk_project_*`. | Write `.dkp` files. Call the stock project load in the first version. |
 | `digikit-menu` | The missing-module warning and the load offer, when project-manager is not selected. | The runtime live job. | Read `.dkp` files. |
 | Port file | The hook sites, resolved from `devices/fw/project.toml` `[[hook]]` entries, and their byte check. | Nothing. | Hold project logic. |
@@ -86,9 +86,15 @@ stock load:      stock sets the project slot -> hook records slot -> service fin
                  compares the save stamp, renames the file if the project name changed
                  -> LOADED to modules (UI task) -> live job restores the project's modules
                  -> digikit-menu: missing-module warning, load offer
+
+stock clear:     hook records the slot -> service archives projects/<slot>-*.dkp to
+                 projects/archive/<name>-<stamp>.dkp (no module event)
+
+stock paste:     hook records source and destination -> service copies the source .dkp
+                 to <dest>-<name>.dkp (no module event)
 ```
 
-The hooks run inside the stock save and load paths. They only record what happened. The service sends events and calls module code later, from the UI task, like every other module callback.
+The hooks run inside the stock save, load, clear and paste paths. They only record what happened; the service acts in its tick. The service sends events and calls module code later, from the UI task, like every other module callback.
 
 ### File name and identity
 
@@ -101,6 +107,7 @@ The hooks run inside the stock save and load paths. They only record what happen
   - Mismatch (the slot was overwritten outside digikit, or a project was copied in on the +Drive): one short warning, the file is ignored.
 - Save as to another slot: the save hook sees the new slot and writes `<new slot>-<name>.dkp` from the current data, so the digikit data follows the save-as.
 - A project gets a `.dkp` only when there is digikit data to keep. A new project writes none.
+- Archive rule: the service never deletes a `.dkp` for good. A file that no longer belongs to its slot moves to `projects/archive/<name>-<stamp>.dkp` (stamp as 8 hex digits): at a save into a reused slot (the existing file has another stamp) and at a stock clear. Stock paste copies the source `.dkp` to the destination slot. A stamp mismatch on load ignores the file and leaves it in place. A rename's old path and the loser of the two-file rule are superseded copies of the same project and may be removed. Design: [digikit-project](../design/digikit-project.md) section 5.
 
 ### Events
 
@@ -118,6 +125,10 @@ Load (hook on the stock slot setter, on change):
 6. A refused live apply (missing service, does not fit): "RESTART TO APPLY?", as in the menu flow.
 7. Transport playing: the live apply is refused while playing. The project loads as stock. The offer changes to "load on stop": the apply runs when the transport stops. The restart path stays in the offer.
 
+Clear (hook on the stock clear, single and multi-slot): the hook records each slot. The service archives the slot's `<slot>-*.dkp` to `projects/archive/<name>-<stamp>.dkp`. No module event.
+
+Paste (hook on the stock paste): the hook records source and destination. The service copies the source `.dkp` to `<dest>-<name>.dkp`. No module event.
+
 ### Stock safety
 
 1. Service not selected: no hooks, pure stock.
@@ -131,6 +142,7 @@ Load (hook on the stock slot setter, on change):
 - The service's RAM budget for two 16 KiB `.dkp` images (32 KiB, live and frozen); fallback 8 KiB files ("Step 2 design").
 - Does a stock rename keep the save stamp? One emulator check: rename a project and read the slot header stamp before and after. If the stamp changes, the service hooks the rename callback (DT2 `0x400a1246`, DN2 `0x4009b3bc`; both devices) and moves the file at once ([finding 110](../findings/110-project-identity.md) section 4).
 - Whether stock refuses duplicate names (no check seen; the slot in the file name makes this harmless).
+- Firmware [O] items of [finding 110](../findings/110-project-identity.md) section 5: whether format's erase loops all stay below the write guard `0x457FFF`; the DN2 paste callback and the DN2 clear record reset (not traced); stock move (cut), no callers found; what triggers load from memory (`0x40043f74`); whether a rename keeps the stamp (section 4).
 - A load from project-manager's list calls the stock project load: a later step that needs its own firmware facts (task, locks, a real progress callback).
 - Order of the `dkm_project` calls against the live job during a restore.
 
@@ -226,7 +238,7 @@ Static reads on DT2 OS 1.17 and DN2 OS 1.12. [D] from one read, then checked by 
 | Live name: 16 bytes ASCII, zero padded, bytes >= 0x80 stored as 0, no guaranteed NUL | `*(Project+0x10) + 0xc` | same |
 | Name writer `ProjectDataChangeInfo(Project*, src)`, flag 0x20 | `0x40042140` | `0x4003e800` |
 | Live stamp (built by `0x401524ce` / `0x4015097e` from two 15-bit LCG steps `0x401524a0` / `0x40150950`; bits 31 and 15 are always 0) | `*(Project+0x10) + 8` | same |
-| Stamp regenerated by 1-arg `ProjectDataChangeInfo`, flag 0x80, on each load, new and load from memory, and at boot when 0 | `0x40041c96` | `0x4003e38c` |
+| `ProjectDataChangeInfo` notification with 0x80 (posts a change to a vfunc at +0x10; not the stamp builder) | `0x40041c96` | `0x4003e38c` |
 | Save `(Project*, slot, progress)`, nonzero on success. Slot 0x80 is the live mirror: skip it | `0x40043a30` | `0x40040190` |
 | Save / save-as wrapper `(Project*, slot or -1, progress)`: setter(slot) (or the getter for -1), then `FUN_40043b28(slot)` (rejects slot > 0x80, calls the save), then save slot 0x80, then setter(slot) again, then `FUN_40042522(Project*, 0)` | `0x40043b78` | `0x400402d8` |
 | `loadProjectFromMmc` (does not call the setter itself) | `0x40046906` | `0x40042b92` |
@@ -241,15 +253,16 @@ When the setter runs:
 | Action | Setter runs |
 | --- | --- |
 | Load | Yes, in the load wrapper. Name and stamp are in place before it. |
-| New | Yes (unchecked). |
-| Load from memory | Yes (unchecked). |
+| New | Yes, inside `initializeNewProject` and in the save wrapper ([finding 110](../findings/110-project-identity.md) section 5). |
+| Load from memory | Yes (`0x40043f74` calls it; what triggers it is open). |
 | Save-as to another slot | Yes, before and after the write. Name unchanged. |
 | Save to the current slot | No change (the setter is a no-op). |
-| Delete | Only if the deleted slot is current: setter(-1) (unchecked). |
-| Format, reset, `project_container_decode` | setter(-1) (unchecked). |
+| Delete | Only if the deleted slot is current: setter(-1); no save. |
+| Format, reset, `project_container_decode` | setter(-1) (format only when a Project exists); no save. |
 | Rename (DT2 `0x400a1246`, DN2 `0x4009b3bc`) | No. Updates the live name when the slot is current. |
 | Rename in the +Drive browser (DT2 `0x400e839a`, DN2 `0x400e9d6a`) | No. Patches the card name and the listing only, not the live name (unchecked). |
-| Copy or move in the +Drive browser | [O]. Leads: `0x400a131e` and `0x400a1376` call the card write `FUN_400f5150` without the setter. |
+| Clear, paste | No setter, no save (clear `0x400a131e`, `0x400a1376`; paste `0x400a12f8`). Hooked. |
+| Move (cut) | [O]: `0x400f539e` has no callers in the static read. |
 | Power-down autosave | [O], none found. |
 
 Correction to [finding 110](../findings/110-project-identity.md): `loadProjectFromMmc` does not call the setter; its wrapper does.
@@ -269,8 +282,8 @@ Correction to [finding 110](../findings/110-project-identity.md): `loadProjectFr
 ## Open questions
 
 1. What counts as a needed module. Proposal: a machine module used by any track, or an FX module with an active route. Fallback: the modules selected while the project was active.
-2. Does a stock rename keep the save stamp? One emulator check: rename a project and read the slot header stamp before and after. If the stamp changes, the service hooks the rename callback (DT2 `0x400a1246`, DN2 `0x4009b3bc`; both devices) and moves the file at once. Check that a +Drive rename of the loaded project behaves the same as a menu rename.
-3. Copy and move of projects in the +Drive browser.
+2. Does a stock rename keep the save stamp? Open: [finding 110](../findings/110-project-identity.md) section 4 [O]. Fallback: hook the rename callback (DT2 `0x400a1246`, DN2 `0x4009b3bc`; both devices) and move the file at once. Check that a +Drive rename of the loaded project behaves the same as a menu rename.
+3. Remaining [O] of finding 110 section 5: stock move (cut) has no callers in the static read; the DN2 paste callback is not traced. Clear and paste are covered by the clear and paste hooks and the archive rule.
 4. FX routes stay global in the settings record unless Em wants them per project.
 5. DT2 stock project load also resets the borrowed pool slots ([finding 109](../findings/109-dt2-stock-pool-borrowing.md)). The re-drive comes from the module (decision 3), on pool lost and on project changed. Check the order of the two events, and the order of the `dkm_project` calls against the live job during a restore.
 6. Power-down autosave: none found; confirm.
@@ -282,9 +295,9 @@ Correction to [finding 110](../findings/110-project-identity.md): `loadProjectFr
 
 Estimate: about 1.5 days of agent time.
 
-1. [ ] Byte check of the remaining firmware facts above by a second agent, both devices. The byte check of the setter, the save and the save exit is done ([finding 110](../findings/110-project-identity.md) section 4). Resolve the [O] cells needed by step 3. Mark checked facts [V] in finding 110. Unchecked: setter calls in `initializeNewProject` and `loadProjectFromMemory`, delete/format/reset rows, +Drive rename addresses, copy/move. Update finding 110: the name lookup is resolved (live+0xc, 16 bytes); loadProjectFromMmc does not call the setter; the +0x18 word is a save stamp. (1 h)
-2. [ ] Design doc `docs/design/digikit-project.md`: the `.dkp` format and write path of "Step 2 design", C signatures of the module API, events, error codes. Em's OK before code. (1 h)
-3. [ ] Service `project` with its hooks, both devices. The sites are the verified sites of [finding 110](../findings/110-project-identity.md) section 4: the setter (on change; stack argument at SP+4, -1 = no project) and the save exit (the single exit of the save; the hook reads success from D0.b and the slot from D3; slot 0x80 is skipped). Hook entries in `devices/fw/project.toml` `[[hook]]`; routines as per-device `.s` files in the service before port step 3. The service emits its own loaded and saved signals to modules (the export `dkm_project`, decision 2); the runtime has no `dkrt_project_*` calls for it. The service also emits project "saved" and "loaded" events (runtime log) after the stock save and load finish; device tests wait on them instead of the fixed 3.5 s and 6 s waits in `tests/regression/runtime/project-kit.ts`. Then the optional tool module `digikit/project-manager`. (0.5 day)
+1. [x] Byte check of the firmware facts, both devices ([finding 110](../findings/110-project-identity.md) sections 4 and 5), except the [O] items listed under Open items. (1 h)
+2. [x] Design doc [digikit-project](../design/digikit-project.md): the `.dkp` format and write path of "Step 2 design", C signatures of the module API, events, error codes. (1 h)
+3. [ ] Service `project` with four hooks per device, no delete or format hook. The sites are in [finding 110](../findings/110-project-identity.md) sections 4 and 5: the setter (on change; stack argument at SP+4, -1 = no project), the save exit (the single exit of the save; the hook reads success from D0.b and the slot from D3; slot 0x80 is skipped), clear and paste. The service archives and copies `.dkp` files by the archive rule (Architecture "File name and identity"); it deletes none for good. Hook entries in `devices/fw/project.toml` `[[hook]]`; routines as per-device `.s` files in the service before port step 3. The service emits its own loaded and saved signals to modules (the export `dkm_project`, decision 2); the runtime has no `dkrt_project_*` calls for it. The service also emits project "saved" and "loaded" events (runtime log) after the stock save and load finish; device tests wait on them instead of the fixed 3.5 s and 6 s waits in `tests/regression/runtime/project-kit.ts`. Then the optional tool module `digikit/project-manager`. (0.5 day)
 4. [ ] Runtime and service: the service writes the `.dkp` with the SDK file calls, reads it on project change, writes it on save; the opener `dk_settings_open_project` in `sdk/sdk.toml` (API minor), forwarded by the runtime to the service. Module scope uses the settings record. (0.5 day)
 5. [ ] Pool: remove the per-project lists from `sample_tracks.rs`; the sample picker keeps its list in project scope and re-drives on change and on lost. (3 h) Docs to update: sample-api-1.5 (lines ~45, 65, 116-118, 137-138, 168 and its TODO on store persistence), `sdk/include/dk/sample_track.h:74`, the `sample_tracks.rs` header comment and the tests calling `project_changed` (`sample_tracks/tests.rs`), module-architecture 3.10 and section 12, digikit-store "Keys by owner" and the line that only upload writes the store.
 6. [ ] Validation: missing-module warning and the "load" offer (applied live, restart only on refusal) in `digikit-menu`. (2 h)

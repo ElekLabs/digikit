@@ -49,6 +49,7 @@ One meaning per word. A second use gets a new word.
   services/<service>.dks       stem = service name
   ports/<device>-<version>.dkport   <version> is the firmware version string; picked by the FW hash == fw_id
   projects/<slot>-<name>.dkp   slot 000..127; header: device, slot, name, save stamp
+  projects/archive/<name>-<stamp>.dkp   archived project files of the project service, kept for good; stamp as 8 hex digits ([digikit-project](digikit-project.md))
   samples/<folder>/<name>      devices with card = "slots" only
   data/<module id>/...         reserved for files that a module writes; not enforced
   logs/                        reserved
