@@ -149,9 +149,9 @@ Machine rows and transport (for E5):
 | Word | Meaning |
 | --- | --- |
 | role | module or service: the header role word. Nothing else is a role. |
-| kind | a record type in `[records.kinds]`. |
+| record kind | a record type in `[records.kinds]`. A content module has a module kind (machine, fx, filter, lfo-shape, tool). |
 | service | owns a set of kinds that write to the same family of firmware tables, plus the hooks on them. |
-| image half | the part of a service that must sit in the patched image: reserved rows, stubs, slots, info tables, interrupt-site stubs. Today an "adapter". |
+| image half | the part of a service that must sit in the patched image: reserved rows, stubs, slots, info tables, interrupt-site stubs (class `image-half`). Today an "adapter". |
 | platform | the runtime's own image code: expansion, platform, dsp-link, dyndsp, ui, health, input, and the pieces of E9. Today an "adapter". |
 | adapter | a code adapter: image code for one device function that is no service and no runtime part (usb-bulk, plusdrive-write, sdhc-large). |
 | fix | an optional firmware fix: changes stock behaviour, needed by no service (overdrive, introblank). |
@@ -330,37 +330,7 @@ planner against the live set (E3, E5 and E5b land in that order, the per-service
 
 ### 4.1 Folders
 
-The regroup stays inside `modules/core`, because patchkit finds manifests under `modules/` and every module id is written in its
-`module.toml`. No module id changes (rule 11).
-
-```
-modules/core/
-  runtime/                         unchanged (L2)
-  platform/                        the runtime's own image code (L1) and the code adapters, from adapters/:
-    expansion/                       from modules/core/expansion
-    platform/  dsp-link/  ui/  health/
-    dyndsp/                          shared by machines and fx, so outside both image folders (class platform)
-    usb-bulk/                        usb-bulk-audio merged in (one module, one id kept: core/usb-bulk; the id core/usb-bulk-audio goes, see E8)
-    input/  plusdrive-write/  sdhc-large/   until E9 decides on-demand loading
-    fw/                              from modules/core/fw (firmware bindings, a build library)
-  fixes/                           optional firmware fixes, in no service: overdrive/, introblank/
-  services/                        (L3) each service in one folder with its image half:
-    machines/{src,dks,image/{machines,dynreg,params,dsp-voice}}
-    fx/{src,dks,image/{fx,dynfx,fxpages}}
-    samples/{src,dks,image/sample-pool}
-    lfo/{src,dks,image/}             image/ gains the LFO tick stub in E6
-    params/                          shared library crate (row writers, init window), not a service: renamed rows/ (crate dkrt-svc-rows)
-  apps/digikit-menu/               unchanged (L4)
-  proofs/storage-fault/            firmware experiment behind finding 107 (from adapters/storage-fault-proof)
-  adapters/                        gone
-```
-
-- `dsp-stereo-proof` moves into the tests of `dsp-voice` (`services/machines/image/dsp-voice/tests/stereo-proof/`): its sources become test
-  assets of the call sites it proves. Its id stays.
-- `file-catalog-proof` moves to `proofs/file-catalog/` (E1: the gate covers directory open and next through `plusdrive-write`'s lookups,
-  but nothing else covers `path.size`).
-- Proofs are in no patch set; moving them changes no shipped image.
-- `overdrive` and `introblank` go to `fixes/`. `overdrive` moves on to `services/<owner>/image/` or becomes a content module when E9 decides its owner (O3).
+The target tree, the mapping from today's folders and what does not move are in [taxonomy](../design/taxonomy.md) "Repo layout". E8 does the move. No module id changes (rule 11).
 
 Class and home of every image module (inventory of the 25 `adapters/` folders and `expansion`):
 
@@ -370,18 +340,20 @@ Class and home of every image module (inventory of the 25 `adapters/` folders an
 | service image half | fx, dynfx, fxpages | `services/fx/image/` |
 | service image half | sample-pool | `services/samples/image/` |
 | service image half | lfo | `services/lfo/image/` |
-| runtime-platform | platform, ui, health, input, dsp-link, expansion, dyndsp | `platform/` (dyndsp serves machines and fx; dsp-link serves probe, fx, dsp-voice, dyndsp, dynfx) |
-| code adapter | usb-bulk (usb-bulk-audio merged in), plusdrive-write, sdhc-large | `platform/` |
-| firmware fix | overdrive, introblank | `fixes/` |
+| runtime platform | platform, ui, health, input, dsp-link, expansion, dyndsp | `runtime/platform/` |
+| adapter | usb-bulk (usb-bulk-audio merged in a separate PR), plusdrive-write, sdhc-large | `image/adapters/` |
+| fix | overdrive, introblank | `image/fixes/` |
 | proof | dsp-stereo-proof | tests of `dsp-voice` |
-| proof | storage-fault-proof, file-catalog-proof | `proofs/` |
-| not image | runtime, digikit-menu | unchanged |
+| proof | storage-fault-proof, file-catalog-proof | `image/proofs/` |
+| not image | runtime, digikit-menu | `runtime/core`, `runtime/apps/digikit-menu` |
+
+`dsp-stereo-proof` becomes test assets of the call sites it proves; its id stays. `file-catalog-proof` stays a proof (E1: the gate covers directory open and next through `plusdrive-write`'s lookups, but nothing else covers `path.size`). Proofs are in no patch set. `overdrive` may later move to a service or become a content module (O3).
 
 ### 4.2 Names
 
 | Today | After | Where |
 | --- | --- | --- |
-| `role = "adapter"`, `type = "framework"` in every image module | one class per module: `image`, `platform`, `adapter`, `fix`, `proof` (table in 4.1) | `module.toml` of each module; layercheck `roles` |
+| `role = "adapter"`, `type = "framework"` in every image module | one role per module: `platform`, `image-half`, `adapter`, `fix`, `proof` (table in 4.1; the full list is in the taxonomy) | `module.toml` of each module; layercheck `roles` |
 | `Gate` (builder check) | `InitWindow` | `params/src/builder.rs` and users |
 | `gate()` calls | `init_window()` | machines and fx `build.rs` |
 | `services/params` | `services/rows` | crate rename; users in machines and fx |
@@ -683,7 +655,7 @@ Plan corrections the E5 design found (the text above already reflects them):
 - E3/E4 and R12-8 both rewrite five files (`loader/mod.rs`, `abi/src/service.rs`, `handlers.rs`, `svc-rt`, machines `records.rs` and `assign.rs`). The second to merge pays one rebase and an object rebuild.
 - `PH_RETAINED` latches for the session after one failed `quiesce`, so a reload timeout must not call `release` (item 5).
 - `clear_rows` frees every row of the record on an unload; during a reload it parks each published row as a placeholder instead, and the reload's end frees the rows nobody took over (item 7).
-- E5 changes the image (dynreg words) and `SVC_ABI` (`live_op`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
+- E5 changes the image (dynreg words) and `SVC_ABI` (`live_op`), so its PRs are shared inputs of every device test: the merge proof is a named subset on both devices. The port file stack ([port-file.md](port-file.md) PR2) changes `SVC_ABI` again and merges after E5. The port file is a provider, not a service; it is the one provider that is no service file. Each change makes the runtime refuse old service files with `E_SVC_ABI`, and Transfer replaces them.
 
 Commit split (host checks per commit; device runs only at the end, one gate):
 
@@ -903,34 +875,26 @@ Done when: a module adds a filter that appears in FUNC+SYN on the FLTR page, sho
 Estimate: 3-5 days. Payoff: proves the "table row" shape for a second table family. Confidence: medium until E0a (ColdFire side known).
 Depends on: E0a; E3; E4; E5 (MISSING placeholder for filters); R12-8; the port file (its six new hooks go through it).
 
-### E8 Folder regroup and names
+### E8 Top-level lift and names
 
-What: section 4.1 and 4.2, as one mechanical PR after the open branches merge.
-- `git mv` into `modules/core/platform/`, `modules/core/fixes/` and `modules/core/services/<s>/image/`; `services/params` to `services/rows`.
-  `core/platform` goes to `platform/platform`; `dsp-link` and `dyndsp` go to `platform/`, because services share them.
-- `module.toml` class per module (`image`, `platform`, `adapter`, `fix`, `proof`; table in 4.1) replaces `role = adapter` and
-  `type = framework`, so the role carries the class; layercheck `roles` table and folder rules; `project.json` paths and Nx project roots;
-  `tools/nx/*.mjs` inputs; patch-set comments in `devices/*.toml` (ids unchanged).
-- Requires edges: `plusdrive-write` and `sdhc-large` get a `requires` edge from the tool that needs them (usb-fast lists only usb-bulk
-  today; a comment in the patch set carries the rest). Check that the edges change no image bytes.
-- Patch-set lists: every list that names `core/ui` or `core/health` also names `core/runtime`, as ST does (the emulator sets rely on
-  `requires` today). `introblank` and `overdrive` are in no E9 candidate list; E9 gets them (O3 for overdrive).
-- Merge `usb-bulk-audio` into `usb-bulk`: one module; the patch sets name `core/usb-bulk`; the `core/usb-bulk-audio` id goes (it is a
-  platform module with no stored identity).
-- `InitWindow` rename (4.2).
-- Proofs (4.1): `dsp-stereo-proof` into the tests of `dsp-voice`, `storage-fault-proof` and `file-catalog-proof` to `proofs/`.
-- `devices/fw/storage.toml`: drop `core/runtime` from the `users` of `cf.storage.fn.directory.open` and `.next` (E1).
+What: the target tree of [taxonomy](../design/taxonomy.md) (layers, `runtime/`, `services/`, `ports/`, `image/`, content modules under `modules/<kind>/<author>/<name>`), as one mechanical PR in two commits.
+
+Scope:
+- Commit 1: `git mv` of every folder in the mapping table of the taxonomy, with the path edits in `tools/nx/modules.mjs`, `tools/devtools/layercheck.py`, `project.json` files (Nx project roots and inputs; Nx project names stay), Cargo path dependencies, patchkit manifest roots and `tools/nx/*.mjs` inputs. `services/params` becomes `services/rows` (crate `dkrt-svc-rows`).
+- Commit 2: roles in `module.toml` (`runtime`, `installer`, `platform`, `image-half` with `service = "<x>"`, `adapter`, `fix`, `proof`, `app`, `service`; they replace `role = adapter` and `type = framework`), the layercheck `roles` table and folder rules, the requires edges (`plusdrive-write` and `sdhc-large` get an edge from the tool that needs them; every patch-set list that names `core/ui` or `core/health` also names `core/runtime`, as ST does), patch-set comments in `devices/*.toml` (ids unchanged), `InitWindow` (4.2), `dsp-stereo-proof` into the tests of `dsp-voice`, and the `users` of `cf.storage.fn.directory.open` and `.next` in `devices/fw/storage.toml` (E1: drop `core/runtime`).
 - Docs: ARCHITECTURE.md (layers, folder map), LAYOUT.md, AGENTS.md directory map, runtime-and-services.md wording.
+- Not in E8: the merge of `usb-bulk-audio` into `usb-bulk`. It changes bytes on purpose, so it is a separate small PR before or after the move, with its own named device tests (usb-bulk, usb-bulk-audio). Module ids do not change.
+- Check first: the Rust objects embed no source path (a moved source would change their bytes).
 
-Cost: folder moves and role renames change no image bytes (ids stay; checked with `git diff -M` and unchanged image hashes). Only the
-usb-bulk merge changes an image hash (checked with `patchkit objdiff`).
+Proof, by bytes first:
+- Tooling, part of E8: one small command that writes and compares a hash manifest. It reuses the existing byte tooling (`patchkit device-bytes`, `dist/bytes/images-<device>.sha256`, `dist/bytes/pack-verdicts.json`). The manifest lists the patched image per device, every `.dks` and `.dkm` in `dist/`, every committed `.dko.json` object, and the generated headers and tables.
+- Before the move: build every artifact and write the manifest. After the move: rebuild and compare. All hashes identical is the proof that every device test sees the same inputs. The merge-test cache keys on the image hashes, so the device tests replay from cache and do not run.
+- Then only what bytes cannot show: the host stage (`typecheck`, `lint`, `fmt-check`, `test-host`, `python-checks`), `mise run test:plan` (the same targets as before, modulo renamed paths), `gate-smoke`, and one device test per device (for example module-load) to prove that the harness finds the moved files. About an hour of checking.
+- `git diff -M` shows renames plus path edits only.
+- Stop rule: any hash change stops the PR.
 
-Tests: `git diff -M --stat` shows renames plus path edits only; image and `.dks` hashes unchanged except the usb-bulk merge (its image
-diff is checked with `patchkit objdiff`). This selects the whole gate, so it runs with the full test run of its batch (`mise run test:full`).
-
-Estimate: 6-8 h mechanical plus the full run (the class rename, the `fixes/` home, the shared-module placement and the requires and patch-set edits add about 2 h). Payoff: the folders show the layers; new code lands in the right place. Confidence: high.
-Depends on: E1; open branches merged (including `test/t1i-rig-read-hook`, which edits `dsp-stereo-proof`). Order: last, or before E6 if the
-branches have merged by then.
+Estimate: 10-14 h of agent editing time (the move, the path users, roles, requires edges and the manifest tool). It is not test time. Payoff: the folders show the layers; new code lands in the right place. Confidence: high.
+Depends on: E1; the port-file stack (PR2, PR3) and E5c/E5b merged; open branches merged (including `test/t1i-rig-read-hook`, which edits `dsp-stereo-proof`). Order: before port step 3, the project service and E7.
 
 ### E9 Later: on-demand platform pieces and overdrive
 
@@ -967,7 +931,8 @@ runtime-and-services.md.
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
 | 9 | E7 filter machines | E0a, E0b, E3, E4, E5, E6c, R12-8, port file | filter test plus subset | todo |
-| 10 | E8 regroup and names (class per module, `fixes/`, shared `dyndsp`, requires edges, patch-set lists; 6-8 h) | E1, open branches merged | full run of its batch | todo |
+| 10 | E8 top-level lift and names (taxonomy tree, roles, requires edges, patch-set lists, hash-manifest tool; 10-14 h agent editing time) | E1, port-file stack, E5c/E5b, open branches merged | host stage, `test:plan`, gate-smoke, one device test per device; proof by hash manifest | todo |
+| 10 | Taxonomy and card layout | - | none | done: docs/design/taxonomy.md |
 | 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | active: PR1 done (PR #621); PR2 next after E5 |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
 
@@ -1009,7 +974,7 @@ Taken:
 - Proof adapters stay; they move next to what they prove (4.1); E1 checks whether `file-catalog-proof` is still needed.
 - O1: filters get a typed `dk_filter *` handle; the machines service implements them.
 - O5: reload first; user-facing unload without a replacement later.
-- O2: regroup inside `modules/core` (section 4.1), after the open branches merge.
+- O2: the top-level lift of the taxonomy (E8), after the port-file stack and E5c/E5b, before port step 3, the project service and E7.
 - Effect id format stays 16-bit.
 
 Open:
