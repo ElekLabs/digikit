@@ -688,7 +688,7 @@ pub extern "C" fn dkrt_info_table() {}
 
 #[export_name = "cf.storage.fn.capacity"]
 pub extern "C" fn card_capacity() -> u32 {
-    u32::MAX
+    crate::host_io::card_capacity()
 }
 
 #[export_name = "cf.storage.fn.block.read"]

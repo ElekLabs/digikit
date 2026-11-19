@@ -59,7 +59,8 @@ The Syntakt has an eMMC on eSDHC0, as the DT2 and DN2:
   range that ends above it (-13) (0x4010f874).
 - The eMMC identity whitelist is the same table: four rows (`004G90`, `4FTE4R`, `TX2932`, `TS0A32`) with the same capacity words
   (0x760000/0x3b0000, 0x748000/0x3a4000, 0x3a4a000/0x2e1a000 twice) at 0x402d5b40 (DT2 0x402b4fc8); referenced from 0x4010f1a4 and 0x40113766.
-  The card is therefore one of the parts the DT2 accepts. Which part a Syntakt carries: **[O]**; `total_sectors = 0x2e1a000` is the DT2 and DN2 value.
+  The table is not enforced at boot (finding 153). Which part a Syntakt carries is read from the driver at run time (INFO `card_sectors`); `total_sectors = 0x2e1a000`
+  is only the card the emulator emulates.
 
 The card layout of MAIN 1.42 (units are 512-byte sectors; the MmcFs object is the class `MmcFs`, vtable 0x4024324c):
 
@@ -85,8 +86,10 @@ For `/samples/N` the offset is `N * 0x80000 + 0x380000` and the size comes from 
 
 ### Store location
 
-The store is the DN2 store, unchanged: `first_sector = 0x800000`, `end_sector = 0x2e1a000`, `selection_sectors = 2`, `settings_sectors = 32`,
-`header_b_sector = 0x2e19fdd` (`devices/syntakt.toml` `[card.store]`; `[capabilities] card = "slots"`).
+The store is a fixed 512 MiB area: `first_sector = 0x200000`, `end_sector = 0x300000`, `selection_sectors = 2`, `settings_sectors = 32`,
+`header_b_sector = 0x2fffdd` (`devices/syntakt.toml` `[card.store]`; `[capabilities] card = "slots"`). It is above everything stock 1.42 writes (below 0x180000) and below
+the smallest capacity the firmware's card table lists (0x3a4000). The earlier choice, the DN2 store at 0x800000..0x2e1a000, was too big for a unit's card
+(`CARD_TOO_SMALL`). Reasons, the capacity word and the risks: [finding 153](153-syntakt-card-capacity-store.md).
 
 Emulator observation **[D]**: stock 1.42 booted ColdFire-only (no DSP, no runtime) on the default emulated card (the whitelisted 32 GB pSLC part,
 0x2e1a000 sectors), with a log of every eSDHC command that writes or erases (CMD25 data with its sector, CMD35, CMD36, CMD38). The session used the

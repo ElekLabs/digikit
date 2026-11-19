@@ -430,3 +430,24 @@ fn the_digitakt_and_digitone_device_images_have_no_literal_tail() {
         );
     }
 }
+
+/// The key ids of the Syntakt's key events that core/ui compares (`[input.view_keys]`) are the entries of the firmware's decoder table at 0x401d7a48 for the
+/// wire positions of YES, NO and RIGHT (panel codes 39, 28 and 31: wire position = code - 1 = channel * 8 + bit; finding 152).
+#[test]
+fn the_syntakt_view_keys_are_the_decoder_table_entries() {
+    let Some(raw) = image() else { return };
+    let fw = Firmware::parse(&raw).unwrap();
+    let main = fw.main().unwrap();
+    let table = |wire: usize| -> u64 {
+        let at = (0x401d7a48 - main.dest as usize) + 4 * wire;
+        u32::from_be_bytes(main.data[at..at + 4].try_into().unwrap()) as u64
+    };
+    let text = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    let doc: toml::Value = toml::from_str(&text).unwrap();
+    let keys = &doc["input"]["view_keys"];
+    let get = |k: &str| keys[k].as_integer().unwrap() as u64;
+    assert_eq!(get("yes"), table(39 - 1));
+    assert_eq!(get("no"), table(28 - 1));
+    assert_eq!(get("right"), table(31 - 1));
+    assert_eq!(get("yes2"), 0, "the Syntakt has no second YES key");
+}

@@ -194,7 +194,7 @@ emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
 [card]
 header_sector = 0x0
-total_sectors = 0x2e1a000   # the card the firmware whitelists (the pSLC 32 GB part, finding 14); the store runs to its end
+total_sectors = 0x2e1a000   # the card the emulator emulates (the pSLC 32 GB part, finding 14); it holds the store below. A unit's real capacity is read at run time from the driver (finding 153)
 table_sector = 0x800        # the write-protect bitmaps of projects and sounds, 272 bytes
 
 # Projects: FUN_40110746, sector = (slot + 0x40) * 0x2000, 4 MiB per slot.
@@ -222,15 +222,17 @@ role = "working-project"
 sector = 0x7e000
 sectors = 0x2000
 
-# Module and sample store (docs/design/digikit-store.md, version 3): the Digitone II's range. The most that stock MAIN 1.42 wrote in a session
-# (save project, save sound, +Drive format) is sector 0x81f7f and its format erases up to 0x17ffff; MmcFs writes refuse a sector at or above 0x180000
-# (finding 138 "Storage"). The store starts 5 times higher.
+# Module store (docs/design/digikit-store.md): a fixed 512 MiB area, 1 GiB .. 1.5 GiB (finding 153). Stock MAIN 1.42 touches only sectors below 0x180000 (the last
+# is 0x17ffff, the end of the project pool); the area starts 0x80000 sectors (256 MiB) above that. It ends 0xa4000 sectors below the smallest capacity the firmware's
+# card table lists (0x3a4000), so every accepted part holds it. The area is fixed and not computed from the capacity: the tail records (header B, settings, selection)
+# are relative to its end, so a card whose capacity changes must not move them. The runtime reads the capacity from the firmware's driver and refuses the store
+# (CARD_TOO_SMALL, no card access) when the card does not reach the end of the area. The stock Data API overrun (finding 145) is not excluded by this placement.
 [card.store]
-first_sector = 0x800000
-end_sector = 0x2e1a000
+first_sector = 0x200000
+end_sector = 0x300000
 selection_sectors = 2      # the last two sectors: the digikit selection record
 settings_sectors = 32      # the 32 sectors before them: the settings record, copy A then copy B of 16 sectors
-header_b_sector = 0x2e19fdd  # store header copy B: the sector before the settings record
+header_b_sector = 0x2fffdd  # store header copy B: the sector before the settings record (end - 35, as on the other devices)
 
 # Board facts that only the emulator uses. free_running_dtcn: the DMA timer counter channels (DTCN0..3) that the firmware reads as
 # free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).

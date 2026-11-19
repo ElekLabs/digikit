@@ -1363,7 +1363,7 @@ args = ["runtime", "device", "stable_blocks", "record_seq", "boot_counter"]
 [[log.kind]]
 id = 2
 name = "CARD_CHECK"
-args = ["state", "first_nonblank", "hash", "read_errors", "-"]
+args = ["state", "first_nonblank", "hash", "read_errors", "sectors"]
 
 [[log.kind]]
 id = 3

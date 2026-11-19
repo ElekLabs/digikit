@@ -353,7 +353,7 @@ export const LOG_KIND = {
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
 export const LOG_KINDS: Record<number, [string, [string, string, string, string, string]]> = {
   1: ['BOOT_START', ['runtime', 'device', 'stable_blocks', 'record_seq', 'boot_counter']],
-  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', '-']],
+  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', 'sectors']],
   3: ['SAFE', ['reason', 'boot_counter', 'record_seq', '-', '-']],
   4: ['BOOT_RECORD', ['seq', 'copy', 'boot_counter', 'selected', 'flags']],
   5: ['MOD_LOAD', ['index', 'result', 'name0', 'name1', 'name2']],

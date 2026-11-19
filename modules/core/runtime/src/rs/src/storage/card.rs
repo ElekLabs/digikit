@@ -2,7 +2,7 @@
 //! this file first.
 //!
 //! - Range: a write outside the store area of this device (`[card.store]`, `store::layout()`) is refused (`E_RANGE`) and counted.
-//! - Size: the card must reach the end of the area (the last sector reads); a smaller card has **no store** (`CARD_TOO_SMALL`): nothing is read or
+//! - Size: the card must reach the end of the area (its capacity, from the firmware's driver, is at least `first + sectors`); a smaller card has **no store** (`CARD_TOO_SMALL`): nothing is read or
 //!   written there, uploads answer `E_NOSTORE`, the boot goes on.
 //! - Ownership: before the first write the runtime has looked at its area on this card (`check`, at boot, or at the first write when no
 //!   boot hook ran). The area is **ours** when store header A or B is a valid header, or a selection copy is valid. Otherwise the sectors that
@@ -15,7 +15,7 @@
 //!   in the middle of an upload leaves a card the next boot calls ours, not a card with unexplained data in it.
 //!
 //! The check reads the start of the area only on a card where none of our structures is present (a fresh card): `BLANK_SECTORS` in 64 KiB reads,
-//! stopping at the first sector that is not blank. A card that is ours costs five sector reads.
+//! stopping at the first sector that is not blank. A card that is ours costs four sector reads (the capacity comes from the driver).
 //!
 //! The reads go through the staging buffer (`DKRT_STAGE`), so `check` must not run while a module file is staged: the boot hook runs it first.
 use crate::dlog;
@@ -179,10 +179,16 @@ pub unsafe fn check_with<P: Platform>(p: &P) {
         c.state = CARD_TOO_SMALL;
         return;
     }
+    // the card's capacity from the firmware's driver (no card access): 0xFFFFFFFF while the driver is not ready, then nothing is decided and nothing is read,
+    // and the next write asks again
     c.sectors = p.card_sectors();
+    if c.sectors == u32::MAX {
+        c.checked = 0;
+        return;
+    }
     let l = lay();
-    // the card must reach the end of the area: the firmware's block read refuses a start at or past the card's capacity
-    if p.block_read(l.first + l.sectors - 1, 512, stage()) != 0 {
+    // the card must reach the end of the area
+    if c.sectors < l.first + l.sectors {
         c.state = CARD_TOO_SMALL;
         report();
         return;
@@ -231,7 +237,7 @@ unsafe fn report() {
     dlog::ev(
         logk::CARD_CHECK,
         if bad { logk::F_ERROR } else { dlog::INFO },
-        [c.state, c.first_nonblank, c.hash, c.read_errors, 0],
+        [c.state, c.first_nonblank, c.hash, c.read_errors, c.sectors],
     );
 }
 

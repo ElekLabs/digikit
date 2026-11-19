@@ -19,7 +19,7 @@ above the MmcFs write guard at sector `0x457FFF` (finding 59):
 | DN2 | `0x800000`, above everything the Data API reaches | `0x2E1A000`, the card end | about 22 GiB |
 
 `[card] total_sectors` is the card the firmware accepts (the pSLC 32 GB part, 0x2E1A000 sectors); the area ends with it. A card the runtime finds
-smaller than the area (its last sector does not read) has **no store**: nothing is read or written there, uploads answer `E_NOSTORE`, and the boot goes on
+smaller than the area (the firmware driver's capacity is below its end) has **no store**: nothing is read or written there, uploads answer `E_NOSTORE`, and the boot goes on
 (`CARD_TOO_SMALL`, a `CARD_CHECK` event). Sector numbers below are relative to `first_sector` unless said otherwise. A device with no `[card.store]` takes no
 `digikit/` files (the builder reports them as skipped).
 
