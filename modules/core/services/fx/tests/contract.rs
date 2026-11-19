@@ -14,7 +14,7 @@ use dkrt_svc_fx::fxpage::{self, INFO_HASH};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::records::Fx;
 use dkrt_test_support::contract::{
-    contract, locked, Dsp, Fixture, Init, Knobs, Late, Lifecycle, Module,
+    contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module, ParkedKnobs,
 };
 use dkrt_test_support::FakeCore;
 
@@ -282,7 +282,7 @@ fn fixture(device: u32) -> Fixture {
             beside_b: false,
         }),
         rules: true,
-        knobs: Some(knobs()),
+        parked_knobs: Some(parked_knobs()),
     }
 }
 
@@ -381,8 +381,8 @@ fn kit_array(kit: u32) -> u32 {
 }
 
 /// The hooks of the contract's case 13: the knob of effect row 0 in the live kit (`KIT_CELL` holds kit `KIT_A` or `KIT_B`), and the firmware's kit-load count.
-fn knobs() -> Knobs {
-    Knobs {
+fn parked_knobs() -> ParkedKnobs {
+    ParkedKnobs {
         image: with_kit,
         kit: |core, n| unsafe { core.wr(KIT_CELL, if n == 0 { KIT_A } else { KIT_B }) },
         get: |core| unsafe { core.rd16(kit_array(core.rd(KIT_CELL))) },
@@ -433,7 +433,7 @@ fn the_removal_of_another_effect_does_not_refresh_the_stamp_of_a_parked_row() {
     let mut f = fixture(DT2.id);
     f.image = image_with_kit;
     let l = Lifecycle::<Fx>::new(&f);
-    let k = knobs();
+    let k = parked_knobs();
     unsafe {
         (k.kit)(&l.core, 0);
         assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);

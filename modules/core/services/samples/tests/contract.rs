@@ -71,7 +71,7 @@ fn fixture(device: u32) -> Fixture {
         // none: the service has no `apply`; its only refusals are `dsp_admit` and the checks of the section, before any row is written
         bad_late: None,
         rules: false,
-        knobs: None,
+        parked_knobs: None,
     }
 }
 

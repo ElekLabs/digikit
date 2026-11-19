@@ -143,14 +143,14 @@ pub struct Fixture {
     /// The service's `validate_records` refuses some records (it is not `accepts_records!()`): case 1b then also checks that it refuses a fixture record whose body is one byte short.
     pub rules: bool,
     /// The values the user turned on the module's rows, which the service keeps while the module is gone (`None`: the service keeps none). Case 13.
-    pub knobs: Option<Knobs>,
+    pub parked_knobs: Option<ParkedKnobs>,
 }
 
-/// What case 13 needs to turn a module's stored value and read it back: the live kit, the value of the first row's first knob in it, and the firmware's kit load.
-/// The value is what the firmware keeps for the row (the effect's knob array in the kit); the service parks it when the module unloads for a reload and puts it back when
-/// the same module loads into the row again.
+/// What case 13 needs, shaped like the fx service's knob values (`None` for a service that parks none): the firmware keeps the user's value of a module's row in a kit object (the
+/// effect's knob array in the live kit), the service parks it when the module unloads for a reload and puts it back when the same module loads into the row again, and only while no kit
+/// was loaded or initialised since (the firmware's kit-load hook counts them). The hooks give the case a live kit, the value of the first row's first knob, and a kit load.
 #[derive(Clone, Copy)]
-pub struct Knobs {
+pub struct ParkedKnobs {
     /// Adds the live kit to the image after `Fixture::image` (the cell that holds the kit pointer).
     pub image: fn(&mut FakeCore),
     /// Makes kit `n` (0 or 1) the live kit: the two kits have other pointers.
@@ -1330,11 +1330,11 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
     l.unload(0);
 }
 
-/// Case 13 (`Fixture::knobs`): the values the user turned survive a reload of the same module, as the firmware's kit array keeps them, and only that: they are the defaults
+/// Case 13 (`Fixture::parked_knobs`): the values the user turned survive a reload of the same module, as the firmware's kit array keeps them, and only that: they are the defaults
 /// when another kit is live at the load, when a kit load ran while the module was gone, when another module takes the row, and when a module of another name has the
 /// same keys. The user's value is `0x1234`, a word no fixture holds as a default. Docs: docs/plans/extension-model.md, E5b.
 fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f: &Fixture) {
-    let Some(k) = f.knobs else { return };
+    let Some(k) = f.parked_knobs else { return };
     const TURNED: i32 = 0x1234;
     const LEFT: i32 = 0x2222;
     let mut l = Lifecycle::<S>::with_image(f, k.image);
