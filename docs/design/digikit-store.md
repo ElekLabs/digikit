@@ -30,7 +30,7 @@ The area is not a path filesystem: **folders are in the paths.** The folders and
 | `modules/<kind>/<author>-<name>.dkm` | content modules, grouped by module kind; the file name is the module id with "/" as "-" |
 | `services/<service>.dks` | service files; the stem is the service name |
 | `ports/<device>-<version>.dkport` | port files, several side by side; `<version>` is the firmware version string, the runtime picks the one whose `FW` hash equals the image `fw_id` |
-| `projects/<slot>.dkp` | project files, slot 000 to 127 |
+| `projects/<slot>-<name>.dkp` | project files of the `project` service, slot 000 to 127 (the identity) and the project name ([digikit-project](../plans/digikit-project.md)) |
 | `samples/<folder>/<name>` | samples, for devices with `card = "slots"` only |
 | `data/<module id>/` | reserved for files that a module writes; not enforced |
 | `logs/` | reserved |
