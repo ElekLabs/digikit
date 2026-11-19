@@ -348,6 +348,8 @@ test('install: a key rule the new file breaks is a `keys` warning before the upl
   const a = dkm('x/a', { machine: 1, size: 900 });
   const b = dkm('x/b', { machine: 1, size: 900, salt: 3 });
   dev.files.set('modules/a.dkm', a); // on the card already
+  dev.files.set('modules/c.dkm', dkm('x/c', { machine: 1, size: 900, salt: 5 })); // on the card, not in the selection
+  dev.loadFailures = [{ name: 'a.dkm', result: 0, state: 1 }]; // LOADS: the selection holds a
   // the Rust rules run in dkneeds.wasm.test.ts; here a reader that finds one shared key with any other file
   setFitReader({
     ...everythingFits,
@@ -358,7 +360,11 @@ test('install: a key rule the new file breaks is a `keys` warning before the upl
     const out = await install(
       session(dev),
       ['x/b'],
-      [(await libraryModule(a, needsOf))!, (await libraryModule(b, needsOf))!],
+      [
+        (await libraryModule(a, needsOf))!,
+        (await libraryModule(b, needsOf))!,
+        (await libraryModule(dev.files.get('modules/c.dkm')!, needsOf))!,
+      ],
       (e) => events.push(e),
     );
     assert.deepEqual(out.uploaded, ['x/b']);

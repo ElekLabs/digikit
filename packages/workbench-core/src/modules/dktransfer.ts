@@ -801,7 +801,8 @@ export function uploadProgress(
 
 /**
  * Before the upload, one `{ event: 'keys', id, text }` for each key rule a module of `ids` breaks (`keyWarnings`, fit.ts: the Rust rules of `pk_keys_check`): a key twice, a key that a module
- * already on the card has, a key the version on the card has and the new file lacks (that version is read from the card). Only a warning: the device refuses the module itself, at the
+ * of the device's selection has (`selected`: file names; modules that are only on the card are not loaded together), a key the version on the card has and the new file lacks (that version is
+ * read from the card, only when its hash differs from the new file's). Only a warning: the device refuses the module itself, at the
  * next boot or at a reload. A read that fails gives no warning for that file.
  */
 async function warnAboutKeys(
@@ -810,12 +811,19 @@ async function warnAboutKeys(
   by: Map<string, LibraryModule>,
   library: LibraryModule[],
   have: Map<string, { path: string; size: number; hash: string }>,
+  selected: Set<string>,
   emit: Emit,
 ): Promise<void> {
   for (const id of ids) {
     const m = by.get(id)!;
     const others = library
-      .filter((o) => o.path !== m.path && have.get(o.path)?.hash === o.hash && have.get(o.path)?.size === o.file_size)
+      .filter(
+        (o) =>
+          o.path !== m.path &&
+          selected.has(o.path.split('/').pop()!.slice(0, 27)) &&
+          have.get(o.path)?.hash === o.hash &&
+          have.get(o.path)?.size === o.file_size,
+      )
       .map((o) => ({ name: o.label, bytes: o.bytes }));
     const there = have.get(m.path);
     let old: Uint8Array | undefined;
@@ -921,7 +929,9 @@ export async function install(
     }
   }
   const have = new Map((await listModules(s, info)).map((c) => [c.path, c]));
-  await warnAboutKeys(s, ids, by, library, have, emit);
+  // the modules of the device's selection (the next boot loads them together with the new file): LOADS names them by file name
+  const selected = new Set(hasCap(info, 'LOADS') ? (await s.loadStates()).map((x) => x.name) : []);
+  await warnAboutKeys(s, ids, by, library, have, selected, emit);
   const uploaded: string[] = [];
   const onCard: string[] = [];
   for (const id of ids) {
