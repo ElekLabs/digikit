@@ -1,7 +1,7 @@
 //! Assembly tests (docs/plans/test-architecture.md T2 step 4): the seams between separately built artifacts, run on the host with the real packed outputs.
 //!
 //! Nothing here is a fake of an artifact. The files are the ones the build leaves in `dist/`: the packed fixtures (`dist/modules/<device>/*.dkm`), the service files
-//! (`core/services/{fx,machines,lfo}`, `test/svc-test`) as the card holds them (the bound file of `dist/svc-bound/<device>/` where the service has hooks), the committed
+//! (`core/services/{fx,machines,lfo}`, `test/svc-test`) as the card holds them (the packed file of `dist/modules/<device>/`, and the port file of `dist/ports/` beside them), the committed
 //! runtime object (`modules/core/runtime/build/runtime.dko.json`, the immediate of its ABI check) and the info table of the patched image
 //! (`dist/bytes/images/<device>/set-<set>.info`, written by `patchkit:device-images` from the plan of `patchkit apply`). They go through the code of the boot:
 //! the search for providers on the card, the plan (needs, owners of kinds, capacity limits from the `cap_<kind>` entries), the role checks of a provider file (ABI word, stock
@@ -33,7 +33,7 @@ fn repo() -> PathBuf {
 struct Dev {
     name: &'static str,
     profile: dkrt_abi::platform::DeviceProfile,
-    /// The stock firmware the images and the bound files are made from (the acceptance cells).
+    /// The stock firmware the images are made from (the acceptance cells); its sites' stock bytes come from `patchkit port stock`.
     firmware: &'static str,
     /// The device file whose `[patch_sets]` name the roots of each image set.
     toml: &'static str,
@@ -50,7 +50,7 @@ impl Dev {
         std::format!("{}-{}", self.name, stem.rsplit("OS").next().unwrap())
     }
 
-    /// False (with a note) when the firmware is not here: its images and bound files are not made, and nothing of this device can be assembled.
+    /// False (with a note) when the firmware is not here: its images are not made, and nothing of this device can be assembled.
     fn has_firmware(&self) -> bool {
         let ok = repo().join(self.firmware).exists();
         if !ok {
@@ -76,11 +76,27 @@ fn service_file(dev: Dev, leaf: &str, nx: &str) -> Vec<u8> {
     packed(dev, leaf, "dks", nx)
 }
 
-/// The bound file of `patchkit bind` (`<id>:bind`): the stock bytes of every hook site, which the host test puts at the sites of the fake firmware (the port file holds only
-/// their check values), and the firmware words of the lfo service. It is no card file. (The binding leaves with PR3 of the port file stack; the stock bytes then come from
-/// another dump.)
-fn bound_file(dev: Dev, leaf: &str) -> Option<Vec<u8>> {
-    std::fs::read(repo().join(format!("dist/svc-bound/{}/{leaf}.dks", dev.name))).ok()
+/// The stock bytes of every hook site a service takes, from the local firmware (`patchkit port stock`, which reads the image and the committed port data; the bytes go
+/// into a fake firmware here and are written nowhere): hook name hash to (site address, displaced bytes). The port file holds only their check values.
+fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
+    let out = std::process::Command::new(repo().join("dist/patchkit/patchkit"))
+        .current_dir(repo())
+        .args(["--root", ".", "port", "stock", "--firmware"])
+        .arg(repo().join(dev.firmware))
+        .arg("--port")
+        .arg(repo().join(std::format!("devices/ports/{}.toml", dev.port())))
+        .output()
+        .unwrap_or_else(|e| panic!("patchkit port stock: {e}; run `pnpm nx:pilot run patchkit:cli`"));
+    assert!(out.status.success(), "patchkit port stock: {}", String::from_utf8_lossy(&out.stderr));
+    let table: toml::Table = String::from_utf8(out.stdout).unwrap().parse().unwrap();
+    table
+        .iter()
+        .map(|(hook, v)| {
+            let hex = v["stock"].as_str().unwrap();
+            let bytes: Vec<u8> = (0..hex.len() / 2).map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap()).collect();
+            (name_hash(hook), (v["addr"].as_integer().unwrap() as u32, bytes))
+        })
+        .collect()
 }
 
 /// The port file of the device's firmware as the card holds it.
@@ -475,17 +491,9 @@ fn card_of(dev: Dev, modules: &[&Fixture], services: &[Fixture]) -> Vec<(String,
 unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fixture], services: &[Fixture]) -> (Boot, Plan) {
     let files = card_of(dev, modules, services);
     let p = image.platform(dev, limits);
-    // the stock bytes of every hook site are live in the firmware (the check values of the port file are of them): the bound files have them
-    for s in &SERVICES {
-        if let Some(f) = bound_file(dev, s.leaf) {
-            let t = table_of(&f);
-            let keys = Keys::parse(&t).unwrap();
-            let mut i = 0;
-            while let Some(b) = keys.bind(i) {
-                p.put_code(b.addr, &b.stock[..b.len as usize]);
-                i += 1;
-            }
-        }
+    // the stock bytes of every hook site are live in the firmware (the check values of the port file are of them)
+    for (addr, bytes) in stock_sites(dev).values() {
+        p.put_code(*addr, bytes);
     }
     let mut l = Loader::new(p, Card::new(files), DeviceRegistry { runtime: runtime_object() });
     l.reset_plan();
@@ -502,21 +510,25 @@ fn found(l: &Boot, plan: &Plan) -> BTreeSet<String> {
     (0..plan.np).map(|j| String::from_utf8(l.found.path(j).to_vec()).unwrap()).collect()
 }
 
-/// The hook sites (site name hash, address) that the service files which loaded install, from their bound files (the stock sites of `patchkit bind`) less the hooks
-/// the port file lists as absent for the device.
+/// The hook sites (hook name hash, address) that the service files which loaded install: each `HOOKS` item of the packed file that the port file lists as present.
 fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
+    let pf = port_file(dev);
+    let pt = table_of(&pf);
+    let port = Keys::parse(&pt).unwrap();
     let mut out = Vec::new();
     for j in 0..plan.np {
         let path = String::from_utf8(l.found.path(j).to_vec()).unwrap();
-        let Some(leaf) = path.strip_prefix("services/").and_then(|p| p.strip_suffix(".dks")) else { continue };
-        if l.loaded[j] {
-            let Some(file) = bound_file(dev, leaf) else { continue };
-            let t = table_of(&file);
-            let keys = Keys::parse(&t).unwrap();
-            let mut i = 0;
-            while let Some(b) = keys.bind(i) {
-                out.push((b.site, b.addr));
-                i += 1;
+        if !path.starts_with("services/") || !l.loaded[j] {
+            continue;
+        }
+        let (_, file) = l.m.files.iter().find(|(n, _)| *n == path.as_bytes()).unwrap();
+        let t = table_of(file);
+        let keys = Keys::parse(&t).unwrap();
+        for i in 0..keys.count(tag::HOOKS) {
+            let hash = keys.words(tag::HOOKS, i).unwrap().0;
+            let site = port.find_site(hash).expect("the port file lists the hook");
+            if site.flags & dkneeds::keys::FLAG_ABSENT == 0 {
+                out.push((hash, site.addr));
             }
         }
     }
@@ -638,7 +650,7 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     for w in want {
         assert!(rows.contains(w), "{what}: no row {w} in {rows:?}");
     }
-    // the hook sites of the files: one `jmp` written for each site of a bound file, at its address, under one mask
+    // the hook sites of the files: one `jmp` written for each hook of a service file that the port lists as present, at its address, under one mask
     let binds = binds_of(dev, &l, &plan);
     assert_eq!(l.installer.count(), binds.len(), "{what}: installed sites");
     let written: Vec<u32> = l.p.calls.borrow().iter().filter_map(|c| if let Call::Write { addr, .. } = c { Some(*addr) } else { None }).collect();
@@ -705,16 +717,21 @@ fn an_lfo_loads_with_the_lfo_service_file() {
             fits(*dev, "emulator", &[&LFO_SHAPE], &["lfo"]);
         }
         let _ = clean_state();
-        // the UI-task hooks: the bound file has one BIND item for each hook the device has (the name formatter and the page cell's vector pick; the Digitone II also its three-character
-        // formatter), each over the stock bytes the bind compared with the firmware: `link.w A6,-0x1c; moveq 6,D0`
-        let bound = bound_file(*dev, "lfo").expect("lfo.dks is bound: run `pnpm nx:pilot run core/services/lfo:bind`");
-        let table = table_of(&bound);
+        // the UI-task hooks: the port file lists each hook the lfo service takes and the device has (the name formatter and the page cell's vector pick; the Digitone II also its
+        // three-character formatter), over the stock bytes of the firmware: `link.w A6,-0x1c; moveq 6,D0`. The check value of each is what the loader compares at the install.
+        let file = service_file(*dev, "lfo", "core/services/lfo");
+        let table = table_of(&file);
         let keys = Keys::parse(&table).unwrap();
+        let pf = port_file(*dev);
+        let pt = table_of(&pf);
+        let port = Keys::parse(&pt).unwrap();
+        let stock = stock_sites(*dev);
         let mut got = Vec::new();
-        let mut i = 0;
-        while let Some(b) = keys.bind(i) {
-            got.push((b.site, b.stock[..b.len as usize].to_vec()));
-            i += 1;
+        for i in 0..keys.count(tag::HOOKS) {
+            let hash = keys.words(tag::HOOKS, i).unwrap().0;
+            if port.find_site(hash).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0) {
+                got.push((hash, stock[&hash].1.clone()));
+            }
         }
         let name = |h: &str| name_hash(std::format!("cf.lfo.hook.{h}").as_str());
         let mut want = std::vec![
@@ -733,15 +750,15 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         }
         got.sort();
         want.sort();
-        assert_eq!(got, want, "{}: the BIND items of lfo.dks", dev.name);
-        // the four firmware words of the WAVE maximum (`DKRT_LFO_FW`): the stock parameter table and the rows of the codes 79, 89 and 99, resolved by `bind`. A zero word would
-        // make the service write nothing (it takes 0 for a build without firmware), so each must be set; the rows lie 60 bytes apart in the table
-        let map = std::fs::read_to_string(repo().join(format!("dist/svc-bound/{}/lfo.addrmap.json", dev.name))).expect("the address map of the bound lfo.dks");
-        let at = map.find("\"name\":\"DKRT_LFO_FW\"").expect("DKRT_LFO_FW is in the address map");
-        let from = map[..at].rfind("\"addr\":").unwrap() + 7;
-        let off: u32 = map[from..].split(',').next().unwrap().parse().unwrap();
-        let words: Vec<u32> = (0..4).map(|k| be(&bound, be(&bound, dkneeds::H_IMAGE_OFF) + off + 4 * k)).collect();
-        assert!(words.iter().all(|w| *w != 0), "{}: a DKRT_LFO_FW word is 0: {words:x?}", dev.name);
+        assert_eq!(got, want, "{}: the sites of lfo.dks", dev.name);
+        // the four firmware words of the WAVE maximum (`DKRT_LFO_FW`): the stock parameter table and the rows of the codes 79, 89 and 99, which the file imports from the port file
+        // (`dk_fw_<hash>` of each name). A name the port lacks would refuse the file, and an absent one would make the service write nothing, so each must be an address;
+        // the rows lie 60 bytes apart in the table
+        let addr = |n: &str| match port.find_name(dkneeds::keys::NAME_FW, name_hash(n), 0) {
+            Some(x) if x.flags & dkneeds::keys::FLAG_ABSENT == 0 => x.addr,
+            other => panic!("{}: {n} is {other:?} in the port file", dev.name),
+        };
+        let words = [addr("cf.param.data.descriptor_table"), addr("cf.lfo.data.wave_row.1"), addr("cf.lfo.data.wave_row.2"), addr("cf.lfo.data.wave_row.3")];
         for (k, code) in [79u32, 89, 99].into_iter().enumerate() {
             assert_eq!(words[1 + k], words[0] + 60 * code, "{}: WAVE row {} is not table + 60 * {code}", dev.name, k + 1);
         }
@@ -1054,18 +1071,20 @@ fn a_provider_with_another_abi_word_or_a_site_that_is_not_stock_is_refused_befor
             l.phase = Phase::Boot;
             let ppath = std::format!("ports/{}.dkport\0", dev.port());
             assert_eq!(l.load_provider(ppath.as_ptr(), port), OK, "{}", dev.name);
-            // a raw site of fx (the port copies no raw site, so the port file is not what refuses): its address is in the bound file
+            // a raw site of fx (the port copies no raw site, so the port file is not what refuses): its address is in the port file
             let pf = port_file(*dev);
             let pt = table_of(&pf);
             let pk = Keys::parse(&pt).unwrap();
-            let bound = bound_file(*dev, "fx").expect("fx.dks is bound");
-            let bt = table_of(&bound);
-            let bk = Keys::parse(&bt).unwrap();
-            let site = (0..bk.bind_count())
-                .filter_map(|i| bk.bind(i))
-                .find(|b| pk.find_site(b.site).is_some_and(|s| s.kind == dkneeds::keys::SITE_RAW && s.flags & dkneeds::keys::FLAG_ABSENT == 0))
-                .expect("fx.dks has a raw hook");
-            l.p.put_code(site.addr, &[0xff]);
+            let fxfile = service_file(*dev, "fx", "core/services/fx");
+            let ft = table_of(&fxfile);
+            let fk = Keys::parse(&ft).unwrap();
+            let addr = (0..fk.count(tag::HOOKS))
+                .map(|i| fk.words(tag::HOOKS, i).unwrap().0)
+                .filter_map(|h| pk.find_site(h))
+                .find(|s| s.kind == dkneeds::keys::SITE_RAW && s.flags & dkneeds::keys::FLAG_ABSENT == 0)
+                .expect("fx.dks has a raw hook")
+                .addr;
+            l.p.put_code(addr, &[0xff]);
             assert_eq!(l.load_provider(b"services/fx.dks\0".as_ptr(), j), E_HOOK_STOCK, "{}", dev.name);
             assert!(!l.p.calls.borrow().iter().any(|c| matches!(c, Call::Write { .. } | Call::Word { .. })), "no site is written");
             assert_eq!(l.installer.count(), 0);
@@ -1171,7 +1190,7 @@ fn the_service_objects_and_files_carry_the_abi_word_of_the_runtime_object() {
 }
 
 /// The declarations of the real `init` of a service file (its glue, `dk_svc_declare` of `service!`, run natively over the runtime's own `dk_service_declare_*`) against the
-/// header table of the file as the card holds it (the bound file) for the device: the same kinds with their lengths, slots with their flags, hooks, exports and resources. The loader makes the same
+/// header table of the file as the card holds it for the device: the same kinds with their lengths, slots with their flags, hooks, exports and resources. The loader makes the same
 /// comparison at the commit (`decl_matches`) and refuses a difference with `E_DECL_KIND`; the other cases here replay the table and cannot see one. The entry addresses are not
 /// compared: a host function has no offset in the file (an entry is checked by its presence and its name hash).
 #[test]

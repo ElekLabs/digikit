@@ -3,17 +3,29 @@ import { expect, test } from 'vitest';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { needsOf, recordBytesOf } from '@digi/regression/runtime/dkm.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { boundPath, neededServices } from '@digi/regression/runtime/service-files.ts';
+import { neededServices, portFile } from '@digi/regression/runtime/service-files.ts';
+import { entry, nameHash } from '../../refusal/dkm-patch.ts';
 import { block, geometryOf, LOADED } from '@digi/regression/runtime/synth.ts';
 import { bootEntries, COUPLED_ROOTS, expectBoot, popcount, SYMBOLS, type Entry } from '../capacity-helpers.ts';
 
 /** The arena of the providers of a module's services: their image blocks and the blocks of their keys tables (loader/role.rs). */
-const providerArena = async (device: Parameters<typeof boundPath>[0], file: string) => {
+const providerArena = async (device: Parameters<typeof portFile>[0], file: string) => {
   let sum = 0;
-  for (const { service: name } of neededServices([file])) {
-    const service = boundPath(device, name);
+  let needsPort = false;
+  for (const { service: name, moduleId } of neededServices([file])) {
+    const service = moduleArtifact(device, moduleId);
     const [n] = await needsOf([service]);
-    sum += n!.ARENA! + block(fs.readFileSync(service).readUInt32BE(0x94));
+    const bytes = fs.readFileSync(service);
+    sum += n!.ARENA! + block(bytes.readUInt32BE(0x94));
+    // a service that names the firmware needs the port file, which loads once for all of them: its image and bss, and the block that keeps its table
+    const needs = entry(bytes, 1);
+    for (let k = 0; k < needs.count; k++) needsPort ||= bytes.readUInt32BE(needs.at + 12 * k) === nameHash('port');
+    void name;
+  }
+  if (needsPort) {
+    const port = portFile(device).file;
+    const [n] = await needsOf([port]);
+    sum += n!.ARENA! + block(fs.readFileSync(port).readUInt32BE(0x94));
   }
   return sum;
 };
@@ -24,7 +36,7 @@ const providerArena = async (device: Parameters<typeof boundPath>[0], file: stri
  * that stand for the other shapes of a module (a raw ColdFire module, a machine, an effect). One boot per module: full tier.
  *
  * A module that needs a service file (machines.dks, fx.dks) also takes the arena of the provider the runtime loads with it: the provider's image block
- * (`patchkit needs` of the bound file) and the block that keeps its keys table (BIND, EXPORTS and SLOTS; loader/role.rs). ARENA is compared with both added.
+ * (`patchkit needs` of the packed file) and the block that keeps its keys table (HOOKS, EXPORTS and SLOTS; loader/role.rs), and once the port file when a service needs it (its image and bss, and the block of its table). ARENA is compared with both added.
  */
 const INFERRED_NEEDS_MODULES = [
   'digikit/debug',

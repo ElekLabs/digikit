@@ -12,7 +12,7 @@ import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices } from './service-files.ts';
+import { neededServices, portFile } from './service-files.ts';
 import { bindServiceSymbols } from './service-symbols.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
@@ -294,16 +294,12 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           )
             throw new Error(`invalid route preset selection ${tag}`);
           const files = inventory.map((id, index) => ({ name: `m${index}.dkm`, file: moduleArtifact(device, id) }));
-          // the services the inventory needs (fx.dks), bound to the stock firmware, go to digikit/services; a preset with `noServices` leaves out all (`true`) or the named ones (the effect is refused)
-          const services = await Promise.all(
-            neededServices(files.map((f) => f.file))
-              .filter((needed) => !dropsService(preset.noServices, needed.service))
-              .map((needed) => (cardServices.add(needed.service), needed))
-              .map(async (needed) => ({
-                name: `${needed.service}.dks`,
-                file: await boundService(device, needed, moduleArtifact(device, needed.moduleId)),
-              })),
-          );
+          // the services the inventory needs (fx.dks), go to digikit/services as packed, with the port file in digikit/ports; a preset with `noServices` leaves out all (`true`) or the named ones (the effect is refused)
+          const services = neededServices(files.map((f) => f.file))
+            .filter((needed) => !dropsService(preset.noServices, needed.service))
+            .map((needed) => (cardServices.add(needed.service), needed))
+            .map((needed) => ({ name: `${needed.service}.dks`, file: moduleArtifact(device, needed.moduleId) }));
+          const port = services.length ? portFile(device) : undefined;
           // The card is built in WORK (`<work>/card/card.img`).
           const produce = async (work: string) => {
             // The seed stays in the card dir: tests read the built modules from it.
@@ -314,6 +310,11 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
             const serviceDir = path.join(seed, 'digikit', 'services');
             fs.mkdirSync(serviceDir, { recursive: true });
             for (const f of services) fs.copyFileSync(f.file, path.join(serviceDir, f.name));
+            if (port) {
+              const portDir = path.join(seed, 'digikit', 'ports');
+              fs.mkdirSync(portDir, { recursive: true });
+              fs.copyFileSync(port.file, path.join(portDir, path.basename(port.name)));
+            }
             fs.writeFileSync(path.join(seed, 'digikit', 'selection.txt'), preset.selection.join('\n') + '\n');
             const out = path.join(work, 'card', 'card.img');
             fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -350,6 +351,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
               kind: 'fx-route-preset',
               modules: files.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
               services: services.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
+              port: port ? fileSha(port.file) : undefined,
               selection: preset.selection,
             });
             cardImage = await cachedCard(key, produce);

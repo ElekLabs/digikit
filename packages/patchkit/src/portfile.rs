@@ -119,6 +119,10 @@ pub struct Facts {
     pub len: u32,
     pub kind: SiteKind,
     pub check: [u8; 8],
+    /// The site address and the stock bytes of the displaced instructions, read from the image: for a host test that puts them in a fake firmware. Never written to
+    /// a committed file (`port_resolve` takes only `len`, `kind` and `check`).
+    pub addr: u32,
+    pub stock: Vec<u8>,
 }
 
 /// The declaration of `hook` that applies on `device`: the entry without a `devices` filter or with this device.
@@ -172,6 +176,8 @@ pub fn site_facts(fw: &[u8], port_text: &str, decls: &[&str]) -> Result<Vec<Fact
             len: site.site_len as u32,
             kind,
             check: check_of(&site.old),
+            addr: site.site as u32,
+            stock: site.old.clone(),
         });
     }
     Ok(out)

@@ -7,7 +7,7 @@ import { mergeTests, manifestClosure, read, records } from './module-manifests.m
 import {
   DEVICE_INPUTS,
   VITEST_SETUP,
-  bindableIds,
+  serviceIds,
   builtSourceExclusions,
   deviceInputs,
   forDevice,
@@ -57,7 +57,7 @@ export const deviceTarget = (
   for (const rec of recs) {
     for (const id of rec.modules ?? []) {
       dependsOn.push(`${id}:pack`);
-      if (opts.bindable?.has(id)) dependsOn.push(`${id}:bind`); // a service with hooks: the bound file the tests copy to the card
+      if (opts.serviceIds?.has(id) && !dependsOn.includes('patchkit:ports')) dependsOn.push('patchkit:ports'); // a service: the port file that goes on the card with it
     }
     if (Object.keys(rec.aliases ?? {}).length) dependsOn.push('pack-aliases');
     if (rec.plusdrive) dependsOn.push('plusdrive-format:cli');
@@ -301,7 +301,7 @@ export const testOnlyNodes = (
         twin: targetName === 'test-device',
         subjects: config.implicitDependencies,
         services: serviceLeaves(byId),
-        bindable: bindableIds(byId),
+        serviceIds: serviceIds(byId),
         base: workspaceRoot,
         mergeTests: mergeTests(join(workspaceRoot, root)),
       },

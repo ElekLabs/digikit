@@ -1571,6 +1571,22 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
             }
             println!("{}", serde_json::Value::Object(o));
         }
+        // `port stock`: the same facts as TOML with the site address and the stock bytes, for a host test that puts them in a fake firmware (the output holds firmware
+        // bytes: it goes to a test, never into the repository)
+        "stock" => {
+            let fw = read(&flag(rest, "--firmware").ok_or_else(|| Error(USAGE.into()))?)?;
+            let src = flag(rest, "--port").ok_or_else(|| Error(USAGE.into()))?;
+            let text = String::from_utf8_lossy(&read(&src)?).into_owned();
+            for f in portfile::site_facts(&fw, &text, &decls)? {
+                println!(
+                    "[\"{}\"]\naddr = {}\nlen = {}\nstock = \"{}\"\n",
+                    f.hook,
+                    f.addr,
+                    f.len,
+                    patchkit::error::hex(&f.stock)
+                );
+            }
+        }
         "build" => {
             let reg = registry(root)?;
             let out = PathBuf::from(flag(rest, "--out").ok_or_else(|| Error(USAGE.into()))?);

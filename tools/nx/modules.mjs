@@ -7,9 +7,9 @@
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { read, records, mergeTests, packDevices, isUploadable } from './module-manifests.mjs';
-import { buildObjectsTarget, packTarget, packAliasesTarget, bindTarget } from './module-build.mjs';
+import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
 import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
-import { serviceLeaves, isBindable, bindableIds } from './device-test-keys.mjs';
+import { serviceLeaves, serviceIds } from './device-test-keys.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { standaloneRustTests } from './cargo.mjs';
 import { rigTarget } from './rig-tests.mjs';
@@ -115,8 +115,6 @@ export const createNodesV2 = [
           coreManifests,
         );
       if (devices.length && packable.has(m.id)) targets.pack = packTarget(ctx.workspaceRoot, byId, m, devices);
-      if (devices.length && packable.has(m.id) && isBindable(m))
-        targets.bind = bindTarget(ctx.workspaceRoot, m, devices);
       const aliasesTarget = packAliasesTarget(ctx.workspaceRoot, byId, recs);
       if (aliasesTarget) targets['pack-aliases'] = aliasesTarget;
       if (shipped && hostTests.length)
@@ -139,7 +137,7 @@ export const createNodesV2 = [
             twin: true,
             moduleId: m.id,
             services: serviceLeaves(byId),
-            bindable: bindableIds(byId),
+            serviceIds: serviceIds(byId),
             projectDevices: devices,
             mergeTests: mergeTests(join(ctx.workspaceRoot, root)),
             base: ctx.workspaceRoot,

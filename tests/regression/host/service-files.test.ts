@@ -1,6 +1,5 @@
-// The services a module needs go on the card with it: the NEEDS of a packed .dkm name them, and the install step puts the bound file at services/<name>.dks before the
-// selection and the restart.
-import { createHash } from 'node:crypto';
+// The services a module needs go on the card with it: the NEEDS of a packed .dkm name them, and the install step puts the packed file at services/<name>.dks (and the port file at ports/) before the
+// selection and the restart, with the port file of the firmware.
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, expect, test, vi } from 'vitest';
@@ -19,26 +18,21 @@ vi.mock('../runtime/devices.ts', () => ({ FIRMWARE: { dt2: '1.17', dn2: '1.12' }
 vi.mock('../runtime/addrmap.ts', () => ({ readLoadTable: vi.fn() }));
 vi.mock('@digi/test-support', async (original) => ({
   ...(await original<object>()),
-  resolveInputs: () => ({ syx: '/stock.syx' }),
   repoRoot: () => dir,
 }));
 import { installModules } from '../runtime/install.ts';
-import { boundService, derivedModule, neededServices, rawModule } from '../runtime/service-files.ts';
+import { derivedModule, neededServices, portFile, rawModule } from '../runtime/service-files.ts';
 import { bindServiceSymbols, serviceMapEntries } from '../runtime/service-symbols.ts';
 
-// the packed service the harness finds under dist/modules/<device>/<leaf>.dks
+// the packed service the harness finds under dist/modules/<device>/<leaf>.dks: a whole header (the DSP size word is read to see whether the card needs a coupled
+// session), a zero DSP part
+const PACKED = Buffer.concat([Buffer.from('packed'), Buffer.alloc(0xa0)]);
 fs.mkdirSync(path.join(dir, 'dist/modules/dt2'), { recursive: true });
-fs.writeFileSync(path.join(dir, 'dist/modules/dt2/fx.dks'), 'packed');
-// the file the Nx target `core/services/fx:bind` wrote
-fs.mkdirSync(path.join(dir, 'dist/svc-bound/dt2'), { recursive: true });
-// a service file has a whole header (the DSP size word is read to see whether the card needs a coupled session): a zero DSP part
-const BOUND = Buffer.concat([Buffer.from('bound'), Buffer.alloc(0xa0)]);
-fs.writeFileSync(path.join(dir, 'dist/svc-bound/dt2/fx.dks'), BOUND);
+fs.writeFileSync(path.join(dir, 'dist/modules/dt2/fx.dks'), PACKED);
+// the port file `patchkit:ports` wrote
+fs.mkdirSync(path.join(dir, 'dist/ports'), { recursive: true });
+fs.writeFileSync(path.join(dir, 'dist/ports/dt2-1.17.dkport'), 'port file');
 const FX = { service: 'fx', moduleId: 'core/services/fx' };
-const sha = (text: string) => createHash('sha256').update(text).digest('hex');
-// the sidecar `patchkit bind` writes: what the bound file was made from (the stock image of this test does not exist, so only the packed file is compared)
-const sidecar = path.join(dir, 'dist/svc-bound/dt2/fx.src.json');
-fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('packed'), firmware_sha256: 'x' }));
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 // the pack target writes `<leaf>.services.json` (`patchkit services`, one JSON line per service) beside the file: here gain.dkm is an effect
@@ -72,7 +66,7 @@ test('a copy of a packed module needs what the original needs', () => {
   );
 });
 
-test('install puts the bound service on the card before the selection and the restart', async () => {
+test('install puts the port file and the packed service on the card before the selection and the restart', async () => {
   const order: string[] = [];
   const sent = new Map<string, string>();
   const dk = {
@@ -85,34 +79,32 @@ test('install puts the bound service on the card before the selection and the re
   } as unknown as DkSession;
   const effect = write('gain.dkm');
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }], { device: 'dt2' });
-  expect(order).toEqual(['put modules/dyn-fx-gain.dkm', 'put services/fx.dks', 'select', 'restart', 'boot']);
-  expect(sent.get('services/fx.dks'), 'the bound file of the Nx bind target goes on the card').toBe(BOUND.toString());
+  expect(order).toEqual([
+    'put modules/dyn-fx-gain.dkm',
+    'put ports/dt2-1.17.dkport',
+    'put services/fx.dks',
+    'select',
+    'restart',
+    'boot',
+  ]);
+  expect(sent.get('services/fx.dks'), 'the packed file of the Nx pack target goes on the card').toBe(PACKED.toString());
+  expect(sent.get('ports/dt2-1.17.dkport'), 'the port file of the Nx ports target goes on the card').toBe('port file');
+  expect(portFile('dt2').name).toBe('ports/dt2-1.17.dkport');
   // without a device the module goes alone (a test that installs by hand)
   order.length = 0;
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }]);
   expect(order).toEqual(['put modules/dyn-fx-gain.dkm', 'select', 'restart', 'boot']);
 });
 
-test('a bound file made from other bytes than the packed service is refused with the Nx target to run, whatever the mtimes say', async () => {
-  const packed = path.join(dir, 'dist/modules/dt2/fx.dks');
-  const bound = path.join(dir, 'dist/svc-bound/dt2/fx.dks');
-  // a cache restore gives the bound file a new mtime: only the content says it is current
-  const now = Date.now() / 1000;
-  fs.utimesSync(bound, now + 10, now + 10);
-  fs.utimesSync(packed, now, now);
-  await expect(boundService('dt2', FX, packed)).resolves.toBe(bound);
-  fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('an older pack'), firmware_sha256: 'x' }));
-  await expect(boundService('dt2', FX, packed)).rejects.toThrow(
-    /was bound from another fx\.dks: run nx run core\/services\/fx:bind/,
-  );
-  fs.rmSync(sidecar);
-  await expect(boundService('dt2', FX, packed)).rejects.toThrow(/no \.src\.json sidecar .*: run nx run/);
-  fs.writeFileSync(sidecar, JSON.stringify({ unbound_sha256: sha('packed'), firmware_sha256: 'x' }));
+test('a missing port file is an error naming the Nx target', () => {
+  fs.rmSync(path.join(dir, 'dist/ports/dt2-1.17.dkport'));
+  expect(() => portFile('dt2')).toThrow(/missing .*dt2-1\.17\.dkport: run nx run patchkit:ports/);
+  fs.writeFileSync(path.join(dir, 'dist/ports/dt2-1.17.dkport'), 'port file');
 });
 
-test('service symbols come from the address map that bind wrote, never from the unbound pack', () => {
-  const file = path.join(dir, 'dist/svc-bound/dt2/fx.addrmap.json');
-  expect(() => serviceMapEntries('dt2', 'fx')).toThrow(/fx:bind/);
+test('service symbols come from the address map of the pack: the file loads as packed', () => {
+  const file = path.join(dir, 'dist/modules/dt2/fx.addrmap.json');
+  expect(() => serviceMapEntries('dt2', 'fx')).toThrow(/fx:pack/);
   fs.writeFileSync(
     file,
     JSON.stringify({
@@ -127,7 +119,7 @@ test('service symbols come from the address map that bind wrote, never from the 
 
 test('a boot that should have the service fails with the service and the reason; noServices is explicit', async () => {
   const runtime = { session: { options: { device: 'dt2' } } } as never;
-  fs.rmSync(path.join(dir, 'dist/svc-bound/dt2/fx.addrmap.json'), { force: true });
-  await expect(bindServiceSymbols(runtime, {} as never, 'fx')).rejects.toThrow(/fx service.*fx:bind/);
+  fs.rmSync(path.join(dir, 'dist/modules/dt2/fx.addrmap.json'), { force: true });
+  await expect(bindServiceSymbols(runtime, {} as never, 'fx')).rejects.toThrow(/fx service.*fx:pack/);
   await expect(bindServiceSymbols(runtime, {} as never, 'fx', { expected: false })).resolves.toBeUndefined();
 });

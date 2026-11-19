@@ -4,7 +4,7 @@ import { moduleStateText, type ModuleState } from '@digi/dk-session';
 import { CAPACITY_KINDS, RECORD_KIND } from '@digi/dk-session/gen_proto';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { boundPath, derivedModule } from '@digi/regression/runtime/service-files.ts';
+import { derivedModule } from '@digi/regression/runtime/service-files.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { loadCode, stateName } from '@digi/regression/runtime/load-states.ts';
 import { LOADED } from '@digi/regression/runtime/synth.ts';
@@ -37,8 +37,8 @@ interface Seen {
   modules: string[];
 }
 
-/** The card file of the lfo service (not selected: the loader finds it for the NEEDS of every fixture): the bound file, because the service has hooks. */
-const lfoService = (rig: CardRig) => ({ name: 'services/lfo.dks', file: boundPath(rig.device, 'lfo') });
+/** The card file of the lfo service (not selected: the loader finds it for the NEEDS of every fixture): the packed file; the card rig adds the port file it needs. */
+const lfoService = (rig: CardRig) => ({ name: 'services/lfo.dks', file: moduleArtifact(rig.device, 'core/services/lfo') });
 
 /** One boot of `entries`, and everything the tests read from it as plain values (the tests do not touch the device again). */
 async function boot(rig: CardRig, tag: string, entries: Entry[]): Promise<Seen> {

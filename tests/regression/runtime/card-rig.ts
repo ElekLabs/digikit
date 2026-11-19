@@ -34,7 +34,7 @@ import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
 import { moduleArtifact } from './install.ts';
-import { boundService, neededServices, requireCoupledForServices, servicePath } from './service-files.ts';
+import { neededServices, portFile, requireCoupledForServices, servicePath } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
@@ -262,17 +262,15 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const build = async (session: Session, tag: string, spec: CardSpec = {}) => {
     const { modules = [], name: _name, ...rest } = spec;
     const files = modules.map((m) => (typeof m === 'string' ? mod(m) : m));
-    // the services that these modules need go on the card too, bound to the stock firmware (`service-files.ts`)
+    // the services that these modules need go on the card too, as packed, with the port file of the firmware (`service-files.ts`)
     // only the files of `modules/` are modules: samples, other data and the service files of a test have no NEEDS
     const needed = neededServices(files.filter((m) => m.name.startsWith('modules/')).map((m) => m.file));
-    const services = await Promise.all(
-      needed
-        .filter((n) => !files.some((m) => m.name === servicePath(n.service)))
-        .map(async (n) => ({
-          name: servicePath(n.service),
-          file: await boundService(device, n, moduleArtifact(device, n.moduleId)),
-        })),
-    );
+    const services: { name: string; file: string }[] = needed
+      .filter((n) => !files.some((m) => m.name === servicePath(n.service)))
+      .map((n) => ({ name: servicePath(n.service), file: moduleArtifact(device, n.moduleId) }));
+    // the port file the services resolve their firmware names from (a test that lists its own port file keeps it)
+    if ((services.length || files.some((m) => m.name.startsWith('services/'))) && !files.some((m) => m.name.startsWith('ports/')))
+      services.push(portFile(device));
     requireCoupledForServices([...files, ...services], o.dsp);
     for (const n of needed) cardServices.add(n.service);
     const options = {

@@ -6,7 +6,7 @@ import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
-import { boundService, neededServices, requireCoupledForServices, servicePath } from './service-files.ts';
+import { neededServices, portFile, requireCoupledForServices, servicePath } from './service-files.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
 const MODULES_LOADED_EMULATED_MS = 30_000;
@@ -47,19 +47,27 @@ export async function installModules(
         paths.push(storePath);
       }
       if (device) {
-        for (const needed of neededServices(modules.map((m) => m.artifact))) {
+        const services = neededServices(modules.map((m) => m.artifact));
+        if (services.length) {
+          // the port file the services resolve their firmware names from
+          const port = portFile(device);
+          const bytes = fs.readFileSync(port.file);
+          await timePhase('service.upload', () => dk.put(port.name, bytes));
+          expect(await dk.verifyFile(port.name, bytes), 'fresh card read matches the port file').toBe(true);
+        }
+        for (const needed of services) {
           const name = needed.service;
-          const boundFile = await boundService(device, needed, moduleArtifact(device, needed.moduleId));
+          const boundFile = moduleArtifact(device, needed.moduleId);
           // the rule holds whenever a service goes on the card: a call without a session cannot show the mode, so it is refused for a service with a DSP part
           requireCoupledForServices(
             [{ name: servicePath(name), file: boundFile }],
             session ? (await session.status()).dsp : undefined,
           );
-          const bound = fs.readFileSync(boundFile);
-          await timePhase('service.upload', () => dk.put(servicePath(name), bound));
+          const packed = fs.readFileSync(boundFile);
+          await timePhase('service.upload', () => dk.put(servicePath(name), packed));
           expect(
-            await dk.verifyFile(servicePath(name), bound),
-            `fresh card read matches the bound ${name} service`,
+            await dk.verifyFile(servicePath(name), packed),
+            `fresh card read matches the packed ${name} service`,
           ).toBe(true);
         }
       }
