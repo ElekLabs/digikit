@@ -1,10 +1,13 @@
 import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
-import { waitClock } from '@digi/test-support';
+import { button, waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { analysisJson, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, SETTLE, analysisJson, bounded, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
+import { createFxKitUi } from '@digi/regression/runtime/fx-kit-ui.ts';
+import { kitMenu, kitSlotOne } from '@digi/regression/runtime/fx-track-ui.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { effectPage, mainPage, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
 import { wordBase } from '@digi/regression/runtime/memory.ts';
 import type { FxProfile } from '@digi/regression/runtime/fx-session.ts';
@@ -37,6 +40,8 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *   level of a new note after the swap is the level before within 5% (the user's value survives the reload and reaches the DSP row). An unload and a load keep it too, as long as no kit was loaded in
  *   between.
  *
+ * - a kit load while the module is gone (the KIT menu, LOAD of a saved slot, between an `UNLOAD` and a `LOAD`): the service's counter of kit loads moves although no row holds an effect, and the level after
+ *   the `LOAD` is the default level `wet` within 5%, not the turned one.
  * - the FX page of the effect is open during an `UNLOAD`: no fault, the frame holds still (the page shows the empty row of the unloaded effect, the state of a failed effect load), and after leaving the page and
  *   a `LOAD` the page shows the effect again. Whether the view should instead be put back to the stock list is open (docs/plans/extension-model.md, E5b item 2: no predicate says which view is on top).
  *
@@ -196,6 +201,35 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   await rt.ui.wait({ ms: 400, why: 'the effect page is drawn (no observable state of the redraw)' });
   expect(await stableFrameHash(rt), 'the page shows the effect again after the load').toBe(shown);
   await mainPage(rt);
+
+  // a kit load while the module is gone: the parked values are not the new kit's, so the load gives the defaults (the real kit-load hook of the fx service counts the load
+  // although no row holds an effect: `fxp_load` in modules/core/services/fx/dks/src/hooks.rs bumps DKRT_FXP_NLOAD before it looks at any row)
+  await createFxKitUi(rt, plan, profile, artifacts).saveKit(2, 'other-kit'); // the kit holds the turned value now, in a slot to load back
+  await job(rt, plan, 'unload', MASTER_PATH, 'unload before a kit load', epoch, 0);
+  const nload = await serviceSymbol(rt, plan, 'fx', 'DKRT_FXP_NLOAD');
+  const loads = await word(rt.session, nload);
+  await loadKitSlot(rt, 2);
+  expect(await word(rt.session, nload), 'the firmware kit loader ran (the service counted it with no effect loaded)').toBeGreaterThan(loads);
+  await job(rt, plan, 'load', MASTER_PATH, 'load after a kit load', epoch, 0);
+  await rt.ui.wait({ ms: 200, why: 'the UI loop sends the knob to the new DSP row (no observable state of the transfer)' });
+  const afterKit = await level('after-kit-load');
+  expect(Math.abs(afterKit / wet - 1), `a kit was loaded while the module was gone: the default level (${afterKit.toFixed(4)} against ${wet.toFixed(4)}), not the turned one (${half.toFixed(4)})`).toBeLessThan(0.05);
+}
+
+/** The KIT menu's LOAD of kit slot `n` with the held YES key, as `createFxKitUi.loadKit` does it, without the DSP row watch. */
+async function loadKitSlot(rt: TestRuntime, n: number): Promise<void> {
+  await kitMenu(rt, 0);
+  await rt.ui.tap('YES', { until: { ms: 700, why: REDRAW } });
+  await kitSlotOne(rt);
+  for (let i = 1; i < n; i++) await rt.ui.tap('DOWN', { until: { ms: 80, why: REDRAW } });
+  try {
+    await bounded(() => rt.session.client.inputButton(button('YES'), true));
+    await rt.ui.wait({ ms: 60, why: SETTLE });
+    await bounded(() => rt.session.client.inputButton(button('YES'), false));
+  } finally {
+    await bounded(() => rt.session.client.inputButton(button('YES'), false));
+  }
+  await rt.ui.wait({ ms: 600, why: 'the kit loader runs and the firmware redraws (the load counter is read after)' });
 }
 
 /** Write the halfword `value` at the firmware address `at` (the kit objects are in DDR; the write goes word by word through the daemon, as `pageKit.poke` does). */
