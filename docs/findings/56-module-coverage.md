@@ -106,7 +106,7 @@ The write-set check (P4a) still looks at one module at a time.
 | --- | --- | --- | --- | --- | --- |
 | modules loaded | 8 | 8 | device profile `[limits] modules` (at most `[limits.max]` of sdk.toml = `SEL_MAX`) | SELECT of a ninth path `E_SEL_COUNT`; `E_TABLE_FULL` is unreachable while `modules` is `SEL_MAX` | capacity-* (Gq) |
 | ColdFire arena | 512 KiB | 512 KiB | `[limits] arena_bytes` | `E_NOMEM`; a bss above the arena is `E_FORMAT` | capacity-*, memaudit-*-full |
-| upload stage buffer | 64 KiB | 64 KiB | `[limits] stage_bytes` | `E_TOO_BIG` (a file of the exact size loads) | capacity-* |
+| upload stage buffer | 128 KiB | 128 KiB | `[limits] stage_bytes` | `E_TOO_BIG` (a file of the exact size loads) | capacity-* |
 | machine types and DSP voice rows | 8 (types 0x10-0x17) | 8 | `[limits] machine_rows`, tied to types.toml by a gen check | a hashed machine `E_TYPE_RANGE`; a pinned voice `E_DSP_ROWS` (rows) or `E_DSP_TYPE` (type) | capacity-*, isolation-* |
 | parameter rows | 16 | 16 | `[limits] param_rows` (tied to the core/dynreg manifest by a cargo test) | `E_PARAM_FULL` | capacity-* |
 | page rows | 0 | 8 | `[limits] page_rows` (tied to the core/dynreg manifest) | `E_PAGE_FULL` (DN2) | capacity-dn2 |

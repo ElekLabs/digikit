@@ -71,7 +71,7 @@ Both devices block: 32 samples per call, 1500 blocks per second (`devices/*.toml
 | Item | Where | Limit |
 | --- | --- | --- |
 | module records (name, base, size, slot mask, store path) | `State.modules`, `DKRT_PATHS` (`modules/core/runtime/src/rs/src/lib.rs:75-99`) | `MAX_MODULES = 8` (`lib.rs:39`) |
-| ColdFire arena | first fit, 16-byte blocks, `DKRT_ARENA` in bss (`arena.rs:1-22`) | `ARENA_BYTES` 512 KiB, `STAGE_BYTES` 64 KiB (`lib.rs:36-38`); the same on both devices |
+| ColdFire arena | first fit, 16-byte blocks, `DKRT_ARENA` in bss (`arena.rs:1-22`) | `ARENA_BYTES` 512 KiB, `STAGE_BYTES` 128 KiB (`lib.rs:36-38`); the same on both devices |
 | run-time machine types | `core/dynreg` reserves rows 16-23 (`digikit-registry.md:42-50`) | 8 machine rows, 16 parameter rows, 8 page rows (DN2) (`:117-119`) |
 | voice rows (DSP) | `voices.rows` of `core/dsp-voice`, 16 words each (`module.toml` of dsp-voice :63-136) | at most 16 registered types (:63-68); run-time types 16-23 (`dsp.rs:23`, `types.toml:20-22`) |
 | DSP placement | `DKRT_DSP.mod_off/mod_len`, first fit, 64-byte granules, aligned (`dsp.rs:27, 260-285, 474`) | `dsp_area_bytes`: DT2 524288, DN2 327680 (`digitakt-ii.toml:94`, `digitone-ii.toml:88`) |

@@ -172,7 +172,7 @@ span_clock_hz = 132000000
 modules = 8
 machine_rows = 8
 arena_bytes = 524288
-stage_bytes = 65536
+stage_bytes = 131072
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)
 send_slots = 2 # of them effects that run on a send bus (core/fx send route, the send page of the FX key: one knob each; at most the entries of [fx] send_indices)
 param_rows = 16

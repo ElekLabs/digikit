@@ -19,7 +19,7 @@ The in-memory DSP representation and ownership are a separate contract.
 
 **[D]** `modules/core/runtime/src/rs/src/store.rs:102` stages a whole file and rejects files
 larger than `STAGE_BYTES`; `read_file` additionally rejects a file exceeding the caller's capacity.
-The DN2 device profile sets staging to 64 KiB total file size, including its in-file header/trailer
+The DN2 device profile sets staging to 128 KiB total file size, including its in-file header/trailer
 (not the separate store metadata). The public `store_read` therefore cannot read an
 arbitrarily long sample in chunks. A range reader is needed for larger resident samples as well as streaming.
 
