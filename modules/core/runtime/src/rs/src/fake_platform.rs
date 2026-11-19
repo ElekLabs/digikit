@@ -195,6 +195,9 @@ impl Platform for FakePlatform {
         self.calls.borrow_mut().push(Call::Word { addr, value });
         self.put_code(addr, &value.to_be_bytes());
     }
+    fn card_sectors(&self) -> u32 {
+        self.card_sectors.get()
+    }
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32 {
         self.reads.borrow_mut().push((sector, bytes));
         let n = bytes / 512;
@@ -334,6 +337,7 @@ fn card_reset() {
         checked: 0,
         claims: 0,
         writes: 0,
+        sectors: 0,
     };
     TEST_LAYOUT.with(|c| c.set(Some(L)));
 }

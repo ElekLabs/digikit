@@ -269,7 +269,7 @@ typedef struct DkrtDevice {
 /* dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
 typedef struct DkrtHealth {
     uint32_t magic;                              /* HEALTH_MAGIC */
-    uint32_t version;                            /* 3 */
+    uint32_t version;                            /* 4 */
     uint32_t flags;                              /* HEALTH_* */
     uint32_t blocks;                             /* DSP blocks seen since boot (1500 per second) */
     uint32_t windows;                            /* windows (one second each) closed */
@@ -295,6 +295,8 @@ typedef struct DkrtHealth {
     uint32_t store_total;                        /* the module store (HEALTH_STORE), in KiB: the store may use in all (header, tables and files) */
     uint32_t store_used;                         /* KiB the current header says are used */
     uint32_t store_free;                         /* KiB a new file may still take in all (the room for the table's next entry kept back; not one contiguous piece) */
+    uint32_t card_sectors;                       /* the card's capacity in 512-byte sectors as the firmware's eMMC driver reports it; 0xFFFFFFFF while the driver is not ready */
+    uint32_t card_state;                         /* the card check's state (DKRT_CARD.state): 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small */
 } DkrtHealth;
 
 /* A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes. */
@@ -478,7 +480,7 @@ _Static_assert(offsetof(DkrtDevice, keep_bytes) == 44, "DkrtDevice.keep_bytes");
 _Static_assert(offsetof(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevice.dsp_block_cycles");
 _Static_assert(offsetof(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
 _Static_assert(offsetof(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
-_Static_assert(sizeof(DkrtHealth) == 108, "DkrtHealth size");
+_Static_assert(sizeof(DkrtHealth) == 116, "DkrtHealth size");
 _Static_assert(offsetof(DkrtHealth, magic) == 0, "DkrtHealth.magic");
 _Static_assert(offsetof(DkrtHealth, version) == 4, "DkrtHealth.version");
 _Static_assert(offsetof(DkrtHealth, flags) == 8, "DkrtHealth.flags");
@@ -506,6 +508,8 @@ _Static_assert(offsetof(DkrtHealth, dsp_area_largest) == 92, "DkrtHealth.dsp_are
 _Static_assert(offsetof(DkrtHealth, store_total) == 96, "DkrtHealth.store_total");
 _Static_assert(offsetof(DkrtHealth, store_used) == 100, "DkrtHealth.store_used");
 _Static_assert(offsetof(DkrtHealth, store_free) == 104, "DkrtHealth.store_free");
+_Static_assert(offsetof(DkrtHealth, card_sectors) == 108, "DkrtHealth.card_sectors");
+_Static_assert(offsetof(DkrtHealth, card_state) == 112, "DkrtHealth.card_state");
 _Static_assert(sizeof(DkrtStoreEntry) == 72, "DkrtStoreEntry size");
 _Static_assert(offsetof(DkrtStoreEntry, path) == 0, "DkrtStoreEntry.path");
 _Static_assert(offsetof(DkrtStoreEntry, first) == 64, "DkrtStoreEntry.first");

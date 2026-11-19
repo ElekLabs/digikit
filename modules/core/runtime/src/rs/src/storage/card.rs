@@ -38,6 +38,8 @@ pub struct CardInfo {
     pub checked: u32,
     pub claims: u32,
     pub writes: u32,
+    /// The card's capacity in sectors as the driver reported it at the check (0xFFFFFFFF: not ready then; 0: not asked).
+    pub sectors: u32,
 }
 
 #[no_mangle]
@@ -51,6 +53,7 @@ pub static mut DKRT_CARD: CardInfo = CardInfo {
     checked: 0,
     claims: 0,
     writes: 0,
+    sectors: 0,
 };
 
 #[repr(C, align(16))]
@@ -176,6 +179,7 @@ pub unsafe fn check_with<P: Platform>(p: &P) {
         c.state = CARD_TOO_SMALL;
         return;
     }
+    c.sectors = p.card_sectors();
     let l = lay();
     // the card must reach the end of the area: the firmware's block read refuses a start at or past the card's capacity
     if p.block_read(l.first + l.sectors - 1, 512, stage()) != 0 {

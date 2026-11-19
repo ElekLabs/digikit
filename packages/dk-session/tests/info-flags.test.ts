@@ -5,14 +5,18 @@ import { DkSession, decode8in7, encode8in7 } from '../src/index.ts';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
 
-function info(flags: number): Uint8Array {
-  const b = new Uint8Array(41);
+function info(flags: number, card?: [number, number]): Uint8Array {
+  const b = new Uint8Array(card ? 53 : 41);
   const v = new DataView(b.buffer);
   v.setUint16(0, 1);
   v.setUint16(2, 4);
   b.set(new TextEncoder().encode('dn2'), 4);
   b[16] = flags;
   v.setUint32(25, 0x000500);
+  if (card) {
+    v.setUint32(45, card[0]);
+    v.setUint32(49, card[1]);
+  }
   return b;
 }
 
@@ -37,7 +41,8 @@ class InfoDevice {
   }
 }
 
-const read = (flags: number) => new DkSession(new InfoDevice(info(flags)), { timeoutMs: 200, retries: 0 }).info();
+const read = (flags: number, card?: [number, number]) =>
+  new DkSession(new InfoDevice(info(flags, card)), { timeoutMs: 200, retries: 0 }).info();
 
 test('each bit of the INFO flags byte is its own field', async () => {
   const names = ['safe_mode', 'upload_open', 'card_read_only', 'log_sink', 'fault_found'] as const;
@@ -50,4 +55,13 @@ test('each bit of the INFO flags byte is its own field', async () => {
     names.map((n) => none[n]),
     [false, false, false, false, false],
   );
+});
+
+test('INFO appends the card capacity and state; an older runtime reports null', async () => {
+  const i = await read(0, [0x748000, 5]);
+  assert.equal(i.card_sectors, 0x748000);
+  assert.equal(i.card_state, 5);
+  const old = await read(0);
+  assert.equal(old.card_sectors, null);
+  assert.equal(old.card_state, null);
 });

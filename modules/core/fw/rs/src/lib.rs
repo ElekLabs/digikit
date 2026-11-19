@@ -743,6 +743,12 @@ pub mod storage {
     }
 
     unsafe extern "C" {
+        /// The eMMC driver's capacity getter (20 bytes): the card's capacity in 512-byte sectors, 0xFFFFFFFF while the driver is not ready (DT2 1.17 FUN_4012ddd6, DN2 1.12 0x4012c49a, Syntakt 1.42 0x4010f232; one hash on all three). The firmware's block read refuses a start at or past it.
+        #[link_name = "cf.storage.fn.capacity"]
+        pub fn capacity() -> u32;
+    }
+
+    unsafe extern "C" {
         /// DT2 1.17 locked stored metadata getter: 0 success/-1 failure, output unchanged on failure. Four words: id, stored odd hash, physical byte size, node word. No hash recomputation or source lease (finding 93).
         #[link_name = "cf.storage.fn.directory.metadata"]
         pub fn directory_metadata(entry_id: u32, output: *mut u32) -> i32;

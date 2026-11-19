@@ -972,21 +972,24 @@ static void fill_health(dk_ui_menu *m, void *ctx)
     else
         t_s(&t, "--");
     hrow(m, &t);
-    t_init(&t);
-    /* of an assumed 1 GHz block (finding 100) */
-    t_s(&t, "DSP 1GHZ ");
-    if (h->flags & DKRT_HEALTH_DSP)
-        pct_text(&t, h->dsp_avg_x10);
-    else
-        t_s(&t, "--");
-    hrow(m, &t);
-    t_init(&t);
-    t_s(&t, "DSP MAX ");
-    if (h->flags & DKRT_HEALTH_DSP)
-        pct_text(&t, h->dsp_max_x10);
-    else
-        t_s(&t, "--");
-    hrow(m, &t);
+    /* the DSP rows: only on a device with a DSP (DKRT_HEALTH_NO_DSP is the device file's capability) */
+    if (!(h->flags & DKRT_HEALTH_NO_DSP)) {
+        t_init(&t);
+        /* the DSP block handler's share of one audio block, taking a 1 GHz DSP clock (finding 100) */
+        t_s(&t, "DSP LOAD ");
+        if (h->flags & DKRT_HEALTH_DSP)
+            pct_text(&t, h->dsp_avg_x10);
+        else
+            t_s(&t, "--");
+        hrow(m, &t);
+        t_init(&t);
+        t_s(&t, "DSP MAX ");
+        if (h->flags & DKRT_HEALTH_DSP)
+            pct_text(&t, h->dsp_max_x10);
+        else
+            t_s(&t, "--");
+        hrow(m, &t);
+    }
     t_init(&t);
     t_s(&t, "RAM FREE ");
     if (h->flags & DKRT_HEALTH_HEAP) {
@@ -1015,19 +1018,34 @@ static void fill_health(dk_ui_menu *m, void *ctx)
         size_text(&t, h->arena_largest);
         hrow(m, &t);
     }
-    t_init(&t);
-    t_s(&t, "DSP FREE ");
-    if (h->dsp_area_total != 0)
-        size_text(&t, h->dsp_area_free);
-    else
-        t_s(&t, "--");
-    hrow(m, &t);
-    if (h->dsp_area_total != 0 && h->dsp_area_largest < h->dsp_area_free) {
+    if (!(h->flags & DKRT_HEALTH_NO_DSP)) {
         t_init(&t);
-        t_s(&t, "DSP BIG ");
-        size_text(&t, h->dsp_area_largest);
+        t_s(&t, "DSP FREE ");
+        if (h->dsp_area_total != 0)
+            size_text(&t, h->dsp_area_free);
+        else
+            t_s(&t, "--");
         hrow(m, &t);
+        if (h->dsp_area_total != 0 && h->dsp_area_largest < h->dsp_area_free) {
+            t_init(&t);
+            t_s(&t, "DSP BIG ");
+            size_text(&t, h->dsp_area_largest);
+            hrow(m, &t);
+        }
     }
+    /* the card: the capacity the firmware's driver reports, in GB of 10^9 bytes with one decimal (sectors * 512 / 10^8 tenths, within 0.001 %) */
+    t_init(&t);
+    t_s(&t, "CARD ");
+    if (h->card_sectors == 0xffffffffu || h->card_sectors == 0) {
+        t_s(&t, "--");
+    } else {
+        uint32_t tenths = h->card_sectors / 195312u;
+        t_num(&t, tenths / 10);
+        t_c(&t, '.');
+        t_num(&t, tenths % 10);
+        t_s(&t, " GB");
+    }
+    hrow(m, &t);
     t_init(&t);
     t_s(&t, "STORE USED ");
     if (h->flags & DKRT_HEALTH_STORE)

@@ -605,6 +605,10 @@ export interface DkInfoFull extends DkInfo {
   log_sink: boolean;
   /** INFO flags bit 4: the runtime found a fault record from an earlier run (`crate::fault::seen`). Reading it does not send the FAULT command. */
   fault_found: boolean;
+  /** The card's capacity in 512-byte sectors as the firmware's driver reports it (0xFFFFFFFF: the driver is not ready), or null when the runtime does not report it. */
+  card_sectors: number | null;
+  /** The card check's state: 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small; null when the runtime does not report it. */
+  card_state: number | null;
   /** The id of the flashed image as 16 hex digits (runtime 0.5.2 and later; patchkit stamps it), or null when the reply has none. */
   image_id: string | null;
   /** The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), or null when the runtime does not report it. */
@@ -1140,6 +1144,8 @@ export class DkSession {
     let imageId: string | null = null;
     let svcAbi: number | null = null;
     let fwId: string | null = null;
+    let cardSectors: number | null = null;
+    let cardState: number | null = null;
     if (b.length >= at + 9 + 8 + 8) {
       runtime = u32(b, at + 9 + 8);
       caps = u32(b, at + 9 + 12);
@@ -1151,8 +1157,16 @@ export class DkSession {
       if (caps !== null && ((caps >>> GCAP.SVC_ABI) & 1) === 1 && b.length >= at + 9 + 24 + 4)
         svcAbi = u32(b, at + 9 + 24);
       // then the firmware identity (8 bytes), when the capability FW_ID is set
-      if (svcAbi !== null && caps !== null && ((caps >>> GCAP.FW_ID) & 1) === 1 && b.length >= at + 9 + 28 + 8)
-        fwId = Array.from(b.subarray(at + 9 + 28, at + 9 + 36), (x) => x.toString(16).padStart(2, '0')).join('');
+      let o = at + 9 + 28;
+      if (svcAbi !== null && caps !== null && ((caps >>> GCAP.FW_ID) & 1) === 1 && b.length >= o + 8) {
+        fwId = Array.from(b.subarray(o, o + 8), (x) => x.toString(16).padStart(2, '0')).join('');
+        o += 8;
+      }
+      // then the card's capacity in sectors and the card check's state (4 bytes each)
+      if (svcAbi !== null && b.length >= o + 8) {
+        cardSectors = u32(b, o);
+        cardState = u32(b, o + 4);
+      }
     }
     return {
       protocol,
@@ -1162,6 +1176,8 @@ export class DkSession {
       image_id: imageId,
       svc_abi: svcAbi,
       fw_id: fwId,
+      card_sectors: cardSectors,
+      card_state: cardState,
       port,
       free_bytes: free,
       max_chunk: maxChunk,

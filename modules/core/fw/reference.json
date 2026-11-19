@@ -13512,6 +13512,67 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c1ba",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c49a",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012ddd6",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f232",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_storage_capacity",
+        "rust": "dkfw::storage::capacity"
+      },
+      "cpu": "cf",
+      "doc": "The eMMC driver's capacity getter (20 bytes): the card's capacity in 512-byte sectors, 0xFFFFFFFF while the driver is not ready (DT2 1.17 FUN_4012ddd6, DN2 1.12 0x4012c49a, Syntakt 1.42 0x4010f232; one hash on all three). The firmware's block read refuses a start at or past it.",
+      "file": "devices/fw/storage.toml",
+      "kind": "fn",
+      "mark": "O",
+      "name": "cf.storage.fn.capacity",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 ()",
+      "subsystem": "storage",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4015aec2",
@@ -23126,7 +23187,7 @@
       "name": "samples"
     },
     {
-      "count": 48,
+      "count": 49,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",

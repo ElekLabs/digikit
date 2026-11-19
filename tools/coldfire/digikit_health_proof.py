@@ -46,9 +46,18 @@ CMD_HEALTH = 6
 HEALTH_FIELDS = [
     "magic", "version", "flags", "blocks", "windows", "cpu_x10", "idle_win", "idle_ref", "dsp_avg", "dsp_max", "dsp_period",
     "dsp_avg_x10", "dsp_max_x10", "heap_total", "heap_free", "heap_largest", "heap_allocs", "heap_free_blocks", "arena_total",
-    "arena_free", "arena_largest", "dsp_area_total", "dsp_area_free", "dsp_area_largest", "store_total", "store_used", "store_free",
+    "arena_free", "arena_largest", "dsp_area_total", "dsp_area_free", "dsp_area_largest", "store_total", "store_used", "store_free", "card_sectors", "card_state",
 ]  # fmt: skip
-F_MODULE, F_CPU, F_DSP, F_HEAP, F_CUT, F_BAD, F_STORE = 1, 2, 4, 8, 16, 32, 64
+F_MODULE, F_CPU, F_DSP, F_HEAP, F_CUT, F_BAD, F_STORE, F_NO_DSP = (
+    1,
+    2,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128,
+)
 HS_FIELDS = [
     "blocks",
     "pos",
@@ -93,8 +102,9 @@ def expected_lines(h: dict) -> list[str]:
     """What the page must say for the figures `h`: this file's own formatting, not the menu's."""
     f = h["flags"]
     out = ["CPU REL " + (pct(h["cpu_x10"]) if f & F_CPU else "--")]
-    out.append("DSP 1GHZ " + (pct(h["dsp_avg_x10"]) if f & F_DSP else "--"))
-    out.append("DSP MAX " + (pct(h["dsp_max_x10"]) if f & F_DSP else "--"))
+    if not f & F_NO_DSP:
+        out.append("DSP LOAD " + (pct(h["dsp_avg_x10"]) if f & F_DSP else "--"))
+        out.append("DSP MAX " + (pct(h["dsp_max_x10"]) if f & F_DSP else "--"))
     out.append(
         "RAM FREE "
         + (
@@ -107,11 +117,19 @@ def expected_lines(h: dict) -> list[str]:
     out.append("CPU FREE " + size_text(h["arena_free"]))
     if h["arena_largest"] + ARENA_HDR < h["arena_free"]:
         out.append("CPU BIG " + size_text(h["arena_largest"]))
-    out.append(
-        "DSP FREE " + (size_text(h["dsp_area_free"]) if h["dsp_area_total"] else "--")
-    )
-    if h["dsp_area_total"] and h["dsp_area_largest"] < h["dsp_area_free"]:
-        out.append("DSP BIG " + size_text(h["dsp_area_largest"]))
+    if not f & F_NO_DSP:
+        out.append(
+            "DSP FREE "
+            + (size_text(h["dsp_area_free"]) if h["dsp_area_total"] else "--")
+        )
+        if h["dsp_area_total"] and h["dsp_area_largest"] < h["dsp_area_free"]:
+            out.append("DSP BIG " + size_text(h["dsp_area_largest"]))
+    sectors = h["card_sectors"]
+    if sectors in (0, 0xFFFFFFFF):
+        out.append("CARD --")
+    else:
+        tenths = sectors // 195312
+        out.append(f"CARD {tenths // 10}.{tenths % 10} GB")
     out.append("STORE USED " + (size_text_kb(h["store_used"]) if f & F_STORE else "--"))
     out.append("STORE FREE " + (size_text_kb(h["store_free"]) if f & F_STORE else "--"))
     return out

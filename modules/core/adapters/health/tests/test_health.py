@@ -81,12 +81,13 @@ def test_formatting_helpers():
     h = dict.fromkeys(hp.HEALTH_FIELDS, 0)
     assert hp.expected_lines(h) == [
         "CPU REL --",
-        "DSP 1GHZ --",
+        "DSP LOAD --",
         "DSP MAX --",
         "RAM FREE --",
         "LARGEST --",
         "CPU FREE 0 KB",
         "DSP FREE --",
+        "CARD --",
         "STORE USED --",
         "STORE FREE --",
     ]
@@ -107,16 +108,29 @@ def test_formatting_helpers():
     }
     assert hp.expected_lines(h) == [
         "CPU REL 37%",
-        "DSP 1GHZ 52%",
+        "DSP LOAD 52%",
         "DSP MAX 61%",
         "RAM FREE 12.3 MB",
         "LARGEST 4.1 MB",
         "CPU FREE 511 KB",
         "DSP FREE 508 KB",
         "DSP BIG 400 KB",
+        "CARD --",
         "STORE USED 2 KB",
         "STORE FREE 11.9 MB",
     ]
+    # a device without a DSP shows no DSP rows; the card shows its capacity in GB (the driver's sectors)
+    nodsp = h | {"flags": h["flags"] | hp.F_NO_DSP, "card_sectors": 0x748000}
+    assert hp.expected_lines(nodsp) == [
+        "CPU REL 37%",
+        "RAM FREE 12.3 MB",
+        "LARGEST 4.1 MB",
+        "CPU FREE 511 KB",
+        "CARD 3.9 GB",
+        "STORE USED 2 KB",
+        "STORE FREE 11.9 MB",
+    ]
+    assert hp.expected_lines(h | {"card_sectors": 0xFFFFFFFF})[-3] == "CARD --"
 
 
 def test_largest_rows_only_when_they_differ():

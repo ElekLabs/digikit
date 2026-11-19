@@ -64,6 +64,7 @@ impl Fixture {
             checked: 0,
             claims: 0,
             writes: 0,
+            sectors: 0,
         };
         TEST_LAYOUT.with(|c| c.set(Some(L)));
         crate::store::test_forget_checked();
