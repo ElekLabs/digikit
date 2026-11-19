@@ -33,7 +33,7 @@ import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
 import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
-import { moduleArtifact } from './install.ts';
+import { moduleArtifact, moduleStorePath } from './install.ts';
 import { neededServices, portFile, requireCoupledForServices, servicePath } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
@@ -133,7 +133,7 @@ export interface CardRig {
   readonly overlays: readonly string[];
   /** The protocol session of the last `pausedBoot`. */
   readonly dk: DkSession;
-  /** A module for a card: store path `modules/<as>.dkm` (default the last part of `id`) and its prepared .dkm. */
+  /** A module for a card: store path `modules/<kind>/<as>.dkm` (default `modules/<kind>/<author>-<name>.dkm`, `moduleStorePath`) and its prepared .dkm. */
   mod(id: string, as?: string): { name: string; file: string };
   /** A file below `cfg/` for a card (the fault and crash modules read their delay from it). */
   cfg(name: string, bytes: Uint8Array): { name: string; file: string };
@@ -252,7 +252,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     return file;
   };
   const mod = (id: string, as?: string) => ({
-    name: `modules/${as ?? id.split('/').at(-1)}.dkm`,
+    name: moduleStorePath(device, id, as),
     file: moduleArtifact(device, id),
   });
   /**

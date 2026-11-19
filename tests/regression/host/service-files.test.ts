@@ -80,7 +80,7 @@ test('install puts the port file and the packed service on the card before the s
   const effect = write('gain.dkm');
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }], { device: 'dt2' });
   expect(order).toEqual([
-    'put modules/dyn-fx-gain.dkm',
+    'put modules/tool/test-dyn-fx-gain.dkm',
     'put ports/dt2-1.17.dkport',
     'put services/fx.dks',
     'select',
@@ -93,7 +93,7 @@ test('install puts the port file and the packed service on the card before the s
   // without a device the module goes alone (a test that installs by hand)
   order.length = 0;
   await installModules(dk, [{ id: 'test/dyn-fx-gain', artifact: effect }]);
-  expect(order).toEqual(['put modules/dyn-fx-gain.dkm', 'select', 'restart', 'boot']);
+  expect(order).toEqual(['put modules/tool/test-dyn-fx-gain.dkm', 'select', 'restart', 'boot']);
 });
 
 test('a missing port file is an error naming the Nx target', () => {

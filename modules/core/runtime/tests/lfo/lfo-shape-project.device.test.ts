@@ -87,7 +87,7 @@ cardRigs(
       rig.closed();
 
       // RAMP is gone, STEP stays: the service runs (STEP needs it) and number 7 is a gap below the highest number 8
-      await h.usb(rt, (dk) => dk.select([storePath(SHAPE_B)]));
+      await h.usb(rt, (dk) => dk.select([storePath(h.device, SHAPE_B)]));
       const rt2 = await h.restart(rt);
       expect((await h.usb(rt2, (dk) => dk.modules())).map((m) => m.name), 'only STEP is loaded').toEqual([SHAPE_B]);
       expect((await shapeWords(h, rt2)).map((w) => w & 0xff), 'STEP keeps number 8').toContain(FIRST_SHAPE + 1);

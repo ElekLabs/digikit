@@ -12,7 +12,7 @@ export { pcmPinFile } from '@digi/sharc-rig-kit/pins';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { readLoadTable, resolveAddresses } from '@digi/regression/runtime/addrmap.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { moduleArtifact, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { moduleResultsNote } from '@digi/regression/runtime/runtime-menu.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import {
@@ -118,7 +118,7 @@ export function defineEquiv(scenarios: Equiv[]): void {
           symbols: [...SYMBOLS, 'voices.rows', 'dyndsp_info'],
           initial: () => ({
             modules: sc.modules,
-            selection: sc.modules.map((id) => `modules/${id.split('/').at(-1)}.dkm`),
+            selection: sc.modules.map((id) => moduleStorePath(device, id)),
           }),
         });
         /** Machine 1 of the track: DT2 reads the type; DN2 uses the list position (finding 33), the sound proves the type. */

@@ -141,6 +141,7 @@ export const isDebugMissing = (e: unknown): boolean => e instanceof DkError && e
 const KINDS: Record<LibraryModule['group'], OwnerKind> = {
   Machines: 'machine',
   Effects: 'effect',
+  Filters: 'tool',
   'LFO shapes': 'tool',
   Tools: 'tool',
   Services: 'tool',

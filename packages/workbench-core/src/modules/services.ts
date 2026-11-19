@@ -270,7 +270,7 @@ export function resolveServices(
     }
     const union = new Set([...chosen, ...r]);
     // the port file takes a provider slot when a service needs it
-    const direct = portDirect || m.needs.some((n) => n.hard && n.hash32 === PORT_HASH);
+    const direct: boolean = portDirect || m.needs.some((n) => n.hard && n.hash32 === PORT_HASH);
     const needsPort = (files: Iterable<ServiceFile>) =>
       direct || [...files].some((s) => s.needs.some((n) => n.hard && n.hash32 === PORT_HASH));
     if (union.size + (needsPort(union) ? 1 : 0) > PROVIDER_MAX) {

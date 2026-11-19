@@ -247,7 +247,7 @@ export function createTransferBackend({
     },
     /**
      * The Flash job's share, once the flashed runtime answers (it may still be booting: asked again for about a minute): the services the modules on
-     * the card need are bound again and replaced, the unused ones deleted (`refreshServices`). Nothing happens without services in the library.
+     * the card need are replaced, the unused ones deleted (`refreshServices`). Nothing happens without services in the library.
      */
     async refreshServices(device: string, onEvent: (e: TransferEvent) => void): Promise<string[]> {
       const deps = await installDeps(device);

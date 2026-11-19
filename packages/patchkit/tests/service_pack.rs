@@ -291,7 +291,7 @@ fn fx_packs_to_a_dks_that_owns_effect_and_takes_nine_hooks_by_entry() {
         len: dkneeds::LEN_EFFECT,
         entry: dkm.init.unwrap(),
     }]));
-    // the nine hooks of the effect pages, each by the offset of its entry in the image (a service with hooks is bound to the firmware before it is loaded)
+    // the nine hooks of the effect pages, each by the offset of its entry in the image (the port file of the firmware lists the sites before the service is loaded)
     let hooks: Vec<_> = k.hooks().collect();
     assert_eq!(hooks.len(), 9);
     for name in [

@@ -96,7 +96,7 @@ struct Hook {
     #[serde(default)]
     stock: bool,
     /// The places a raw hook may leave the site besides its end (`dk_exit_<hook>_<n>` of a service, `n` from 1): each is an expression like the ones of a module manifest,
-    /// an anchor name with an optional offset (`"cf.machine.site.clone.5 + 12"`), evaluated on the port of the firmware that is bound.
+    /// an anchor name with an optional offset (`"cf.machine.site.clone.5 + 12"`), evaluated on the port of the firmware of the port file.
     #[serde(default)]
     exits: Vec<String>,
     #[serde(default)]

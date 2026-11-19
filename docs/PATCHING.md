@@ -454,12 +454,9 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 - **Raw hooks and their tails.** A hook with no `handler` in `devices/fw/` is a raw hook: its entry takes the whole control
   flow of the site (mode `replace`), so the entry itself is the target of the jump that the runtime writes
   `jmp entry` at the site. When the entry falls through to the displaced stock instructions, the hook declares the exit
-  `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`
-  (`bind::tail_import`), which `patchkit pack` keeps as an import. `bind` appends the tail, the displaced instructions of the
-  site as in the user's firmware (PC-relative forms are refused as for a `before` hook) followed by `jmp.l` to site + length,
-  turns each reference into a base-relative relocation to it and drops the import. The `BIND` item carries the stock bytes of
-  the site as for any hook, so the runtime refuses a firmware that differs with E_HOOK_STOCK before it installs anything. An
-  unbound `.dks` has no firmware bytes.
+  `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`, which `patchkit pack` keeps as an import. The runtime resolves it at load to the copy of the
+  displaced instructions of the site that the port file holds in its bss (followed by a jump to site + length); the port file lists the site with its stock bytes check value, so the loader refuses a
+  firmware that differs with E_HOOK_STOCK before it installs anything. A `.dks` has no firmware bytes.
 - **Firmware references.** A service names firmware in five ways, all resolved at load by the runtime from the port file (`fwnames::FwRef`); `patchkit pack` makes the import names
   from the `[object.externs]` of the service module (`alias = "target"`) and renames the `cf.*` symbols a Rust service takes from the `dkfw` crate to `dk_fw_`.
   H is the 8 hex digits of `name_hash`.
@@ -476,11 +473,11 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   in the provider log). `patchkit apply` adds the info entry `fw_id`, and the loader refuses a port file for another firmware with E_HOOK_STOCK.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
-  the running device. The packer writes the device set of each hook into the unbound file: an item of `HOOKS` is `{name hash, word}`,
+  the running device. The packer writes the device set of each hook into the file: an item of `HOOKS` is `{name hash, word}`,
   and the top byte of the word is a device mask (bit `i` is device `i` of the device files in file-name order; 0: every device), the low
   24 bits the entry's image offset. The loader drops the mask (`HOOK_ENTRY_MASK`): the port file's `absent` flag says which hooks the firmware has, and a hook that the port
   file does not list at all refuses the service file (`E_IMPORT`).
-  A reader of an unbound file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
+  A reader of the file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
 - **Sections copied from the image.** `[[section]]` copies bytes of the user's image at patch time (a stock table),
   may append one row per registry entry, and places the result. This is how a framework extends a firmware table
   without storing it.

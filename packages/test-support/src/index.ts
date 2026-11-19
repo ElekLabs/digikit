@@ -3,6 +3,7 @@ export * from './emulator-config.ts';
 export * from './golden.ts';
 export * from './inputs.ts';
 export * from './keys.ts';
+export * from './module-path.ts';
 export * from './session.ts';
 export * from './emulated-clock.ts';
 export * from './input.ts';

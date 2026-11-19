@@ -239,7 +239,7 @@ export function createFirmwareState({
         detail: final.message,
       });
     else if (final.phase === 'failed') log({ level: 'error', text: `${what} failed: ${final.message}` });
-    // the flash is done: the services on the card are bound again for the new runtime and the unused ones go (the same code on the desktop and the site)
+    // the flash is done: the services and port files on the card are replaced for the new runtime and the unused ones go (the same code on the desktop and the site)
     if (final.phase === 'done' && !p.restore) {
       try {
         const replaced = await transfer.backend.refreshServices(p.device, () => {});

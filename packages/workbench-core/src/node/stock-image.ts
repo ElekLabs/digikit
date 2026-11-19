@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-/** The devices whose stock firmware the tools bind services to, and the analysis version of each (AGENTS.md: DT2 1.17, DN2 1.12). */
+/** The devices whose stock firmware the tools read, and the analysis version of each (AGENTS.md: DT2 1.17, DN2 1.12). */
 export type StockDevice = 'dt2' | 'dn2';
 
 export const STOCK_SYX: Record<StockDevice, string> = {

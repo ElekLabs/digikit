@@ -90,7 +90,7 @@ pub struct PlanInfo {
 const INFO_WORDS: usize = 16;
 
 /// The info table entry patchkit adds to every table it builds: the first 8 bytes of the SHA-256 of the stock `.syx` this image was made from (two words, a data
-/// entry). The loader compares it with the `FW` item of a bound service file.
+/// entry). The loader finds the port file whose `FW` item equals it.
 pub const FW_ID_ENTRY: &str = "fw_id";
 
 #[derive(Clone, Debug, Serialize)]
@@ -1314,7 +1314,7 @@ pub fn apply_with(
                 .map(move |i| (m, i))
         })
         .collect();
-    // the entries of the modules, and patchkit's own `fw_id` (the first 8 bytes of the stock image's SHA-256: a bound service file is checked against it) in every table that exists
+    // the entries of the modules, and patchkit's own `fw_id` (the first 8 bytes of the stock image's SHA-256: the port file of this firmware is found by it) in every table that exists
     let n_modules =
         slot_defs.iter().map(|(_, d)| d.len()).sum::<usize>() + dsp_slots.len() + info_defs.len();
     let n_info = n_modules + usize::from(n_modules > 0);

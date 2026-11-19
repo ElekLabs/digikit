@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
 import { poll } from '@digi/dk-session';
-import { repoRoot, type Device, type Session } from '@digi/test-support';
+import { moduleStorePathOf, repoRoot, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
@@ -19,6 +19,14 @@ export function moduleArtifact(device: Device, id: string): string {
   const artifact = fs.existsSync(`${leaf}.dkm`) || !fs.existsSync(`${leaf}.dks`) ? `${leaf}.dkm` : `${leaf}.dks`;
   if (!fs.existsSync(artifact)) throw new Error(`missing ${artifact}: run nx run ${id}:pack`);
   return artifact;
+}
+
+/**
+ * The store path of a prepared module: `modules/<kind>/<author>-<name>.dkm`, the one rule of Transfer (`modulePath`), the kind from the records of the packed file. `as` is the file name
+ * a test chooses (`modules/<kind>/<as>.dkm`).
+ */
+export function moduleStorePath(device: Device, id: string, as?: string): string {
+  return moduleStorePathOf(id, fs.readFileSync(moduleArtifact(device, id)), as);
 }
 
 /** The debug module: the log (LOG, PEEK, LOGCFG) exists only while it is loaded, so a test that reads the log selects it next to the module it tests. */
@@ -41,7 +49,7 @@ export async function installModules(
       const paths: string[] = [];
       for (const { id, artifact } of modules) {
         const bytes = fs.readFileSync(artifact);
-        const storePath = `modules/${id.split('/').at(-1)}.dkm`;
+        const storePath = moduleStorePathOf(id, bytes);
         await timePhase('module.upload', () => dk.put(storePath, bytes));
         expect(await dk.verifyFile(storePath, bytes), 'fresh card read matches prepared module bytes').toBe(true);
         paths.push(storePath);

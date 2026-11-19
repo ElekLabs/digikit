@@ -215,16 +215,16 @@ export const MODULE_ID_LIMIT = 31;
 /** The longest path of a selection entry: `SEL_PATH` is 56 bytes with the NUL (`gen_abi.rs`). */
 export const SELECTION_PATH_LIMIT = 55;
 
-/** The store path of a module: `modules/<kind>/<author>-<name>.dkm`, the file name the module id with "/" as "-". The kind is the group Transfer shows the module in (its records).
+/** The store path of a module: `modules/<kind>/<author>-<name>.dkm`, the file name the module id with "/" as "-". The kind is the group Transfer shows the module in (its records). A test may give its own `fileName`.
  * Throws a `request` error when the id is longer than 31 bytes or the path longer than 55 characters (a selection entry holds no more). */
-export function modulePath(id: string, group: Group = 'Tools'): string {
+export function modulePath(id: string, group: Group = 'Tools', fileName: string = id.replace(/\//g, '-')): string {
   const bytes = new TextEncoder().encode(id).length;
   if (bytes > MODULE_ID_LIMIT)
     throw new DkError({
       error: `the module id "${id}" is ${bytes} bytes; an id may have at most ${MODULE_ID_LIMIT}`,
       kind: 'request',
     });
-  const path = `modules/${KIND_FOLDER[group === 'Services' ? 'Tools' : group]}/${id.replace(/\//g, '-')}.dkm`;
+  const path = `modules/${KIND_FOLDER[group === 'Services' ? 'Tools' : group]}/${fileName}.dkm`;
   if (path.length > SELECTION_PATH_LIMIT)
     throw new DkError({
       error: `the store path ${path} is ${path.length} characters; a selection entry holds at most ${SELECTION_PATH_LIMIT}: shorten the module id`,

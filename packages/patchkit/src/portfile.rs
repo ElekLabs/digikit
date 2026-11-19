@@ -552,7 +552,7 @@ pub fn file_name(port: &Port) -> String {
     format!("{}.dkport", port.id())
 }
 
-/// The firmware references of an unbound service that the port file does not list (any device's port): the names `patchkit service-check` refuses.
+/// The firmware references of a service that the port file does not list (any device's port): the names `patchkit service-check` refuses.
 pub fn outside_set(dks: &Dkm, data: &PortData) -> Vec<String> {
     outside_imports(&dks.imports, data)
 }
