@@ -3,7 +3,9 @@
 
 use crate::boot::{info, INFO_MAGIC};
 use crate::dlog;
-use crate::selection::{current, update, Choice};
+use crate::card;
+use crate::selection::{current_with, update_with, Choice};
+use crate::PLATFORM;
 use core::ptr::addr_of;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
@@ -61,135 +63,223 @@ pub unsafe fn ui_pass() {
     let dead = elapsed == 0 && UI_PASSES >= DEAD_CLOCK_PASSES;
     if b.safe != 0 || elapsed >= period || dead {
         b.stable = 1;
-        // The record as the card holds it now, not the one this boot started from: the menu may have saved a selection since.
         // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
-        let floor = LATE_FLOOR;
         // With SAFE_READ the record is unknown: the counter stays as it is.
-        let cur = match current() {
-            Choice::Use { record, copy, .. } if b.reason != SAFE_READ => Some((record, copy)),
-            _ => None,
-        };
-        if let Some((mut r, copy)) = cur {
-            if r.boot_counter != floor {
-                r.boot_counter = floor;
-                update(r, copy, true);
-            }
-        }
+        let floor = LATE_FLOOR;
+        clear_counter_with(&PLATFORM, floor, b.reason == SAFE_READ);
         dlog::ev(logk::STABLE, dlog::INFO, [now, floor, 0, 0, 0]);
     }
 }
 
-/// The record with this boot counted, or `None` when the card is not one the runtime may write (no counter then). Every boot that is not
-/// safe counts, whether or not a selection exists: a fresh device has none, and the write creates the record (`update` with no valid copy).
-pub(crate) fn raised(r: &Record, writable: bool) -> Option<Record> {
-    if !writable {
-        return None;
+/// Count this boot: raise the boot counter in the selection record and write it before anything of a module runs. Every boot that is not safe
+/// counts, whether or not a selection exists: a fresh device has no record, and the write creates it (`update` with no valid copy: copy A, `seq` 1).
+/// On a card the runtime may not write (a foreign area, unreadable, too small, no store, or not checked yet and then refused) nothing is written and
+/// nothing counts. Returns the record this boot goes on with.
+pub(crate) unsafe fn count_boot_with<P: Platform>(p: &P, r: Record, copy: u32, valid: bool) -> Record {
+    if !card::writable() {
+        return r;
     }
-    let mut n = *r;
+    let mut n = r;
     n.boot_counter = n.boot_counter.wrapping_add(1);
-    Some(n)
+    update_with(p, n, copy, valid);
+    n
 }
 
-/// The counter after a boot that found the crash record of a session that had been stable: that boot had cleared its counter, so it is counted now.
-pub(crate) fn after_late_crash(counter: u32) -> u32 {
-    counter.wrapping_add(1)
+/// The counter of a boot that found the crash record of a session that had been stable: that boot had cleared its counter, so it is counted bad now.
+/// Returns the floor the next stable period leaves (`LATE_FLOOR`).
+pub(crate) fn count_late_crash(r: &mut Record) -> u32 {
+    r.boot_counter = r.boot_counter.wrapping_add(1);
+    1
+}
+
+/// The stable period is over (or the boot is safe): the counter in the record as the card holds it now goes back to `floor`. `unknown`: the record
+/// could not be read at the boot, the counter stays as it is.
+pub(crate) unsafe fn clear_counter_with<P: Platform>(p: &P, floor: u32, unknown: bool) {
+    // the record as the card holds it now, not the one this boot started from: the menu may have saved a selection since
+    let cur = match current_with(p) {
+        Choice::Use { record, copy, .. } if !unknown => Some((record, copy)),
+        _ => None,
+    };
+    if let Some((mut r, copy)) = cur {
+        if r.boot_counter != floor {
+            r.boot_counter = floor;
+            update_with(p, r, copy, true);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fake_platform::FakePlatform;
+    use crate::storage::layout::TEST_LAYOUT;
+    use crate::test_lock::LOCK;
+    use dkrt_abi::profiles;
+    use dkrt_sdk::store::Layout;
 
-    /// What the card holds and what the next boot reads: `None` is a fresh device (`Choice::Empty`).
-    struct Card {
-        rec: Option<Record>,
-        writable: bool,
+    const L: Layout = Layout { first: 1000, sectors: 4096 };
+    const FOREIGN: [u8; 512] = [0x55; 512];
+
+    /// A new boot: the runtime's RAM (the card state) starts again, the card stays.
+    fn new_boot() {
+        *card::info() = card::CardInfo {
+            state: CARD_UNKNOWN,
+            first_nonblank: u32::MAX,
+            hash: 0,
+            refused: 0,
+            refused_range: 0,
+            read_errors: 0,
+            checked: 0,
+            claims: 0,
+            writes: 0,
+        };
+        TEST_LAYOUT.with(|c| c.set(Some(L)));
     }
 
     /// How a boot ends.
-    #[derive(Clone, Copy, PartialEq, Debug)]
+    #[derive(Clone, Copy)]
     enum End {
-        /// Hangs or loses power before the stable period.
-        Hang,
-        /// A CPU crash before the stable period (the crash record is found at the next boot; its counter was not cleared, so no extra count).
-        Crash,
-        /// Runs through the stable period.
+        /// The session stops before the stable period (a hang, a power-off, a crash: the counter was raised at the start already).
+        Early,
+        /// The stable period passes.
         Stable,
     }
 
-    /// One boot over the same decisions as `dkrt_boot` and `ui_pass`; returns whether it was a safe boot.
-    fn boot(c: &mut Card, end: End) -> bool {
-        let mut r = c.rec.unwrap_or_else(Record::empty);
+    /// One boot over the runtime's own functions, in the order of `dkrt_boot` and `ui_pass`. `late_crash`: the boot finds the crash record of a
+    /// session that had been stable. Returns whether the boot was safe mode by counter.
+    unsafe fn boot(f: &FakePlatform, late_crash: bool, end: End) -> bool {
+        new_boot();
+        let (mut r, copy, valid) = match current_with(f) {
+            Choice::Use { record, copy, .. } => (record, copy, true),
+            _ => (Record::empty(), 0, false),
+        };
+        let floor = if late_crash { count_late_crash(&mut r) } else { 0 };
         if r.boot_counter >= SAFE_AFTER {
-            // a safe boot loads nothing and counts nothing; its UI loop clears the counter at once
-            if c.writable {
-                r.boot_counter = 0;
-                c.rec = Some(r);
-            }
+            // a safe boot loads nothing and counts nothing; its first UI-loop pass clears the counter
+            clear_counter_with(f, 0, false);
             return true;
         }
-        if let Some(n) = raised(&r, c.writable) {
-            c.rec = Some(n);
-        }
-        if end == End::Stable && c.writable {
-            let mut r = c.rec.unwrap();
-            r.boot_counter = 0;
-            c.rec = Some(r);
+        count_boot_with(f, r, copy, valid);
+        if let End::Stable = end {
+            clear_counter_with(f, floor, false);
         }
         false
     }
 
+    /// The record the card holds now.
+    unsafe fn held(f: &FakePlatform) -> Option<Record> {
+        new_boot();
+        match current_with(f) {
+            Choice::Use { record, .. } => Some(record),
+            _ => None,
+        }
+    }
+
+    fn fresh_card() -> FakePlatform {
+        FakePlatform::new(profiles::DT2)
+    }
+
+    fn written_sectors(f: &FakePlatform) -> Vec<u32> {
+        let mut v: Vec<u32> = f.writes.borrow().iter().map(|w| w.0).collect();
+        v.sort();
+        v.dedup();
+        v
+    }
+
     #[test]
     fn a_fresh_device_that_does_not_reach_the_stable_period_boots_safe_on_the_third_boot() {
-        for end in [End::Hang, End::Crash] {
-            let mut c = Card { rec: None, writable: true };
-            let safe: Vec<bool> = (0..3).map(|_| boot(&mut c, end)).collect();
-            assert_eq!(safe, [false, false, true], "{end:?}");
-            // the safe boot cleared the counter: the next boot tries the selection again
-            assert_eq!(c.rec.unwrap().boot_counter, 0);
-            assert!(!boot(&mut c, End::Stable));
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let f = fresh_card();
+            assert!(held(&f).is_none(), "a fresh card has no record");
+            assert!(!boot(&f, false, End::Early));
+            let r = held(&f).expect("the first counted boot created the record");
+            assert_eq!((r.seq, r.boot_counter, r.count), (1, 1, 0));
+            assert_eq!(written_sectors(&f), [L.sel_a()], "only a selection copy was written");
+            assert!(!boot(&f, false, End::Early));
+            assert_eq!(held(&f).unwrap().boot_counter, 2);
+            assert!(boot(&f, false, End::Early), "two bad boots: the third is safe");
+            let r = held(&f).unwrap();
+            assert_eq!(r.boot_counter, 0, "the safe boot cleared the counter");
+            assert_eq!(r.count, 0);
+            assert!(!boot(&f, false, End::Stable), "the boot after it tries the selection again");
         }
     }
 
     #[test]
-    fn a_stable_session_clears_the_counter_so_later_hangs_start_from_zero() {
-        let mut c = Card { rec: None, writable: true };
-        assert!(!boot(&mut c, End::Hang));
-        assert_eq!(c.rec.unwrap().boot_counter, 1);
-        assert!(!boot(&mut c, End::Stable));
-        assert_eq!(c.rec.unwrap().boot_counter, 0);
-        assert!(!boot(&mut c, End::Hang));
-        assert!(!boot(&mut c, End::Hang));
-        assert!(boot(&mut c, End::Hang));
-    }
-
-    #[test]
-    fn a_crash_after_the_stable_period_counts_one_bad_boot_once_the_next_boot_finds_it() {
-        // the crashed boot had cleared its counter (0): the next boot counts it (1) and its own start (2): two bad boots lead to safe mode
-        let after = after_late_crash(0);
-        assert_eq!(after, 1);
-        let r = Record::empty();
-        let mut r = r;
-        r.boot_counter = after;
-        assert_eq!(raised(&r, true).unwrap().boot_counter, 2);
-    }
-
-    #[test]
-    fn a_card_the_runtime_does_not_write_has_no_counter_and_no_safe_mode_by_it() {
-        // read-only, too small, or without a store: `writable()` is false; nothing is written and a hang loop never turns safe
-        let mut c = Card { rec: None, writable: false };
-        assert!(raised(&Record::empty(), false).is_none());
-        for _ in 0..10 {
-            assert!(!boot(&mut c, End::Hang));
+    fn a_stable_session_clears_the_counter_so_later_failures_count_from_zero() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let f = fresh_card();
+            let seen: Vec<bool> = [End::Early, End::Stable, End::Early, End::Early, End::Early]
+                .into_iter()
+                .map(|end| boot(&f, false, end))
+                .collect();
+            assert_eq!(seen, [false, false, false, false, true]);
         }
-        assert!(c.rec.is_none());
     }
 
     #[test]
-    fn an_existing_record_keeps_its_selection_and_counts_the_same_way() {
-        let mut r = Record::empty();
-        r.count = 2;
-        r.seq = 5;
-        let n = raised(&r, true).unwrap();
-        assert_eq!((n.count, n.seq, n.boot_counter), (2, 5, 1));
+    fn a_crash_after_the_stable_period_counts_once_and_two_in_a_row_lead_to_safe_mode() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let f = fresh_card();
+            assert!(!boot(&f, false, End::Stable), "a stable first session");
+            assert_eq!(held(&f).unwrap().boot_counter, 0);
+            // the session crashed after its stable period: the next boot counts it (1) and itself (2), and its own stable period leaves 1
+            assert!(!boot(&f, true, End::Stable));
+            assert_eq!(held(&f).unwrap().boot_counter, 1);
+            assert!(boot(&f, true, End::Stable), "a second such crash: the boot is safe");
+        }
+    }
+
+    #[test]
+    fn a_card_the_runtime_may_not_write_counts_nothing_and_never_loops_into_safe_mode() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let foreign = fresh_card();
+            foreign.put(L.first + 100, FOREIGN);
+            let small = fresh_card();
+            small.card_sectors.set(L.first + 10); // the card ends inside the store area: no store
+            for (name, f) in [("foreign bytes in the area", &foreign), ("a card too small for the store", &small)] {
+                for n in 0..6 {
+                    assert!(!boot(f, false, End::Early), "{name}: boot {n}");
+                }
+                assert!(f.writes.borrow().is_empty(), "{name}: nothing was written");
+                assert!(held(f).is_none(), "{name}: no record");
+            }
+        }
+    }
+
+    #[test]
+    fn an_existing_selection_keeps_its_paths_and_counts_into_the_copy_that_is_not_current() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let f = fresh_card();
+            let mut r = Record::empty();
+            r.seq = 5;
+            r.count = 1;
+            r.paths[0][..5].copy_from_slice(b"a.dkm");
+            let mut b = [0u8; 512];
+            dkrt_sdk::sel::encode(&r, &mut b);
+            f.put(L.sel_a(), b);
+            assert!(!boot(&f, false, End::Early));
+            let now = held(&f).unwrap();
+            assert_eq!((now.seq, now.boot_counter, now.count), (6, 1, 1));
+            assert_eq!(&now.paths[0][..5], b"a.dkm");
+            assert_eq!(written_sectors(&f), [L.sel_b()], "copy A stays valid while B is written");
+        }
+    }
+
+    #[test]
+    fn a_record_that_could_not_be_read_keeps_its_counter_at_the_stable_period() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let f = fresh_card();
+            assert!(!boot(&f, false, End::Early));
+            new_boot();
+            clear_counter_with(&f, 0, true);
+            assert_eq!(held(&f).unwrap().boot_counter, 1);
+        }
     }
 }
