@@ -6,7 +6,10 @@
 import { deviceNamesText, newestReleasesText, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 import { runtimeFaceplateIds } from '@digi/workbench-core/data/faceplates.ts';
 
-export const SITE_DEVICES: readonly string[] = ['dt2', 'dn2'];
+import { SITE_DEVICES as LIST } from '../data/site-devices.mjs';
+
+/** The devices the site offers (src/data/site-devices.mjs: the list the site build reads too). */
+export const SITE_DEVICES: readonly string[] = LIST;
 
 /** Does the site offer this device? (`FirmwareEnv.offersPatched` of the site.) */
 export const siteOffers = (device: string, offered: readonly string[] = SITE_DEVICES): boolean =>

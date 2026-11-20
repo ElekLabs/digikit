@@ -1,7 +1,13 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { panels, type Panel as PanelData } from '@digi/workbench-core/data/faceplates.ts';
-import { siteFaceplateIds } from '../firmware/site-policy';
-import { deviceProfiles, localReadyFirmwareSha256, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
+import { siteDeviceNamesText, siteFaceplateIds, siteOffers } from '../firmware/site-policy';
+
+import {
+  deviceNameOf,
+  deviceProfiles,
+  localReadyFirmwareSha256,
+  type DeviceId,
+} from '@digi/workbench-core/data/device-profiles.ts';
 import { browserRuntimeDeps } from '../runtime/browser-deps';
 import { browserRuntime, type EmulatorRuntime, type RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
 import { parseLeds } from '@digi/workbench-core/runtime/leds.ts';
@@ -16,6 +22,10 @@ import { devEnabled } from '../dev';
 import { identify } from '@digi/workbench-core/patch/identify.ts';
 import { handoffStore, takeHandoff } from '../patch/handoff';
 import './faceplate.css';
+
+/** What the emulator page says for a firmware of a device the site does not offer. */
+const unsupportedMessage = (name: string) =>
+  `${name} is not supported on this site yet. Choose the firmware of ${siteDeviceNamesText('or')}.`;
 
 function BenchStatus() {
   onMount(() => {
@@ -84,7 +94,7 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
       setLoaded(true);
       setPaused(false);
     }
-    if (Object.hasOwn(panels, s.device)) setDevice(s.device);
+    if (siteFaceplateIds().includes(s.device)) setDevice(s.device);
     setRunning({ device: s.device, version: s.version });
     const display =
       s.frame_revision === 0
@@ -140,6 +150,10 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
       if (firmwareFile !== file) return;
       setChosenFirmware({ name: file.name, bytes: bytes.slice() });
       const identity = identify(await sha256Hex(bytes));
+      if (identity && !siteOffers(identity.device)) {
+        setStatus(unsupportedMessage(deviceNameOf(identity.device)));
+        return;
+      }
       if (identity) setDevice(identity.device);
       const selected = await runtimeReady;
       if (firmwareFile !== file || !selected) return;
@@ -197,6 +211,10 @@ function Panel(props: { runtime?: EmulatorRuntime }) {
       .then((item) => {
         if (!item) {
           setStatus('Nothing to boot: open the patch page and press Boot in emulator.');
+          return;
+        }
+        if (item.device && !siteOffers(item.device)) {
+          setStatus(unsupportedMessage(deviceNameOf(item.device)));
           return;
         }
         if (item.device && Object.hasOwn(panels, item.device)) setDevice(item.device);

@@ -18,10 +18,12 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { SITE_DEVICES } from '../src/data/site-devices.mjs';
 import { loadDevices } from '@digi/devices/node';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const deviceIds = loadDevices().runtimeIds;
+// The devices the site ships modules for: the runtime devices that the site offers (src/data/site-devices.mjs). A module whose targets are all outside the list is not shipped or listed.
+const deviceIds = loadDevices().runtimeIds.filter((d) => SITE_DEVICES.includes(d));
 export const repoRoot = resolve(here, '../../..');
 
 const walk = (dir, name, out = []) => {
@@ -188,7 +190,7 @@ function packAll(root, ids, device, to) {
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
 export function shipModules(out, root = repoRoot) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
-  for (const sub of [...deviceIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
+  for (const sub of [...loadDevices().runtimeIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
   const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
     walk(join(root, 'modules', r), 'module.toml').sort(byParts),
