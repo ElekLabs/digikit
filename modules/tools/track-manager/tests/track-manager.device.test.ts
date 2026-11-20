@@ -1,7 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { emulatorRead, panelInput, pollUntil, readViewStack, repoRoot, viewStackFacts, type Device } from '@digi/test-support';
-import { parse } from 'smol-toml';
+import { emulatorRead, panelInput, pollUntil, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
@@ -21,39 +18,16 @@ const MODULE = 'digikit/track-manager';
 const DRAINED = { drained: true } as const;
 const WITHIN = { withinMs: 20_000, intervalMs: 100 } as const;
 const OVERLAY = 1;
-const ITEM_BYTES = 8; // shared_ptr<MenuItem> (core/ui rows_of)
-
-/** The offset of field `field` in the struct `struct` of devices/fw/menu.toml (as the ui-views fixture test reads it). */
-function fwField(struct: string, field: string): number {
-  const rules = parse(fs.readFileSync(path.join(repoRoot(), 'devices/fw/menu.toml'), 'utf8')) as {
-    struct: { name: string; fields: { name: string; off: number }[] }[];
-  };
-  const f = rules.struct.find((s) => s.name === struct)?.fields.find((x) => x.name === field);
-  if (!f) throw new Error(`devices/fw/menu.toml: no ${struct}.${field}`);
-  return f.off;
-}
 
 /** The view stack and the SETTINGS menu, read from guest memory. */
 function firmware(rt: TestRuntime, device: Device) {
   const facts = viewStackFacts(device);
   if (!facts) throw new Error(`${device} has no [ui] facts`);
   const read = emulatorRead(rt.session);
-  const word = async (addr: number) => {
-    const b = await read(addr, 4);
-    return new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(0);
-  };
-  const viewAt = fwField('cf.menu.struct.VerticalMenuView', 'view');
-  const itemsBegin = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_begin');
-  const itemsEnd = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_end');
   /** The top view of the stack: its object, class and opaque byte. */
   const top = async () => (await readViewStack(read, facts))[0];
   /** The items of the top view's menu (the top view must be SETTINGS). */
-  const topMenuItems = async () => {
-    const v = await top();
-    if (!v) throw new Error('the view stack is empty');
-    const menu = v.view - viewAt;
-    return ((await word(menu + itemsEnd)) - (await word(menu + itemsBegin))) / ITEM_BYTES;
-  };
+  const topMenuItems = () => readTopMenuItems(read, facts);
   return { top, topMenuItems };
 }
 

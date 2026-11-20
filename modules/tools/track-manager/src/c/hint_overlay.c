@@ -14,6 +14,7 @@
 static dk_ui *ui;
 static const track_names *names;
 static dk_ui_view *view;
+static uintptr_t serial; /* which opening `view` is: `closed` of an older view must not clear a newer handle */
 
 static void append(char *out, uint32_t *at, const char *text)
 {
@@ -25,7 +26,7 @@ static void append(char *out, uint32_t *at, const char *text)
 static void draw(void *arg, const dk_canvas *canvas)
 {
     (void)arg;
-    uint32_t track = active_track();
+    uint32_t track = active_track_or_first();
     const char *name = track_names_name_of(names, track);
     char number[3], label[LABEL_MAX];
     uint32_t at = 0;
@@ -48,8 +49,8 @@ static void draw(void *arg, const dk_canvas *canvas)
 
 static void closed(void *arg)
 {
-    (void)arg;
-    view = 0;
+    if ((uintptr_t)arg == serial)
+        view = 0;
 }
 
 void hint_overlay_init(dk_ui *ui_handle, const track_names *track_names_state)
@@ -62,9 +63,11 @@ void hint_overlay_init(dk_ui *ui_handle, const track_names *track_names_state)
 void hint_overlay_show(void *arg)
 {
     (void)arg;
-    if (view || !ui)
-        return;
-    const dk_ui_view_desc desc = {.flags = DK_UI_VIEW_OVERLAY, .draw = draw, .closed = closed};
+    if (view || !ui || active_track() < 0)
+        return; /* no project: there is no track to show */
+    serial++;
+    const dk_ui_view_desc desc = {
+        .flags = DK_UI_VIEW_OVERLAY, .draw = draw, .closed = closed, .arg = (void *)serial};
     view = dk_ui_view_open(ui, &desc);
 }
 

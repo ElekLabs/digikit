@@ -1727,8 +1727,8 @@ name = "SHORTCUT_INACTIVE"
 args = ["module", "key0", "key1", "-", "-"]
 
 # core/ui, module screens (docs/plans/track-manager.md): a module's full-screen view or overlay was pushed on the firmware's view stack (after the release of the key
-# that asked for it, when a key callback did), and when it left the stack. `owner` is the module's owner handle (module record index + 2: the handle value core/ui keeps;
-# 0xffffffff for a core module), `flags` the DK_UI_VIEW_* flags of the desc (1: overlay), `slot` the pool slot.
+# that asked for it, when a key callback did), and when it left the stack. `owner` is the module's core/ui handle (its record index + 1: what `dk_ui_open` returns;
+# a core module has no context, its handle is the token of `dk_ui_core_handle`), `flags` the DK_UI_VIEW_* flags of the desc (1: overlay), `slot` the pool slot.
 [[log.kind]]
 id = 54
 name = "VIEW_OPENED"

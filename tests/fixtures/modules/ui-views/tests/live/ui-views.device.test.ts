@@ -1,8 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { RANGES } from '@digi/dk-session/gen_proto';
-import { emulatorRead, readViewStack, repoRoot, viewStackFacts, type Device } from '@digi/test-support';
-import { parse } from 'smol-toml';
+import { emulatorRead, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { REDRAW } from '@digi/regression/runtime/fx-live.ts';
@@ -26,7 +23,7 @@ import { pollEmulated } from '@digi/regression/runtime/waits.ts';
  */
 const REPORT = 0x1b;
 /** The elements of a menu's item vector are `shared_ptr<MenuItem>`: two words (core/ui `rows_of`). */
-const ITEM_BYTES = 8;
+
 const MAX_STACK = 32;
 
 type Report = {
@@ -68,40 +65,18 @@ async function report(rt: TestRuntime): Promise<Report> {
 const until = (rt: TestRuntime, done: (r: Report) => boolean, message: string) =>
   pollEmulated(rt.session, () => report(rt), done, { emulatedMs: 20_000, message });
 
-/** The offset of field `field` in the struct `struct` of devices/fw/menu.toml. */
-function fwField(struct: string, field: string): number {
-  const rules = parse(fs.readFileSync(path.join(repoRoot(), 'devices/fw/menu.toml'), 'utf8')) as {
-    struct: { name: string; fields: { name: string; off: number }[] }[];
-  };
-  const f = rules.struct.find((s) => s.name === struct)?.fields.find((x) => x.name === field);
-  if (!f) throw new Error(`devices/fw/menu.toml: no ${struct}.${field}`);
-  return f.off;
-}
-
 /** The firmware's view stack and SETTINGS menu, read from guest memory. */
 function firmware(rt: TestRuntime) {
   const device = rt.session.options.device as Device;
   const facts = viewStackFacts(device);
   if (!facts) throw new Error(`${device} has no [ui] facts`);
   const read = emulatorRead(rt.session);
-  const word = async (addr: number) => {
-    const b = await read(addr, 4);
-    return new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(0);
-  };
-  const viewAt = fwField('cf.menu.struct.VerticalMenuView', 'view');
-  const itemsBegin = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_begin');
-  const itemsEnd = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_end');
   /** The View objects of the stack, the top one first (the one walker: `readViewStack` of test-support). */
   const views = async (): Promise<number[]> => (await readViewStack(read, facts, MAX_STACK)).map((v) => v.view);
   /** The vtable pointers of the stack, the top one first. */
   const vptrs = async () => (await readViewStack(read, facts, MAX_STACK)).map((v) => v.vptr);
   /** How many items the top view's menu has (the top view must be a menu: SETTINGS). */
-  const topMenuItems = async (): Promise<number> => {
-    const [top] = await views();
-    if (top === undefined) throw new Error('the view stack is empty');
-    const menu = top - viewAt;
-    return ((await word(menu + itemsEnd)) - (await word(menu + itemsBegin))) / ITEM_BYTES;
-  };
+  const topMenuItems = () => readTopMenuItems(read, facts);
   return { vptrs, topMenuItems };
 }
 

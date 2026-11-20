@@ -20,7 +20,6 @@
 #define BAR_OFFSET (TM_GLYPH_H + 1) /* from the top of the number to the bar under it */
 #define SELECTED_GAP 4
 #define KEYS_Y_FROM_BOTTOM (TM_GLYPH_H + 1)
-#define NAME_KEY "names"
 #define TITLE_MAX 24
 
 static dk_ui *ui;
@@ -35,7 +34,7 @@ static void save(void)
     uint8_t value[TRACK_NAMES_ENCODED_MAX];
     uint32_t len = track_names_encode(names, value, sizeof value);
     if (settings && len)
-        dk_settings_put(settings, NAME_KEY, value, len);
+        dk_settings_put(settings, TRACK_NAMES_KEY, value, len);
 }
 
 static void renamed(void *arg, const char *text)
@@ -150,7 +149,7 @@ void manager_screen_open(void *arg)
     if (view || !ui)
         return;
     grid_cursor_init(&cursor, names->count);
-    grid_cursor_jump(&cursor, active_track());
+    grid_cursor_jump(&cursor, active_track_or_first());
     const dk_ui_view_desc desc = {.draw = draw, .key = key, .closed = closed};
     view = dk_ui_view_open(ui, &desc);
 }

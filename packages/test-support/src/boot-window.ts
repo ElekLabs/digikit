@@ -240,6 +240,30 @@ export async function readViewStack(read: ReadMemory, facts: ViewStackFacts, max
   return out;
 }
 
+/** The size of one item of a stock menu's item vector: a shared_ptr<MenuItem>. */
+const MENU_ITEM_BYTES = 8;
+
+/** The offset of field `field` in the struct `struct` of devices/fw/menu.toml. */
+function menuField(struct: string, field: string): number {
+  const rules = parseToml(fs.readFileSync(path.join(repoRoot(), 'devices/fw/menu.toml'), 'utf8')) as {
+    struct: { name: string; fields: { name: string; off: number }[] }[];
+  };
+  const f = rules.struct.find((x) => x.name === struct)?.fields.find((x) => x.name === field);
+  if (!f) throw new Error(`devices/fw/menu.toml: no ${struct}.${field}`);
+  return f.off;
+}
+
+/** How many items the menu of the top view has (the item vector of the stock Menu object). The top view must be a stock menu, such as SETTINGS; throws on an empty stack. */
+export async function readTopMenuItems(read: ReadMemory, facts: ViewStackFacts): Promise<number> {
+  const [top] = await readViewStack(read, facts);
+  if (!top) throw new Error('the view stack is empty');
+  const word = async (addr: number) => u32At(await read(addr, 4));
+  const menu = top.view - menuField('cf.menu.struct.VerticalMenuView', 'view');
+  const begin = await word(menu + menuField('cf.menu.struct.CompactVerticalMenuView', 'items_begin'));
+  const end = await word(menu + menuField('cf.menu.struct.CompactVerticalMenuView', 'items_end'));
+  return (end - begin) / MENU_ITEM_BYTES;
+}
+
 /** Is the bottom view of the firmware's view stack the MainScreenView (the main screen is reached; overlays may sit above it)? undefined when a read fails: read again. */
 export async function readMainAtBottom(read: ReadMemory, facts: BootWindowFacts): Promise<boolean | undefined> {
   try {

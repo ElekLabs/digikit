@@ -7,6 +7,7 @@
 #define TRACK_NAME_MAX 15  /* characters of one name */
 #define TRACK_NAMES_CAP 32 /* tracks the table has room for */
 #define TRACK_NAMES_VERSION 1
+#define TRACK_NAMES_KEY "names" /* the settings key the saved value is kept under */
 #define TRACK_NAMES_ENCODED_MAX (2 + TRACK_NAMES_CAP * (1 + TRACK_NAME_MAX))
 
 typedef struct track_names {

@@ -1026,8 +1026,7 @@ int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms)
 }
 
 /* ---- module views, SETTINGS rows, text input ---------------------------------------------------------------------------
-   The logic is in settings_rows.c, view_pool.c, canvas_map.c and text_input.c (host-tested). This section is the glue to the firmware.
-   Parts marked [STUB] are not written yet: they wait for the byte-checked anchors (no devices/fw or ports rule exists for them). */
+   The logic is in settings_rows.c, view_pool.c, canvas_map.c and text_input.c (host-tested). This section is the glue to the firmware. */
 
 /* Called by the runtime (dkrt_unload_observer_add) with the owner id of a module that is unloaded, after its fini and before its memory is freed: the
    module's views, SETTINGS rows and timers go. The owner key is the handle value (owner id + 1). */

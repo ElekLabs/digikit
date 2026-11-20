@@ -10,7 +10,6 @@
 #include "manager_screen.h"
 #include "track_names.h"
 
-#define NAME_KEY "names"
 #define SETTINGS_ROW_TEXT "TRACK MANAGER"
 
 static track_names names;
@@ -21,7 +20,7 @@ static int32_t init(dk_module_ctx *ctx)
     track_names_init(&names, dk_device_track_count());
     if (dk_settings_open(ctx, &settings) == DK_OK) {
         uint8_t value[TRACK_NAMES_ENCODED_MAX];
-        int32_t len = dk_settings_get(settings, NAME_KEY, value, sizeof value);
+        int32_t len = dk_settings_get(settings, TRACK_NAMES_KEY, value, sizeof value);
         if (len >= 0)
             track_names_load(&names, value, (uint32_t)len);
     } else {

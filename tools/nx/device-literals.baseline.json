@@ -309,7 +309,6 @@
   "modules/core/services/machines/tests/records.rs": 3,
   "modules/core/services/samples/dks/module.toml": 2,
   "modules/core/services/samples/src/tracks.rs": 8,
-  "modules/core/services/shortcuts/README.md": 7,
   "modules/core/services/shortcuts/dks/module.toml": 4,
   "modules/fx/freqshift/README.md": 9,
   "modules/fx/freqshift/build/gen/gallery.json": 2,
