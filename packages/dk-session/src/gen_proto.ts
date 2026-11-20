@@ -354,6 +354,7 @@ export const LOG_KIND = {
   FW_READY: 47,
   DSP_SWEEP: 48,
   SETUP_DONE: 49,
+  CARD_GUARD_REFUSED: 50,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -407,6 +408,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
   48: ['DSP_SWEEP', ['sweep', 'generation', 'blocks', '-', '-']],
   49: ['SETUP_DONE', ['op', 'track', 'type', 'seq', 'status']],
+  50: ['CARD_GUARD_REFUSED', ['sector', 'sectors', 'class_kind', 'refused_writes', 'refused_erases']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

@@ -59,6 +59,10 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     47: ("FW_READY", ("blocks", "-", "-", "-", "-")),
     48: ("DSP_SWEEP", ("sweep", "generation", "blocks", "-", "-")),
     49: ("SETUP_DONE", ("op", "track", "type", "seq", "status")),
+    50: (
+        "CARD_GUARD_REFUSED",
+        ("sector", "sectors", "class_kind", "refused_writes", "refused_erases"),
+    ),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

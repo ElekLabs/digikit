@@ -53,6 +53,7 @@ pub mod logk {
     pub const FW_READY: u16 = 47;
     pub const DSP_SWEEP: u16 = 48;
     pub const SETUP_DONE: u16 = 49;
+    pub const CARD_GUARD_REFUSED: u16 = 50;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;

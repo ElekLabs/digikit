@@ -65,7 +65,15 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     // 5 too small); a client that stops earlier ignores them
     wr32(rb.add(n), crate::PLATFORM.card_sectors());
     wr32(rb.add(n + 4), card::state());
-    reply(CMD_INFO, seq, OK, n + 8)
+    // then the card write guard's counters (core/card-guard): `u32 version` (0: the module is not in the image; the other words are then 0), refused writes, refused erases,
+    // and the last refused request (first sector, length in sectors, class | kind << 8; class 0 stock, 1 runtime; kind 0 write, 1 erase)
+    let g = crate::storage::card_guard::stats(&crate::PLATFORM).words();
+    let mut k = 0;
+    while k < 6 {
+        wr32(rb.add(n + 8 + 4 * k), g[k]);
+        k += 1;
+    }
+    reply(CMD_INFO, seq, OK, n + 8 + 24)
 }
 
 /// CAPACITY: per resource of the runtime, its limit, what is used and the largest free piece. Body: none. Reply: `u8 version` (1), `u8 n`, then

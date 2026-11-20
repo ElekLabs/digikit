@@ -608,6 +608,18 @@ pub extern "C" fn sdhc_large_ctl(_: u32, _: u32) -> u32 {
     0
 }
 
+// core/card-guard, absent in this host fixture (no words written: version 0).
+#[no_mangle]
+pub extern "C" fn dkcg_stats(_: *mut u32, _: u32) -> u32 {
+    0
+}
+
+// The runtime's raw block write (tramp.s): on the device it calls the firmware's write and owns the return label that core/card-guard tells the runtime's write by.
+#[no_mangle]
+pub extern "C" fn dkrt_raw_block_write(sector: u32, bytes: u32, buf: *const u8) -> i32 {
+    block_write(sector, bytes, buf)
+}
+
 // The +Drive write adapter: absent in this host fixture (version 0 is refused) until a test installs the fake of `host_io::Pdw`.
 #[no_mangle]
 pub extern "C" fn dkpw_version() -> u32 {

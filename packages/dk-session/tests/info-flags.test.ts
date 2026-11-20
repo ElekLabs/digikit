@@ -68,9 +68,9 @@ test('INFO appends the card capacity and state; an older runtime reports null', 
 });
 
 /** A reply as the runtime writes it: the port id, flags, log range, image id (33), svc_abi (41), then fw_id (when FW_ID is set) and the card fields. */
-function real(opts: { fwId?: boolean; card?: boolean }): Uint8Array {
+function real(opts: { fwId?: boolean; card?: boolean; guard?: number[] }): Uint8Array {
   const caps = (1 << CAP.SVC_ABI) | (opts.fwId ? 1 << CAP.FW_ID : 0);
-  const n = 45 + (opts.fwId ? 8 : 0) + (opts.card ? 8 : 0);
+  const n = 45 + (opts.fwId ? 8 : 0) + (opts.card ? 8 : 0) + (opts.guard ? 24 : 0);
   const b = new Uint8Array(n);
   const v = new DataView(b.buffer);
   v.setUint16(0, 1);
@@ -88,10 +88,12 @@ function real(opts: { fwId?: boolean; card?: boolean }): Uint8Array {
   if (opts.card) {
     v.setUint32(at, 0x2e1a000);
     v.setUint32(at + 4, 2);
+    at += 8;
   }
+  opts.guard?.forEach((w, k) => v.setUint32(at + 4 * k, w));
   return b;
 }
-const readReal = (opts: { fwId?: boolean; card?: boolean }) =>
+const readReal = (opts: { fwId?: boolean; card?: boolean; guard?: number[] }) =>
   new DkSession(new InfoDevice(real(opts)), { timeoutMs: 200, retries: 0 }).info();
 
 test('INFO of a real reply: svc_abi, fw_id, then the card fields after it', async () => {
@@ -114,4 +116,33 @@ test('INFO without the FW_ID bit has the card fields right after svc_abi', async
   assert.equal(i.fw_id, null);
   assert.equal(i.card_sectors, 0x2e1a000);
   assert.equal(i.card_state, 2);
+});
+
+test('INFO appends the card write guard counters after the card fields', async () => {
+  // version 1, 3 refused writes, 2 refused erases; the last refusal: sector 0x200000, 8 sectors, class stock (0), kind erase (1)
+  const i = await readReal({ card: true, guard: [1, 3, 2, 0x200000, 8, 0x100] });
+  assert.deepEqual(i.card_guard, {
+    version: 1,
+    refused_writes: 3,
+    refused_erases: 2,
+    last_sector: 0x200000,
+    last_sectors: 8,
+    last_class: 'stock',
+    last_kind: 'erase',
+  });
+  assert.equal(i.card_state, 2);
+  // the runtime's own write refused (class 1, kind 0)
+  const r = await readReal({ card: true, guard: [1, 1, 0, 0x180000, 1, 0x001] });
+  assert.equal(r.card_guard?.last_class, 'runtime');
+  assert.equal(r.card_guard?.last_kind, 'write');
+  // no refusal yet: the last request is not described
+  const none = await readReal({ card: true, guard: [1, 0, 0, 0, 0, 0] });
+  assert.equal(none.card_guard?.refused_writes, 0);
+  assert.equal(none.card_guard?.last_class, null);
+  assert.equal(none.card_guard?.last_kind, null);
+});
+
+test('INFO reports no card guard when the module is not in the image (version 0) or the reply ends before it (an older runtime)', async () => {
+  assert.equal((await readReal({ card: true, guard: [0, 0, 0, 0, 0, 0] })).card_guard, null);
+  assert.equal((await readReal({ card: true })).card_guard, null);
 });

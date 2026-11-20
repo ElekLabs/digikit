@@ -2,6 +2,7 @@
 //!
 //! - `layout`: where the store is on the card;
 //! - `card`: the card safety gate and the one gated block write;
+//! - `card_guard`: the refusal counters of the card write guard (core/card-guard) for INFO, HEALTH and the log;
 //! - `lock`: the store lock, the read leases and the shared buffers;
 //! - `route`: the one decision of which backend serves a root on this device;
 //! - `store`: the read side (find, stage with hash check, the one listing rule `listed`, health figures);
@@ -13,6 +14,7 @@
 //! The modules `card`, `store` and `store_writer` are re-exported at the crate root while callers still name them there.
 pub mod backends;
 pub mod card;
+pub mod card_guard;
 pub mod layout;
 pub mod lock;
 pub mod route;
