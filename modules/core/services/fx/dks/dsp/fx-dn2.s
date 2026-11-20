@@ -45,8 +45,26 @@
 .EXTERN _fxs_flg;
 .EXTERN _fxs_fbuf;
 
+#include "dk_trace.inc"
 #include "fx-rows.inc"
 #include "fx-chain.inc"
 #include "fxsend-a.inc"
 #include "fxsend-slots.inc"
 #include "fxsend-b.inc"
+
+// The stats rows of the spans (sdk/dsp/contract/dk_span.inc): rows 8 to 15 are the effect rows (24 words each in the effect table; the last takes the rest).
+#define DK_SPAN_PTR_WORD _fx_diag + 28
+#define DK_SPAN_ROW_CODE \
+    R2 = I4; \
+    R0 = _fx_table; \
+    R2 = R2 - R0; \
+    R0 = LSHIFT R2 BY 3; \
+    R0 = R0 + R2; \
+    R2 = LSHIFT R2 BY 1; \
+    R2 = R0 + R2; \
+    R2 = LSHIFT R2 BY -10; \
+    R0 = 8; \
+    R2 = R2 + R0; \
+    R0 = 15; \
+    R2 = MIN(R2, R0);
+#include "dk_span.inc"

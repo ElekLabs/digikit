@@ -129,6 +129,13 @@ export function link(object: SharcObject, baseSw: number, externs: Record<string
 }
 
 /** A DSP source as `pk_sharc` reads it: `#include` from the include directories and the source's own directory. */
-export function assembleSource(file: string, includeDirs: string[]): SharcObject {
-  return assemble(expandIncludes(readFileSync(file, 'utf8'), [...includeDirs, path.dirname(file)]));
+export function assembleSource(
+  file: string,
+  includeDirs: string[],
+  transform: (expanded: string) => string = (t) => t,
+): SharcObject {
+  return assemble(transform(expandIncludes(readFileSync(file, 'utf8'), [...includeDirs, path.dirname(file)])));
 }
+
+/** A source without its `DK_SPAN_BEGIN` and `DK_SPAN_END` marks (sdk/dsp/contract/dk_trace.inc): the baseline of the cost of the marks. */
+export const stripSpans = (expanded: string): string => expanded.replace(/^[ \t]*DK_SPAN_(BEGIN|END)\(.*$/gm, '');

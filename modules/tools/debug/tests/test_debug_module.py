@@ -39,6 +39,21 @@ static void (*the_sink)(const Ev *);
 static void (*the_tick)(void);
 static dk_host_cmd_fn *the_cmd;
 static dk_host_cmd_fn *the_profile;
+static dk_host_cmd_fn *the_dsp;
+/* the runtime's DSP stats control and mirror, as fakes: the control is the span channel owner's (the sink is set); a sweep is `fake_sweep` (0: none) */
+static unsigned ctl_on, ctl_gen, ctl_calls, fake_sweep;
+int32_t dk_dsp_stats_ctl(uint32_t on, uint32_t clear)
+{
+    if (!the_span) return DK_E_BUSY;
+    ctl_on = on; ctl_gen = clear; ctl_calls++;
+    return 0;
+}
+uint32_t dk_dsp_stats_read(uint32_t *out, uint32_t max)
+{
+    for (uint32_t i = 0; i < max && i < 100; i++) out[i] = fake_sweep ? 1000u * fake_sweep + i : 0;
+    if (max > 102) { out[100] = fake_sweep; out[101] = 2; out[102] = 3; }
+    return fake_sweep;
+}
 static u32 clock_blocks;
 static int32_t track_ty[16];
 static int project = 1;
@@ -85,8 +100,9 @@ int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *h)
 {
     /* the first range is the log commands, the second the profiling commands; both print as one line */
     if (!the_cmd) { the_cmd = h; reg_first = first; reg_count = count; return 0; }
-    the_profile = h;
-    printf("reg %u %u %u %u\n", reg_first, reg_count, first, count);
+    if (!the_profile) { the_profile = h; printf("reg %u %u %u %u", reg_first, reg_count, first, count); return 0; }
+    the_dsp = h;
+    printf(" %u %u\n", first, count);
     return 0;
 }
 
@@ -131,6 +147,10 @@ int main(int argc, char **argv)
         } else if (sscanf(line, "poll %u %u %x", &a, &b, &c) == 3) {
             poll_owner[a] = b;
             poll_fn[a] = (uint32_t)c;
+        } else if (sscanf(line, "dspsweep %u", &a) == 1) {
+            fake_sweep = a;
+        } else if (!strncmp(line, "dspctl", 6)) {
+            printf("ctl %u %u %u\n", ctl_on, ctl_gen, ctl_calls);
         } else if (!strncmp(line, "noproject", 9)) {
             project = 0;
         } else if (!strncmp(line, "project", 7)) {
@@ -144,7 +164,7 @@ int main(int argc, char **argv)
             u32 len = 0, i;
             if (sscanf(line, "cmd %u %2047s", &a, hex) != 2) hex[0] = 0;
             for (i = 0; hex[2 * i] && hex[2 * i + 1]; i++) { unsigned v; sscanf(hex + 2 * i, "%2x", &v); body[len++] = (u8)v; }
-            int32_t r = (a >= 0x1eu && a <= 0x1fu ? the_profile : the_cmd)(a, 0, body, len, out);
+            int32_t r = (a == 0x1bu ? the_dsp : a >= 0x1eu && a <= 0x1fu ? the_profile : the_cmd)(a, 0, body, len, out);
             printf("reply %d ", r);
             for (i = 0; r > 0 && i < (u32)r; i++) printf("%02x", out[i]);
             printf("\n");
@@ -220,7 +240,7 @@ def ev(kind, flags, a=0):
 
 def test_init_registers_the_range_and_the_sink_and_fini_clears_it(harness):
     out = run(harness, ["fini"])
-    assert out == ["reg 32 3 30 2", "init 0 1", "fini 1 1"]
+    assert out == ["reg 32 3 30 2 27 1", "init 0 1", "fini 1 1"]
 
 
 ROWS = 8 + 3 + 4  # module records (limits.max modules), service phases, polls
@@ -567,3 +587,105 @@ def test_profile_elapsed_counts_clock_ticks_across_wraps_while_running(harness):
     assert profile_elapsed(out[5]) == 100 + wrapped + 10
     assert profile_elapsed(out[6]) == 100 + wrapped + 10
     assert profile_elapsed(out[7]) == 0
+
+
+def dsp_reply(reply: str):
+    raw = bytes.fromhex(reply.split()[2])
+    version, flags, gen, rows, sweep, sweeps, gaps, ignored = struct.unpack(
+        ">BBBBIIII", raw[:20]
+    )
+    assert (version, rows) == (1, 16)
+    words = struct.unpack(f">{(len(raw) - 20) // 4}I", raw[20:])
+    assert len(words) == (100 if flags & 2 else 0)
+    return flags, gen, sweep, (sweeps, gaps, ignored), words
+
+
+def test_profile_dsp_start_takes_the_span_channel_and_sends_the_control(harness):
+    out = run(
+        harness,
+        [
+            "sinkstat",
+            "dspctl",
+            "cmd 27 00",
+            "cmd 27 01",
+            "sinkstat",
+            "dspctl",
+            "cmd 27 02",
+            "sinkstat",
+            "dspctl",
+        ],
+    )
+    assert out[2:4] == ["sink 0 0", "ctl 0 0 0"]
+    assert dsp_reply(out[4]) == (
+        0,
+        0,
+        0,
+        (0, 2, 3),
+        (),
+    )  # off: no sweep, the mirror's counters
+    assert dsp_reply(out[5]) == (1, 0, 0, (0, 2, 3), ())  # on, no sweep yet
+    assert out[6:8] == ["sink 1 1", "ctl 1 0 1"], (
+        "start owns the channel, as PROFILE_STATE start does"
+    )
+    assert dsp_reply(out[8])[0] == 0
+    assert out[9:] == ["sink 1 1", "ctl 0 0 2"], (
+        "stopping the DSP counters keeps the spans"
+    )
+
+
+def test_profile_dsp_reply_carries_the_sweep_when_one_is_complete(harness):
+    out = run(harness, ["cmd 27 01", "dspsweep 3", "cmd 27 00"])
+    flags, gen, sweep, counts, words = dsp_reply(out[3])
+    assert (flags, gen, sweep, counts) == (3, 0, 3, (3, 2, 3))
+    assert words == tuple(3000 + i for i in range(100))
+
+
+def test_profile_dsp_clear_is_a_new_generation_and_needs_the_span_channel(harness):
+    out = run(
+        harness,
+        [
+            "cmd 27 03",
+            "dspctl",
+            "cmd 27 01",
+            "cmd 27 03",
+            "dspctl",
+            "cmd 27 02",
+            "cmd 27 03",
+            "dspctl",
+        ],
+    )
+    assert out[2].startswith("reply -53") and out[3] == "ctl 0 0 0", (
+        "without the span channel nothing could be sent: refused"
+    )
+    assert dsp_reply(out[4])[:2] == (1, 0), "start sends the generation"
+    assert dsp_reply(out[5])[1] == 1 and out[6] == "ctl 1 1 2"
+    assert dsp_reply(out[8])[1] == 2 and out[9] == "ctl 0 2 4", (
+        "stopped, the spans still on: the new generation reaches the DSP with on = 0"
+    )
+
+
+def test_profile_dsp_stops_with_the_spans_and_with_the_module(harness):
+    out = run(
+        harness, ["cmd 27 01", "cmd 30 02", "dspctl", "cmd 27 01", "fini", "dspctl"]
+    )
+    assert out[4] == "ctl 0 0 2", (
+        "PROFILE_STATE stop stops the DSP counters before it gives up the channel"
+    )
+    assert dsp_reply(out[5])[0] == 1
+    assert out[6:] == ["fini 1 1", "ctl 0 0 4"], "fini stops them too"
+
+
+def test_profile_dsp_start_gets_the_runtime_busy_code_and_bad_bodies_are_refused(
+    harness,
+):
+    out = run(
+        harness,
+        ["cmd 27 01", "cmd 27 00", "cmd 27 09", "cmd 27", "cmd 27 0001"],
+        args=["busy"],
+    )
+    assert out[2].split()[1] == "-12", "another module owns the span channel"
+    assert dsp_reply(out[3])[0] == 0
+    assert out[4].startswith("reply -60"), "an op past clear"
+    assert out[5].startswith("reply -50") and out[6].startswith("reply -50"), (
+        "a body of another length"
+    )

@@ -573,6 +573,14 @@ pub extern "C" fn dl_diag(_: *mut u32, _: u32) -> i32 {
     0
 }
 
+// core/dsp-link's feed of the stats pages, a no-op in this host fixture.
+#[no_mangle]
+pub extern "C" fn dl_stats_hook(feed: usize) {
+    STATS_HOOK.store(feed, core::sync::atomic::Ordering::SeqCst);
+}
+/// The feed `dl_tick` would call now (0: none).
+pub(crate) static STATS_HOOK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
 // core/sdhc-large, absent in this host fixture.
 #[no_mangle]
 pub extern "C" fn sdhc_large_range(_: u32, _: u32) {}

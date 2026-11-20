@@ -249,6 +249,10 @@ pub unsafe extern "C" fn dk_span_sink_set(emit: *mut u8, clock: *mut u8) -> i32 
         OK
     };
     irq_restore(sr);
+    if r == OK && emit.is_null() {
+        // the owner gives the channel up: the DSP counters are its to control, and stop with it
+        crate::dsp_stats::owner_gone();
+    }
     r
 }
 
@@ -264,6 +268,7 @@ pub(crate) unsafe fn test_reset_sinks() {
 pub unsafe fn release_sinks(idx: usize) {
     let owner = idx as u8 + 1;
     let sr = irq_mask();
+    let mut span_released = false;
     let mut i = 0;
     while i < SINKS {
         let c = &mut (*addr_of_mut!(CHAN))[i];
@@ -272,11 +277,20 @@ pub unsafe fn release_sinks(idx: usize) {
             write_volatile(addr_of_mut!(c.owner), 0);
             if i == SINK_SPAN as usize {
                 write_volatile(addr_of_mut!(SPAN_CLOCK), 0);
+                span_released = true;
             }
         }
         i += 1;
     }
     irq_restore(sr);
+    if span_released {
+        crate::dsp_stats::owner_gone();
+    }
+}
+
+/// The source index of the module that owns the span channel (record index + 1; 0: none does).
+pub fn span_owner() -> u8 {
+    unsafe { read_volatile(addr_of!((*addr_of!(CHAN))[SINK_SPAN as usize].owner)) }
 }
 
 /// Is a sink set on `channel`? (The one flag test of a producer.)

@@ -60,6 +60,7 @@
 #include "adapter-dt2.inc"
 #include "dk_machine.inc"
 #include "dk_stub.inc"
+#include "dk_trace.inc"
 
 #define DV_FIXED_LEVEL 0x6400                 // knob 7's word for level 100
 #define DV_SLOTS_ALWAYS 4                     // the parameter slots every machine reads (knobs 1, 2, 4, 5); the rest only when declared
@@ -1487,9 +1488,11 @@ _dv_cnoclr:
     I12 = R0;                             // the note_on pc
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's note_on (profiling 13.1): R3 and I1 are free here
     I13 = _dv_nback;
     JUMP (M13, I12);
 _dv_nback:
+    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     R0 = PASS R0;
     IF LT JUMP _dv_nfault;
 _dv_crender:
@@ -1500,9 +1503,11 @@ _dv_crender:
     R4 = DM(_dv_c + 12);
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp2, _dv_diag + 124, R3, I1);   // the module's render
     I13 = _dv_rback;
     JUMP (M13, I12);
 _dv_rback:
+    DK_SPAN_END(_dv_sp3, _dv_diag + 124, R3, I1);
     R2 = DM(_dv_g + 12);                  // contract 1.2: a stereo machine or-s DK_STEREO into the status; the track's flag tells the odd voice to keep the R it wrote
     R2 = LSHIFT R2 BY 2;
     R3 = _dv_st;
@@ -1705,3 +1710,20 @@ _dv_clrstep:
     R3 = 0;
     DM(0, I4) = R3;
     RTS;
+
+// The stats rows of the spans (sdk/dsp/contract/dk_span.inc): the machine row of the voices registry (24 words each; the last stats row takes the rest).
+#define DK_SPAN_PTR_WORD _dv_diag + 124
+#define DK_SPAN_ROW_CODE \
+    R2 = DM(_dv_g + 0); \
+    R0 = _dv_table; \
+    R2 = R2 - R0; \
+    R0 = 96; \
+    R2 = R2 - R0; \
+    R0 = LSHIFT R2 BY 3; \
+    R0 = R0 + R2; \
+    R2 = LSHIFT R2 BY 1; \
+    R2 = R0 + R2; \
+    R2 = LSHIFT R2 BY -10; \
+    R0 = 7; \
+    R2 = MIN(R2, R0);
+#include "dk_span.inc"
