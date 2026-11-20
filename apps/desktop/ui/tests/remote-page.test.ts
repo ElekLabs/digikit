@@ -7,7 +7,9 @@ import {
   deviceOfPort,
   infoDue,
   isRemoteMissing,
+  keyErrorLine,
   leaveCancels,
+  remoteListed,
   remoteNotice,
   remotePaused,
   remoteRuntime,
@@ -75,4 +77,49 @@ test('a Transfer job keeps the Remote page from cancelling its requests and from
   }
   assert.equal(remotePaused(''), false);
   assert.equal(remotePaused('Reading'), false);
+});
+
+test('E_PROTO from the state request is no "not loaded" when MODULES lists digikit/remote (the state request is optional)', () => {
+  const noState = new DkError({ error: 'remote state: E_PROTO', kind: 'device', status: 'E_PROTO' });
+  assert.equal(remoteListed([{ name: 'digikit/remote' }]), true);
+  assert.equal(remoteListed([{ name: 'test/crash' }]), false);
+  assert.equal(remoteListed(undefined), undefined);
+  assert.equal(remoteNotice(undefined, noState, true), '');
+  assert.match(remoteNotice(undefined, noState, false), /not loaded/);
+  assert.match(remoteNotice(undefined, noState, undefined), /not loaded/);
+});
+
+test('a key without digikit/remote gives a plain lasting line; other errors keep their text', () => {
+  const noModule = new DkError({
+    error: 'remote key: E_PROTO unknown protocol version',
+    kind: 'device',
+    status: 'E_PROTO',
+  });
+  assert.match(
+    keyErrorLine(noModule, 'the target'),
+    /^Keys need digikit\/remote: install it on the Transfer page.*restart/,
+  );
+  const silent = new DkError({ error: 'no reply', kind: 'timeout' });
+  assert.match(keyErrorLine(silent, 'the target'), /No reply from the target/);
+});
+
+test('a key reports its failure, then throws; a key that works reports ok', async () => {
+  const seen: string[] = [];
+  const noModule = new DkError({ error: 'E_PROTO', kind: 'device', status: 'E_PROTO' });
+  let fail = true;
+  const session = {
+    remoteKey: async () => {
+      if (fail) throw noModule;
+    },
+    remoteTurn: async () => {},
+  };
+  const rt = remoteRuntime(async () => session as unknown as DkSession, {
+    ok: () => seen.push('ok'),
+    failed: (e) => seen.push(isRemoteMissing(e) ? 'missing' : 'other'),
+  });
+  await assert.rejects(rt.press(3));
+  fail = false;
+  await rt.press(3);
+  await rt.turn(1, 1);
+  assert.deepEqual(seen, ['missing', 'ok', 'ok']);
 });
