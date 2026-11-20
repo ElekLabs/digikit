@@ -400,3 +400,17 @@ export function phaseLine(e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'r
   if (e.kind === 'stable') return `waiting for a stable boot ${e.waited} s / ${e.of} s`;
   return 'putting the stock machine back';
 }
+
+/** The note before Run: which tracks a run takes over, and that it leaves them on the stock machine (the run starts from the stock machine, it restores nothing). */
+export function trackNote(tracks: readonly number[]): string {
+  if (tracks.length === 0) return '';
+  const runs: string[] = [];
+  for (let i = 0; i < tracks.length;) {
+    let j = i;
+    while (j + 1 < tracks.length && tracks[j + 1] === tracks[j]! + 1) j++;
+    runs.push(j - i >= 2 ? `${tracks[i]} to ${tracks[j]}` : tracks.slice(i, j + 1).join(', '));
+    i = j + 1;
+  }
+  const list = runs.join(', ');
+  return `Calibration uses ${tracks.length === 1 ? 'track' : 'tracks'} ${list} and leaves ${tracks.length === 1 ? 'it' : 'them'} on the stock machine.`;
+}
