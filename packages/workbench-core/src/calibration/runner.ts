@@ -87,6 +87,9 @@ export interface CaseResult {
 
 const isSetup = (o: Op) => o.op === 'setup';
 
+/** `E_MISSING` of sdk/sdk.toml `[load.status]`: the service the module imports is not in the image. */
+const E_MISSING = -73;
+
 /** Clock ms the sweep that ends a capture may take (a sweep is 50 blocks, about 33 ms of the device). */
 const SWEEP_WAIT_MS = 5000;
 /** Wall ms after which a wait that never ends (a stopped emulator, a dead link) is given up. */
@@ -317,9 +320,15 @@ async function runCase(
     await ensureModules(rig, c.modules, log);
   } catch (e) {
     // the runtime refused the module because the image lacks a core module the case declares it needs: the case cannot run here
+    const declared = c.needs ?? [];
     const lacking = e instanceof ModuleLoadRefused ? e.needs : undefined;
-    if (lacking !== undefined && (c.needs ?? []).some((n) => n.replace(/^core\//, '') === lacking)) {
-      const reason = `the image has no core/${lacking}, which the module needs`;
+    const named = lacking !== undefined && declared.some((n) => n.replace(/^core\//, '') === lacking);
+    // E_MISSING: a service the module imports is not in the image (the module that provides it is not part of it); the case says what it needs
+    const service = e instanceof ModuleLoadRefused && e.result === E_MISSING && declared.length > 0;
+    if (named || service) {
+      const reason = named
+        ? `the image has no core/${lacking}, which the module needs`
+        : `the image lacks a service the module needs (the case declares ${declared.join(', ')})`;
       log(`case ${c.id}: skipped, ${reason}`);
       return { id: c.id, captures: [], skipped: reason };
     }
@@ -332,9 +341,12 @@ async function runCase(
   const pause = async (ms: number): Promise<void> => {
     if (keepers.length === 0) return rig.clock.pause(ms);
     const every = Math.min(...keepers.map((k) => k.retrigger_ms!));
-    for (let left = ms; left > 0; left -= every) {
-      await rig.clock.pause(Math.min(every, left));
-      for (const k of keepers) await play(k, rig);
+    for (let left = ms; left > 0;) {
+      const slice = Math.min(every, left);
+      await rig.clock.pause(slice);
+      left -= slice;
+      // pressed again only when the wait goes on: a press at its end would start a voice that the next measurement sees from its first block
+      if (left > 0) for (const k of keepers) await play(k, rig);
     }
   };
   try {

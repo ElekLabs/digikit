@@ -497,7 +497,7 @@ test('a note with retrigger_ms is pressed again every that many ms of the warm-u
     after.filter((l) => l.startsWith('pause')),
     ['pause 400', 'pause 400', 'pause 200', 'pause 400', 'pause 400', 'pause 200'],
   );
-  assert.equal(after.filter((l) => l === 'midi 144,60,100').length, 1 + 6);
+  assert.equal(after.filter((l) => l === 'midi 144,60,100').length, 1 + 4, 'not pressed at the end of a wait');
   assert.equal(
     f.log.slice(0, at).filter((l) => l === 'midi 144,60,100').length,
     1,
@@ -529,6 +529,18 @@ test('a module capture in which no row counted a call is refused, and a case who
     rig: g.rig,
   });
   assert.match(skipped!.skipped!, /no core\/sample-pool/);
+  // E_MISSING (a service the module imports is not in the image) with a declared need: skipped as well
+  const m = fake();
+  m.rig.setup = async () => {};
+  m.rig.modules!.select = async () => {
+    throw new ModuleLoadRefused(0, -73);
+  };
+  const [, again] = await runCalibration({
+    ...input,
+    profile: withCase('mach', 'needs = ["core/sample-pool"]\n'),
+    rig: m.rig,
+  });
+  assert.match(again!.skipped!, /lacks a service/);
   // an undeclared refusal ends the run
   const h = fake();
   h.rig.setup = async () => {};
