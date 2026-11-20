@@ -306,9 +306,9 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
                 .count()
         })
         .sum();
-    // the two `internal` ones are exports of the files and no import of a module: 26 for modules, 28 in the files
+    // the two `internal` ones are exports of the files and no import of a module: 27 for modules, 28 in the files
     assert_eq!(total, 28);
-    assert!(get(sdkgen::RUST_OUT).contains("pub const PROVIDED: [(&str, &str); 26]"));
+    assert!(get(sdkgen::RUST_OUT).contains("pub const PROVIDED: [(&str, &str); 27]"));
     assert!(!get(sdkgen::RUST_OUT).contains("dk_fx_routes_entry"));
 }
 
