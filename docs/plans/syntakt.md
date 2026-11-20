@@ -244,7 +244,7 @@ State on Em's unit: the `device-peer` image and the repaired full `device` image
 - [x] HEALTH shows the card capacity (INFO `card_sectors`, `card_state`); the runtime refuses a card whose capacity is unknown.
 - [x] The store at 0x200000..0x300000 of the second ColdFire's flash window, checked against the driver's capacity ([finding 154](../findings/154-syntakt-card-capacity-store.md)).
 - [x] The site publishes only the devices of `SITE_DEVICES` (`apps/web/src/data/site-devices.mjs`): the build, the pages, the gallery and the emulator page follow it.
-- [x] The store area and a content module on the unit: INFO `card_state` 1 and `free_bytes` 536851968, the first upload writes the headers, HEALTH STORE USED 1 KB and FREE 511.9 MB, `digikit/remote` installed, selected, applied and restarted, the Remote pane's keys work (finding 154 section 6). The part's capacity (INFO `card_sectors`) is not recorded yet.
+- [x] The store area and a content module on the unit: INFO `card_state` 1 and `free_bytes` 536851968, the first upload writes the headers, HEALTH STORE USED 1 KB and FREE 511.9 MB, `digikit/remote` installed, selected, applied and restarted, the Remote pane's keys work (finding 154 section 6). INFO `card_sectors` 3817472 (0x3a4000, the 0x15 `4FTE4R` part with the enhanced area set) covers the store area.
 - [ ] The stock Data API write guard: Transfer must not write samples or sounds into the stock slots (design in progress). Until it lands, back up the +Drive card and do not use Transfer for them.
 - [ ] CPU REL without a DSP (design in the `core/health` README).
 - [ ] A kept Syntakt emulator test for `core/peer-image`: the packed boot, and a corrupted stream refused.
