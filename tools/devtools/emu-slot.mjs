@@ -354,6 +354,15 @@ const main = async () => {
     console.error('usage: node tools/devtools/emu-slot.mjs -- <command...>');
     process.exit(2);
   }
+  const requirePgo =
+    process.env.DIGI_REQUIRE_PGO ?? (fs.statSync('.git', { throwIfNoEntry: false })?.isFile() ? '1' : '0');
+  if (requirePgo === '1' && process.env.DIGI_EMU_DSP === 'sharc') {
+    const args = ['run', 'python', '-m', 'tools.devtools.verify_build', 'check-pgo'];
+    if (process.env.DIGI_DEVICE) args.push('--device', process.env.DIGI_DEVICE);
+    const check = spawnSync('uv', args, { stdio: 'inherit' });
+    if (check.error) throw check.error;
+    if (check.status !== 0) process.exit(check.status ?? 1);
+  }
   let child;
   let signalled;
   const forward = (signal) => {
