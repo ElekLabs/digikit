@@ -63,7 +63,7 @@ async function savedNames(h: CardRig, rt: TestRuntime): Promise<string[] | null>
   } catch {
     return null;
   }
-  const map = settingsMap(decodeSettings(rec));
+  const map = settingsMap(decodeSettings(rec.raw));
   const key = Object.keys(map).find((k) => k.startsWith('digikit/track-manager') && k.endsWith('/names'));
   if (!key) return null;
   const b = Buffer.from(map[key]!, 'hex');
@@ -83,7 +83,7 @@ const names = (h: CardRig, rt: TestRuntime, done: (n: string[] | null) => boolea
 
 cardRigs('track manager', { dsp: 'zero', initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
   test('the manager screen names a track, the name survives a restart, and TRK+YES shows the overlay while held', async () => {
-    let rt = await h.load('track-manager', { modules: [MODULE], selection: [moduleStorePath(h.device, MODULE)] });
+    let rt: TestRuntime = await h.load('track-manager', { modules: [MODULE], selection: [moduleStorePath(h.device, MODULE)] });
     const info = await bootInfo(rt.session, h.plan);
     expect(info.results.slice(0, 1), 'the module loads').toEqual([0]);
     const drained = { drained: true } as const;
