@@ -166,7 +166,13 @@ fn keeps(kind: u16, flags: u16) -> bool {
     if crate::boot::info().ui_reached == 0 {
         return true;
     }
-    kind == logk::SETTINGS_LOAD || kind == logk::FW_READY || (kind < 32 && (BOOT_KINDS >> kind) & 1 != 0)
+    kind == logk::SETTINGS_LOAD || kind == logk::FW_READY || is_screen_kind(kind) || (kind < 32 && (BOOT_KINDS >> kind) & 1 != 0)
+}
+
+/// The events of a module's screens (core/ui: a view pushed or removed, the naming screen opened or answered). They come from key presses, a few a second at most, and a device
+/// test on a card without the debug module waits on them in this ring.
+fn is_screen_kind(kind: u16) -> bool {
+    kind == logk::VIEW_OPENED || kind == logk::VIEW_CLOSED || kind == logk::TEXT_INPUT_OPENED || kind == logk::TEXT_INPUT_DONE
 }
 
 /// Set (or, with 0, clear) the sink and its tick. The events of the small ring, oldest first, are handed to a new sink at once, so it starts with the boot.
@@ -488,6 +494,16 @@ mod tests {
         LOGGED += 1;
         LAST_KIND = (*e).kind;
     }
+    /// The screen events of core/ui are in the small ring after the first UI frame, an info-level event of another kind is not.
+    #[test]
+    fn the_small_ring_keeps_the_screen_events_of_core_ui() {
+        for kind in [logk::VIEW_OPENED, logk::VIEW_CLOSED, logk::TEXT_INPUT_OPENED, logk::TEXT_INPUT_DONE] {
+            assert!(is_screen_kind(kind), "{kind}");
+        }
+        assert!(!is_screen_kind(logk::HEALTH));
+        assert!(!is_screen_kind(logk::MOD_LOG));
+    }
+
     unsafe extern "C" fn fake_span(s: *const Span) {
         SPANS += 1;
         LAST_SPAN = ((*s).owner, (*s).cycles);

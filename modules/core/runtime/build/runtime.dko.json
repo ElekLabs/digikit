@@ -8572,70 +8572,70 @@
   },
   {
    "addend": 0,
-   "offset": 192,
+   "offset": 234,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..text._RNvNtCs7sxP7D8NSdT_4dkrt8platform9fw_blocks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 212,
+   "offset": 254,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": "dkrt_irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 222,
+   "offset": 264,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4SINK",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 232,
+   "offset": 274,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 254,
+   "offset": 296,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": "dkrt_irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 402,
+   "offset": 444,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG_COUNT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 426,
+   "offset": 468,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 466,
+   "offset": 508,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 488,
+   "offset": 530,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG_COUNT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 506,
+   "offset": 548,
    "section": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
    "symbol": ".sec..bss._RNvNtCs7sxP7D8NSdT_4dkrt4dlog4CHAN",
    "type": "cf.32"
@@ -44176,10 +44176,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffac2f02302e000ee0884a00661271b900000000e188342e000e84803d42000e203900000000342e000e0802000066404ab900000000677a73ee000a7420b481677073ee000a742fb4816766741fb481650001a0322e000ac2822041223c4015817e2408e4a97401c4811d42ffb3603473ee000a7417b4816700017873ee000a7418b4816700016c7419b48167000164322e000a740ab5814a4156c1240144821d42ffb34a8066104a2effb3660a6000014674011d42ffb341eefffa4eb9000000004a6efffa6742242efffc2d42ffb44eb9000000002d40ffac2279000000004a89662c2279000000004a8966604a2effb36600009a2f2effac4eb900000000588f242effa84e5e4e7542aeffb460c042aeffba242effb42d42ffbe342e000a3d42ffc2342e000e3d42ffc4206e00102d58ffc62d58ffca2d58ffce2d58ffd22d50ffd6486effba4e91588f609642aeffda242effb42d42ffde342e000a3d42ffe2342e000e3d42ffe4206e00102d58ffe62d58ffea2d58ffee2d58fff22d50fff6486effda4e91588f6000ff6241f9000000002210224152892d49ffb0701fc280eb89200106800000000020404290242effb421420004342e000a31420008342e000e3142000a226e00102041d1fc0000000020d920d920d920d92091204020aeffb043f90000000022aeffb06000ff064a80660a4ab9000000006700ff0442021d42ffb36000feb0",
+   "hex": "4e56ffac2f02302e000ee0884a00661271b900000000e188342e000e84803d42000e203900000000342e000e0802000066624ab900000000670000a473ee000a7420b4816700009873ee000a742fb4816700008c73ee000a7436b48167787437b48167727438b481676c7439b481676e741fb481650001a8322e000ac2822041223c4015817e2408e4a97401c4811d42ffb3603473ee000a7417b4816700018073ee000a7418b481670001747419b4816700016c322e000a740ab5814a4156c1240144821d42ffb34a8066184a2effb367000150600e74011d42ffb360ea74011d42ffb341eefffa4eb9000000004a6efffa6742242efffc2d42ffb44eb9000000002d40ffac2279000000004a89662c2279000000004a8966604a2effb36600009a2f2effac4eb900000000588f242effa84e5e4e7542aeffb460c042aeffba242effb42d42ffbe342e000a3d42ffc2342e000e3d42ffc4206e00102d58ffc62d58ffca2d58ffce2d58ffd22d50ffd6486effba4e91588f609642aeffda242effb42d42ffde342e000a3d42ffe2342e000e3d42ffe4206e00102d58ffe62d58ffea2d58ffee2d58fff22d50fff6486effda4e91588f6000ff6241f9000000002210224152892d49ffb0701fc280eb89200106800000000020404290242effb421420004342e000a31420008342e000e3142000a226e00102041d1fc0000000020d920d920d920d92091204020aeffb043f90000000022aeffb06000ff064a80660a4ab9000000006700ff0442021d42ffb36000feb0",
    "kind": "text",
    "name": ".text._RNvNtCs7sxP7D8NSdT_4dkrt4dlog2ev",
-   "size": 524
+   "size": 566
   },
   {
    "align": 2,
@@ -49740,7 +49740,7 @@
    "size": 24
   }
  ],
- "source_sha256": "25b030f0ae0daa1ec3f72d89dfa086c90a143cff6b7c4895dd736379ab063adc",
+ "source_sha256": "588b3ae8ccff31e67f3735bdee66b7941f7116ad470f91f3ec697f4a41a4faba",
  "symbols": [
   {
    "global": false,
@@ -57359,8 +57359,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UNLOAD_OBSERVERS DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_ctx_owner dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_phase dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick dkrt_unload_observer_add dkrt_unload_observer_remove",
-  "instructions_redecoded": "61695",
-  "isa_check": "682080dcb3b14030504bd9d362b49fc63ede07e08b818f72158d64ad4f4fb392",
+  "instructions_redecoded": "61711",
+  "isa_check": "0d218d0cdd78cd9ddc0e4c6b998b1f08276ff982e2aa013a59dad3bf9a57a9fe",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
