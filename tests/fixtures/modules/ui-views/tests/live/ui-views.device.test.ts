@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { RANGES } from '@digi/dk-session/gen_proto';
-import { bootWindowFacts, emulatorRead, repoRoot, type Device } from '@digi/test-support';
+import { emulatorRead, repoRoot, viewStackFacts, type Device } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -17,7 +17,7 @@ import { pollEmulated } from '@digi/regression/runtime/waits.ts';
  * (`core/runtime` `spans_tests.rs`, `cleanup_tests.rs`).
  *
  * The screen is read from firmware state, never from pixels: the view stack (Brain, view manager, list of nodes, the View of each node and its vptr: the `[ui]` facts of the device
- * files, `bootWindowFacts`) and the item list of the stock SETTINGS menu (the Menu object's item vector; the offsets are the structs of `devices/fw/menu.toml`).
+ * files, `viewStackFacts`) and the item list of the stock SETTINGS menu (the Menu object's item vector; the offsets are the structs of `devices/fw/menu.toml`).
  * - the rows are in SETTINGS after the stock rows (two more items while the module is loaded), and YES on a row runs its function;
  * - the full-screen view is a new top view of the stack (its vptr is not the one below), draws on every frame and gets the keys; YES opens the stock NameView (another top view);
  *   YES on it calls `done` with the text, NO calls nothing; NO closes the view and `closed` runs;
@@ -81,7 +81,7 @@ function fwField(struct: string, field: string): number {
 /** The firmware's view stack and SETTINGS menu, read from guest memory. */
 function firmware(rt: TestRuntime) {
   const device = rt.session.options.device as Device;
-  const facts = bootWindowFacts(device);
+  const facts = viewStackFacts(device);
   if (!facts) throw new Error(`${device} has no [ui] facts`);
   const read = emulatorRead(rt.session);
   const word = async (addr: number) => {

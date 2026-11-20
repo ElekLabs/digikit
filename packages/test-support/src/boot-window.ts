@@ -11,7 +11,8 @@ import type { Clock } from './emulated-clock.ts';
  */
 
 /** The `[ui]` and `[ui.boot_window]` facts of a device file; offsets in bytes, addresses are ColdFire addresses. */
-export interface BootWindowFacts {
+/** What reading the view stack needs: the Brain, the view manager and the list nodes (`[ui]` of the device file). */
+export interface ViewStackFacts {
   /** The global that holds the Brain pointer (0 until the Brain exists). */
   brainPtr: number;
   /** The view manager is the object at Brain + this. */
@@ -24,6 +25,9 @@ export interface BootWindowFacts {
   listPrevOff: number;
   /** The offset of the View pointer in a list node. */
   nodeViewOff: number;
+}
+
+export interface BootWindowFacts extends ViewStackFacts {
   /** The title of the window that ends the boot. */
   title: string;
   /** The vtable pointer stored at +0 of the MainScreenView: the main screen is reached once the bottom view of the list is this one (overlays such as the help bubble sit above it). */
@@ -77,6 +81,24 @@ const num = (table: Record<string, unknown>, key: string, where: string): number
   return v;
 };
 
+/** The view stack facts from the parsed device file's `[ui]` table; undefined when it has no `brain_ptr` (the device file does not give them). */
+export function viewStackFactsOf(
+  file: { ui?: Record<string, unknown> },
+  where = 'device file',
+): ViewStackFacts | undefined {
+  const ui = file.ui;
+  if (!ui || ui.brain_ptr === undefined) return undefined;
+  const u = `${where} [ui]`;
+  return {
+    brainPtr: num(ui, 'brain_ptr', u),
+    viewManagerOff: num(ui, 'view_manager_off', u),
+    listOff: num(ui, 'list_off', u),
+    listNextOff: num(ui, 'list_next_off', u),
+    listPrevOff: num(ui, 'list_prev_off', u),
+    nodeViewOff: num(ui, 'node_view_off', u),
+  };
+}
+
 /** The facts from the parsed device file; undefined when it has no `[ui.boot_window]` table (the device has no boot window). */
 export function bootWindowFactsOf(
   file: { ui?: Record<string, unknown> },
@@ -88,14 +110,10 @@ export function bootWindowFactsOf(
   if (typeof window.title !== 'string' || window.title === '')
     throw new Error(`${where}: [ui.boot_window] title must be a string`);
   const w = `${where} [ui.boot_window]`;
-  const u = `${where} [ui]`;
+  const stack = viewStackFactsOf(file, where);
+  if (!stack) throw new Error(`${where} [ui]: brain_ptr is missing`);
   return {
-    brainPtr: num(ui, 'brain_ptr', u),
-    viewManagerOff: num(ui, 'view_manager_off', u),
-    listOff: num(ui, 'list_off', u),
-    listNextOff: num(ui, 'list_next_off', u),
-    listPrevOff: num(ui, 'list_prev_off', u),
-    nodeViewOff: num(ui, 'node_view_off', u),
+    ...stack,
     title: window.title,
     mainVptr: num(window, 'main_vptr', w),
     confirmVptr: num(window, 'confirm_vptr', w),
@@ -109,24 +127,36 @@ export function bootWindowFactsOf(
   };
 }
 
-const factsCache = new Map<Device, BootWindowFacts | undefined>();
-
-/** The boot window facts of `device`, read from its `devices/*.toml` (found by `[device] short`); undefined: the device has no boot window. */
-export function bootWindowFacts(device: Device): BootWindowFacts | undefined {
-  if (factsCache.has(device)) return factsCache.get(device);
+/** The parsed device file of `device` (found by `[device] short`). */
+function deviceFile(device: Device): { name: string; file: { ui?: Record<string, unknown> } } {
   const dir = path.join(repoRoot(), 'devices');
-  let facts: BootWindowFacts | undefined;
-  let found = false;
   for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.toml'))) {
     const file = parseToml(fs.readFileSync(path.join(dir, name), 'utf8')) as {
       device?: { short?: string };
       ui?: Record<string, unknown>;
     };
-    if (file.device?.short !== device) continue;
-    found = true;
-    facts = bootWindowFactsOf(file, `devices/${name}`);
+    if (file.device?.short === device) return { name: `devices/${name}`, file };
   }
-  if (!found) throw new Error(`no device file for ${device}`);
+  throw new Error(`no device file for ${device}`);
+}
+
+const stackCache = new Map<Device, ViewStackFacts | undefined>();
+const factsCache = new Map<Device, BootWindowFacts | undefined>();
+
+/** The view stack facts of `device`, read from its `devices/*.toml`; undefined: the device file does not give them. No boot window is needed. */
+export function viewStackFacts(device: Device): ViewStackFacts | undefined {
+  if (stackCache.has(device)) return stackCache.get(device);
+  const { name, file } = deviceFile(device);
+  const facts = viewStackFactsOf(file, name);
+  stackCache.set(device, facts);
+  return facts;
+}
+
+/** The boot window facts of `device`, read from its `devices/*.toml`; undefined: the device has no boot window. */
+export function bootWindowFacts(device: Device): BootWindowFacts | undefined {
+  if (factsCache.has(device)) return factsCache.get(device);
+  const { name, file } = deviceFile(device);
+  const facts = bootWindowFactsOf(file, name);
   factsCache.set(device, facts);
   return facts;
 }
