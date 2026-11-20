@@ -189,16 +189,24 @@ def generated_dir(
 def device_generated(
     device: str, environ: dict[str, str] | os._Environ[str] | None = None
 ) -> pathlib.Path:
-    """The generated core a profile of DEVICE is keyed with (a pure lookup: no card build, no ready state).
+    """The generated core a profile of DEVICE is keyed with: the one resolution of training, lookup and `coupled-build`
+    (a pure lookup: no card build, no ready state).
 
-    dn2 and both (its first core): :func:`generated_dir`. dt2: SHARC_GEN_DIR_DT2, else the core registered for the DT2
-    ready DSP image, else :func:`generated_dir`. A launcher or `verify_build` env normally names the DN2 core in
-    SHARC_GEN_DIR, which is not the DT2 core: SHARC_GEN_DIR must not decide for dt2 while a DT2 core is known."""
+    dn2: :func:`generated_dir`. both: its DN2 core (:func:`both_generated`, which also takes SHARC_GEN_DIR_DN2 and the
+    registered core). dt2: SHARC_GEN_DIR_DT2, else the core registered for the DT2 ready DSP image (the card-ready state
+    holds the same image). The launcher's SHARC_GEN_DIR is the DN2 core and never decides for dt2. Raises SystemExit when
+    no DT2 core is known."""
     environ = os.environ if environ is None else environ
+    if device == BOTH:
+        return both_generated(environ)[0]
     if device == "dt2":
         found = second_generated(environ)
-        if found is not None:
-            return found
+        if found is None:
+            raise SystemExit(
+                "no generated DT2 core registered for the DT2 DSP image "
+                "(mise run perf:aot -- dt2 --card-image IMG, or set SHARC_GEN_DIR_DT2)"
+            )
+        return found
     return generated_dir(environ)
 
 
@@ -809,8 +817,12 @@ def pgo_state(
         return "off", ""
     if environ.get("RUSTFLAGS") or environ.get("CARGO_ENCODED_RUSTFLAGS"):
         return "skipped", "RUSTFLAGS is set"
+    try:
+        gen = device_generated(device, environ)
+    except SystemExit as exc:
+        return "missing", str(exc)
     return check(
-        device_generated(device, environ),
+        gen,
         environ.get("SHARC_FAST_REGIONS", ""),
         environ.get("SHARC_BLOCKTRANS", ""),
         device,
@@ -1479,17 +1491,22 @@ def text_digest(value: object) -> str:
 
 
 def training_inputs(
-    device: str, hasher: FileHasher, regions: object
+    device: str, hasher: FileHasher, regions: object, runs: int
 ) -> dict[str, object]:
     """Digests of what a training of DEVICE reads that the profile key does not hold: the scenario files it plays, the ready
     inputs (and card) it boots, and the region lists (REGIONS: they decide which DSP code runs as generated blocks, so they
-    shape the counters). Stored in the manifest as `inputs` and compared by :func:`current_training`. The scenario files
+    shape the counters), and the run settings (RUNS and the workload lists). Stored in the manifest as `inputs` and compared by :func:`current_training`. The scenario files
     are hashed alone: what they import is not followed."""
     scenarios = {
         "dn2": [],
         "dt2": [f for f, _ in DT2_WORKLOAD],
         BOTH: [f for f, _ in (*DN2_WORKLOAD, *DT2_WORKLOAD)]
         + [f for f, _, _ in REPLAYS.values()],
+    }[device]
+    workload = {
+        "dn2": [WORKLOAD, EXPECTED_FRAMES],
+        "dt2": DT2_WORKLOAD,
+        BOTH: [DN2_WORKLOAD, DT2_WORKLOAD, REPLAYS],
     }[device]
     ready: dict[str, pathlib.Path] = {}
     if device in ("dn2", BOTH):
@@ -1498,7 +1515,7 @@ def training_inputs(
         )
     if device == "dn2":
         for path in tree_files(
-            pathlib.Path(run_env(pathlib.Path("."))["DIGI_COUPLED_FIXTURES"])
+            pathlib.Path(os.environ.get("DIGI_COUPLED_FIXTURES", str(READY)))
         ):
             ready[f"fixtures {path.name}"] = path
     if device in ("dt2", BOTH):
@@ -1506,7 +1523,7 @@ def training_inputs(
 
         found, card_args = dt2_sample_check.card_inputs()
         ready.update({f"dt2 {k}": v for k, v in found.items()})
-        ready["dt2 card"] = pathlib.Path(card_args[1])
+        ready["dt2 card"] = pathlib.Path(card_args[card_args.index("--card-image") + 1])
     return {
         "scenarios": {f: hasher.digest(ROOT / f) for f in sorted(set(scenarios))},
         "ready": {
@@ -1514,6 +1531,8 @@ def training_inputs(
             for name, path in sorted(ready.items())
         },
         "regions": text_digest(regions),
+        "runs": runs,
+        "workload": text_digest(workload),
     }
 
 
@@ -1539,7 +1558,9 @@ def cmd_train(args: argparse.Namespace) -> None:
     blocktrans = blocktrans_roots()
     components, nfiles = compute_components(packages, gen, hasher, fast, blocktrans)
     desktop = desktop_digest(hasher)
-    inputs = training_inputs("dn2", hasher, [fast, fallback_regions(), blocktrans])
+    inputs = training_inputs(
+        "dn2", hasher, [fast, fallback_regions(), blocktrans], args.runs
+    )
     hasher.save()
     key = key_of(components)
     phases.done("key")
@@ -1693,8 +1714,6 @@ def cmd_plan(args: argparse.Namespace) -> int:
         "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
         "SHARC_BLOCKTRANS": blocktrans_roots(),
     }
-    if args.device == "dt2" and not environ.get("SHARC_GEN_DIR"):
-        environ["SHARC_GEN_DIR"] = str(dt2_generated())
     if args.device == BOTH:
         gen, _gen2 = both_generated()
         environ["SHARC_GEN_DIR"] = str(gen)
@@ -1734,11 +1753,8 @@ def coupled_module():
 
 
 def dt2_generated() -> pathlib.Path:
-    """SHARC_GEN_DIR, else the core registered for the DT2 DSP image."""
-    from tools.emulator import dt2_sample_check
-
-    _, _, ready, _ = dt2_sample_check.prepare()
-    return coupled_module().generated("dt2", ready / "digi-audio-dn2-image.bin")
+    """The DT2 core of a training, lookup and `coupled-build` (see :func:`device_generated`)."""
+    return device_generated("dt2")
 
 
 def build_coupled(
@@ -1900,7 +1916,7 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
     components, nfiles = compute_components(packages, gen, hasher)
     components["workload"] = DT2_WORKLOAD_NAME
     fast_env = dt2_fast_env()
-    inputs = training_inputs("dt2", hasher, fast_env)
+    inputs = training_inputs("dt2", hasher, fast_env, args.runs)
     hasher.save()
     key = key_of(components)
     phases.done("key")
@@ -2201,7 +2217,7 @@ def cmd_train_both(args: argparse.Namespace) -> None:
     components, nfiles = compute_components(packages, gen, hasher, gen2=gen2)
     components["workload"] = both_workload_name(reset is not None)
     fast_env = both_fast_env(items)
-    inputs = training_inputs(BOTH, hasher, fast_env)
+    inputs = training_inputs(BOTH, hasher, fast_env, args.runs)
     hasher.save()
     key = key_of(components)
     phases.done("key")

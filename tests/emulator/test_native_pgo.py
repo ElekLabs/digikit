@@ -414,9 +414,9 @@ def test_training_inputs_follow_workload_ready_inputs_and_regions(
         ),
     )
 
-    def inputs(regions="r1"):
+    def inputs(regions="r1", runs=1):
         hasher = native_pgo.FileHasher(tmp_path / "hash-cache.json")
-        return native_pgo.training_inputs(native_pgo.BOTH, hasher, regions)
+        return native_pgo.training_inputs(native_pgo.BOTH, hasher, regions, runs)
 
     record_training(tmp_path, monkeypatch, inputs=inputs())
     key = "k" * 64
@@ -432,6 +432,11 @@ def test_training_inputs_follow_workload_ready_inputs_and_regions(
     assert not current("both", key, False, False, inputs())
     files["card.img"].write_text("card.img")
     assert not current("both", key, False, False, inputs("another region list"))
+    assert not current(
+        "both", key, False, False, inputs(runs=3)
+    )  # --runs 1 does not satisfy --runs 3
+    monkeypatch.setattr(native_pgo, "REPLAYS", {"dn2": ("scen.json", "c", 9.0)})
+    assert not current("both", key, False, False, inputs())  # a replay setting changed
 
 
 def test_a_profile_covers_the_libraries_of_its_training_target():
@@ -591,3 +596,57 @@ def test_the_dt2_core_override_wins_over_the_launcher_core():
     environ = {"SHARC_GEN_DIR": "/dn2-core", "SHARC_GEN_DIR_DT2": "/own"}
     assert native_pgo.device_generated("dt2", environ) == pathlib.Path("/own")
     assert native_pgo.device_generated("dn2", environ) == pathlib.Path("/dn2-core")
+
+
+def test_an_instrumented_library_is_restored_by_key_and_built_when_missing(
+    tmp_path, monkeypatch
+):
+    from tools.devtools import core_store, emud_key
+
+    gen = tmp_path / "gen"
+    gen.mkdir()
+    (gen / "blocks_00.rs").write_text("fn a() {}")
+    (gen / "image.rs").write_text('pub const IMAGE: &str = "dn2-1.12";\n')
+    builds = []
+
+    def build(plan, inputs, log=None):
+        builds.append(log)
+        lib = tmp_path / "built" / core_store.lib_name()
+        lib.parent.mkdir(exist_ok=True)
+        lib.write_bytes(b"library")
+        return lib
+
+    monkeypatch.setenv("DIGI_SHARC_PGO_INSTRUMENT_STORE", str(tmp_path / "store"))
+    monkeypatch.setattr(digi_env, "check_generated", lambda gen: None)
+    monkeypatch.setattr(emud_key, "rustc_version", lambda: "rustc 1")
+    monkeypatch.setattr(core_store, "build_core", build)
+    log = tmp_path / "lib.log"
+    first = native_pgo.instrumented_library("dn2", gen, log)
+    assert first.read_bytes() == b"library" and builds == [log]
+    # the same key: restored, no second build
+    assert native_pgo.instrumented_library("dn2", gen, log) == first
+    assert len(builds) == 1
+    # another gen file content: another key, built again
+    (gen / "blocks_00.rs").write_text("fn b() {}")
+    assert native_pgo.instrumented_library("dn2", gen, log) != first
+    assert len(builds) == 2
+
+
+def test_training_and_lookup_compute_the_same_dt2_key(monkeypatch, tmp_path):
+    """SHARC_GEN_DIR names the launcher's DN2 core: the dt2 training (`dt2_generated`) and every lookup ignore it."""
+    dt2_core = tmp_path / "dt2-core"
+    monkeypatch.setattr(native_pgo, "second_generated", lambda environ=None: dt2_core)
+    monkeypatch.setenv("SHARC_GEN_DIR", str(tmp_path / "dn2-core"))
+    monkeypatch.delenv("SHARC_GEN_DIR_DT2", raising=False)
+    seen = []
+
+    def resolve(device, gen=None, gen2=None, *rest):
+        seen.append(gen)
+        return native_pgo.Resolved(None, "missing", "x")
+
+    monkeypatch.setattr(native_pgo, "resolve", resolve)
+    monkeypatch.setattr(native_pgo, "supported_host", lambda: True)
+    assert native_pgo.dt2_generated() == dt2_core  # what cmd_train_dt2 keys with
+    native_pgo.pgo_state({"SHARC_GEN_DIR": str(tmp_path / "dn2-core")}, "dt2")
+    native_pgo.current_profile("dt2", native_pgo.device_generated("dt2"))
+    assert seen == [dt2_core, dt2_core]

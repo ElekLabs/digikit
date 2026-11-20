@@ -325,6 +325,14 @@ def device_for_args(args: list[str]) -> str:
     return (digi_env.device_for_syx(syx) if syx else None) or "dn2"
 
 
+# What a training takes when the host builds and instrumented libraries are warm; a cold lane takes far longer.
+TRAIN_ESTIMATE = {
+    "dn2": "about 6 min warm, 30 min or more with a cold build",
+    "dt2": "about 6 min warm, 30 min or more with a cold build",
+    "both": "about 10 min warm, up to an hour with a cold two-core build and two instrumented libraries",
+}
+
+
 def train_profile(device: str = "dn2") -> str:
     """Run `native_pgo.py train`; returns "" on success, else why it failed."""
     try:
@@ -397,7 +405,7 @@ def pgo_plan(args: list[str]) -> object | None:
                 detail = f"{detail}; cannot train: {blocker}"
             else:
                 print(
-                    f"native PGO: profile {status} ({detail}); training (~6 min, "
+                    f"native PGO: profile {status} ({detail}); training ({TRAIN_ESTIMATE[device]}, "
                     "DIGI_EMU_PGO_TRAIN=1)",
                     file=sys.stderr,
                     flush=True,
