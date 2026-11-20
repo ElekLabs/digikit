@@ -176,6 +176,7 @@ send_slots = 0
 param_rows = 0
 page_rows = 0
 
+# core/card-guard is in both sets that hold the runtime: [card.guard] turns the guard on for this device (patchkit refuses a set with the runtime and without it).
 # Module sets patched in by name (the Digitone II file explains them; docs/PATCHING.md "Flashing a Syntakt").
 #   `device`: the runtime and every core module that has a Syntakt port (the same modules as `emulator`), with core/peer-image: it stores the peer
 #     CPU's section 7 packed and unpacks it in MAIN (without it the image is 32 KB over the container limit). The workbench Firmware page flashes this set.
@@ -184,9 +185,9 @@ page_rows = 0
 # `emulator`: what the emulator patches in itself. The DSP, run-time machine and effect modules have no Syntakt port (no DSP). There is no
 # `device-introblank`: the boot screen module has no Syntakt port.
 [patch_sets]
-device = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+device = ["core/runtime", "core/card-guard", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 device-peer = ["core/peer-image"]
-emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+emulator = ["core/runtime", "core/card-guard", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 
 # Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
