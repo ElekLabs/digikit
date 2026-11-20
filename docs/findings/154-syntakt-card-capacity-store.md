@@ -56,8 +56,15 @@ sectors below 0x180000. Whether a later firmware uses more is **[O]**.
 | **The stock Data API overrun** (a host-declared size written upward from a sample slot, checked only against the capacity, finding 145) | **not excluded by the placement**; the write guard stays open (plan: "Store write safety") |
 | Anchor drift | patchkit resolves by hash and refuses an image where it is missing; the hash is the same on four images |
 
+## 6. The store on the unit [D]
+
+Measured once on Em's Syntakt (st 1.42, `device` set): INFO reports `card_state` 1 (ours), `card_read_only` false and `free_bytes` 536851968 (the whole 512 MiB area) on a freshly flashed unit with no upload yet. The first `store put`
+(49 bytes) writes the header pair; `store ls` and `store rm` work. HEALTH then shows STORE USED 1 KB and STORE FREE 511.9 MB. A content module runs end to end: `digikit/remote` installed from the workbench Transfer page into the
+store, selected in MODULES, applied, restarted; the Remote pane's keys work. Before the first upload the store has no headers, so INFO reports the whole area free while MODULES and HEALTH showed no store.
+The part and its capacity (INFO `card_sectors`) are not recorded in this run.
+
 ## Open
 
-- **[O]** The part and capacity of Em's unit (INFO `card_sectors`).
+- **[O]** The part and capacity of Em's unit (INFO `card_sectors`); section 6 does not record it.
 - **[O]** Whether the emulator should model a card capacity (today it ignores the size of `--card-image`).
 - **[O]** The write guard against the Data API overrun.

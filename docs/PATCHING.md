@@ -633,7 +633,7 @@ hardware result.
 ### Flashing a Syntakt
 
 A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the image of each is under the 2 MiB `container_max` only because
-`core/peer-image` stores section 7 packed ([finding 151](findings/151-syntakt-section7-pack.md)). Both images boot on a unit: the `device-peer` image and the full `device` image. Section 7 packing and MAIN's unpack are proven on the hardware. The store area is not yet confirmed on the unit.
+`core/peer-image` stores section 7 packed ([finding 151](findings/151-syntakt-section7-pack.md)). Both images boot on a unit: the `device-peer` image and the full `device` image. Section 7 packing and MAIN's unpack are proven on the hardware. The digikit store and a content module are proven on a unit: INFO reports an ours card, `store put`, `ls` and `rm` work, and `digikit/remote` installed from the Transfer page, selected in MODULES and applied runs with working keys ([finding 154](findings/154-syntakt-card-capacity-store.md) section 6).
 
 | Set | Modules | Container (OS 1.42) | Flashed by |
 |---|---|---|---|
