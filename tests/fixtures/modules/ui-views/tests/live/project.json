@@ -18,6 +18,7 @@
           "A:core/ui"
         ],
         "modules": [
+          "digikit/debug",
           "test/ui-views"
         ],
         "sources": [

@@ -1,10 +1,10 @@
 import { emulatorRead, pollUntil, readViewStack, viewStackFacts } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import type { RuntimeEvent } from '@digi/dk-session';
-import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import type { DkLogEvent } from '@digi/dk-session';
+import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { pausedEvents } from '@digi/regression/runtime/paused-dk.ts';
+import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
 
 /**
@@ -24,7 +24,7 @@ const WORD_OFF = 0x6f666600; // "off\0"
 const DRAINED = { drained: true } as const;
 const WITHIN = { withinMs: 10_000, intervalMs: 100 } as const;
 
-const isCall = (word: number) => (e: RuntimeEvent) => (e.args[0]! | 0) === word;
+const isCall = (word: number) => (e: DkLogEvent) => (e.args[0]! | 0) === word;
 
 async function boot(h: CardRig): Promise<TestRuntime> {
   const rt = await h.load('shortcut-demo', { modules: [FIXTURE], selection: [moduleStorePath(h.device, FIXTURE)] });
@@ -33,20 +33,24 @@ async function boot(h: CardRig): Promise<TestRuntime> {
   return rt;
 }
 
-cardRigs('shortcuts: the key hook', { dsp: 'zero', initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
+cardRigs('shortcuts: the key hook', { dsp: 'zero', symbols: CARD_SYMBOLS, initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
   test('TRK+YES calls on and off and SETTINGS does not get the YES; YES alone does; a trig key under TRK still selects its track', async () => {
+    console.info('STEP boot');
     const rt = await boot(h);
-    // a card rig's `rt.dk` belongs to the baseline boot: the log is read through a protocol session that steps the paused emulator (`pausedEvents`, as `h.usb` does)
-    const events = await pausedEvents(rt.session, rt.clock);
+    console.info('STEP events');
+    // a card has no debug module, so no log commands: the events are read from the runtime's small ring in memory (error-level events, which the fixture and core/ui log)
+    const events = await ringWatch(rt, h.plan);
+    console.info('STEP facts');
     const facts = viewStackFacts(h.device);
     if (!facts) throw new Error(`${h.device} has no [ui] facts`);
     const read = emulatorRead(rt.session);
     /** The top view of the stack: its object and class. */
     const top = async () => (await readViewStack(read, facts))[0];
     const topIs = (view: number | undefined) => (v: Awaited<ReturnType<typeof top>>) => v?.view === view;
-    const anyCall = (e: RuntimeEvent) => isCall(WORD_ON)(e) || isCall(WORD_OFF)(e);
-    const none = (why: string) => expect(events.until('MOD_LOG', anyCall, { withinMs: 300 }), why).rejects.toThrow();
+    const anyCall = (e: DkLogEvent) => isCall(WORD_ON)(e) || isCall(WORD_OFF)(e);
+    const none = (why: string) => expect(events.none('MOD_LOG', anyCall), why).resolves.toBeUndefined();
 
+    console.info('STEP settings');
     // SETTINGS is open when the top view is not the main screen's
     const main = await top();
     await rt.ui.tap('SETTINGS', { until: DRAINED });
@@ -55,10 +59,11 @@ cardRigs('shortcuts: the key hook', { dsp: 'zero', initial: () => ({}), uploads:
       message: 'SETTINGS did not open',
     });
 
+    console.info('STEP trkyes');
     // TRK+YES: `on` and `off` run; when both keys are up the top view is the same SETTINGS view (the stock track selection that TRK pushed is gone again)
     await rt.ui.tap('YES', { until: DRAINED, held: 'TRK' });
-    await events.until('MOD_LOG', isCall(WORD_ON), { withinMs: 3000 });
-    await events.until('MOD_LOG', isCall(WORD_OFF), { withinMs: 3000 });
+    await events.next('MOD_LOG', isCall(WORD_ON), 3000);
+    await events.next('MOD_LOG', isCall(WORD_OFF), 3000);
     await none('one on and one off, no more');
     await pollUntil(rt.clock, top, topIs(settings!.view), { ...WITHIN, message: 'SETTINGS is not the top view again' });
     expect(await top(), 'YES did not reach SETTINGS: no submenu opened').toEqual(settings);
@@ -75,9 +80,9 @@ cardRigs('shortcuts: the key hook', { dsp: 'zero', initial: () => ({}), uploads:
     // TRK+TRIG 3 selects track 3 as stock; the next TRK+YES logs the selected track (0-based)
     await rt.ui.tap('TRIG 3', { until: DRAINED, held: 'TRK' });
     await rt.ui.tap('YES', { until: DRAINED, held: 'TRK' });
-    const on = await events.until('MOD_LOG', isCall(WORD_ON), { withinMs: 3000 });
+    const on = await events.next('MOD_LOG', isCall(WORD_ON), 3000);
     expect(on.args[4]! | 0, 'the selected track when the combination completed').toBe(2);
-    await events.until('MOD_LOG', isCall(WORD_OFF), { withinMs: 3000 });
+    await events.next('MOD_LOG', isCall(WORD_OFF), 3000);
     await rt.session.expectNoFault('shortcut hook');
   });
 });

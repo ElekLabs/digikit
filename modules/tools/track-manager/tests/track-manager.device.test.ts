@@ -4,8 +4,8 @@ import { emulatorRead, panelInput, pollUntil, readViewStack, repoRoot, viewStack
 import { parse } from 'smol-toml';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
-import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { pausedEvents } from '@digi/regression/runtime/paused-dk.ts';
+import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { decodeSettings, settingsMap, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -83,20 +83,22 @@ async function savedNames(h: CardRig, rt: TestRuntime): Promise<string[] | null>
 const names = (h: CardRig, rt: TestRuntime, done: (n: string[] | null) => boolean, message: string) =>
   pollUntil(rt.clock, () => savedNames(h, rt), done, { withinMs: 20_000, intervalMs: 500, message });
 
-/** The module on a card, the log read through a protocol session that steps the emulator (a card rig's `rt.dk` belongs to the baseline boot). */
+/** The module on a card, the events read from the runtime's small ring (a card has no debug module). */
 async function boot(h: CardRig, tag: string) {
   const rt = await h.load(tag, { modules: [MODULE], selection: [moduleStorePath(h.device, MODULE)] });
   const info = await bootInfo(rt.session, h.plan);
   expect(info.results.slice(0, 1), 'the module loads').toEqual([0]);
-  const events = await pausedEvents(rt.session, rt.clock);
+  const events = await ringWatch(rt, h.plan);
   return { rt, events };
 }
 
-cardRigs('track manager', { dsp: 'zero', initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
+cardRigs('track manager', { dsp: 'zero', symbols: CARD_SYMBOLS, initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
   test('a name entered on the manager screen is saved and survives a restart', async () => {
-    let { rt, events } = await boot(h, 'track-manager-names');
+    const first = await boot(h, 'track-manager-names');
+    const events = first.events;
+    let rt: TestRuntime = first.rt;
     let fw = firmware(rt, h.device);
-    const viewOpened = (flags: number) => events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === flags, { withinMs: 10_000 });
+    const viewOpened = (flags: number) => events.next('VIEW_OPENED', (e) => (e.args[1]! | 0) === flags);
 
     // SETTINGS > TRACK MANAGER: the module's row is the last one; the screen is a full-screen view of the module
     const main = await fw.top();
@@ -112,12 +114,12 @@ cardRigs('track manager', { dsp: 'zero', initial: () => ({}), uploads: true, rel
     // TRIG 10 selects track 10; YES opens the naming screen (pushed after the release of YES)
     await rt.ui.tap('TRIG 10', { until: DRAINED });
     await rt.ui.tap('YES', { until: DRAINED });
-    await events.until('TEXT_INPUT_OPENED', undefined, { withinMs: 10_000 });
+    await events.next('TEXT_INPUT_OPENED');
 
     // UP edits the character under the cursor; YES saves and closes the naming screen
     await rt.ui.tap('UP', { until: DRAINED });
     await rt.ui.tap('YES', { until: DRAINED });
-    await events.until('TEXT_INPUT_DONE', undefined, { withinMs: 10_000 });
+    await events.next('TEXT_INPUT_DONE');
     await pollUntil(rt.clock, fw.top, (v) => v?.view === manager?.view, { ...WITHIN, message: 'the manager screen is not the top view again' });
     const saved = await names(h, rt, (n) => n !== null && n.some((x) => x !== ''), 'the settings record holds the name');
     expect(saved!.length, 'one entry for each track').toBe(16);
@@ -141,13 +143,13 @@ cardRigs('track manager', { dsp: 'zero', initial: () => ({}), uploads: true, rel
     try {
       const selection = await pollUntil(rt.clock, fw.top, (v) => v !== undefined && v.view !== main?.view, { ...WITHIN, message: 'TRK did not push the track selection' });
       await input.button('YES', true);
-      await events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === OVERLAY, { withinMs: 10_000 });
+      await events.next('VIEW_OPENED', (e) => (e.args[1]! | 0) === OVERLAY);
       const overlay = await fw.top();
-      expect(overlay?.view, 'the overlay is a new top view over the stock track selection').not.toBe(selection.view);
+      expect(overlay?.view, 'the overlay is a new top view over the stock track selection').not.toBe(selection!.view);
       expect(overlay?.opaque, 'the overlay is not opaque').toBe(0);
       await input.button('YES', false);
-      await events.until('VIEW_CLOSED', undefined, { withinMs: 10_000 });
-      await pollUntil(rt.clock, fw.top, (v) => v?.view === selection.view, { ...WITHIN, message: 'the overlay stayed' });
+      await events.next('VIEW_CLOSED');
+      await pollUntil(rt.clock, fw.top, (v) => v?.view === selection!.view, { ...WITHIN, message: 'the overlay stayed' });
     } finally {
       await input.button('YES', false).catch(() => {});
       await input.button('TRK', false);
