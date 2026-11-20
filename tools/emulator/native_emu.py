@@ -157,7 +157,7 @@ def default_audio_args(
         # A device with no DSP (no ready inputs, no generated core): ColdFire-only build; its audio, if any, is the peer's.
         return args
     paths = digi_env.ready_inputs(device=device)
-    # A patched build of the stock firmware (a runtime image) boots from the positional file while its audio state is the stock firmware's, as on DN2: the
+    # A patched build of the stock firmware (a runtime image) boots from the positional file while its audio state is the stock firmware's (the device whose snapshot is built from the stock firmware alone does the same): the
     # snapshot is only valid for the firmware it was taken from (the daemon refuses another one: "snapshot was taken from different firmware").
     if positional and device != "dn2" and not ready_is_of_another_firmware(paths, syx):
         paths["firmware"] = syx
