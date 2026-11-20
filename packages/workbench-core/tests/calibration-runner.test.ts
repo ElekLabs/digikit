@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { MidiOut, ModuleLoadRefused, type Clock } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
 import { addModuleCases, parseCalCase, parseCalProfile } from '../src/calibration/calprofile';
-import { runCalibration, splitCapture, type Rig, type RunInput } from '../src/calibration/runner';
+import { profileTracks, runCalibration, splitCapture, type Rig, type RunInput } from '../src/calibration/runner';
 import { parseStepFile, type StepLibrary } from '../src/calibration/steps';
 import type { DspStats, StatsSource } from '../src/calibration/stats';
 
@@ -260,7 +260,10 @@ test('a case the target cannot play is skipped with its reason, the others run',
       `[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "m"\nsteps = "mach"\n`,
   );
   assert.equal(again[1]!.skipped, undefined);
-  assert.deepEqual(calls, [['machine', 1, 'a/b']]);
+  assert.deepEqual(calls, [
+    ['machine', 1, 0],
+    ['machine', 1, 'a/b'],
+  ]);
 });
 
 test('a wrong name fails before anything is played', async () => {
@@ -426,6 +429,7 @@ test('a module case sets its machine through the rig, and its teardown (after th
     dspUnit: 'insn',
   });
   assert.deepEqual(calls, [
+    ['machine', 1, 0], // the known start
     ['machine', 1, 'a/b'],
     ['machine', 1, 0],
   ]);
@@ -552,8 +556,9 @@ test('a module capture in which no row counted a call is refused, and a case who
 
 test('when putting the machine type back is refused the run stops, before the next case can unload the module', async () => {
   const f = fake({ moduleCalls: 5 });
+  let zeros = 0;
   f.rig.setup = async (_what, _track, type) => {
-    if (type === 0) throw new Error('SETUP refused');
+    if (type === 0 && ++zeros > 1) throw new Error('SETUP refused'); // the start works, the teardown after the case does not
   };
   const profile = addModuleCases(
     parseCalProfile(
@@ -588,4 +593,110 @@ test('the module teardown takes the track of the case', () => {
     [parseCalCase('schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\nsteps = "mach"\nargs = { track = 3 }\n', 'm')],
   );
   assert.deepEqual(p.cases[1]!.teardown, { steps: 'reset', args: { track: 3 } });
+});
+
+/** A rig that starts dirty: SETUP refuses a type that no loaded module owns (as the firmware does), and tracks keep what was set. */
+function dirty(opts: { types?: Record<number, number>; loaded?: string[]; counting?: boolean; hold?: string[] } = {}) {
+  const f = fake({ moduleCalls: 5, loaded: opts.loaded ?? [] });
+  const types = new Map<number, number>(Object.entries(opts.types ?? {}).map(([k, v]) => [Number(k), v]));
+  const setup: string[] = [];
+  const typeOf = new Map([['a/b', 17]]);
+  f.rig.setup = async (_what, track, type) => {
+    const t = typeof type === 'number' ? type : typeOf.get(type)!;
+    const have = await f.rig.modules!.loaded();
+    const valid = t === 0 || [...typeOf].some(([id, n]) => n === t && have.includes(id));
+    setup.push(`${track}:${t}${valid ? '' : ' refused'}`);
+    if (!valid) throw new Error(`SETUP machine track ${track - 1} type ${t}: refused, status -46`);
+    types.set(track, t);
+  };
+  if (opts.counting) {
+    let stopped = false;
+    const stop = f.rig.stats.stop;
+    f.rig.stats.stop = async () => {
+      stopped = true;
+      return stop();
+    };
+    const start = f.rig.stats.start;
+    f.rig.stats.start = async () => {
+      if (!stopped) throw new Error('the counters were still running at the first start');
+      return start();
+    };
+  }
+  return { ...f, types, setup };
+}
+
+const dirtyProfile = () =>
+  addModuleCases(
+    parseCalProfile(
+      base + `discover = "modules"\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [parseCalCase('schema = "dk.calcase/1"\nid = "m1"\nmodule = "a/b"\nsteps = "mach"\n', 'm1')],
+  );
+const runDirty = (rig: Rig) =>
+  runCalibration({
+    profile: dirtyProfile(),
+    steps: lib,
+    rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+
+test('a project machine of a run-time type that is not loaded in this boot, extra modules and running counters do not stop the run: it starts from the stock machine', async () => {
+  // track 1 of the project has run-time type 16, which no loaded module owns; another module is selected; the counters were left on
+  const d = dirty({ types: { 1: 16 }, loaded: ['x/extra'], counting: true });
+  const results = await runDirty(d.rig);
+  assert.deepEqual(
+    results.map((r) => [r.id, r.failed ?? null, r.skipped ?? null]),
+    [
+      ['stock', null, null],
+      ['m1', null, null],
+    ],
+  );
+  assert.equal(d.setup[0], '1:0', 'the stock machine is the first SETUP, before any module is loaded');
+  assert.ok(!d.setup.some((x) => x.endsWith('refused')));
+  assert.ok(d.log.indexOf('select none') >= 0, 'the extra module was replaced by the stock case selection');
+  assert.equal(d.types.get(1), 0, 'the track is left on the stock machine');
+});
+
+test('a case whose modules are already the selected ones does not restart, and its tracks are still reset', async () => {
+  const d = dirty({ types: { 1: 16 }, loaded: ['a/b'] });
+  const full = dirtyProfile();
+  await runCalibration({
+    profile: { ...full, cases: full.cases.filter((c) => c.id !== 'stock') },
+    steps: lib,
+    rig: d.rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+  assert.ok(!d.log.includes('load'), 'no restart');
+  assert.equal(d.setup[0], '1:0');
+  assert.equal(d.types.get(1), 0);
+});
+
+test('a track that cannot be put on the stock machine refuses the run up front, with a hint, before anything is loaded', async () => {
+  const d = dirty({ loaded: ['x/extra'] });
+  d.rig.setup = async () => {
+    throw new Error('SETUP timed out');
+  };
+  await assert.rejects(
+    runDirty(d.rig),
+    /could not put track 1 on the stock machine before the first case.*debug module/,
+  );
+  assert.ok(!d.log.includes('load') && !d.log.includes('stats.start'), 'nothing was loaded or counted');
+});
+
+test('the tracks a profile uses come from its setup and its MIDI channels', () => {
+  const p = dirtyProfile();
+  assert.deepEqual(profileTracks(p, lib, midi), [1]);
+  assert.deepEqual(
+    profileTracks(
+      parseCalProfile(base + `teardown = { steps = "off" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`, 'p'),
+      lib,
+      midi,
+    ),
+    [1],
+  );
 });

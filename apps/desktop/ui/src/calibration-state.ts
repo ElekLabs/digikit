@@ -1,9 +1,11 @@
 // The state and handlers of the Calibration section, owned by the Profile pane (ProfilePanel.tsx), not by the section: a run that installs modules and
 // restarts the target resets the pane's reading and unmounts what is drawn from it, and the run must go on with its captures. No module state: the
 // pane builds one with its calibrator and disposes it with the pane (`dispose` aborts a run in progress). Host tests: tests/calibration-state.test.ts.
-import { createMemo, createSignal } from 'solid-js';
+import { createMemo, createResource, createSignal } from 'solid-js';
 import {
   fitView,
+  trackNote,
+  phaseLine,
   progressLine,
   readCaptureSet,
   secondsLeft,
@@ -39,6 +41,12 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
   });
   const [chosen, setChosen] = createSignal('');
   const profile = () => choices().list.find((p) => p.name === chosen()) ?? choices().list[0];
+  // the tracks the chosen profile uses on the target, for the note before Run (a target that cannot say shows no note)
+  const [tracks] = createResource(
+    () => profile()?.name,
+    async (name) => (await calibrator.tracks?.(name).catch(() => [] as number[])) ?? [],
+  );
+  const note = () => trackNote(tracks() ?? []);
   const [running, setRunning] = createSignal(false);
   const [stopping, setStopping] = createSignal(false);
   const [progress, setProgress] = createSignal('');
@@ -102,6 +110,9 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
         onEvent: (e) => {
           if (e.kind === 'plan') {
             skipping = e.skipping;
+          } else if (e.kind === 'restart' || e.kind === 'stable' || e.kind === 'restore') {
+            at = undefined;
+            setProgress(phaseLine(e));
           } else if (e.kind === 'capture') {
             void now().then((t) => {
               at = { case: e.case, n: e.n, of: e.of, since: t };
@@ -187,6 +198,7 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     running,
     stopping,
     progress,
+    note,
     notes,
     error,
     setError,

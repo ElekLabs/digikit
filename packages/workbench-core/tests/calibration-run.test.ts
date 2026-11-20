@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, type Clock, type DkSession } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { runCalibrationOnTarget, deviceOfInfo } from '../src/profile/calibration-run';
-import { sessionSetup, untilBootStable } from '../src/calibration/rigsetup';
+import { DEFAULT_STABLE_BLOCKS, sessionSetup, untilBootStable } from '../src/calibration/rigsetup';
 import { loadCalibrationFiles, type RunEvent } from '../src/profile/calibration-view';
 
 const files = loadCalibrationFiles({
@@ -164,9 +165,9 @@ test('with the debug log a machine step is a SETUP request for the machine type 
   let t = 0;
   (f.deps.session as unknown as { clock: Clock }).clock.now = async () => (t += 1000);
   const out = await runCalibrationOnTarget({ ...f.deps, files: withMachine }, { profile: 'm' });
-  // the request was made for the module's own type and the 0-based track, and its SETUP_DONE was awaited
-  assert.deepEqual(setups, [['machine', 2, 17]]);
-  assert.match(out.error ?? '', /SETUP_DONE/);
+  // the run starts by putting the first used track on the stock machine (0-based track 0, type 0) and awaits its SETUP_DONE, which this log never holds: the run refuses up front
+  assert.deepEqual(setups, [['machine', 0, 0]]);
+  assert.match(out.error ?? '', /stock machine before the first case.*SETUP_DONE/s);
   assert.deepEqual(
     out.skipped.map((x) => x.case),
     [],
@@ -200,7 +201,81 @@ test('a boot that is not seen stable stops the run with a clear message, and one
   await untilBootStable(log as never, clock);
 });
 
-test('the machine step remembers the type the firmware reported as the old one and puts it back with `original`', async () => {
+test('an idle long boot is stable at once: a probe event carries the block count now, with STABLE dropped from the ring; a young boot waits for STABLE', async () => {
+  let t = 0;
+  const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
+  const events: { seq: number; time: number; kind: number; flags: number; args: number[] }[] = [
+    { seq: 1, time: 100, kind: LOG_KIND.BOOT_START, flags: 2, args: [0x0a04, 1, 3000, 1, 1] },
+  ];
+  let listed = 0;
+  const make = (nowBlocks: number) => ({
+    logPage: async (from: number) => [1, events.length, events.filter((e) => e.seq >= from)] as never,
+    // a command the runtime does not keep quiet logs an event stamped with the block count now
+    list: async () => {
+      listed++;
+      events.push({ seq: events.length + 1, time: nowBlocks, kind: LOG_KIND.UPLOAD, flags: 2, args: [0, 0, 0, 0, 0] });
+      return [];
+    },
+    info: async () => ({ log_sink: true }),
+    logConfig: async () => ({ level: 2, modules: [] }),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  });
+  // the boot is 10 minutes old and nothing was logged since: no waiting
+  await untilBootStable(make(100 + 900_000) as never, clock);
+  assert.equal(listed, 1);
+  assert.equal(t, 0);
+  // the boot is 1 s old (1500 blocks of 3000): it waits, reports, and STABLE ends the wait
+  events.length = 1;
+  const waits: [number, number][] = [];
+  const young = make(100 + 1500);
+  const done = untilBootStable(young as never, clock, (w, of) => {
+    waits.push([w, of]);
+    if (waits.length === 2)
+      events.push({ seq: events.length + 1, time: 100 + 3000, kind: LOG_KIND.STABLE, flags: 2, args: [0, 0, 0, 0, 0] });
+  });
+  await done;
+  assert.deepEqual(
+    waits.map((w) => w[1]),
+    [2, 2],
+  );
+  assert.ok(t >= 2000);
+});
+
+test('BOOT_START dropped from the ring: the probe event alone decides against the default stable period', async () => {
+  let t = 0;
+  const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
+  const events: { seq: number; time: number; kind: number; flags: number; args: number[] }[] = [];
+  const make = (nowBlocks: number) => ({
+    logPage: async (from: number) => [5, 5 + events.length, events.filter((e) => e.seq >= from)] as never,
+    list: async () => {
+      events.push({ seq: 6, time: nowBlocks, kind: LOG_KIND.UPLOAD, flags: 2, args: [0, 0, 0, 0, 0] });
+      return [];
+    },
+    info: async () => ({ log_sink: true }),
+    logConfig: async () => ({ level: 2, modules: [] }),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  });
+  await untilBootStable(make(DEFAULT_STABLE_BLOCKS + 1000) as never, clock);
+  assert.equal(t, 0);
+  events.length = 0;
+  const waits: number[] = [];
+  await untilBootStable(make(DEFAULT_STABLE_BLOCKS - 3000) as never, clock, (w) => {
+    waits.push(w);
+    if (waits.length === 1)
+      events.push({ seq: 7, time: DEFAULT_STABLE_BLOCKS, kind: LOG_KIND.STABLE, flags: 2, args: [0, 0, 0, 0, 0] });
+  });
+  assert.ok(waits.length >= 1 && t >= 1000);
+});
+
+test('the default stable period is the runtime ABI constant', () => {
+  const abi = readFileSync(new URL('../../../modules/core/runtime/abi.toml', import.meta.url), 'utf8');
+  const m = /name = "STABLE_BLOCKS"\s*\ntype = "u32"\s*\nvalue = (\d+)/.exec(abi);
+  assert.equal(DEFAULT_STABLE_BLOCKS, Number(m![1]));
+});
+
+test('the machine step sets a number as the type and a module id as its first reported type; it restores nothing', async () => {
   const sent: [string, number, number][] = [];
   const session = {
     modules: async () => [{ name: 'a/b', types: [17] }],
@@ -211,16 +286,39 @@ test('the machine step remembers the type the firmware reported as the old one a
   };
   const clock: Clock = { now: async () => 0, pause: async () => {} };
   const events = {
-    // SETUP_DONE of the request, and the watch's MACHINE_CHANGE of the first one: track 3 had type 2
     until: async () => ({ fields: { seq: sent.length, status: 0 } }),
-    tryUntil: async () => ({ fields: { track: 3, new_type: 17, old_type: 2 } }),
+    tryUntil: async () => undefined,
   };
   const setup = sessionSetup(session as never, events as never, clock);
   await setup('machine', 3, 'a/b');
-  await setup('machine', 3, 'original');
+  await setup('machine', 3, 0);
   assert.deepEqual(sent, [
     ['machine', 2, 17],
-    ['machine', 2, 2],
+    ['machine', 2, 0],
   ]);
-  await assert.rejects(setup('machine', 5, 'original'), /none to put back/);
+});
+
+test('a module case whose module has no build for the target is skipped with that reason and the rest of the profile runs', async () => {
+  const f = fake();
+  const withModules = loadCalibrationFiles({
+    profiles: {
+      'p/m.toml': `schema = "dk.calprofile/1"\nname = "m"\nwarmup_s = 0\ncapture_s = 0.1\nrepeats = 1\ndiscover = "modules"\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+    },
+    steps: {
+      'hold.toml': `schema = "dk.steps/1"\nname = "hold"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\n`,
+    },
+    cases: {
+      'x/calibration.toml': `schema = "dk.calcase/1"\nid = "only-other"\nmodule = "tom/other"\nsteps = "hold"\n`,
+    },
+  });
+  const events: RunEvent[] = [];
+  const out = await runCalibrationOnTarget(
+    { ...f.deps, files: withModules, modules: { library: async () => [], install: async () => {} } },
+    { profile: 'm', onEvent: (e) => events.push(e) },
+  );
+  const port = (await f.deps.session.info()).port;
+  assert.deepEqual(out.skipped, [{ case: 'only-other', reason: `not built for ${port}: tom/other` }]);
+  assert.equal(out.error, undefined);
+  assert.ok(out.captures.length > 0, 'the stock case still ran');
+  assert.ok(events.some((e) => e.kind === 'skip' && e.case === 'only-other'));
 });

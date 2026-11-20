@@ -79,10 +79,23 @@ export function deviceOfInfo(port: string): string {
 }
 
 export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): Promise<RunOutcome> {
-  const profile = deps.files.profiles.find((p) => p.name === opts.profile);
-  if (!profile) throw new Error(`no calibration profile ${opts.profile}`);
+  const whole = deps.files.profiles.find((p) => p.name === opts.profile);
+  if (!whole) throw new Error(`no calibration profile ${opts.profile}`);
   const { session, emulator } = deps;
   const info = await session.info();
+  // A module case whose module has no build for the target (the library holds the builds of this target's device only) is skipped with that reason, and the rest runs.
+  const notBuilt: { case: string; reason: string }[] = [];
+  let profile = whole;
+  if (deps.modules) {
+    const built = new Set((await deps.modules.library()).map((f) => f.id));
+    const keepCases = whole.cases.filter((c) => {
+      const missing = c.modules.filter((id) => !built.has(id));
+      if (missing.length === 0) return true;
+      notBuilt.push({ case: c.id, reason: `not built for ${info.port}: ${missing.join(', ')}` });
+      return false;
+    });
+    if (notBuilt.length) profile = { ...whole, cases: keepCases };
+  }
   const device = deviceOfInfo(info.port);
   const record = registry.get(device);
   if (!record.midi) throw new Error(`the ${record.name} device file has no [midi] table`);
@@ -95,18 +108,25 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
     else signal?.addEventListener('abort', () => resolve(), { once: true });
   });
   // The first wait after Stop throws, which ends the case (its teardown still plays); later waits return at once so the teardown is not held up.
+  const stoppable = async (wait: Promise<void>): Promise<void> => {
+    if (tripped) return;
+    if (!signal?.aborted) {
+      const done = Symbol();
+      const r = await Promise.race([wait.then(() => done), aborted.then(() => 'abort' as const)]);
+      if (r === done) return;
+    }
+    tripped = true;
+    throw new Stopped();
+  };
   const clock: Clock = {
     ...base,
-    async pause(ms) {
-      if (tripped) return;
-      if (!signal?.aborted) {
-        const done = Symbol();
-        const r = await Promise.race([base.pause(ms).then(() => done), aborted.then(() => 'abort' as const)]);
-        if (r === done) return;
-      }
-      tripped = true;
-      throw new Stopped();
-    },
+    pause: (ms) => (tripped ? Promise.resolve() : stoppable(base.pause(ms))),
+    ...(base.pauseEmulated
+      ? {
+          pauseEmulated: (ms: number, hangMs?: number) =>
+            tripped ? Promise.resolve() : stoppable(base.pauseEmulated!(ms, hangMs)),
+        }
+      : {}),
   };
 
   const names = new Map<number, string>();
@@ -157,7 +177,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       async select(ids) {
         // the debug module's log is what the run waits on: it stays selected with the case's modules
         const stay = keep.filter((id) => byId.has(id) && !ids.includes(id));
-        await untilBootStable(session, clock);
+        await untilBootStable(session, clock, (waited, of) => opts.onEvent?.({ kind: 'stable', waited, of }));
         await session.select([...ids, ...stay].map((id) => byId.get(id)!.path));
         await restartDevice(session, () => {}, {});
         if (events) {
@@ -238,13 +258,18 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         ),
       )
       .map((c) => c.id);
-    opts.onEvent?.({ kind: 'plan', skipping });
+    opts.onEvent?.({ kind: 'plan', skipping: [...notBuilt.map((n) => n.case), ...skipping] });
   } catch {
     // a wrong step name: the runner refuses it with its own message
   }
   opts.onClock?.(() => base.now());
 
   const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], failed: [], stopped: false };
+  for (const n of notBuilt) {
+    out.skipped.push(n);
+    opts.onEvent?.({ kind: 'skip', case: n.case, reason: n.reason });
+    opts.onCase?.({ id: n.case, captures: [], skipped: n.reason });
+  }
   try {
     await runCalibration({
       profile,

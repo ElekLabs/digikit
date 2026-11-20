@@ -26,12 +26,12 @@ function menuSymbol(plan: RuntimePlan, name: string): number {
   return plan.symbols[key]!;
 }
 
-/** The rows of the page for a store (`module_row` of src/menu.c): name without `.dkm` in upper case (12 characters), kind from the needs, memory in K, right aligned to 23 characters. */
+/** The short fixture names leave the kind and memory columns at their usual positions. */
 function pageRow(file: string, n: Record<string, number>): string {
   const total = n.ARENA! + n.DSP_AREA!;
   const size = total < 1024 ? '<1K' : `${Math.ceil(total / 1024)}K`;
   const kind = n.FX_SLOTS ? 'FX' : n.MACHINE_ROWS ? 'MACH' : 'TOOL';
-  const row = path.basename(file, '.dkm').toUpperCase().slice(0, 12).padEnd(13) + kind;
+  const row = path.basename(file, '.dkm').toUpperCase().padEnd(13) + kind;
   return row.padEnd(23 - size.length) + size;
 }
 

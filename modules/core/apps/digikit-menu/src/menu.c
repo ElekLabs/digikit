@@ -38,7 +38,7 @@ uint8_t NOK[MAX_ENT];
 uint8_t LOADED[MAX_ENT];
 /* The pending selection: 1 when the row is checked. It starts as the saved selection. */
 uint8_t TICK[MAX_ENT];
-/* Rows of the pages as text (24 bytes each) and how many there are. */
+/* Diagnostic previews (first 23 bytes of each label) and row counts. */
 uint8_t DK_LOAD[40][24];
 uint32_t DK_LOAD_N;
 uint8_t DK_ABOUT[24][24];
@@ -144,7 +144,7 @@ static int g_busy_row =
 /* ---- text ------------------------------------------------------------------------------------------------------------ */
 
 typedef struct txt {
-    char b[48];
+    char b[DK_UI_LIST_TEXT];
     int n;
 } txt;
 
@@ -156,7 +156,7 @@ static void t_init(txt *t)
 
 static txt *t_c(txt *t, char c)
 {
-    if (c && t->n < 47) {
+    if (c && t->n < (int)sizeof t->b - 1) {
         t->b[t->n++] = c;
         t->b[t->n] = 0;
     }
@@ -219,18 +219,16 @@ static int px_of(const char *s)
     return w;
 }
 
-/* Pads to `px` pixels. `exact`: spaces until the rest is a multiple of 4, then PAD; a rest of 1 or 2 pixels stays (only after a '.' or
-   a '~'). Not `exact`: PAD only, which ends up to 3 pixels short but takes no more characters than the letters it stands for. */
-static txt *t_pad_px(txt *t, int px, int exact)
+/* Spaces are three pixels wide and PAD is four. */
+static void t_pad_px(txt *t, int px)
 {
     int rest = px - px_of(t->b);
-    while (exact && rest >= 3 && rest % 4) {
+    while (rest >= 3 && rest % 4) {
         t_c(t, ' ');
         rest -= 3;
     }
     for (; rest >= 4; rest -= 4)
         t_c(t, PAD);
-    return t;
 }
 
 static char upper(char c)
@@ -426,17 +424,21 @@ static int path_len(const uint8_t *p, int max)
     return n;
 }
 
-/* The row's file name without .dkm, upper case, at most max characters. A longer name keeps its start and its end around a ~, so that
-   names with a common start (dyn-fx-gain-send, dyn-fx-gain-sendonly) still differ. */
-static void path_name(const uint8_t *p, int max, txt *t)
+static int stem_len(const uint8_t *p)
 {
     int l = path_len(p, 63);
     if (l > 4 && p[l - 4] == '.' && lower((char)p[l - 3]) == 'd' && lower((char)p[l - 2]) == 'k' &&
         lower((char)p[l - 1]) == 'm')
         l -= 4;
+    return l;
+}
+
+/* Short titles keep both ends of the module name. */
+static void path_name(const uint8_t *p, int max, txt *t)
+{
     txt full;
     t_init(&full);
-    name_of(p, l, 47, 1, &full);
+    name_of(p, stem_len(p), 63, 1, &full);
     if (full.n <= max) {
         t_s(t, full.b);
         return;
@@ -1171,25 +1173,27 @@ static const uint8_t *row_needs(int i)
     return g_boot.results[k] == DKRT_E_IMPORT && g_boot.needs[k][0] ? g_boot.needs[k] : 0;
 }
 
-/* A row: the name (12), the kind (4) and the memory the module takes, right aligned: 23 letter widths, which fit the list. The columns
-   are placed in pixels (t_pad_px), because a space is narrower than a letter. With a mark column the name has 11 characters and the
-   other columns stay where they are. */
-static void module_text(int i, int exact, txt *t)
+/* Short names share aligned columns. A longer name moves the remaining columns right,
+   so the stock list can scroll the complete selected row. */
+static void module_text(int i, txt *t)
 {
     t_init(t);
-    if (g_lead) {
+    if (g_lead)
         t_c(t, dashed(i) ? '-' : unloads_at_restart(i) ? '~' : PAD);
-        row_name(i, NAME_COLS - 1, t);
-    } else {
-        row_name(i, NAME_COLS, t);
-    }
-    t_pad_px(t, (NAME_COLS + 1) * 4, exact);
+    const uint8_t *path = g_ent[i].path;
     if (i == g_busy_row) { /* the job of this row runs, or waits for the runtime's job slot */
         t_s(t, g_lq_state == LQ_START                  ? "WAITING"
                : g_lq_op[g_lq_pos] == DKRT_LIVE_UNLOAD ? "UNLOADING"
                                                        : "LOADING");
+        t_c(t, ' ');
+        name_of(path, stem_len(path), 63, 1, t);
         return;
     }
+    name_of(path, stem_len(path), 63, 1, t);
+    int kind_x = px_of(t->b) + 4;
+    if (kind_x < (NAME_COLS + 1) * 4)
+        kind_x = (NAME_COLS + 1) * 4;
+    t_pad_px(t, kind_x);
     if (unloads_at_restart(i)) {
         t_s(t, "UNLOADS");
         return;
@@ -1201,18 +1205,14 @@ static void module_text(int i, int exact, txt *t)
         t_b(&sz, g_fit.rows[i].mem, DKRT_FIT_MEM);
     else
         bytes_text(&sz, g_ent[i].size);
-    t_pad_px(t, (NAME_COLS + 1 + 4 + 1 + 5) * 4 - px_of(sz.b), exact);
+    t_pad_px(t, kind_x + (4 + 1 + 5) * 4 - px_of(sz.b));
     t_s(t, sz.b);
 }
 
-/* Exact padding needs more characters than the letters it stands for (three spaces for 9 pixels); when the row would then pass the
-   23 characters a list row keeps, it is padded with PAD only. */
 static void module_row(dk_ui_menu *m, int i)
 {
     txt t;
-    module_text(i, 1, &t);
-    if (t.n > DK_UI_ROW - 1)
-        module_text(i, 0, &t);
+    module_text(i, &t);
     if (DK_LOAD_N < 40)
         keep(DK_LOAD[DK_LOAD_N++], t.b);
     dk_ui_menu_add_text(m, t.b);
