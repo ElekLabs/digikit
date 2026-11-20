@@ -1,8 +1,7 @@
 # core/runtime
 
 The digikit runtime: at boot, from the main-OS task entry, loads the `.dkm` modules of the saved selection from the card module store into
-a private arena, and calls the `tick` of every module once per UI-loop pass. The module set is fixed per session (no run-time load or unload:
-hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu changes the selection and restarts. Emulator only.
+a private arena, and calls the `tick` of every module once per UI-loop pass. The DIGIKIT menu changes the selection and restarts. The module set can also change while the device runs: the SysEx commands LOAD, UNLOAD and RELOAD (`admin_cmds.rs`) queue a live job that the UI task runs (`reload.rs`). It works on content modules; the command refuses a service file (`E_FORMAT`). `RELOAD_STATE` reports the job. Design: `docs/plans/extension-model.md` (E5, E5c).
 
 - Design, C ABI, sizes, hook: `docs/design/digikit-runtime.md`. File format: `docs/design/digikit-dkm.md`. Results:
   `docs/findings/29-runtime-v0.md`.
@@ -11,7 +10,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   (about 25 s); tests: `tests/patchkit/test_patchkit_dkrt.py`.
 - Try it by hand: `patchkit pack test/dyn-demo -o plus_drive/dt2/digikit/modules/dyn-demo.dkm`, patch with `--modules core/runtime`,
   boot with that `plus_drive/`; put `modules/dyn-demo.dkm` in `plus_drive/dt2/digikit/selection.txt` (or use DIGIKIT > MODULES), and the boot loads it.
-- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (the services are crates in `modules/core/services/NAME` (`machines`, `fx`, `samples`, `lfo`), linked into the runtime object; `params.rs` the kind-free parameter row writers, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler;
+- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (the runtime links no service: the services are crates in `modules/core/services/NAME` (`machines`, `fx`, `samples`, `lfo`), packed as `.dks` files that the runtime loads from the card at boot; the parameter row writers are the crate `dkrt-svc-params`, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler;
   `state.rs` (`State` and the `DKRT_*` statics), `platform.rs` (device, block read and write, MIDI send, helpers), `imports.rs` (the import table),
   `api.rs` (the C ABI), `health.rs`, `report.rs` (status, capacity, diag, debug imports), `tick.rs`, `mailbox.rs`; boot: `boot.rs`, `selection.rs`, `safe_mode.rs`;
   upload: `transport.rs`, `store_cmds.rs`, `admin_cmds.rs`, `module_cmds.rs`; `fault.rs` (crash, hang and panic records), `invariants.rs` (the module table check); `src/cf/tramp.s` the
