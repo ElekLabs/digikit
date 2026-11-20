@@ -53,7 +53,7 @@ shared = [
   "dkrt::invariants",
   "dkrt_fit",
 ]
-"C:dsp" = ["dkrt::dsp", "dkrt::link", "dkrt_link"]
+"C:dsp" = ["dkrt::dsp", "dkrt::dsp_stats", "dkrt::link", "dkrt_link"]
 "C:storage" = [
   "dkrt::storage",
   "dkrt::files",
