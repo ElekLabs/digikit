@@ -83,3 +83,14 @@ test('disposing the pane ends a run; Run refuses while something else of the pan
     dispose();
   });
 });
+
+test('the note before Run names the tracks of the chosen profile on the target', async () => {
+  const f = fake();
+  f.calibrator.tracks = async () => [1];
+  await createRoot(async (dispose) => {
+    const st = createCalibrationState({ calibrator: f.calibrator, emulator: () => true, blocked: () => false });
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(st.note(), 'Calibration uses track 1 and leaves it on the stock machine.');
+    dispose();
+  });
+});

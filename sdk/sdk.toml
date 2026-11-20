@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -14,9 +14,23 @@ version = "0.10.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import change
 
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
+# The logical keys (`dk_key`, <dk/gen/keys.h>): the order is the ABI. A module is built with the number of a name, so the list only grows at the end: never
+# remove, rename or reorder a name. A device file maps a name to its panel code (`[input.keys]` of devices/*.toml) and may use only the names listed here;
+# `patchkit gen` numbers the names from 1 in this order (0 is DK_KEY_NONE). At most 63 names.
+[keys]
+order = [
+    "PAGE_TRIG", "SRC", "FLTR", "AMP", "FX", "MOD", "PRESET", "SETTINGS",
+    "TEMPO", "YES", "UP", "NO", "LEFT", "DOWN", "RIGHT", "TRK",
+    "FUNC", "KEYBOARD", "RECORD", "PLAY", "STOP", "PAGE", "PTN", "SONG",
+    "TRIG1", "TRIG2", "TRIG3", "TRIG4", "TRIG5", "TRIG6", "TRIG7", "TRIG8",
+    "TRIG9", "TRIG10", "TRIG11", "TRIG12", "TRIG13", "TRIG14", "TRIG15", "TRIG16",
+    "ENC1", "ENC2", "ENC3", "ENC4", "ENC5", "ENC6", "ENC7", "ENC8",
+    "LEVEL_PUSH",
+]
+
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event"]
-services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large"]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
+services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
 # The callback types of the service imports (docs/plans/sdk.md section 10, Naming). The key ends in `_fn`; the C type is `dk_<key>` (the generated
@@ -50,6 +64,8 @@ ui_confirm_fn = "void (void *arg, i32 yes)"
 ui_choice_fn = "void (void *arg, i32 index)"
 # A UI-task timer (`dk_ui_tick`): short, it runs between key events and must not wait.
 ui_tick_fn = "void (void *arg)"
+# The action of a module's SETTINGS row (`dk_ui_settings_row`), in the UI task, when the user presses YES on the row.
+ui_settings_open_fn = "void (void *arg)"
 # The click of a machine parameter's knob (`dk_param_on_click`), in the UI task, when the knob is clicked on the machine's page (release without a turn): `track` is the track of the page.
 # Replaces `void FN(uint32_t track)` of DK_PARAM_ACTION; `arg` is the pointer given to `dk_param_on_click`.
 param_click_fn = "void (void *arg, u32 track)"
@@ -298,6 +314,48 @@ since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_ui *ui, ui_tick_fn fn, void *arg, u32 period_ms)"
 doc = "Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>."
+requires = "core/ui"
+absent = "-1"
+
+[[import]]
+name = "dk_ui_settings_row"
+service = "ui"
+since = "0.10.5"
+context = "init"
+sig = "i32 (dk_ui *ui, const char *text, ui_settings_open_fn open, void *arg)"
+doc = "Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>."
+requires = "core/ui"
+absent = "-1"
+
+[[import]]
+name = "dk_ui_view_open"
+service = "ui"
+since = "0.10.5"
+context = "ui"
+sig = "dk_ui_view *(dk_ui *ui, const void *desc)"
+doc = "Open a screen the module draws from a `dk_ui_view_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype); NULL when the desc is wrong or the pool is full. Closed for the module when it unloads."
+kind = "helper"
+requires = "core/ui"
+absent = "0"
+
+[[import]]
+name = "dk_ui_view_close"
+service = "ui"
+since = "0.10.5"
+context = "ui"
+sig = "void (dk_ui_view *view)"
+doc = "Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_text_input"
+service = "ui"
+since = "0.10.5"
+context = "ui"
+sig = "i32 (dk_ui *ui, const void *desc)"
+doc = "Open the stock naming screen from a `dk_ui_text_input_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype): `done(arg, text)` runs on YES only. 0 when shown, a negative code when not (DK_E_CONTRACT: the desc is wrong)."
+kind = "helper"
 requires = "core/ui"
 absent = "-1"
 
@@ -1334,6 +1392,31 @@ sig = "i32 (u32 op, u32 track, u32 ty)"
 doc = "Set the machine type (`op` 1) or the filter type (`op` 2) of `track` 0 to 15 of the active kit through the firmware's own kit commit, the call a chooser commit makes (calibration setup; never a raw write of the Sound byte). Only for the debug module's SETUP command, from the UI task. A machine type must be a stock one (below the device's `stock_types`) or a run-time type of a loaded module; a filter type a stock one, 0 to 5. Returns 0 when the firmware reports the new type afterwards, DK_E_RANGE (op, track or type not offered), or DK_E_STATE: no project yet, the commit is not in the image, or the firmware kept the old type (the machine permit refused it on that track, the project's settings mode makes the setter skip the write, or the read-back differs). See <dk/platform/debug.h>."
 
 [[import]]
+name = "dk_device_track_count"
+service = "runtime"
+since = "0.10.5"
+context = "any"
+sig = "u32 ()"
+doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal."
+
+[[import]]
+name = "dk_shortcut_add"
+service = "shortcuts"
+provided = true
+since = "0.10.5"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"
+doc = "Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>."
+
+[[import]]
+name = "dk_selected_track"
+service = "runtime"
+since = "0.10.5"
+context = "ui"
+sig = "i32 ()"
+doc = "The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet."
+
+[[import]]
 name = "dk_debug_log_sink_set"
 service = "runtime"
 since = "0.7.0"
@@ -1351,6 +1434,7 @@ doc = "The run-time switches of the speed levers: one RAM word, both bits set at
 
 [log]
 f_error = 1        # flags bit 0: error (kept even when debug is off)
+f_keep = 16        # flags bit 4: notable (kept in the small ring even when debug is off, whatever the level and kind): a producer sets it on an event that a test or a late debug module is to find
 level_shift = 1     # flags bits 1-3: level 0 error, 1 warn, 2 info, 3 debug, 4 trace
 level_mask = 7
 source_shift = 8    # flags bits 8-15: source module (0 = runtime, n = module table index + 1)
@@ -1657,11 +1741,50 @@ id = 49
 name = "SETUP_DONE"
 args = ["op", "track", "type", "seq", "status"]
 
+# a shortcut was not enabled because an earlier module (the first owner keeps it) binds the same two logical keys (warn level): the module's record index + 1 of the disabled
+# shortcut, the record index + 1 of the owner that keeps the binding, the two logical keys (`dk_key`).
+[[log.kind]]
+id = 52
+name = "SHORTCUT_CLASH"
+args = ["module", "owner", "key0", "key1", "-"]
+
+# a shortcut was added disabled because a key of it has no panel code on this device (warn level; it never keeps its key pair from another module's binding): the module's record
+# index + 1 and the two logical keys (`dk_key`).
+[[log.kind]]
+id = 53
+name = "SHORTCUT_INACTIVE"
+args = ["module", "key0", "key1", "-", "-"]
+
+# core/ui, module screens (docs/plans/track-manager.md): a module's full-screen view or overlay was pushed on the firmware's view stack (after the release of the key
+# that asked for it, when a key callback did), and when it left the stack. `owner` is the module's core/ui handle (its record index + 1: what `dk_ui_open` returns;
+# a core module has no context, its handle is the token of `dk_ui_core_handle`), `flags` the DK_UI_VIEW_* flags of the desc (1: overlay), `slot` the pool slot.
+[[log.kind]]
+id = 54
+name = "VIEW_OPENED"
+args = ["owner", "flags", "slot", "-", "-"]
+
+[[log.kind]]
+id = 55
+name = "VIEW_CLOSED"
+args = ["owner", "slot", "-", "-", "-"]
+
+# the stock naming screen opened for a module by dk_ui_text_input was pushed (after the key release when a key callback asked), and its YES was pressed (`done` is about to be called):
+# `owner` as above, `max_len` the length of the desc.
+[[log.kind]]
+id = 56
+name = "TEXT_INPUT_OPENED"
+args = ["owner", "max_len", "-", "-", "-"]
+
+[[log.kind]]
+id = 57
+name = "TEXT_INPUT_DONE"
+args = ["owner", "-", "-", "-", "-"]
+
 # core/card-guard refused a request to the firmware's eMMC block write or erase (error level; the runtime raises it from its tick, at most once per tick, for all refusals since the last one):
 # the sector and the length in sectors of the LAST refused request, its writer class and kind (class | kind << 8: class 0 stock, 1 runtime; kind 0 write, 1 erase) and the totals of
 # refused writes and refused erases since boot. Nothing is shown on the device screen (docs/plans/card-write-guard.md).
 [[log.kind]]
-id = 50
+id = 58
 name = "CARD_GUARD_REFUSED"
 args = ["sector", "sectors", "class_kind", "refused_writes", "refused_erases"]
 
@@ -1705,6 +1828,8 @@ SELECT = 0x30
 RESTART = 0x31
 
 [protocol.ranges]   # command numbers a run-time module may register with dk_host_register (a request number is 6 bits: bit 6 of the command byte marks a reply)
+# 0x0b-0x0f are reserved for the commands of test fixtures and are never built-in commands (the built-in numbers are in [protocol.commands]); 0x0a is the debug module's SETUP; `ui_views_test` is the first fixture.
+ui_views_test = [0x0f, 0x0f]   # test/ui-views: its report (rows, views, text input); with a body byte 1 it closes its overlay
 remote = [0x38, 0x3d]   # digikit/remote: key and turn of the panel (docs/plans/remote-control.md)
 remote_state = [0x3e, 0x3f]   # digikit/remote: the state
 probe = [0x32, 0x35]   # digikit/probe: collector status, raw reads, reset (docs/plans/debug-mode-and-probes.md)
@@ -1841,6 +1966,9 @@ name = "fx"
 [[service]]
 name = "lfo"
 
+[[service]]
+name = "shortcuts"
+
 # A `[[service]]` without `rust` is provided by a `.dks` provider (a module with `role = "service"`), not by a runtime row: it is in no generated table.
 # `test = true`: a test-only service; it and its `[[import]]` rows (also `test = true`) are left out of the public SDK headers, docs and templates.
 [[service]]
@@ -1861,6 +1989,7 @@ EFFECT = { id = 4, len = 0x1a4, service = "fx" }
 ACTION = { id = 5, len = 0x10, service = "machines" }
 NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
 NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
+SHORTCUT = { id = 9, len = 68, service = "shortcuts" }   # id (16 bytes, NUL padded), label (24), two logical keys (`dk_key`), `on` and `off` as image offsets (0: none), `arg` as given (the builder `dk_shortcut_add` writes it)
 LFO_SHAPE = { id = 8, len = 80, service = "lfo", generic = true }   # u32 key (`DK_KEY_<ID>`: not 0), 4 characters of name (space to tilde), 32 samples of i16 (big-endian)
 
 # The resources a module counts in its `uses` (R7, the header table of a `.dkm`): one id each. `capacity` names the [capacity.kinds] entry the

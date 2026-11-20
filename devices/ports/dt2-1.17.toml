@@ -239,6 +239,16 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.input.site.key_event_walk"
+cpu = "cf"
+kind = "code"
+addr = 0x4011c79c
+len = 8
+sha256 = "3d25d06bf11f3a7bccef894d0016b52adbb4ae468a0f475dd497d7b5966e2694"
+mark = "V"
+rule = "fw/input:cf_func"
+
+[[anchor]]
 name = "cf.lfo.data.wave_row.1"
 cpu = "cf"
 kind = "data"
@@ -3397,6 +3407,16 @@ mark = "D"
 rule = "fw/test:cf_func"
 
 [[anchor]]
+name = "cf.text.data.font_large"
+cpu = "cf"
+kind = "data"
+addr = 0x402a764c
+len = 20
+sha256 = "8e52aa8095b967c0045e2f3b1d674ffcbd13e6319f7ca922251740546179b09f"
+mark = "V"
+rule = "fw/text:cf_words"
+
+[[anchor]]
 name = "cf.text.fn.draw"
 cpu = "cf"
 kind = "code"
@@ -3427,6 +3447,16 @@ mark = "D"
 rule = "fw/text:cf_func"
 
 [[anchor]]
+name = "cf.text.fn.width"
+cpu = "cf"
+kind = "code"
+addr = 0x4011467a
+len = 4
+sha256 = "23201b350b902ad73d89ce6a89eee29dfa14dd42612057eede16e4b546dc6759"
+mark = "D"
+rule = "fw/text:cf_func"
+
+[[anchor]]
 name = "cf.usb.data.port_table"
 cpu = "cf"
 kind = "data"
@@ -3436,6 +3466,17 @@ len = 280
 sha256 = "ab516d86279febda1811929633ab4858f3e12c216eb6f460753752341f153632"
 mark = "D"
 rule = "fw/usb:cf_ptr"
+
+[[anchor]]
+name = "cf.usb.data.setup"
+cpu = "cf"
+kind = "value"
+addr = 0x47db4198
+src = 0x40005ffe
+len = 4
+sha256 = "1157e02d549d1799396f2dd840324761380bbeb1395000a05129a7a0d637f5fd"
+mark = "D"
+rule = "fw/usb:cf_literal"
 
 [[anchor]]
 name = "cf.usb.fn.cancel_ep"
@@ -3468,6 +3509,16 @@ mark = "D"
 rule = "fw/usb:cf_func"
 
 [[anchor]]
+name = "cf.usb.fn.ep0_send"
+cpu = "cf"
+kind = "code"
+addr = 0x40005f30
+len = 6
+sha256 = "2e00bf3f6a0d392db77c03fb33873740b6c1471cf16c6783c040fe7f3d4d41f4"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
 name = "cf.usb.fn.queue_td"
 cpu = "cf"
 kind = "code"
@@ -3484,6 +3535,16 @@ kind = "code"
 addr = 0x40006bc6
 len = 4
 sha256 = "7b2e2bc127b724457a8211e62247f55ef096ce64d527fa7baccab49340311cc6"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
+name = "cf.usb.fn.setup_dispatch"
+cpu = "cf"
+kind = "code"
+addr = 0x40005ff6
+len = 6
+sha256 = "3b1d937a65aa85bbf564995e207e8386d3ff3ebe127255b2d7ebc47384d5204c"
 mark = "D"
 rule = "fw/usb:cf_func"
 
@@ -3578,7 +3639,7 @@ kind = "code"
 addr = 0x4011b126
 len = 4
 sha256 = "1f6b50a3616f922607a92f5ea30e249ecfae4035c48517445d22acbd059dd2ec"
-mark = "D"
+mark = "V"
 rule = "fw/view:cf_func"
 
 [[anchor]]
@@ -3603,6 +3664,16 @@ mark = "D"
 rule = "fw/view:cf_ptr"
 
 [[anchor]]
+name = "cf.view.fn.view_ctor"
+cpu = "cf"
+kind = "code"
+addr = 0x4011b06e
+len = 4
+sha256 = "945e33bb4b14d28a5813755f8106ac0c2dbec82302f81140d3b1bf6fc964d321"
+mark = "V"
+rule = "fw/view:cf_func"
+
+[[anchor]]
 name = "cf.view.fn.view_push"
 cpu = "cf"
 kind = "code"
@@ -3620,6 +3691,17 @@ addr = 0x401f7ac0
 src = 0x4006668c
 len = 4
 sha256 = "b92cf07f469597ca95c28e1ce0375afc9a98ed960a7dce564fd3a4008178add7"
+mark = "D"
+rule = "fw/view:cf_ptr"
+
+[[anchor]]
+name = "cf.view.site.sp_view_cb_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x401f1130
+src = 0x4011a0e8
+len = 4
+sha256 = "2698f0b4e94c1f79181f3783fda1116b634ccc0a38bbbe63a5e12e0495188ec4"
 mark = "D"
 rule = "fw/view:cf_ptr"
 
@@ -3642,6 +3724,17 @@ len = 4
 sha256 = "c5991db0da94b3495fb6fdea00f44ed9c71ceb94093f6d3936f467643baac174"
 mark = "D"
 rule = "fw/view:cf_words"
+
+[[anchor]]
+name = "cf.view.site.view_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x4021dfd8
+src = 0x4011b0a6
+len = 4
+sha256 = "27e1fb04df8c32570bc1f6623decb323696117914f97200160a80f2207355524"
+mark = "V"
+rule = "fw/view:cf_ptr"
 
 [[anchor]]
 name = "cf.view.value.brain"
@@ -3672,6 +3765,16 @@ addr = 0x40116b1e
 len = 4
 sha256 = "90dc61142907269c3a05b62e1564c7ed49dec5c08711d5509b8ae38f1b97c382"
 mark = "D"
+rule = "fw/window:cf_func"
+
+[[anchor]]
+name = "cf.window.fn.name_ctor"
+cpu = "cf"
+kind = "code"
+addr = 0x40117ac2
+len = 4
+sha256 = "3f2a7a23497cd06e30629c3e1ea8ba643f614ea616aba5feafae54b013ae9750"
+mark = "V"
 rule = "fw/window:cf_func"
 
 [[anchor]]
@@ -3745,6 +3848,17 @@ addr = 0x40204fb4
 src = 0x400aa04e
 len = 4
 sha256 = "1c83d7d64eae2b2428fc2f4b51d66f88ff9f7954b0748d3a9ac09d6ddcd8ccd7"
+mark = "D"
+rule = "fw/window:cf_ptr"
+
+[[anchor]]
+name = "cf.window.site.name_cb_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x401ef190
+src = 0x4007f1a0
+len = 4
+sha256 = "8907c542b5dbf9f3cd30cd76ab664708e880587e06ab7aa2950d2d6a8bcdb22d"
 mark = "D"
 rule = "fw/window:cf_ptr"
 
@@ -4145,6 +4259,15 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
 
 [[hook]]
+name = "cf.input.hook.key_event"
+site = "cf.input.site.key_event_walk"
+mode = "replace"
+clobbers = ["ccr"]
+len = 8
+kind = "tail"
+check = "3d25d06bf11f3a7b"
+
+[[hook]]
 name = "cf.lfo.hook.graph_vec"
 site = "cf.lfo.site.graph_vec"
 mode = "replace"
@@ -4511,6 +4634,12 @@ name = "cf.usb.hook.init"
 site = "cf.usb.site.init"
 mode = "before"
 clobbers = ["ccr"]
+
+[[hook]]
+name = "cf.usb.hook.setup_dispatch"
+site = "cf.usb.fn.setup_dispatch"
+mode = "before"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
 name = "cf.view.hook.ui_loop"

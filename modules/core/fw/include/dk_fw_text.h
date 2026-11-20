@@ -6,11 +6,24 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* The ROM font header. Word 0 is not the glyph width (the stock font's widths reach 5 with word 0 = 3): its meaning is open. +6 is the glyph box height (6 for the stock font, 15 for the large one), checked by a second agent. */
+typedef struct FontData {
+    uint8_t _pad0[6];
+    uint16_t height;
+    uint8_t _pad1[12];
+} FontData;
+_Static_assert(sizeof(FontData) == 0x14, "FontData size");
+_Static_assert(offsetof(FontData, height) == 0x6, "FontData.height offset");
+
 /* Draws the plain string `s` at x, y: a 36-byte wrapper of the text routine 0x40113a84 with flags 0. Returns the advance. `maxw` is the fifth argument of the wrapper; its exact meaning is not read. */
 int32_t dk_fw_text_draw(uint8_t *bitmap, uint8_t *font, int32_t x, int32_t y, int32_t maxw, const char *s) __asm__("cf.text.fn.draw");
 /* Draws printf-formatted text in a cleared box next to `x`, `y`: `align` 0 left, 1 centre, 2 right of x; `prefix` is an optional C string (0 = none) measured with the text; a frame is cleared first with fill_rect. The meaning of `arg6` is not read; the signature is from the entry code only. */
 int32_t dk_fw_text_draw_box(uint8_t *bitmap, uint8_t *font, int32_t x, int32_t y, int32_t align, int32_t arg6, const char *prefix, const char *fmt, ...) __asm__("cf.text.fn.draw_box");
 /* Draws printf-formatted text (vsnprintf into 128 bytes) and returns the advance. `flags`: bit 0 proportional path, 1 centre, 2 right-align, 3 outline after, 4 clear box before (bits 3 and 4 = 0x18), 5 centre vertically, 6 bottom-align, 7 translate (finding 71 section 3). */
 int32_t dk_fw_text_draw_fmt(uint8_t *bitmap, uint8_t *font, int32_t x, int32_t y, uint32_t flags, const char *fmt, ...) __asm__("cf.text.fn.draw_fmt");
+/* Pixel width of a COW `std::string` (pointer to the one-word object) in a FontData; `maxlen` -1 for all characters. DT2 0x4011467a, DN2 0x40115fee. */
+int32_t dk_fw_text_width(uint8_t *fontdata, int32_t maxlen, const uint32_t *str) __asm__("cf.text.fn.width");
+/* The large ROM font (FontData header, 20 bytes): box height 15, glyph widths 2 to 8, two bytes for each glyph column; it has A to Z, 0 to 9, the space and `~!@#$%^&()_+-=`. The header words are 7, 0x0002000f and three pointers (width table, glyph offset table in columns, glyph data); the header is unique in the image. Finding 155 section 5. */
+extern const uint8_t dk_fw_text_font_large __asm__("cf.text.data.font_large");
 
 #endif

@@ -5954,30 +5954,30 @@
   },
   {
    "addend": 0,
-   "offset": 32,
+   "offset": 38,
    "section": ".text._RINvYINtNtNtCs6uNbiqmv1Ak_4core5slice4iter4IterNtNtCs4NVp4pdP0rZ_8dkrt_abi8platform13DeviceProfileENtNtNtNtBa_4iter6traits8iterator8Iterator8try_folduNCINvNtNtB1F_8adapters6copied13copy_try_foldBJ_uINtNtNtBa_3ops12control_flow11ControlFlowBJ_ENCINvNvB1z_4find5checkBJ_NCNvMBL_BJ_5by_id0E0E0B3a_EBN_",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 172,
+   "offset": 176,
    "section": ".text._RINvYINtNtNtCs6uNbiqmv1Ak_4core5slice4iter4IterNtNtCs4NVp4pdP0rZ_8dkrt_abi8platform13DeviceProfileENtNtNtNtBa_4iter6traits8iterator8Iterator8try_folduNCINvNtNtB1F_8adapters6copied13copy_try_foldBJ_uINtNtNtBa_3ops12control_flow11ControlFlowBJ_ENCINvNvB1z_4find5checkBJ_NCNvMBL_BJ_5by_id0E0E0B3a_EBN_",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
-   "addend": 280,
+   "addend": 500,
    "offset": 16,
    "section": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile5by_id",
-   "symbol": ".sec..rodata.global.14",
+   "symbol": ".sec..rodata.global.15",
    "type": "cf.32"
   },
   {
-   "addend": 82,
+   "addend": 86,
    "offset": 22,
    "section": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile5by_id",
-   "symbol": ".sec..rodata.global.14",
+   "symbol": ".sec..rodata.global.15",
    "type": "cf.32"
   },
   {
@@ -6005,28 +6005,28 @@
    "addend": 16,
    "offset": 22,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 28,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 34,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 46,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
@@ -7153,7 +7153,7 @@
   },
   {
    "align": 2,
-   "hex": "4fefffbc2f2f00484eb9000000002f0041ef000a4eb900000000508f71ef00027202b280671e222f001cb2af004c6210202f004c9081b0af002055c0448060064200600242007201c0814fef00444e75",
+   "hex": "4fefff742f2f00904eb9000000002f0041ef000a4eb900000000508f71ef00027202b280671e222f001cb2af00946210202f00949081b0af002055c0448060064200600242007201c0814fef008c4e75",
    "kind": "text",
    "name": ".text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx6fxpage6in_ddrNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "size": 80
@@ -7593,11 +7593,11 @@
    "size": 41
   },
   {
-   "align": 1,
-   "hex": "00",
+   "align": 16,
+   "hex": "000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.global.18",
-   "size": 1
+   "size": 30
   },
   {
    "align": 1,
@@ -7607,25 +7607,25 @@
    "size": 4
   },
   {
-   "align": 16,
-   "hex": "4d6978000000000000000000000000000000000000000000000000000000",
+   "align": 1,
+   "hex": "4d697800",
    "kind": "data",
    "name": ".rodata.global.16",
-   "size": 30
+   "size": 4
   },
   {
    "align": 16,
-   "hex": "64796e6473705f696e666f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fffffffff0000",
+   "hex": "64796e6473705f696e666f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fffffffff000000010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b00000010000000080000000500000010000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031000000000000000000000000000000010304010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b00000010000000080000000700000010000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031000000000000000000000000000000010304000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc0000000000000000000000000000000000000000000000000000000000000000c000d0000110000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000001030401000101",
    "kind": "data",
    "name": ".rodata.global.15",
-   "size": 86
+   "size": 500
   },
   {
    "align": 16,
-   "hex": "64796e66785f696e666f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b000000100000000800000005010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b000000100000000800000007000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc0000000000000000000000000000000000001000101",
+   "hex": "64796e66785f696e666f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.global.14",
-   "size": 280
+   "size": 82
   },
   {
    "align": 1,
@@ -7650,7 +7650,7 @@
   },
   {
    "align": 2,
-   "hex": "fd7fc82c",
+   "hex": "7efc881d",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -8224,10 +8224,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fed048d73c7c2848266e00082a6e000c2a2b0004260e0683ffffff7c45f900000000280e0684ffffffbe2c0e0686ffffff3a2213ba816700009e204141e8004226884a8167000090487800422f012f034e92487800422f032f044e92202eff822d40fef44fef0018b09566c62d40ffc4487800422f042f064e92342effbe4fef000c71c27202b28067a83d42ff3a206efef42d48ff40260e0683fffffef848780042486eff3a2f0345f9000000004e923d42fef8202efef42d40fefe487800422f032f0c4e924fef0018200c4cee3c7cfed04e5e4e7538bc000260ee",
+   "hex": "4e56fdac48d73cfc2848266e00082a6e000c2a2b0004260e0683fffffeec243c0000008a45f900000000280e0684ffffff762c0e0686fffffe622213ba816700009a204141e8008a26884a816700008c2f022f012f034e922f022f032f044e92202efef22d40fdd44fef0018b09566ca2d40ff7c2f022f042f064e923e2eff764fef000c71c77202b28067ae3d47fe62206efdd42d48fe68240e0682fffffdd8263c0000008a2f03486efe622f0245f9000000004e923d47fdd8202efdd42d40fdde2f032f022f0c4e924fef0018200c4cee3cfcfdac4e5e4e7538bc000260ee",
    "kind": "text",
    "name": ".text._RINvYINtNtNtCs6uNbiqmv1Ak_4core5slice4iter4IterNtNtCs4NVp4pdP0rZ_8dkrt_abi8platform13DeviceProfileENtNtNtNtBa_4iter6traits8iterator8Iterator8try_folduNCINvNtNtB1F_8adapters6copied13copy_try_foldBJ_uINtNtNtBa_3ops12control_flow11ControlFlowBJ_ENCINvNvB1z_4find5checkBJ_NCNvMBL_BJ_5by_id0E0E0B3a_EBN_",
-   "size": 222
+   "size": 224
   },
   {
    "align": 2,
@@ -8259,7 +8259,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffac2d48ffac2d6e0008ffb24879000000004879000000004eb900000000508f2d40ffb62d41ffba486effb2486effb641eeffbe4eb900000000508f71eeffbe7202b280671e48780042486effbe2f2effac4eb9000000004fef000c202effac4e5e4e75206effac30bc000260ee",
+   "hex": "4e56ff642d48ff642d6e0008ff6a4879000000004879000000004eb900000000508f2d40ff6e2d41ff72486eff6a486eff6e41eeff764eb900000000508f71eeff767202b280671e4878008a486eff762f2eff644eb9000000004fef000c202eff644e5e4e75206eff6430bc000260ee",
    "kind": "text",
    "name": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile5by_id",
    "size": 112
@@ -8762,7 +8762,7 @@
    "size": 28
   }
  ],
- "source_sha256": "1bc06419d969d1f4762de924fef44151698044cd21b46d99394696c0cbf08e30",
+ "source_sha256": "911fe1c043895d953693ad57f01dbc84e0ba7dca036536d8d523a7baa0b96de9",
  "symbols": [
   {
    "global": false,
@@ -10951,8 +10951,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
-  "instructions_redecoded": "8826",
-  "isa_check": "184ed7364eec0dd843da44e5f2fd37030ee40a20c8a651bd1f30260a82470374",
+  "instructions_redecoded": "8828",
+  "isa_check": "5eea33e8b898cf42c1c5bacbe8d0f943b7a0acde5850b2c582034e2757b2e7c3",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

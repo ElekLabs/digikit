@@ -1,7 +1,7 @@
 # Plan: the eMMC write guard (core/card-guard)
 
 Status: built for the Syntakt (`st-1.42`) behind a device-data switch; DT2 and DN2 carry the same code with the switch off. Host checks pass; no emulator or device run yet (the device test list is in section 8).
-Hook sites, addresses and register facts: [finding 155](../findings/155-card-write-guard-sites.md). Sources: findings 142, 145, 146, 154, `modules/core/runtime/src/rs/src/storage/card.rs`, `devices/fw/storage.toml`, `devices/*.toml` `[card.guard]`.
+Hook sites, addresses and register facts: [finding 156](../findings/156-card-write-guard-sites.md). Sources: findings 142, 145, 146, 154, `modules/core/runtime/src/rs/src/storage/card.rs`, `devices/fw/storage.toml`, `devices/*.toml` `[card.guard]`.
 Marks: **[D]** read once, static; **[O]** open. Nothing is **[V]**: a second agent must check the bytes first.
 
 ## 1. What is built
@@ -15,7 +15,7 @@ Marks: **[D]** read once, static; **[O]** open. Nothing is **[V]**: a second age
 4. **Class of the caller by return address**: the runtime's raw write goes through `dkrt_raw_block_write` (`tramp.s`), whose call of the firmware is followed by the global label `dkrt_raw_write_ret`. A request with that return address is class `runtime`; every other caller is class `stock`.
    The recursive 64 KiB call inside the stock write (return address entry + 0x36, anchor `cf.storage.site.block_write.split_ret`) is skipped: it is a part of a request that was checked as a whole.
 5. **Refusal**: return `-10` (the firmware's own "sector out of range" code) from the entry, with no lock taken and no state changed. Every caller tests the result for non-zero or negative and stops with its own error (Data API: "Failed to write to eMMC") **[D]**.
-   A refusal is counted (`dkcg_stats`): INFO appends six words after the card state, `DkrtHealth` has two fields (version 5), and the runtime's tick raises one log event `CARD_GUARD_REFUSED` (kind 50) for the refusals since the last tick. Nothing is shown on the device screen.
+   A refusal is counted (`dkcg_stats`): INFO appends six words after the card state, `DkrtHealth` has two fields (version 5), and the runtime's tick raises one log event `CARD_GUARD_REFUSED` (kind 58) for the refusals since the last tick. Nothing is shown on the device screen.
 6. **The switch is enforced by patchkit**: `[module] needed_when = [{ switch = "card.guard.enabled", with = "core/runtime" }]` in the adapter's `module.toml`. On a device whose file turns the switch on, every patch set (checked by `patchkit gen`) and every module selection (checked by `apply`) that holds `core/runtime` must hold `core/card-guard`; a selection that holds the adapter where the switch is off is refused too.
 7. The slot-level bound inside the stock window (a sample upload must not run into the next slot) is a separate, optional phase 2 at the Data API writer constructor (section 7). It protects the user's samples and projects, not the store. The store is already unreachable for every stock writer.
 
@@ -153,7 +153,7 @@ Files:
 - `modules/core/adapters/card-guard/`: `module.toml`, `src/cf/guard.h` (the check), `guard.c`, `hooks.s`, `st/device.s` (rows), `tests/guard-host.c` with `tests/guard.test.ts`.
 - `modules/core/runtime`: `src/cf/tramp.s` (`dkrt_raw_block_write`, `dkrt_raw_write_ret`), `storage/card_guard.rs` (INFO, HEALTH, the event), `platform.rs` (`block_write_raw` calls the trampoline).
 - `packages/patchkit`: `devgen.rs` (`[card.guard]` rows and checks, the `gas-card-guard` kind, `check_needed_when`), `apply.rs` (the selection check), `devdata.rs` (`switches`).
-- `packages/dk-session` (`info().card_guard`), `docs/design/digikit-upload.md` (INFO row), `sdk/sdk.toml` (log kind 50), `modules/core/runtime/abi.toml` (`DkrtHealth`).
+- `packages/dk-session` (`info().card_guard`), `docs/design/digikit-upload.md` (INFO row), `sdk/sdk.toml` (log kind 58), `modules/core/runtime/abi.toml` (`DkrtHealth`).
 
 Hook shim (write; the erase shim is the same with two arguments):
 

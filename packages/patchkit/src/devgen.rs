@@ -91,25 +91,39 @@ struct FxDoc {
 #[derive(Deserialize)]
 struct InputDoc {
     backend: String,
+    /// `[input.keys]`: logical key name = the key's id in the firmware's key events (the id at +0xc of the event). The one source of the C names (`dk_key`), the
+    /// profile's key map and `DkrtDevice.key_codes`. These are firmware key indices: they equal the panel code on some devices and differ
+    /// on others (finding 153), and they are not the wire codes (channel, bit) that `dk_input_key` injects.
     #[serde(default)]
-    view_keys: Option<ViewKeysDoc>,
+    keys: BTreeMap<String, u64>,
+    /// `[input.key_flags]`: the bits of the key event's flags word (+0x10), named by meaning.
+    #[serde(default)]
+    key_flags: Option<KeyFlagsDoc>,
 }
-/// `[input.view_keys]`: the key ids of the firmware's key events (the id the views' key handlers get at +0xc of the event), which are the firmware's
-/// key indices and differ from the panel codes on some devices (the Syntakt's decoder table is not the identity, finding 138 "Safe key"). core/ui reads
-/// them to tell YES, NO and RIGHT in its list views. `yes2` is a second key that acts as YES; absent: none (generated as `UI_NO_KEY`, which is no key id).
+/// `[input.key_flags]`: bit numbers (0 to 31) of the flags word of a key event: `press` is set on a press and clear on a release, `func` is set while FUNC is held,
+/// `repeat` marks a held key repeating, `release` is set on a release (the stock list handler acts on it).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ViewKeysDoc {
-    yes: u64,
-    yes2: Option<u64>,
-    no: u64,
-    right: u64,
-    /// The bit of the key event's flags word (+0x10) that the move keys (RIGHT here) act on, and the bit that YES and NO act on: read from the firmware's own key handler.
-    move_flag: u64,
-    act_flag: u64,
+struct KeyFlagsDoc {
+    press: u64,
+    func: u64,
+    repeat: u64,
+    release: u64,
 }
-/// The value of `UI_KEY_YES2` on a device with no second YES key: no firmware key id (they are small numbers), so the comparison in core/ui never matches.
-const UI_NO_KEY: u64 = 0xFFFF_FFFF;
+/// The value of `UI_KEY_YES2` is the id of `LEVEL_PUSH`: a second key that acts as YES (the stock handler treats it like YES).
+/// core/ui's four keys, by the names of `[input.keys]`: the constant they generate, and the key name. A device file without one of them is refused.
+const UI_KEY_NOTES: [&str; 4] = [
+    "[input.keys] YES (the key id of YES in a key event)",
+    "[input.keys] LEVEL_PUSH (a second YES key)",
+    "[input.keys] NO (the key id of NO)",
+    "[input.keys] RIGHT (the key id of RIGHT)",
+];
+const UI_KEYS: [(&str, &str); 4] = [
+    ("UI_KEY_YES", "YES"),
+    ("UI_KEY_YES2", "LEVEL_PUSH"),
+    ("UI_KEY_NO", "NO"),
+    ("UI_KEY_RIGHT", "RIGHT"),
+];
 
 /// `[panel]`: the key codes: codes 1 to 8 * `linear_channels` are linear (code = channel * 8 + bit + 1), `[panel.exceptions]` lists the others as
 /// code = [channel, bit]. Only these numbers are generated; the groups are for hosts that draw the panel.
@@ -215,6 +229,9 @@ struct Digikit {
     keep_bytes: u64,
     sample_path_max: u64,
     peek: Vec<[u64; 2]>,
+    /// The tracks of the device (0: not given).
+    #[serde(default)]
+    tracks: u64,
     #[serde(default)]
     span_clock: u64,
     #[serde(default)]
@@ -283,7 +300,7 @@ pub struct Facts {
 
 #[derive(Debug)]
 struct DeviceTables {
-    /// The tables of the device file as dotted paths (`input`, `input.view_keys`).
+    /// The tables of the device file as dotted paths (`input`, `input.keys`).
     tables: std::collections::BTreeSet<String>,
     /// `[patch_sets]`: the root modules of each named set.
     patch_sets: BTreeMap<String, Vec<String>>,
@@ -305,6 +322,8 @@ struct Entry {
     /// `None`: no `[card.guard]`.
     guard: Option<GuardF>,
     input: InputF,
+    /// `[input.keys]`: logical key name to the key's id in the firmware's key events (empty: the device has no key names).
+    keys: BTreeMap<String, u64>,
     fx: FxF,
     profile: ProfileF,
     /// DSP instructions per block left for modules (`dkprof::budget`: the block at the default margin, less the stock firmware's load). 0 where `devices/cycle-factors.json`
@@ -414,8 +433,10 @@ struct InputF {
     encoders: u64,
     /// (code, channel, bit)
     exceptions: Vec<[u64; 3]>,
-    /// The key ids of the firmware's key events (yes, yes2, no, right) and the flag bits of the move and act keys.
-    view_keys: [u64; 6],
+    /// The ids of the keys core/ui compares (`UI_KEYS` order: yes, yes2, no, right), from `[input.keys]`.
+    ui_keys: [u64; 4],
+    /// The flag bits of a key event (`[input.key_flags]`: press, func, repeat, release).
+    key_flags: [u64; 4],
 }
 #[derive(Debug)]
 struct SamplePoolF {
@@ -478,6 +499,7 @@ struct DigikitF {
     sample_path_max: u64,
     samples_in_store: bool,
     peek: Vec<[u64; 2]>,
+    tracks: u64,
     span_clock: u64,
     span_clock_hz: u64,
 }
@@ -596,7 +618,8 @@ impl Facts {
                 k.dsp_area_bytes.unwrap_or(0),
                 &crate::sdkgen::limits_max(),
             )?;
-            let input = input_facts(&short, d.input, d.panel)?;
+            let keys = key_facts(&short, d.input.as_ref().map(|i| &i.keys))?;
+            let input = input_facts(&short, d.input, d.panel, &keys)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
             let (adapter_machine, sample_pool) = match d.adapter {
                 Some(a) => (a.machine, a.sample_pool),
@@ -631,6 +654,7 @@ impl Facts {
                             sample_path_max: k.sample_path_max,
                             samples_in_store,
                             peek: k.peek,
+                            tracks: k.tracks,
                             span_clock: k.span_clock,
                             span_clock_hz: k.span_clock_hz,
                         },
@@ -656,6 +680,7 @@ impl Facts {
                         sample_pool,
                         guard,
                         input,
+                        keys,
                         fx,
                         profile: profile_facts(&short, models.by_device.get(&short))?,
                         dsp_headroom,
@@ -667,6 +692,39 @@ impl Facts {
             }
         }
         Ok(Facts { docs, devices })
+    }
+
+    /// The logical key names in the order of their numbers: `[keys] order` of sdk/sdk.toml (`DK_KEY_NONE` is 0, the names follow from 1). A device file may use only
+    /// these names; the list is the ABI and never renumbers.
+    pub fn key_names(&self) -> Result<Vec<String>> {
+        let names = crate::sdkgen::key_order();
+        for (dev, e) in &self.docs {
+            if let Some(n) = e.keys.keys().find(|n| !names.contains(n)) {
+                return Err(err!(
+                    "{dev}: [input.keys] {n}: not a name of [keys] order in sdk/sdk.toml (add it at the end of that list)"
+                ));
+            }
+        }
+        let slots = key_slots()?;
+        if names.len() >= slots {
+            return Err(err!(
+                "[keys] order of sdk/sdk.toml lists {} names, the tables hold {} (DEV_KEYS of core/runtime/abi.toml)",
+                names.len(),
+                slots - 1
+            ));
+        }
+        Ok(names)
+    }
+
+    /// The panel code of each logical key of `dev`, indexed by the key's number (`DEV_KEYS` entries; a key the device lacks is 0).
+    fn key_codes(&self, dev: &str) -> Result<Vec<u64>> {
+        let mut out = vec![0; key_slots()?];
+        if let Some(e) = self.docs.get(dev) {
+            for (i, n) in self.key_names()?.iter().enumerate() {
+                out[i + 1] = e.keys.get(n).copied().unwrap_or(0);
+            }
+        }
+        Ok(out)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -822,7 +880,50 @@ fn fx_facts(short: &str, f: Option<FxDoc>, fx_slots: u64, send_slots: u64) -> Re
     })
 }
 
-fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<InputF> {
+/// The logical keys of `[input.keys]`: a name is capital letters, digits and `_` (it becomes `DK_KEY_<name>`), a code is 1 to 255 and names one key.
+fn key_facts(short: &str, keys: Option<&BTreeMap<String, u64>>) -> Result<BTreeMap<String, u64>> {
+    let Some(keys) = keys else {
+        return Ok(BTreeMap::new());
+    };
+    let mut seen: BTreeMap<u64, &str> = BTreeMap::new();
+    for (name, code) in keys {
+        let ok = name.starts_with(|c: char| c.is_ascii_uppercase())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+        if !ok {
+            return Err(err!(
+                "{short}: [input.keys] {name:?}: a name is capital letters, digits and _, starting with a letter"
+            ));
+        }
+        if !(1..=255).contains(code) {
+            return Err(err!(
+                "{short}: [input.keys] {name} = {code}: a code is 1 to 255"
+            ));
+        }
+        if let Some(other) = seen.insert(*code, name) {
+            return Err(err!(
+                "{short}: [input.keys] {other} and {name} have the same code {code}"
+            ));
+        }
+    }
+    Ok(keys.clone())
+}
+
+/// The entries of the key table: index 0 is `DK_KEY_NONE`, then one for each logical key name (`DEV_KEYS` of core/runtime/abi.toml: the one definition).
+fn key_slots() -> Result<usize> {
+    abi_consts()?
+        .get("DEV_KEYS")
+        .map(|v| *v as usize)
+        .ok_or_else(|| err!("core/runtime/abi.toml has no DEV_KEYS"))
+}
+
+fn input_facts(
+    short: &str,
+    i: Option<InputDoc>,
+    p: Option<PanelDoc>,
+    keys: &BTreeMap<String, u64>,
+) -> Result<InputF> {
     let Some(i) = i else {
         return Ok(InputF::default());
     };
@@ -865,39 +966,44 @@ fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<
         }
         exceptions.push([code, *ch, *bit]);
     }
-    if let Some(k) = &i.view_keys {
-        for (what, bit) in [("move_flag", k.move_flag), ("act_flag", k.act_flag)] {
-            if bit >= 32 {
-                return Err(err!(
-                    "{short}: [input.view_keys] {what} = {bit}: a bit number of the 32-bit flags word, 0 to 31"
-                ));
-            }
+    let Some(f) = &i.key_flags else {
+        return Err(err!(
+            "{short}: [input] needs [input.key_flags] (press, func, repeat and release: bit numbers of the key event's flags word)"
+        ));
+    };
+    let key_flags = [f.press, f.func, f.repeat, f.release];
+    for (n, (what, bit)) in ["press", "func", "repeat", "release"]
+        .iter()
+        .zip(key_flags)
+        .enumerate()
+    {
+        if bit >= 32 {
+            return Err(err!(
+                "{short}: [input.key_flags] {what} = {bit}: a bit number of the 32-bit flags word, 0 to 31"
+            ));
         }
-        for (what, id) in [
-            ("yes", Some(k.yes)),
-            ("yes2", k.yes2),
-            ("no", Some(k.no)),
-            ("right", Some(k.right)),
-        ] {
-            if id.is_some_and(|v| v >= UI_NO_KEY) {
-                return Err(err!(
-                    "{short}: [input.view_keys] {what}: a key id below {UI_NO_KEY:#x}"
-                ));
-            }
+        if let Some(other) = key_flags[..n].iter().position(|b| *b == bit) {
+            return Err(err!(
+                "{short}: [input.key_flags] {what} and {} are both bit {bit}",
+                ["press", "func", "repeat", "release"][other]
+            ));
         }
     }
-    let view_keys = i.view_keys.map_or([0, UI_NO_KEY, 0, 0, 0, 0], |k| {
-        [
-            k.yes,
-            k.yes2.unwrap_or(UI_NO_KEY),
-            k.no,
-            k.right,
-            k.move_flag,
-            k.act_flag,
-        ]
-    });
+    let mut ui_keys = [0u64; 4];
+    // A device that names keys names the four that core/ui needs: it compares the ids of the key events with them.
+    if !keys.is_empty() {
+        for (slot, (_, name)) in UI_KEYS.iter().enumerate() {
+            let Some(id) = keys.get(*name) else {
+                return Err(err!(
+                    "{short}: [input.keys] has no {name}: core/ui needs YES, NO, RIGHT and LEVEL_PUSH (the second YES key)"
+                ));
+            };
+            ui_keys[slot] = *id;
+        }
+    }
     Ok(InputF {
-        view_keys,
+        ui_keys,
+        key_flags,
         backend: backend as u64 + 1,
         linear_channels: p.linear_channels,
         button_channels: p.button_channels,
@@ -1529,6 +1635,7 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             k.sample_path_max,
             "[digikit] sample_path_max",
         ),
+        c("TRACKS", k.tracks, "[digikit] tracks (0: not given)"),
         c(
             "STORE_FIRST",
             store_first,
@@ -1686,26 +1793,37 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         "[panel] button_channels (the button decoder's tables: a key channel is below it)",
     ));
     v.push(c("PANEL_ENCODERS", inp.encoders, "[panel] encoders"));
-    for (name, value, what) in [
-        ("UI_KEY_YES", inp.view_keys[0], "yes"),
-        ("UI_KEY_YES2", inp.view_keys[1], "yes2"),
-        ("UI_KEY_NO", inp.view_keys[2], "no"),
-        ("UI_KEY_RIGHT", inp.view_keys[3], "right"),
-        ("UI_KEYFL_MOVE", inp.view_keys[4], "move"),
-        ("UI_KEYFL_ACT", inp.view_keys[5], "act"),
-    ] {
-        v.push(c(
+    for (slot, (name, key)) in UI_KEYS.iter().enumerate() {
+        v.push(C {
             name,
-            value,
-            match what {
-                "yes" => "[input.view_keys] yes (the key id of YES in a key event)",
-                "yes2" => "[input.view_keys] yes2 (a second YES key; 0xffffffff: none, no key id)",
-                "no" => "[input.view_keys] no (the key id of NO)",
-                "right" => "[input.view_keys] right (the key id of RIGHT)",
-                "move" => "[input.view_keys] move_flag (the flags bit the move keys act on)",
-                _ => "[input.view_keys] act_flag (the flags bit YES and NO act on)",
-            },
-        ));
+            value: inp.ui_keys[slot] as i64,
+            note: UI_KEY_NOTES[slot],
+        });
+        let _ = key;
+    }
+    for (name, value, note) in [
+        (
+            "KEY_FLAG_PRESS",
+            inp.key_flags[0],
+            "[input.key_flags] press (set on a press, clear on a release)",
+        ),
+        (
+            "KEY_FLAG_FUNC",
+            inp.key_flags[1],
+            "[input.key_flags] func (set while FUNC is held)",
+        ),
+        (
+            "KEY_FLAG_REPEAT",
+            inp.key_flags[2],
+            "[input.key_flags] repeat (a held key repeating)",
+        ),
+        (
+            "KEY_FLAG_RELEASE",
+            inp.key_flags[3],
+            "[input.key_flags] release (set on a release)",
+        ),
+    ] {
+        v.push(c(name, value, note));
     }
     v.push(c(
         "PANEL_EXC_N",
@@ -1997,6 +2115,44 @@ fn block_cycles(clock_hz: u64, blocks_per_second: u64) -> Option<u64> {
     (blocks_per_second != 0).then(|| (clock_hz + blocks_per_second / 2) / blocks_per_second)
 }
 
+/// `sdk/include/dk/gen/keys.h`: the logical key names of the device files (`[input.keys]`) as `dk_key` numbers. A module names a key with these and holds no
+/// panel code; the profile and `dkrt_dev` map the number to the device's code. `DK_KEY_NONE` is 0 and a name that a device lacks maps to 0 there.
+pub fn keys_h(facts: &Facts) -> Result<String> {
+    let names = facts.key_names()?;
+    let mut s = format!(
+        "/* {NOTE_SDK} */\n/* sdk/include/dk/gen/keys.h -- the logical keys: panel key names of the device files ([input.keys]), numbered in the order below. */\n#ifndef DK_GEN_KEYS_H\n#define DK_GEN_KEYS_H\n\n#include <stdint.h>\n\n/* A logical key: DK_KEY_NONE or a DK_KEY_* number. */\ntypedef uint32_t dk_key;\n\n#define DK_KEY_NONE 0\n"
+    );
+    for (i, n) in names.iter().enumerate() {
+        let _ = writeln!(s, "#define DK_KEY_{n} {}", i + 1);
+    }
+    let _ = writeln!(
+        s,
+        "#define DK_KEY_COUNT {} /* the names above, without DK_KEY_NONE */",
+        names.len()
+    );
+    for (macro_, stem) in [("TRIG", "TRIG"), ("ENC", "ENC")] {
+        let first = format!("{stem}1");
+        if let Some(i) = names.iter().position(|n| *n == first) {
+            let run = (1..)
+                .take_while(|k| {
+                    names
+                        .get(i + k - 1)
+                        .is_some_and(|n| *n == format!("{stem}{k}"))
+                })
+                .count();
+            let _ = writeln!(
+                s,
+                "/* DK_KEY_{macro_}(n), n = 1 to {run}: the numbered keys are consecutive. */\n#define DK_KEY_{macro_}(n) ((dk_key)(DK_KEY_{stem}1 + (n) - 1))"
+            );
+        }
+    }
+    s.push_str("\n#endif /* DK_GEN_KEYS_H */\n");
+    Ok(s)
+}
+
+const NOTE_SDK: &str =
+    "Generated by `patchkit gen` from the device files ([input.keys]). Do not edit.";
+
 /// The runtime's ABI file: the constants and the `DkrtDevice` struct that this generator writes the device object from.
 const ABI_TEXT: &str = include_str!("../../../modules/core/runtime/abi.toml");
 
@@ -2012,8 +2168,10 @@ fn abi_consts() -> Result<BTreeMap<String, u64>> {
     Ok(out)
 }
 
-/// `DkrtDevice`: its field names in order (every field is a u32), from `core/runtime/abi.toml`.
-fn dkdv_fields() -> Result<Vec<String>> {
+/// `DkrtDevice`: its field names in order with their length in words (1, or the length of an array field `u32 name[N]`; every field is a u32), from
+/// `core/runtime/abi.toml`.
+fn dkdv_fields() -> Result<Vec<(String, usize)>> {
+    let abi = abi_consts()?;
     let t: toml::Table = toml::from_str(ABI_TEXT)?;
     let st = t["struct"]
         .as_array()
@@ -2028,13 +2186,30 @@ fn dkdv_fields() -> Result<Vec<String>> {
         if w.next() != Some("u32") {
             return Err(err!("DkrtDevice: every field must be a u32: {decl:?}"));
         }
-        out.push(w.next().unwrap_or("").to_string());
+        let name = w.next().unwrap_or("");
+        let (name, len) = match name.split_once('[') {
+            Some((n, rest)) => {
+                let l = rest.trim_end_matches(']');
+                let len = l
+                    .parse::<usize>()
+                    .ok()
+                    .or_else(|| abi.get(l).map(|v| *v as usize))
+                    .ok_or_else(|| {
+                        err!(
+                            "DkrtDevice: field {n}: array length {l:?} is not a number or constant"
+                        )
+                    })?;
+                (n, len)
+            }
+            None => (name, 1),
+        };
+        out.push((name.to_string(), len));
     }
     Ok(out)
 }
 
 /// The constant that fills a `DkrtDevice` field (the four header words are not in this table).
-const DKDV_VALUE: [(&str, &str); 11] = [
+const DKDV_VALUE: [(&str, &str); 16] = [
     ("console_uart_base", "CONSOLE_UART_BASE"),
     ("ddr_uncached_alias", "DDR_UNCACHED_ALIAS"),
     ("ddr_cached_base", "DDR_CACHED_BASE"),
@@ -2046,10 +2221,18 @@ const DKDV_VALUE: [(&str, &str); 11] = [
     ("dsp_block_cycles", "DSP_BLOCK_CYCLES"),
     ("dyn_type_first", "DYN_TYPE_FIRST"),
     ("dyn_types", "DYN_TYPES"),
+    ("tracks", "TRACKS"),
+    ("key_flag_press", "KEY_FLAG_PRESS"),
+    ("key_flag_func", "KEY_FLAG_FUNC"),
+    ("key_flag_repeat", "KEY_FLAG_REPEAT"),
+    ("key_flag_release", "KEY_FLAG_RELEASE"),
 ];
 
+/// The array field of `DkrtDevice` that holds the panel code of each logical key (index = the key's number).
+const DKDV_KEY_CODES: &str = "key_codes";
+
 /// The device object of one device (`gas-dkdv`): `dkrt_dev`, the struct `DkrtDevice` as `.long` words.
-fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
+fn gas_dkdv(module: &str, dev: &str, cs: &[C], key_codes: &[u64]) -> Result<String> {
     let abi = abi_consts()?;
     let fields = dkdv_fields()?;
     let value = |name: &str| {
@@ -2062,12 +2245,28 @@ fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
         "/* {module} on {dev}: {NOTE}. The struct DkrtDevice of core/runtime/abi.toml. */\n"
     );
     s.push_str("    .balign 4\n    .globl dkrt_dev\ndkrt_dev:\n");
-    for f in &fields {
+    for (f, len) in &fields {
+        if f == DKDV_KEY_CODES {
+            if *len != key_codes.len() {
+                return Err(err!(
+                    "{module}: DkrtDevice.{f} has {len} words, the key table has {}",
+                    key_codes.len()
+                ));
+            }
+            for (i, code) in key_codes.iter().enumerate() {
+                let _ = writeln!(
+                    s,
+                    "    .long {}    /* {f}[{i}]: the panel code of logical key {i} (0: none) */",
+                    hex(*code as i64)
+                );
+            }
+            continue;
+        }
         let (v, note) = match f.as_str() {
             "magic" => (abi["DEV_MAGIC"] as i64, "DEV_MAGIC".to_string()),
             "version" => (abi["DEV_VERSION"] as i64, "DEV_VERSION".to_string()),
             "size" => (
-                (fields.len() * 4) as i64,
+                (fields.iter().map(|f| f.1).sum::<usize>() * 4) as i64,
                 "the bytes of the struct".to_string(),
             ),
             "caps" => (value("DKDV_CAPS")?, "DEV_HAS_* bits".to_string()),
@@ -2088,8 +2287,10 @@ fn gas_dkdv_offsets(module: &str) -> String {
     let mut s = format!(
         "/* {module}: {NOTE}. Byte offsets of the fields of struct DkrtDevice (core/runtime/abi.toml). */\n"
     );
-    for (i, f) in dkdv_fields().unwrap_or_default().iter().enumerate() {
-        let _ = writeln!(s, "    .equ DKDV_{}, {}", f.to_uppercase(), i * 4);
+    let mut word = 0;
+    for (f, len) in dkdv_fields().unwrap_or_default() {
+        let _ = writeln!(s, "    .equ DKDV_{}, {}", f.to_uppercase(), word * 4);
+        word += len;
     }
     s
 }
@@ -2103,12 +2304,12 @@ const NOTE: &str =
 
 /// `DeviceProfile` constants of every device (the type is `dkrt_abi::platform::DeviceProfile`): what the real platform reads from the device object
 /// (`device.s`, `dkrt_dev`) and what the host tests' `FakePlatform` and a service (through the device id) take their facts from, so they cannot differ.
-fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) -> Result<String> {
+fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
     let mut s = format!(
-        "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::DeviceProfile;\n"
+        "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::{{DeviceProfile, KeyFlagBits}};\n"
     );
     let mut names = vec![];
-    for (dev, e) in docs {
+    for (dev, e) in &facts.docs {
         let cs = constants(lib, dev, e)?;
         let v = |name: &str| -> Result<u64> {
             cs.iter()
@@ -2118,6 +2319,26 @@ fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) ->
         };
         let k = &e.digikit;
         let up = dev.to_uppercase();
+        let key_codes = {
+            let all = facts.key_codes(dev)?;
+            // filled to 100 columns, as rustfmt lays out a long list of numbers
+            let mut rows = String::from("[\n");
+            let mut line = String::new();
+            for c in all {
+                let cell = format!("{c},");
+                if !line.is_empty() && 8 + line.len() + 1 + cell.len() > 99 {
+                    let _ = writeln!(rows, "        {line}");
+                    line.clear();
+                }
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(&cell);
+            }
+            let _ = writeln!(rows, "        {line}");
+            rows.push_str("    ]");
+            rows
+        };
         let safe_key = if e.caps & DEV_HAS_SAFE_KEY != 0 {
             format!("Some({})", k.safe_key)
         } else {
@@ -2125,7 +2346,7 @@ fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) ->
         };
         let _ = writeln!(
             s,
-            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    stock_machine_types: {},\n    dyn_type_first: {},\n    dyn_types: {},\n}};",
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    stock_machine_types: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n    key_flags: KeyFlagBits {{\n        press: {},\n        func: {},\n        repeat: {},\n        release: {},\n    }},\n}};",
             v("DEVICE_ID")?,
             hex(v("DEVICE_NAME_WORD")? as i64),
             e.digikit.samples_in_store,
@@ -2144,6 +2365,11 @@ fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) ->
             v("STOCK_MACHINE_TYPES")?,
             v("DYN_TYPE_FIRST")?,
             v("DYN_TYPES")?,
+            v("TRACKS")?,
+            v("KEY_FLAG_PRESS")?,
+            v("KEY_FLAG_FUNC")?,
+            v("KEY_FLAG_REPEAT")?,
+            v("KEY_FLAG_RELEASE")?,
         );
         names.push(up);
     }
@@ -2332,7 +2558,7 @@ fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     !any
 }
 
-/// The tables of a device file as dotted paths (`input`, `input.view_keys`).
+/// The tables of a device file as dotted paths (`input`, `input.keys`).
 fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
     fn walk(t: &toml::Table, prefix: &str, out: &mut std::collections::BTreeSet<String>) {
         for (k, v) in t {
@@ -2356,7 +2582,7 @@ fn ids_of(lib: &Library, roots: &[String]) -> Result<Vec<String>> {
     lib.with_requires(roots).map(|(ids, _)| ids)
 }
 
-/// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.view_keys`): every device (runtime target or not)
+/// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.keys`): every device (runtime target or not)
 /// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
 /// module should run on. This whole-library check (`patchkit gen`) also refuses a module id of a patch set that the library does not have.
 pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
@@ -2517,7 +2743,11 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 for (dev, cs) in &per_dev {
-                    out.push((g.path.replace("{dev}", dev), gas_dkdv(module, dev, cs)?));
+                    let keys = facts.key_codes(dev)?;
+                    out.push((
+                        g.path.replace("{dev}", dev),
+                        gas_dkdv(module, dev, cs, &keys)?,
+                    ));
                 }
             }
             "gas-dkdv-offsets" => {
@@ -2534,7 +2764,7 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `rust-profiles` gen is one file for all devices"
                     ));
                 }
-                out.push((g.path.clone(), rust_profiles(module, lib, &facts.docs)?));
+                out.push((g.path.clone(), rust_profiles(module, lib, facts)?));
             }
             "c-repack" => {
                 if g.path.contains("{dev}") {

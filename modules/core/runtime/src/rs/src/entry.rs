@@ -82,6 +82,10 @@ pub unsafe fn ctx_addr(rec: usize) -> u32 {
 }
 
 /// The record a `dk_module_ctx *` belongs to; None for a pointer that is not one of `DKRT_CTXS`' live entries.
+pub(crate) unsafe fn ctx_owner(ctx: *mut u8) -> Option<usize> {
+    ctx_rec(ctx)
+}
+
 unsafe fn ctx_rec(ctx: *mut u8) -> Option<usize> {
     let base = addr_of!(DKRT_CTXS) as usize;
     let at = ctx as usize;

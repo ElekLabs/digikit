@@ -1,6 +1,6 @@
 # core/card-guard
 
-Refuses a request to the firmware's eMMC block write or erase that lies outside the rows of its writer class. Design and tests: [docs/plans/card-write-guard.md](../../../../docs/plans/card-write-guard.md); hook sites: [finding 155](../../../../docs/findings/155-card-write-guard-sites.md).
+Refuses a request to the firmware's eMMC block write or erase that lies outside the rows of its writer class. Design and tests: [docs/plans/card-write-guard.md](../../../../docs/plans/card-write-guard.md); hook sites: [finding 156](../../../../docs/findings/156-card-write-guard-sites.md).
 
 - `src/cf/guard.h`: the check, plain C with no firmware access (host test `tests/guard-host.c`, run by `tests/guard.test.ts`).
 - `src/cf/guard.c`: `dkcg_write`, `dkcg_erase` (called by the shims), the counters and `dkcg_stats` (read by the runtime).

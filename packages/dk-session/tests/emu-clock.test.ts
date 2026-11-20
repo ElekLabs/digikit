@@ -26,6 +26,46 @@ test('pause waits ms of wall time and reads nothing: the next now() reads the st
   assert.equal(reads, 1);
 });
 
+test('pauseEmulated returns when emulated time has advanced by ms, whatever the wall time', async () => {
+  let elapsed = 0;
+  const clock = emulatedClock(async () => ({ elapsed }));
+  let done = false;
+  const paused = clock.pauseEmulated!(1000).then(() => (done = true));
+  for (let i = 0; i < 9; i++) {
+    elapsed += 100 * INSNS_PER_MS;
+    await vi.advanceTimersByTimeAsync(30);
+    assert.equal(done, false);
+  }
+  elapsed += 100 * INSNS_PER_MS;
+  await vi.advanceTimersByTimeAsync(30);
+  await paused;
+  assert.equal(done, true);
+});
+
+test('pauseEmulated counts only forward movement of the clock', async () => {
+  let elapsed = 500 * INSNS_PER_MS;
+  const clock = emulatedClock(async () => ({ elapsed }));
+  let done = false;
+  const paused = clock.pauseEmulated!(100).then(() => (done = true));
+  await vi.advanceTimersByTimeAsync(30);
+  elapsed = 0; // a restore drops the clock
+  await vi.advanceTimersByTimeAsync(30);
+  elapsed = 60 * INSNS_PER_MS;
+  await vi.advanceTimersByTimeAsync(30);
+  assert.equal(done, false);
+  elapsed = 160 * INSNS_PER_MS;
+  await vi.advanceTimersByTimeAsync(30);
+  await paused;
+});
+
+test('pauseEmulated fails with the emulator state when emulated time stands still', async () => {
+  const clock = emulatedClock(async () => ({ mode: 'paused', elapsed: 7 * INSNS_PER_MS }));
+  const paused = clock.pauseEmulated!(1000).catch((e: Error) => e);
+  await vi.advanceTimersByTimeAsync(20 * 1000 + 60_000 + 100);
+  const err = await paused;
+  assert.match((err as Error).message, /pauseEmulated\(1000 ms\): emulated clock stuck at 7\.0 ms.*mode paused/);
+});
+
 test('a poll on emulatedClock trips when the clock stands still and no job runs', async () => {
   let n = 0;
   const clock = emulatedClock(async () => ({ mode: 'paused', elapsed: 5000, cf: { icount: n++ } }) as EmuStatus);

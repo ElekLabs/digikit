@@ -164,6 +164,9 @@ impl Platform for RealPlatform {
                 dyn_types: dev::dyn_types(),
                 // a build-time fact of the device file, not a word of the device object: the table of profiles has it
                 stock_machine_types: DeviceProfile::by_id(read_volatile(addr_of!(dkrt_device_id))).map_or(0, |p| p.stock_machine_types),
+                tracks: dev::tracks(),
+                key_codes: dev::key_codes(),
+                key_flags: dev::key_flags(),
             }
         }
     }

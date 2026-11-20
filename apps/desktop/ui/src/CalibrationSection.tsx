@@ -56,6 +56,7 @@ export default function CalibrationSection(props: {
   };
   const error = st.error;
   const notes = st.notes;
+  const note = st.note;
   const progress = st.progress;
   const both = st.both;
   const stopRun = st.stop;
@@ -108,6 +109,9 @@ export default function CalibrationSection(props: {
       </div>
       <Show when={profile()?.description}>
         <span class="hint">{profile()!.description}</span>
+      </Show>
+      <Show when={note()}>
+        <span class="hint">{note()}</span>
       </Show>
       <Show when={running()}>
         <p class="cal-progress" role="status">

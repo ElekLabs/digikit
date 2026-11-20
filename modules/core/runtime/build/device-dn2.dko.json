@@ -5,13 +5,13 @@
  "sections": [
   {
    "align": 4,
-   "hex": "444b4456000000010000003c0000000fec070000480000004000000008000000fc0cc0000000001347fe000000001000000a2c2b000000100000000800000002646e3200000000010000009700016a7c0000001000000002fc07000c07de29000000006540000000466c00004671200047fe100000000000000000000000000000000000008000000261a000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "444b445600000001000001500000000fec070000480000004000000008000000fc0cc0000000001347fe000000001000000a2c2b000000100000000800000010000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d0000001e0000001f000000200000002100000022000000230000002400000025000000260000002700000028000000290000002a0000002b0000002c0000002d0000002e0000002f000000300000003100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000030000000400000002646e3200000000010000009700016a7c0000001000000002fc07000c07de29000000006540000000466c00004671200047fe100000000000000000000000000000000000008000000261a000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 184
+   "size": 460
   }
  ],
- "source_sha256": "9f449807050550ab705d20bc91091bb605f56da9529627181e227ad7d0e09694",
+ "source_sha256": "bf59d8d38ee0debed703f7ecb578305e4433d5ed1cf9abd5bad3dce1a0c8a9f7",
  "symbols": [
   {
    "global": true,
@@ -23,97 +23,97 @@
    "global": true,
    "name": "dkrt_device_id",
    "section": ".rodata",
-   "value": 60
+   "value": 336
   },
   {
    "global": true,
    "name": "dkrt_device_name",
    "section": ".rodata",
-   "value": 64
+   "value": 340
   },
   {
    "global": true,
    "name": "dkrt_dsp_headroom",
    "section": ".rodata",
-   "value": 76
+   "value": 352
   },
   {
    "global": true,
    "name": "dkrt_dsp_voices",
    "section": ".rodata",
-   "value": 80
+   "value": 356
   },
   {
    "global": true,
    "name": "dkrt_files_fs",
    "section": ".rodata",
-   "value": 172
+   "value": 448
   },
   {
    "global": true,
    "name": "dkrt_image_id",
    "section": ".rodata",
-   "value": 148
+   "value": 424
   },
   {
    "global": true,
    "name": "dkrt_peek_n",
    "section": ".rodata",
-   "value": 84
+   "value": 360
   },
   {
    "global": true,
    "name": "dkrt_peek_ranges",
    "section": ".rodata",
-   "value": 100
+   "value": 376
   },
   {
    "global": true,
    "name": "dkrt_sample_fs",
    "section": ".rodata",
-   "value": 156
+   "value": 432
   },
   {
    "global": true,
    "name": "dkrt_sample_path_max",
    "section": ".rodata",
-   "value": 72
+   "value": 348
   },
   {
    "global": true,
    "name": "dkrt_samples_in_store",
    "section": ".rodata",
-   "value": 68
+   "value": 344
   },
   {
    "global": true,
    "name": "dkrt_sound_words",
    "section": ".rodata",
-   "value": 96
+   "value": 372
   },
   {
    "global": true,
    "name": "dkrt_span_clock",
    "section": ".rodata",
-   "value": 88
+   "value": 364
   },
   {
    "global": true,
    "name": "dkrt_span_clock_hz",
    "section": ".rodata",
-   "value": 92
+   "value": 368
   },
   {
    "global": true,
    "name": "dkrt_store_first",
    "section": ".rodata",
-   "value": 132
+   "value": 408
   },
   {
    "global": true,
    "name": "dkrt_store_sectors",
    "section": ".rodata",
-   "value": 136
+   "value": 412
   }
  ],
  "toolchain": {
@@ -121,7 +121,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "7fd196e615f9599770fcbf5f77ecdfc0e22863f79549e96f27a86c2ea3f67aa2",
+  "isa_check": "5e2ac5e8370121cc2f4cb7d957aee226811a7b41b40c4eacc67e7cfd5ee2cea8",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

@@ -226,8 +226,10 @@ cardRigs(
         expect(await cardInfo(session, h.plan)).toMatchObject({ refused: 3, writes: 0 });
         expect(await h.records(), 'no selection record was written').toEqual([null, null]);
 
-        expect((await dk.info()).card_read_only, 'INFO says the card is read-only').toBe(true);
-        expect(await dk.list(), 'LIST works (empty)').toEqual([]);
+        const info = await dk.info();
+        expect(info.card_read_only, 'INFO says the card is read-only').toBe(true);
+        expect(info.free_bytes, 'INFO has no free bytes on a foreign area').toBe(0);
+        expect(await opStatuses(dk, ['list']), 'LIST answers E_NOSTORE: a foreign area is no store').toEqual([E_NOSTORE]);
         expect(await opStatuses(dk, ['begin', 'delete', 'clear'])).toEqual([E_INUSE, E_INUSE, E_INUSE]);
 
         const checks = ofKind(await logEvents(rt, h.plan), LOG_KIND.CARD_CHECK);

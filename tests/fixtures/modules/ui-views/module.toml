@@ -1,0 +1,21 @@
+[module]
+id = "test/ui-views"
+version = "0.1.0"
+name = "UI views demo"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: a content module that adds two SETTINGS rows with dk_ui_settings_row, opens a full-screen view (frame and text, YES opens the stock text input, NO closes) and an overlay with dk_ui_view_open, all through core/ui"
+requires = ["core/ui"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/ui-views`).
+[[object]]
+path = "build/ui-views.dko.json"
+sources = ["src/c/ui_views.c"]
+place = "cf.expansion"

@@ -18,7 +18,7 @@ needs_device = ["card.guard"]
 needed_when = [{ switch = "card.guard.enabled", with = "core/runtime" }]
 
 # The firmware's eMMC block write and erase are the only code of MAIN that issues a write or erase command to the user area, except the OS-upgrade finale's raw
-# controller writes of the COKi copies (finding 155). A `before` hook at the entry of each (offset 0, eight bytes) runs the check of src/cf/guard.h with the
+# controller writes of the COKi copies (finding 156). A `before` hook at the entry of each (offset 0, eight bytes) runs the check of src/cf/guard.h with the
 # first sector, the length and the caller's return address; a refused request returns the driver's "sector out of range" code (-10) to the caller without a card
 # command, a lock or any state change. The class of a caller is its return address: the runtime's raw block write (core/runtime tramp.s) is the one caller with
 # the label `dkrt_raw_write_ret`; the stock write's own recursive call for each 64 KiB piece (anchor split_ret) is a part of a request checked as a whole.

@@ -287,14 +287,24 @@ frame_samples = 32
 [input]
 backend = "panel-uart"
 
-# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Syntakt 1.42: the firmware's key indices from the decoder table at 0x401d7a48 (word per wire position channel * 8 + bit; finding 138 "Safe key", finding 153): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17 **[V]**; `yes2` 0x30 = 48 (the LEVEL push, channel 6 bit 0): the compact view's key handler (CompactVerticalMenuView, 0x400f5c82) treats id 0xc and 0x30 alike **[D]**. Flag bits, same handler: the accessors 0x400f97e4 (`and #1`, used for the ids 15, 16 and 17: bit 0 moves) and 0x400f97b4 (`lsr #4; and #1`, used for the ids 12 and 0x30: bit 4 acts) **[D]**; that NO (13) acts on bit 4 too, as on the Digitakt II, is **[O]** (NO leaves a page in the emulator).
-[input.view_keys]
-yes = 12
-yes2 = 48
-no = 13
-right = 17
-move_flag = 0
-act_flag = 4
+# Logical key names: name = the key's id in the firmware's key events (the id at +0xc of the event), from the decoder table at 0x401d7a48 (word per wire position
+# channel * 8 + bit; finding 138 "Safe key", finding 153): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17 **[V]**; LEVEL_PUSH = 48
+# (channel 6 bit 0), a second YES key: the compact view's key handler (CompactVerticalMenuView, 0x400f5c82) treats ids 0xc and 0x30 alike **[D]**. Only the four names core/ui needs.
+# These are not the wire codes that `dk_input_key` injects.
+[input.keys]
+YES = 12
+NO = 13
+RIGHT = 17
+LEVEL_PUSH = 48
+
+# The bits of the flags word (+0x10) of a key event, by meaning (Digitakt II finding 71, finding 155). Same handler on this device: the accessors 0x400f97e4 (`and #1`, ids 15, 16
+# and 17: bit 0 is the press bit) and 0x400f97b4 (`lsr #4; and #1`, ids 12 and 0x30: bit 4 is the release bit) **[D]**; that NO (13) acts on bit 4 too is **[O]**.
+# `func` and `repeat` are the Digitakt II's bits, not read on this device.
+[input.key_flags]
+press = 0
+func = 1
+repeat = 3
+release = 4
 
 # Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
 # linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:

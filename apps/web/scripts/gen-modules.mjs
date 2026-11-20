@@ -109,6 +109,8 @@ const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.target
  * `{bundle}` from the committed tree under `root` plus the built objects of the content modules. `offered`: only the ports of these devices go in, and the modules
  * that are for other devices only (the site passes its list: the browser patches only what the site offers; the device files stay whole, they identify a user's firmware).
  * Omitted: everything (the Python bundle's content, which a test compares).
+ * @param {string} [root]
+ * @param {readonly string[]} [offered]
  */
 export function buildModuleData(root = repoRoot, offered = undefined) {
   const ports = readdirSync(join(root, 'devices', 'ports'))

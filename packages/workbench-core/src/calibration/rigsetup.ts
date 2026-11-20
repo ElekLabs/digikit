@@ -15,16 +15,15 @@ export const SETUP_READY_MS = 30_000;
 
 /**
  * A machine given as a module id is the first machine type the runtime reports for that module (the MODULES reply, read when the step plays: the types change
- * with every load; a module with several machines calibrates its first one). `original` is the type the track had before this run's first machine SETUP on it. `track` is 1 to 16. Effects are not set by SETUP.
+ * with every load; a module with several machines calibrates its first one). A number is the type itself: the runner puts the stock machine (0, valid in every boot)
+ * on a track to start and to end a case, and never restores a type the track had before the run (a run-time type may not be loaded in this boot). `track` is 1 to 16.
+ * Effects are not set by SETUP.
  */
 export function sessionSetup(
   session: Pick<DkSession, 'setup' | 'modules'>,
   events: Pick<RuntimeEvents, 'until' | 'tryUntil'>,
   clock: Clock,
 ): NonNullable<Rig['setup']> {
-  // the machine type each track had before the first machine SETUP on it: the old type of the firmware's own MACHINE_CHANGE (the debug module's watch of the types);
-  // no change event means the track already had the requested type
-  const original = new Map<number, number>();
   return async (what, track, type) => {
     if (what === 'effect') throw new Error('SETUP sets machine and filter types, not effects');
     const t = trackSetup(session, events, { ready: { clock, withinMs: SETUP_READY_MS } });
@@ -34,26 +33,13 @@ export function sessionSetup(
       return;
     }
     let machine: number;
-    if (type === 'original') {
-      const was = original.get(track);
-      if (was === undefined)
-        throw new Error(`track ${track}: no machine type was set up on it by this run, so there is none to put back`);
-      machine = was;
-    } else if (typeof type === 'number') machine = type;
+    if (typeof type === 'number') machine = type;
     else {
       const m = (await session.modules()).find((x) => x.name === type);
       if (!m || m.types.length === 0) throw new Error(`module ${type} is not loaded or has no machine type`);
       machine = m.types[0]!;
     }
     await t.setMachine(track - 1, machine);
-    if (type !== 'original' && !original.has(track)) {
-      const change = await events.tryUntil(
-        'MACHINE_CHANGE',
-        (e) => e.fields.track === track && e.fields.new_type === machine,
-        { withinMs: 500 },
-      );
-      original.set(track, change && change.fields.old_type !== null ? Number(change.fields.old_type) : machine);
-    }
   };
 }
 

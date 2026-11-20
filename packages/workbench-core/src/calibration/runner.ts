@@ -211,6 +211,30 @@ function dspPart(
   };
 }
 
+/** The tracks (1 to 16) the operations act on: SETUP of a machine or filter, and the notes, CCs and NRPNs by their channel (a note off only releases, it uses no track). */
+export function opTracks(ops: readonly Op[], midi: MidiMap): number[] {
+  const out = new Set<number>();
+  for (const o of ops) {
+    if (o.op === 'setup' && o.what !== 'effect' && o.track > 0) out.add(o.track);
+    else if (o.op === 'midi.note' || o.op === 'midi.cc' || o.op === 'midi.nrpn') {
+      const k = midi.trackChannels.indexOf(o.ch);
+      if (k >= 0) out.add(k + 1);
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** The tracks a profile uses on a device (its setup, teardown and every case with its own teardown): what a run puts on the stock machine to start. */
+export function profileTracks(profile: CalProfile, steps: StepLibrary, midi: MidiMap): number[] {
+  const where = (w: string): ResolveContext => ({ midi, where: w });
+  const ops = [profile.setup, profile.teardown].flatMap((r) => (r ? resolveRef(r, steps, where('profile')) : []));
+  for (const c of profile.cases) {
+    ops.push(...resolveRef(c.steps, steps, where(c.id)));
+    if (c.teardown) ops.push(...resolveRef(c.teardown, steps, where(c.id)));
+  }
+  return opTracks(ops, midi);
+}
+
 /** Run every case of the profile; the captures are in the result (the caller writes them). A case the target cannot play is skipped with its reason. */
 export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   const { profile, rig } = i;
@@ -253,6 +277,22 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   const needed = [...new Set(plan.filter((x) => !x.reason).flatMap((x) => x.c.modules))];
   const results: CaseResult[] = [];
   try {
+    // a known start: the tracks the run uses go to the stock machine (type 0, valid in every boot), whatever the project had on them (a run-time machine whose
+    // module is not loaded in this boot would be refused later, when it is put back). Nothing is restored at the end: a case leaves the stock machine too.
+    const runnable = plan.filter((x) => !x.reason);
+    if (rig.setup && i.midi && runnable.length > 0) {
+      const tracks = opTracks([...setup, ...teardown, ...runnable.flatMap((x) => [...x.ops, ...x.after])], i.midi);
+      for (const t of tracks) {
+        try {
+          await rig.setup('machine', t, 0);
+        } catch (e) {
+          throw new Error(
+            `the run could not put track ${t} on the stock machine before the first case (${e instanceof Error ? e.message : e}): nothing was loaded or changed after that; check that the debug module is selected and the device is not busy, then run again`,
+          );
+        }
+      }
+      if (tracks.length) log(`tracks ${tracks.join(', ')} are on the stock machine`);
+    }
     let hashes: Record<string, string> = {};
     if (needed.length > 0) {
       hashes = await rig.modules!.install(needed);
@@ -342,13 +382,15 @@ async function runCase(
   const keepers = [...setup, ...pre].filter(
     (o): o is Extract<Op, { op: 'midi.note' }> => o.op === 'midi.note' && o.retrigger_ms !== undefined,
   );
+  // warm-up and capture windows hold emulated time (the emulator's `pauseEmulated`), not wall time
+  const hold = (ms: number): Promise<void> => (rig.clock.pauseEmulated ?? rig.clock.pause).call(rig.clock, ms);
   const pause = async (ms: number): Promise<void> => {
-    if (keepers.length === 0) return rig.clock.pause(ms);
+    if (keepers.length === 0) return hold(ms);
     const every = Math.min(...keepers.map((k) => k.retrigger_ms!));
     let next = every;
     for (let left = ms; left > 0;) {
       const slice = Math.min(next, left);
-      await rig.clock.pause(slice);
+      await hold(slice);
       left -= slice;
       // pressed again only when the wait goes on: a press at its end would start a voice that the next measurement sees from its first block
       if (left > 0) {
@@ -432,7 +474,7 @@ async function runCase(
     await playAll(teardown, rig).catch((e) =>
       log(`case ${c.id}: teardown failed: ${e instanceof Error ? e.message : e}`),
     );
-    // what the case changed on the target (the track's machine type) is put back before the next case loads other modules; a refusal stops the run
+    // what the case changed on the target (the track's machine type) goes back to the stock machine before the next case loads other modules; a refusal stops the run
     if (after.length > 0) log(`case ${c.id}: putting the stock machine back`);
     await playAll(after, rig).catch((e) => {
       stopError = e instanceof Error ? e : new Error(String(e));

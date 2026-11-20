@@ -37,7 +37,7 @@ sig = "i32 (u32 sector, u32 count)"
 rule = { kind = "cf_func", hash = "925ab4297f7c5d4d24f735ebc22fea1c", offset = 0x0, len = 8 }
 mark = "O"
 users = ["core/card-guard"]
-doc = "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 155)."
+doc = "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156)."
 
 # Hooks of the eMMC write and erase entries for core/card-guard (docs/plans/card-write-guard.md). Both functions are the same code on the three devices (same hash, offset 0).
 # Each starts `lea (-N,SP),SP; movem.l {D2...},(SP)`: eight bytes, no PC-relative operand, so a `before` hook copies them to its tail unchanged.

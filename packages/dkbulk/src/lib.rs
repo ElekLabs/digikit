@@ -8,6 +8,7 @@ pub mod fake;
 #[rustfmt::skip]
 pub mod gen_bulk;
 pub mod link;
+pub mod msos;
 pub mod proto;
 pub mod usb;
 

@@ -1,6 +1,6 @@
 /* core/card-guard: the two hook shims. Each is entered by a jump from the first eight bytes of a firmware function (a `before` hook: the displaced
  * `lea (-N,SP),SP; movem.l ...,(SP)` are copied to the tail). At the entry the stack holds the caller's frame: 0(SP) = return address, 4(SP) = the first
- * argument, 8(SP) = the second. D0, D1, A0, A1 and the condition codes are dead there (finding 155).
+ * argument, 8(SP) = the second. D0, D1, A0, A1 and the condition codes are dead there (finding 156).
  *
  * The shim pushes (return address, second, first) and calls dkcg_write / dkcg_erase of guard.c, `int32_t f(first, second, ret)`. 0: the displaced code runs
  * and the stock function continues. Anything else: the request is refused; the shim returns to the caller with that value in D0, before the stock code

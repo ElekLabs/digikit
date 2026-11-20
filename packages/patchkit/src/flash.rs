@@ -72,6 +72,13 @@ impl Prepared {
     pub fn leaves_runtime(&self) -> bool {
         !self.restore && self.image_id.is_some()
     }
+
+    /// The runtime version of the image as its INFO reports it after the flash (`dkm::runtime_version`, the SDK version built into the runtime
+    /// object), as `major.minor.patch`; `None` when the image has no runtime. The flash question, the summary and the check after the restart use this one value.
+    pub fn runtime_text(&self) -> Option<String> {
+        self.leaves_runtime()
+            .then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version()))
+    }
     /// Every check passed (and there is something to send).
     pub fn ok(&self) -> bool {
         !self.messages.is_empty() && self.checks.iter().all(|c| c.ok)
@@ -101,7 +108,7 @@ impl Prepared {
             "sha_image": self.sha_image,
             "image_id": self.image_id_hex(),
             // the runtime version the patch carries (a restore has none)
-            "runtime": self.leaves_runtime().then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version())),
+            "runtime": self.runtime_text(),
             "pace_ms": PACE_MS,
             "bytes": self.image.len(),
             "ends": self.messages.iter().map(|m| m.end).collect::<Vec<_>>(),

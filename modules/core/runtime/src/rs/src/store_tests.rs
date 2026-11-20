@@ -612,6 +612,134 @@ fn a_foreign_card_refuses_every_write_and_changes_nothing() {
     assert_eq!(card(|c| c.writes), writes, "nothing reached the card");
 }
 
+/// A fresh card is ours after the selection record and has no store header until the first upload: INFO's view, the module list and the HEALTH
+/// figures all see an empty store (finding 37); a foreign area has no store for any of them.
+#[test]
+fn an_ours_card_without_headers_is_an_empty_store_for_the_list_and_the_figures() {
+    let _f = Fixture::new();
+    card(|c| {
+        c.sectors.insert(L.first + L.sectors - 1, [0u8; 512]);
+    });
+    unsafe {
+        card_gate::check();
+        crate::store::figures_stale();
+        let mut list = [const { unsafe { core::mem::zeroed::<DkrtStoreEntry>() } }; 4];
+        assert_eq!(crate::store::list(b"modules/\0".as_ptr(), list.as_mut_ptr(), 4), 0);
+        let (used, free) = crate::store::seen().expect("an empty store has figures");
+        assert_eq!(used, 0);
+        assert_eq!(free, (L.limit() - 1 - dkrt_sdk::store::table_sectors(1)) / 2);
+        let mut h: dkrt_sdk::DkrtHealth = core::mem::zeroed();
+        crate::store::figures(&mut h);
+        assert_ne!(h.flags & dkrt_sdk::HEALTH_STORE, 0);
+        assert_eq!((h.store_used, h.store_free), (0, free));
+    }
+    // the first upload writes the headers: the same views follow
+    assert_eq!(upload("modules/a.dkm", &pattern(1000, 3)), OK);
+    unsafe {
+        crate::store::figures_stale();
+        let mut list = [const { unsafe { core::mem::zeroed::<DkrtStoreEntry>() } }; 4];
+        assert_eq!(crate::store::list(b"modules/\0".as_ptr(), list.as_mut_ptr(), 4), 1);
+        assert!(crate::store::seen().unwrap().0 > 0);
+    }
+}
+
+#[test]
+fn a_foreign_area_has_no_store_for_the_list_and_the_figures() {
+    let _f = Fixture::new();
+    card(|c| {
+        c.sectors.insert(L.first + 5, [0x55; 512]);
+    });
+    unsafe {
+        card_gate::check();
+        crate::store::figures_stale();
+        let mut list = [const { unsafe { core::mem::zeroed::<DkrtStoreEntry>() } }; 4];
+        assert!(crate::store::list(b"modules/\0".as_ptr(), list.as_mut_ptr(), 4) < 0);
+        assert_eq!(crate::store::seen(), None);
+    }
+}
+
+/// The three views of the store: the module list (`dkrt_scan`'s), the HEALTH figures and the SysEx LIST (INFO and the upload steps use the same state).
+fn views() -> (i32, Option<(u32, u32)>, i32) {
+    unsafe {
+        crate::store::figures_stale();
+        let mut list = [const { unsafe { core::mem::zeroed::<DkrtStoreEntry>() } }; 4];
+        let l = crate::store::list(b"modules/\0".as_ptr(), list.as_mut_ptr(), 4);
+        (l, crate::store::seen(), list_cmd(None).0)
+    }
+}
+
+/// A header sector with our magic and version 4 and a CRC that does not match.
+fn torn_header() -> [u8; 512] {
+    let mut h = [0u8; 512];
+    h[..4].copy_from_slice(&dkrt_sdk::store::MAGIC.to_be_bytes());
+    h[4..8].copy_from_slice(&dkrt_sdk::store::VERSION.to_be_bytes());
+    h[100] = 7;
+    h
+}
+
+/// The guard of the empty-store view: only a card that may hold one, with both header sectors blank (or of another version), is an empty store. Every
+/// other case keeps data safe: no store for the list, the figures and the LIST.
+#[test]
+fn only_a_blank_header_pair_on_a_card_that_may_hold_a_store_is_an_empty_store() {
+    let hb = L.header_b();
+    // not checked yet (UNKNOWN) and blank: an empty store, as before the card check ran
+    let _f = Fixture::new();
+    let (l, seen, lst) = views();
+    assert_eq!((l, lst), (0, OK), "unchecked, blank");
+    assert!(seen.is_some());
+    // the figures read under UNKNOWN do not outlive the decision: a card found foreign later shows no store without an upload in between
+    card(|c| {
+        c.sectors.insert(L.first + 5, [0x55; 512]);
+    });
+    unsafe { card_gate::check() };
+    assert_eq!(card_gate::state(), dkrt_sdk::CARD_FOREIGN);
+    unsafe {
+        assert_eq!(crate::store::seen(), None, "a stale cache is not shown for a card decided foreign");
+    }
+    drop(_f);
+    // unreadable and too small cards
+    for state in [dkrt_sdk::CARD_UNREADABLE, dkrt_sdk::CARD_TOO_SMALL] {
+        let _f = Fixture::new();
+        card_gate::info().state = state;
+        let (l, seen, lst) = views();
+        assert!(l < 0 && seen.is_none() && lst == p::E_NOSTORE, "state {state}: {l} {seen:?} {lst}");
+    }
+    // both headers torn: a header is there, no copy is usable
+    {
+        let _f = Fixture::new();
+        card(|c| {
+            c.sectors.insert(L.first, torn_header());
+            c.sectors.insert(L.first + hb, torn_header());
+        });
+        let (l, seen, lst) = views();
+        assert!(l < 0 && seen.is_none() && lst == p::E_NOSTORE, "torn: {l} {seen:?} {lst}");
+    }
+    // a non-blank header sector that is not a store header (somebody's data), checked or not
+    for check in [false, true] {
+        let _f = Fixture::new();
+        card(|c| {
+            c.sectors.insert(L.first + hb, [0x55; 512]);
+        });
+        if check {
+            unsafe { card_gate::check() };
+        }
+        let (l, seen, lst) = views();
+        assert!(l < 0 && seen.is_none() && lst == p::E_NOSTORE, "foreign header (checked {check}): {l} {seen:?} {lst}");
+    }
+    // a header of another version is no store, as before: an empty one
+    {
+        let _f = Fixture::new();
+        let mut old = [0u8; 512];
+        old[..4].copy_from_slice(&dkrt_sdk::store::MAGIC.to_be_bytes());
+        old[4..8].copy_from_slice(&(dkrt_sdk::store::VERSION - 1).to_be_bytes());
+        card(|c| {
+            c.sectors.insert(L.first, old);
+        });
+        let (l, seen, lst) = views();
+        assert!(l == 0 && seen.is_some() && lst == OK, "old version: {l} {seen:?} {lst}");
+    }
+}
+
 // ---- power cuts -----------------------------------------------------------------------------------------------------------------------
 
 /// A cut or a torn sector at each card write of one upload leaves the old table or the new one, files that read back with their hashes, and a store that

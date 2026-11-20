@@ -16,7 +16,7 @@ dk_make_sp:
 
 | dk_hook: the hook at the end of the SETTINGS rebuild (cf.menu.hook.settings_list.tail), entered by `jmp`. Live registers: a2 = the
 |   settings menu (`this`), d4 = the saved selection, sp = the rebuild's frame; d0/d1/a0/a1 are dead. It calls the optional
-|   dk_app_settings_rows(settings_menu) of the app (an optional link: 0 when no app is in the image) and returns to the rebuild
+|   dk_app_settings_rows(settings_menu) of the app (an optional link: 0 when no app is in the image) then the rows that modules registered (ui_settings_rows_tail), and returns to the rebuild
 |   through the hook tail, where the displaced instructions run.
     .globl dk_hook
 dk_hook:
@@ -26,4 +26,7 @@ dk_hook:
     move.l  %a2,-(%sp)
     jsr     (%a0)
     addq.l  #4,%sp
-1:  jmp     _dk_tail
+1:  move.l  %a2,-(%sp)
+    jsr     ui_settings_rows_tail   | the rows of modules (dk_ui_settings_row); C code keeps d2-d7 and a2-a6
+    addq.l  #4,%sp
+    jmp     _dk_tail

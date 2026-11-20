@@ -13,6 +13,7 @@ typedef struct dk_files dk_files;
 typedef struct dk_sample_pool dk_sample_pool;
 typedef struct dk_ui dk_ui;
 typedef struct dk_ui_menu dk_ui_menu;
+typedef struct dk_ui_view dk_ui_view;
 typedef struct dk_input dk_input;
 typedef struct dk_usb_bulk dk_usb_bulk;
 typedef struct dk_dsp_link dk_dsp_link;
@@ -23,6 +24,7 @@ typedef struct dk_page dk_page;
 typedef struct dk_param dk_param;
 typedef struct dk_page_frame dk_page_frame;
 typedef struct dk_page_event dk_page_event;
+typedef struct dk_shortcut_def dk_shortcut_def;
 
 /* Callback types ([handle.callbacks]): `arg` is the user-data pointer the module gave with the callback. */
 typedef void dk_files_event_fn(uint32_t client, uint32_t request, int32_t state, void *arg);
@@ -40,6 +42,7 @@ typedef void dk_param_click_fn(void *arg, uint32_t track);
 typedef void dk_ui_action_fn(void *arg, int32_t value);
 typedef void dk_ui_choice_fn(void *arg, int32_t index);
 typedef void dk_ui_confirm_fn(void *arg, int32_t yes);
+typedef void dk_ui_settings_open_fn(void *arg);
 typedef void dk_ui_tick_fn(void *arg);
 
 /* ---- service runtime ---- */
@@ -206,6 +209,12 @@ int32_t dk_debug_selected_params(int16_t *out, uint32_t n);
 /* Set the machine type (`op` 1) or the filter type (`op` 2) of `track` 0 to 15 of the active kit through the firmware's own kit commit, the call a chooser commit makes (calibration setup; never a raw write of the Sound byte). Only for the debug module's SETUP command, from the UI task. A machine type must be a stock one (below the device's `stock_types`) or a run-time type of a loaded module; a filter type a stock one, 0 to 5. Returns 0 when the firmware reports the new type afterwards, DK_E_RANGE (op, track or type not offered), or DK_E_STATE: no project yet, the commit is not in the image, or the firmware kept the old type (the machine permit refused it on that track, the project's settings mode makes the setter skip the write, or the read-back differs). See <dk/platform/debug.h>. Context: ui. Since runtime 0.10.4. */
 int32_t dk_debug_setup(uint32_t op, uint32_t track, uint32_t ty);
 
+/* The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal. Context: any. Since runtime 0.10.5. */
+uint32_t dk_device_track_count(void);
+
+/* The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet. Context: ui. Since runtime 0.10.5. */
+int32_t dk_selected_track(void);
+
 /* Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none). Context: any. Since runtime 0.7.0. */
 void dk_debug_log_sink_set(uint8_t *sink, uint8_t *tick);
 
@@ -307,6 +316,12 @@ int32_t dk_ui_toast(dk_ui *ui, const char *text);
 /* Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>. Context: ui. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns -1. */
 int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms);
 
+/* Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>. Context: init. Since runtime 0.10.5. Needs core/ui: without it the import binds to a stub that returns -1. */
+int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg);
+
+/* Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing. Context: ui. Since runtime 0.10.5. Needs core/ui: without it the import binds to a stub that does nothing. */
+void dk_ui_view_close(dk_ui_view *view);
+
 /* Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Context: init. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns DK_E_MISSING. */
 int32_t dk_ui_open(dk_module_ctx *ctx, dk_ui **out);
 
@@ -404,5 +419,10 @@ int32_t dk_sdhc_large_open(dk_module_ctx *ctx, dk_sdhc_large **out);
 
 /* core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside the range the runtime sets, is 16-byte aligned and its length is a multiple of 512, while the switch is on. Key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. 0 without the module. See <dk/platform/sdhc_large.h>. Context: any. Since runtime 0.7.0. Needs core/sdhc-large: without it the import binds to a stub that returns 0. */
 uint32_t dk_sdhc_large_ctl(dk_sdhc_large *sl, uint32_t key, uint32_t val);
+
+/* ---- service shortcuts ---- */
+
+/* Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>. Context: init. Since runtime 0.10.5. */
+int32_t dk_shortcut_add(dk_module_ctx *ctx, const dk_shortcut_def *def);
 
 #endif /* DK_GEN_IMPORTS_H */

@@ -684,6 +684,12 @@ pub static dkrt_dev: dkrt_sdk::DkrtDevice = dkrt_sdk::DkrtDevice {
     dsp_block_cycles: 0xa_2c2b,
     dyn_type_first: 16,
     dyn_types: 8,
+    tracks: 16,
+    key_codes: [0; dkrt_sdk::DEV_KEYS],
+    key_flag_press: 0,
+    key_flag_func: 1,
+    key_flag_repeat: 3,
+    key_flag_release: 4,
 };
 #[no_mangle]
 pub static dkrt_sample_fs: [u32; 4] = [0; 4];
@@ -757,6 +763,33 @@ fn unload_of_a_module_without_fini_releases_its_sink() {
         pass();
         assert_eq!(st().modules[0].used, 0);
         assert!(!crate::dlog::sink_on(0));
+    }
+}
+
+static mut OBSERVED: Vec<(u32, u32)> = Vec::new();
+/// An unload observer of the tests: the owner and whether the module's record is still in use when it is called.
+unsafe extern "C" fn test_observer(owner: u32) {
+    let used = st().modules[owner as usize].used as u32;
+    (*core::ptr::addr_of_mut!(OBSERVED)).push((owner, used));
+}
+
+/// An unload tells the observers which owner is gone, after the module's `fini` and with its record and memory still there; a failed or removed
+/// observer is not called.
+#[test]
+fn unload_of_a_module_tells_the_observers_before_its_memory_is_freed() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        seed(Completion::Ack, false, true, true);
+        (*core::ptr::addr_of_mut!(OBSERVED)).clear();
+        assert_eq!(crate::dkrt_unload_observer_add(test_observer as *const () as usize), OK);
+        let removed: usize = 0x1234;
+        assert_eq!(crate::dkrt_unload_observer_add(removed), OK);
+        crate::dkrt_unload_observer_remove(removed);
+        pass();
+        assert_eq!(st().modules[0].used, 0);
+        crate::dkrt_unload_observer_remove(test_observer as *const () as usize);
+        assert_eq!(*core::ptr::addr_of!(OBSERVED), [(0, 1)], "once, for owner 0, while the record was in use");
+        assert!(LINK.events.contains(&Event::Fini));
     }
 }
 
