@@ -51,6 +51,16 @@ mark = "D"
 users = ["core/machines", "core/services/machines"]
 doc = "DT2: returns the current track's machine type as a signed long, -1 without a track; the SRC page hook calls it."
 
+[[fn]]
+name = "cf.machine.fn.set_kit"
+cpu = "cf"
+sig = "i32 (u32 kit, i32 track, i32 ty, i32 flag4, i32 flag5)"
+rule.dt2 = { kind = "cf_func", hash = "32441e7a8a2c46c0561dcb6063bdac45", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "42f12722dd5b838c1c8d8563e44870a3", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The KitActive set-machine wrapper the machine chooser commits through: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15, calls the machine setter on the track object (k + 0x6c + track * 0x3c0; the setter checks the permit and sends the change), and updates the mask of tracks that hold the special type. DT2 0x40036798, DN2 0x40031880. Finding 150. The debug module's SETUP command calls it from the UI task."
+
 # ---- anchor rules ---------------------------------------------------------------------------------------------------
 # Digitone II: the same framework with the sites of c4d86e4e:tools/patchkit/pk_machine_rules_dn2.py (finding 02, "core.machines on Digitone II")
 [[fn]]

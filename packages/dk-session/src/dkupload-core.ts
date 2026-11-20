@@ -1495,6 +1495,16 @@ export class DkSession {
     }
     return out;
   }
+  /**
+   * SETUP (debug module): queue the change of a track's machine or filter type. The UI task performs it through the firmware's own kit commit and logs
+   * SETUP_DONE with the returned `seq` (wait for it: `trackSetup`). Refused with E_BUSY while one request is queued. Returns the request's seq.
+   */
+  async setup(what: 'machine' | 'filter', track: number, type: number, quick: Quick = false): Promise<number> {
+    const op = { machine: 1, filter: 2 }[what];
+    const b = await this.ok(SERVICE_CMD.SETUP, 'setup', Uint8Array.of(op, track, type), quick);
+    if (b.length < 1) throw new DkError({ error: 'setup: malformed reply', kind: 'protocol' });
+    return b[0]!;
+  }
   /** PROFILE_STATE (debug module): `get` the state, `start` or `stop` the spans, or `reset` the counters. The reply is the state after the op, with the ticks of the span clock that passed while running since the last reset (the window the sums belong to). */
   async profileState(
     op: 'get' | 'start' | 'stop' | 'reset',

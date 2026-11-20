@@ -33,11 +33,12 @@ DT2 OS 1.17 and DN2 OS 1.12. Static reading (fw.py disasm, decomp and dossier, c
 
 ## Getting KitActive outside a view
 
-- In the chooser, KitActive is the view member at this+0x84. Where that member is set, and how code outside a view gets KitActive, is open. **[O]**
+- KitActive = `cf.project.fn.active_kit(cf.project.fn.singleton())`. The MachineSelectionView constructor stores exactly that at this+0x84: DT2 0x40061268 `jsr` singleton, 0x4006127c `jsr 0x40041d24` (the active kit), 0x4006128e `move.l D0,(0x84,A2)`; DN2 0x4005b5e2, 0x4005b5ec, 0x4005b5fe. **[D]**
 - FUN_40041d18 is not a KitActive accessor. It returns arg + 0x30 (a settings accessor taking a Project pointer). **[V]**
 - The Project singleton comes from 0x40198b7e, which creates DAT_44f370a0 on first use. The setter reaches project and settings through it (FUN_4004c6f8, FUN_4004c3da, FUN_4004ca26). **[V]**
+- The SETUP device test (modules/tools/debug/tests/setup.device.test.ts) calls `set_kit` with this KitActive from the UI task on DT2 and DN2, and the firmware's own MACHINE_CHANGE follows each change. **[D]**
 
 ## Use
 
-- The intended consumer is a debug-module SETUP command (calibration setup, planned). It sets a track's machine or filter type from the UI task. For a machine it calls the wrapper. For a filter it calls the filter commit 0x4003696e or the setter.
-- It must never write the byte directly. Finding 148: a raw write to sound+0xa3 did not reach the DSP.
+- The debug module's SETUP command is built (command 0x0a, event SETUP_DONE; modules/tools/debug/README.md "Setup"). It sets a track's machine type through `cf.machine.fn.set_kit` and its filter type through `cf.filter.fn.set_kit` (DT2 0x4003696e, DN2 0x40031a56), both with `(KitActive, track, type, 1, 1)`, from the module's tick in the UI task. It reads the type back through `track_type` or the filter getter and reports the status in SETUP_DONE.
+- It never writes the byte directly. Finding 148: a raw write to sound+0xa3 did not reach the DSP.

@@ -139,6 +139,16 @@ mark = "D"
 rule = "fw/filter:cf_func"
 
 [[anchor]]
+name = "cf.filter.fn.set_kit"
+cpu = "cf"
+kind = "code"
+addr = 0x4003696e
+len = 4
+sha256 = "160a09b66f6c0b9c7f6a532b7bb38424d35bb5bc883498bdb42edacdb4b7f54f"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
 name = "cf.filter.site.graph_switch"
 cpu = "cf"
 kind = "code"
@@ -549,6 +559,16 @@ kind = "code"
 addr = 0x400da514
 len = 30
 sha256 = "3f754c40927b2e0a19c26c5c0d2077bb2f74290b8873294892048bf473f2f383"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
+name = "cf.machine.fn.set_kit"
+cpu = "cf"
+kind = "code"
+addr = 0x40036798
+len = 4
+sha256 = "6240ed2cbe7b6b6b8b2f0e7fd4de1ee3c458134434d8e29ef7acf254b42fcf12"
 mark = "D"
 rule = "fw/machine:cf_func"
 

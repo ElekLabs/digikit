@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.3"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -1326,6 +1326,14 @@ sig = "i32 (i16 *out, u32 n)"
 doc = "The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written)."
 
 [[import]]
+name = "dk_debug_setup"
+service = "runtime"
+since = "0.10.4"
+context = "ui"
+sig = "i32 (u32 op, u32 track, u32 ty)"
+doc = "Set the machine type (`op` 1) or the filter type (`op` 2) of `track` 0 to 15 of the active kit through the firmware's own kit commit, the call a chooser commit makes (calibration setup; never a raw write of the Sound byte). Only for the debug module's SETUP command, from the UI task. A machine type must be a stock one (below the device's `stock_types`) or a run-time type of a loaded module; a filter type a stock one, 0 to 5. Returns 0 when the firmware reports the new type afterwards, DK_E_RANGE (op, track or type not offered), or DK_E_STATE: no project yet, the commit is not in the image, or the firmware kept the old type (the machine permit refused it on that track, the project's settings mode makes the setter skip the write, or the read-back differs). See <dk/platform/debug.h>."
+
+[[import]]
 name = "dk_debug_log_sink_set"
 service = "runtime"
 since = "0.7.0"
@@ -1641,6 +1649,14 @@ id = 48
 name = "DSP_SWEEP"
 args = ["sweep", "generation", "blocks", "-", "-"]
 
+# a SETUP request of the debug module was performed in the UI task (info level): the op (1 machine, 2 filter), the track, the requested type, the request's seq
+# (the reply of SETUP) and the status: 0; DK_E_RANGE a type no chooser offers; DK_E_STATE the firmware kept the old type (permit refused, settings mode skips the write,
+# read-back differs) or there is no project; DK_E_AGAIN the module was unloaded with the request queued (it never ran).
+[[log.kind]]
+id = 49
+name = "SETUP_DONE"
+args = ["op", "track", "type", "seq", "status"]
+
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
 polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
@@ -1687,6 +1703,7 @@ probe = [0x32, 0x35]   # digikit/probe: collector status, raw reads, reset (docs
 debug = [0x20, 0x22]   # digikit/debug: LOG, PEEK, LOGCFG (docs/findings/46-digikit-debug.md)
 debug_profile = [0x1e, 0x1f]   # digikit/debug: PROFILE_STATE, PROFILE_READ
 debug_profile_dsp = [0x1b, 0x1b]   # digikit/debug: PROFILE_DSP
+debug_setup = [0x0a, 0x0a]   # digikit/debug: SETUP (calibration setup: a track's machine or filter type)
 file_write_test = [0x24, 0x27]   # test/file-write: start an I/O job that writes a file, its status, wake it, a file call outside an I/O step
 usb_fast = [0x36, 0x37]   # usb-fast: SET_NONCE (the host proves which USB device is on its MIDI port, docs/plans/usb-fast.md section 5)
 file_write_test_b = [0x28, 0x2b]   # test/file-write-b: the same commands for a second module
@@ -1703,6 +1720,7 @@ LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 
 PROFILE_STATE = 0x1e   # digikit/debug: profiling start and stop, and its state
 PROFILE_READ = 0x1f    # digikit/debug: read the span records
 PROFILE_DSP = 0x1b     # digikit/debug: the DSP stats window: body u8 op (0 get, 1 start, 2 stop, 3 clear); reply (big-endian) u8 version (1), u8 flags (bit 0 stats on, bit 1 a sweep follows), u8 clear generation, u8 rows (16), u32 sweep number, u32 sweeps, u32 gaps, u32 ignored, then when bit 1 is set the 100 words of the window (4 header words: blocks, largest stock block delta, overruns, spare; 16 rows of 6 words: calls, cycles low, cycles high, largest call, largest block, spare)
+SETUP = 0x0a           # digikit/debug: body u8 op (1 machine type, 2 filter type), u8 track (0 to 15), u8 type; reply u8 seq (the request is queued: the UI task performs it, and the log event SETUP_DONE with this seq reports the result); E_BUSY while one is queued; E_STATE until the module's track watch has its baseline (the project is loaded and scanned)
 USB_FAST_NONCE = 0x36  # usb-fast: body nonce[8]; the module keeps it and returns it in the INFO reply of the bulk link; reply empty
 REMOTE_STATE = 0x3e    # reply: enabled (u8, always 1 while the module is loaded), state format (u8), turn limit (u8)
 

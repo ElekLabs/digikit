@@ -103,6 +103,7 @@ CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 
 SERVICE_CMD: dict[str, int] = {
+    "SETUP": 0x0A,
     "PROFILE_DSP": 0x1B,
     "PROFILE_STATE": 0x1E,
     "PROFILE_READ": 0x1F,
@@ -303,6 +304,7 @@ RANGES: dict[str, tuple[int, int]] = {
     "debug": (0x20, 0x22),
     "debug_profile": (0x1E, 0x1F),
     "debug_profile_dsp": (0x1B, 0x1B),
+    "debug_setup": (0x0A, 0x0A),
     "entry_demo_test": (0x1C, 0x1D),
     "file_write_test": (0x24, 0x27),
     "file_write_test_b": (0x28, 0x2B),

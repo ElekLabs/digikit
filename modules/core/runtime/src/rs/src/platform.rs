@@ -12,6 +12,7 @@ use crate::state::{State, DKRT_STATE};
 use core::ffi::c_void;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::platform::{DeviceProfile, Platform, SamplePool, StagedWriter, Tasking};
+use dkrt_sdk::proto::E_STATE;
 use dkrt_sdk::*;
 
 extern "C" {
@@ -154,6 +155,8 @@ impl Platform for RealPlatform {
                 dsp_block_cycles: dev::dsp_block_cycles(),
                 dyn_type_first: dev::dyn_type_first(),
                 dyn_types: dev::dyn_types(),
+                // a build-time fact of the device file, not a word of the device object: the table of profiles has it
+                stock_machine_types: DeviceProfile::by_id(read_volatile(addr_of!(dkrt_device_id))).map_or(0, |p| p.stock_machine_types),
             }
         }
     }
@@ -352,6 +355,33 @@ impl Platform for RealPlatform {
             return Some(-1);
         }
         Some(dkfw::project::track_type(dkfw::project::active_kit(p), track as i32))
+    }
+    /// The KitActive commits of the machine chooser and the filter chooser (finding 150): `(KitActive *, track, type, 1, 1)`. The track object is the Sound value
+    /// object of `native_track_sound`; the filter getter reads the type back from it. The commits are optional anchors (a device without them answers `E_STATE`).
+    unsafe fn set_track_type(&self, op: u32, track: u32, ty: u32) -> i32 {
+        let p = dkfw::project::singleton();
+        if p == 0 {
+            return E_STATE;
+        }
+        let kit = dkfw::project::active_kit(p);
+        let (t, want) = (track as i32, ty as i32);
+        if op == 1 {
+            if core::hint::black_box(dkfw::machine::set_kit as usize) == 0 {
+                return E_STATE;
+            }
+            dkfw::machine::set_kit(kit, t, want, 1, 1);
+            return if dkfw::project::track_type(kit, t) == want { 0 } else { E_STATE };
+        }
+        if core::hint::black_box(dkfw::filter::set_kit as usize) == 0 || core::hint::black_box(dkfw::filter::get as usize) == 0 {
+            return E_STATE;
+        }
+        dkfw::filter::set_kit(kit, t, want, 1, 1);
+        let sound = dkfw::page::native_track_sound(kit as *mut u8, track) as u32;
+        if sound != 0 && dkfw::filter::get(sound) == want {
+            0
+        } else {
+            E_STATE
+        }
     }
     /// The firmware's own transport test: both play words ORed.
     #[cfg(not(test))]
