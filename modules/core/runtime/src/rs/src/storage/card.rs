@@ -11,7 +11,8 @@
 //!   runtime: every write is refused (`E_CARD_RO`), the boot counter is not raised (so there is no safe mode by counter), uploads answer
 //!   `E_INUSE`, and ABOUT says so. The area is up to 22 GiB: the rest of it is not scanned (**[O]**: finding 59).
 //! - Claiming: a write that touches only the store's header sectors or the selection record is itself a mark of ours, so it needs nothing
-//!   first. A write of data or a table into a blank range (an upload's staging) first writes an empty store header pair, so a power cut
+//!   first. The boot's own record write (the boot counter) is such a write, so on a device a blank card is marked ours by the first boot and the claim
+//!   below is rarely reached (a write of data into a blank range before any record was written). A write of data or a table into a blank range (an upload's staging) first writes an empty store header pair, so a power cut
 //!   in the middle of an upload leaves a card the next boot calls ours, not a card with unexplained data in it.
 //!
 //! The check reads the start of the area only on a card where none of our structures is present (a fresh card): `BLANK_SECTORS` in 64 KiB reads,

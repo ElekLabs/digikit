@@ -82,6 +82,44 @@ cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symb
     },
   );
 
+  test(
+    'a fresh card with no record: boots that never reach the stable period lead to safe mode (counter) from the first boot, and a stable session clears it',
+    async () => {
+      // No selection and no module: nothing of ours can hang the boot. What counts is a session that ends before its stable period (a power-off, a
+      // firmware hang, a crash): the first boot creates the selection record and raises its counter, like every later one.
+      let card = await h.card();
+      for (const counter of [0, 1]) {
+        await h.boot(card);
+        const info = await h.ready();
+        expect(info, `boot ${counter + 1} of a card with no record: not safe, counter ${counter}`).toMatchObject({ safe: 0, counter, count: 0 });
+        expect(info.stable, 'its stable period has not ended when the power goes').toBe(0);
+        expect(currentRecord(await h.records())?.counter, 'the record exists and holds the raised counter').toBe(counter + 1);
+        card = await h.after(); // a power cycle: the card as the last boot left it
+      }
+      await h.boot(card);
+      const safe = await h.ready(true);
+      expect(safe, 'two boots without a stable period: the third is safe mode (counter 2)').toMatchObject({
+        safe: 1,
+        reason: SAFE_COUNTER,
+        counter: 2,
+      });
+      expect((await introNow(h.session)).equals(safeFrame('counter')), 'the intro shows the 2 FAILED BOOTS frame').toBe(true);
+      expect(currentRecord(await h.records())?.counter, 'the safe boot cleared the counter at its first UI-loop pass').toBe(0);
+
+      // the next boot is not safe; a stable session leaves the counter at 0
+      await h.boot(await h.after());
+      const next = await h.ready();
+      expect(next, 'the boot after the safe one is not safe').toMatchObject({ safe: 0, counter: 0 });
+      await expectPollEmulated(
+        h.session,
+        async () => (await bootInfo(h.session, h.plan)).stable,
+        (value) => expect(value, 'the session reaches its stable period').toBe(1),
+        { emulatedMs: 120_000, message: 'the stable period ends' },
+      );
+      expect(currentRecord(await h.records())?.counter, 'a stable session clears the counter').toBe(0);
+    },
+  );
+
   for (const kind of ['early', 'late'] as const) {
     test(
       `a module that hangs the UI task ${kind} in a session: the boot counter and the stable period`,
@@ -229,8 +267,12 @@ cardRigs(
         );
         const recs = await h.records();
         expect(r).toBe(0);
-        expect(recs[0]?.seq, 'A is new').toBe(1);
-        expect(recs[1], 'B is still empty').toBeNull();
+        // The boot counted itself in the record on this card with no record (copy A, seq 1), and the stable-period clear may have written B (seq 2)
+        // before this call; SELECT_ONE then wrote A only, with the next sequence number. So: A holds the selection and is the newer copy; B is either
+        // still empty or the counter clear of the boot, which selects nothing.
+        expect(recs[0]?.paths, 'A is new: it holds the selection').toEqual(mods.map((m) => m.name));
+        expect(recs[0]?.seq, 'A is newer than anything the boot wrote').toBeGreaterThan(recs[1]?.seq ?? 1);
+        expect(recs[1]?.paths ?? [], 'B is still empty, or the boot\'s counter clear (no selection)').toEqual([]);
 
         await dk.restart();
         await dk.waitForBoot(90_000, { until: 'boot' }); // the boot record test: h.ready() follows

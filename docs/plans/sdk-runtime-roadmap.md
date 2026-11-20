@@ -74,6 +74,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | 5 | P10 | ColdFire PC sampling on the device | P9 | todo | |
 | Any | T-AB | A/B of two firmware images: `coupled_ab --image LABEL=SYX` | - | done | PR 484 |
 | Any | P5 | Track A: host profiles named from sharcdb (emulator host speed), in a lane | - | parked | |
+| Any | SM-F | Safe mode from the first boot: the boot counter counts with no selection record too (the first counted boot creates the record), so a hang or crash loop on a fresh flash reaches safe mode; host tests in `safe_mode.rs` | - | active | `rt/safe-mode-fresh`; device proof pending: needs the full tier (the fresh-card test is in the full-tier `safe mode` rig, `core/runtime-tests:test-device-all--safe-mode`) |
 
 Until P9, cycle budgets use emulator instruction counts with a margin. P9 replaces the margin with a measured factor; the contract field
 does not change.
@@ -126,3 +127,4 @@ Later, only when a feature needs it: the firmware tooling list in [profiling.md]
 - 2026-11-18: B1, RS-S, RS-C and T1i done in one shared gate (transfer-live fails on DT2 and DN2: installer bug already on main, tracked separately); T2 gate-time cuts, DSP-mode scheduling and pyramid moves done; `fx_entry` to `dkrt_export` deferred.
 - 2026-11-17: row E (extension model) added after H; its E5 does H stages S1 and S4.
 - 2026-11-18: row E: E0b-E4 built, E6 active (branch e6/lfo-shapes), E5 scoped smaller to machine reload, with E5b for the rest; E0a retry needs a daemon with a generated core (finding 148).
+- 2026-11-20: row SM-F added: automatic safe mode was unreachable on a fresh flash (no record, no counter); the record is written on the first counted boot (device tests updated, device proof pending).
