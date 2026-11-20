@@ -446,6 +446,8 @@ fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
 
 #[test]
 fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them() {
+    // TEST_LOCK first (this file's statics, as its neighbours), then the contract lock (the service row statics)
+    let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _lock = dkrt_test_support::contract::locked();
     let core = core();
     dkrt_svc_machines::rows::reset();
