@@ -71,12 +71,17 @@ pub unsafe fn ui_pass() {
     }
 }
 
+/// Do the boots counted in the record call for safe mode (`SAFE_AFTER` boots that did not reach the stable period)?
+pub(crate) fn counter_is_safe(r: &Record) -> bool {
+    r.boot_counter >= SAFE_AFTER
+}
+
 /// Count this boot: raise the boot counter in the selection record and write it before anything of a module runs. Every boot that is not safe
 /// counts, whether or not a selection exists: a fresh device has no record, and the write creates it (`update` with no valid copy: copy A, `seq` 1).
 /// On a card the runtime may not write (a foreign area, unreadable, too small, no store, or not checked yet and then refused) nothing is written and
-/// nothing counts. Returns the record this boot goes on with.
-pub(crate) unsafe fn count_boot_with<P: Platform>(p: &P, r: Record, copy: u32, valid: bool) -> Record {
-    if !card::writable() {
+/// nothing counts. `writable` is `card::writable()` as the caller read it after the card check. Returns the record this boot goes on with.
+pub(crate) unsafe fn count_boot_with<P: Platform>(p: &P, r: Record, copy: u32, valid: bool, writable: bool) -> Record {
+    if !writable {
         return r;
     }
     let mut n = r;
@@ -154,12 +159,12 @@ mod tests {
             _ => (Record::empty(), 0, false),
         };
         let floor = if late_crash { count_late_crash(&mut r) } else { 0 };
-        if r.boot_counter >= SAFE_AFTER {
+        if counter_is_safe(&r) {
             // a safe boot loads nothing and counts nothing; its first UI-loop pass clears the counter
             clear_counter_with(f, 0, false);
             return true;
         }
-        count_boot_with(f, r, copy, valid);
+        count_boot_with(f, r, copy, valid, card::writable());
         if let End::Stable = end {
             clear_counter_with(f, floor, false);
         }
