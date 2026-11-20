@@ -244,9 +244,15 @@ pub fn run_coverage(rest: &[String]) -> Result<()> {
         return Err(err!("coverage: no .dkm files"));
     }
     let mods = load(&paths)?;
+    let known: BTreeSet<&str> = sdk.iter().map(|i| i.name.as_str()).collect();
     let mut linked: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (p, _, imps) in &mods {
         for i in imps {
+            // A service file (`.dks`) also links its own tables, which sdk.toml does not list: the `dkc_*` core calls (`SVC_IMPORTS`) and the
+            // firmware names (`dk_fw_`, `dk_exit_`, `dk_tail_`, `dk_stock_`, `dk_ret_`). Only a module can link an unknown SDK name by mistake.
+            if p.ends_with(".dks") && !known.contains(i.as_str()) {
+                continue;
+            }
             linked.entry(i.clone()).or_default().insert(p.clone());
         }
     }
