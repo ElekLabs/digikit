@@ -145,6 +145,20 @@ describe('parse', () => {
     ).toThrow(/needed by samples/);
   });
 
+  test('[midi] is optional and checks channels, cc and nrpn ranges', () => {
+    const midi = (params: string, chans = '[1, 2]') =>
+      identity('x', `[midi]\ntrack_channels = ${chans}\n[midi.params]\n${params}\n`);
+    expect(parse({ 'x.toml': identity('x') }).get('x').midi).toBeUndefined();
+    expect(parse({ 'x.toml': midi('a = { cc = 74, nrpn = [1, 20] }\nb = { nrpn = [1, 2] }') }).get('x').midi).toEqual({
+      trackChannels: [1, 2],
+      params: { a: { cc: 74, nrpn: [1, 20] }, b: { nrpn: [1, 2] } },
+    });
+    expect(() => parse({ 'x.toml': midi('a = { cc = 128 }') })).toThrow(/cc must be 0 to 127/);
+    expect(() => parse({ 'x.toml': midi('a = { nrpn = [1] }') })).toThrow(/nrpn must be/);
+    expect(() => parse({ 'x.toml': midi('a = {}') })).toThrow(/needs cc or nrpn/);
+    expect(() => parse({ 'x.toml': midi('a = { cc = 1 }', '[0]') })).toThrow(/track_channels/);
+  });
+
   test('a TOML syntax error names the file', () => {
     expect(() => parse({ 'broken.toml': '[device\n' })).toThrow(/devices\/broken\.toml/);
   });
@@ -162,6 +176,26 @@ describe('the repository device files', () => {
     expect(r.get('dt2').acceptance).toBeDefined();
     expect(r.get('dn2').acceptance).toBeDefined();
     expect(r.get('dt2').capabilities.card).toBe('path-fs');
+  });
+
+  test('the audio devices carry the MIDI map the calibration runner uses', () => {
+    const r = loadDevices();
+    for (const id of ['dt2', 'dn2']) {
+      const m = r.get(id).midi;
+      expect(m, id).toBeDefined();
+      for (const name of [
+        'track_mute',
+        'track_level',
+        'filter_freq',
+        'filter_reso',
+        'filter_env_depth',
+        'amp_release',
+        'send_delay',
+        'send_reverb',
+        'send_chorus',
+      ])
+        expect(m?.params[name], `${id} ${name}`).toBeDefined();
+    }
   });
 
   test('the slot device keeps its samples in numbered slots', () => {

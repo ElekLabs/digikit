@@ -10,7 +10,7 @@ import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.t
 import type { DkSession } from '@digi/dk-session';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { sameTarget } from '@digi/workbench-core/transfer/target.ts';
+import { sameTarget, type Target } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import {
   buildRows,
@@ -35,6 +35,10 @@ import { createEmulatorNames } from './log-names-backend';
 import { deviceOfPort } from './remote-core';
 import { createRecorder, type ProfileReading } from './profile-backend';
 import { createReadGate } from './read-gate-core';
+import CalibrationSection from './CalibrationSection';
+import { calibrationTexts } from './calibration-data';
+import { createCalibrator } from './calibration-backend';
+import { createCalibrationState } from './calibration-state';
 import './card-panel.css';
 import './profile-panel.css';
 
@@ -89,6 +93,56 @@ export default function ProfilePanel(props: {
     names: props.host && prof ? createEmulatorNames(props.host, prof) : undefined,
   });
 
+  // a calibration run owns the counters and the target: the pane does not read while it plays, locks its other actions, and the run fails when the
+  // selected target changes under it
+  const [calibrating, setCalibrating] = createSignal(false);
+  let runTarget: Target | undefined;
+  const sameRunTarget = () => {
+    if (readsTarget() && runTarget && !sameTarget(runTarget, target()))
+      throw new Error('the target changed during the run: it was stopped');
+  };
+  const calibrator = createCalibrator({
+    session: async () => props.session(),
+    get rpc() {
+      return onEmulator() ? props.host?.rpc : undefined;
+    },
+    get midi() {
+      const sink = props.host?.ports.midi;
+      return sink
+        ? {
+            send: async (bytes: Uint8Array) => {
+              sameRunTarget();
+              await sink.send(bytes);
+            },
+          }
+        : undefined;
+    },
+    loadLibrary: app.loadLibrary,
+    // Transfer installs on the selected target: only when this pane reads it, and only while it is still the target the run began on
+    get install() {
+      return readsTarget()
+        ? async (ids: string[]) => {
+            sameRunTarget();
+            await app.backend.install(ids, () => {});
+          }
+        : undefined;
+    },
+    prof: prof ?? (async () => Promise.reject(new Error('dkprof.wasm needs the desktop host'))),
+    texts: calibrationTexts,
+  });
+  // the state is the pane's: a run that restarts the target resets `reading` and must not lose its captures
+  const calibration = createCalibrationState({
+    calibrator,
+    emulator: () => emu(),
+    blocked: () => busy() || !!acting(),
+    onRunning: (r) => {
+      runTarget = r ? target() : undefined;
+      setCalibrating(r);
+    },
+  });
+  onCleanup(() => calibration.dispose());
+  const locked = () => !!acting() || calibrating();
+
   const running = () => {
     const r = reading();
     return !!r && !r.noDebug && r.snap.running;
@@ -131,7 +185,7 @@ export default function ProfilePanel(props: {
     },
   });
 
-  const active = createMemo(() => props.visible);
+  const active = createMemo(() => props.visible && !calibrating());
   // read when the tab is shown, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
@@ -160,6 +214,7 @@ export default function ProfilePanel(props: {
   onCleanup(() => gate.dispose());
 
   const act = async (what: string, f: () => Promise<void>) => {
+    if (calibrating()) return;
     setActing(what);
     try {
       await f();
@@ -268,7 +323,7 @@ export default function ProfilePanel(props: {
               span and records nothing.
             </span>
             <div class="acts">
-              <button type="button" class="act primary" disabled={!!acting()} onClick={() => void addDebug()}>
+              <button type="button" class="act primary" disabled={locked()} onClick={() => void addDebug()}>
                 {acting() === 'add' ? 'Adding…' : 'Add debug module'}
               </button>
             </div>
@@ -295,16 +350,16 @@ export default function ProfilePanel(props: {
                   <Show
                     when={r().snap.running}
                     fallback={
-                      <button type="button" class="act primary" disabled={!!acting()} onClick={() => void start()}>
+                      <button type="button" class="act primary" disabled={locked()} onClick={() => void start()}>
                         Start
                       </button>
                     }
                   >
-                    <button type="button" class="act" disabled={!!acting()} onClick={() => void stop()}>
+                    <button type="button" class="act" disabled={locked()} onClick={() => void stop()}>
                       Stop
                     </button>
                   </Show>
-                  <button type="button" class="act quiet" disabled={!!acting()} onClick={() => void reset()}>
+                  <button type="button" class="act quiet" disabled={locked()} onClick={() => void reset()}>
                     Reset
                   </button>
                   <span class="sp" />
@@ -322,7 +377,7 @@ export default function ProfilePanel(props: {
                   <button
                     type="button"
                     class="act quiet"
-                    disabled={!!acting() || !props.host || r().snap.elapsedTicks === 0n}
+                    disabled={locked() || !props.host || r().snap.elapsedTicks === 0n}
                     onClick={() => void exportFile()}
                   >
                     Export…
@@ -569,6 +624,15 @@ export default function ProfilePanel(props: {
               </span>
             </>
           )}
+        </Show>
+        <Show when={props.host && !reading()?.noDebug}>
+          <CalibrationSection
+            state={calibration}
+            host={props.host}
+            target={`${emu() ? 'Emulator' : 'USB'} ${device()}`.trim()}
+            emulator={emu()}
+            disabled={!!acting() || busy()}
+          />
         </Show>
         <Show when={error()}>
           <p class="err" role="alert">

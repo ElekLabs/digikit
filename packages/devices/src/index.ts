@@ -7,6 +7,8 @@ export type {
   DeviceRecord,
   Firmware,
   Level,
+  MidiMap,
+  MidiParam,
   Registry,
   SlotStorage,
   Storage,

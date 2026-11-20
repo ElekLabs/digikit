@@ -325,3 +325,69 @@
   color: var(--ink-2, #b3b7be);
   line-height: 1.45;
 }
+/* the Calibration section (CalibrationSection.tsx) */
+.profile-panel .cal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.profile-panel .cal-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2, #b3b7be);
+}
+.profile-panel .cal-pick select {
+  background: var(--panel-3, #23262b);
+  color: var(--ink, #e6e8eb);
+  border: 1px solid #2c3036;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font: inherit;
+}
+.profile-panel .cal-target {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2, #b3b7be);
+}
+.profile-panel .cal-progress {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2, #b3b7be);
+}
+.profile-panel .cal-table {
+  --cols: minmax(0, 1fr) 76px 76px 44px 54px;
+}
+.profile-panel .cal-table .row .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-panel .cal-fit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.profile-panel .cal-headline {
+  font-size: 12px;
+  color: var(--ink, #e6e8eb);
+}
+.profile-panel .cal-refused,
+.profile-panel .cal-warning {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.profile-panel .cal-refused {
+  color: var(--bad, #e5736b);
+}
+.profile-panel .cal-warning {
+  color: var(--amber, #f3b52c);
+}
+.profile-panel .cal-acts {
+  flex-wrap: wrap;
+}
