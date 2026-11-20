@@ -27,7 +27,7 @@ Costs are polynomials in these symbols; `Poly.evaluate` substitutes values.
 
 Run it through the firmware query tool (needs out/sharcdb/<image>.sqlite):
 
-    fw.py cost ADDR -i dt2-1.17 [--vars R2=32,R2@1cd286=16] [--vars-all R12=32]
+    fw.py cost ADDR -i <image> [--vars R2=32,R2@1cd286=16] [--vars-all R12=32]
                                 [--no-calls]
 
 `--vars NAME=V` sets the entry function's register, `NAME@FN=V` that of one
