@@ -101,9 +101,10 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await expectRuntimeReady(session);
   const tap = tapOf(rt);
   // the events core/ui logs when a module view is pushed and when it leaves the stack, and for the naming screen: what the test waits on (the firmware's view stack is read only to compare identities)
-  // the log commands exist while digikit/debug is loaded: install it first (it is part of the stock rows measured below)
-  await installWithDebug(rt);
-  let events = await rt.listen();
+  // the fixture goes in with the debug module (the log commands exist only while it is loaded) in one selection and one restart: a second restart would count a second
+  // unstable boot, and the boot after it would be a safe-mode boot (the harness allows one controlled install restart)
+  await installWithDebug(rt, 'test/ui-views');
+  const events = await rt.listen();
   const opened = (flags: number) => events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === flags, { withinMs: 10_000 });
   const viewClosed = () => events.until('VIEW_CLOSED', undefined, { withinMs: 10_000 });
   const inputOpened = () => events.until('TEXT_INPUT_OPENED', undefined, { withinMs: 10_000 });
@@ -119,12 +120,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
     await leave(rt);
     return n;
   };
-  const rowsBefore = await stockRows();
   const mainStack = await fw.vptrs();
-
-  // the fixture goes in with the debug module: a selection without it would take the log commands away at the restart
-  await installWithDebug(rt, 'test/ui-views');
-  events = await rt.listen();
   expect(RANGES.ui_views_test, 'reserved command range of the fixture').toEqual([0x0f, 0x0f]);
   const first = await report(rt);
   expect([first.row1, first.row2], 'dk_ui_settings_row in init: both rows added').toEqual([0, 0]);
@@ -132,8 +128,9 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
 
   // The rows: two more items in the SETTINGS menu, at its end.
   const rowsWith = await stockRows();
-  expect(rowsWith, 'the SETTINGS menu has the two rows of the module more').toBe(rowsBefore + 2);
-  const row1 = rowsWith - 2;
+  // the stock rows are the rest: there is one restart only, so the menu is never measured without the module, and the firmware keeps the rows of an unloaded module until it rebuilds the list
+  const rowsBefore = rowsWith - 2;
+  const row1 = rowsBefore;
 
   // The full-screen view: a new top view above the SETTINGS menu.
   await pressSettingsRow(rt, row1, rowsWith);
