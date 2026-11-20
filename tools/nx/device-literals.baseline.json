@@ -524,7 +524,7 @@
   "packages/patchkit/src/error.rs": 2,
   "packages/patchkit/src/firmware.rs": 1,
   "packages/patchkit/src/flash.rs": 43,
-  "packages/patchkit/src/flash_cli.rs": 25,
+  "packages/patchkit/src/flash_cli.rs": 12,
   "packages/patchkit/src/flash_rpc.rs": 6,
   "packages/patchkit/src/fwgen.rs": 4,
   "packages/patchkit/src/lib.rs": 2,

@@ -145,7 +145,7 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
     }
     if let Some(sock) = emu {
         if rpc {
-            ask_flash(&p, device_name(&p, ""), yes)?;
+            ask_flash(&p, &device_name(&p), yes)?;
         }
         return emulator(&p, &sock, rpc.then_some(chunk));
     }
@@ -166,18 +166,9 @@ pub fn run(reg: &Registry, lib: &Library, rest: &[String]) -> Result<()> {
     device(&p, &name)
 }
 
-/// The name of the device: from the MIDI port when it says so, else from the image.
-fn device_name(p: &Prepared, port: &str) -> &'static str {
-    let port = port.to_lowercase();
-    if port.contains("digitakt") {
-        "Digitakt II"
-    } else if port.contains("digitone") {
-        "Digitone II"
-    } else if p.device == "dt2" {
-        "Digitakt II"
-    } else {
-        "Digitone II"
-    }
+/// The product name of the device, from its device file (`[device] name`); the short name when no device file has it.
+fn device_name(p: &Prepared) -> String {
+    patchkit::devdata::by_short(&p.device).map_or_else(|| p.device.clone(), |d| d.name.clone())
 }
 
 /// The one question of the rpc route, asked before anything is sent: "Flash Digitakt II OS 1.17 (stock) now? [y/N]".
@@ -189,7 +180,7 @@ fn flash_question(p: &Prepared, name: &str) -> String {
     } else {
         format!(
             "with digikit runtime {}",
-            patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version())
+            p.runtime_text().unwrap_or_default()
         )
     };
     format!("Flash {name} OS {} {what} now? [y/N] ", p.os)
@@ -416,7 +407,7 @@ fn device_rpc(p: &Prepared, want: &str, chunk: usize, yes: bool) -> Result<()> {
     let name = find_port(&out_names()?, want)?;
     println!("port {name:?}");
     println!("{}", rpc_instructions(p));
-    ask_flash(p, device_name(p, &name), yes)?;
+    ask_flash(p, &device_name(p), yes)?;
     let mut link = open(&name)?;
     let t0 = Instant::now();
     run_rpc(p, chunk, &mut link)?;
@@ -1045,23 +1036,32 @@ mod tests {
 
     #[test]
     fn the_question_names_the_device_the_os_and_what_is_flashed() {
-        let q = flash_question(
-            &prepared(true),
-            device_name(&prepared(true), "Elektron Digitakt II"),
-        );
-        assert_eq!(q, "Flash Digitakt II OS 1.17 (stock) now? [y/N] ");
+        // the name comes from the device file of the prepared image, whatever the device
+        for d in patchkit::devdata::all() {
+            let mut p = prepared(true);
+            p.device = d.short.clone();
+            assert_eq!(device_name(&p), d.name);
+            let q = flash_question(&p, &device_name(&p));
+            assert_eq!(q, format!("Flash {} OS 1.17 (stock) now? [y/N] ", d.name));
+        }
+        let mut unknown = prepared(true);
+        unknown.device = "xx".into();
+        assert_eq!(device_name(&unknown), "xx");
+        // with the runtime: the runtime version INFO reports after the flash, the same value as the summary and the check after the restart
         let mut with_runtime = prepared(false);
         with_runtime.image_id = Some([1; 8]);
-        let q = flash_question(&with_runtime, "Digitakt II");
-        assert!(
-            q.starts_with("Flash Digitakt II OS 1.17 with digikit runtime "),
-            "{q}"
-        );
-        assert!(q.ends_with(" now? [y/N] "), "{q}");
-        let q = flash_question(&prepared(false), "Syntakt");
+        let version = patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version());
+        assert_eq!(with_runtime.runtime_text(), Some(version.clone()));
+        assert_eq!(with_runtime.summary_json()["runtime"], version);
+        let q = flash_question(&with_runtime, "Name");
         assert_eq!(
             q,
-            "Flash Syntakt OS 1.17 patched, without the digikit runtime now? [y/N] "
+            format!("Flash Name OS 1.17 with digikit runtime {version} now? [y/N] ")
+        );
+        let q = flash_question(&prepared(false), "Name");
+        assert_eq!(
+            q,
+            "Flash Name OS 1.17 patched, without the digikit runtime now? [y/N] "
         );
     }
 
