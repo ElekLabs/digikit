@@ -658,6 +658,15 @@ int32_t dkrt_poll_add(uintptr_t f);
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
 void dkrt_poll_remove(uintptr_t f);
 
+/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The runtime says only that the owner is gone; what the observer closes is its own business. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. core/ui uses it to close the views, SETTINGS rows and timers of the owner. */
+int32_t dkrt_unload_observer_add(uintptr_t f);
+
+/* Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table. */
+void dkrt_unload_observer_remove(uintptr_t f);
+
+/* The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded module. */
+int32_t dkrt_ctx_owner(uintptr_t ctx);
+
 /* A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect. */
 void dkrt_menu_built(uintptr_t code, uintptr_t data);
 

@@ -42,6 +42,8 @@
 /* The control-block vtables of the two make_shared window types (data anchors; the address is the vtable). */
 extern const uint8_t fw_confirm_cb_vt __asm__("cf.window.site.confirm_cb_vptr_lit");
 extern const uint8_t fw_choice_cb_vt __asm__("cf.window.site.multichoice_cb_vptr_lit");
+/* The control-block vtable of the make_shared<NameView> block. */
+extern const uint8_t fw_name_cb_vt __asm__("cf.window.site.name_cb_vptr_lit");
 
 /* assembly shim */
 void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
@@ -932,6 +934,12 @@ int32_t dk_ui_toast(dk_ui *ui, const char *text)
 /* The timers (tick.h). One function, ui_poll, is on the runtime's per-pass list (dkrt_poll_add) while any timer runs: the UI loop calls it
    in the UI task, the task of every UI callback. The runtime's block clock (1500 per second) times the periods; without one the passes
    of the UI loop (about 120 per second) do. */
+/* The owner of what a module hands in: its handle, which dk_ui_open made from the module's owner id (and dk_ui_core_handle for core modules). */
+static uintptr_t owner_of(dk_ui *ui)
+{
+    return (uintptr_t)ui;
+}
+
 static ui_ticks g_ticks;
 static uint32_t g_passes;
 static int g_polling;
@@ -981,11 +989,10 @@ static void ui_poll(void)
 
 int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms)
 {
-    (void)ui;
     uint32_t per_s, now = tick_clock(&per_s);
-    int r = ui_ticks_set(&g_ticks, fn, arg, period_ms, now);
+    int r = ui_ticks_set(&g_ticks, owner_of(ui), fn, arg, period_ms, now);
     if (r == 0 && ui_ticks_active(&g_ticks) && poll_start() != 0) {
-        ui_ticks_set(&g_ticks, fn, arg, 0, now);
+        ui_ticks_set(&g_ticks, 0, fn, arg, 0, now);
         return -1;
     }
     return r;
@@ -995,18 +1002,29 @@ int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms)
    The logic is in settings_rows.c, view_pool.c, canvas_map.c and text_input.c (host-tested). This section is the glue to the firmware.
    Parts marked [STUB] are not written yet: they wait for the byte-checked anchors (no devices/fw or ports rule exists for them). */
 
-/* The owner of what a module hands in. TODO(open question, see docs/plans/track-manager.md): dk_ui_open gives every module the same token, so all modules
-   are one owner today; an unload then cannot tell whose views to close. One handle per dk_module_ctx (the runtime's DkrtModule.ctx) would. */
-static uintptr_t owner_of(dk_ui *ui)
+static void text_input_drop_owner(uintptr_t owner);
+
+/* Called by the runtime (dkrt_unload_observer_add) with the owner id of a module that is unloaded, after its fini and before its memory is freed: the
+   module's views, SETTINGS rows and timers go. The owner key is the handle value (owner id + 1). */
+static void ui_owner_gone(uint32_t owner)
 {
-    return (uintptr_t)ui;
+    uintptr_t key = (uintptr_t)owner + 1;
+    ui_rows_remove_owner(&g_rows, key);
+    ui_views_close_owner(&g_views, key);
+    ui_ticks_remove_owner(&g_ticks, key);
+    text_input_drop_owner(key);
 }
 
-/* Called by the runtime's unload step when it learns the module is gone. TODO: no unload notice reaches core/ui yet (open question). */
-void ui_owner_unloaded(uintptr_t owner)
+/* Watch for unloads, once. */
+static int observe_unloads(void)
 {
-    ui_rows_remove_owner(&g_rows, owner);
-    ui_views_close_owner(&g_views, owner);
+    static int done;
+    if (done)
+        return 0;
+    if (dkrt_unload_observer_add((uintptr_t)ui_owner_gone) != 0)
+        return -1;
+    done = 1;
+    return 0;
 }
 
 /* -- SETTINGS rows -- */
@@ -1032,46 +1050,47 @@ int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *
 
 /* -- canvas: the firmware side of canvas_map.h -- */
 
-/* [D, second agent: FontData +6 is the glyph box height; the stock font is the operand of the VerticalMenuView constructor] */
-#define FONTDATA_HEIGHT_AT 6
-
 static uint8_t *g_canvas_font;
 
+/* The screen's own calls. Text y and rectangle rows both count from the screen bottom (the title bar of every stock list is drawn at rows 0x39 to 0x3f
+   with the text at y 0x3a: checked in the stock paint code). `maxw` -1: the whole text (the main screen passes -1). A set pixel is colour -1, a clear
+   one 0 (the stock paint calls), and the selection bar of the stock lists is inverted with colour -1. */
 static void fwc_text(void *bitmap, int32_t x, int32_t y_up, const char *s)
 {
-    dk_fw_text_draw((uint8_t *)bitmap, g_canvas_font, x, y_up, 0,
-                    s); /* [O] the fifth argument `maxw` is not read; 0 */
+    dk_fw_text_draw((uint8_t *)bitmap, g_canvas_font, x, y_up, -1, s);
 }
 
 static void fwc_fill(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color)
 {
-    dk_fw_draw_fill_rect((uint8_t *)bitmap, x0, y0, x1, y1, color);
+    dk_fw_draw_fill_rect((uint8_t *)bitmap, x0, y0, x1, y1, color ? -1 : 0);
 }
 
 static void fwc_invert(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 {
-    dk_fw_draw_invert_rect((uint8_t *)bitmap, x0, y0, x1, y1,
-                           1); /* [O] the roles of `color` are not fully read */
+    dk_fw_draw_invert_rect((uint8_t *)bitmap, x0, y0, x1, y1, -1);
 }
 
-/* [STUB] The width routine (hash 2f0ac4fb5a02.., DT2 0x4011467a, DN2 0x40115fee) has no anchor yet, and the FontData header word 0 is not the glyph
-   width. Until it has, the width of any text is reported as 1, so that a text is only dropped when it starts off the screen. */
+/* The width routine takes the font data and a std::string (a pointer to the one-word COW object). */
 static int32_t fwc_text_width(const char *s)
 {
-    (void)s;
-    return 1;
+    uint32_t str;
+    uint8_t alloc = 0;
+    int32_t w;
+    dk_fw_string_std_string_ctor(&str, s, &alloc);
+    w = dk_fw_text_width(g_canvas_font, -1, &str);
+    dk_fw_string_std_string_dtor(&str);
+    return w;
 }
 
-/* Fills `fw` for the screen Bitmap of this frame: +4 width, +8 height (dk_fw_draw.h). */
+/* Fills `fw` for the screen Bitmap of this frame: +4 width, +8 height (dk_fw_draw.h); the glyph box height of the font is FontData.height. */
 static void canvas_fw_for(ui_canvas_fw *fw, uint8_t *bitmap)
 {
     g_canvas_font = vmv_font();
     fw->bitmap = bitmap;
     fw->width = read_u32(bitmap + 4);
     fw->height = read_u32(bitmap + 8);
-    fw->font_h = *(const uint16_t *)(g_canvas_font + FONTDATA_HEIGHT_AT);
-    fw->rect_from_bottom =
-        0; /* [O] the orientation of fill_rect against text y is not proven: 0 until the byte check says */
+    fw->font_h = *(const uint16_t *)(g_canvas_font + offsetof(FontData, height));
+    fw->rect_from_bottom = 1;
     fw->text = fwc_text;
     fw->fill = fwc_fill;
     fw->invert = fwc_invert;
@@ -1081,6 +1100,7 @@ static void canvas_fw_for(ui_canvas_fw *fw, uint8_t *bitmap)
 /* -- views -- */
 
 #define VIEW_SLOT_AT 0x4c /* our word behind a module view: its pool slot */
+#define VIEW_OBJ_SIZE 0x50
 
 /* Slot 4 of the view vtable: draw(this, Bitmap *). */
 static void mv_draw(uint8_t *view, uint8_t *bitmap)
@@ -1106,26 +1126,50 @@ static void mv_detached(uint32_t slot)
     ui_views_gone(&g_views, slot);
 }
 
-/* [STUB] Make the firmware view for pool slot `slot` and push it. Recipe (docs/findings, second-agent check p0-verify):
-   1. object = fw_new(0x4c + one word), zeroed; View::ctor(obj, name) [no anchor yet: DT2 0x4011b06e, DN2 0x4011c9e2]; the name is kept by pointer: static.
-   2. write `slot` at VIEW_SLOT_AT; copy the 19 words of the View vtable, replace slot 4 with mv_draw and slot 2 with mv_key, point the vptr at the copy.
-      Slot 0 stays View's complete destructor (no free): for a make_shared block the firmware calls slot 0 and the block frees the memory. Slot 1 is
-      used only by the raw-pointer block (vptr 0x401f1130); do not rely on it, and slot 11 is unverified.
-   3. opaque byte (+0x16, slot 8): 1 for full screen, 0 for an overlay, before the push (the push runs the relayout).
-   4. a detach callback (slot 16) that calls mv_detached(slot) (a std::function like the menus' own, see make_fn).
-   5. a make_shared-style block (use count 1, vptr as the stock make_shared<View> blocks, block size 0x10 + object) and a shared_ptr<View> to it; push with
-      view_controller_push(view_manager(), &sp, 0); the push copies the shared_ptr, so release our own reference afterwards
-      (cf.string.fn.shared_ptr.release): the firmware then frees the view after the sweep.
-   Returns the object pointer as the opaque word, 0 on failure. */
+/* The view left the stack: the sweep ran the detach callback. */
+static void inv_view_detached(const uint32_t *any)
+{
+    mv_detached(any[0]);
+}
+
+/* Our own vtable: the View vtable (the vptr the constructor stored) copied, slot 2 (key) and 4 (draw) replaced. Slot 0 stays View's complete
+   destructor and slot 1 its deleting one. One copy serves every module view. */
+static uint32_t g_view_vt[VT_WORDS];
+
+static void own_view_vtable(uint8_t *obj)
+{
+    uint32_t *old = (uint32_t *)vtable(obj);
+    if (!g_view_vt[2]) {
+        for (int i = 0; i < VT_WORDS; i++)
+            g_view_vt[i] = old[i - 2];
+        g_view_vt[2 + VT_PAINT] = (uint32_t)mv_draw;
+        g_view_vt[2 + VT_KEY] = (uint32_t)mv_key;
+    }
+    *(uint32_t **)obj = &g_view_vt[2];
+}
+
+/* Make the firmware view for pool slot `slot` and push it, as the dialogs are: a make_shared block (0x10 control block, the object at +0x10, the
+   control-block vtable of the stock ConfirmWindow, whose dispose calls slot 0 of the object and whose destroy frees the block), pushed on the view
+   manager; our own count is released afterwards, so the firmware frees the view after its sweep. Opaque: a full-screen view hides the views below, an
+   overlay does not. Returns the object as the opaque word, 0 when it could not be made. */
 static uint32_t fwv_push(void *fw, uint32_t slot, int overlay)
 {
     (void)fw;
-    (void)slot;
-    (void)overlay;
-    (void)mv_detached;
-    (void)mv_draw;
-    (void)mv_key;
-    return 0;
+    uint8_t *blk = fw_new(0x10 + VIEW_OBJ_SIZE);
+    if (!blk)
+        return 0;
+    uint8_t *obj = blk + 0x10;
+    init_block(blk, &fw_confirm_cb_vt);
+    dk_fw_view_view_ctor(obj, "dkview"); /* the name is kept by pointer: static */
+    own_view_vtable(obj);
+    *(uint32_t *)(obj + VIEW_SLOT_AT) = slot;
+    ((View *)obj)->opaque = overlay ? 0 : 1; /* before the push: the push runs the relayout */
+    fn f = make_fn(slot, 0, inv_view_detached);
+    ((void (*)(uint8_t *, fn *))vtable(obj)[VT_DETACH_ADD])(obj, &f);
+    shared_ptr sp = {(uint32_t)obj, (uint32_t)blk};
+    uint32_t ok = dk_fw_view_view_controller_push(view_manager(), &sp, 0);
+    dk_fw_string_shared_ptr_release(&sp.ctl);
+    return ok ? (uint32_t)obj : 0;
 }
 
 /* Flag the view for removal: slot 10 (close). [D] only flags; the sweep removes it. */
@@ -1165,33 +1209,100 @@ void dk_ui_view_close(dk_ui_view *v)
 
 /* -- text input -- */
 
-/* [STUB] How many characters the NameView edit box takes (the box is 122 px wide, the edit font is a RAM wrapper not read yet). Until it is read, the API
-   cap. */
+/* How many characters the NameView edit box takes without a number prefix: the largest maxlen that a stock call site passes (16, in 21 call sites of the
+   NameView wrapper), so the box fits it. The API cap (15) is below it. */
+#define NAME_SCREEN_MAX 16u
+
 static uint32_t text_input_screen_max(void)
 {
-    return DK_UI_TEXT_INPUT_MAX;
+    return NAME_SCREEN_MAX;
 }
 
-/* [STUB] NameView::ctor(this, prompt, initial, number, maxlen, show_number = 0, number_fmt = "", done) with a done std::function void(std::string, int)
-   that calls desc.done(arg, text) on YES and then clears the busy flag, a detach callback that clears the busy flag too (NO has no done), and a
-   make_shared block (vptr DT2 0x401ef190, DN2 0x401e0fd8, size 0xb0). */
-static int32_t name_view_open(const dk_ui_text_input_desc *d, const char *initial)
+/* The one open text input: the module's done function and argument, and the serial that tells our detach callback whose screen left. */
+static struct {
+    void (*done)(void *arg, const char *text);
+    void *arg;
+    uintptr_t owner;
+    uint32_t open; /* serial, 0: none */
+} g_name;
+
+/* The module that opened the input unloads: its screen stays until the user leaves it, but `done` is never called (the code is gone). */
+static void text_input_drop_owner(uintptr_t owner)
 {
-    (void)d;
-    (void)initial;
-    return DK_E_MISSING;
+    if (g_name.open && g_name.owner == owner)
+        g_name.done = 0;
+}
+static uint32_t g_name_serial;
+
+/* The firmware's `done`, a std::function<void(std::string, int)>: invoker(storage, std::string *, number) on YES, before the screen closes. The text is
+   the COW string's characters, trailing blanks already removed. */
+static void inv_name_done(const uint32_t *any, const uint32_t *str, int number)
+{
+    (void)any;
+    (void)number;
+    void (*done)(void *, const char *) = g_name.done;
+    void *arg = g_name.arg;
+    g_name.open = 0; /* first: done may open the next input */
+    if (done)
+        done(arg, (const char *)*str);
+}
+
+/* Any way of closing ends the input (NO has no done). */
+static void inv_name_detached(const uint32_t *any)
+{
+    if (g_name.open == any[0])
+        g_name.open = 0;
+}
+
+/* NameView(this, prompt, initial, number 0, maxlen, show_number 0, number_fmt "", done) in a make_shared block, pushed as the dialogs are. */
+static int32_t name_view_open(uintptr_t owner, const dk_ui_text_input_desc *d, const char *initial)
+{
+    if (g_name.open)
+        return DK_E_BUSY;
+    uint8_t *blk = fw_new(0x10 + sizeof(NameView));
+    if (!blk)
+        return DK_E_NOMEM;
+    uint8_t alloc = 0;
+    uint32_t prompt, start, fmt;
+    char title[DK_UI_ROW + 1];
+    cut(title, sizeof title, d->title);
+    dk_fw_string_std_string_ctor(&prompt, title, &alloc);
+    dk_fw_string_std_string_ctor(&start, initial, &alloc);
+    dk_fw_string_std_string_ctor(&fmt, "", &alloc);
+    uint32_t serial = ++g_name_serial;
+    fn done = make_fn(0, 0, inv_name_done);
+    init_block(blk, &fw_name_cb_vt);
+    uint8_t *obj = blk + 0x10;
+    dk_fw_window_name_ctor(obj, &prompt, &start, 0, (int32_t)d->max_len, 0, &fmt,
+                           (const std_function *)&done);
+    dk_fw_string_std_string_dtor(&fmt);
+    dk_fw_string_std_string_dtor(&start);
+    dk_fw_string_std_string_dtor(&prompt);
+    fn gone = make_fn(serial, 0, inv_name_detached);
+    ((void (*)(uint8_t *, fn *))vtable(obj)[VT_DETACH_ADD])(obj, &gone);
+    g_name.done = d->done;
+    g_name.arg = d->arg;
+    g_name.owner = owner;
+    g_name.open = serial;
+    shared_ptr sp = {(uint32_t)obj, (uint32_t)blk};
+    uint32_t ok = dk_fw_view_view_controller_push(view_manager(), &sp, 0);
+    dk_fw_string_shared_ptr_release(&sp.ctl);
+    if (!ok) {
+        g_name.open = 0;
+        return DK_E_NOMEM;
+    }
+    return 0;
 }
 
 int32_t dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *d)
 {
     char initial[DK_UI_TEXT_INPUT_MAX + 1];
     int32_t r;
-    (void)ui;
     r = ui_text_input_check(d, text_input_screen_max());
     if (r != 0)
         return r;
     ui_text_input_initial(initial, d);
-    return name_view_open(d, initial);
+    return name_view_open(owner_of(ui), d, initial);
 }
 
 /* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ----
@@ -1208,7 +1319,13 @@ int32_t dk_ui_open(dk_module_ctx *ctx, dk_ui **out)
 {
     if (!ctx || !out)
         return DK_E_CONTRACT;
-    *out = (dk_ui *)&ui_token;
+    int32_t owner = dkrt_ctx_owner((uintptr_t)ctx);
+    if (owner < 0)
+        return DK_E_CONTRACT;
+    if (observe_unloads() != 0)
+        return DK_E_NOMEM;
+    *out =
+        (dk_ui *)((uintptr_t)owner + 1); /* the handle names the owner; it is never dereferenced */
     return 0;
 }
 

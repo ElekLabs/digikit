@@ -1242,6 +1242,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         crate::module_cmds::release_cmds(rec as u8 + 1);
         drop_tick_cb(m.base, m.size);
         crate::api::poll_drop_range(m.base, m.size);
+        // what adapters keep for the module (core/ui: views, SETTINGS rows, timers) is closed now: the code and memory are still there
+        if module {
+            crate::api::notify_unload(rec, m.base, m.size);
+        }
         // the machine row first, then the DSP voice rows, then the range in the DSP area
         if self.torn[rec] & TORN_UNDO == 0 {
             self.torn[rec] |= TORN_UNDO;

@@ -373,7 +373,7 @@ pub mod proto {
         ("DSP_VOICES", CAPK_DSP_VOICES, "DSP voices"),
     ];
     /// The command ranges a module may register, as (first, last).
-    pub const RANGES: [(u8, u8); 10] = [
+    pub const RANGES: [(u8, u8); 11] = [
         (0x20, 0x22), // debug
         (0x1e, 0x1f), // debug_profile
         (0x1c, 0x1d), // entry_demo_test
@@ -382,6 +382,7 @@ pub mod proto {
         (0x32, 0x35), // probe
         (0x38, 0x3d), // remote
         (0x3e, 0x3f), // remote_state
+        (0x1b, 0x1b), // ui_views_test
         (0x2c, 0x2f), // usb_echo_test
         (0x36, 0x37), // usb_fast
     ];
@@ -393,6 +394,7 @@ pub mod proto {
     pub const RANGE_PROBE: (u8, u8) = (0x32, 0x35);
     pub const RANGE_REMOTE: (u8, u8) = (0x38, 0x3d);
     pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
+    pub const RANGE_UI_VIEWS_TEST: (u8, u8) = (0x1b, 0x1b);
     pub const RANGE_USB_ECHO_TEST: (u8, u8) = (0x2c, 0x2f);
     pub const RANGE_USB_FAST: (u8, u8) = (0x36, 0x37);
 }

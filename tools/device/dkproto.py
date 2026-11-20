@@ -304,6 +304,7 @@ RANGES: dict[str, tuple[int, int]] = {
     "probe": (0x32, 0x35),
     "remote": (0x38, 0x3D),
     "remote_state": (0x3E, 0x3F),
+    "ui_views_test": (0x1B, 0x1B),
     "usb_echo_test": (0x2C, 0x2F),
     "usb_fast": (0x36, 0x37),
 }

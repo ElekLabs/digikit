@@ -468,6 +468,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `lfo-shape` | A service-type module that emits one `lfo_shape` record (key from `DK_KEY_SHAPE`); a test makes a second file with the same key by renaming a copy | assembly, device |
 | `lfo-shape-b` | A second shape (name STEP) under another module id, so another shape key: two shapes in one boot (numbers 7 and 8), a gap below the highest number; wrapper of the code of `lfo-shape` | device |
 | `entry-demo` | The module entry point: `dk_module` with `init`, `tick`, `fini`, `menu`, settings, log, time, an absent optional service; the module that owns a menu object (its `menu` function builds a submenu with `dk_ui_menu_new`, the case of `E_RELOAD_MENUS`) | host, device |
+| `ui-views` | The module screens of core/ui: a content module that adds two SETTINGS rows (`dk_ui_settings_row`), opens a full-screen view (frame, text, key handling), the stock text input (`dk_ui_text_input`) and an overlay; an unload closes its view and rows | device (`modules/core/runtime/tests/ui-views`) |
 | `dyn-demo` | A raw module loaded from the card store with a counter in its `tick`: load, unload, store format, names | host, assembly, device |
 | `dyn-demo-stray` | The ColdFire memory audit: `dyn-demo` that writes one word outside its block | device |
 | `files-proof` | The public read-only listing boundary of the files API (deferred notifications, no tick) | host, device |
