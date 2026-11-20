@@ -176,7 +176,7 @@ mod tests {
     }
 
     fn fresh_card() -> FakePlatform {
-        FakePlatform::new(profiles::DT2)
+        FakePlatform::new(profiles::ALL[0])
     }
 
     fn written_sectors(f: &FakePlatform) -> Vec<u32> {

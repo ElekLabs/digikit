@@ -17,7 +17,7 @@ import { byte, DELAY_MS, padded, ROUTE, settingsCase, suiteName, text, torn } fr
 
 for (const device of DEVICES) {
   describe(suiteName(device), () => {
-    const { s, first, limit, kit, written, dumpJson } = settingsCase(device);
+    const { s, kit, written, dumpJson } = settingsCase(device);
 
     // The boot of a blank card writes its selection record (copy A), which marks the area ours: the settings write needs no claim of the header pair.
     test('blank: the boot marks the area ours with its record, so the first settings write needs no claim and writes copy A', async () => {
