@@ -266,7 +266,7 @@ export function readCaptureSet(files: readonly { name: string; text: string }[])
 /** The parts of `dk.calibration/1` the section reads. */
 export interface CalibrationDoc {
   schema?: string;
-  key?: { device?: string; firmware_sha256?: string; device_unit?: string };
+  key?: { device?: string; firmware_sha256?: string; device_unit?: string; block_cycles?: number };
   dsp?: SectionDoc;
   cf?: SectionDoc;
   refused?: { section: string; case: string; id: string; reason: string }[];

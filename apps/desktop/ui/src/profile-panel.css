@@ -258,6 +258,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.profile-panel .dsp-mods.cal-est .dsp-mod .est {
+  flex: 0 0 74px;
+  text-align: right;
+}
+.profile-panel .dsp-mods.cal-est .dsp-mod .est.share {
+  flex-basis: 54px;
+}
+.profile-panel .dsp-mods.cal-est .dsp-mod.head {
+  color: var(--ink-3, #8b9098);
+  font-size: 10.5px;
+}
 .profile-panel .dsp-top {
   display: flex;
   flex-direction: column;
@@ -325,7 +336,10 @@
   color: var(--ink-2, #b3b7be);
   line-height: 1.45;
 }
-/* the Calibration section (CalibrationSection.tsx) */
+/* the Calibration tab (CalibrationPanel.tsx, CalibrationSection.tsx) */
+.profile-panel .cal-active .cal-target.dim {
+  opacity: 0.6;
+}
 .profile-panel .cal-bar {
   display: flex;
   flex-wrap: wrap;
