@@ -1163,7 +1163,7 @@ export class DkSession {
         o += 8;
       }
       // then the card's capacity in sectors and the card check's state (4 bytes each)
-      if (svcAbi !== null && b.length >= o + 8) {
+      if (b.length >= o + 8) {
         cardSectors = u32(b, o);
         cardState = u32(b, o + 4);
       }

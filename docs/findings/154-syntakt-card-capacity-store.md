@@ -14,7 +14,7 @@ A unit reported `CARD_TOO_SMALL` for the store of the first Syntakt build (the D
 - A 20-byte getter returns it, or 0xFFFFFFFF while the driver is not ready: st `FUN_4010f232` (0x4010f232), DT2 1.17 `FUN_4012ddd6`, DN2 1.12 0x4012c49a, DN2 1.11 0x4012c1ba. One strict hash
   (`f196b962...`) on all four: the anchor `cf.storage.fn.capacity` (mark O). The block read refuses a start at or past the capacity (-10), the write also a range that ends above it (-13).
 - The runtime reads the getter (`Platform::card_sectors`), records it in `DKRT_CARD.sectors`, reports it in the CARD_CHECK event (fifth word) and in INFO (`card_sectors` and `card_state`, appended after the ABI
-  fingerprint) and shows `CARD x.x GB` on the HEALTH page.
+  fingerprint, and after the firmware identity when CAP_FW_ID is set) and shows `CARD x.x GB` on the HEALTH page.
 
 ## 2. The part table [D]
 
