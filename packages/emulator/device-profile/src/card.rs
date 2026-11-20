@@ -120,6 +120,24 @@ fn default_settings_sectors() -> u64 {
     32
 }
 
+/// The eMMC write guard (core/card-guard; read and checked by `patchkit gen`, `devgen.rs`). The emulator only carries it: the guard is firmware code.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuardLayout {
+    pub enabled: bool,
+    #[serde(default)]
+    pub row: Vec<GuardRowLayout>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GuardRowLayout {
+    /// `stock` or `runtime`.
+    pub who: String,
+    pub first: u64,
+    pub end: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PoolSet {
@@ -143,6 +161,7 @@ pub struct CardLayout {
     pub regions: Vec<RegionLayout>,
     pub path_fs: Option<PathFsLayout>,
     pub store: Option<StoreLayout>,
+    pub guard: Option<GuardLayout>,
 }
 
 impl CardLayout {
