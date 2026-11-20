@@ -1,6 +1,6 @@
-//! The DSP side's shared types and constants: the words of the info tables, the loader's state and the voice rows (`DspState`), the loader's pending load, the checked
-//! section (`Job`, `DspSec`). The core owns the object `DKRT_DSP`; a service reaches it through `CoreApi::dsp`. The effect rows are the fx service's own (`DKRT_FROWS`).
-use crate::{MAX_MODULES, REC_MAX};
+//! The DSP side's shared types and constants: the words of the info tables, the loader's state (`DspState`), the loader's pending load, the checked
+//! section (`Job`, `DspSec`). The core owns the object `DKRT_DSP`; a service reaches it through `CoreApi::dsp`. The voice rows and the effect rows are the services' own (`DKRT_VROWS`, `DKRT_FROWS`).
+use crate::REC_MAX;
 use dkneeds;
 use dkrt_sdk::*;
 
@@ -133,7 +133,7 @@ pub struct Pending {
     pub send_buf: u32,
 }
 
-/// The DSP loader's state and, until the machines service owns them, the voice rows: one object a host can peek (`DKRT_DSP`).
+/// The DSP loader's state: one object a host can peek (`DKRT_DSP`). The voice rows are the machines service's (`DKRT_VROWS`), the effect rows the fx service's (`DKRT_FROWS`).
 #[repr(C)]
 pub struct DspState {
     pub magic: u32,
@@ -152,28 +152,13 @@ pub struct DspState {
     pub row_writes: u32,
     pub failures: u32,
     pub last_dl_err: u32,
-    /// Per module record: byte offset into the area and length of its range (len 0: none), and the rows it owns (bit mask).
+    /// Per module record: byte offset into the area and length of its range (len 0: none).
     pub mod_off: [u32; REC_MAX],
     pub mod_len: [u32; REC_MAX],
-    pub mod_rows: [u32; REC_MAX],
-    /// Per voice row: the type claimed for it (`FREE_TYPE` when free), its owner (module record + 1), whether its type word was
-    /// written to the DSP (so it needs clearing), and the pc to publish.
-    pub row_type: [u32; MAX_ROWS],
-    pub row_pc: [u32; MAX_ROWS],
-    /// Per voice row: the declared ranges of knobs 0 to 7 (min | max << 16, 0: undeclared).
-    pub row_rng: [[u32; 8]; MAX_ROWS],
-    pub row_owner: [u8; MAX_ROWS],
-    pub row_pub: [u8; MAX_ROWS],
     /// The load being sent, and the loads behind it (the boot hook publishes the CF side of every module at once).
     pub pending: Pending,
     pub waiting: [Pending; REC_MAX],
     pub nwait: u32,
-    /// Per voice row: the note_on pc (0: none), the byte address of voice 0's state, the bytes between states, the bytes cleared at note-on.
-    pub row_note_on: [u32; MAX_ROWS],
-    pub row_state_base: [u32; MAX_ROWS],
-    pub row_stride: [u32; MAX_ROWS],
-    pub row_clear: [u32; MAX_ROWS],
-    pub row_latched: [u32; MAX_ROWS],
     /// The slot writes of a provider file's DSP part sent so far (0: not started, 1: the sequence of its slots is in flight or done).
     pub slot_run: u32,
 }

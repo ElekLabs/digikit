@@ -303,6 +303,7 @@
   "modules/core/services/machines/tests/assign.rs": 13,
   "modules/core/services/machines/tests/build.rs": 51,
   "modules/core/services/machines/tests/contract.rs": 39,
+  "modules/core/services/machines/tests/guard.rs": 1,
   "modules/core/services/machines/tests/records.rs": 3,
   "modules/core/services/samples/dks/module.toml": 2,
   "modules/core/services/samples/src/tracks.rs": 8,

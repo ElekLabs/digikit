@@ -1089,10 +1089,10 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
             let table = table_of(&owner);
             let keys = Keys::parse(&table).unwrap();
             let listed: std::collections::BTreeSet<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
-            use crate::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_GUARD_STATE, MACHINES_OWNED_IDS};
+            use crate::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_MODULE_INFO};
             let internal: &[&str] = match service {
                 "fx" => &[FX_ROUTES_ENTRY],
-                "machines" => &[MACHINES_GUARD_STATE, MACHINES_OWNED_IDS],
+                "machines" => &[MACHINES_MODULE_INFO],
                 _ => &[],
             };
             let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().chain(internal.iter().copied()).map(name_hash).collect();

@@ -16,8 +16,9 @@ pub(crate) fn frows() -> &'static mut dkrt_svc_fx::rows::FxRows {
     dkrt_svc_fx::rows::frows()
 }
 
-/// Back to the start state (all rows free).
+/// Back to the start state (all rows free) of the services that hold DSP rows: the machines service's voice rows and the fx service's effect rows, with their guard memory.
 pub(crate) fn reset_rows() {
+    dkrt_svc_machines::rows::reset();
     dkrt_svc_fx::rows::reset()
 }
 

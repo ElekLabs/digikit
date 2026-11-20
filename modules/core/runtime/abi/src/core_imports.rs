@@ -23,8 +23,6 @@ macro_rules! core_imports {
             // `out` points at 32 bytes
             fn dkc_legacy_state(out: *mut u8);
             fn dkc_legacy_state_clear() -> i32;
-            fn dkc_guard_faults(ty: u32) -> u32;
-            fn dkc_guard_disabled(ty: u32) -> bool;
             fn dkc_live_op() -> u32;
             // ---- the device
             fn dkc_device_id() -> u32;
@@ -49,7 +47,6 @@ macro_rules! core_imports {
             fn dkc_job_cancel(owner: u8, id: u32) -> i32;
             // ---- the DSP loader's state and tables
             fn dkc_dsp() -> *mut $crate::dsp::DspState;
-            fn dkc_dsp_info() -> *const u32;
             // An entry of the image's info table by the `name_hash` of its name (`CoreApi::info`): null when the image has none.
             fn dkc_info(name_hash: u32) -> *const u32;
             // ---- the DSP link

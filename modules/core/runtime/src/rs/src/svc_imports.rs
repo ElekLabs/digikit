@@ -39,13 +39,7 @@ pub mod shims {
         REAL_CORE.legacy_state_clear()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_guard_faults(ty: u32) -> u32 {
-        REAL_CORE.guard_faults(ty)
-    }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_guard_disabled(ty: u32) -> bool {
-        REAL_CORE.guard_disabled(ty)
-    }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_live_op() -> u32 {
         REAL_CORE.live_op()
@@ -120,9 +114,6 @@ pub mod shims {
         REAL_CORE.dsp()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_dsp_info() -> *const u32 {
-        REAL_CORE.dsp_info()
-    }
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_info(name_hash: u32) -> *const u32 {
         REAL_CORE.info(name_hash)

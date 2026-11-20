@@ -104,7 +104,8 @@ pub struct Module {
 }
 
 /// The row tables a service keeps in statics of its own (`DKRT_*`, not in the loader's `DspState`): a view of their bytes for the snapshots, the reset to the start state
-/// that a fresh core has, and the bytes a release leaves other than at the start. A service without row tables has `Rows::NONE`.
+/// that a fresh core has, the bytes a release leaves other than at the start, and the views of the cases that compare a module loaded beside a parked row: the bytes
+/// without the placeholder rows and with the rows in the order of their types. A service without row tables has `Rows::NONE`.
 #[derive(Clone, Copy)]
 pub struct Rows {
     /// The bytes of the service's row tables now.
@@ -113,6 +114,14 @@ pub struct Rows {
     pub reset: fn(),
     /// `(byte offset in `bytes`, value)` pairs a release leaves other than at the start, on purpose. Each entry has a reason in the fixture.
     pub kept: fn(&FakeCore, usize, u8) -> bool,
+    /// The bytes with each MISSING placeholder row as a free row (a comparison of services that park the rows of absent modules leaves out the row bytes that are not the
+    /// module's own). The identity for a service that parks no row.
+    pub without_placeholders: fn(&[u8]) -> Vec<u8>,
+    /// The bytes (already `without_placeholders`) with the rows in the order of their types, free rows last, and the row masks following: a module loaded beside a parked row
+    /// has its row at another index than the same module loaded alone, and its words are compared by type. The identity for a service that parks no row.
+    pub by_type: fn(&[u8]) -> Vec<u8>,
+    /// The number of rows that are placeholders in the bytes.
+    pub placeholder_rows: fn(&[u8]) -> usize,
 }
 
 impl Rows {
@@ -121,6 +130,9 @@ impl Rows {
         bytes: Vec::new,
         reset: || {},
         kept: |_, _, _| false,
+        without_placeholders: |b| b.to_vec(),
+        by_type: |b| b.to_vec(),
+        placeholder_rows: |_| 0,
     };
 }
 
@@ -223,77 +235,23 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    fn state_of_dsp(&self) -> DspState {
-        assert_eq!(self.dsp.len(), core::mem::size_of::<DspState>());
-        unsafe { core::ptr::read_unaligned(self.dsp.as_ptr() as *const DspState) }
-    }
-
-    fn with_dsp(&self, d: DspState) -> Snapshot {
+    /// The snapshot with each MISSING placeholder row of the service's row tables as a free row (`Rows::without_placeholders`).
+    pub fn without_placeholders(&self, rows: &Rows) -> Snapshot {
         let mut out = self.clone();
-        unsafe { core::ptr::write_unaligned(out.dsp.as_mut_ptr() as *mut DspState, d) };
+        out.rows = (rows.without_placeholders)(&self.rows);
         out
     }
 
-    /// The snapshot with each MISSING placeholder voice row as a free row (owner 0, type `FREE_TYPE`, every other field 0): what a comparison of services that park rows of
-    /// absent modules leaves of the row bytes that are not the module's own.
-    pub fn without_placeholders(&self) -> Snapshot {
-        let mut d = self.state_of_dsp();
-        for k in 0..dkrt_abi::dsp::MAX_ROWS {
-            if d.row_owner[k] == dkrt_abi::dsp::PLACEHOLDER_OWNER {
-                d.row_owner[k] = 0;
-                d.row_type[k] = dkrt_abi::dsp::FREE_TYPE;
-                d.row_pc[k] = 0;
-                d.row_rng[k] = [0; 8];
-                d.row_pub[k] = 0;
-                d.row_note_on[k] = 0;
-                d.row_state_base[k] = 0;
-                d.row_stride[k] = 0;
-                d.row_clear[k] = 0;
-                d.row_latched[k] = 0;
-            }
-        }
-        self.with_dsp(d)
+    /// `without_placeholders`, and the rows in the order of their types (`Rows::by_type`).
+    pub fn by_type(&self, rows: &Rows) -> Snapshot {
+        let mut out = self.without_placeholders(rows);
+        out.rows = (rows.by_type)(&out.rows);
+        out
     }
 
-    /// `without_placeholders`, and the voice rows in the order of their types (free rows last), with the row masks of the records following: a module loaded beside a parked
-    /// row has its row at another index than the same module loaded alone, and its words are compared by type.
-    pub fn by_type(&self) -> Snapshot {
-        let clean = self.without_placeholders();
-        let d = clean.state_of_dsp();
-        let mut order: Vec<usize> = (0..dkrt_abi::dsp::MAX_ROWS).collect();
-        order.sort_by_key(|k| (d.row_type[*k], *k));
-        let mut n = unsafe { core::ptr::read_unaligned(clean.dsp.as_ptr() as *const DspState) };
-        for (i, k) in order.iter().enumerate() {
-            n.row_type[i] = d.row_type[*k];
-            n.row_pc[i] = d.row_pc[*k];
-            n.row_rng[i] = d.row_rng[*k];
-            n.row_owner[i] = d.row_owner[*k];
-            n.row_pub[i] = d.row_pub[*k];
-            n.row_note_on[i] = d.row_note_on[*k];
-            n.row_state_base[i] = d.row_state_base[*k];
-            n.row_stride[i] = d.row_stride[*k];
-            n.row_clear[i] = d.row_clear[*k];
-            n.row_latched[i] = d.row_latched[*k];
-        }
-        for r in 0..n.mod_rows.len() {
-            let mut m = 0;
-            for (i, k) in order.iter().enumerate() {
-                if d.mod_rows[r] & (1 << k) != 0 {
-                    m |= 1 << i;
-                }
-            }
-            n.mod_rows[r] = m;
-        }
-        clean.with_dsp(n)
-    }
-
-    /// Voice rows that are MISSING placeholders in this snapshot.
-    fn placeholder_rows(&self) -> usize {
-        let d = self.state_of_dsp();
-        d.row_owner
-            .iter()
-            .filter(|o| **o == dkrt_abi::dsp::PLACEHOLDER_OWNER)
-            .count()
+    /// Rows that are MISSING placeholders in this snapshot.
+    fn placeholder_rows(&self, rows: &Rows) -> usize {
+        (rows.placeholder_rows)(&self.rows)
     }
 
     fn small(&self) -> (Vec<(u8, u32, u32)>, Vec<u32>) {
@@ -601,10 +559,6 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             check_run: core::cell::RefCell::new(None),
             _s: core::marker::PhantomData,
         };
-        // the runtime's `init_once`: every voice row starts free
-        for t in l.core.dsp().row_type.iter_mut() {
-            *t = dkrt_abi::dsp::FREE_TYPE;
-        }
         for owner in 1..=MAX_MODULES as u8 {
             unsafe { S::remove(&l.core, owner) };
         }
@@ -1267,8 +1221,8 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     // words, DSP state and ids are what is compared, and the capacity counts
     // (a service that parks the rows of an absent module keeps A's row, so B has the next one: B's words are in another row and are not compared)
     if !f.parks_rows {
-        let lost = after_b.by_type().lost_in(
-            &l.snapshot().by_type(),
+        let lost = after_b.by_type(&f.rows).lost_in(
+            &l.snapshot().by_type(&f.rows),
             &|o, v| (f.kept_dsp)(&l.core, o, v),
             &|o, v| (f.rows.kept)(&l.core, o, v),
         );
@@ -1634,7 +1588,7 @@ fn gap_rows_after_an_unload(
     if f.absent_rows.is_some() {
         let rows = on(loaded).iter().filter(|o| **o).count();
         assert_eq!(
-            s.placeholder_rows(),
+            s.placeholder_rows(&f.rows),
             rows,
             "{} ({}): the rows of A after its unload are placeholders",
             f.name,
@@ -1814,7 +1768,7 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
             .count()
     };
     assert!(
-        f.absent_rows.is_none() || end_a.placeholder_rows() == on(&loaded_a),
+        f.absent_rows.is_none() || end_a.placeholder_rows(&f.rows) == on(&loaded_a),
         "{} ({}): the rows of A after its unload are not parked",
         f.name,
         profile(f)
@@ -1973,8 +1927,8 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         expect_small("a refusal during apply", f, &before, &refused);
         // (a service that parks the rows of an absent module keeps the voice row of the module that unloaded: only the placeholder rows' bytes are left out of the compare)
         let (reference_cmp, refused_cmp) = (
-            reference.without_placeholders(),
-            refused.without_placeholders(),
+            reference.without_placeholders(&f.rows),
+            refused.without_placeholders(&f.rows),
         );
         if let Err(d) = reference_cmp.same_after_unload(&refused_cmp, false) {
             panic!(

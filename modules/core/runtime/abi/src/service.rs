@@ -36,7 +36,7 @@ const fn svc_abi() -> u32 {
         size_of::<ApplyCtx>(),
         size_of::<Claim>(),
         size_of::<RowWrite>(),
-        size_of::<GuardState>(),
+        size_of::<ModuleMachines>(),
         size_of::<TableFault>(),
         size_of::<DeclItem>(),
         size_of::<Declare>(),
@@ -142,12 +142,16 @@ pub struct RowWrite {
     pub undo: u32,
 }
 
-/// What the guard counted for a machine type (`MODULES` reports it).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// What the MODULES reply says of the machines of one module (the answer of the export `dk_machines_module_info`): the voice rows it owns (bit mask), its machine type
+/// numbers (`nt` of the 8 bytes in `types`), the guard's fault count for those types and whether the guard switched one of them off (0 or 1).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[repr(C)]
-pub struct GuardState {
+pub struct ModuleMachines {
+    pub rows: u32,
+    pub nt: u32,
+    pub types: [u8; 8],
     pub faults: u32,
-    pub disabled: bool,
+    pub guard_off: u32,
 }
 
 /// The first mismatch `Service::table_check` found: the module record index, and two numbers that say which row and what it held (the service's own). The core

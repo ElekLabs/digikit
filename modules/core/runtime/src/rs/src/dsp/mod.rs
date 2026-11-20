@@ -53,7 +53,7 @@ pub struct DlStatus {
 pub(crate) const DL_DONE: u32 = 2;
 pub(crate) const DL_ERROR: u32 = 3;
 
-/// The loader's state and, until the machines service owns them, the voice rows (`DspState`). The effect rows are the fx service's own (`DKRT_FROWS`).
+/// The loader's state (`DspState`). The voice rows and the effect rows are the services' own (`DKRT_VROWS`, `DKRT_FROWS`).
 #[no_mangle]
 pub static mut DKRT_DSP: DspState = unsafe { core::mem::zeroed() };
 
@@ -129,11 +129,6 @@ pub unsafe fn init_once() {
     if d.magic == STATE_MAGIC {
         return;
     }
-    let mut i = 0;
-    while i < MAX_ROWS {
-        d.row_type[i] = FREE_TYPE;
-        i += 1;
-    }
     d.magic = STATE_MAGIC;
 }
 
@@ -199,20 +194,10 @@ pub(crate) unsafe fn alloc_range(len: u32, align: u32) -> Option<u32> {
 
 // ---- checking a section --------------------------------------------------------------------------------------------------
 
-/// Bytes of the range a module needs, before the granule: image, bss, then (version 3) the state blocks of its voices, every block
-/// of `voices * state_bytes` rounded to 8 bytes, then the state blocks the services counted (`Job::state_bytes`: the effects' states, each rounded to 8).
-/// The caller has checked the counts, so nothing overflows.
-pub(crate) unsafe fn extent(image_size: u32, bss: u32, voices: *const u8, nvoice: u32, vstride: u32, state_bytes: u32) -> u32 {
-    let mut total = (image_size + bss + 7) & !7;
-    if vstride == VOICE_V3 {
-        let mut i = 0;
-        while i < nvoice {
-            let e = voices.add((vstride * i) as usize);
-            total += rd32(e.add(VOICE_VOICES as usize)) * ((rd32(e.add(VOICE_STATE_BYTES as usize)) + 7) & !7);
-            i += 1;
-        }
-    }
-    total + state_bytes
+/// Bytes of the range a module needs, before the granule: image, bss, then the state blocks the services counted (`Job::state_bytes`: the voices' and the effects' states,
+/// each block rounded to 8). The services checked the counts, so nothing overflows.
+pub(crate) fn extent(image_size: u32, bss: u32, state_bytes: u32) -> u32 {
+    ((image_size + bss + 7) & !7) + state_bytes
 }
 
 /// An exported DSP symbol of `dyndsp_info`; 0 when there is none of that name.
@@ -272,11 +257,9 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         || align & (align - 1) != 0
         || nreloc > MAX_RELOCS
         || nimport > MAX_IMPORTS
-        || nvoice as usize > MAX_VOICES
         || !in_sec(image_off, image_size, size)
         || !in_sec(reloc_off, nreloc * RELOC_LEN, size)
         || !in_sec(import_off, nimport * DSP_IMPORT_LEN, size)
-        || !in_sec(voice_off, nvoice * vstride, size)
     {
         return E_DSP_FORMAT;
     }
@@ -306,11 +289,11 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         return r;
     }
     // an entry that no loaded service owns would load as nothing: refuse it (its rows do not exist)
-    if job.accepted != nvoice + nfx {
+    if job.accepted != nvoice.saturating_add(nfx) {
         return E_DSP_ROWS;
     }
     // the range must fit the area at all (a later load may still find it taken: reserve())
-    let need = extent(image_size, bss, s.add(voice_off as usize), nvoice, vstride, job.state_bytes);
+    let need = extent(image_size, bss, job.state_bytes);
     if need > iw(I_AREA_BYTES) || (need + GRANULE - 1) & !(GRANULE - 1) > iw(I_AREA_BYTES) {
         return E_DSP_NOSPACE;
     }
@@ -385,7 +368,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         return r;
     }
     let d = ds();
-    let len = (extent(job.image_size, job.bss, job.voices, job.nvoice, job.vstride, job.state_bytes) + GRANULE - 1) & !(GRANULE - 1);
+    let len = (extent(job.image_size, job.bss, job.state_bytes) + GRANULE - 1) & !(GRANULE - 1);
     let off = match alloc_range(len, job.align) {
         Some(o) => o,
         None => return E_DSP_NOSPACE,

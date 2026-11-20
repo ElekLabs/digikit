@@ -275,6 +275,7 @@ fn fixture(device: u32) -> Fixture {
             bytes: || rows::bytes().to_vec(),
             reset: rows::reset,
             kept: kept_rows,
+            ..Rows::NONE
         },
         absent_rows: None,
         // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one

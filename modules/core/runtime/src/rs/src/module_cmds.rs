@@ -45,26 +45,9 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
             i += 1;
             continue;
         }
-        // the machine types: rows of the registry, then voice rows (pinned numbers of a DSP-only module)
-        let mut types = [0u8; 8];
-        let mut nt = crate::handlers::exports::owned_ids(i as u8 + 1, &mut types);
-        let mut r = 0;
-        while r < crate::dsp::MAX_ROWS {
-            if d.row_owner[r] == i as u8 + 1 && d.row_type[r] < 256 && nt < 8 {
-                let t = d.row_type[r] as u8;
-                let mut dup = false;
-                let mut j = 0;
-                while j < nt {
-                    dup |= types[j] == t;
-                    j += 1;
-                }
-                if !dup {
-                    types[nt] = t;
-                    nt += 1;
-                }
-            }
-            r += 1;
-        }
+        // the machines of the module (the machines service: voice rows, types, guard counts; none without the service file)
+        let mm = crate::handlers::exports::module_info(i as u8 + 1).unwrap_or_default();
+        let nt = (mm.nt as usize).min(8);
         if at + 71 + nt > REPLY_BODY_MAX - 1 {
             break;
         }
@@ -78,21 +61,15 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         wr32(rb.add(at + 49), m.size);
         wr32(rb.add(at + 53), d.mod_off[i]);
         wr32(rb.add(at + 57), d.mod_len[i]);
-        wr32(rb.add(at + 61), d.mod_rows[i]);
+        wr32(rb.add(at + 61), mm.rows);
         *rb.add(at + 65) = nt as u8;
-        let mut faults = 0u32;
-        let mut off = false;
         let mut j = 0;
         while j < nt {
-            *rb.add(at + 66 + j) = types[j];
-            if let Some(g) = crate::handlers::exports::guard_state(types[j] as u32) {
-                faults = faults.wrapping_add(g.faults);
-                off |= g.disabled;
-            }
+            *rb.add(at + 66 + j) = mm.types[j];
             j += 1;
         }
-        wr32(rb.add(at + 66 + nt), faults);
-        *rb.add(at + 70 + nt) = off as u8;
+        wr32(rb.add(at + 66 + nt), mm.faults);
+        *rb.add(at + 70 + nt) = (mm.guard_off != 0) as u8;
         at += 71 + nt;
         n += 1;
         i += 1;

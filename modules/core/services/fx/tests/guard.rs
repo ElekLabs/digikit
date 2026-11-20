@@ -272,15 +272,15 @@ fn check_sections(core: &FakeCore, sec: &DspSec, job: &mut Job) -> i32 {
 fn the_section_check_adds_the_states_of_the_effects_rounded_to_eight() {
     let (_rows, mut core) = core();
     // the area of the DSP: the state of an effect must fit it
-    let mut t = vec![0u32; 12];
-    t[dkrt_abi::dsp::I_MAGIC] = dkrt_abi::dsp::INFO_MAGIC;
-    t[dkrt_abi::dsp::I_AREA_BYTES] = 0x10000;
-    core.info_tables
-        .push((dkneeds::keys::name_hash("dyndsp_info"), t));
+    core.set_dyndsp(0x10000, 0, 0);
     let (_keep, sec) = section(3, 20);
     let mut job = Job::empty();
     assert_eq!(check_sections(&core, &sec, &mut job), dkrt_sdk::OK);
     assert_eq!(job.state_bytes, 3 * 24, "each state of 20 bytes takes 24");
+    assert_eq!(
+        job.accepted, 3,
+        "the service says it took the three entries"
+    );
     // a state larger than the area is refused
     let (_keep, big) = section(1, 0x10004);
     assert_eq!(

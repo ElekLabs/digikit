@@ -125,8 +125,6 @@ pub struct FakeCore {
     pub settings: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
     pub link: RefCell<&'static mut Link<FakeLink>>,
     pub name: String,
-    /// The words of `dyndsp_info` the fake hands out (`CoreApi::dsp_info`); empty: the image has no voice rows.
-    pub dsp_table: Vec<u32>,
     /// The info entries `CoreApi::info` hands out, by name hash: the words of each. Empty: the image has no table.
     pub info_tables: Vec<(u32, Vec<u32>)>,
     pub device: u32,
@@ -155,6 +153,21 @@ impl FakeCore {
         let hash = fnv1a("dynreg_info");
         self.info_tables.retain(|(h, _)| *h != hash);
         self.info_tables.push((hash, table));
+    }
+
+    /// The image has the table `dyndsp_info` (the DSP's voice registry and area) with `area_bytes` bytes of area, the first free voice row at `first` and `free` rows
+    /// (the magic is set here): the services find it through `CoreApi::info`.
+    pub fn set_dyndsp(&mut self, area_bytes: u32, first: u32, free: u32) {
+        use dkrt_abi::dsp::{INFO_MAGIC, I_AREA_BYTES, I_DEVICE, I_MAGIC, I_VFIRST, I_VFREE};
+        let mut t = std::vec![0u32; 16];
+        t[I_MAGIC] = INFO_MAGIC;
+        t[I_DEVICE] = self.device;
+        t[I_AREA_BYTES] = area_bytes;
+        t[I_VFIRST] = first;
+        t[I_VFREE] = free;
+        let hash = fnv1a("dyndsp_info");
+        self.info_tables.retain(|(h, _)| *h != hash);
+        self.info_tables.push((hash, t));
     }
 
     /// The image has the table `dynfx_info` (the effect chain's rows) with the first free row at `first`, `free` rows and the row size of the device: the fx service finds
@@ -191,7 +204,6 @@ impl FakeCore {
             settings: RefCell::new(Vec::new()),
             link: RefCell::new(Box::leak(Box::new(link()))),
             name: String::from("fake\0"),
-            dsp_table: Vec::new(),
             info_tables: Vec::new(),
             device: 0,
             fw_result: Cell::new(0),
@@ -328,12 +340,6 @@ impl CoreApi for FakeCore {
         }
         r
     }
-    unsafe fn guard_faults(&self, _ty: u32) -> u32 {
-        0
-    }
-    unsafe fn guard_disabled(&self, _ty: u32) -> bool {
-        false
-    }
     fn device_id(&self) -> u32 {
         self.device
     }
@@ -425,13 +431,6 @@ impl CoreApi for FakeCore {
     }
     fn dsp(&self) -> &'static mut DspState {
         unsafe { &mut *self.dsp }
-    }
-    unsafe fn dsp_info(&self) -> *const u32 {
-        if self.dsp_table.is_empty() {
-            core::ptr::null()
-        } else {
-            self.dsp_table.as_ptr()
-        }
     }
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         self.info_tables

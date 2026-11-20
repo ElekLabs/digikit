@@ -6,12 +6,13 @@ use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::link::{Owner, Sequence};
 use crate::test_lock::LOCK;
 use crate::handlers::fx_fixture::{frows, reset_rows};
+use crate::handlers::machines_fixture::vrows;
 use std::vec::Vec;
 
 const CF: u32 = 0x8000;
 const IMAGE: u32 = 0xd000;
 const PUB_PC: u32 = 0xc000;
-static VOICE_INFO: [u32; 12] = [0x4459_4e49, 0, 1, 0x20000000, 4096, 0, 4, 8, 0, 0, 0, 0];
+static VOICE_INFO: [u32; 12] = [0x4444_5350, 0, 1, 0x20000000, 4096, 0, 4, 8, 0, 0, 0, 0];
 static FX_INFO: [u32; 8] = [0x4446_5849, 0, 1, 0, 0, 4, 0, 24];
 
 #[derive(Clone, Copy)]
@@ -187,7 +188,7 @@ pub unsafe fn poll_state() -> (u32, u32) {
 pub unsafe fn fini(rec: usize, addr: u32) {
     assert_eq!((rec, addr), (0, 1));
     assert!(!entry::has_tick(0), "the tick stops before fini");
-    assert_eq!(dsp::ds().row_pub[0], 0);
+    assert_eq!(vrows().row_pub[0], 0);
     assert_eq!(frows().fx_pub[0], 0);
     assert_eq!(dsp::ds().mod_len[0], 256); // invalidated but still owned at fini
     LINK.events.push(Event::Fini);
@@ -268,11 +269,11 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
         r.mod_fx[0] = 3;
         d.step = 18;
     } else {
-        d.row_pc[0] = PUB_PC;
-        d.row_owner[0] = 1;
-        d.row_pub[0] = u8::from(published);
-        d.row_owner[1] = 1;
-        d.mod_rows[0] = 3;
+        vrows().row_pc[0] = PUB_PC;
+        vrows().row_owner[0] = 1;
+        vrows().row_pub[0] = u8::from(published);
+        vrows().row_owner[1] = 1;
+        vrows().mod_rows[0] = 3;
         d.step = 16; // the second voice row, after the latch-mask publication step
     }
     if queued {
@@ -294,15 +295,15 @@ fn voice_latch_mask_is_published_before_the_type() {
         let d = dsp::ds();
         idle_link();
         d.step = 13;
-        d.row_pub[0] = 0;
-        d.row_latched[0] = 5;
-        d.row_type[0] = 17;
+        vrows().row_pub[0] = 0;
+        vrows().row_latched[0] = 5;
+        vrows().row_type[0] = 17;
         while LINK.events.len() < 4 {
             pass();
         }
         let at = 24 * VOICE_INFO[6];
         assert_eq!(LINK.events, [Event::Word(1, at + 22, 5), Event::Word(1, at + 23, 0), Event::Word(1, at + 10, 0), Event::Word(1, at, 17)]);
-        assert_eq!(dsp::ds().row_pub[0], 1);
+        assert_eq!(vrows().row_pub[0], 1);
     }
 }
 
@@ -315,7 +316,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert_eq!(d.mod_len[0], 256);
     assert_eq!(d.mod_len[1], 256);
     // Publication metadata is inline now, rather than an arena-allocated step list.
-    assert_eq!(if fx { frows().fx_pc[0] } else { d.row_pc[0] }, PUB_PC);
+    assert_eq!(if fx { frows().fx_pc[0] } else { vrows().row_pc[0] }, PUB_PC);
     assert_eq!(d.nwait, 1);
     assert_eq!(d.waiting[0].send_buf, 0xe000);
     assert_eq!(d.transfers, 1);
@@ -328,7 +329,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     if fx {
         assert_eq!((frows().fx_owner[0], frows().fx_pub[0]), (1, 1));
     } else {
-        assert_eq!((d.row_owner[0], d.row_pub[0]), (1, 1));
+        assert_eq!((vrows().row_owner[0], vrows().row_pub[0]), (1, 1));
     }
     assert!(!LINK
         .events
@@ -452,12 +453,12 @@ unsafe fn successful_case(fx: bool, published: bool) {
     assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
     assert_eq!(dsp::ds().mod_len[0], 0);
-    assert_eq!((dsp::ds().row_owner[0], frows().fx_owner[0]), (0, 0));
+    assert_eq!((vrows().row_owner[0], frows().fx_owner[0]), (0, 0));
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(0));
     assert!(LINK.events.contains(&Event::Fini));
     assert!(LINK.events.contains(&Event::Registry));
     assert!(LINK.events.contains(&Event::Free(CF)));
-    assert_eq!(if fx { frows().fx_pc[0] } else { dsp::ds().row_pc[0] }, 0);
+    assert_eq!(if fx { frows().fx_pc[0] } else { vrows().row_pc[0] }, 0);
     assert_eq!(LINK.events.contains(&Event::Free(IMAGE)), !published);
     assert_eq!(dsp::ds().phase, dsp::PH_SEND);
     assert_eq!(dsp::ds().pending.rec, 1);
@@ -547,7 +548,7 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
         idle_link();
         log().clear();
         let d = dsp::ds();
-        d.row_owner = [0; dsp::MAX_ROWS];
+        vrows().row_owner = [0; dsp::MAX_ROWS];
         d.step = 0; // no row of module 0 in the fake's list: every row is in
         crate::loader::dsp_step_with(TWO);
         // each service hears it once, in list order, and the load is over
@@ -569,9 +570,8 @@ fn attribution_names_the_module_of_every_site_the_watch_reports() {
     let _fx = crate::handlers::fx_fixture::LoadedFx::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
-        let d = dsp::ds();
-        d.row_owner[0] = 2;
-        d.row_type[0] = 7;
+        vrows().row_owner[0] = 2;
+        vrows().row_type[0] = 7;
         frows().fx_owner[1] = 3;
         // a voice site: the module that owns the machine type
         assert_eq!(services().attribute(SITE_VOICE, 7), Some(1));
@@ -764,7 +764,7 @@ fn a_loaded_dsp_part_makes_its_module_active() {
         seed(Completion::Ack, false, true, false);
         idle_link();
         let d = dsp::ds();
-        d.row_owner = [0; dsp::MAX_ROWS];
+        vrows().row_owner = [0; dsp::MAX_ROWS];
         d.step = 0;
         dsp_loading();
         crate::loader::dsp_step_with(TWO);

@@ -9,8 +9,8 @@ use dkrt_abi::dsp::{DspSec, Job};
 use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
-    check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, GuardState, ModuleCommitCtx,
-    Problem, RowWrite, Service, SettleCtx,
+    check_step, tick_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, ModuleMachines,
+    Problem, RowWrite, Service, SettleCtx, TableFault,
 };
 use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
@@ -79,17 +79,48 @@ const KNOBS: usize = limits::PAGE_KNOBS;
 /// The machines service.
 pub struct Machines;
 
-/// The guard's counts of machine type `ty` (the export `dk_machines_guard_state`, for the MODULES reply).
-pub unsafe fn guard_state<C: CoreApi>(core: &C, ty: u32) -> GuardState {
-    GuardState {
-        faults: core.guard_faults(ty),
-        disabled: core.guard_disabled(ty),
+/// What the MODULES reply says of the machines of module record `owner` (1 ..): the voice rows it owns (mask), its machine types (the machine rows of the registry, then
+/// the types of its voice rows that no machine row names: a DSP-only module, at most 8) and the guard's counts for them (the export `dk_machines_module_info`).
+pub fn module_info<C: CoreApi>(core: &C, owner: u8) -> ModuleMachines {
+    let mut types = [0u8; MAX_MACH];
+    let mut nt = types_of(core, owner, &mut types);
+    let v = crate::rows::vrows();
+    let mut r = 0;
+    while r < dkrt_abi::dsp::MAX_ROWS {
+        if v.row_owner[r] == owner && v.row_type[r] < 256 && nt < MAX_MACH {
+            let t = v.row_type[r] as u8;
+            let mut dup = false;
+            let mut j = 0;
+            while j < nt {
+                dup |= types[j] == t;
+                j += 1;
+            }
+            if !dup {
+                types[nt] = t;
+                nt += 1;
+            }
+        }
+        r += 1;
     }
-}
-
-/// The machine type numbers of the rows module record `owner` (1 ..) filled, into `out`; how many (the export `dk_machines_owned_ids`, for the MODULES reply).
-pub fn owned_ids<C: CoreApi>(core: &C, owner: u8, out: &mut [u8; 8]) -> u32 {
-    types_of(core, owner, out) as u32
+    let mut faults = 0u32;
+    let mut off = false;
+    let mut j = 0;
+    while j < nt {
+        faults = faults.wrapping_add(crate::guard::faults(types[j] as u32));
+        off |= crate::guard::disabled(types[j] as u32);
+        j += 1;
+    }
+    ModuleMachines {
+        rows: if owner >= 1 {
+            v.mod_rows[owner as usize - 1]
+        } else {
+            0
+        },
+        nt: nt as u32,
+        types,
+        faults,
+        guard_off: off as u32,
+    }
 }
 
 impl Machines {
@@ -250,6 +281,14 @@ impl<C: CoreApi> Service<C> for Machines {
         } else {
             None
         }
+    }
+
+    unsafe fn diag(core: &C, words: &[u32; dkrt_sdk::fault::DIAG_WORDS]) {
+        crate::guard::diag(core, words)
+    }
+
+    unsafe fn table_check(_core: &C, used: u32, out: &mut TableFault) -> u32 {
+        dsp::table_check(used, out)
     }
 
     unsafe fn dsp_check_sections(core: &C, sec: &DspSec, job: &mut Job) -> i32 {
