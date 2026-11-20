@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, type Clock, type DkSession } from '@digi/dk-session';
 import { runCalibrationOnTarget, deviceOfInfo } from '../src/profile/calibration-run';
+import { untilBootStable, untilModulesListed } from '../src/calibration/rigsetup';
 import { loadCalibrationFiles, type RunEvent } from '../src/profile/calibration-view';
 
 const files = loadCalibrationFiles({
@@ -168,4 +169,24 @@ test('with the debug log a machine step is a SETUP request for the machine type 
     out.skipped.map((x) => x.case),
     [],
   );
+});
+
+test('after a restart the run waits until MODULES lists the modules, and a boot whose log cannot be read is not waited for', async () => {
+  let t = 0;
+  const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
+  let reads = 0;
+  const session = {
+    modules: async () => (++reads < 4 ? [{ name: 'digikit/debug' }] : [{ name: 'digikit/debug' }, { name: 'a/b' }]),
+  };
+  await untilModulesListed(session as never, clock, ['a/b']);
+  assert.equal(reads, 4);
+  const lines: string[] = [];
+  const noLog = {
+    logPage: async () => Promise.reject(new Error('no log')),
+    logConfig: async () => Promise.reject(new Error('no log')),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  };
+  await untilBootStable(noLog as never, clock, (l) => lines.push(l));
+  assert.match(lines[0]!, /restarting anyway/);
 });

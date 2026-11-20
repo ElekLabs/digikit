@@ -1,15 +1,7 @@
 // One calibration run of the Profile pane: the rig of a session (MIDI, counters, clock, log events, modules), the shared runner
 // (calibration/runner.ts, the code `wb profile calibrate run` plays) and a Stop that ends the run at its next wait and lets the runner's teardown play.
 // No module state: the session, the MIDI sink and the modules are arguments, so a test gives fakes. Host tests: tests/calibration-run.test.ts.
-import {
-  MidiOut,
-  RuntimeEvents,
-  trackSetup,
-  wallClock,
-  type Clock,
-  type DkSession,
-  type MidiSink,
-} from '@digi/dk-session';
+import { MidiOut, RuntimeEvents, wallClock, type Clock, type DkSession, type MidiSink } from '@digi/dk-session';
 import { SPAN_PHASES } from '@digi/dk-session/gen_proto';
 import { registry } from '../data/device-profiles.ts';
 import { restartDevice } from '../modules/dktransfer.ts';
@@ -21,6 +13,7 @@ import {
   type Rig,
   type RigModules,
 } from '../calibration/runner.ts';
+import { sessionSetup, untilBootStable, untilModulesListed } from '../calibration/rigsetup.ts';
 import { sessionStatsSource } from '../calibration/stats.ts';
 import { resolveRef, type Op } from '../calibration/steps.ts';
 import { runId } from './profile-artifact.ts';
@@ -67,9 +60,6 @@ export interface RunOutcome {
   /** Why the run failed (the captures made before are in `captures`). */
   error?: string;
 }
-
-/** Clock ms a SETUP request may wait for the debug module's track watch to have its baseline (about 2 s of emulated time after a boot). */
-const SETUP_READY_MS = 30_000;
 
 class Stopped extends Error {
   constructor() {
@@ -142,11 +132,14 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   if (deps.modules) {
     const m = deps.modules;
     const byId = new Map<string, { path: string; sha256: string }>();
+    // the modules that stay loaded whatever the case selects (the debug module, the remote module: no rows and no types), found by their file in the library
+    let keep: string[] = [];
     modules = {
       async install(ids) {
         const files = await m.library();
+        keep = (await session.modules()).filter((x) => x.rows === 0 && x.types.length === 0).map((x) => x.name);
         for (const f of files)
-          if (ids.includes(f.id) && !byId.has(f.id))
+          if ((ids.includes(f.id) || keep.includes(f.id)) && !byId.has(f.id))
             byId.set(f.id, {
               path: f.path,
               sha256: hex(await crypto.subtle.digest('SHA-256', f.bytes as Uint8Array<ArrayBuffer>)),
@@ -160,8 +153,12 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         return Object.fromEntries(ids.map((id) => [id, byId.get(id)!.sha256]));
       },
       async select(ids) {
-        await session.select(ids.map((id) => byId.get(id)!.path));
+        // the debug module's log is what the run waits on: it stays selected with the case's modules
+        const stay = keep.filter((id) => byId.has(id) && !ids.includes(id));
+        await untilBootStable(session, clock);
+        await session.select([...ids, ...stay].map((id) => byId.get(id)!.path));
         await restartDevice(session, () => {}, {});
+        await untilModulesListed(session, clock, ids);
         if (events) await events.listen({ fromBoot: true });
         await refreshNames();
       },
@@ -185,27 +182,8 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         }
       : undefined;
 
-  // SETUP (the debug module): a track's machine or filter type through the firmware's own setter, awaited on its SETUP_DONE. A machine given as a module id is
-  // the first machine type the runtime reports for that module (the MODULES reply, read when the step plays: the types change with every load).
-  const setup: Rig['setup'] = events
-    ? async (what, track, type) => {
-        if (what === 'effect') throw new Error('SETUP sets machine and filter types, not effects');
-        const t = trackSetup(session, events, { ready: { clock, withinMs: SETUP_READY_MS } });
-        if (what === 'filter') {
-          if (typeof type !== 'number') throw new Error('a filter type is a number');
-          await t.setFilter(track - 1, type);
-          return;
-        }
-        let machine: number;
-        if (typeof type === 'number') machine = type;
-        else {
-          const m = (await session.modules()).find((x) => x.name === type);
-          if (!m || m.types.length === 0) throw new Error(`module ${type} is not loaded or has no machine type`);
-          machine = m.types[0]!;
-        }
-        await t.setMachine(track - 1, machine);
-      }
-    : undefined;
+  // SETUP (the debug module): a track's machine or filter type through the firmware's own setter, awaited on its SETUP_DONE
+  const setup = events ? sessionSetup(session, events, clock) : undefined;
 
   const rig: Rig = {
     midi: new MidiOut(deps.sink),
