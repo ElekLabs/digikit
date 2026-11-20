@@ -19,7 +19,7 @@ function deps(extra: Partial<CalibrationDeps> = {}) {
   const sent: string[] = [];
   const session = {
     clock: { now: async () => 0, pause: async () => {} },
-    info: async () => ({ port: 'dn2-1.12', runtime: '1', fw_id: 'ab' }),
+    info: async () => ({ port: 'dn2-1.12', runtime: '1', fw_id: 'ab', log_sink: true }),
     modules: async () => [],
     logPage: async () => {
       throw new Error('no log');

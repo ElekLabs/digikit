@@ -1296,6 +1296,15 @@ pub fn dyn_range(lib: &Library, dev: &str) -> Result<(i64, i64)> {
     Ok((first, d.last))
 }
 
+/// The number of stock machine types of a device: `stock_types` of `core/machines` types.toml.
+pub fn stock_types(lib: &Library, dev: &str) -> Result<i64> {
+    lib.get("core/machines")
+        .and_then(|m| m.alloc.get("machines"))
+        .and_then(|a| a.devices.get(dev))
+        .and_then(|d| d.stock_types)
+        .ok_or_else(|| err!("{dev}: types.toml has no stock_types"))
+}
+
 /// The constants of one device.
 fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     let has_dsp = e.caps & DEV_HAS_DSP != 0;
@@ -1305,6 +1314,7 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     } else {
         (0, -1)
     };
+    let stock = if has_dsp { stock_types(lib, dev)? } else { 0 };
     let (store_first, store_sectors) = match &e.store {
         Some(s) => {
             if s.selection_sectors != 2 {
@@ -1390,6 +1400,11 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "STORE_SECTORS",
             store_sectors,
             "[card.store] end_sector - first_sector (0: no store)",
+        ),
+        c(
+            "STOCK_MACHINE_TYPES",
+            stock as u64,
+            "core/machines types.toml stock_types (0: no DSP)",
         ),
         c(
             "DYN_TYPE_FIRST",
@@ -2086,7 +2101,7 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
         };
         let _ = writeln!(
             s,
-            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n    key_flags: KeyFlagBits {{\n        press: {},\n        func: {},\n        repeat: {},\n        release: {},\n    }},\n}};",
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    stock_machine_types: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n    key_flags: KeyFlagBits {{\n        press: {},\n        func: {},\n        repeat: {},\n        release: {},\n    }},\n}};",
             v("DEVICE_ID")?,
             hex(v("DEVICE_NAME_WORD")? as i64),
             e.digikit.samples_in_store,
@@ -2102,6 +2117,7 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
             hex(v("KEEP_BYTES")? as i64),
             hex(v("ESDHC_BASE")? as i64),
             v("DSP_BLOCK_CYCLES")?,
+            v("STOCK_MACHINE_TYPES")?,
             v("DYN_TYPE_FIRST")?,
             v("DYN_TYPES")?,
             v("TRACKS")?,

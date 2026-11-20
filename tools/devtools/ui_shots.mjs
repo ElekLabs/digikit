@@ -905,7 +905,7 @@ const SCENES = [
       await p.wait(800);
     },
   },
-  // ---- the Calibration section of the Profile pane (preview/calibration-backend.mock.ts): made-up captures; the files go in through the file inputs ----
+  // ---- the Calibration tab (preview/calibration-backend.mock.ts): made-up captures; the files go in through the file inputs ----
   {
     // a run on the emulator in progress: the progress line and Stop (cal=slow stretches a capture to 3 s)
     name: 'profile-calibration-run',
@@ -913,7 +913,7 @@ const SCENES = [
     size: [1440, 1100],
     steps: async (p) => {
       await p.wait(500);
-      await showTab(p, 'Profile');
+      await showTab(p, 'Calibration');
       await p.wait(1500);
       await p.eval(
         "(() => { const b = document.querySelector('.cal .cal-bar .act.primary'); b.click(); b.scrollIntoView(); })()",
@@ -928,7 +928,7 @@ const SCENES = [
     size: [1440, 1100],
     steps: async (p) => {
       await p.wait(500);
-      await showTab(p, 'Profile');
+      await showTab(p, 'Calibration');
       await p.wait(1500);
       const give = (index, side) =>
         p.eval(`(() => {
@@ -951,6 +951,52 @@ const SCENES = [
       await give(1, 'dev');
       await p.wait(800);
       await p.eval("document.querySelector('.cal').scrollIntoView()");
+      await p.wait(300);
+    },
+  },
+  {
+    // an active calibration loaded on the Calibration tab
+    name: 'profile-calibration-active',
+    q: 'page=emulator&card=dn2&prof=stopped',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(`(() => {
+        const doc = { schema: 'dk.calibration/1', key: { device: 'dn2', device_unit: 'cycles', block_cycles: 666784 },
+          dsp: { factor: { fit: 1.31, budget: 1.34 }, error: { n: 9, mean: 0.002, worst_under: 0.013 } } };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(doc)], 'dk-calibration-dn2.json', { type: 'application/json' }));
+        const input = document.querySelector('.cal-active input[type=file]');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await p.wait(600);
+    },
+  },
+  {
+    // the same calibration, then the Profile tab: the DSP rows with est. cyc/blk and % block
+    name: 'profile-calibration-estimate',
+    q: 'page=emulator&card=dn2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(`(() => {
+        const doc = { schema: 'dk.calibration/1', key: { device: 'dn2', device_unit: 'cycles', block_cycles: 666784 },
+          dsp: { factor: { fit: 1.31, budget: 1.34 }, error: { n: 9, mean: 0.002, worst_under: 0.013 } } };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(doc)], 'dk-calibration-dn2.json', { type: 'application/json' }));
+        const input = document.querySelector('.cal-active input[type=file]');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await p.wait(600);
+      await showTab(p, 'Profile');
+      await p.wait(2500);
+      await p.eval("document.querySelector('.dsp-mods')?.scrollIntoView()");
       await p.wait(300);
     },
   },

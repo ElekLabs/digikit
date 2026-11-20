@@ -8,6 +8,24 @@ use dkrt_sdk::proto::*;
 use dkrt_sdk::OK;
 use crate::transport::*;
 
+/// Does a loaded module have machine type `ty` (a run-time type some module owns)? The machines service answers per module (`module_info`, the same export the
+/// MODULES reply reads). A row nobody loaded is a gap row: it plays as type 0.
+pub(crate) fn machine_type_loaded(ty: u32) -> bool {
+    let s = crate::st();
+    let mut i = 0;
+    while i < crate::MAX_MODULES {
+        if s.modules[i].used != 0 {
+            if let Some(mm) = unsafe { crate::handlers::exports::module_info(i as u8 + 1) } {
+                if mm.types[..(mm.nt as usize).min(8)].iter().any(|t| *t as u32 == ty) {
+                    return true;
+                }
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
 /// MODULES: the loaded modules and what they hold. Body: `u8 start` (a module record index). Reply: `u32 arena_free, arena_largest, dsp_free,
 /// dsp_largest`, `u8 total` (loaded modules), `u8 n` (records in this reply), then per record `u8 index`, `name[32]`, `u32 version`, 8 bytes (`u32` the runtime
 /// version the module needs, then four zero bytes), `u32 cf_base, cf_size, dsp_off, dsp_len, rows` (voice rows as a mask), `u8 n_types` and that many machine

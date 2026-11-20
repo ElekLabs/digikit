@@ -115,7 +115,11 @@ const emulatorFaceplate = () =>
             </dl>
           </div>
         }
-        session={() => Promise.resolve({} as never)}
+        session={() =>
+          Promise.resolve({
+            info: async () => ({ port: `${cardDevice}-${cardDevice === 'dn2' ? '1.12' : '1.17'}` }),
+          } as never)
+        }
         where={() => 'the emulator'}
       />
     </div>

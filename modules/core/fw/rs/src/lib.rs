@@ -38,13 +38,23 @@ pub mod draw {
 pub mod filter {
     // cf.filter.fn.accessor: no sig yet
 
-    // cf.filter.fn.get: no sig yet
+    unsafe extern "C" {
+        /// Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store.
+        #[link_name = "cf.filter.fn.get"]
+        pub fn get(track_object: u32) -> i32;
+    }
 
     // cf.filter.fn.list_vector: no sig yet
 
     // cf.filter.fn.name: no sig yet
 
     // cf.filter.fn.set: no sig yet
+
+    unsafe extern "C" {
+        /// The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150.
+        #[link_name = "cf.filter.fn.set_kit"]
+        pub fn set_kit(kit: u32, track: i32, ty: i32, flag4: i32, flag5: i32) -> i32;
+    }
 }
 
 pub mod input {
@@ -119,6 +129,12 @@ pub mod machine {
     // cf.machine.fn.name.long: no sig yet
 
     // cf.machine.fn.permit: no sig yet
+
+    unsafe extern "C" {
+        /// The KitActive set-machine wrapper the machine chooser commits through: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15, calls the machine setter on the track object (k + 0x6c + track * 0x3c0; the setter checks the permit and sends the change), and updates the mask of tracks that hold the special type. DT2 0x40036798, DN2 0x40031880. Finding 150. The debug module's SETUP command calls it from the UI task.
+        #[link_name = "cf.machine.fn.set_kit"]
+        pub fn set_kit(kit: u32, track: i32, ty: i32, flag4: i32, flag5: i32) -> i32;
+    }
 
     // cf.machine.fn.type_page.count: no sig yet
 

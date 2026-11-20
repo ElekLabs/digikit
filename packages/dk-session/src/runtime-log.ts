@@ -171,6 +171,9 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
       f.name = asciiOf(a[2]!, a[3]!, a[4]!);
       if (name === 'MOD_LOAD') f.result = signed(a[1]!);
       break;
+    case 'SETUP_DONE':
+      f.status = signed(a[4]!);
+      break;
     case 'MOD_NEEDS':
       f = { index: a[0]!, needs: asciiOf(a[1]!, a[2]!, a[3]!) };
       break;

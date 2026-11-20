@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
-import { poll } from '@digi/dk-session';
+import { poll, RuntimeEvents } from '@digi/dk-session';
 import { moduleStorePathOf, repoRoot, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { type PatchedSession } from '../support.ts';
@@ -84,6 +84,15 @@ export async function installModules(
       // waitForBoot ends at FW_READY with the debug module (the log), after the stock MidiRpc service answers
       await timePhase('protocol.waitForBoot', () => dk.waitForBoot());
       const want = modules.map((m) => m.id);
+      if (want.includes(DEBUG_MODULE)) {
+        // the debug module's log is there: the runtime's own events say when each module of the selection is in (MOD_LOAD, and MOD_DSP for a DSP part), no list poll
+        const events = new RuntimeEvents(dk, dk.clock);
+        await events.listen({ fromBoot: true });
+        // a DSP part completes (MOD_DSP) only when the session runs the SHARC DSP: without it the CF part (MOD_LOAD) is final
+        const dsp = session ? (await session.status()).dsp === 'sharc' : true;
+        await events.untilModulesActive(modules.length, { withinMs: MODULES_LOADED_EMULATED_MS * 4, dsp });
+        return;
+      }
       const loaded = async () => (await dk.modules()).map((entry) => entry.name);
       // the module loads (DSP parts take many blocks) run on the session's clock: emulated time on the harness, wall time on a bare DkSession
       await poll(dk.clock, loaded, (names) => want.every((id) => names.includes(id)), {

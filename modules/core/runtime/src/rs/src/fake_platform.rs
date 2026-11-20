@@ -234,6 +234,9 @@ impl Platform for FakePlatform {
     unsafe fn track_type(&self, _track: u32) -> Option<i32> {
         None
     }
+    unsafe fn set_track_type(&self, _op: u32, _track: u32, _ty: u32) -> i32 {
+        dkrt_sdk::proto::E_STATE
+    }
     unsafe fn play_state(&self) -> Option<u32> {
         self.play.get()
     }

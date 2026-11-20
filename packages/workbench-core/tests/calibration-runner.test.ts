@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { MidiOut, type Clock } from '@digi/dk-session';
+import { MidiOut, ModuleLoadRefused, type Clock } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
-import { parseCalProfile } from '../src/calibration/calprofile';
+import { addModuleCases, parseCalCase, parseCalProfile } from '../src/calibration/calprofile';
 import { runCalibration, splitCapture, type Rig, type RunInput } from '../src/calibration/runner';
 import { parseStepFile, type StepLibrary } from '../src/calibration/steps';
 import type { DspStats, StatsSource } from '../src/calibration/stats';
@@ -23,6 +23,15 @@ const lib: StepLibrary = {
   mach: parseStepFile(
     `schema = "dk.steps/1"\nname = "mach"\n[[step]]\naction = "setup"\ntrack = 1\nmachine = "a/b"\n`,
     'mach',
+  ),
+  reset: parseStepFile(
+    `schema = "dk.steps/1"\nname = "reset"\n[[step]]\naction = "setup"\ntrack = 1\nmachine = 0\n`,
+    'reset',
+  ),
+  fx: parseStepFile(`schema = "dk.steps/1"\nname = "fx"\n[[step]]\naction = "setup"\neffect = "a/fx"\n`, 'fx'),
+  ring: parseStepFile(
+    `schema = "dk.steps/1"\nname = "ring"\n[[step]]\naction = "setup"\ntrack = 1\nmachine = "a/b"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\nretrigger_ms = 400\n`,
+    'ring',
   ),
   win: parseStepFile(
     `schema = "dk.steps/1"\nname = "win"\n[[step]]\naction = "capture"\nmark = "start"\n[[step]]\naction = "midi.cc"\ntrack = 1\nparam = "amp_release"\nvalue = 9\n[[step]]\naction = "wait"\nms = 700\n[[step]]\naction = "capture"\nmark = "stop"\n`,
@@ -194,7 +203,7 @@ test('markers make the steps between them the capture window, in place of captur
 });
 
 test('modules: the stock case runs with none loaded, a module case with only its module, and the hashes are recorded', async () => {
-  const f = fake({ loaded: ['a/b', 'c/d'] });
+  const f = fake({ loaded: ['a/b', 'c/d'], moduleCalls: 5 });
   const text =
     base.replace('repeats = 2', 'repeats = 1') +
     `modules = ["a/b", "c/d"]\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "ab"\nmodules = ["a/b"]\nsteps = "hold"\n[[case]]\nid = "both"\nmodules = ["c/d", "a/b"]\nsteps = "hold"\n`;
@@ -392,4 +401,191 @@ test('a profile with module cases is refused when the target has no DSP stats, b
   g.rig.stats = { ...g.rig.stats, capabilities: async () => ({ dsp: false, spans: true }) };
   const [c] = await run(g.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "hold"\n`);
   assert.equal(c!.captures.length, 1);
+});
+
+const withModuleCase = (steps: string) =>
+  addModuleCases(
+    parseCalProfile(
+      base +
+        `discover = "modules"\nteardown = { steps = "off" }\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [parseCalCase(`schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\nsteps = "${steps}"\n`, 'm')],
+  );
+
+test('a module case sets its machine through the rig, and its teardown (after the profile teardown) puts the stock machine back, also after a failure', async () => {
+  const f = fake({ moduleCalls: 5 });
+  const calls: unknown[][] = [];
+  f.rig.setup = async (...a) => void (calls.push(a), f.log.push(`setup ${a.join(' ')}`));
+  await runCalibration({
+    profile: withModuleCase('mach'),
+    steps: lib,
+    rig: f.rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+  assert.deepEqual(calls, [
+    ['machine', 1, 'a/b'],
+    ['machine', 1, 0],
+  ]);
+  const at = (l: string) => f.log.lastIndexOf(l);
+  assert.ok(at('midi 128,60,0') < at('setup machine 1 0'), 'the note is released, then the stock machine comes back');
+  // a capture that fails: the teardown still plays
+  const g = fake({ moduleCalls: 5 });
+  const read = g.rig.stats.read;
+  g.rig.stats.read = async () => {
+    if (g.log.includes('select a/b')) throw new Error('the link broke');
+    return read();
+  };
+  g.rig.setup = async (...a) => void g.log.push(`setup ${a.join(' ')}`);
+  await assert.rejects(
+    runCalibration({
+      profile: withModuleCase('mach'),
+      steps: lib,
+      rig: g.rig,
+      midi,
+      run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+      dspUnit: 'insn',
+    }),
+    /the link broke/,
+  );
+  assert.equal(g.log.at(-1), 'setup machine 1 0');
+});
+
+test('SETUP sets no effects: a case that needs one is skipped with that reason even when the rig has a setter', async () => {
+  const f = fake();
+  f.rig.setup = async () => {};
+  const [stock, fx] = await runCalibration({
+    profile: withModuleCase('fx'),
+    steps: lib,
+    rig: f.rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+  assert.equal(stock!.skipped, undefined);
+  assert.match(fx!.skipped!, /effect/);
+  assert.ok(!f.log.includes('select a/b'), 'nothing was loaded for it');
+});
+
+test('a note with retrigger_ms is pressed again every that many ms of the warm-up and the window, and not otherwise', async () => {
+  const f = fake({ moduleCalls: 5 });
+  f.rig.setup = async () => {};
+  const profile = addModuleCases(
+    parseCalProfile(
+      base
+        .replace('repeats = 2', 'repeats = 1')
+        .replace('warmup_s = 1', 'warmup_s = 1')
+        .replace('capture_s = 2', 'capture_s = 1') + `discover = "modules"\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [parseCalCase('schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\nsteps = "ring"\n', 'm')],
+  );
+  await runCalibration({
+    profile,
+    steps: lib,
+    rig: f.rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+  const at = f.log.indexOf('select a/b');
+  const after = f.log.slice(at);
+  // 1 s warm-up and 1 s window in slices of 400 ms (400, 400, 200 each), the key pressed again after each slice
+  assert.deepEqual(
+    after.filter((l) => l.startsWith('pause')),
+    ['pause 400', 'pause 400', 'pause 200', 'pause 400', 'pause 400', 'pause 200'],
+  );
+  assert.equal(after.filter((l) => l === 'midi 144,60,100').length, 1 + 4, 'not pressed at the end of a wait');
+  assert.equal(
+    f.log.slice(0, at).filter((l) => l === 'midi 144,60,100').length,
+    1,
+    'the stock case presses its key once',
+  );
+});
+
+test('a module capture in which no row counted a call is refused, and a case whose module the image lacks is skipped with that reason', async () => {
+  const f = fake({ moduleCalls: 0 });
+  f.rig.setup = async () => {};
+  const withCase = (steps: string, needs: string) =>
+    addModuleCases(parseCalProfile(base + `discover = "modules"\n[[case]]\nid = "stock"\nsteps = "hold"\n`, 'p'), [
+      parseCalCase(`schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\n${needs}steps = "${steps}"\n`, 'm'),
+    ]);
+  const input = { steps: lib, midi, run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' }, dspUnit: 'insn' };
+  // a case whose capture counted no call fails as a case, with its reason; the run goes on and the next case runs
+  const [, failedCase] = await runCalibration({ ...input, profile: withCase('mach', ''), rig: f.rig });
+  assert.match(failedCase!.failed!, /counted no calls of any machine or effect row/);
+  assert.equal(failedCase!.captures.length, 0, 'the empty capture is not kept');
+  // the runtime refuses the module for an import of a core module that the case declares: skipped, the run goes on
+  const g = fake();
+  g.rig.setup = async () => {};
+  g.rig.modules!.select = async () => {
+    throw new ModuleLoadRefused(0, -7, 'sample-pool');
+  };
+  const [, skipped] = await runCalibration({
+    ...input,
+    profile: withCase('mach', 'needs = ["core/sample-pool"]\n'),
+    rig: g.rig,
+  });
+  assert.match(skipped!.skipped!, /no core\/sample-pool/);
+  // E_MISSING (a service the module imports is not in the image) with a declared need: skipped as well
+  const m = fake();
+  m.rig.setup = async () => {};
+  m.rig.modules!.select = async () => {
+    throw new ModuleLoadRefused(0, -73);
+  };
+  const [, again] = await runCalibration({
+    ...input,
+    profile: withCase('mach', 'needs = ["core/sample-pool"]\n'),
+    rig: m.rig,
+  });
+  assert.match(again!.skipped!, /lacks a service/);
+  // an undeclared refusal ends the run
+  const h = fake();
+  h.rig.setup = async () => {};
+  h.rig.modules!.select = async () => {
+    throw new ModuleLoadRefused(0, -7, 'sample-pool');
+  };
+  await assert.rejects(runCalibration({ ...input, profile: withCase('mach', ''), rig: h.rig }), /did not load/);
+});
+
+test('when putting the machine type back is refused the run stops, before the next case can unload the module', async () => {
+  const f = fake({ moduleCalls: 5 });
+  f.rig.setup = async (_what, _track, type) => {
+    if (type === 0) throw new Error('SETUP refused');
+  };
+  const profile = addModuleCases(
+    parseCalProfile(
+      base + `discover = "modules"\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [
+      parseCalCase('schema = "dk.calcase/1"\nid = "m1"\nmodule = "a/b"\nsteps = "mach"\n', 'm1'),
+      parseCalCase('schema = "dk.calcase/1"\nid = "m2"\nmodule = "c/d"\nsteps = "mach"\n', 'm2'),
+    ],
+  );
+  await assert.rejects(
+    runCalibration({
+      profile,
+      steps: lib,
+      rig: f.rig,
+      midi,
+      run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+      dspUnit: 'insn',
+    }),
+    /putting the track's machine type back failed.*the run stops before the next case/,
+  );
+  assert.ok(!f.log.includes('select c/d'), 'the module of the next case was not loaded');
+});
+
+test('the module teardown takes the track of the case', () => {
+  const p = addModuleCases(
+    parseCalProfile(
+      base + `discover = "modules"\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [parseCalCase('schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\nsteps = "mach"\nargs = { track = 3 }\n', 'm')],
+  );
+  assert.deepEqual(p.cases[1]!.teardown, { steps: 'reset', args: { track: 3 } });
 });

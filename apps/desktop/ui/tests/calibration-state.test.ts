@@ -32,6 +32,7 @@ function fake() {
         emulator: true,
         captures: [capture as never],
         skipped: [],
+        failed: [],
         stopped: seen.aborted,
       } as RunOutcome;
     },

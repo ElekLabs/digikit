@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, type Clock, type DkSession } from '@digi/dk-session';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { runCalibrationOnTarget, deviceOfInfo } from '../src/profile/calibration-run';
+import { sessionSetup, untilBootStable } from '../src/calibration/rigsetup';
 import { loadCalibrationFiles, type RunEvent } from '../src/profile/calibration-view';
 
 const files = loadCalibrationFiles({
@@ -35,6 +37,7 @@ function fake(opts: { hangOnPause?: number; fwId?: string | null } = {}) {
     info: async () => ({
       port: 'dn2-1.12',
       runtime: '0.9',
+      log_sink: true,
       ...(opts.fwId === null ? {} : { fw_id: opts.fwId ?? 'ab12' }),
     }),
     modules: async () => [],
@@ -132,4 +135,92 @@ test('the run says up front which cases it cannot play, and hands over its clock
   );
   assert.equal(out.skipped.length, 1);
   assert.equal(await clock!(), 0);
+});
+
+test('with the debug log a machine step is a SETUP request for the machine type the runtime reports for the module, awaited on SETUP_DONE', async () => {
+  const setups: [string, number, number][] = [];
+  const f = fake();
+  const withMachine = loadCalibrationFiles({
+    profiles: {
+      'p/m.toml': `schema = "dk.calprofile/1"\nname = "m"\nwarmup_s = 0\ncapture_s = 0.1\nrepeats = 1\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "mach"\nsteps = "mach"\n[[case]]\nid = "fx"\nsteps = "fx"\n`,
+    },
+    steps: {
+      'hold.toml': `schema = "dk.steps/1"\nname = "hold"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\n`,
+      'mach.toml': `schema = "dk.steps/1"\nname = "mach"\n[[step]]\naction = "setup"\ntrack = 3\nmachine = "a/b"\n`,
+      'fx.toml': `schema = "dk.steps/1"\nname = "fx"\n[[step]]\naction = "setup"\neffect = "a/fx"\n`,
+    },
+    cases: {},
+  });
+  const session = f.deps.session as unknown as Record<string, unknown>;
+  session.modules = async () => [{ index: 0, name: 'a/b', types: [17], rows: 1 }];
+  session.logPage = async () => [0, 0, []];
+  session.logConfig = async () => ({ level: 2, modules: [] });
+  session.setLogConfig = async () => ({});
+  session.setup = async (what: string, track: number, type: number) => {
+    setups.push([what, track, type]);
+    return 7;
+  };
+  // the clock moves 1 s per reading, so the wait for SETUP_DONE (which this fake log never holds) ends at once
+  let t = 0;
+  (f.deps.session as unknown as { clock: Clock }).clock.now = async () => (t += 1000);
+  const out = await runCalibrationOnTarget({ ...f.deps, files: withMachine }, { profile: 'm' });
+  // the request was made for the module's own type and the 0-based track, and its SETUP_DONE was awaited
+  assert.deepEqual(setups, [['machine', 2, 17]]);
+  assert.match(out.error ?? '', /SETUP_DONE/);
+  assert.deepEqual(
+    out.skipped.map((x) => x.case),
+    [],
+  );
+});
+
+test('a boot that is not seen stable stops the run with a clear message, and one whose events say it is stable does not wait', async () => {
+  let t = 0;
+  const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
+  const noLog = {
+    logPage: async () => Promise.reject(new Error('no log')),
+    info: async () => Promise.reject(new Error('no log')),
+    logConfig: async () => Promise.reject(new Error('no log')),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  };
+  await assert.rejects(untilBootStable(noLog as never, clock), /not seen stable.*the run stops here/);
+  // BOOT_START (stable_blocks 3000) at block 100 and a later event at block 3200: stable by the blocks, though STABLE itself was dropped from the ring
+  const word = [0, 0, 0];
+  const events = [
+    { seq: 1, time: 100, kind: LOG_KIND.BOOT_START, flags: 2, args: [0x0a04, 1, 3000, 1, 1] },
+    { seq: 2, time: 3200, kind: LOG_KIND.HEALTH, flags: 2, args: [...word, 0, 0] },
+  ];
+  const log = {
+    logPage: async (from: number) => [1, 2, events.filter((e) => e.seq >= from)] as never,
+    info: async () => ({ log_sink: true }),
+    logConfig: async () => ({ level: 2, modules: [] }),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  };
+  await untilBootStable(log as never, clock);
+});
+
+test('the machine step remembers the type the firmware reported as the old one and puts it back with `original`', async () => {
+  const sent: [string, number, number][] = [];
+  const session = {
+    modules: async () => [{ name: 'a/b', types: [17] }],
+    setup: async (what: string, track: number, type: number) => {
+      sent.push([what, track, type]);
+      return sent.length;
+    },
+  };
+  const clock: Clock = { now: async () => 0, pause: async () => {} };
+  const events = {
+    // SETUP_DONE of the request, and the watch's MACHINE_CHANGE of the first one: track 3 had type 2
+    until: async () => ({ fields: { seq: sent.length, status: 0 } }),
+    tryUntil: async () => ({ fields: { track: 3, new_type: 17, old_type: 2 } }),
+  };
+  const setup = sessionSetup(session as never, events as never, clock);
+  await setup('machine', 3, 'a/b');
+  await setup('machine', 3, 'original');
+  assert.deepEqual(sent, [
+    ['machine', 2, 17],
+    ['machine', 2, 2],
+  ]);
+  await assert.rejects(setup('machine', 5, 'original'), /none to put back/);
 });

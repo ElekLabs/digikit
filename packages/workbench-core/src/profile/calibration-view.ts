@@ -266,7 +266,7 @@ export function readCaptureSet(files: readonly { name: string; text: string }[])
 /** The parts of `dk.calibration/1` the section reads. */
 export interface CalibrationDoc {
   schema?: string;
-  key?: { device?: string; firmware_sha256?: string; device_unit?: string };
+  key?: { device?: string; firmware_sha256?: string; device_unit?: string; block_cycles?: number };
   dsp?: SectionDoc;
   cf?: SectionDoc;
   refused?: { section: string; case: string; id: string; reason: string }[];
@@ -348,14 +348,18 @@ export type RunEvent =
   /** Before the first case: the cases this rig cannot play (they are skipped, and take no time). */
   | { kind: 'plan'; skipping: string[] }
   | { kind: 'skip'; case: string; reason: string }
+  /** A case whose capture counted no call of any module row: recorded as failed, the run goes on. */
+  | { kind: 'fail'; case: string; reason: string }
   | { kind: 'text'; text: string };
 
-/** The log lines of `runCalibration` (`case ID: capture N of M`, `case ID: skipped, REASON`); every other line is text. */
+/** The log lines of `runCalibration` (`case ID: capture N of M`, `case ID: skipped, REASON`, `case ID: failed, REASON`); every other line is text. */
 export function parseRunLine(line: string): RunEvent {
   const cap = /^case (\S+): capture (\d+) of (\d+)$/.exec(line);
   if (cap) return { kind: 'capture', case: cap[1]!, n: Number(cap[2]), of: Number(cap[3]) };
   const skip = /^case (\S+): skipped, (.*)$/.exec(line);
   if (skip) return { kind: 'skip', case: skip[1]!, reason: skip[2]! };
+  const fail = /^case (\S+): failed, (.*)$/.exec(line);
+  if (fail) return { kind: 'fail', case: fail[1]!, reason: fail[2]! };
   return { kind: 'text', text: line };
 }
 

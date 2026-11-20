@@ -18,6 +18,7 @@ perf:pgo` retrains it (or launch once with DIGI_EMU_PGO_TRAIN=1).
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import pathlib
 import subprocess
@@ -156,7 +157,9 @@ def default_audio_args(
         # A device with no DSP (no ready inputs, no generated core): ColdFire-only build; its audio, if any, is the peer's.
         return args
     paths = digi_env.ready_inputs(device=device)
-    if positional and device != "dn2":
+    # A patched build of the stock firmware (a runtime image) boots from the positional file while its audio state is the stock firmware's (the device whose snapshot is built from the stock firmware alone does the same): the
+    # snapshot is only valid for the firmware it was taken from (the daemon refuses another one: "snapshot was taken from different firmware").
+    if positional and device != "dn2" and not ready_is_of_another_firmware(paths, syx):
         paths["firmware"] = syx
     card = (
         pathlib.Path(args[args.index("--card-image") + 1])
@@ -205,6 +208,19 @@ def default_audio_args(
     if "--audio-buffer" not in args:
         args.extend(["--audio-buffer", "0.3"])
     return args
+
+
+def ready_is_of_another_firmware(
+    paths: dict[str, pathlib.Path], syx: pathlib.Path
+) -> bool:
+    """True when the ready directory records (`SOURCE.json`, written by ready.py) another firmware than `syx`. A directory that records nothing is not known to differ."""
+    try:
+        recorded = json.loads(
+            (paths["CF snapshot"].parent / "SOURCE.json").read_text()
+        )["syx_sha256"]
+    except (OSError, KeyError, ValueError):
+        return False
+    return recorded != hashlib.sha256(syx.read_bytes()).hexdigest()
 
 
 def ready_for(

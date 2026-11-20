@@ -85,6 +85,7 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
+  SETUP: 0x0a,
   PROFILE_DSP: 0x1b,
   PROFILE_STATE: 0x1e,
   PROFILE_READ: 0x1f,
@@ -257,6 +258,7 @@ export const RANGES = {
   debug: [0x20, 0x22],
   debug_profile: [0x1e, 0x1f],
   debug_profile_dsp: [0x1b, 0x1b],
+  debug_setup: [0x0a, 0x0a],
   entry_demo_test: [0x1c, 0x1d],
   file_write_test: [0x24, 0x27],
   file_write_test_b: [0x28, 0x2b],
@@ -353,6 +355,7 @@ export const LOG_KIND = {
   DSP_LINK: 46,
   FW_READY: 47,
   DSP_SWEEP: 48,
+  SETUP_DONE: 49,
   SHORTCUT_CLASH: 52,
   SHORTCUT_INACTIVE: 53,
   VIEW_OPENED: 54,
@@ -411,6 +414,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
   48: ['DSP_SWEEP', ['sweep', 'generation', 'blocks', '-', '-']],
+  49: ['SETUP_DONE', ['op', 'track', 'type', 'seq', 'status']],
   52: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
   53: ['SHORTCUT_INACTIVE', ['module', 'key0', 'key1', '-', '-']],
   54: ['VIEW_OPENED', ['owner', 'flags', 'slot', '-', '-']],

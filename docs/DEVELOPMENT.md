@@ -193,7 +193,7 @@ mise run scenario:all         # every DN2 scenario; fails when a pinned PCM hash
 mise run scenario trig1-taps --wav
 ```
 
-Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
+Test runs print compact output by default; read a failed task with `node tools/nx/failures.mjs <log or project:target>` and use `--verbose` for the full stream ([TESTING.md, "Nx gate"](TESTING.md#nx-gate)). Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
 
 ```sh
 mise run test:changed         # lint, format, types, host tests and Python checks of the affected projects; no builds or devices
@@ -374,6 +374,10 @@ Build times: the Rust runtime 2.3 s, a C object under 1 s. `uv run python -m too
 - Never change section 2 (bootstrap), section 4 (updater) or section 8. patchkit refuses.
 - Recovery is the bootstrap's STARTUP menu (hold FUNC at power-on, then the stock OS over MIDI DIN); it has not been rehearsed.
 - Read `docs/findings/01-container-and-patching.md` before you install anything.
+
+## Agent workflow
+
+Project agents are in `.claude/agents/`: `lane-worker` runs an implementation lane in a named worktree; `coder`, `scout` and `reviewer` override the user-level agents of the same name. `reviewer` is limited to read-only Git by `tools/devtools/restrict_readonly_bash.py`. Every agent returns the report contract of AGENTS.md "Sub-agents and reports" (at most 200 words).
 
 ## Repository layout
 

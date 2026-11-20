@@ -53,6 +53,9 @@ pub struct DeviceProfile {
     /// `MACHINE_ROWS` rows: a device has that many types or none.
     pub dyn_type_first: u32,
     pub dyn_types: u32,
+    /// How many stock machine types the firmware has (`stock_types` of core/machines `types.toml`; 0 without a DSP): the types `0 .. stock_machine_types`. The numbers
+    /// from there to `dyn_type_first` are built-in or gap rows that no chooser offers.
+    pub stock_machine_types: u32,
     /// `[digikit] tracks`: the tracks of the device (0: the file gives none).
     pub tracks: u32,
     /// `[input.keys]`: the id of each logical key (`dk_key`, `sdk/include/dk/gen/keys.h`) in the firmware's key events, indexed by the key's number; 0 where the device has no such key.
@@ -212,6 +215,10 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     /// The machine type of `track` of the active kit, read-only: `None` when there is no project yet, `Some(-1)` past track 15 or when the firmware has no
     /// type for the track.
     unsafe fn track_type(&self, track: u32) -> Option<i32>;
+    /// Set the machine type (`op` 1) or the filter type (`op` 2) of `track` of the active kit through the firmware's KitActive commit, the call a chooser makes
+    /// (never a raw write of the Sound byte). 0 when the firmware reports `ty` afterwards, `E_STATE` when there is no project, the commit is not in the image
+    /// or the firmware kept the old type (the machine permit refused it).
+    unsafe fn set_track_type(&self, op: u32, track: u32, ty: u32) -> i32;
     /// The firmware's transport state (`cf.project.fn.transport_state`): 0 stopped, 1 playing, 2 paused, 3 the two play words disagree. `None` when the
     /// platform cannot read it; a reload refuses then (docs/plans/extension-model.md E5).
     unsafe fn play_state(&self) -> Option<u32>;

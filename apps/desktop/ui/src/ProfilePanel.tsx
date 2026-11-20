@@ -10,7 +10,7 @@ import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.t
 import type { DkSession } from '@digi/dk-session';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { sameTarget, type Target } from '@digi/workbench-core/transfer/target.ts';
+import { sameTarget } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import {
   buildRows,
@@ -35,10 +35,13 @@ import { createEmulatorNames } from './log-names-backend';
 import { deviceOfPort } from './remote-core';
 import { createRecorder, type ProfileReading } from './profile-backend';
 import { createReadGate } from './read-gate-core';
-import CalibrationSection from './CalibrationSection';
-import { calibrationTexts } from './calibration-data';
-import { createCalibrator } from './calibration-backend';
-import { createCalibrationState } from './calibration-state';
+import {
+  calibrationChip,
+  estimateDsp,
+  fmtBlockShare,
+  fmtCycles,
+} from '@digi/workbench-core/profile/calibration-active.ts';
+import type { CalibrationHub } from './calibration-hub';
 import './card-panel.css';
 import './profile-panel.css';
 
@@ -63,6 +66,8 @@ export default function ProfilePanel(props: {
   where: () => string;
   track?: () => unknown;
   host?: Host;
+  /** What the Profile and Calibration tabs share (a run in progress, the active calibration). */
+  hub: CalibrationHub;
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
   const app = useTransferApp();
@@ -93,54 +98,8 @@ export default function ProfilePanel(props: {
     names: props.host && prof ? createEmulatorNames(props.host, prof) : undefined,
   });
 
-  // a calibration run owns the counters and the target: the pane does not read while it plays, locks its other actions, and the run fails when the
-  // selected target changes under it
-  const [calibrating, setCalibrating] = createSignal(false);
-  let runTarget: Target | undefined;
-  const sameRunTarget = () => {
-    if (readsTarget() && runTarget && !sameTarget(runTarget, target()))
-      throw new Error('the target changed during the run: it was stopped');
-  };
-  const calibrator = createCalibrator({
-    session: async () => props.session(),
-    get rpc() {
-      return onEmulator() ? props.host?.rpc : undefined;
-    },
-    get midi() {
-      const sink = props.host?.ports.midi;
-      return sink
-        ? {
-            send: async (bytes: Uint8Array) => {
-              sameRunTarget();
-              await sink.send(bytes);
-            },
-          }
-        : undefined;
-    },
-    loadLibrary: app.loadLibrary,
-    // Transfer installs on the selected target: only when this pane reads it, and only while it is still the target the run began on
-    get install() {
-      return readsTarget()
-        ? async (ids: string[]) => {
-            sameRunTarget();
-            await app.backend.install(ids, () => {});
-          }
-        : undefined;
-    },
-    prof: prof ?? (async () => Promise.reject(new Error('dkprof.wasm needs the desktop host'))),
-    texts: calibrationTexts,
-  });
-  // the state is the pane's: a run that restarts the target resets `reading` and must not lose its captures
-  const calibration = createCalibrationState({
-    calibrator,
-    emulator: () => emu(),
-    blocked: () => busy() || !!acting(),
-    onRunning: (r) => {
-      runTarget = r ? target() : undefined;
-      setCalibrating(r);
-    },
-  });
-  onCleanup(() => calibration.dispose());
+  // a calibration run (the Calibration tab) owns the counters and the target: this pane does not read while it plays and locks its other actions
+  const calibrating = props.hub.calibrating;
   const locked = () => !!acting() || calibrating();
 
   const running = () => {
@@ -288,6 +247,12 @@ export default function ProfilePanel(props: {
   /** What the reading came from: the emulator (a controller to ask for the instruction profiles) or a device. */
   const emu = () => reading()?.emulator ?? onEmulator();
   const where = () => (emu() ? 'emulator' : 'USB');
+  /** The calibration kept for the device of the reading, and what it estimates for the DSP rows (emulator only: a device measures cycles itself). */
+  const calibration = () => props.hub.active.get(deviceOfPort(reading()?.port ?? ''));
+  const estimate = (v: DspView) => {
+    const c = calibration();
+    return c && emu() ? estimateDsp(v, c.doc) : undefined;
+  };
   const px = (share: number) => Math.round((share / top()) * GRAPH_PX);
   const barPx = (share: number) => Math.min(36, Math.max(2, Math.round(share * 100 * 1.6)));
   const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;
@@ -511,14 +476,40 @@ export default function ProfilePanel(props: {
                           Module instructions per DSP block
                           {v().headroom ? ' against the device headroom' : ''}. Stock DSP work is outside the bar.
                         </span>
-                        <div class="dsp-mods">
+                        <Show when={estimate(v())}>
+                          <span class="hint" title={calibration()!.name}>
+                            {calibrationChip(device(), calibration()!.doc)}
+                          </span>
+                        </Show>
+                        <div class="dsp-mods" classList={{ 'cal-est': !!estimate(v()) }}>
+                          <Show when={estimate(v())}>
+                            <div class="dsp-mod head" role="row">
+                              <span class="name">row</span>
+                              <span class="mono">insn/blk</span>
+                              <span class="mono est">est. cyc/blk</span>
+                              <span class="mono est share">% block</span>
+                            </div>
+                          </Show>
                           <For each={v().modules}>
-                            {(m) => (
+                            {(m, i) => (
                               <>
                                 <div class="dsp-mod">
                                   <span class={`swatch ${kindClass(m.kind)}`} />
                                   <span class="name">{m.name}</span>
                                   <span class="mono">{Math.round(m.insnPerBlock).toLocaleString('en-US')}</span>
+                                  <Show when={estimate(v())?.rows[i()]}>
+                                    {(row) => (
+                                      <>
+                                        <span
+                                          class="mono est"
+                                          title={`budget factor, worst under ${(estimate(v())!.worstUnder * 100).toFixed(1)} %; the fit factor alone gives ${fmtCycles(m.insnPerBlock * calibration()!.doc.dsp!.factor.fit)}`}
+                                        >
+                                          {fmtCycles(row().cycles)}
+                                        </span>
+                                        <span class="mono est share">{fmtBlockShare(row().share)}</span>
+                                      </>
+                                    )}
+                                  </Show>
                                 </div>
                                 <div class="dsp-top">
                                   <For each={m.top}>
@@ -624,15 +615,6 @@ export default function ProfilePanel(props: {
               </span>
             </>
           )}
-        </Show>
-        <Show when={props.host && !reading()?.noDebug}>
-          <CalibrationSection
-            state={calibration}
-            host={props.host}
-            target={`${emu() ? 'Emulator' : 'USB'} ${device()}`.trim()}
-            emulator={emu()}
-            disabled={!!acting() || busy()}
-          />
         </Show>
         <Show when={error()}>
           <p class="err" role="alert">

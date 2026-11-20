@@ -9,3 +9,4 @@ teardown = { steps = "release-notes" }
 [[case]]
 id = "stock"
 steps = "heavy-hold"
+args = { retrigger_ms = 1000 }
