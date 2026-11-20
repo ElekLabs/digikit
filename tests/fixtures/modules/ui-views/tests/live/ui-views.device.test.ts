@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { RANGES } from '@digi/dk-session/gen_proto';
-import { emulatorRead, repoRoot, viewStackFacts, type Device } from '@digi/test-support';
+import { emulatorRead, readViewStack, repoRoot, viewStackFacts, type Device } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
@@ -91,21 +91,10 @@ function firmware(rt: TestRuntime) {
   const viewAt = fwField('cf.menu.struct.VerticalMenuView', 'view');
   const itemsBegin = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_begin');
   const itemsEnd = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_end');
-  /** The View objects of the stack, the top one first. */
-  const views = async (): Promise<number[]> => {
-    const brain = await word(facts.brainPtr);
-    if (brain === 0) return [];
-    const list = brain + facts.viewManagerOff + facts.listOff;
-    const out: number[] = [];
-    let node = await word(list + facts.listPrevOff);
-    while (node !== list && out.length < MAX_STACK) {
-      out.push(await word(node + facts.nodeViewOff));
-      node = await word(node + facts.listPrevOff);
-    }
-    return out;
-  };
+  /** The View objects of the stack, the top one first (the one walker: `readViewStack` of test-support). */
+  const views = async (): Promise<number[]> => (await readViewStack(read, facts, MAX_STACK)).map((v) => v.view);
   /** The vtable pointers of the stack, the top one first. */
-  const vptrs = async () => Promise.all((await views()).map((v) => word(v)));
+  const vptrs = async () => (await readViewStack(read, facts, MAX_STACK)).map((v) => v.vptr);
   /** How many items the top view's menu has (the top view must be a menu: SETTINGS). */
   const topMenuItems = async (): Promise<number> => {
     const [top] = await views();

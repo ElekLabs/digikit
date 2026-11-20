@@ -1,6 +1,6 @@
 # Track manager
 
-Status: active. Branch `feat/track-manager` (lane `ext-model`), sub-branches in lane `lfo-shapes` merged into it.
+Status: phases 0 to 4 are done and host-green on branch `feat/track-manager`; phase 5 (the device proof) is pending. Findings: [151](../findings/151-key-event-path-module-views-and-naming-screen.md).
 
 ## Goal
 
@@ -19,7 +19,8 @@ the active track while it is held. Three reusable pieces come with it: module-ow
 3. **Default binding [TRK]+[YES].** The stock `TrackSelectionView` (pushed while [TRK] is held) consumes only TRIG 1-16,
    REC, PLAY, STOP and, in one case, NO; every other key goes on to the view below (finding 122, static read of
    `vfunc_2`, DT2 `0x40078020`, DN2 `0x40072510`). So a combination is only clean if its last key is swallowed: the
-   `shortcuts` service owns a hook at the entry of the stock key dispatcher. Rebinding comes later.
+   `shortcuts` service owns a hook at the entry of the stock view walker (finding 151). The hook only decides; the module's
+   `on` and `off` run in the service's tick. Rebinding comes later.
 4. **Name length 15 characters.**
 5. **The runtime learns no feature.** It gains only one generic device fact (track count). Shortcuts, views and names stay
    in the service, `core/ui` and the module.
@@ -28,9 +29,9 @@ the active track while it is held. Three reusable pieces come with it: module-ow
 
 | Part | Layer | Owns |
 | --- | --- | --- |
-| `core/ui` (adapter) | L1 | Module views (full screen or overlay), the canvas, SETTINGS rows of modules, text input over the stock naming screen |
-| `core/services/shortcuts` (new) | L3 | Binding records, held-key state, the key-dispatch hook, calls to the module on press and release |
-| Device data + runtime | L2 data | `tracks` in each device file and `dk_device_track_count()` read from the device object |
+| `core/ui` (adapter) | L1 | Module views (full screen or overlay), the canvas, SETTINGS rows of modules, text input over the stock naming screen; owner handles; closes a module's views and drops its rows when the runtime's unload observer says the module goes; defers a push until the release of the key that asked for it |
+| `core/services/shortcuts` (new) | L3 | Binding records, held-key state, the key hook, the queue of `on` and `off` calls that its tick makes |
+| Device data + runtime | L2 data | `tracks` and `[panel.keys]` in the device files; `dk_device_track_count()`, `dk_selected_track()` and the key map read from the device object |
 | `digikit/track-manager` (new tool module) | L4 | The names, the manager screen, the naming flow, the hint overlay |
 
 ## API (SDK additions)
@@ -86,19 +87,24 @@ typedef struct {
 int dk_shortcut_add(dk_module_ctx *ctx, const dk_shortcut_def *d);   // init only
 ```
 
-- Keys are logical (`dk_key`, `DK_KEY_TRK`, `DK_KEY_YES`, `DK_KEY_TRIG(n)`). Their names come from the device file
-  (`[panel]` gets a name for each code); one generator writes the C names and the per-device map. No module holds a panel
-  code.
-- Owner objects of the crate: `KeyState` (held keys, a bit set, press and release), `BindingTable` (records by owner, the
-  first owner keeps a binding, a later one is disabled and logged, `remove(owner)` on unload), `Shortcuts` (`on_key(event)`
-  returns pass or swallow, keeps the one active binding, calls `on` and `off`). The hook only calls `Shortcuts::on_key`.
-- While a binding is active, its keys and their releases are swallowed; all other events (trig keys under [TRK]) pass, so a
-  track change while [TRK] is held works as stock.
+- Keys are logical (`dk_key`, `DK_KEY_TRK`, `DK_KEY_YES`, `DK_KEY_TRIG(n)`): `[keys] order` in `sdk/sdk.toml` is the SDK's
+  append-only list of names (the order is the ABI). A device file maps a name to its panel code (`[panel.keys]`) and may use
+  only listed names; `patchkit gen` writes `sdk/include/dk/gen/keys.h`, the Rust constants, `DeviceProfile.key_codes` and
+  `dkrt_dev` `key_codes` from them. A key a device lacks maps to 0. SRC is one key on both devices (the DN2 panel prints SYN).
+  No module holds a panel code.
+- Owner objects of the crate: `KeyState` (held keys and the keys whose press was swallowed), `BindingTable` (records by owner,
+  the first owner keeps a binding, a later one is disabled and logged, a binding with a key the device lacks is inactive,
+  `remove(owner)` on unload), `Shortcuts` (`on_key(code, flags)` returns pass or swallow, keeps the one active binding and
+  queues `on` and `off`; `run_pending` makes the calls). The hook calls `on_key` through `dk_shortcuts_key`; `Service::tick`
+  calls `run_pending` in the UI pass. A queued call of a module that unloads is dropped.
+- While a binding is active, its second key, its repeats and its release are swallowed; the first key and all other events
+  (trig keys under [TRK]) pass, so a track change while [TRK] is held works as stock.
 
 ### Device fact
 
-`tracks = 16` in the device files (both targets; Syntakt 12 later). `dk_device_track_count()` returns it. The module draws
-rows of 8 from it; no literal 16 in the module.
+`[digikit] tracks = 16` in the device files (both targets; Syntakt 12 later). `dk_device_track_count()` returns it and
+`dk_selected_track()` returns the selected track (0 to count - 1, or -2 without a project; the same firmware read as
+`dk_debug_selected_params`). The module draws rows of 8 from the count; no literal 16 in the module.
 
 ## Screens (128 x 64)
 
@@ -148,29 +154,31 @@ A track with no name shows `TRACK 10`.
 
 | Layer | What | Where |
 | --- | --- | --- |
-| Unit | `KeyState`, `BindingTable` (first owner wins, remove on unload), `Shortcuts::on_key` (swallow, pass, release order, trig keys under [TRK]) | `core/services/shortcuts` crate tests over `FakeCore` |
-| Unit | View pool (open, close, close all of an owner, pool full), `SettingsRows` (order, cap, unload) | `core/adapters/ui/host:rust-tests` (`dkui_host`, C over fakes) |
-| Unit | `track_names` codec (round trip, empty, bad version, 15 characters), `grid_cursor` | module `test-host` (cc-built C, as `modules/tools/remote/tests/pacing.test.ts`) |
-| Contract | `shortcuts` runs the service contract suite (load, unload, reload leave the same state) | `core/services/shortcuts/tests/contract.rs` |
-| Assembly | the `shortcuts` service file and its hook declarations; a module with a `shortcut` record; a card without the service refuses that module | `core/runtime:test-assembly` |
-| Device | [TRK]+[YES] calls `on`, YES does not reach the stock view, releasing calls `off`; a trig under [TRK] still selects | `core/services/shortcuts` device test (fixture module) |
-| Device | SETTINGS row opens a module view; text input round trip; view closed on unload | `ui-demo` fixture device test (extended) |
-| Device | name a track, reboot, the hint shows the name | `digikit/track-manager` device test |
+| Unit | `KeyState`, `BindingTable`, `Shortcuts` (swallow, pass, release order, deferred `on`/`off`, unload drops pending, inactive keys) | `core/services/shortcuts/tests/state.rs`, `records.rs` over `FakeCore` |
+| Unit | the key hook's flag translation | `core/services/shortcuts/dks/src/hooks.rs` |
+| Unit | generator: key numbers, key map, profile and `dkrt_dev` agree; refusals | `packages/patchkit/tests/devdata.rs` |
+| Unit | View pool, `SettingsRows`, owner handles | `core/adapters/ui/host:rust-tests` (`dkui_host`, C over fakes) |
+| Unit | `track_names` codec, `grid_cursor` | `modules/tools/track-manager/tests/logic.test.ts` (cc-built C, run by the inferred `test-host` target) |
+| Contract | `shortcuts` runs the service contract suite | `core/services/shortcuts/tests/contract.rs` |
+| Assembly | the service file's hook and kind, the fixture's needs, a card without the service refuses it | `core/runtime:test-assembly` |
+| Device | [TRK]+[YES] calls `on` and `off`, SETTINGS does not get YES (view stack), YES alone passes, [TRK]+[TRIG 3] selects | `core/services/shortcuts/tests/device/shortcuts.device.test.ts` (fixture `test/shortcut-demo`) |
+| Device | SETTINGS row opens a module view; text input; closed on unload | `tests/fixtures/modules/ui-views/tests/live/ui-views.device.test.ts` |
+| Device | name a track, restart, the name is on the card, [TRK]+[YES] shows the overlay | `modules/tools/track-manager/tests/track-manager.device.test.ts` |
 
 Device tests run on DT2 and DN2, with no DSP.
 
 ## Phases
 
-| # | Work | Lane | Status |
-| --- | --- | --- | --- |
-| 0 | Static: anchors for the view base, the naming screen (both devices, control block, NO behaviour) and the key-dispatch hook site; second-agent byte check; one finding. Emulator look: hold [TRK] on DT2 and DN2. | static | active |
-| 1 | `core/ui`: view pool, canvas, SETTINGS rows, logical keys, unload; host tests; `ui-demo` extended | `lfo-shapes` (sub-branch `feat/track-manager-ui`) | |
-| 2 | `core/ui`: `dk_ui_text_input` | same | |
-| 3 | `shortcuts` service: crate, record kind, dispatch hook, contract and assembly cases; device fact `tracks` | `ext-model` | |
-| 4 | `digikit/track-manager`: module, unit tests, device test | `ext-model` | |
-| 5 | Review, device gate (new device tests, gate-smoke, gate-pins on DT2 and DN2), PR | | |
+| # | Work | Status |
+| --- | --- | --- |
+| 0 | Static: anchors for the view base, the naming screen and the key hook site; second-agent byte check; finding 151 | done |
+| 1 | `core/ui`: view pool, canvas, SETTINGS rows, logical keys, unload; host tests | done, host-green |
+| 2 | `core/ui`: `dk_ui_text_input` | done, host-green |
+| 3 | `shortcuts` service: crate, record kind, key hook, contract and assembly cases; device facts `tracks`, `[panel.keys]`, `dk_selected_track` | done, host-green |
+| 4 | `digikit/track-manager`: module, unit tests, device test | done, host-green |
+| 5 | Review, device gate (the three device tests above, gate-smoke, gate-pins on DT2 and DN2), PR | pending |
 
-Phases 1-2 and 3 run in parallel; shared files (`sdk/sdk.toml`, generated headers, assembly tests, workspace
+Phases 1-2 and 3 ran in parallel; shared files (`sdk/sdk.toml`, generated headers, assembly tests, workspace
 `Cargo.toml`) are merged by regenerating, not by hand. Each phase gets an independent review before its device run.
 
 ## Not in scope
