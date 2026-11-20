@@ -19,7 +19,7 @@ Everything else is a service file (`services/*.dks`) or an image adapter. Image 
 ## State before this plan
 
 - `machines`, `fx` and `lfo` are service files (R12 services as `.dks`). `samples` is the last service linked into the image (`gen_services.rs`, `STATIC = 1`).
-- The core still holds machines and fx code that the services call through `CoreApi`: about 1,000 of the 1,443 lines of `collect.rs` (builder state, lowering, commit checks), the registry tables of `registry.rs`, `params.rs`, `assign.rs`, `native.rs`, the guard logging of `watch.rs`, about 15 of the 38 `CoreApi` methods, `dkrt_fx` and `machine_types_of` (of those, the guard logging, the voice and effect rows and four `CoreApi` methods left in R12-8 step 7).
+- The core still holds machines and fx code that the services call through `CoreApi`: about 1,000 of the 1,443 lines of `collect.rs` (builder state, lowering, commit checks), the registry tables of `registry.rs`, `params.rs`, `assign.rs`, `native.rs`, the guard logging of `watch.rs`, about 15 of the 38 `CoreApi` methods (28 are left), `dkrt_fx` and `machine_types_of`.
 - The core names services and adapters: `gen_services::ORDER` (including a test service), the C entry points in `handlers.rs`, `dyndsp_info`, `dynfx_info`, `dynreg_info`, `mf_native_*`, `dkpool_*`. The rule "L2 is kind-free" in ARCHITECTURE.md does not hold yet.
 - Storage has cycles (store and store_writer, store and card, card and platform), four listers of the same table and three places that decide the root and route (`storage_adapter.rs`, `store_writer.rs`, samples `tracks.rs`). The DT2 +Drive write route sits inside `store_writer.rs` (2,260 lines).
 
@@ -104,8 +104,8 @@ Levels (calls go down only): 5 `tick` and the `dkrt_*` entry points; 4 transport
 | `native.rs` (`mf_native_*`) | `machines`, through the function words of `machines_info` |
 | row methods `has_voice`, `declare_voice`, `declare_fx`; `fx_entry`; `machine_types_of` | internal to the services; `fx_entry` becomes the fx export `dk_fx_entry`; `machine_types_of` becomes a generic `owned_ids`, so the MODULES reply stays the same |
 | `dkrt_fx` C ABI | a generic `dkrt_export(name_hash)` for the menu app |
-| watch guard logging, `guard_*`, the DSP state voice and fx fields, `dsp_info`, `fx_info`, `extent()` | done (R12-8 step 7): `machines` and `fx` own their rows and guard state and log through `Service::diag`; `extent()` takes `Job::state_bytes` |
-| invariant checks of service rows | done (R12-8 step 7): `Service::table_check`, run by the core (invariant 3) and by the contract suite; the core keeps the record-level checks |
+| watch guard logging, `guard_*`, the DSP state voice and fx fields, `dsp_info`, `fx_info`, `extent()` | gone: `machines` and `fx` own their rows and guard state and log through `Service::diag`; `extent()` takes `Job::state_bytes` |
+| invariant checks of service rows | gone: `Service::table_check`, run by the core (invariant 3) and by the contract suite; the core keeps the record-level checks |
 | `gen_services::ORDER` | the planner's dependency order; `STATIC = 0` |
 | samples: the crate link, the C entry points in `handlers.rs`, `SampleCore`, `SampleHost`, the entry glue, the platform `SamplePool` | `samples.dks` |
 | `worker.rs` (the job queue on the stock sample-loader task) | `samples.dks`, its only shipped user; `dk_job_post` becomes a samples export; needs B1's firmware address imports |
@@ -149,7 +149,7 @@ Operations kept, from their callers: layout and card gate; `find` and `load_to_s
 
 ## Interfaces
 
-**CoreApi.** About 24 methods stay: `device_id`, `module_name`, `settings_get`, `settings_put`, `log`, `current_source`, `info`, `dsp` (the loader's state only), the 8 `link_*` methods, and new `module_of(ctx)`, `storage_stat`, `storage_stat_head`, `irq_mask`, `irq_restore`. The machines and fx methods (`dynreg`, `reg_state`, `param_first`, `param_owners`, the row writers, `make_rep`, `type_resolve`, `type_map_used`, `native_*`; `guard_*`, `dsp_info`, `fx_info`) leave with their code. `SampleCore` and `SampleHost` are deleted.
+**CoreApi.** 28 methods stay (counted after R12-8 step 7): `device_id`, `module_name`, `settings_get`, `settings_put`, `log`, `current_source`, `info`, `dsp` (the loader's state only), the 8 `link_*` methods, and new `module_of(ctx)`, `storage_stat`, `storage_stat_head`, `irq_mask`, `irq_restore`. The machines and fx methods (`dynreg`, `reg_state`, `param_first`, `param_owners`, the row writers, `make_rep`, `type_resolve`, `type_map_used`, `native_*`; `guard_*`, `dsp_info`, `fx_info`) left with their code. `SampleCore` and `SampleHost` are deleted.
 
 **Service data without the core naming it.** A service finds its adapter's data through `core.info(name_hash)`. New `[[info]]` entries in the adapters' own `module.toml`: `dynreg_info`, `dynfx_info`, `sample_pool_info` (magic, version, device, the `dkpool_*` function words). The core reads only its own platform tables.
 

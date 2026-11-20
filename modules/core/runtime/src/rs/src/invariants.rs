@@ -123,6 +123,8 @@ mod tests {
         unsafe {
             *st() = core::mem::zeroed();
             *dsp::ds() = core::mem::zeroed();
+            crate::handlers::fx_fixture::reset_rows();
+            *addr_of_mut!(DKRT_TABLE_BAD) = 0;
             assert_eq!(check(), 0);
             dsp::ds().mod_len[2] = 64;
             assert_eq!(check(), 3);

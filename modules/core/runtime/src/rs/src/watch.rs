@@ -52,7 +52,6 @@ struct Watch {
     first_at: u32,
     last: [u32; DIAG_WORDS],
     n: u32,
-    /// The guard's fault count (word 17, 16 bits) and the number of disabled types already logged.
     /// A full set has been logged (the first poll logs one).
     logged: bool,
     /// The last set logged, for the change test.

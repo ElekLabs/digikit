@@ -6,7 +6,7 @@ import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { pollEmulated, withEmulatedProbe } from '@digi/regression/runtime/waits.ts';
 
-/** The helpers of the fault-trace tests that wait for the safe boot after a stop or a crash (`fault-trace.device.test.ts`, `fault-trace-dt2.device.test.ts`). */
+/** The helpers of the fault-trace tests that wait for the safe boot after a stop or a crash (the two `fault-trace` device test files). */
 
 /** Wait for the device to restart itself into safe mode (the hang record is written about 20 s after the DSP stopped). */
 export async function waitForSafeMode({ session, dk }: PatchedSession): Promise<void> {

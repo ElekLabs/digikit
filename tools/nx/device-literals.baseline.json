@@ -252,7 +252,6 @@
   "modules/core/runtime/tests/crash-capture.device.test.ts": 2,
   "modules/core/runtime/tests/debug-guard.device.test.ts": 15,
   "modules/core/runtime/tests/entry/entry.device.test.ts": 2,
-  "modules/core/runtime/tests/fault-trace-support.ts": 1,
   "modules/core/runtime/tests/file-write/file-write.device.test.ts": 3,
   "modules/core/runtime/tests/fixtures/module-load.device.test.ts": 10,
   "modules/core/runtime/tests/fixtures/project.json": 1,

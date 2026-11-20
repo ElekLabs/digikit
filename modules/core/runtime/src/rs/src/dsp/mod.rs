@@ -288,9 +288,10 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     if r != OK {
         return r;
     }
-    // an entry that no loaded service owns would load as nothing: refuse it (its rows do not exist)
+    // an entry that no loaded service owns would load as nothing: refuse it as a missing service (the boot plan already refuses a module that needs a service nobody
+    // provides, `E_MISSING`; this is the backstop for a section whose header table does not say so)
     if job.accepted != nvoice.saturating_add(nfx) {
-        return E_DSP_ROWS;
+        return E_MISSING;
     }
     // the range must fit the area at all (a later load may still find it taken: reserve())
     let need = extent(image_size, bss, job.state_bytes);

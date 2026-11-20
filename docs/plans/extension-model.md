@@ -35,7 +35,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
 
 - The `Service<C: CoreApi>` trait (`modules/core/runtime/abi/src/service.rs:436`). The four services implement it (machines, fx, lfo,
   samples: `modules/core/services/*/src/records.rs`): `declare`, `check`, `apply`, `apply_record`, `remove(owner)`, `cap`, `attribute`,
-  `on_loaded`, `tick`, `module_begin`, `module_commit`, `settle` (E3 removed `guard_state`, `fx_entry` and `owned_ids`: see 4.3; R12-8 step 7 added `diag` and `table_check`).
+  `on_loaded`, `tick`, `module_begin`, `module_commit`, `settle` (`guard_state`, `fx_entry` and `owned_ids` are no trait methods: see 4.3); `diag` gives a service the polled DSP words and `table_check` checks its tables against the used records.
 - `[records.kinds]` in `sdk/sdk.toml` maps each record kind to its owning service. machines owns PARAM, MACHINE, PAGE, ACTION,
   NATIVE_PAGE and NATIVE_PAGE_V2; fx owns EFFECT; lfo owns LFO_SHAPE (`generic = true`). A kind is added there and in its service only.
 - The runtime names no kind: registry walker (`registry.rs`), collector (`collect.rs`), boot planner (`plan.rs`). Layercheck `kind-free`
@@ -84,7 +84,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
   `[[export]]` in `dks/module.toml` (12 in machines, with `dk_param_get` and `dk_param_set`), `MACHINE_BUILDERS` and `FX_BUILDERS` in
   `loader/tests/assembly_tests.rs:768,780`, and the builder names in `RT_KIND_FREE` (`layercheck.py:965`).
 - Kind-specific methods were on the generic `Service` trait: `fx_entry` (effects for DIGIKIT > FX ROUTES), `guard_state` (machine types),
-  `owned_ids` (machine type numbers for the MODULES reply). E3 made them `internal` exports found by name; R12-8 step 7 merged the two machines exports into `dk_machines_module_info` (with `dk_fx_routes_entry`).
+  `owned_ids` (machine type numbers for the MODULES reply). They are `internal` exports found by name: `dk_fx_routes_entry` and `dk_machines_module_info` (one call answers a module's voice rows, machine types and guard counts).
 - "Adapter" covers two things: the firmware half of a service (reserved rows, stubs, slots, info tables) and the runtime's own platform code.
   `modules/core/adapters/` holds 25 folders of both.
 - Proof adapters: three firmware experiments that back findings, in no patch set and required by no module. An image holds one only when a test
@@ -364,7 +364,7 @@ Module ids keep the word they have (`core/dynreg` and so on); only folders, role
 ### 4.3 Service trait
 
 - `fx_entry`, `guard_state` and `owned_ids` leave the trait (rule 12). They become service exports found by name hash
-  (the handover's deferred item): `dk_fx_routes_entry`, and (since R12-8 step 7) `dk_machines_module_info`, which answers the machines of a module in one call. They are `[[import]]` entries of
+  (the handover's deferred item): `dk_fx_routes_entry` and `dk_machines_module_info` (the machines of a module in one call). They are `[[import]]` entries of
   `sdk/sdk.toml` with `provided`, `wrapper = "rt"` and `internal = true` (in the export list and `gen_exports.rs`, in no header, document or module import
   table). `handlers::exports` looks them up with `find_export(name)` over the loader's export table; the menu and the MODULES reply keep their
   behaviour when the file is not loaded. The runtime's `kind-free` rule then also holds for the trait.
@@ -571,8 +571,8 @@ machines writers on the device path; the device subset of E3 or E5 covers it). D
 
 This is hot reload S1 (code-only modules) and S4 (machine and fx modules) of [digikit-hot-reload.md](digikit-hot-reload.md), for reload
 (3.6), scoped to day-to-day machine work: the module's code, DSP and keys change; its menus and its own effect routes do not. It starts
-after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6, 2.7) and, in step 7, moved
-the DSP row state into the services (`DKRT_VROWS`, `DKRT_FROWS`). The two-block DSP wait is new work, done here. Menus, fx reload, the workbench key check and the
+after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6, 2.7) and keeps
+the DSP row state in the services (`DKRT_VROWS`, `DKRT_FROWS`). The two-block DSP wait is new work, done here. Menus, fx reload, the workbench key check and the
 cleanup of the old duplicate checks was E5b.
 
 Before E5 starts (about 2 hours, no code): map which code of the archive tag `digikit-hot-reload-v1` carries over to the R12-8 layout
