@@ -2,19 +2,19 @@
 // (devices/calibration/profiles/kernels.toml). A calibration run fits device and emulator factors per kind of instruction from the
 // instructions-per-call counts of these kernels, so each call executes a fixed number of instructions that does not depend on the
 // input, the parameters, the state or the note. Every kernel writes silence to the output block (mix: a signal below 1e-6) and returns
-// DK_OK; after KLIFE (1400) blocks, 0.93 s, it returns DK_DONE instead (a block counter in the first state word, the same instructions
-// in every block). The calibration case presses the note again every second, so one voice plays in about 93 percent of the blocks and a
-// machine never leaves a voice behind when the track changes machines. Silence is a loop of 8 iterations of 4 stores (33 instructions
-// with the loop set-up). The counts below are instructions executed in one render call, from the first instruction to the JUMP back to
-// the adapter (the JUMP counted); the rig test of the module asserts
+// DK_OK: a voice never ends by itself, so the calibration case presses the note once and exactly one call per block follows for as long as
+// the case runs. A voice that a later case leaves behind goes with the module's restart: the profile `kernels` puts a module-free case
+// between two kernel cases. Silence is a loop of 8 iterations of 4 stores (33 instructions with the loop set-up). The counts below are
+// instructions executed in one render call, from the first instruction to the JUMP back to the adapter (the JUMP counted); the rig test
+// of the module asserts
 // them (tests/kernels.rig.test.ts).
 //
 //   kernel  entry       kind of instruction                      loop iterations x body   instructions per render call
-//   alu     _ka_render  multiply-accumulate and ALU, registers   2500 x 8                 20,059
-//   dm      _kd_render  loads and stores, state buffer (1 KiB)   76 x 262                 19,968
-//   mem     _km_render  streaming loads, 75 KiB bss buffer       2400 x 8                 19,253
-//   branch  _kb_render  data-dependent jumps, short loops        625 x 32                 20,054
-//   mix     _kx_render  oscillator and 44 biquad sections        32 x 623                 19,964
+//   alu     _ka_render  multiply-accumulate and ALU, registers   2500 x 8                 20,050
+//   dm      _kd_render  loads and stores, state buffer (1 KiB)   76 x 262                 19,959
+//   mem     _km_render  streaming loads, 75 KiB bss buffer       2400 x 8                 19,244
+//   branch  _kb_render  data-dependent jumps, short loops        625 x 32                 20,046
+//   mix     _kx_render  oscillator and 44 biquad sections        32 x 623                 19,956
 //
 // The breakdown of each count is stated in front of its kernel. Memory: the module's state (_*_desc state_bytes, reserved behind the image
 // by the adapter) and its .PKBSS buffer both come from the run-time DSP area of the device (free L2 SRAM, 512 KiB on the Digitakt II
@@ -34,7 +34,6 @@
 #define KM_BYTES 76800
 #define KB_OUTER 625
 #define KX_SECTIONS 44
-#define KLIFE 1400
 
 .SECTION/PM seg_pmco;
 .GLOBAL _ka_render;
@@ -49,10 +48,9 @@
 .GLOBAL _kx_note_on;
 
 // alu: multiply-accumulate and ALU operations on registers only, no memory access in the loop.
-// Count: 15 (set-up) + 1 (LCNTR/DO) + 2500 x 8 + 33 (silence) + 10 (life tail with the JUMP) = 20,059.
+// Count: 14 (set-up) + 1 (LCNTR/DO) + 2500 x 8 + 33 (silence) + 2 (R0 = DK_OK, JUMP) = 20,050.
 // The loop body has one MAC, three float operations, two shifts or logic and one integer add, all on distinct registers (no stalls).
 _ka_render:
-    I3 = R4;                              // the state
     I1 = R8;                              // the voice input
     R0 = DM(DK_IN_W_OUT, I1);
     R4 = 3;
@@ -81,24 +79,15 @@ _ka_loop: R7 = R10 XOR R9;
         DM(I0, M6) = R2;
         DM(I0, M6) = R2;
 _ka_zero: DM(I0, M6) = R2;
-    R1 = DM(0, I3);                      // blocks played so far
-    R3 = 1;
-    R2 = R1 + R3;
-    DM(0, I3) = R2;
-    R3 = KLIFE;
-    R5 = DK_DONE;
-    COMP(R2, R3);
     R0 = DK_OK;
-    IF GE R0 = PASS R5;                   // the voice ends after KLIFE blocks, in the same number of instructions
     JUMP (M13, I13);
 
 // dm: loads and stores to the voice's state buffer (256 words, 1 KiB): the outer loop points I1 at words 0 to 127 and I2 at words
 // 128 to 255, the inner loop copies 4 words per iteration (4 loads, 4 stores), 32 iterations.
-// Count: 12 (set-up) + 1 (LCNTR/DO) + 76 x (4 + 1 + 32 x 8 + 1) + 33 (silence) + 10 = 76 x 262 + 56 = 19,968.
+// Count: 11 (set-up) + 1 (LCNTR/DO) + 76 x (4 + 1 + 32 x 8 + 1) + 33 (silence) + 2 = 76 x 262 + 47 = 19,959.
 // Outer iteration: I1 = R4, I2 = R5, two NOPs (the pointers are loaded 4 instructions before the first access), DO, 256 inner, one
 // closing NOP (the last instruction of the outer loop is not the end of the inner loop).
 _kd_render:
-    I3 = R4;
     I1 = R8;
     R0 = DM(DK_IN_W_OUT, I1);
     R6 = 128;
@@ -130,24 +119,15 @@ _kd_outer: NOP;
         DM(I0, M6) = R10;
         DM(I0, M6) = R10;
 _kd_zero: DM(I0, M6) = R10;
-    R1 = DM(0, I3);                      // blocks played so far
-    R3 = 1;
-    R2 = R1 + R3;
-    DM(0, I3) = R2;
-    R3 = KLIFE;
-    R5 = DK_DONE;
-    COMP(R2, R3);
     R0 = DK_OK;
-    IF GE R0 = PASS R5;                   // the voice ends after KLIFE blocks, in the same number of instructions
     JUMP (M13, I13);
 
 // mem: streaming reads of a 75 KiB buffer (19,200 words, bss of the module's own object, so in the run-time DSP area) from its first
 // word to its last, 8 loads per iteration, no use of the values. The buffer is larger than the L1 data cache would hold, so every
 // block reads it from the start.
-// Count: 9 (set-up) + 1 (LCNTR/DO) + 2400 x 8 + 33 (silence) + 10 = 19,253.
+// Count: 8 (set-up) + 1 (LCNTR/DO) + 2400 x 8 + 33 (silence) + 2 = 19,244.
 .PKBSS _km_buf, KM_BYTES;
 _km_render:
-    I3 = R4;
     I1 = R8;
     R0 = DM(DK_IN_W_OUT, I1);
     R10 = 0;
@@ -170,22 +150,14 @@ _km_loop: R7 = DM(I1, M6);
         DM(I0, M6) = R10;
         DM(I0, M6) = R10;
 _km_zero: DM(I0, M6) = R10;
-    R1 = DM(0, I3);                      // blocks played so far
-    R3 = 1;
-    R2 = R1 + R3;
-    DM(0, I3) = R2;
-    R3 = KLIFE;
-    R5 = DK_DONE;
-    COMP(R2, R3);
     R0 = DK_OK;
-    IF GE R0 = PASS R5;                   // the voice ends after KLIFE blocks, in the same number of instructions
     JUMP (M13, I13);
 
 // branch: an xorshift32 generator (state word 0, seeded by note_on, carried from block to block) steers three two-way branches per
 // iteration, then a 3-iteration loop of 4 instructions (loop set-up and exit). Both paths of a branch execute 4 instructions (test,
 // conditional jump, one operation, and a jump or a NOP), so the count does not depend on the bits; the taken and not-taken jumps differ.
 // Iteration: 6 (xorshift) + 3 x 4 (branches) + 1 (LCNTR/DO) + 3 x 4 (loop) + 1 (closing instruction, outside the inner loop) = 32.
-// Count: 9 (set-up) + 1 (LCNTR/DO) + 625 x 32 + 1 (state store) + 33 (silence) + 10 = 20,054.
+// Count: 9 (set-up) + 1 (LCNTR/DO) + 625 x 32 + 1 (state store) + 33 (silence) + 2 = 20,046.
 _kb_render:
     I1 = R8;
     R0 = DM(DK_IN_W_OUT, I1);
@@ -233,23 +205,15 @@ _kb_outer: R12 = R7 + R3;
         DM(I0, M6) = R10;
         DM(I0, M6) = R10;
 _kb_zero: DM(I0, M6) = R10;
-    R1 = DM(1, I2);                      // blocks played so far
-    R3 = 1;
-    R2 = R1 + R3;
-    DM(1, I2) = R2;
-    R3 = KLIFE;
-    R5 = DK_DONE;
-    COMP(R2, R3);
     R0 = DK_OK;
-    IF GE R0 = PASS R5;                   // the voice ends after KLIFE blocks, in the same number of instructions
     JUMP (M13, I13);
 
 // mix: a blend like a typical voice: a sawtooth oscillator (phase += 0.01, wrapped at 1) feeds a cascade of 44 transposed direct form
 // II biquad sections (5 multiplies, 5 adds, 2 loads, 2 stores and a pass: 14 instructions), the coefficients in registers and the two
 // state words of each section in the state buffer. Output: the last section's output, which is below 1e-6 (each section has a gain below 1).
-// State (360 bytes, cleared at note-on): word 0 the phase, words 1 to 88 the section states, word 89 the block counter.
+// State (356 bytes, cleared at note-on): word 0 the phase, words 1 to 88 the section states.
 // Per sample: 1 (I1 = I2) + 4 (oscillator) + 1 (LCNTR/DO) + 44 x 14 + 1 (store) = 623.
-// Count: 16 (set-up) + 1 (LCNTR/DO) + 32 x 623 + 1 (phase store) + 10 = 19,964. (No silence loop: the sample loop writes the 32 samples.)
+// Count: 16 (set-up) + 1 (LCNTR/DO) + 32 x 623 + 1 (phase store) + 2 = 19,956. (No silence loop: the sample loop writes the 32 samples.)
 _kx_render:
     I1 = R8;
     R0 = DM(DK_IN_W_OUT, I1);
@@ -290,44 +254,27 @@ _kx_render:
 _kx_sec:    DM(I1, M6) = F13;
 _kx_sample: DM(I0, M6) = F12;
     DM(0, I3) = R7;
-    R1 = DM(89, I3);                     // blocks played so far
-    R3 = 1;
-    R2 = R1 + R3;
-    DM(89, I3) = R2;
-    R3 = KLIFE;
-    R5 = DK_DONE;
-    COMP(R2, R3);
     R0 = DK_OK;
-    IF GE R0 = PASS R5;                   // the voice ends after KLIFE blocks, in the same number of instructions
     JUMP (M13, I13);
 
-// note_on of every kernel clears the block counter of its voice (branch also seeds its xorshift state). None is at offset 0 of the image.
+// note_on of every kernel does nothing except branch, which seeds its xorshift state. None is at offset 0 of the image.
 _ka_note_on:
-    I1 = R4;
     R0 = 0;
-    DM(0, I1) = R0;                   // the block counter of the voice
     JUMP (M13, I13);
 _kd_note_on:
-    I1 = R4;
     R0 = 0;
-    DM(0, I1) = R0;                   // the block counter of the voice
     JUMP (M13, I13);
 _km_note_on:
-    I1 = R4;
     R0 = 0;
-    DM(0, I1) = R0;                   // the block counter of the voice
     JUMP (M13, I13);
 _kb_note_on:
     I1 = R4;
     R0 = 0x2545f491;
     DM(0, I1) = R0;                       // the generator seed
     R0 = 0;
-    DM(1, I1) = R0;                       // the block counter of the voice
     JUMP (M13, I13);
 _kx_note_on:
-    I1 = R4;
     R0 = 0;
-    DM(89, I1) = R0;                   // the block counter of the voice
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
@@ -364,8 +311,8 @@ _kx_note_on:
 .VAR _kb_desc1 = DK_MACHINE_V1;
 .VAR _kb_desc2 = 0;
 .VAR _kb_desc3 = 1;
-.VAR _kb_desc4 = 8;
-.VAR _kb_desc5 = 8;
+.VAR _kb_desc4 = 4;
+.VAR _kb_desc5 = 4;
 .VAR _kb_desc6 = 2;
 .VAR _kb_desc7 = 0;
 .GLOBAL _kx_desc;
@@ -373,7 +320,7 @@ _kx_note_on:
 .VAR _kx_desc1 = DK_MACHINE_V1;
 .VAR _kx_desc2 = 0;
 .VAR _kx_desc3 = 1;
-.VAR _kx_desc4 = 360;
-.VAR _kx_desc5 = 360;
+.VAR _kx_desc4 = 356;
+.VAR _kx_desc5 = 356;
 .VAR _kx_desc6 = 2;
 .VAR _kx_desc7 = 0;

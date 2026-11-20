@@ -7,11 +7,11 @@ import { DEVICES, MachineRig, machineSpec } from '@digi/sharc-rig-kit';
 
 /** Instructions of one render call, from the first instruction to the JUMP back (see src/dsp/cal_kernels.s). */
 const COUNTS: Record<string, number> = {
-  alu: 20_059,
-  dm: 19_968,
-  mem: 19_253,
-  branch: 20_054,
-  mix: 19_964,
+  alu: 20_050,
+  dm: 19_959,
+  mem: 19_244,
+  branch: 20_046,
+  mix: 19_956,
 };
 
 const MODULE = 'test/cal-kernels';
@@ -49,20 +49,4 @@ describe.each(DEVICES)('%s', (device) => {
       }
     }, 120_000);
   });
-});
-
-// Digitakt II only: its voice record has the ACTIVE byte the rig reads; the Digitone II has no record.
-describe('dt2 voice life', () => {
-  it.each(Object.keys(COUNTS))('kernel %s ends its voice at the 1400th render call and not before', async (id) => {
-    const rig = await MachineRig.open(machineSpec(`${MODULE}#${id}`, 'dt2')!);
-    try {
-      rig.trigger();
-      const off: number[] = [];
-      for (let k = 0; k < 1402; k++) if (((await rig.block('friendly')).active & 0xff) === 0) off.push(k);
-      // the note-on block (block 0) also renders on the Digitakt II, so the 1400th render call is block 1399
-      expect(off[0]).toBe(1399);
-    } finally {
-      await rig.close();
-    }
-  }, 300_000);
 });

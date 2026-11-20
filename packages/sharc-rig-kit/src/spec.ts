@@ -44,8 +44,8 @@ export const FX_NEGATIVE: Record<string, string> = {
 };
 /** Fixtures of the runtime's fault tests that the suite does not run. */
 const FX_SKIP = new Set(['test/dyn-fx-hang']);
-/** Fixtures that declare a machine and that the suite does not run (`test/cal-kernels`: its kernels run about 20,000 instructions a block by design, over the voice-block budget; its own rig test asserts the counts). */
-const MACHINE_SKIP = new Set(['test/commit-demo', 'test/cal-kernels']);
+/** Fixtures that declare a machine and that the suite does not run. */
+const MACHINE_SKIP = new Set(['test/commit-demo']);
 
 export class ConformError extends Error {}
 

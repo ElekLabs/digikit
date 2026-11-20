@@ -1,6 +1,6 @@
 schema = "dk.calprofile/1"
 name = "kernels"
-description = "The stock case, then one case per synthetic kernel of the test module test/cal-kernels (machines alu, dm, mem, branch, mix, in that order), each with only that module loaded and one machine on track 1 playing a note every block: a known number of instructions per render call (about 20,000), so device and emulator factors can be fitted per kind of instruction. Real modules (the profile `modules`) serve as the validation. The machine cases put a stock machine back afterwards."
+description = "The stock case, then one case per synthetic kernel of the test module test/cal-kernels (machines alu, dm, mem, branch, mix, in that order), each with only that module loaded and one machine on track 1 holding one note (a voice that never ends: exactly one call per block): a known number of instructions per render call (about 20,000), so device and emulator factors can be fitted per kind of instruction. Real modules (the profile `modules`) serve as the validation. A module-free case follows each kernel case: the restart that unloads the module ends the voice, which would otherwise play on while the next kernel runs. The machine cases put a stock machine back afterwards."
 warmup_s = 2
 capture_s = 5
 repeats = 3
@@ -12,38 +12,59 @@ id = "stock"
 steps = "hold-note"
 args = { tracks = "1" }
 
-# The kernels never end a voice; the note is pressed again every second so that the track plays in every block of the window.
+# The kernels never end a voice: one press per case, and a module-free case after each kernel case (the restart ends the voice).
+
 [[case]]
 id = "alu"
 modules = ["test/cal-kernels"]
 steps = "play-module-machine"
-args = { machine = "test/cal-kernels#1", retrigger_ms = 1000 }
+args = { machine = "test/cal-kernels#1" }
 teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-1"
+steps = "hold-note"
+args = { tracks = "1" }
 
 [[case]]
 id = "dm"
 modules = ["test/cal-kernels"]
 steps = "play-module-machine"
-args = { machine = "test/cal-kernels#2", retrigger_ms = 1000 }
+args = { machine = "test/cal-kernels#2" }
 teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-2"
+steps = "hold-note"
+args = { tracks = "1" }
 
 [[case]]
 id = "mem"
 modules = ["test/cal-kernels"]
 steps = "play-module-machine"
-args = { machine = "test/cal-kernels#3", retrigger_ms = 1000 }
+args = { machine = "test/cal-kernels#3" }
 teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-3"
+steps = "hold-note"
+args = { tracks = "1" }
 
 [[case]]
 id = "branch"
 modules = ["test/cal-kernels"]
 steps = "play-module-machine"
-args = { machine = "test/cal-kernels#4", retrigger_ms = 1000 }
+args = { machine = "test/cal-kernels#4" }
 teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-4"
+steps = "hold-note"
+args = { tracks = "1" }
 
 [[case]]
 id = "mix"
 modules = ["test/cal-kernels"]
 steps = "play-module-machine"
-args = { machine = "test/cal-kernels#5", retrigger_ms = 1000 }
+args = { machine = "test/cal-kernels#5" }
 teardown = { steps = "reset-machine" }
