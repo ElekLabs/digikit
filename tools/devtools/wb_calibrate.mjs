@@ -20,10 +20,7 @@ import {
   parseCalProfile,
 } from '../../packages/workbench-core/src/calibration/calprofile.ts';
 import { runCalibration } from '../../packages/workbench-core/src/calibration/runner.ts';
-import {
-  sessionSetup,
-  untilBootStable,
-} from '../../packages/workbench-core/src/calibration/rigsetup.ts';
+import { sessionSetup, untilBootStable } from '../../packages/workbench-core/src/calibration/rigsetup.ts';
 import { sessionStatsSource } from '../../packages/workbench-core/src/calibration/stats.ts';
 import { parseStepFile } from '../../packages/workbench-core/src/calibration/steps.ts';
 import { libraryModule, restartDevice } from '../../packages/workbench-core/src/modules/dktransfer.ts';
