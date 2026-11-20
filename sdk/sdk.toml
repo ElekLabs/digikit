@@ -14,6 +14,20 @@ version = "0.10.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import change
 
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
+# The logical keys (`dk_key`, <dk/gen/keys.h>): the order is the ABI. A module is built with the number of a name, so the list only grows at the end: never
+# remove, rename or reorder a name. A device file maps a name to its panel code (`[panel.keys]` of devices/*.toml) and may use only the names listed here;
+# `patchkit gen` numbers the names from 1 in this order (0 is DK_KEY_NONE). At most 63 names.
+[keys]
+order = [
+    "PAGE_TRIG", "SRC", "FLTR", "AMP", "FX", "MOD", "PRESET", "SETTINGS",
+    "TEMPO", "YES", "UP", "NO", "LEFT", "DOWN", "RIGHT", "TRK",
+    "FUNC", "KEYBOARD", "RECORD", "PLAY", "STOP", "PAGE", "PTN", "SONG",
+    "TRIG1", "TRIG2", "TRIG3", "TRIG4", "TRIG5", "TRIG6", "TRIG7", "TRIG8",
+    "TRIG9", "TRIG10", "TRIG11", "TRIG12", "TRIG13", "TRIG14", "TRIG15", "TRIG16",
+    "ENC1", "ENC2", "ENC3", "ENC4", "ENC5", "ENC6", "ENC7", "ENC8",
+    "LEVEL_PUSH",
+]
+
 [handle]
 types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
 services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
@@ -1648,7 +1662,7 @@ args = ["blocks", "-", "-", "-", "-"]
 # a shortcut was not enabled because an earlier module (the first owner keeps it) binds the same two logical keys (warn level): the module's record index + 1 of the disabled
 # shortcut, the record index + 1 of the owner that keeps the binding, the two logical keys (`dk_key`).
 [[log.kind]]
-id = 48
+id = 52
 name = "SHORTCUT_CLASH"
 args = ["module", "owner", "key0", "key1", "-"]
 

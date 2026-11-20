@@ -74,6 +74,7 @@ const TS_WIDTH: usize = 120;
 #[serde(deny_unknown_fields)]
 struct Sdk {
     runtime: Runtime,
+    keys: KeysToml,
     machine: Machine,
     fx: Fx,
     log: Log,
@@ -743,6 +744,21 @@ fn page_knobs_of(sdk: &Sdk) -> usize {
 /// `DK_PAGE_KNOBS` of the `sdk/sdk.toml` this crate was built with.
 pub fn page_knobs() -> usize {
     page_knobs_of(&parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses"))
+}
+
+/// `[keys]`: the logical key names in the order of their numbers.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeysToml {
+    order: Vec<String>,
+}
+
+/// The logical key names of `[keys] order` of the `sdk/sdk.toml` this crate was built with: the first is `DK_KEY_` number 1.
+pub fn key_order() -> Vec<String> {
+    parse(include_str!("../../../sdk/sdk.toml"))
+        .expect("sdk/sdk.toml parses")
+        .keys
+        .order
 }
 
 /// The contract maxima of the `sdk/sdk.toml` this crate was built with.

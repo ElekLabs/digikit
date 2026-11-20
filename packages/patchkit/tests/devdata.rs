@@ -875,9 +875,8 @@ fn the_key_map_gives_each_device_its_codes_and_a_missing_key_is_zero() {
         assert_eq!(key(o, "TRIG10"), 34);
         assert_eq!(key(o, "ENC3"), 43);
     }
-    // the label of code 2 differs: DT2 has SRC, DN2 has SYN; each lacks the other's key
-    assert_eq!((key(&d, "SRC"), key(&d, "SYN")), (2, 0));
-    assert_eq!((key(&n, "SRC"), key(&n, "SYN")), (0, 2));
+    // code 2 is one logical key on both devices (the DN2 panel prints SYN)
+    assert_eq!((key(&d, "SRC"), key(&n, "SRC")), (2, 2));
 }
 
 #[test]
@@ -929,18 +928,18 @@ fn a_key_table_with_a_clash_or_a_bad_name_is_refused() {
             .0;
         assert!(e.contains(want), "{what}: {e}");
     }
-    // more names than the tables hold
-    let letters = |i: usize| {
-        format!(
-            "Z{}{}",
-            (b'A' + (i / 26) as u8) as char,
-            (b'A' + (i % 26) as u8) as char
-        )
-    };
-    let many: String = (0..70)
-        .map(|i| format!("{} = {}\n", letters(i), 100 + i))
-        .collect();
-    let bad = dt2.replace("[panel.keys]\n", &format!("[panel.keys]\n{many}"));
-    let facts = Facts::from_texts([bad.as_str(), dn2.as_str()]).unwrap();
-    assert!(facts.key_names().unwrap_err().0.contains("names"));
+    // a name that is not in `[keys] order` of sdk/sdk.toml
+    let bad = dt2.replace("TRK = 16", "TRK = 16\nNOT_A_KEY = 100");
+    let e = Facts::from_texts([bad.as_str(), dn2.as_str()]).unwrap().key_names().unwrap_err().0;
+    assert!(e.contains("NOT_A_KEY") && e.contains("[keys] order"), "{e}");
+}
+
+#[test]
+fn the_logical_key_numbers_are_the_order_of_the_sdk_list_and_do_not_depend_on_the_device_files() {
+    let (dt2, dn2) = device_texts();
+    let all = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap().key_names().unwrap();
+    let one = Facts::from_texts([dn2.as_str()]).unwrap().key_names().unwrap();
+    assert_eq!(all, one);
+    assert_eq!(all.first().map(String::as_str), Some("PAGE_TRIG"));
+    assert_eq!(all.iter().position(|n| n == "TRK"), Some(15), "the number of a name is fixed by the list (append only)");
 }

@@ -294,10 +294,10 @@ encoders = 9
 
 # Logical key names: name = panel code. The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS;
 # the groups below arrange the same codes). `patchkit gen` writes the C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical
-# name to code map of the profile and of `dkrt_dev`. A name a device lacks maps to 0. DN2 labels code 2 SYN, DT2 labels it SRC.
+# name to code map of the profile and of `dkrt_dev`. A name a device lacks maps to 0. Names come from `[keys] order` of sdk/sdk.toml.
 [panel.keys]
 PAGE_TRIG = 1
-SYN = 2
+SRC = 2   # the panel prints SYN on this device; the logical key is the same (the firmware calls the page SourcePageView on both)
 FLTR = 3
 AMP = 4
 FX = 5

@@ -582,19 +582,20 @@ impl Facts {
         Ok(Facts { docs })
     }
 
-    /// The logical key names of all devices, in the order of their numbers: `DK_KEY_NONE` is 0 and the names follow from 1, sorted with a trailing number
-    /// as a number. Every device file adds its names, so a name that no file has is not in the list.
+    /// The logical key names in the order of their numbers: `[keys] order` of sdk/sdk.toml (`DK_KEY_NONE` is 0, the names follow from 1). A device file may use only
+    /// these names; the list is the ABI and never renumbers.
     pub fn key_names(&self) -> Result<Vec<String>> {
-        let mut names: Vec<String> = self
-            .docs
-            .values()
-            .flat_map(|e| e.keys.keys().cloned())
-            .collect();
-        names.sort_by_key(|n| key_order(n));
-        names.dedup();
+        let names = crate::sdkgen::key_order();
+        for (dev, e) in &self.docs {
+            if let Some(n) = e.keys.keys().find(|n| !names.contains(n)) {
+                return Err(err!(
+                    "{dev}: [panel.keys] {n}: not a name of [keys] order in sdk/sdk.toml (add it at the end of that list)"
+                ));
+            }
+        }
         if names.len() >= KEY_SLOTS {
             return Err(err!(
-                "[panel.keys] names {} keys, the tables hold {} (KEY_SLOTS of devgen.rs and DEV_KEYS of core/runtime/abi.toml)",
+                "[keys] order of sdk/sdk.toml lists {} names, the tables hold {} (KEY_SLOTS of devgen.rs and DEV_KEYS of core/runtime/abi.toml)",
                 names.len(),
                 KEY_SLOTS - 1
             ));
@@ -794,13 +795,6 @@ fn key_facts(short: &str, keys: Option<&BTreeMap<String, u64>>) -> Result<BTreeM
         }
     }
     Ok(keys.clone())
-}
-
-/// The order of two key names: letters first, then a trailing number as a number, so TRIG2 comes before TRIG10 and the numbered keys are consecutive.
-fn key_order(name: &str) -> (String, u64) {
-    let stem = name.trim_end_matches(|c: char| c.is_ascii_digit());
-    let n = name[stem.len()..].parse().unwrap_or(0);
-    (stem.to_string(), n)
 }
 
 /// A device's numbers for the logical key names: the number of names the shared header can hold (index 0 is `DK_KEY_NONE`).

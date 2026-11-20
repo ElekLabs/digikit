@@ -345,7 +345,7 @@ export const LOG_KIND = {
   MODULE_LATCH: 45,
   DSP_LINK: 46,
   FW_READY: 47,
-  SHORTCUT_CLASH: 48,
+  SHORTCUT_CLASH: 52,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -397,7 +397,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
   46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
-  48: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
+  52: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
