@@ -23,7 +23,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   ring has no room (`cf.midi.site.tx_inflight_lit`), BEGIN makes the two store headers equal before staging, `DKRT_UPLOAD_TEAR` is a test knob.
 - Card safety (finding 46): every card write goes through `block_write` (`card.rs`): outside the store range it is refused (`E_RANGE`); on a card whose
   area is neither ours (valid store header or selection copy) nor blank (all 0x00 or 0xFF) the runtime is read-only (`E_CARD_RO`: no boot counter, no
-  selection, uploads answer `E_INUSE`, ABOUT shows CARD READ-ONLY and NO BOOT COUNTER); a card too small for the store, or a device without one, has no counter either (ABOUT shows no row).
+  selection, uploads answer `E_INUSE`, ABOUT shows CARD READ-ONLY and NO BOOT COUNTER); a card too small for the store, or a device without one, has no counter either (ABOUT has no card row for it; the MODULES page says NO STORE).
   `dkrt_diag` reports it. On a blank card the boot's own record write (the boot counter) marks the area ours, so no header claim is needed; a write of data into a blank range that no record marks
   still claims it with an empty store header pair first.
 - Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dk_debug_log_sink_set`); the module `digikit/debug` (`modules/tools/debug`) holds the

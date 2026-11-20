@@ -101,11 +101,12 @@ nothing can be blamed: it clears the counter at its first UI-loop pass as before
 **[O]** The counter counts from the first boot, with or without a selection (device proof pending). A fresh device has no record: the first counted boot creates one (copy A,
 `seq` 1, no modules selected) and raises its counter, so a device whose runtime hangs or crash-loops from the first boot on reaches safe mode on
 the third boot like any other. On a card the runtime may not write (FOREIGN, UNREADABLE or TOO_SMALL, and a device without a store), and
-while the card state is still UNKNOWN and the card driver is not ready (branch `st/peer-pack`: the write is refused and that boot adds no count),
+and while the card state is still UNKNOWN because the card driver is not ready (the write is refused then, and that boot adds no count),
 nothing is written and nothing counts: such a device never reaches safe mode by counter (the key, the DSP-stop record and the
 panic record still work). Cost: two record-sector writes per boot (the raise, the clear after the stable period) on a device with no selection too. A blank card's
-first write is now the record, which marks the area ours, so the empty header pair is claimed by no boot (only by a write of data into a blank
-range that no record marks).
+first write is now the record, which marks the area ours, so no boot claims the empty header pair: the claim (`Gate::Claim`) is reached only by a
+write of data into a blank range before any record exists, which is rare on a device. The area is then ours with no headers, and the store
+code treats that as an empty store; a store dump of such a card gives `store: null`.
 
 ### The clock: the firmware's block counter **[D]**
 

@@ -14,7 +14,7 @@ import {
 } from '@digi/dk-session';
 import { Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { blob, listing, pokeWord, sha, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
+import { blob, currentRecord, listing, pokeWord, sha, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { options, word, REDRAW } from '@digi/regression/runtime/fx-live.ts';
 import { wordBase } from '@digi/regression/runtime/memory.ts';
@@ -104,8 +104,9 @@ async function readChecks(rig: CardRig, file: string, data: Buffer): Promise<voi
 
 async function ops(rig: CardRig, quick: boolean): Promise<void> {
   const dk = await rig.pausedBoot(await rig.card({ name: 'ops' }));
-  // The boot counts itself in the selection record: copy A on this card with no record. The check below is about what the uploads wrote after it.
-  const atBoot = await rig.writes('ops-boot');
+  // The boot counts itself in the selection record (this card has none): the record read here is the boot counter's own (seq 1, counter 1, or seq 2 and
+  // counter 0 when the stable period has already cleared it). The uploads below must leave it alone.
+  const atBoot = currentRecord(await rig.records());
   await rig.applyCap();
   const files: Files = {};
   const info = await dk.info();
@@ -139,13 +140,14 @@ async function ops(rig: CardRig, quick: boolean): Promise<void> {
     await opsFull(rig, files);
     await roundtrip(rig, files);
   }
-  // The overlay of the guest's writes names sectors, not writes: the selection copies hold the boot counter (A written at the boot of this card with no
-  // record, B perhaps by the stable-period clear), so a selection sector in it no longer says that an upload wrote one. What is checked is the boot's record.
-  const written = await rig.writes('ops-final');
+  // The uploads never write a selection record: after them the current record has the same paths, flags and (empty) selection as after the boot, and its
+  // sequence number advanced only by the stable-period clear (seq + 1 with the counter back to 0), or not at all.
+  const atEnd = currentRecord(await rig.records());
+  const cleared = atBoot?.counter === 1 && atEnd?.counter === 0 && atEnd.seq === atBoot.seq + 1;
   check(
-    'the boot wrote its selection record (copy A) on this card with no record',
-    atBoot.has(rig.store.selA) && written.has(rig.store.selA),
-    [...written].map((s) => s.toString(16)).join(' '),
+    'the uploads left the selection record alone (same selection and flags; seq moved only by the counter clear)',
+    atBoot !== null && atEnd !== null && JSON.stringify([atEnd.paths, atEnd.flags]) === JSON.stringify([atBoot.paths, atBoot.flags]) && (atEnd.seq === atBoot.seq || cleared),
+    JSON.stringify([atBoot, atEnd]),
   );
 }
 

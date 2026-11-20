@@ -56,7 +56,7 @@ export function settingsCase(device: Device) {
     symbols: ['DKRT_MAILBOX', 'DKRT_CARD', ...RING_SYMBOLS],
     // an empty selection record: the area is ours, the settings copies are zero
     initial: () => ({ selection: [] }),
-    // the settings copies and the empty header pair of a claimed blank area
+    // the settings copies (the empty header pair is claimed only by a data write into a blank range with no record, which no boot does now)
     storeExtra: [...settingsArea, first, first + limit],
   });
   // The boot counts itself in the selection record (a boot writes copy B, the stable-period clear writes A), so the selection sectors are no

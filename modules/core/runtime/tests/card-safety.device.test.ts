@@ -6,6 +6,7 @@ import {
   cardInfo,
   claimHeader,
   bootInfo,
+  currentRecord,
   E_CARD_RO,
   E_INUSE,
   E_NOSTORE,
@@ -15,10 +16,11 @@ import {
   setSelection,
   statusOf,
 } from '@digi/regression/runtime/card-kit.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { NONE, opStatuses } from '@digi/regression/runtime/debug-kit.ts';
 import { openAbout } from '@digi/regression/runtime/flows/menu.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
+import type { Session } from '@digi/test-support';
 import { logEvents, ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 
 /**
@@ -34,6 +36,18 @@ const MOD = 'modules/a.dkm';
 const STRAY = 100; // relative sector of the foreign bytes
 const PAT = Buffer.from(Array.from({ length: 512 }, (_, i) => (i * 7 + 3) & 0xff)); // neither all 0x00 nor all 0xFF
 const BOOT_OK = { safe: 0, count: 0, uiReached: 1 };
+
+/**
+ * What the boot counter has done by now, read while the run is paused: the stable flag, the record the next boot would use and the card writes.
+ * The stable-period clear lands at an emulated time the test does not control, so the expected values are exact functions of the stable flag read
+ * with them (`stable` is 0 or 1): the boot raises the counter (one write), the clear lowers it (one more write and one more sequence number).
+ */
+async function counterState(h: CardRig, session: Session) {
+  const stable = (await bootInfo(session, h.plan)).stable;
+  const rec = currentRecord(await h.records());
+  const writes = (await cardInfo(session, h.plan)).writes;
+  return { stable, rec, writes };
+}
 
 cardRigs(
   'card safety',
@@ -53,8 +67,7 @@ cardRigs(
       async () => {
         const { session } = h.runtime;
         const check = async () => cardInfo(session, h.plan);
-        // The boot counts itself from the first boot: on a blank card it writes selection copy A (the write marks the area ours, no header claim). The
-        // stable-period clear may add one write to copy B (timing), so the writes below are a range.
+        // The boot counts itself from the first boot: on a blank card it writes selection copy A (the write marks the area ours, no header claim).
         const boot = await check();
         expect(boot, 'the check found the range blank; the boot then marked it ours with its record, nothing refused or claimed').toMatchObject({
           stateName: 'ours',
@@ -62,8 +75,14 @@ cardRigs(
           refused: 0,
           claims: 0,
         });
-        expect(boot.writes, 'the boot wrote copy A (and perhaps the clear into B)').toBeGreaterThanOrEqual(1);
-        expect(boot.writes).toBeLessThanOrEqual(2);
+        const s0 = await counterState(h, session);
+        expect(s0.rec, 'the boot created the record: seq 1, counter 1 (seq 2 and counter 0 once the stable period cleared it), no selection').toMatchObject({
+          seq: 1 + s0.stable,
+          counter: 1 - s0.stable,
+          flags: 0,
+          paths: [],
+        });
+        expect(s0.writes, 'one write for the boot, one more for the clear').toBe(1 + s0.stable);
         const bad: [number, number][] = [
           [first - 1, 512],
           [end, 512],
@@ -77,23 +96,30 @@ cardRigs(
         const results: number[] = [];
         for (const [sector, n] of bad) results.push(await probeWrite(session, h.plan, sector, n));
         expect(results, 'every write outside the range is E_RANGE, whatever its size').toEqual(bad.map(() => E_RANGE));
-        const refusedAll = await check();
-        expect(refusedAll, 'the refusals are counted').toMatchObject({
+        expect(await check(), 'the refusals are counted').toMatchObject({
           refused: bad.length,
           refusedRange: bad.length,
           stateName: 'ours',
         });
-        expect(refusedAll.writes - boot.writes, 'and they wrote nothing (at most the stable-period clear)').toBeLessThanOrEqual(1);
+        const s1 = await counterState(h, session);
+        expect(
+          [s1.rec?.seq, s1.rec?.counter, s1.writes],
+          'the refusals wrote nothing: the record and the write count are the boot counter\'s alone',
+        ).toEqual([1 + s1.stable, 1 - s1.stable, 1 + s1.stable]);
 
         expect(await setSelection(session, h.plan, [MOD])).toBe(0);
         const recs = await h.records();
         expect(recs[0], 'two record sectors are written, no store header').not.toBeNull();
         expect(recs[0]).toEqual(recs[1]);
-        // the selection write adds two writes (both copies) to the boot's one or two
-        const done = await check();
-        expect(done, 'the area is ours, no claim').toMatchObject({ stateName: 'ours', claims: 0 });
-        expect(done.writes - refusedAll.writes, 'both record copies were written').toBeGreaterThanOrEqual(2);
-        expect(done.writes - refusedAll.writes).toBeLessThanOrEqual(3);
+        const s2 = await counterState(h, session);
+        // the selection write takes the next sequence number and keeps the counter; it writes both copies (two writes)
+        expect(s2.rec, 'the selection is in the record').toMatchObject({ paths: [MOD], flags: 0 });
+        expect([s2.rec?.seq, s2.rec?.counter, s2.writes], 'seq, counter and writes after the selection write').toEqual([
+          2 + s2.stable,
+          1 - s2.stable,
+          3 + s2.stable,
+        ]);
+        expect(await check(), 'the area is ours, no claim').toMatchObject({ stateName: 'ours', claims: 0 });
 
         const events = await logEvents(h.runtime, h.plan);
         const checks = ofKind(events, LOG_KIND.CARD_CHECK);
@@ -127,13 +153,14 @@ cardRigs(
         expect(ci.stateName, 'the card counts as ours').toBe('ours');
         expect(await opStatuses(rt.dk, ['begin', 'delete', 'list'])).toEqual([E_NOSTORE, E_NOSTORE, E_NOSTORE]);
         await rt.dk.request(CMD.DATA, Buffer.alloc(14)); // DATA with no upload open: E_STATE, nothing staged
-        // the boot counts itself in the record (copy B, and the stable-period clear into A): those two sectors only, no header, no data
+        // The card holds a record (seq 1, counter 0): the boot raises it into copy B (seq 2, counter 1) and the stable-period clear writes copy A (seq 3,
+        // counter 0). Those are the only writes: no header, no data.
         const { selA, selB } = cardStore(h.device);
-        expect(
-          (await h.storeWrites()).filter((s) => s !== selA && s !== selB),
-          'nothing was written to the store range besides the selection record',
-        ).toEqual([]);
-        expect((await cardInfo(rt.session, h.plan)).writes, 'the record writes only').toBeLessThanOrEqual(2);
+        const st = await counterState(h, rt.session);
+        expect([st.rec?.seq, st.rec?.counter, st.writes]).toEqual([2 + st.stable, 1 - st.stable, 1 + st.stable]);
+        expect(await h.storeWrites(), 'nothing was written to the store range besides the selection record').toEqual(
+          st.stable ? [selA, selB] : [selB],
+        );
       },
     );
 
@@ -232,10 +259,10 @@ cardRigs('card safety: torn sectors', { dsp: 'zero', uploads: true, roots: RT, s
       expect((await cardInfo(rt.session, h.plan)).stateName).toBe('ours');
       expect(await statusOf(() => rt.dk.put('modules/b.dkm', blob(3_000, 31)))).toBe(E_NOSTORE);
       const { selA, selB } = cardStore(h.device);
-      expect(
-        (await h.storeWrites()).filter((s) => s !== selA && s !== selB),
-        'nothing written in the store range besides the selection record',
-      ).toEqual([]);
+      const st = await counterState(h, rt.session);
+      expect(await h.storeWrites(), 'nothing written in the store range besides the selection record (A by the boot, B by the stable clear)').toEqual(
+        st.stable ? [selA, selB] : [selA],
+      );
       expect(await statusOf(() => rt.dk.clear()), 'CLEAR').toBe(0);
       expect(await statusOf(() => rt.dk.put('modules/b.dkm', blob(3_000, 31))), 'the next upload commits').toBe(0);
       expect((await rt.dk.list()).map((e) => e.path)).toContain('modules/b.dkm');

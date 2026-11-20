@@ -31,7 +31,7 @@ for (const device of DEVICES) {
       expect([ci.stateName, ci2.stateName, ci2.claims]).toEqual(['ours', 'ours', 0]);
       expect(w, 'copy A only: no header pair was claimed').toEqual([s.setA]);
       const d = await dumpJson(await kit.after('blank', session.cardPath!));
-      expect(d.store.files, 'an empty store (no file)').toEqual([]);
+      expect(d.store, 'ours with a record and no header pair: the dump finds no store').toBeNull();
       expect(d.settings.active).toBe('A');
       expect(d.settings.copies[0].entries[0].key, 'the key in copy A').toBe(ROUTE);
     });
