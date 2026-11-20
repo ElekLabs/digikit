@@ -1,6 +1,6 @@
 schema = "dk.steps/1"
 name = "play-module-machine"
-description = "Set a track to a run-time machine of a loaded module and hold a note. `machine` is the module id: the runner puts the machine type the runtime reports for that module on the track (the SETUP command of the debug module). A runner without SETUP skips the case. `retrigger_ms` (0: off) presses the key again every that many ms during the capture, for a voice that ends by itself (pluck): the runner refuses a module capture in which no row counted a call."
+description = "Set a track to a run-time machine of a loaded module and hold a note. `machine` is the module id, or `module#n` for the n-th machine of a module that has several (counted from 1): the runner puts the machine type the runtime reports for that machine on the track (the SETUP command of the debug module). A runner without SETUP skips the case. `retrigger_ms` (0: off) presses the key again every that many ms during the capture, for a voice that ends by itself (pluck): the runner refuses a module capture in which no row counted a call."
 
 [args]
 track = 1

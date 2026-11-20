@@ -44,8 +44,8 @@ export const FX_NEGATIVE: Record<string, string> = {
 };
 /** Fixtures of the runtime's fault tests that the suite does not run. */
 const FX_SKIP = new Set(['test/dyn-fx-hang']);
-/** Fixtures that declare a machine and that the suite does not run. */
-const MACHINE_SKIP = new Set(['test/commit-demo']);
+/** Fixtures that declare a machine and that the suite does not run (`test/cal-kernels`: its kernels run about 20,000 instructions a block by design, over the voice-block budget; its own rig test asserts the counts). */
+const MACHINE_SKIP = new Set(['test/commit-demo', 'test/cal-kernels']);
 
 export class ConformError extends Error {}
 
@@ -170,9 +170,9 @@ export function moduleDir(id: string): string {
   return dir;
 }
 
-function voices(man: Toml): { render: string; noteOn: string; desc: string } | null {
+function voices(man: Toml, n = 0): { render: string; noteOn: string; desc: string } | null {
   if (man.module?.type === 'machine' && man.machine?.length) {
-    const m = man.machine[0];
+    const m = man.machine[n];
     const p = m.dsp || String(m.id).replaceAll('-', '_');
     return { render: `_${p}_render`, noteOn: `_${p}_note_on`, desc: `_${p}_desc` };
   }
@@ -180,8 +180,8 @@ function voices(man: Toml): { render: string; noteOn: string; desc: string } | n
 }
 
 /** (render symbol, literal type or null) of the module's voice. */
-function entryRow(man: Toml): [string, string | null] | null {
-  const v = voices(man);
+function entryRow(man: Toml, n = 0): [string, string | null] | null {
+  const v = voices(man, n);
   if (v) return [v.render, null];
   for (const e of man.entry ?? [])
     if (e.registry === 'voices' && typeof e.pc === 'string') return [e.pc, e.type ?? null];
@@ -198,10 +198,10 @@ function dspSources(man: Toml, moddir: string, device: string): string[] {
   return out;
 }
 
-function typeNumber(mid: string, man: Toml, device: string, literal: string | null): number {
+function typeNumber(mid: string, man: Toml, device: string, literal: string | null, n = 0): number {
   if (literal !== null && /^[0-9][0-9a-zA-Z_]*$/.test(String(literal))) return Number(literal);
   const types = readToml(path.join(ROOT, 'modules/core/adapters/machines/types.toml'))[device];
-  let mach: string | undefined = man.machine?.length ? man.machine[0].id : undefined;
+  let mach: string | undefined = man.machine?.length ? man.machine[n].id : undefined;
   if (literal !== null) mach = String(literal).split('.')[1];
   const key = `${mid}:${mach}`;
   if (types.alloc && key in types.alloc) return Number(types.alloc[key]);
@@ -215,12 +215,12 @@ function readGallery(moddir: string, mid: string, hint: string): Toml {
   return JSON.parse(readFileSync(file, 'utf8')) as Toml;
 }
 
-function machineParams(moddir: string, man: Toml, device: string): Param[] {
+function machineParams(moddir: string, man: Toml, device: string, n = 0): Param[] {
   const mid = man.module?.id ?? path.basename(moddir);
   const gallery = readGallery(moddir, mid, '`patchkit gen`');
   const machines = gallery.machines ?? [];
   if (!machines.length) return [];
-  const dev = machines[0].devices?.[device];
+  const dev = machines[n]?.devices?.[device];
   if (!dev) return [];
   const decl = new Map<string, Toml>((gallery.params?.[device] ?? []).map((p: Toml) => [p.id, p]));
   const out: Param[] = [];
@@ -280,24 +280,28 @@ export function machineSpec(mid: string, device: Device): MachineSpec | null {
     const [file, render, noteOn, desc] = variant;
     return { ...base, module: mid, sources: [path.resolve(base.moddir, file)], entry: render, noteOn, desc };
   }
-  const moddir = moduleDir(mid);
+  // `module#ID` is the machine ID of a module that declares several (a calibration module: one kernel per machine); `module` is its first
+  const [base, which] = mid.split('#') as [string, string | undefined];
+  const moddir = moduleDir(base);
   const man = manifest(moddir);
+  const n = which === undefined ? 0 : ((man.machine ?? []) as Toml[]).findIndex((m) => m.id === which);
+  if (n < 0) throw new ConformError(`${mid}: the module declares no machine ${which}`);
   const ports: string[] = man.module?.ports ?? [];
   if (ports.length && !ports.some((p) => p.split('-')[0] === device)) return null;
-  const row = entryRow(man);
+  const row = entryRow(man, n);
   if (!row) return null;
   const sources = dspSources(man, moddir, device);
   if (!sources.length) return null;
   const f = deviceFile(device).modules.frame;
-  const v = voices(man);
+  const v = voices(man, n);
   return {
     module: mid,
     device,
     moddir,
     sources,
     entry: row[0],
-    machineType: typeNumber(mid, man, device, row[1]),
-    params: machineParams(moddir, man, device),
+    machineType: typeNumber(base, man, device, row[1], n),
+    params: machineParams(moddir, man, device, n),
     frame: { base: f.base, stride: f.stride, group: f.group ?? 0, gap: f.gap ?? 0 },
     noteOn: v?.noteOn ?? null,
     desc: v?.desc ?? null,
