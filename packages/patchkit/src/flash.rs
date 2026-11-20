@@ -51,6 +51,8 @@ pub struct Prepared {
     pub os: String,
     /// The id the runtime's INFO reports after the flash (`None`: a restore, or a patch without the runtime).
     pub image_id: Option<[u8; 8]>,
+    /// The version of the runtime module in the image (its manifest version, as the `patch` check lists it as `id@version`); `None` without the runtime.
+    pub runtime: Option<String>,
     pub sha_stock: String,
     pub sha_image: String,
     pub restore: bool,
@@ -148,6 +150,16 @@ fn known_of(reg: &Registry) -> Vec<Known> {
         .collect()
 }
 
+/// The module that is the digikit runtime in a patch set.
+const RUNTIME_MODULE: &str = "core/runtime";
+
+/// The version of the runtime among the `id@version` tags of a patch's modules.
+fn runtime_version_of(tags: &[String]) -> Option<String> {
+    tags.iter()
+        .find_map(|t| t.strip_prefix(RUNTIME_MODULE)?.strip_prefix('@'))
+        .map(str::to_string)
+}
+
 fn info_of(short: &str) -> Result<&'static DeviceInfo> {
     devdata::by_short(short).ok_or_else(|| err!("no device file for {short}"))
 }
@@ -209,6 +221,9 @@ pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result
     p.os = os;
     p.sha_stock = stock_sha;
     p.image_id = applied.image_id;
+    p.runtime = applied
+        .image_id
+        .and(runtime_version_of(&applied.plan.modules));
     p.ship_map = Some(ShipMap {
         json: crate::addrmap::ship_map(&applied.plan).to_json(),
         symbols: crate::addrmap::load_symbols(&applied.plan),
@@ -368,6 +383,7 @@ fn finish(
         device,
         os: String::new(),
         image_id: None,
+        runtime: None,
         sha_stock: String::new(),
         sha_image,
         restore,
@@ -731,6 +747,19 @@ impl Sender {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_runtime_version_is_the_one_in_the_patch_tags() {
+        let tags = [
+            "core/ui@1.2.0",
+            "core/runtime@0.9.0",
+            "core/runtime-extra@3.0.0",
+        ]
+        .map(String::from);
+        assert_eq!(runtime_version_of(&tags).as_deref(), Some("0.9.0"));
+        assert_eq!(runtime_version_of(&tags[..1]), None);
+        assert_eq!(runtime_version_of(&tags[2..]), None);
+    }
+
     use super::*;
 
     fn dt2() -> &'static DeviceInfo {
