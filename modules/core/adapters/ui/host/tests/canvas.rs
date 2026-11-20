@@ -182,7 +182,7 @@ fn large_text_is_clipped_by_its_own_height_and_width() {
     assert!(log().is_empty());
     text_in(-7, 0, 1, "A"); // one column on the screen
     text_in(0, -14, 1, "A"); // one row on the screen
-    // a small text at the same y is 6 rows high: -14 is off the screen for it
+                             // a small text at the same y is 6 rows high: -14 is off the screen for it
     text_in(0, -14, 0, "A");
     assert_eq!(log().len(), 2);
     unsafe { cv_end() };
@@ -194,7 +194,11 @@ fn text_width_in_asks_the_firmware_with_the_font() {
     unsafe { cv_begin(0) };
     assert_eq!(unsafe { cv_text_width_in(0, c"ABC".as_ptr()) }, 12);
     assert_eq!(unsafe { cv_text_width_in(1, c"ABC".as_ptr()) }, 24);
-    assert_eq!(unsafe { cv_text_width(c"ABC".as_ptr()) }, 12, "text_width stays small");
+    assert_eq!(
+        unsafe { cv_text_width(c"ABC".as_ptr()) },
+        12,
+        "text_width stays small"
+    );
     assert_eq!(unsafe { cv_text_width_in(1, std::ptr::null()) }, 0);
     // a font number the canvas does not know is the small font
     assert_eq!(unsafe { cv_text_width_in(7, c"ABC".as_ptr()) }, 12);
