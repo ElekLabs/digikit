@@ -230,6 +230,14 @@ send_indices = [100]
 # window that ends its boot, so it has no [ui.boot_window] table and the view stack offsets of the Digitakt II file are not needed here.
 [ui]
 brain_ptr = 0x44648900
+# The view stack: the view manager is the object at Brain + 0x40, its list sentinel at +0x14, a std::list node has next at +0 and prev at +4 and its View pointer at +8. The offsets are those of the
+# Digitakt II: the key runner (DT2 0x40030bd0, DN2 0x4002c5c8) and the key walker (DT2 0x4011c79c, DN2 0x4011e110) have the same hashes on both devices and take Brain + 0x40 and the list at +0x14
+# (docs/findings: key event dispatch). The top view is the node before the sentinel (the prev pointer), the bottom view the node after it. No boot window facts here: this table is enough to read the stack.
+view_manager_off = 0x40
+list_off = 0x14
+list_next_off = 0
+list_prev_off = 4
+node_view_off = 8
 
 # What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.

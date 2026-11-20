@@ -13,6 +13,7 @@ typedef struct dk_files dk_files;
 typedef struct dk_sample_pool dk_sample_pool;
 typedef struct dk_ui dk_ui;
 typedef struct dk_ui_menu dk_ui_menu;
+typedef struct dk_ui_view dk_ui_view;
 typedef struct dk_input dk_input;
 typedef struct dk_usb_bulk dk_usb_bulk;
 typedef struct dk_dsp_link dk_dsp_link;
@@ -41,6 +42,7 @@ typedef void dk_param_click_fn(void *arg, uint32_t track);
 typedef void dk_ui_action_fn(void *arg, int32_t value);
 typedef void dk_ui_choice_fn(void *arg, int32_t index);
 typedef void dk_ui_confirm_fn(void *arg, int32_t yes);
+typedef void dk_ui_settings_open_fn(void *arg);
 typedef void dk_ui_tick_fn(void *arg);
 
 /* ---- service runtime ---- */
@@ -304,6 +306,12 @@ int32_t dk_ui_toast(dk_ui *ui, const char *text);
 
 /* Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>. Context: ui. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns -1. */
 int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms);
+
+/* Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>. Context: init. Since runtime 0.10.2. Needs core/ui: without it the import binds to a stub that returns -1. */
+int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg);
+
+/* Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing. Context: ui. Since runtime 0.10.2. Needs core/ui: without it the import binds to a stub that does nothing. */
+void dk_ui_view_close(dk_ui_view *view);
 
 /* Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Context: init. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns DK_E_MISSING. */
 int32_t dk_ui_open(dk_module_ctx *ctx, dk_ui **out);

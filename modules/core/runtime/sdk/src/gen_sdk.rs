@@ -437,7 +437,7 @@ pub mod proto {
         ("DSP_VOICES", CAPK_DSP_VOICES, "DSP voices"),
     ];
     /// The command ranges a module may register, as (first, last).
-    pub const RANGES: [(u8, u8); 10] = [
+    pub const RANGES: [(u8, u8); 11] = [
         (0x20, 0x22), // debug
         (0x1e, 0x1f), // debug_profile
         (0x1c, 0x1d), // entry_demo_test
@@ -446,6 +446,7 @@ pub mod proto {
         (0x32, 0x35), // probe
         (0x38, 0x3d), // remote
         (0x3e, 0x3f), // remote_state
+        (0x1b, 0x1b), // ui_views_test
         (0x2c, 0x2f), // usb_echo_test
         (0x36, 0x37), // usb_fast
     ];
@@ -457,6 +458,7 @@ pub mod proto {
     pub const RANGE_PROBE: (u8, u8) = (0x32, 0x35);
     pub const RANGE_REMOTE: (u8, u8) = (0x38, 0x3d);
     pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
+    pub const RANGE_UI_VIEWS_TEST: (u8, u8) = (0x1b, 0x1b);
     pub const RANGE_USB_ECHO_TEST: (u8, u8) = (0x2c, 0x2f);
     pub const RANGE_USB_FAST: (u8, u8) = (0x36, 0x37);
 }
@@ -580,11 +582,14 @@ pub mod api {
     /// The callback type `ui_confirm_fn` of `[handle.callbacks]`.
     pub type UiConfirmFn = unsafe extern "C" fn(arg: *mut u8, yes: i32);
 
+    /// The callback type `ui_settings_open_fn` of `[handle.callbacks]`.
+    pub type UiSettingsOpenFn = unsafe extern "C" fn(arg: *mut u8);
+
     /// The callback type `ui_tick_fn` of `[handle.callbacks]`.
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 123] = [
+    pub const IMPORT_NAMES: [&str; 127] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -596,6 +601,10 @@ pub mod api {
         "dk_ui_choice",
         "dk_ui_toast",
         "dk_ui_tick",
+        "dk_ui_settings_row",
+        "dk_ui_view_open",
+        "dk_ui_view_close",
+        "dk_ui_text_input",
         "dk_alloc",
         "dk_free",
         "dk_log",
@@ -814,6 +823,12 @@ pub mod api {
 
     /// `dk_ui_tick`: Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>.
     pub type DkUiTickFn = unsafe extern "C" fn(ui: *mut u8, r#fn: Option<UiTickFn>, arg: *mut u8, period_ms: u32) -> i32;
+
+    /// `dk_ui_settings_row`: Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>.
+    pub type DkUiSettingsRowFn = unsafe extern "C" fn(ui: *mut u8, text: *const u8, open: Option<UiSettingsOpenFn>, arg: *mut u8) -> i32;
+
+    /// `dk_ui_view_close`: Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing.
+    pub type DkUiViewCloseFn = unsafe extern "C" fn(view: *mut u8);
 
     /// `dk_alloc`: A 16-byte aligned block from the module arena (zero is not guaranteed); null when it is full.
     pub type DkAllocFn = unsafe extern "C" fn(size: u32) -> *mut u8;
@@ -1167,6 +1182,10 @@ macro_rules! optional_imports {
                 pub fn dk_ui_choice(ui: *mut u8, title: *const u8, items: *const u8, n: i32, done: Option<UiChoiceFn>, arg: *mut u8) -> i32;
                 pub fn dk_ui_toast(ui: *mut u8, text: *const u8) -> i32;
                 pub fn dk_ui_tick(ui: *mut u8, r#fn: Option<UiTickFn>, arg: *mut u8, period_ms: u32) -> i32;
+                pub fn dk_ui_settings_row(ui: *mut u8, text: *const u8, open: Option<UiSettingsOpenFn>, arg: *mut u8) -> i32;
+                pub fn dk_ui_view_open(ui: *mut u8, desc: *const u8) -> *mut u8;
+                pub fn dk_ui_view_close(view: *mut u8);
+                pub fn dk_ui_text_input(ui: *mut u8, desc: *const u8) -> i32;
                 pub fn dk_ui_open(ctx: *mut u8, out: *mut *mut u8) -> i32;
                 pub fn dk_ui_menu_open(m: *mut u8) -> i32;
                 pub fn dk_ui_menu_close(m: *mut u8);
@@ -1208,6 +1227,10 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_ui_choice(_a0: *mut u8, _a1: *const u8, _a2: *const u8, _a3: i32, _a4: Option<UiChoiceFn>, _a5: *mut u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_toast(_a0: *mut u8, _a1: *const u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_tick(_a0: *mut u8, _a1: Option<UiTickFn>, _a2: *mut u8, _a3: u32) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_settings_row(_a0: *mut u8, _a1: *const u8, _a2: Option<UiSettingsOpenFn>, _a3: *mut u8) -> i32 { -1 as _ }
+                pub unsafe extern "C" fn dk_ui_view_open(_a0: *mut u8, _a1: *const u8) -> *mut u8 { 0 as _ }
+                pub unsafe extern "C" fn dk_ui_view_close(_a0: *mut u8) { }
+                pub unsafe extern "C" fn dk_ui_text_input(_a0: *mut u8, _a1: *const u8) -> i32 { -1 as _ }
                 pub unsafe extern "C" fn dk_ui_open(_a0: *mut u8, _a1: *mut *mut u8) -> i32 { crate::loader::stub_missing("core/ui"); -73 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_open(_a0: *mut u8) -> i32 { -73 as _ }
                 pub unsafe extern "C" fn dk_ui_menu_close(_a0: *mut u8) { }
@@ -1241,13 +1264,17 @@ macro_rules! optional_imports {
             }
 
             /// (name, address from the module or 0, address of the stub or 0, the module that provides it)
-            pub fn table() -> [(&'static str, usize, usize, &'static str); 35] {
+            pub fn table() -> [(&'static str, usize, usize, &'static str); 39] {
                 [
                     ("dk_ui_menu_new", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, "core/ui"),
                     ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize, "core/ui"),
                     ("dk_ui_choice", core::hint::black_box(dk_ui_choice as usize), absent::dk_ui_choice as usize, "core/ui"),
                     ("dk_ui_toast", core::hint::black_box(dk_ui_toast as usize), absent::dk_ui_toast as usize, "core/ui"),
                     ("dk_ui_tick", core::hint::black_box(dk_ui_tick as usize), absent::dk_ui_tick as usize, "core/ui"),
+                    ("dk_ui_settings_row", core::hint::black_box(dk_ui_settings_row as usize), absent::dk_ui_settings_row as usize, "core/ui"),
+                    ("dk_ui_view_open", core::hint::black_box(dk_ui_view_open as usize), absent::dk_ui_view_open as usize, "core/ui"),
+                    ("dk_ui_view_close", core::hint::black_box(dk_ui_view_close as usize), absent::dk_ui_view_close as usize, "core/ui"),
+                    ("dk_ui_text_input", core::hint::black_box(dk_ui_text_input as usize), absent::dk_ui_text_input as usize, "core/ui"),
                     ("dk_ui_open", core::hint::black_box(dk_ui_open as usize), absent::dk_ui_open as usize, "core/ui"),
                     ("dk_ui_menu_open", core::hint::black_box(dk_ui_menu_open as usize), absent::dk_ui_menu_open as usize, "core/ui"),
                     ("dk_ui_menu_close", core::hint::black_box(dk_ui_menu_close as usize), absent::dk_ui_menu_close as usize, "core/ui"),
