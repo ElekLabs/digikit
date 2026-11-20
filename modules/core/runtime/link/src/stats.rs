@@ -126,6 +126,14 @@ impl Mirror {
         true
     }
 
+    /// The sweep just published, for a host event: its number (what `read` reports), its clear generation and the block count of its header. `None` without one.
+    pub fn published(&self) -> Option<(u32, u8, u32)> {
+        if !self.valid {
+            return None;
+        }
+        Some((self.seq, self.gen, self.buf[self.front][0]))
+    }
+
     /// `seq` moves with every publish; written with volatile stores, read the same way, so that the reader's recheck stays.
     fn bump(&mut self) {
         compiler_fence(Ordering::SeqCst);

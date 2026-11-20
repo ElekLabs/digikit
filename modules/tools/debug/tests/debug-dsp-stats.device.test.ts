@@ -1,6 +1,5 @@
-import { waitClock, pollUntil } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { DspStats } from '@digi/dk-session';
+import type { DspStats, RuntimeEvents } from '@digi/dk-session';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { pickSine } from '@digi/regression/runtime/fx-live.ts';
@@ -30,6 +29,20 @@ const BLOCKS_PER_S = 1500;
 const MACHINE_ROW = 0;
 const EFFECT_ROW = 8;
 
+/** No DSP_SWEEP event within `ms` of emulated time. A sweep whose last page was already on the way when the DSP stopped may still complete: it is drained once, then a second one fails. */
+async function expectNoSweepEvent(events: RuntimeEvents, ms: number, what: string): Promise<void> {
+  for (let drained = 0; ; drained++) {
+    await events.listen();
+    try {
+      await events.until('DSP_SWEEP', undefined, { withinMs: ms });
+    } catch (e) {
+      if (/not seen within/.test(String(e))) return;
+      throw e;
+    }
+    expect(drained, `${what}: a sweep appeared again`).toBeLessThan(1);
+  }
+}
+
 async function expectDspStats(rt: TestRuntime): Promise<void> {
   const { dk, session } = rt;
   const artifacts = liveArtifacts(session, 'debug-dsp-stats');
@@ -47,20 +60,23 @@ async function expectDspStats(rt: TestRuntime): Promise<void> {
   expect(idle.on, 'stats are off at the start').toBe(false);
   expect(idle.sweep, 'and there is no sweep').toBeUndefined();
 
+  // the runtime logs DSP_SWEEP once per complete sweep: every wait below is on that event, not on the clock
+  const events = await rt.listen();
   expect((await dk.profileDsp('start')).on).toBe(true);
   await sendNote(rt, MIDI_CHANNEL, NOTE, 100); // AMP HOLD is NOTE: the voice runs while the note is held
 
-  const sweepAfter = (after: number, what: string): Promise<NonNullable<DspStats['sweep']>> =>
-    pollUntil(
-      rt.clock,
-      async () => (await dk.profileDsp('get')).sweep,
-      (s) => s !== undefined && s.number > after,
-      { withinMs: 20_000, intervalMs: 100, message: () => `${what}: no sweep newer than ${after}` },
-    ) as Promise<NonNullable<DspStats['sweep']>>;
+  /** The newest sweep once the log says a sweep of `blocks` blocks or more was published (and one newer than `after`). */
+  const sweepAfter = async (after: number, what: string, blocks = 0): Promise<NonNullable<DspStats['sweep']>> => {
+    await events.until('DSP_SWEEP', (e) => Number(e.fields.sweep) > after && Number(e.fields.blocks) >= blocks, {
+      withinMs: 20_000,
+    });
+    const sweep = (await dk.profileDsp('get')).sweep;
+    expect(sweep, `${what}: the event came with a sweep to read`).toBeDefined();
+    return sweep!;
+  };
 
   const first = await sweepAfter(0, 'first sweep');
-  await waitClock(rt.clock, 1000); // about 1500 blocks
-  const second = await sweepAfter(first.number, 'second sweep');
+  const second = await sweepAfter(first.number, 'second sweep', first.blocks + BLOCKS_PER_S); // about a second of blocks later
   const blocks = second.blocks - first.blocks;
   expect(blocks, 'about a second of blocks between the two sweeps').toBeGreaterThan(BLOCKS_PER_S * 0.8);
   for (const [name, row] of [
@@ -80,12 +96,13 @@ async function expectDspStats(rt: TestRuntime): Promise<void> {
 
   const stopped = await dk.profileDsp('stop');
   expect(stopped.on).toBe(false);
-  await waitClock(rt.clock, 300); // pages already on the way
+  await expectNoSweepEvent(events, 2000, 'stopped: the mirror publishes no sweep');
   const frozen = (await dk.profileDsp('get')).sweep!.number;
-  await waitClock(rt.clock, 2000);
+  await expectNoSweepEvent(events, 2000, 'stopped: still none');
   expect((await dk.profileDsp('get')).sweep!.number, 'stopped: the sweep number does not move').toBe(frozen);
 
   expect((await dk.profileDsp('clear')).sweep, 'a new clear generation drops the old sweep').toBeUndefined();
+  await events.listen();
   expect((await dk.profileDsp('start')).on).toBe(true);
   const again = await sweepAfter(0, 'sweep after the clear');
   expect(again.blocks, 'the counts start again from 0').toBeLessThan(second.blocks);

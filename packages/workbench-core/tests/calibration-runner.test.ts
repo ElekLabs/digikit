@@ -47,26 +47,25 @@ const sweep = (calls: number): DspStats => ({
 });
 
 /** One recorder of everything the runner does, in order. */
-function fake(opts: { moduleCalls?: number; loaded?: string[]; noSweepFor?: number } = {}) {
+function fake(opts: { moduleCalls?: number; loaded?: string[]; sweepGeneration?: number } = {}) {
   const log: string[] = [];
   let loaded = opts.loaded ?? [];
-  let reads = 0;
   const clock: Clock = { now: async () => 0, pause: async (ms) => void log.push(`pause ${ms}`) };
   const stats: StatsSource = {
     capabilities: async () => ({ dsp: true, spans: true }),
     start: async () => void log.push('stats.start'),
-    clear: async () => void log.push('stats.clear'),
+    clear: async () => {
+      log.push('stats.clear');
+      return { generation: 1 };
+    },
     stop: async () => void log.push('stats.stop'),
     read: async () => {
       log.push('stats.read');
-      reads++;
       const spans = {
         spans: [{ owner: 0, kind: 'module' as const, name: 'm', calls: 1, sum_ticks: 2, max_ticks: 3 }],
         span_clock_hz: 132_000_000,
         span_elapsed_ticks: 5,
       };
-      // a sweep that is not complete on the first read of a capture
-      if (opts.noSweepFor && reads <= opts.noSweepFor) return { spans, dsp: { ...sweep(0), sweep: undefined } };
       const calls = log.filter((l) => l === 'load').length > 0 && loaded.length > 0 ? (opts.moduleCalls ?? 0) : 0;
       return { spans, dsp: sweep(calls) };
     },
@@ -82,6 +81,16 @@ function fake(opts: { moduleCalls?: number; loaded?: string[]; noSweepFor?: numb
     midi: out,
     stats,
     clock,
+    // the runtime log: DSP_SWEEP events of the generation the sweep belongs to (`sweepGeneration`, default the one `clear` answered)
+    events: {
+      listen: async () => void log.push('events.listen'),
+      until: async (kind, match) => {
+        const e = { seq: 1, kind, args: [], fields: { sweep: 3, generation: opts.sweepGeneration ?? 1, blocks: 50 } };
+        log.push(`until ${kind}`);
+        if (!match(e as never)) throw new Error('no sweep of that generation');
+        return e as never;
+      },
+    },
     modules: {
       install: async (ids) => Object.fromEntries(ids.map((id) => [id, `sha-${id}`])),
       select: async (ids) => {
@@ -117,7 +126,8 @@ test('a case plays its steps once and captures `repeats` times: start, warm up, 
       'pause 1000',
       'stats.clear',
       'pause 2000',
-      'stats.read',
+      'events.listen',
+      'until DSP_SWEEP',
       'stats.stop',
       'stats.read',
     ]),
@@ -168,7 +178,8 @@ test('markers make the steps between them the capture window, in place of captur
     'stats.clear',
     'midi 176,83,9',
     'pause 700',
-    'stats.read',
+    'events.listen',
+    'until DSP_SWEEP',
     'stats.stop',
     'stats.read',
   ]);
@@ -247,10 +258,30 @@ test('a wrong name fails before anything is played', async () => {
   assert.deepEqual(f.log, []);
 });
 
-test('a sweep that is not complete yet is waited for, and spans-only targets still capture', async () => {
-  const f = fake({ noSweepFor: 2 });
+test('the capture ends at the DSP_SWEEP of the clear generation, from the event and not by polling', async () => {
+  const f = fake();
   const [c] = await run(f.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "hold"\n`);
   assert.ok(c!.captures[0]!.profile.dsp);
+  assert.equal(
+    f.log.filter((l) => l.startsWith('pause')).length,
+    2,
+    'the warm-up and the window, and no polling pause',
+  );
+  // a sweep of another generation does not end the capture
+  const g0 = fake({ sweepGeneration: 9 });
+  await assert.rejects(run(g0.rig, base + `[[case]]\nid = "stock"\nsteps = "hold"\n`), /no sweep of that generation/);
+  assert.ok(g0.log.includes('stats.stop'), 'and the counters are stopped');
+  // a target with DSP stats but no runtime log is refused before anything is played
+  const h = fake();
+  delete (h.rig as { events?: unknown }).events;
+  await assert.rejects(
+    run(h.rig, base + `[[case]]\nid = "stock"\nsteps = "hold"\n`),
+    /needs the runtime log|rig needs/,
+  );
+  assert.deepEqual(h.log, []);
+});
+
+test('spans-only targets still capture', async () => {
   const g = fake();
   g.rig.stats = {
     ...g.rig.stats,
@@ -285,7 +316,7 @@ test('captures are delivered as they finish, and a later failure keeps the earli
   const inner = f.rig.stats.read;
   f.rig.stats.read = async () => {
     // the second case fails on its first read
-    if (++reads > 4) throw new Error('link lost');
+    if (++reads > 2) throw new Error('link lost');
     return inner();
   };
   const delivered: string[] = [];

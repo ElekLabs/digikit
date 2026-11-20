@@ -1,8 +1,7 @@
 // The calibration runner: plays a profile's cases on a target (an emulator or a device) and captures DSP stats and runtime spans, one `dk.profile/1`
 // per capture. The caller connects and gives the pieces (`Rig`); the runner holds no connection and no module-level state, so `wb profile calibrate run`
 // and the workbench's Profile pane use the same code. Host tests: tests/calibration-runner.test.ts. Format: docs/INSTRUMENTATION.md "Calibration runs".
-import type { MidiOut } from '@digi/dk-session';
-import type { Clock } from '@digi/dk-session';
+import type { Clock, LogKindName, MidiOut, RuntimeEvents } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
 import { buildProfile, type DspRowOut } from '../profile/profile-artifact.ts';
 import { canonicalJson, sha256Hex, STOCK_CASE, type CalCase, type CalProfile } from './calprofile.ts';
@@ -25,14 +24,8 @@ export interface Rig {
   stats: StatsSource;
   /** Emulated time on the emulator, wall time on a device. */
   clock: Clock;
-  /** The runtime log (`RuntimeEvents`): `wait` for an event. */
-  events?: {
-    until(
-      kind: never,
-      match: (e: { fields: Record<string, unknown> }) => boolean,
-      opts: { withinMs: number },
-    ): Promise<unknown>;
-  };
+  /** The runtime log: `wait` for an event, and the wait for the DSP sweep that ends a capture. */
+  events?: Pick<RuntimeEvents, 'until' | 'listen'>;
   /** Panel keys and encoders (the remote module, or the emulator's panel). */
   panel?: {
     tap(key: string | number, holdMs?: number): Promise<void>;
@@ -90,6 +83,26 @@ export interface CaseResult {
 }
 
 const isSetup = (o: Op) => o.op === 'setup';
+
+/** Clock ms the sweep that ends a capture may take (a sweep is 50 blocks, about 33 ms of the device). */
+const SWEEP_WAIT_MS = 5000;
+/** Wall ms after which a wait that never ends (a stopped emulator, a dead link) is given up. */
+const HANG_GUARD_MS = 120_000;
+
+/** `p`, or an error after `ms` of wall time: the only timer the sweep wait has, a guard against a hang. */
+async function withHangGuard<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${what} (hung for ${ms} ms of wall time)`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** What a case needs that the rig does not have, or undefined. */
 function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
@@ -203,6 +216,10 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
       'the target reported no firmware identity (run.firmware_sha256): a fit could not refuse a device and a model with different firmware; allow it explicitly to capture anyway',
     );
   const caps = await rig.stats.capabilities();
+  if (caps.dsp && !rig.events)
+    throw new Error(
+      'the target has DSP stats, and the runner waits for their DSP_SWEEP event: the rig needs the runtime log',
+    );
   if (!caps.dsp) log('DSP stats are not available on this target (no PROFILE_DSP): the captures carry spans only');
 
   // decide what runs before the target is touched: a skipped case installs and loads nothing
@@ -290,14 +307,17 @@ async function runCase(
       try {
         await rig.stats.start();
         await rig.clock.pause(profile.warmup_s * 1000);
-        await rig.stats.clear();
+        const { generation } = await rig.stats.clear();
         if (marked) await playAll(body, rig);
         else await rig.clock.pause(profile.capture_s * 1000);
-        // the DSP side answers with the newest complete sweep: give a first sweep a moment to complete while counting goes on
-        let waiting = await rig.stats.read();
-        for (let tries = 0; dsp && !waiting.dsp?.sweep && tries < 20; tries++) {
-          await rig.clock.pause(200);
-          waiting = await rig.stats.read();
+        if (dsp) {
+          // the window ends with the first complete sweep of this clear generation that the mirror publishes after it (about 50 blocks): the runtime logs DSP_SWEEP
+          await rig.events!.listen();
+          await withHangGuard(
+            rig.events!.until('DSP_SWEEP', (e) => e.fields.generation === generation, { withinMs: SWEEP_WAIT_MS }),
+            HANG_GUARD_MS,
+            `case ${c.id}: no DSP_SWEEP of generation ${generation}`,
+          );
         }
         // the spans and the sweep are read after counting stopped, so they describe one window
         await rig.stats.stop();

@@ -76,7 +76,22 @@ pub unsafe extern "C" fn dk_dsp_stats_ctl(on: u32, clear: u32) -> i32 {
 /// The record of the acknowledgement slot of one block (called by `dl_tick`). Returns 1 for a stats page, 0 for anything else.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_dsp_stats_feed(tag: u32, a: u32, b: u32) -> u32 {
-    u32::from(mirror().feed(tag, a, b))
+    let m = mirror();
+    let before = m.counts.sweeps;
+    let took = m.feed(tag, a, b);
+    if m.counts.sweeps != before {
+        publish_event(m);
+    }
+    u32::from(took)
+}
+
+/// A complete sweep was published (once per sweep, about every 50 blocks): the `DSP_SWEEP` event, so a host waits on it instead of polling PROFILE_DSP. `ev` masks
+/// interrupts itself, so this is safe from the block interrupt; the source is the owner of the span channel (the debug module), whose level filter applies.
+unsafe fn publish_event(m: &Mirror) {
+    if let Some((sweep, generation, blocks)) = m.published() {
+        let src = (dlog::span_owner() as u16) << dkrt_sdk::logk::SOURCE_SHIFT;
+        dlog::ev(dkrt_sdk::logk::DSP_SWEEP, dlog::INFO | src, [sweep, generation as u32, blocks, 0, 0]);
+    }
 }
 
 /// `dk_dsp_stats_read(out, max)`, an import of the modules (sdk/sdk.toml): the newest complete sweep and its number, 0 for none. `out` gets at most `max`
@@ -219,6 +234,45 @@ mod tests {
             dlog::release_sinks(1);
             assert_eq!(hook(), 0, "a module that is gone without a fini: no feed");
             assert_eq!(dlog::span_owner(), 0);
+            reset();
+        }
+    }
+
+    static mut SEEN: [(u16, u16, [u32; 5]); 8] = [(0, 0, [0; 5]); 8];
+    static mut SEEN_N: usize = 0;
+
+    unsafe extern "C" fn log_sink(e: *const dlog::Ev) {
+        // only this kind: the replay of the small ring to a new sink brings the other events
+        if (*e).kind == dkrt_sdk::logk::DSP_SWEEP && SEEN_N < 8 {
+            SEEN[SEEN_N] = ((*e).kind, (*e).flags, (*e).a);
+            SEEN_N += 1;
+        }
+    }
+
+    #[test]
+    fn a_complete_sweep_logs_one_dsp_sweep_event_with_its_number_generation_and_blocks() {
+        let _g = LOCK.lock().unwrap();
+        unsafe {
+            reset();
+            in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
+            dlog::dk_debug_log_sink_set(log_sink as usize as *mut u8, core::ptr::null_mut());
+            SEEN_N = 0; // the replay of the small ring (kept before the first UI frame) brought events of earlier tests
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 4)), OK);
+            let events = |kind| (0..SEEN_N).filter(|&i| SEEN[i].0 == kind).count();
+            for p in 0..PAGES as u8 - 1 {
+                dkrt_dsp_stats_feed(tag(4, p), 1234, 7);
+            }
+            assert_eq!(events(dkrt_sdk::logk::DSP_SWEEP), 0, "no event before the sweep is complete");
+            dkrt_dsp_stats_feed(tag(4, PAGES as u8 - 1), 1, 7);
+            assert_eq!(events(dkrt_sdk::logk::DSP_SWEEP), 1, "one event when it completes");
+            let at = (0..SEEN_N).find(|&i| SEEN[i].0 == dkrt_sdk::logk::DSP_SWEEP).unwrap();
+            let (_, flags, a) = SEEN[at];
+            assert_eq!(&a[..3], &[1, 4, 1234], "sweep number, generation and the blocks of the header");
+            assert_eq!(flags >> dkrt_sdk::logk::SOURCE_SHIFT, 2, "the source is the owner of the span channel (record 1 is source 2)");
+            // a repeated page or a page of the next sweep that is not complete adds none
+            dkrt_dsp_stats_feed(tag(4, 0), 1, 7);
+            assert_eq!(events(dkrt_sdk::logk::DSP_SWEEP), 1);
+            dlog::dk_debug_log_sink_set(core::ptr::null_mut(), core::ptr::null_mut());
             reset();
         }
     }

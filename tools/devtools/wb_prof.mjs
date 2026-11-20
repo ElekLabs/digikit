@@ -6,7 +6,7 @@
 //     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
 //     wb profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]   (device and model captures of the same cases: docs/INSTRUMENTATION.md "Calibration")
 //     wb [--format json|text] profile calibrate report cal.json [--model-profile FILE]    (--calibration FILE on `profile report` adds the estimate to a model profile's DSP rows)
-//     wb profile calibrate run   (the capture runner: not built yet)
+//     wb profile calibrate run --profile NAME|FILE [--out DIR]   (the capture runner: tools/devtools/wb_calibrate.mjs, docs/INSTRUMENTATION.md "Calibration runs")
 //     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]
 //     wb [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command, run from wb.mjs: profSpans; --start resets the counters, then starts)
 //
@@ -75,11 +75,6 @@ function show(answer, format) {
 export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
   const format = opts.format ?? 'text';
   if (format !== 'json' && format !== 'text') fail('--format is json or text');
-  if (cmd === 'profile' && sub === 'calibrate' && rest[0] === 'run')
-    fail(
-      'profile calibrate run (the capture runner) is not built yet: capture with profile record / profile spans, then calibrate fit',
-      1,
-    );
   const prof = cmd === 'profile' && sub === 'record' ? null : await loadProf(root, fail);
   if (cmd === 'addrmap' && sub === 'lookup') {
     if (rest.length === 0) fail('addrmap lookup ADDR... [--map F]...');
