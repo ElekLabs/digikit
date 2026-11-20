@@ -53,6 +53,7 @@
           "digikit/debug"
         ]
       }
-    ]
+    ],
+    "mergeTests": ["tests/debug-dsp-stats.device.test.ts", "tests/setup.device.test.ts"]
   }
 }
