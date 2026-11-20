@@ -17,6 +17,8 @@ extern "C" {
     fn vw_poll();
     fn vw_set_key_result(r: c_int);
     fn vw_fail_push(on: c_int);
+    fn vw_fail_poll(on: c_int);
+    fn vw_poll_starts() -> c_int;
     fn vw_used() -> u32;
     fn vw_count(what: c_int, tag: c_int) -> c_int;
     fn vw_last_flags(tag: c_int) -> u32;
@@ -276,4 +278,19 @@ fn calls_with_a_slot_outside_the_pool_do_nothing() {
         vw_gone(0); // a free slot
     }
     assert_eq!(unsafe { vw_used() }, 0);
+}
+
+#[test]
+fn a_view_whose_poll_cannot_start_is_not_opened_and_its_closed_never_runs() {
+    let _g = fresh();
+    unsafe { vw_fail_poll(1) };
+    assert_eq!(open(1, 0, 0), 0);
+    assert_eq!(count(PUSHES, 0), 0, "the firmware view was not made");
+    assert_eq!((unsafe { vw_used() }, count(CLOSED, 0)), (0, 0));
+    unsafe { vw_fail_poll(0) };
+    // nothing is stuck: every slot is still free
+    for i in 0..VIEWS {
+        assert_ne!(open(1, 0, i as c_int), 0, "slot {i}");
+    }
+    assert_eq!(unsafe { vw_poll_starts() } as usize, 1 + VIEWS);
 }

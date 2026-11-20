@@ -720,6 +720,7 @@
   "tests/fixtures/modules/track-select/module.toml": 3,
   "tests/fixtures/modules/ui-demo/README.md": 8,
   "tests/fixtures/modules/ui-demo/module.toml": 2,
+  "tests/fixtures/modules/ui-views/module.toml": 2,
   "tests/fixtures/modules/usb-echo/module.toml": 2,
   "tests/fixtures/records/lowered.golden": 9,
   "tests/golden/arena_safety_frames.json": 74,

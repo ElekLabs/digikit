@@ -5,6 +5,7 @@ use std::ffi::{c_char, c_int, CStr, CString};
 extern "C" {
     fn sr_reset();
     fn sr_add(owner: usize, text: *const c_char, tag: c_int) -> c_int;
+    fn sr_add_outside_init(owner: usize, text: *const c_char) -> c_int;
     fn sr_add_no_open(owner: usize, text: *const c_char) -> c_int;
     fn sr_remove(owner: usize) -> u32;
     fn sr_count() -> u32;
@@ -15,6 +16,7 @@ extern "C" {
 }
 
 const E_CONTRACT: c_int = -48;
+const E_CONTEXT: c_int = -19;
 const E_NOMEM: c_int = -8;
 
 fn add(owner: usize, text: &str, tag: c_int) -> c_int {
@@ -101,4 +103,13 @@ fn a_removed_row_does_nothing_when_its_old_stock_row_runs() {
     // a new row never takes the old id
     add(1, "A", 0);
     assert_ne!(unsafe { sr_id(0) }, id);
+}
+
+#[test]
+fn a_row_added_outside_init_is_refused_with_the_context_error() {
+    let _g = session();
+    unsafe { sr_reset() };
+    assert_eq!(unsafe { sr_add_outside_init(1, c"A".as_ptr()) }, E_CONTEXT);
+    assert_eq!(unsafe { sr_count() }, 0);
+    assert_eq!(add(1, "A", 0), 0, "init still works");
 }

@@ -21,8 +21,9 @@ typedef struct ui_settings_rows {
     uint32_t last_id;
 } ui_settings_rows;
 
-/* Add a row at the end. DK_OK, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (all rows used). The text is copied and cut to DK_UI_ROW - 1. */
-int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *text,
+/* Add a row at the end. `in_init`: the caller is the module's `init` (the only place a row may be added). DK_OK, DK_E_CONTEXT (not in init), DK_E_CONTRACT (no text
+   or open) or DK_E_NOMEM (all rows used). The text is copied and cut to DK_UI_ROW - 1. */
+int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, int in_init, const char *text,
                     dk_ui_settings_open_fn *open, void *arg);
 
 /* Remove every row of `owner`; the rows after them keep their order. Returns how many were removed. */

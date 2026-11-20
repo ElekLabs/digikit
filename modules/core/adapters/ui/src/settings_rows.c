@@ -17,11 +17,13 @@ static void move_row(ui_settings_row *d, const ui_settings_row *s)
         d->text[i] = s->text[i];
 }
 
-int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *text,
+int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, int in_init, const char *text,
                     dk_ui_settings_open_fn *open, void *arg)
 {
     ui_settings_row *r;
     uint32_t i = 0;
+    if (!in_init)
+        return DK_E_CONTEXT;
     if (!text || !open)
         return DK_E_CONTRACT;
     if (s->n == DK_UI_SETTINGS_ROWS)

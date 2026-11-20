@@ -11,7 +11,7 @@ static ui_view_fw fake;
 static int draws[TAGS], keys[TAGS], closed[TAGS];
 static uint32_t last_key[TAGS], last_flags[TAGS];
 static int key_result;
-static int pushes, closes, invalidates, push_fails;
+static int pushes, closes, invalidates, push_fails, poll_fails, poll_starts;
 static uint32_t pushed_overlay;
 static uint32_t close_log[16];
 static int close_n;
@@ -23,6 +23,13 @@ static uint32_t last_canvas_w;
 dk_key ui_key_of_code(uint32_t code)
 {
     return code == 100 ? 1 : code == 101 ? 2 : DK_KEY_NONE;
+}
+
+static int32_t f_poll_start(void *fw)
+{
+    (void)fw;
+    poll_starts++;
+    return poll_fails ? -8 : 0;
 }
 
 static uint32_t f_push(void *fw, uint32_t slot, int overlay)
@@ -77,12 +84,13 @@ void vw_reset(void)
     memset(keys, 0, sizeof keys);
     memset(closed, 0, sizeof closed);
     key_result = 0;
-    pushes = closes = invalidates = push_fails = 0;
+    pushes = closes = invalidates = push_fails = poll_fails = poll_starts = 0;
     pushed_overlay = 0;
     close_n = 0;
     reopen_tag = -1;
     reopened = 0;
     fake.fw = 0;
+    fake.poll_start = f_poll_start;
     fake.push = f_push;
     fake.close = f_close;
     fake.invalidate = f_invalidate;
@@ -143,6 +151,14 @@ void vw_poll(void)
 void vw_set_key_result(int r)
 {
     key_result = r;
+}
+void vw_fail_poll(int on)
+{
+    poll_fails = on;
+}
+int vw_poll_starts(void)
+{
+    return poll_starts;
 }
 void vw_fail_push(int on)
 {

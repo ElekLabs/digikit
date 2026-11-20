@@ -61,6 +61,8 @@ uintptr_t ui_views_open(ui_views *p, uintptr_t owner, const dk_ui_view_desc *d)
         }
     if (!v)
         return 0;
+    if (p->fw->poll_start(p->fw->fw) != 0)
+        return 0;
     /* the slot is taken before the push: the firmware may call back into it as soon as the view is on the stack */
     v->state = UI_VIEW_OPEN;
     v->count = (uint16_t)(v->count + 1);

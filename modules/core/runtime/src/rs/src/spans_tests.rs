@@ -303,6 +303,10 @@ fn a_module_context_names_its_owner() {
         assert_eq!(crate::dkrt_ctx_owner(0), E_CONTRACT);
         assert_eq!(crate::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[3]) as usize), E_CONTRACT, "record 3 is not loaded");
         crate::entry::unbind(2);
+        // a service file's record has a context too, but no owner id is given out for it
+        crate::entry::bind(crate::MAX_MODULES);
+        assert_eq!(crate::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[crate::MAX_MODULES]) as usize), E_CONTRACT);
+        crate::entry::unbind(crate::MAX_MODULES);
         reset(0, 5);
     }
 }
@@ -395,5 +399,22 @@ fn the_job_reads_the_menu_count_of_its_own_record() {
         }
         assert!(ops.menu_built(1), "the count stays at its top and does not wrap to 0");
         reset(0, 5);
+    }
+}
+
+/// `dkrt_phase` says what the running module code is.
+#[test]
+fn the_phase_is_that_of_the_running_module_code() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        assert_eq!(crate::dkrt_phase(), 0);
+        let prev = dlog::enter_module(0, dlog::PHASE_INIT);
+        assert_eq!(crate::dkrt_phase(), 1);
+        dlog::leave_module(prev);
+        let prev = dlog::enter_module(0, dlog::PHASE_TICK);
+        assert_eq!(crate::dkrt_phase(), 2);
+        dlog::leave_module(prev);
+        assert_eq!(crate::dkrt_phase(), 0);
     }
 }

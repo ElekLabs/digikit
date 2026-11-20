@@ -16,6 +16,9 @@
 /* What the pool asks of the firmware. `fw` is passed back to each call. */
 typedef struct ui_view_fw {
     void *fw;
+    /* Called before anything is taken for a new view: make sure the per-pass poll runs (ui_views_poll is called from it). 0, or a negative code: the view is then
+       not opened, so `closed` of its desc never runs for a view the caller did not get. */
+    int32_t (*poll_start)(void *fw);
     /* Make the firmware view for slot `slot` (it calls ui_views_draw, ui_views_key and ui_views_gone with it), push it on the view stack and give
        back our own reference to it. Returns the view as an opaque word, or 0 when it could not be made. `overlay`: not opaque, keys pass on. */
     uint32_t (*push)(void *fw, uint32_t slot, int overlay);

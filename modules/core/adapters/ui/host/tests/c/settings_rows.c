@@ -22,11 +22,15 @@ void sr_reset(void)
 }
 int sr_add(uintptr_t owner, const char *text, int tag)
 {
-    return ui_rows_add(&reg, owner, text, open_a, (void *)(intptr_t)tag);
+    return ui_rows_add(&reg, owner, 1, text, open_a, (void *)(intptr_t)tag);
+}
+int sr_add_outside_init(uintptr_t owner, const char *text)
+{
+    return ui_rows_add(&reg, owner, 0, text, open_a, 0);
 }
 int sr_add_no_open(uintptr_t owner, const char *text)
 {
-    return ui_rows_add(&reg, owner, text, 0, 0);
+    return ui_rows_add(&reg, owner, 1, text, 0, 0);
 }
 uint32_t sr_remove(uintptr_t owner)
 {

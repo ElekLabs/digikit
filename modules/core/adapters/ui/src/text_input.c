@@ -25,3 +25,54 @@ void ui_text_input_initial(char out[DK_UI_TEXT_INPUT_MAX + 1], const dk_ui_text_
         }
     out[i] = 0;
 }
+
+int32_t ui_text_open(ui_text_input *t, uintptr_t owner, const dk_ui_text_input_desc *d,
+                     uint32_t screen_max)
+{
+    char initial[DK_UI_TEXT_INPUT_MAX + 1];
+    int32_t r = ui_text_input_check(d, screen_max);
+    if (r != DK_OK)
+        return r;
+    if (t->open)
+        return DK_E_BUSY;
+    ui_text_input_initial(initial, d);
+    do
+        t->serial++;
+    while (t->serial == 0);
+    /* the state first: the firmware may call back as soon as the screen is on the stack */
+    t->done = d->done;
+    t->arg = d->arg;
+    t->owner = owner;
+    t->open = t->serial;
+    r = t->fw->push(t->fw->fw, d, initial, t->serial);
+    if (r != DK_OK) {
+        t->open = 0;
+        t->done = 0;
+        return r;
+    }
+    return DK_OK;
+}
+
+void ui_text_done(ui_text_input *t, const char *text)
+{
+    void (*done)(void *, const char *) = t->done;
+    void *arg = t->arg;
+    t->open = 0;
+    t->done = 0;
+    if (done)
+        done(arg, text);
+}
+
+void ui_text_gone(ui_text_input *t, uint32_t serial)
+{
+    if (t->open == serial) {
+        t->open = 0;
+        t->done = 0;
+    }
+}
+
+void ui_text_drop_owner(ui_text_input *t, uintptr_t owner)
+{
+    if (t->open && t->owner == owner)
+        t->done = 0;
+}

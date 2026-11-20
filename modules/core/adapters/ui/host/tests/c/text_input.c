@@ -31,3 +31,93 @@ void ti_initial(const char *initial, int has_initial, uint32_t max_len, char *ou
     ui_text_input_initial(buf, &d);
     memcpy(out, buf, sizeof buf);
 }
+
+/* ---- the owner object over a fake of the firmware's naming screen ---- */
+#define TAGS 4
+static ui_text_input input;
+static ui_text_fw fake;
+static int done_calls[TAGS];
+static char done_text[TAGS][16];
+static int pushes, push_result;
+static uint32_t pushed_serial;
+static char pushed_initial[16];
+
+static int32_t f_push(void *fw, const dk_ui_text_input_desc *d, const char *initial,
+                      uint32_t serial)
+{
+    (void)fw;
+    (void)d;
+    pushes++;
+    if (push_result)
+        return push_result;
+    pushed_serial = serial;
+    for (int i = 0; i < 16; i++)
+        pushed_initial[i] = initial[i];
+    return 0;
+}
+
+static void on_done(void *arg, const char *text)
+{
+    int tag = (int)(intptr_t)arg;
+    done_calls[tag]++;
+    for (int i = 0; i < 16; i++)
+        done_text[tag][i] = text[i];
+}
+
+void ti_reset(void)
+{
+    memset(&input, 0, sizeof input);
+    memset(done_calls, 0, sizeof done_calls);
+    memset(done_text, 0, sizeof done_text);
+    pushes = push_result = 0;
+    pushed_serial = 0;
+    memset(pushed_initial, 0, sizeof pushed_initial);
+    fake.fw = 0;
+    fake.push = f_push;
+    input.fw = &fake;
+}
+void ti_set_push_result(int r)
+{
+    push_result = r;
+}
+int32_t ti_open(uintptr_t owner, int tag, uint32_t max_len)
+{
+    dk_ui_text_input_desc d = {"NAME", "KICK", max_len, on_done, (void *)(intptr_t)tag};
+    return ui_text_open(&input, owner, &d, 16);
+}
+void ti_yes(const char *text)
+{
+    ui_text_done(&input, text);
+}
+void ti_no(void)
+{
+    ui_text_gone(&input, pushed_serial);
+}
+void ti_gone_serial(uint32_t serial)
+{
+    ui_text_gone(&input, serial);
+}
+void ti_drop(uintptr_t owner)
+{
+    ui_text_drop_owner(&input, owner);
+}
+uint32_t ti_pushed_serial(void)
+{
+    return pushed_serial;
+}
+int ti_pushes(void)
+{
+    return pushes;
+}
+int ti_done_calls(int tag)
+{
+    return done_calls[tag];
+}
+const char *ti_done_text(int tag)
+{
+    return done_text[tag];
+}
+const char *ti_pushed_initial(void)
+{
+    return pushed_initial;
+}

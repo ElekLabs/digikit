@@ -203,12 +203,19 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await leave(rt);
   expect(await fw.vptrs(), 'back on the main screen').toEqual(mainStack);
 
+  const path = moduleStorePath(device, 'test/ui-views');
+  const unload = async (what: string) =>
+    expect(await dk.unloadAndWait(path), what).toEqual({ result: 0, unloaded: true });
+  const reload = async () => {
+    expect(await dk.loadAndWait(path), 'the module loads again').toEqual({ result: 0, unloaded: false });
+    expect((await dk.modules()).map((m) => m.name)).toContain('test/ui-views');
+  };
+
   // An unload takes an open view off the stack and removes the rows, without a fault.
   await pressSettingsRow(rt, row1);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open before the unload');
   expect((await fw.vptrs()).length).toBe(mainStack.length + 2);
-  const path = moduleStorePath(device, 'test/ui-views');
-  expect(await dk.unloadAndWait(path), 'the unload of a module that has views, rows and no menu').toEqual({ result: 0, unloaded: true });
+  await unload('the unload of a module that has views, rows and no menu');
   const after = await pollEmulated(session, () => fw.vptrs(), (v) => v.length === mainStack.length + 1, {
     emulatedMs: 10_000,
     message: 'the view of the unloaded module is still on the view stack',
@@ -219,6 +226,51 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   expect((await dk.modules()).map((m) => m.name), 'the module is not loaded').not.toContain('test/ui-views');
   expect(await stockRows(), 'the rows of the module are gone from the SETTINGS menu').toBe(rowsBefore);
   await session.expectNoFault('the SETTINGS menu after the unload');
+
+  // The pool is not stuck: the module loads again and opens a view (a slot of the unloaded one is free).
+  await reload();
+  expect((await stockRows()), 'the rows are back').toBe(rowsBefore + 2);
+  await pressSettingsRow(rt, row1);
+  await until(rt, (r) => r.fullOpen === 1, 'a view of the reloaded module did not open');
+  await tap('NO');
+  await until(rt, (r) => r.closedFull === 1, 'the view of the reloaded module did not close');
+  await leave(rt);
+
+  // A stock row that was built before the unload does nothing when it is run afterwards.
+  await tap('SETTINGS');
+  for (let i = 0; i < row1; i++) await tap('DOWN');
+  const settingsOnly = await fw.vptrs();
+  await unload('the unload with the SETTINGS menu open');
+  await tap('YES');
+  expect(await fw.vptrs(), 'YES on the row of an unloaded module opened no view').toEqual(settingsOnly);
+  await session.expectNoFault('a stale SETTINGS row');
+  await leave(rt);
+
+  // An unload with the text input open: YES calls nothing of the unloaded module, the screen goes, and a text input of the reloaded module works.
+  await reload();
+  await pressSettingsRow(rt, row1);
+  await until(rt, (r) => r.fullOpen === 1, 'the view did not open for the text input case');
+  await tap('YES');
+  await until(rt, (r) => r.keyPresses === 1, 'the view got no key press');
+  const inputUp = await fw.vptrs();
+  expect(inputUp.length, 'the naming screen is on the stack').toBe(mainStack.length + 3);
+  await unload('the unload with a view and a text input open');
+  const left = await pollEmulated(session, () => fw.vptrs(), (v) => v.length === mainStack.length + 2, {
+    emulatedMs: 10_000,
+    message: 'the view of the unloaded module is still on the view stack under its text input',
+  });
+  expect(left, 'the naming screen and SETTINGS are left').toEqual([inputUp[0], ...inputUp.slice(2)]);
+  await tap('YES'); // the naming screen answers YES: its `done` belongs to code that is gone and must not run
+  expect((await fw.vptrs()).length, 'YES closed the naming screen').toBe(mainStack.length + 1);
+  await session.expectNoFault('YES on a text input of an unloaded module');
+  await leave(rt);
+  await reload();
+  await pressSettingsRow(rt, row1);
+  await until(rt, (r) => r.fullOpen === 1, 'the view did not open after the reload');
+  await tap('YES');
+  await tap('YES');
+  const again = await until(rt, (r) => r.doneCalls === 1, 'a text input of the reloaded module did not call done (the input is stuck)');
+  expect(again.doneText).toBe('AB');
 }
 
 runtimeTests('a content module adds SETTINGS rows, opens a full-screen view and an overlay, takes text input, and an unload closes its view and rows', expectUiViews, {
