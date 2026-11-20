@@ -33,7 +33,7 @@ export interface Rig {
   };
   /**
    * Machine or filter type through the firmware's setters (the SETUP command of the debug module). `track` is 1 to 16; a machine `type` is a number or the id of
-   * the loaded module whose machine it is. Resolves when the firmware has performed the change.
+   * the loaded module whose machine it is (`module#n`: its n-th machine, counted from 1). Resolves when the firmware has performed the change.
    */
   setup?: (what: 'machine' | 'filter' | 'effect', track: number, type: number | string) => Promise<void>;
   shot?: (name: string) => Promise<void>;

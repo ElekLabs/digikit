@@ -486,6 +486,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `dyn-guard-nan` | A machine that outputs NaN while a voice is active: the voice guard of `core/dsp-voice` | host, device, rig |
 | `stock-pool` | Calls to the stock DT2 sample loader, reload and purge from the command task and the loader worker | host, device |
 | `track-select` | Adds a sample to the pool of another module's table through SysEx commands | host, device |
+| `cal-kernels` | Five machines of synthetic SHARC+ kernels with known instruction counts (alu, dm, mem, branch, mix) for the calibration profile `kernels`; its machine rig runs `module#id` specs and is not in the conformance suite (the kernels run about 20,000 instructions a block, over the voice budget) | host, rig |
 | `dsp-facts` | Probe: cycle counts, instruction semantics and core register values on the SHARC+ core, one framed word per block | host, device |
 | `sharc-probe` | Probe: RECIPS and RSQRTS over a fixed sequence, one framed word per block | host, device |
 | `step-beacon` | Probe: stores a call counter in the module step word on every call | device |

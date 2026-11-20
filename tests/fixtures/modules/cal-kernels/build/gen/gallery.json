@@ -1,0 +1,244 @@
+{
+  "machines": [
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [],
+          "level": 10,
+          "name": "Cal ALU",
+          "own_dsp": true,
+          "page": {
+            "name": "CAL ALU",
+            "title": "Cal ALU"
+          },
+          "position": null,
+          "short": "KAL",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Cal ALU",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "KAL",
+          "type": null
+        }
+      },
+      "id": "alu",
+      "name": "Cal ALU",
+      "short": "KAL"
+    },
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [],
+          "level": 10,
+          "name": "Cal DM",
+          "own_dsp": true,
+          "page": {
+            "name": "CAL DM",
+            "title": "Cal DM"
+          },
+          "position": null,
+          "short": "KDM",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Cal DM",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "KDM",
+          "type": null
+        }
+      },
+      "id": "dm",
+      "name": "Cal DM",
+      "short": "KDM"
+    },
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [],
+          "level": 10,
+          "name": "Cal MEM",
+          "own_dsp": true,
+          "page": {
+            "name": "CAL MEM",
+            "title": "Cal MEM"
+          },
+          "position": null,
+          "short": "KMM",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Cal MEM",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "KMM",
+          "type": null
+        }
+      },
+      "id": "mem",
+      "name": "Cal MEM",
+      "short": "KMM"
+    },
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [],
+          "level": 10,
+          "name": "Cal BRANCH",
+          "own_dsp": true,
+          "page": {
+            "name": "CAL BRANCH",
+            "title": "Cal BRANCH"
+          },
+          "position": null,
+          "short": "KBR",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Cal BRANCH",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "KBR",
+          "type": null
+        }
+      },
+      "id": "branch",
+      "name": "Cal BRANCH",
+      "short": "KBR"
+    },
+    {
+      "devices": {
+        "dn2": {
+          "clone_of": 0,
+          "knobs": [],
+          "level": 10,
+          "name": "Cal MIX",
+          "own_dsp": true,
+          "page": {
+            "name": "CAL MIX",
+            "title": "Cal MIX"
+          },
+          "position": null,
+          "short": "KMX",
+          "type": null
+        },
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            {
+              "slot": 7,
+              "stock": 209
+            }
+          ],
+          "level": 10,
+          "name": "Cal MIX",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "KMX",
+          "type": null
+        }
+      },
+      "id": "mix",
+      "name": "Cal MIX",
+      "short": "KMX"
+    }
+  ],
+  "module": "test/cal-kernels",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

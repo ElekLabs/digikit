@@ -160,10 +160,13 @@ export async function runPoly(
 
 /** The cases of one machine module on one device. */
 export async function conformMachine(sp: MachineSpec, o: ConformOptions = {}): Promise<MachineReport> {
-  const bud = budget(sp.device);
   const seed = o.seed ?? SEED;
   const t0 = performance.now();
-  buildMachine(sp); // assembles and links once; the cases reuse it
+  const image = buildMachine(sp); // assembles and links once; the cases reuse it
+  // the broker takes `max(costs) x voices` of the selection, so a machine that declares fewer voices than the device's 16 may use its share of the headroom
+  const all = budget(sp.device);
+  const voices = image.desc[3] ?? 0;
+  const bud = voices >= 1 && voices < 16 ? { ...all, voiceBlock: Math.floor(all.headroom / voices) } : all;
   const built = (performance.now() - t0) / 1000;
   const groups = o.groups ?? [];
   const cases: CaseResult[] = [];

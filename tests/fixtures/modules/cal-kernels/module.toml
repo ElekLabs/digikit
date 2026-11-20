@@ -1,0 +1,61 @@
+[module]
+id = "test/cal-kernels"
+version = "0.1.0"
+name = "CAL KERNELS"
+category = "test"
+type = "machine"
+author = "digikit"
+status = "experimental"
+summary = "Test module of five synthetic SHARC+ kernels with known instruction mixes (alu, dm, mem, branch, mix) for the calibration profile `kernels`; each machine renders silence or a low constant and runs a fixed number of instructions per block."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# Five machines, one kernel each; `dsp` is the prefix of the SHARC entry points (_ka_render, _kd_render, _km_render, _kb_render, _kx_render).
+# `[uses.<device>]` is written by `mise run module:check`.
+[[machine]]
+id = "alu"
+dsp = "ka"
+
+[[machine]]
+id = "dm"
+dsp = "kd"
+
+[[machine]]
+id = "mem"
+dsp = "km"
+
+[[machine]]
+id = "branch"
+dsp = "kb"
+
+[[machine]]
+id = "mix"
+dsp = "kx"
+
+[[object]]
+path = "build/cal-kernels-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/cal-kernels-dsp.dko.json"
+sources = ["src/dsp/cal_kernels.s"]
+place = "dsp.l2"
+
+[uses.dn2]
+machine_rows = 5
+param_rows = 0
+page_rows = 5
+record_bytes = 1036
+
+[uses.dt2]
+machine_rows = 5
+param_rows = 0
+page_rows = 0
+record_bytes = 556
