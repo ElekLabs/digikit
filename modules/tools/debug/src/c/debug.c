@@ -106,7 +106,7 @@ typedef uint8_t u8;
 #define LEVEL_MAX 4u
 
 #define K_MACHINE_CHANGE 26u
-#define K_SETUP_DONE 48u
+#define K_SETUP_DONE 49u
 #define K_PARAM_CHANGE 42u
 #define PARAMS                                                                                     \
     101u /* Sound words of the larger device (Digitone II); the runtime zeroes the words a device does not have */

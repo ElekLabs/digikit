@@ -5,11 +5,18 @@ paging, PEEK's range rules, LOGCFG, the track watch and what fini clears. No fir
 import shutil
 import struct
 import subprocess
+import tomllib
 
 import pytest
 from support.paths import REPO_ROOT
 
 MOD = REPO_ROOT / "modules/tools/debug"
+# the kind the module logs SETUP_DONE with is the one of sdk/sdk.toml (debug.c names it K_SETUP_DONE)
+SETUP_DONE = next(
+    k["id"]
+    for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"]
+    if k["name"] == "SETUP_DONE"
+)
 
 HARNESS = r"""
 #include <stdio.h>
@@ -739,7 +746,7 @@ def test_setup_queues_the_request_and_the_ui_pass_performs_it_and_logs_the_resul
         "setup 2 2 1 6",
     ]
     _, _, evs = log(out[-1])
-    done = [e for e in evs if e[2] == 48]
+    done = [e for e in evs if e[2] == SETUP_DONE]
     assert [(e[4], e[5], e[6], e[7], e[8]) for e in done] == [
         (1, 3, 5, 1, 0),
         (2, 1, 6, 2, 0),
@@ -799,7 +806,7 @@ def test_setup_logs_the_status_the_runtime_gave_when_it_refuses(harness):
         [*READY, "setupres -53", "cmd 10 010101", "slot", "cmd 32 00000000"],
     )
     _, _, evs = log(out[-1])
-    done = [e for e in evs if e[2] == 48]
+    done = [e for e in evs if e[2] == SETUP_DONE]
     assert [(e[4], e[5], e[6], e[7], e[8]) for e in done] == [
         (1, 1, 1, 1, 0xFFFFFFCB)  # -53, DK_E_STATE
     ]
@@ -834,5 +841,10 @@ def test_a_request_pending_at_fini_is_logged_as_cancelled_and_never_runs(harness
         harness,
         [*READY, "cmd 10 010305", "fini", "setupcalls"],
     )
-    # SETUP_DONE (kind 48) with DK_E_AGAIN (-72) goes to the runtime's ring: the sink is already cleared
-    assert out[2:6] == ["reply 1 01", "late 48 -72", "fini 1 1", "setup 0 0 0 0"]
+    # SETUP_DONE with DK_E_AGAIN (-72) goes to the runtime's ring: the sink is already cleared
+    assert out[2:6] == [
+        "reply 1 01",
+        f"late {SETUP_DONE} -72",
+        "fini 1 1",
+        "setup 0 0 0 0",
+    ]
