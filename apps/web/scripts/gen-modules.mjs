@@ -106,13 +106,13 @@ const objectText = (dir, d, o, stored) =>
 const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.targets ?? {})].map((p) => p.split('-')[0]);
 
 /**
- * `{bundle}` from the committed tree under `root` plus the built objects of the content modules. `devices`: only the ports of these devices go in, and the modules
+ * `{bundle}` from the committed tree under `root` plus the built objects of the content modules. `offered`: only the ports of these devices go in, and the modules
  * that are for other devices only (the site passes its list: the browser patches only what the site offers; the device files stay whole, they identify a user's firmware).
  * Omitted: everything (the Python bundle's content, which a test compares).
  */
-export function buildModuleData(root = repoRoot, devices = undefined) {
+export function buildModuleData(root = repoRoot, offered = undefined) {
   const ports = readdirSync(join(root, 'devices', 'ports'))
-    .filter((f) => f.endsWith('.toml') && (!devices || devices.includes(f.split('-')[0])))
+    .filter((f) => f.endsWith('.toml') && (!offered || offered.includes(f.split('-')[0])))
     .sort()
     .map((f) => readFileSync(join(root, 'devices', 'ports', f), 'utf8'));
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
@@ -126,7 +126,7 @@ export function buildModuleData(root = repoRoot, devices = undefined) {
     })
     .filter(({ d }) => {
       const mine = moduleDevices(d);
-      return !devices || mine.length === 0 || mine.some((x) => devices.includes(x));
+      return !offered || mine.length === 0 || mine.some((x) => offered.includes(x));
     });
   const built = (d) => d.module.category !== 'core' && (d.object ?? []).some((o) => (o.sources ?? []).length > 0);
   const builtDirs = parsed.filter((m) => built(m.d)).map((m) => m.dir);
