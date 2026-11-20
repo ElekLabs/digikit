@@ -23159,14 +23159,14 @@
       "name": "param"
     },
     {
-      "count": 6,
+      "count": 5,
       "cpu": "cf",
       "file": "devices/fw/peer.toml",
       "meaning": "the second ColdFire CPU of a device that has one: the thread that reads its image from the NOR flash and streams it, and the container section depacker",
       "name": "peer"
     },
     {
-      "count": 5,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/project.toml",
       "meaning": "the project object, kits, tracks, serialisation",

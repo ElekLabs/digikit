@@ -232,12 +232,25 @@ Order: runtime safety items first, then the Nx cache gap, speed, restructure, de
 - Syntakt machines need a peer-ColdFire module contract (not SHARC). Not planned.
 - Hardware flashing beyond the sets below.
 
-### Hardware flashing, prepared (2026-11-19)
+### Hardware bring-up (branch `st/peer-pack`)
 
-Two images, built and preflighted on the host, emulator-proved for section 7 and the flash route ([finding 151](../findings/151-syntakt-section7-pack.md)); never flashed:
+State on Em's unit: the `device-peer` image and the repaired full `device` image boot. Section 7 packing and MAIN's unpack run on the hardware ([finding 151](../findings/151-syntakt-section7-pack.md)). The runtime, the digikit menu and HEALTH run. Where the card store lives and how it is checked is in [finding 154](../findings/154-syntakt-card-capacity-store.md); that check is not yet confirmed on the unit.
 
-- [ ] Optional first flash: `patchkit flash firmware/Syntakt_OS1.42.syx --port NAME --set device-peer`: `core/peer-image` only, no runtime.
-- [ ] The full set: the workbench Firmware page (or `--set device`): the runtime and the core modules of the `emulator` set.
-- The public site (apps/web) does not offer a patched Syntakt image until the proof is complete; then add `st` to `SITE_DEVICES` (`apps/web/src/firmware/site-policy.ts`).
-- Before: back up the +Drive card; do not use Transfer to put samples or sounds into the stock slots until the Data API write guard (above) lands.
+- [x] Section 7 packed by patchkit (`[container] repack`), unpacked in MAIN by `core/peer-image`; verify checks a packed section; the image fits the OS-upgrade limit.
+- [x] Bootstrap MAIN stage at 0x40200000 (`[patch] main_stage`) and the in-place margin guard: patchkit refuses an image whose margin is below the floor, and prints the budget ([finding 152](../findings/152-syntakt-bootstrap-main-stage.md)).
+- [x] Hardware sets: `device` (the full set) and `device-peer` (`core/peer-image` only, the optional first flash); the workbench skips the runtime follow-ups for an image without the runtime.
+- [x] The flash flow: the INFO failure of step A is confirmed through a Ping; the Ping reply layout of the Syntakt (length byte before the blob) is read at both offsets.
+- [x] The MODULES freeze: `core/ui` compared key events with the Digitakt II ids; `[input.view_keys]` of the device file holds the Syntakt's ids and flag bits, and a module that reads a device table declares it with `needs_device` ([finding 153](../findings/153-syntakt-view-keys.md)).
+- [x] HEALTH shows the card capacity (INFO `card_sectors`, `card_state`); the runtime refuses a card whose capacity is unknown.
+- [x] The store at 0x200000..0x300000 of the second ColdFire's flash window, checked against the driver's capacity ([finding 154](../findings/154-syntakt-card-capacity-store.md)).
+- [x] The site publishes only the devices of `SITE_DEVICES` (`apps/web/src/data/site-devices.mjs`): the build, the pages, the gallery and the emulator page follow it.
+- [ ] Confirm the store area and the card capacity on the unit (INFO `card_sectors`).
+- [ ] The stock Data API write guard: Transfer must not write samples or sounds into the stock slots (design in progress). Until it lands, back up the +Drive card and do not use Transfer for them.
+- [ ] CPU REL without a DSP (design in the `core/health` README).
+- [ ] A kept Syntakt emulator test for `core/peer-image`: the packed boot, and a corrupted stream refused.
+- [ ] Add `st` to `SITE_DEVICES` (`apps/web/src/data/site-devices.mjs`) after the hardware proof is complete.
 - Recovery: hold FUNC at power-on, TRIG 4 (OS UPGRADE), send the stock file over 5-pin MIDI DIN ([PATCHING.md](../PATCHING.md) "Flashing a Syntakt").
+
+Later:
+
+- A digikit sample pool on the Syntakt, in the digikit store and split from the 64 stock slots (which stay Elektron's). It needs a playback contract on the second ColdFire (the Syntakt has no SHARC) and is bounded by the second CPU's sample RAM (the stock firmware loads up to 32 MB).
