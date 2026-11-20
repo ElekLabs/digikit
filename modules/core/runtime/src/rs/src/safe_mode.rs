@@ -137,6 +137,7 @@ mod tests {
             checked: 0,
             claims: 0,
             writes: 0,
+            sectors: 0,
         };
         TEST_LAYOUT.with(|c| c.set(Some(L)));
     }
