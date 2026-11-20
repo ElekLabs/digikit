@@ -277,13 +277,14 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
 }
 
 /** Make the loaded content modules exactly `want` (the stock case: none), and check it. */
-async function ensureModules(rig: Rig, want: string[], log: (l: string) => void): Promise<void> {
+async function ensureModules(rig: Rig, want: string[], log: (l: string) => void, caseId: string): Promise<void> {
   if (!rig.modules) return;
   const same = (a: string[], b: string[]) =>
     a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
   let have = await rig.modules.loaded();
   if (!same(have, want)) {
     log(`loading ${want.length === 0 ? 'no modules' : want.join(', ')}`);
+    log(`case ${caseId}: restarting`);
     await rig.modules.select(want);
     have = await rig.modules.loaded();
   }
@@ -320,7 +321,7 @@ async function runCase(
   );
   const captures: Capture[] = [];
   try {
-    await ensureModules(rig, c.modules, log);
+    await ensureModules(rig, c.modules, log, c.id);
   } catch (e) {
     // the runtime refused the module because the image lacks a core module the case declares it needs: the case cannot run here
     const declared = c.needs ?? [];
@@ -432,6 +433,7 @@ async function runCase(
       log(`case ${c.id}: teardown failed: ${e instanceof Error ? e.message : e}`),
     );
     // what the case changed on the target (the track's machine type) is put back before the next case loads other modules; a refusal stops the run
+    if (after.length > 0) log(`case ${c.id}: putting the stock machine back`);
     await playAll(after, rig).catch((e) => {
       stopError = e instanceof Error ? e : new Error(String(e));
     });

@@ -170,7 +170,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       async select(ids) {
         // the debug module's log is what the run waits on: it stays selected with the case's modules
         const stay = keep.filter((id) => byId.has(id) && !ids.includes(id));
-        await untilBootStable(session, clock);
+        await untilBootStable(session, clock, (waited, of) => opts.onEvent?.({ kind: 'stable', waited, of }));
         await session.select([...ids, ...stay].map((id) => byId.get(id)!.path));
         await restartDevice(session, () => {}, {});
         if (events) {

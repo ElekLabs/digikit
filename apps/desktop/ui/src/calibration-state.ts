@@ -4,6 +4,7 @@
 import { createMemo, createSignal } from 'solid-js';
 import {
   fitView,
+  phaseLine,
   progressLine,
   readCaptureSet,
   secondsLeft,
@@ -102,6 +103,9 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
         onEvent: (e) => {
           if (e.kind === 'plan') {
             skipping = e.skipping;
+          } else if (e.kind === 'restart' || e.kind === 'stable' || e.kind === 'restore') {
+            at = undefined;
+            setProgress(phaseLine(e));
           } else if (e.kind === 'capture') {
             void now().then((t) => {
               at = { case: e.case, n: e.n, of: e.of, since: t };

@@ -7,6 +7,7 @@ import {
   fitView,
   loadCalibrationFiles,
   parseRunLine,
+  phaseLine,
   progressLine,
   readCaptureSet,
   secondsLeft,
@@ -140,7 +141,15 @@ test('progress: the runner log lines parse, and the time left counts the later c
   // capture 2 of 3 of the first case, 2 s in: 3 s here, one more capture (5 s), one whole later case (15 s)
   assert.equal(secondsLeft({ profile: p, case: 'stock', n: 2, intoCaptureS: 2 }), 3 + 5 + 15);
   assert.equal(secondsLeft({ profile: p, case: 'lp4', n: 3, intoCaptureS: 9 }), 0);
-  assert.equal(progressLine({ case: 'lp4', n: 2, of: 3, left: 6 }), 'running case lp4 · capture 2/3 · 6 s left');
+  assert.equal(progressLine({ case: 'lp4', n: 2, of: 3, left: 6 }), 'case lp4 · capture 2/3 · 6 s left');
+});
+
+test('phase lines say what the run does between captures', () => {
+  assert.deepEqual(parseRunLine('case lp4: restarting'), { kind: 'restart', case: 'lp4' });
+  assert.deepEqual(parseRunLine('case lp4: putting the stock machine back'), { kind: 'restore', case: 'lp4' });
+  assert.equal(phaseLine({ kind: 'restart', case: 'lp4' }), 'restarting for case lp4');
+  assert.equal(phaseLine({ kind: 'stable', waited: 4, of: 30 }), 'waiting for a stable boot 4 s / 30 s');
+  assert.equal(phaseLine({ kind: 'restore', case: 'lp4' }), 'putting the stock machine back');
 });
 
 test('the progress parser follows what the shared runner logs', async () => {
