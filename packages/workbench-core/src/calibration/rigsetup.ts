@@ -62,7 +62,7 @@ const BLOCKS_PER_S = 1500;
  * the log from the start of the boot with a cursor of its own (the runner's waits have consumed earlier events).
  */
 export async function untilBootStable(
-  session: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules'>,
+  session: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'>,
   clock: Clock,
 ): Promise<void> {
   const events = new RuntimeEvents(session, clock);

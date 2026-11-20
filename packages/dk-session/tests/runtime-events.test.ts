@@ -49,7 +49,13 @@ class FakeLog {
     const newest = this.events[this.events.length - 1]?.seq ?? 0;
     return [oldest, newest, this.events.filter((e) => e.seq >= from).slice(0, this.pageSize)];
   }
+  /** Until true the debug module's commands answer E_PROTO and INFO shows no log sink. */
+  debugLoaded = true;
+  async info() {
+    return { log_sink: this.debugLoaded };
+  }
   async logConfig() {
+    if (!this.debugLoaded) throw new Error('logcfg: E_PROTO');
     return { level: 1, modules: [0, 0, 0, 0, 0, 0, 0, 0] };
   }
   async setLogConfig() {
@@ -347,4 +353,31 @@ test('untilModulesActive: an E_IMPORT without MOD_NEEDS is final with an empty n
   noDsp.add('MOD_LOAD', [0, 1, 0, 0, 0]); // the DSP part never reports without the DSP
   await n.ev.untilModulesActive(1, { dsp: false });
   await assert.rejects(ev.untilModulesActive(0), /debug module file/);
+});
+
+test('listen sends no debug-module command until INFO shows the log sink', async () => {
+  const log = new FakeLog();
+  log.debugLoaded = false;
+  const clock = new FakeClock();
+  const info = log.info.bind(log);
+  let polls = 0;
+  log.info = async () => {
+    // the module loads (MOD_LOAD) after a few polls
+    if (++polls === 4) {
+      log.debugLoaded = true;
+      log.add('MOD_LOAD', [0, 0]);
+    }
+    return info();
+  };
+  const ev = new RuntimeEvents(log as never, clock);
+  await ev.listen({ fromBoot: true });
+  assert.equal(polls, 4);
+  assert.deepEqual(log.pages, []);
+});
+
+test('listen fails with the cause when the debug module never loads', async () => {
+  const log = new FakeLog();
+  log.debugLoaded = false;
+  const ev = new RuntimeEvents(log as never, new FakeClock());
+  await assert.rejects(ev.listen(), /did not set its log sink/);
 });

@@ -37,6 +37,7 @@ function fake(opts: { hangOnPause?: number; fwId?: string | null } = {}) {
     info: async () => ({
       port: 'dn2-1.12',
       runtime: '0.9',
+      log_sink: true,
       ...(opts.fwId === null ? {} : { fw_id: opts.fwId ?? 'ab12' }),
     }),
     modules: async () => [],
@@ -177,6 +178,7 @@ test('a boot that is not seen stable stops the run with a clear message, and one
   const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
   const noLog = {
     logPage: async () => Promise.reject(new Error('no log')),
+    info: async () => Promise.reject(new Error('no log')),
     logConfig: async () => Promise.reject(new Error('no log')),
     setLogConfig: async () => ({}),
     modules: async () => [],
@@ -190,6 +192,7 @@ test('a boot that is not seen stable stops the run with a clear message, and one
   ];
   const log = {
     logPage: async (from: number) => [1, 2, events.filter((e) => e.seq >= from)] as never,
+    info: async () => ({ log_sink: true }),
     logConfig: async () => ({ level: 2, modules: [] }),
     setLogConfig: async () => ({}),
     modules: async () => [],

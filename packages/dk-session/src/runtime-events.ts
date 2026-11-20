@@ -10,7 +10,7 @@
 //   BOOT_START there is a new boot.
 // - A gap (the oldest kept event is newer than the anchor in the same boot: the ring dropped events we had not read) is reported as `lost`, never thrown.
 import { LOG_KIND } from './gen_proto.ts';
-import type { DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
+import type { DkInfoFull, DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
 import { runtimeEvent, type RuntimeEvent } from './runtime-log.ts';
 import { BOOT_WAIT_MS, type Clock, type WaitRecord } from './waits.ts';
 
@@ -158,7 +158,7 @@ interface WaitOpts {
 }
 
 export class RuntimeEvents {
-  private readonly dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules'>;
+  private readonly dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'>;
   private readonly clock: Clock;
   private readonly cursor: LogCursor;
   private readonly pollMs: number;
@@ -170,7 +170,7 @@ export class RuntimeEvents {
   private recent: RuntimeEvent[] = [];
 
   constructor(
-    dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules'>,
+    dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'>,
     clock: Clock,
     opts: RuntimeEventsOptions = {},
   ) {
@@ -192,9 +192,24 @@ export class RuntimeEvents {
   async listen({ fromBoot = false }: { fromBoot?: boolean } = {}): Promise<void> {
     this.queue = [];
     this.recent = [];
+    // every debug-module command (LOG, LOGCFG) answers E_PROTO until the module has registered its range: INFO (a runtime command) says when its sink is set
+    await this.untilDebugModule();
     if (fromBoot) this.cursor.fromBoot();
     else await this.cursor.fromNewest();
     await this.setLevels();
+  }
+
+  /** Waits on INFO flag bit 3 (the debug module's log sink; the module registers its command range before it sets the sink). */
+  private async untilDebugModule(withinMs = 20_000): Promise<void> {
+    const start = await this.clock.now();
+    for (;;) {
+      if (((await this.dk.info()) as Partial<DkInfoFull>).log_sink === true) return;
+      if ((await this.clock.now()) - start >= withinMs)
+        throw new EventTimeout(
+          'the debug module (digikit/debug) did not set its log sink: INFO flag bit 3 stayed clear',
+        );
+      await this.clock.pause(this.pollMs);
+    }
   }
 
   /** The records of `debugModules` that are loaded go to `level`; the other levels stay. */
