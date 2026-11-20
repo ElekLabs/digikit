@@ -2973,6 +2973,16 @@ mark = "D"
 rule = "fw/string:cf_func"
 
 [[anchor]]
+name = "cf.text.data.font_large"
+cpu = "cf"
+kind = "data"
+addr = 0x40291c3c
+len = 20
+sha256 = "ca010dc4278c16fd76818ca69f30b217d523986d03cf1393885d5934c5aa6e72"
+mark = "V"
+rule = "fw/text:cf_words"
+
+[[anchor]]
 name = "cf.text.fn.draw"
 cpu = "cf"
 kind = "code"

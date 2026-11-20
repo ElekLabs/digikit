@@ -291,21 +291,21 @@
   },
   {
    "addend": 0,
-   "offset": 38,
+   "offset": 42,
    "section": ".text.fwc_text_width",
    "symbol": ".sec..bss.g_canvas_font",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 44,
+   "offset": 52,
    "section": ".text.fwc_text_width",
    "symbol": "cf.text.fn.width",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 58,
+   "offset": 66,
    "section": ".text.fwc_text_width",
    "symbol": "cf.string.fn.std_string.dtor",
    "type": "cf.32"
@@ -340,7 +340,7 @@
   },
   {
    "addend": 0,
-   "offset": 28,
+   "offset": 36,
    "section": ".text.fwc_text",
    "symbol": "cf.text.fn.draw",
    "type": "cf.32"
@@ -1138,76 +1138,6 @@
   },
   {
    "addend": 0,
-   "offset": 6,
-   "section": ".text.mv_draw",
-   "symbol": "cf.menu.site.vertical_menu_view_ctor.font_ref",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 24,
-   "section": ".text.mv_draw",
-   "symbol": ".sec..bss.g_canvas_font",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 64,
-   "section": ".text.mv_draw",
-   "symbol": ".sec..text.fwc_text",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 74,
-   "section": ".text.mv_draw",
-   "symbol": ".sec..text.fwc_fill",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 84,
-   "section": ".text.mv_draw",
-   "symbol": ".sec..text.fwc_invert",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 94,
-   "section": ".text.mv_draw",
-   "symbol": ".sec..text.fwc_text_width",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 104,
-   "section": ".text.mv_draw",
-   "symbol": "ui_canvas_bind",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 122,
-   "section": ".text.mv_draw",
-   "symbol": ".sec..bss.g_views",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 128,
-   "section": ".text.mv_draw",
-   "symbol": "ui_views_draw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 134,
-   "section": ".text.mv_draw",
-   "symbol": "ui_canvas_unbind",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 102,
    "section": ".text.inv_act",
    "symbol": "cf.menu.fn.popout_set_active",
@@ -1225,6 +1155,90 @@
    "offset": 188,
    "section": ".text.inv_act",
    "symbol": ".sec..text.value_changed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.mv_draw",
+   "symbol": "cf.menu.site.vertical_menu_view_ctor.font_ref",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.mv_draw",
+   "symbol": "cf.text.data.font_large",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..bss.g_canvas_font",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_fill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_text_width",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 124,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..bss.g_canvas_font",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_invert",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 144,
+   "section": ".text.mv_draw",
+   "symbol": "ui_canvas_bind",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 162,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 168,
+   "section": ".text.mv_draw",
+   "symbol": "ui_views_draw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 174,
+   "section": ".text.mv_draw",
+   "symbol": "ui_canvas_unbind",
    "type": "cf.32"
   },
   {
@@ -2441,15 +2455,29 @@
   {
    "addend": 0,
    "offset": 2,
-   "section": ".text.c_text_width",
+   "section": ".text.c_text_width_in",
    "symbol": ".sec..bss.g_fw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 6,
-   "section": ".text.c_text",
+   "offset": 8,
+   "section": ".text.c_text_width",
+   "symbol": ".sec..text.c_text_width_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.c_text_in",
    "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.c_text",
+   "symbol": ".sec..text.c_text_in",
    "type": "cf.32"
   },
   {
@@ -2517,7 +2545,21 @@
   },
   {
    "addend": 0,
-   "offset": 66,
+   "offset": 70,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_text_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_text_width_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
    "section": ".text.ui_canvas_bind",
    "symbol": ".sec..bss.g_fw",
    "type": "cf.32"
@@ -2743,10 +2785,10 @@
   },
   {
    "align": 2,
-   "hex": "42004e56fff4486efffb2f2e0008486efffc1d40fffb4eb900000000486efffc4878ffff2f39000000004eb900000000486efffc2d40fff44eb9000000004fef001c202efff44e5e4e75",
+   "hex": "42004e56fff4486efffb2f2e000c486efffc1d40fffb4eb900000000486efffc202e00084878ffff41f9000000002f300c004eb900000000486efffc2d40fff44eb9000000004fef001c202efff44e5e4e75",
    "kind": "text",
    "name": ".text.fwc_text_width",
-   "size": 74
+   "size": 82
   },
   {
    "align": 2,
@@ -2764,10 +2806,10 @@
   },
   {
    "align": 2,
-   "hex": "2f2f00104878ffff2f2f00142f2f00142f39000000002f2f00184eb9000000004fef00184e75",
+   "hex": "2f2f00144878ffff2f2f00182f2f001841f900000000202f00182f300c002f2f00184eb9000000004fef00184e75",
    "kind": "text",
    "name": ".text.fwc_text",
-   "size": 38
+   "size": 46
   },
   {
    "align": 2,
@@ -2946,17 +2988,17 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffc043f90000000022690002206e000c71e9000623c9000000002d680004ffe22d680008ffe62d40ffea486effde486effc22d48ffde70011d40ffee203c000000002d40fff0203c000000002d40fff4203c000000002d40fff8203c000000002d40fffc4eb900000000486effc2206e00082f28004c4879000000004eb9000000004eb9000000004fef00144e5e4e75",
-   "kind": "text",
-   "name": ".text.mv_draw",
-   "size": 146
-  },
-  {
-   "align": 2,
    "hex": "4fefffe4206f002048d71c0c24504a8a677a202800044a806d72b0aa001e6c6c721e4c010800206a001ad1c02228000a141071aa001026680002262800062868000e2068001a57802f4100142f4800184a806618206a00124a886710202800042f002f004eb900000000508f71827201b280672257804a8067304a02660e4a8b670a2f2f00142f034e93508f4cd71c0c4fef001c4e754cd71c0c2f6f001800204fef001c4ef9000000004a8c67de4a9457c27502448228822f0a4eb900000000588f4a8b67c62f0260bc",
    "kind": "text",
    "name": ".text.inv_act",
    "size": 202
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffb041f90000000022680002203c000000002f0b2f0a23c9000000002d40ffb24aaeffb26700009a206effb2246e000c71e9000647f9000000002d6a0004ffde2d6a0008ffe22d40ffe671e800062d4affda45f9000000002d4afff02d40ffea486effda700145f900000000486effb62d4bfff42d4afffc23c8000000001d40ffee203c000000002d40fff84eb900000000486effb6206e00082f28004c4879000000004eb9000000004eb9000000004fef0014246effa8266effac4e5e4e7520496000ff68",
+   "kind": "text",
+   "name": ".text.mv_draw",
+   "size": 200
   },
   {
    "align": 2,
@@ -3173,7 +3215,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.g_canvas_font",
-   "size": 4
+   "size": 8
   },
   {
    "align": 2,
@@ -3485,21 +3527,35 @@
   },
   {
    "align": 2,
-   "hex": "2079000000004a88670c4aaf000467062268001e4ed142804e75",
+   "hex": "2079000000004a88671c4aaf000867167201b2af000457c0710044802f400004226800224ed142804e75",
+   "kind": "text",
+   "name": ".text.c_text_width_in",
+   "size": 42
+  },
+  {
+   "align": 2,
+   "hex": "2f2f000442a74eb900000000508f4e75",
    "kind": "text",
    "name": ".text.c_text_width",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "4feffff048d70c0c247900000000266f00204a8a676a4a8b67664a1367627201b2af001c57c07203710092802400448226321c002f0b2f02206a00224e90508f222f0014b2aa00046c36d0814a806f30202a0008b0af00186f26222f0018d2834a816f1c2f0b90af001c90832f002f2f001c2f022f12206a00164e904fef00144cd70c0c4fef00104e75",
+   "kind": "text",
+   "name": ".text.c_text_in",
+   "size": 138
+  },
+  {
+   "align": 2,
+   "hex": "2f2f000c42a72f2f00102f2f00104eb9000000004fef00104e75",
+   "kind": "text",
+   "name": ".text.c_text",
    "size": 26
   },
   {
    "align": 2,
-   "hex": "2f0b2f0a247900000000266f00144a8a67544a8b67504a13674c2f0b206a001e4e90588f222f000cb2aa00046c38d0814a806f32202a0008b0af00106f28222a000c206f0010d1c14a886f1a2f0b90af001490812f002f2f00142f12206a00124e904fef0010245f265f4e75",
-   "kind": "text",
-   "name": ".text.c_text",
-   "size": 108
-  },
-  {
-   "align": 2,
-   "hex": "4feffff448d7040c247900000000226f0010206f0014222f0018202f001c4a8a6772b2896d06240122092242b0886d062400200820422409260884836b56262a0004b2836c4e242a0008b0826c464a816c0242814a806c024280b3c36d0422435389b1c26d04204253884a2a0010670c538226029688204291c020032f2f00202f082f092f002f012f12206a00164e904fef00184cd7040c4fef000c4e75",
+   "hex": "4feffff448d7040c247900000000226f0010206f0014222f0018202f001c4a8a6772b2896d06240122092242b0886d062400200820422409260884836b56262a0004b2836c4e242a0008b0826c464a816c0242814a806c024280b3c36d0422435389b1c26d04204253884a2a0014670c538226029688204291c020032f2f00202f082f092f002f012f12206a001a4e904fef00184cd7040c4fef000c4e75",
    "kind": "text",
    "name": ".text.c_fill",
    "size": 158
@@ -3513,17 +3569,17 @@
   },
   {
    "align": 2,
-   "hex": "4feffff448d7040c247900000000226f0010206f0014222f0018202f001c4a8a676eb2896d06240122092242b0886d062400200820422409260884836b52262a0004b2836c4a242a0008b0826c424a816c0242814a806c024280b3c36d0422435389b1c26d04204253884a2a0010670c538226029688204291c020032f082f092f002f012f12206a001a4e904fef00144cd7040c4fef000c4e75",
+   "hex": "4feffff448d7040c247900000000226f0010206f0014222f0018202f001c4a8a676eb2896d06240122092242b0886d062400200820422409260884836b52262a0004b2836c4a242a0008b0826c424a816c0242814a806c024280b3c36d0422435389b1c26d04204253884a2a0014670c538226029688204291c020032f082f092f002f012f12206a001e4e904fef00144cd7040c4fef000c4e75",
    "kind": "text",
    "name": ".text.c_invert",
    "size": 154
   },
   {
    "align": 2,
-   "hex": "206f0004203c00000000226f000820a9000421690008000421400008203c000000002140000c203c0000000021400010203c0000000021400014203c0000000023c900000000214000184e75",
+   "hex": "206f0004203c00000000226f000820a9000421690008000421400008203c000000002140000c203c0000000021400010203c0000000021400014203c0000000021400018203c000000002140001c203c0000000023c900000000214000204e75",
    "kind": "text",
    "name": ".text.ui_canvas_bind",
-   "size": 76
+   "size": 96
   },
   {
    "align": 2,
@@ -3589,7 +3645,7 @@
    "size": 72
   }
  ],
- "source_sha256": "e5d7383041efdea9de5b30875e7c518edfd6d8c4af49950debfbaa5d5360554f",
+ "source_sha256": "70ecb07a78fafdfdd3cea09e8154d9807340d53a547d90a2d70faf19d053932f",
  "symbols": [
   {
    "global": false,
@@ -3797,8 +3853,20 @@
   },
   {
    "global": false,
+   "name": ".sec..text.c_text_in",
+   "section": ".text.c_text_in",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.c_text_width",
    "section": ".text.c_text_width",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_text_width_in",
+   "section": ".text.c_text_width_in",
    "value": 0
   },
   {
@@ -4169,8 +4237,20 @@
   },
   {
    "global": false,
+   "name": "c_text_in",
+   "section": ".text.c_text_in",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "c_text_width",
    "section": ".text.c_text_width",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_text_width_in",
+   "section": ".text.c_text_width_in",
    "value": 0
   },
   {
@@ -4296,6 +4376,12 @@
   {
    "global": true,
    "name": "cf.string.fn.std_string.dtor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.text.data.font_large",
    "section": null,
    "value": 0
   },
@@ -5276,8 +5362,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3772",
-  "isa_check": "cba78a42a97c4464cca8796043d6564a90774f240ba01754782684bd0a825e9c",
+  "instructions_redecoded": "3822",
+  "isa_check": "c4c776837fb5c10a0387e2947a8c5efb953987a13119fb4b9bad4f579c710847",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

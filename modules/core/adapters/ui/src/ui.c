@@ -1102,14 +1102,15 @@ int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *
 
 /* -- canvas: the firmware side of canvas_map.h -- */
 
-static uint8_t *g_canvas_font;
+/* The fonts of the canvas by dk_font: the stock UI font and the large ROM font (anchor `cf.text.data.font_large`; a firmware without it draws the small one). */
+static uint8_t *g_canvas_font[2];
 
 /* The screen's own calls. Text y and rectangle rows both count from the screen bottom (the title bar of every stock list is drawn at rows 0x39 to 0x3f
    with the text at y 0x3a: checked in the stock paint code). `maxw` -1: the whole text (the main screen passes -1). A set pixel is colour -1, a clear
    one 0 (the stock paint calls), and the selection bar of the stock lists is inverted with colour -1. */
-static void fwc_text(void *bitmap, int32_t x, int32_t y_up, const char *s)
+static void fwc_text(void *bitmap, int32_t font, int32_t x, int32_t y_up, const char *s)
 {
-    dk_fw_text_draw((uint8_t *)bitmap, g_canvas_font, x, y_up, -1, s);
+    dk_fw_text_draw((uint8_t *)bitmap, g_canvas_font[font], x, y_up, -1, s);
 }
 
 static void fwc_fill(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color)
@@ -1120,6 +1121,13 @@ static void fwc_fill(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t y
 static void fwc_invert(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 {
     dk_fw_draw_invert_rect((uint8_t *)bitmap, x0, y0, x1, y1, -1);
+}
+
+/* The large ROM font, or `small` on a firmware whose port has no `cf.text.data.font_large`: the anchor is optional and links 0 there. */
+static uint8_t *large_font(uint8_t *small)
+{
+    uint8_t *volatile p = (uint8_t *)&dk_fw_text_font_large;
+    return p ? p : small;
 }
 
 /* The anchors behind module screens (the text width, the View constructor, the naming screen and its callback vtable) are optional in module.toml: a firmware that
@@ -1135,13 +1143,13 @@ static int fw_screens(void)
 }
 
 /* The width routine takes the font data and a std::string (a pointer to the one-word COW object). */
-static int32_t fwc_text_width(const char *s)
+static int32_t fwc_text_width(int32_t font, const char *s)
 {
     uint32_t str;
     uint8_t alloc = 0;
     int32_t w;
     dk_fw_string_std_string_ctor(&str, s, &alloc);
-    w = dk_fw_text_width(g_canvas_font, -1, &str);
+    w = dk_fw_text_width(g_canvas_font[font], -1, &str);
     dk_fw_string_std_string_dtor(&str);
     return w;
 }
@@ -1149,11 +1157,13 @@ static int32_t fwc_text_width(const char *s)
 /* Fills `fw` for the screen Bitmap of this frame: +4 width, +8 height (dk_fw_draw.h); the glyph box height of the font is FontData.height. */
 static void canvas_fw_for(ui_canvas_fw *fw, uint8_t *bitmap)
 {
-    g_canvas_font = vmv_font();
+    g_canvas_font[0] = vmv_font();
+    g_canvas_font[1] = large_font(g_canvas_font[0]);
     fw->bitmap = bitmap;
     fw->width = read_u32(bitmap + 4);
     fw->height = read_u32(bitmap + 8);
-    fw->font_h = *(const uint16_t *)(g_canvas_font + offsetof(FontData, height));
+    for (int i = 0; i < 2; i++)
+        fw->font_h[i] = *(const uint16_t *)(g_canvas_font[i] + offsetof(FontData, height));
     fw->rect_from_bottom = 1;
     fw->text = fwc_text;
     fw->fill = fwc_fill;

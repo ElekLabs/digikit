@@ -21,4 +21,20 @@ static inline void track_text_number(char out[3], uint32_t track)
     out[2] = 0;
 }
 
+/* "TRACK NN" and a terminator, written byte by byte (no string copy, so no library call in the module). */
+static inline void track_text_label(char out[9], uint32_t track)
+{
+    char number[3];
+    track_text_number(number, track);
+    out[0] = 'T';
+    out[1] = 'R';
+    out[2] = 'A';
+    out[3] = 'C';
+    out[4] = 'K';
+    out[5] = ' ';
+    out[6] = number[0];
+    out[7] = number[1];
+    out[8] = 0;
+}
+
 #endif

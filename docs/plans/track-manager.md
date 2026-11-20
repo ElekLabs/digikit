@@ -66,7 +66,7 @@ int dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *d);
 ```
 
 - `dk_canvas` (new header `dk/platform/canvas.h`): `width`, `height`, `text`, `fill_rect` in the order of `dk_page_canvas_v1`,
-  then `invert_rect`, `frame_rect`, `text_width`. Page code can take `dk_canvas` later with no ABI change.
+  then `invert_rect`, `frame_rect`, `text_width`, and the font choice `text_in(x, y, font, str)` and `text_width_in(font, str)` (`DK_FONT_SMALL`, `DK_FONT_LARGE`: the large ROM font, box height 15, anchor `cf.text.data.font_large`). Page code can take `dk_canvas` later with no ABI change.
 - Views come from a fixed pool in `core/ui` (one owner object: open, close, close all of an owner). `core/ui` closes and
   frees a module's views and drops its SETTINGS rows when the module unloads, so a module with views stays unloadable
   (menus are not: `DK_E_RELOAD_MENUS`).

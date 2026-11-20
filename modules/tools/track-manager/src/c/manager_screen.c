@@ -1,5 +1,5 @@
-/* manager_screen: see manager_screen.h. Layout for 128 x 64 with the stock font (glyphs 6 pixels high): title, the grid rows, a bar under named tracks, the
- * selected track, the key line at the bottom; the right-aligned text uses `text_width`. */
+/* manager_screen: see manager_screen.h. Layout for 128 x 64: the title and the two grid rows in the stock font (glyphs 6 pixels high; a bar under named tracks),
+ * then "TRACK NN" in the small font and the name in the large font (or "-"), and the key line at the bottom; the right-aligned text uses `text_width`. */
 #include "manager_screen.h"
 
 #include <dk/platform/settings.h>
@@ -9,6 +9,7 @@
 
 #include "active_track.h"
 #include "grid_cursor.h"
+#include "name_line.h"
 #include "track_text.h"
 
 #define MARGIN 4
@@ -18,7 +19,8 @@
 #define TITLE_Y 0
 #define GRID_Y (TM_GLYPH_H + 5)     /* below the title */
 #define BAR_OFFSET (TM_GLYPH_H + 1) /* from the top of the number to the bar under it */
-#define SELECTED_GAP 4
+#define SELECTED_GAP 4              /* above the "TRACK NN" line */
+#define NAME_GAP 1                  /* between that line and the large name */
 #define KEYS_Y_FROM_BOTTOM (TM_GLYPH_H + 1)
 #define TITLE_MAX 24
 
@@ -86,19 +88,14 @@ static void draw(void *arg, const dk_canvas *canvas)
             canvas->invert_rect(x - 1, y - 1, x + w, y + TM_GLYPH_H);
     }
     uint32_t track = grid_cursor_track(&cursor);
-    char line[TITLE_MAX + TRACK_NAME_MAX];
-    uint32_t at = 0;
-    char number[3];
-    track_text_number(number, track);
-    line[at++] = number[0];
-    line[at++] = number[1];
-    line[at++] = ' ';
-    line[at++] = ' ';
-    for (const char *s = track_names_name_of(names, track); *s; s++)
-        line[at++] = *s;
-    line[at] = 0;
+    char label[9];
+    track_text_label(label, track);
     int32_t keys_y = (int32_t)canvas->height - KEYS_Y_FROM_BOTTOM;
-    canvas->text(MARGIN, keys_y - TM_GLYPH_H - SELECTED_GAP, line);
+    int32_t name_y = keys_y - SELECTED_GAP - NAME_LINE_H_ROWS;
+    int32_t label_y = name_y - NAME_GAP - TM_GLYPH_H;
+    canvas->text(MARGIN, label_y, label);
+    name_line_draw(canvas, MARGIN, name_y, (int32_t)canvas->width - 2 * MARGIN,
+                   track_names_name_of(names, track));
     const char *exit_text = "[NO] EXIT";
     canvas->text(MARGIN, keys_y, "[YES] RENAME");
     canvas->text((int32_t)canvas->width - MARGIN - canvas->text_width(exit_text), keys_y,

@@ -1055,6 +1055,12 @@ pub mod text {
         #[link_name = "cf.text.fn.width"]
         pub fn width(fontdata: *mut u8, maxlen: i32, str: *const u32) -> i32;
     }
+
+    unsafe extern "C" {
+        /// The large ROM font (FontData header, 20 bytes): box height 15, glyph widths 2 to 8, two bytes for each glyph column; it has A to Z, 0 to 9, the space and `~!@#$%^&()_+-=`. The header words are 7, 0x0002000f and three pointers (width table, glyph offset table in columns, glyph data); the header is unique in the image. Finding 155 section 5.
+        #[link_name = "cf.text.data.font_large"]
+        pub static FONT_LARGE: u8;
+    }
 }
 
 pub mod usb {

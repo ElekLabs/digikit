@@ -13,6 +13,8 @@ extern "C" {
     fn cv_invert(x0: c_int, y0: c_int, x1: c_int, y1: c_int);
     fn cv_frame(x0: c_int, y0: c_int, x1: c_int, y1: c_int, c: c_int);
     fn cv_text_width(s: *const c_char) -> c_int;
+    fn cv_text_in(x: c_int, y: c_int, font: c_int, s: *const c_char);
+    fn cv_text_width_in(font: c_int, s: *const c_char) -> c_int;
 }
 
 fn log() -> Vec<String> {
@@ -150,4 +152,51 @@ fn after_the_draw_the_canvas_does_nothing() {
     unsafe { cv_frame(0, 0, 5, 5, 1) };
     assert_eq!(unsafe { cv_text_width(c"A".as_ptr()) }, 0);
     assert!(log().is_empty());
+}
+
+fn text_in(x: i32, y: i32, font: i32, s: &str) {
+    let s = CString::new(s).unwrap();
+    unsafe { cv_text_in(x, y, font, s.as_ptr()) }
+}
+
+#[test]
+fn large_text_y_is_the_top_row_of_its_taller_box() {
+    let _g = session();
+    unsafe { cv_begin(0) };
+    text_in(3, 0, 1, "A"); // top row 0, 15 rows high: the bottom edge is 49 up from the bottom
+    text_in(3, 49, 1, "B"); // the last 15 rows: bottom edge at row 0
+    text_in(3, 10, 0, "C"); // the small font keeps its 6 rows: 64 - 10 - 6
+    assert_eq!(log(), ["L 3 49 A", "L 3 0 B", "T 3 48 C"]);
+    unsafe { cv_end() };
+}
+
+#[test]
+fn large_text_is_clipped_by_its_own_height_and_width() {
+    let _g = session();
+    unsafe { cv_begin(0) };
+    text_in(0, 64, 1, "A"); // below
+    text_in(0, -15, 1, "A"); // above: its 15 rows end at -1
+    text_in(128, 0, 1, "A"); // right of the screen
+    text_in(-8, 0, 1, "A"); // 8 wide, ends at x = 0
+    text_in(0, 0, 1, "");
+    assert!(log().is_empty());
+    text_in(-7, 0, 1, "A"); // one column on the screen
+    text_in(0, -14, 1, "A"); // one row on the screen
+    // a small text at the same y is 6 rows high: -14 is off the screen for it
+    text_in(0, -14, 0, "A");
+    assert_eq!(log().len(), 2);
+    unsafe { cv_end() };
+}
+
+#[test]
+fn text_width_in_asks_the_firmware_with_the_font() {
+    let _g = session();
+    unsafe { cv_begin(0) };
+    assert_eq!(unsafe { cv_text_width_in(0, c"ABC".as_ptr()) }, 12);
+    assert_eq!(unsafe { cv_text_width_in(1, c"ABC".as_ptr()) }, 24);
+    assert_eq!(unsafe { cv_text_width(c"ABC".as_ptr()) }, 12, "text_width stays small");
+    assert_eq!(unsafe { cv_text_width_in(1, std::ptr::null()) }, 0);
+    // a font number the canvas does not know is the small font
+    assert_eq!(unsafe { cv_text_width_in(7, c"ABC".as_ptr()) }, 12);
+    unsafe { cv_end() };
 }

@@ -83,22 +83,38 @@ static void c_frame(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t colo
     }
 }
 
+/* A font number the canvas knows: anything else is the small font. */
+static int32_t font_of(dk_font font)
+{
+    return font == DK_FONT_LARGE ? DK_FONT_LARGE : DK_FONT_SMALL;
+}
+
+static int32_t c_text_width_in(dk_font font, const char *s)
+{
+    return g_fw && s ? g_fw->text_width(font_of(font), s) : 0;
+}
+
 static int32_t c_text_width(const char *s)
 {
-    return g_fw && s ? g_fw->text_width(s) : 0;
+    return c_text_width_in(DK_FONT_SMALL, s);
+}
+
+static void c_text_in(int32_t x, int32_t y, dk_font font, const char *s)
+{
+    const ui_canvas_fw *fw = g_fw;
+    int32_t w, f = font_of(font), h;
+    if (!fw || !s || !*s)
+        return;
+    h = (int32_t)fw->font_h[f];
+    w = fw->text_width(f, s);
+    if (x >= (int32_t)fw->width || x + w <= 0 || y >= (int32_t)fw->height || y + h <= 0)
+        return;
+    fw->text(fw->bitmap, f, x, (int32_t)fw->height - y - h, s);
 }
 
 static void c_text(int32_t x, int32_t y, const char *s)
 {
-    const ui_canvas_fw *fw = g_fw;
-    int32_t w;
-    if (!fw || !s || !*s)
-        return;
-    w = fw->text_width(s);
-    if (x >= (int32_t)fw->width || x + w <= 0 || y >= (int32_t)fw->height ||
-        y + (int32_t)fw->font_h <= 0)
-        return;
-    fw->text(fw->bitmap, x, (int32_t)fw->height - y - (int32_t)fw->font_h, s);
+    c_text_in(x, y, DK_FONT_SMALL, s);
 }
 
 void ui_canvas_bind(dk_canvas *c, const ui_canvas_fw *fw)
@@ -111,6 +127,8 @@ void ui_canvas_bind(dk_canvas *c, const ui_canvas_fw *fw)
     c->invert_rect = c_invert;
     c->frame_rect = c_frame;
     c->text_width = c_text_width;
+    c->text_in = c_text_in;
+    c->text_width_in = c_text_width_in;
 }
 
 void ui_canvas_unbind(void)
