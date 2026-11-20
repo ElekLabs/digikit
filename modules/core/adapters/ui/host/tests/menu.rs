@@ -8,10 +8,6 @@ extern "C" {
     fn fk_add(path: *const c_char, flags: u32, arena: u32, fx_slots: u32, machines: u32);
     fn fk_select(path: *const c_char);
     fn fk_scan_result(r: c_int);
-    fn fk_get_result(r: c_int);
-    fn fk_apply();
-    fn fk_set_tick(row: c_int, on: c_int);
-    fn fk_boot_read_failure();
     fn fk_boot_safe();
     fn fk_loaded(path: *const c_char, name: *const c_char);
     fn fk_fx(id: *const c_char, allowed: u32, saved: u32);
@@ -25,9 +21,6 @@ extern "C" {
     fn fk_selection_sets() -> c_int;
     fn fk_set_count() -> c_int;
     fn fk_set_path(i: c_int) -> *const c_char;
-    fn fk_puts() -> c_int;
-    fn fk_put_key(i: c_int) -> *const c_char;
-    fn fk_put_val(i: c_int) -> c_int;
     fn fk_flushes() -> c_int;
     fn fk_tick(i: c_int) -> c_int;
     fn fk_live_script(i: c_int, queue_result: c_int, job_result: c_int);
@@ -37,7 +30,6 @@ extern "C" {
     fn fk_live_calls() -> c_int;
     fn fk_live_op(i: c_int) -> c_int;
     fn fk_live_path(i: c_int) -> *const c_char;
-    fn fk_boot_counters(unloads: u32, reloads: u32);
     fn fk_boot_needs(k: c_int, name: *const c_char);
     fn fk_set_handle(k: c_int) -> usize;
     fn fk_say_poll();
