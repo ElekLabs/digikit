@@ -224,3 +224,28 @@ test('the machine step remembers the type the firmware reported as the old one a
   ]);
   await assert.rejects(setup('machine', 5, 'original'), /none to put back/);
 });
+
+test('a module case whose module has no build for the target is skipped with that reason and the rest of the profile runs', async () => {
+  const f = fake();
+  const withModules = loadCalibrationFiles({
+    profiles: {
+      'p/m.toml': `schema = "dk.calprofile/1"\nname = "m"\nwarmup_s = 0\ncapture_s = 0.1\nrepeats = 1\ndiscover = "modules"\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+    },
+    steps: {
+      'hold.toml': `schema = "dk.steps/1"\nname = "hold"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\n`,
+    },
+    cases: {
+      'x/calibration.toml': `schema = "dk.calcase/1"\nid = "only-other"\nmodule = "tom/other"\nsteps = "hold"\n`,
+    },
+  });
+  const events: RunEvent[] = [];
+  const out = await runCalibrationOnTarget(
+    { ...f.deps, files: withModules, modules: { library: async () => [], install: async () => {} } },
+    { profile: 'm', onEvent: (e) => events.push(e) },
+  );
+  const port = (await f.deps.session.info()).port;
+  assert.deepEqual(out.skipped, [{ case: 'only-other', reason: `not built for ${port}: tom/other` }]);
+  assert.equal(out.error, undefined);
+  assert.ok(out.captures.length > 0, 'the stock case still ran');
+  assert.ok(events.some((e) => e.kind === 'skip' && e.case === 'only-other'));
+});
