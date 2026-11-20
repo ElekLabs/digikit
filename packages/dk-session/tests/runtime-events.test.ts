@@ -80,6 +80,15 @@ test('an event after the cursor matches; events before listen() do not', async (
   assert.equal(e.seq, 2);
 });
 
+test('tryUntil gives null when the event does not come and the event when it does', async () => {
+  const log = new FakeLog();
+  const { ev } = make(log);
+  await ev.listen();
+  assert.equal(await ev.tryUntil('SAFE', undefined, { withinMs: 200 }), null);
+  log.add('SAFE', [3]);
+  assert.equal((await ev.tryUntil('SAFE'))?.seq, 1);
+});
+
 test('fromBoot sees the early events of the boot', async () => {
   const log = new FakeLog();
   log.add('BOOT_START');

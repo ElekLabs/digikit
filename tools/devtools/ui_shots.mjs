@@ -905,6 +905,55 @@ const SCENES = [
       await p.wait(800);
     },
   },
+  // ---- the Calibration section of the Profile pane (preview/calibration-backend.mock.ts): made-up captures; the files go in through the file inputs ----
+  {
+    // a run on the emulator in progress: the progress line and Stop (cal=slow stretches a capture to 3 s)
+    name: 'profile-calibration-run',
+    q: 'page=emulator&card=dn2&prof=stopped&cal=slow',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(1500);
+      await p.eval(
+        "(() => { const b = document.querySelector('.cal .cal-bar .act.primary'); b.click(); b.scrollIntoView(); })()",
+      );
+      await p.wait(4000);
+    },
+  },
+  {
+    // an emulator run loaded from a file, then a device run through Fit with…: the table with both columns, factor and error, the fit lines
+    name: 'profile-calibration-fit',
+    q: 'page=emulator&card=dn2&prof=stopped',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(1500);
+      const give = (index, side) =>
+        p.eval(`(() => {
+          const cap = (caseId, n, rows) => ({ schema: 'dk.profile/1', run: { id: '${side}-1-' + caseId + n, case_id: caseId, target: 'dn2' },
+            dsp: { unit: '${side === 'emu' ? 'insn' : 'cycles'}', blocks: 400, max_stock_block_delta: 0 },
+            dsp_rows: rows.map(([row, call, block]) => ({ row, kind: 'machine', calls: 400, sum_cycles: block * 300, max_call: call, max_block: block })) });
+          const k = ${side === 'emu' ? 1 : 1.31};
+          const set = { schema: 'dk.calcaptures/1', profile: 'modules', side: '${side}', captures: [
+            cap('stock', 1, []), cap('bd', 1, [[3, Math.round(16400 * k), Math.round(21400 * k)]]),
+            cap('pluck', 1, [[5, Math.round(30200 * k), Math.round(39800 * (k + (${side === 'dev'} ? 0.02 : 0)))]]),
+            cap('tb303', 1, [[7, Math.round(11800 * k), Math.round(15100 * k)]]) ] };
+          const dt = new DataTransfer();
+          dt.items.add(new File([JSON.stringify(set)], '${side}.captures.json', { type: 'application/json' }));
+          const input = document.querySelectorAll('.cal input[type=file]')[${index}];
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+      await give(0, 'emu');
+      await p.wait(400);
+      await give(1, 'dev');
+      await p.wait(800);
+      await p.eval("document.querySelector('.cal').scrollIntoView()");
+      await p.wait(300);
+    },
+  },
   // ---- the right-hand column of the Emulator page: tabs (Card, Memory, Metrics) over one panel; folded, a rail ----
   ...['dn2', 'dt2'].map((dev) => ({
     name: `side-${dev}`,

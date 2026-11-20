@@ -22,6 +22,18 @@ export interface Container {
   readonly: readonly number[];
 }
 
+/** One MIDI parameter of `[midi.params]`: the 7-bit control change number and the 14-bit NRPN (`[msb, lsb]`); either may be absent. */
+export interface MidiParam {
+  cc?: number;
+  nrpn?: readonly [number, number];
+}
+
+/** `[midi]`: the factory MIDI channel (1-16) of each track (index 0 is track 1) and the named parameters the tools set over MIDI. */
+export interface MidiMap {
+  trackChannels: readonly number[];
+  params: Readonly<Record<string, MidiParam>>;
+}
+
 /** `[storage.slots]`: how a device with numbered sample slots takes samples (`samples = "stock-slots"`). `bytesMax`: the most audio bytes of one sample.
  * `apply`: when the device uses a change (`restart`: at its next start). */
 export interface SlotStorage {
@@ -75,6 +87,8 @@ export interface DeviceRecord {
   /** `[storage]`; absent when the file has none (the device has no content backend yet). */
   storage?: Storage;
   acceptance?: Acceptance;
+  /** `[midi]`; absent when the file has none. */
+  midi?: MidiMap;
   firmware: readonly Firmware[];
   /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
   patchSets: Readonly<Record<string, readonly string[]>>;
@@ -272,6 +286,35 @@ function acceptance(file: string, t: unknown, fw: readonly Firmware[]): Acceptan
   return out;
 }
 
+function midiMap(file: string, v: unknown): MidiMap | undefined {
+  if (v === undefined) return undefined;
+  const m = need(file, '[midi]', v, isTable);
+  const inRange = (x: unknown, lo: number, hi: number): x is number => isInt(x) && x >= lo && x <= hi;
+  const chans = m.track_channels;
+  if (!Array.isArray(chans) || chans.length === 0 || !chans.every((c) => inRange(c, 1, 16)))
+    throw new Error(`devices/${file}: [midi] track_channels must list channels 1 to 16`);
+  const raw = need(file, '[midi.params]', m.params, isTable);
+  const params: Record<string, MidiParam> = {};
+  for (const [name, p] of Object.entries(raw)) {
+    const t = need(file, `[midi.params] ${name}`, p, isTable);
+    const out: MidiParam = {};
+    if (t.cc !== undefined) {
+      if (!inRange(t.cc, 0, 127)) throw new Error(`devices/${file}: [midi.params] ${name}: cc must be 0 to 127`);
+      out.cc = t.cc;
+    }
+    if (t.nrpn !== undefined) {
+      const n = t.nrpn;
+      if (!Array.isArray(n) || n.length !== 2 || !inRange(n[0], 0, 127) || !inRange(n[1], 0, 127))
+        throw new Error(`devices/${file}: [midi.params] ${name}: nrpn must be [msb, lsb] of 0 to 127`);
+      out.nrpn = [n[0], n[1]];
+    }
+    if (out.cc === undefined && out.nrpn === undefined)
+      throw new Error(`devices/${file}: [midi.params] ${name} needs cc or nrpn`);
+    params[name] = out;
+  }
+  return { trackChannels: chans as number[], params };
+}
+
 /** The registry of the device files `files` (name to text). A file without `[device]` (the LED maps) is skipped. */
 export function parse(files: Readonly<Record<string, string>>): Registry {
   const devices: DeviceRecord[] = [];
@@ -301,6 +344,8 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     if (d.syx_id !== undefined) rec.syxId = need(file, '[device] syx_id', d.syx_id, isInt);
     const acc = acceptance(file, doc.acceptance, fw);
     if (acc) rec.acceptance = acc;
+    const mm = midiMap(file, doc.midi);
+    if (mm) rec.midi = mm;
     const st = storage(file, doc.storage);
     if (st) rec.storage = st;
     if (doc.digikit !== undefined && doc.patch === undefined)

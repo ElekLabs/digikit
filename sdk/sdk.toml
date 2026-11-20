@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.3"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -1632,6 +1632,14 @@ args = ["what", "a", "b", "c", "d"]
 id = 47
 name = "FW_READY"
 args = ["blocks", "-", "-", "-", "-"]
+
+# the ColdFire mirror of the DSP stats window published a complete sweep (info level, not kept in the small ring; logged only while the counters run, once per sweep,
+# about every 50 blocks): `sweep` is the sweep number PROFILE_DSP reports, `generation` the clear generation (an 8-bit counter) the sweep belongs to, `blocks` the block count of the
+# sweep's header. The source is the module that owns the span channel (the debug module). A host waits on it instead of polling PROFILE_DSP.
+[[log.kind]]
+id = 48
+name = "DSP_SWEEP"
+args = ["sweep", "generation", "blocks", "-", "-"]
 
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)

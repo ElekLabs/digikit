@@ -169,11 +169,31 @@ export function cfPart(before: CfAnswer | undefined, after: CfAnswer): Part {
   };
 }
 
+/** The header of the DSP stats window of a capture (`dk.profile/1` `dsp`): `unit` is `cycles` on a device and `insn` on the emulator. */
+export interface DspHeader {
+  unit: string;
+  blocks: number;
+  max_stock_block_delta: number;
+  overruns: number;
+}
+
+/** One DSP dispatch row (`dsp_rows`): 0 to 7 machines, 8 to 15 effects. */
+export interface DspRowOut {
+  row: number;
+  kind: 'machine' | 'effect';
+  calls: number;
+  sum_cycles: number;
+  max_call: number;
+  max_block: number;
+}
+
 export interface BuildInput {
   run: Record<string, unknown>;
   cf?: Part;
   sharc?: Part;
   spans?: SpansPart;
+  /** The DSP stats window of the capture (calibration runs). */
+  dsp?: { header: DspHeader; rows: DspRowOut[] };
   /** Names the markers (`record.start` at 0 is always there when a part is given). */
   markers?: { name: string; at: number }[];
 }
@@ -209,6 +229,7 @@ export function buildProfile(i: BuildInput): Record<string, unknown> {
     loss: parts.flatMap((p) => p.loss),
     overhead: parts.flatMap((p) => p.overhead),
     ...(spans ? spans : {}),
+    ...(i.dsp ? { dsp: i.dsp.header, dsp_rows: i.dsp.rows } : {}),
   };
 }
 
