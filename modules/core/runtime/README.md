@@ -18,7 +18,7 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   hook trampoline and `dkrt_flush`; `src/cf/<dev>/device.s` the device id.
 - Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/transport.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task and dispatches them to `store_cmds.rs`, `admin_cmds.rs` and `module_cmds.rs` (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
 - Safe mode (finding 37): the boot counter is cleared after a stable period (45,000 DSP blocks = 30 s of UI loop, clock: the firmware's block counter,
-  anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device).
+  anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device). Every boot counts from the first one: with no selection record yet (a fresh flash) the first counted boot creates the record; a card the runtime does not write (foreign area, too small, no store) has no counter.
   `DKRT_STABLE_BLOCKS` and the record's `stable_blocks` shorten it for tests. Upload safety (finding 43): replies are dropped when the firmware's TX
   ring has no room (`cf.midi.site.tx_inflight_lit`), BEGIN makes the two store headers equal before staging, `DKRT_UPLOAD_TEAR` is a test knob.
 - Card safety (finding 46): every card write goes through `block_write` (`card.rs`): outside the store range it is refused (`E_RANGE`); on a card whose

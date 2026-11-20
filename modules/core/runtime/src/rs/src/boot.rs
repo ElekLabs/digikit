@@ -131,7 +131,7 @@ pub unsafe extern "C" fn dkrt_boot() {
         if seen.found != 0 && seen.stable != 0 {
             // the crashed boot had already cleared its counter: count it as bad now, and keep that one count until a boot with no crash
             // behind it has run 30 s (`ui_pass`)
-            r.boot_counter = r.boot_counter.wrapping_add(1);
+            r.boot_counter = crate::safe_mode::after_late_crash(r.boot_counter);
             LATE_FLOOR = 1;
         }
     }
@@ -191,10 +191,11 @@ pub unsafe extern "C" fn dkrt_boot() {
         states().skip_all(r.count as usize);
         return;
     }
-    // raise the counter before anything of a module runs; the first UI-loop pass clears it. On a card the runtime does not write there is no
-    // counter, so no safe mode by counter (ABOUT says so).
-    if (r.count != 0 || r.boot_counter != 0) && card::writable() {
-        r.boot_counter = r.boot_counter.wrapping_add(1);
+    // raise the counter before anything of a module runs; the stable period clears it. This counts from the first boot: with no record
+    // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
+    // (ABOUT says so).
+    if let Some(raised) = crate::safe_mode::raised(&r, card::writable()) {
+        r = raised;
         update(r, copy, valid);
     }
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part

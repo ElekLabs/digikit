@@ -98,6 +98,12 @@ first UI-loop pass.** A boot that dies earlier (a hang in the UI task stops the 
 leaves the counter raised, so the next boots count it, and the third boot after two such boots is safe mode. A safe boot loads nothing, so
 nothing can be blamed: it clears the counter at its first UI-loop pass as before (`DkrtBootInfo::stable` reports the clearing in both cases).
 
+The counter counts from the first boot, with or without a selection. A fresh device has no record: the first counted boot creates one (copy A,
+`seq` 1, no modules selected) and raises its counter, so a device whose runtime hangs or crash-loops from the first boot on reaches safe mode on
+the third boot like any other. On a card the runtime may not write (a foreign area, state `CARD_RO`) and on a card too small for a store or a
+device without one, nothing is written and nothing counts: such a device never reaches safe mode by counter (the key, the DSP-stop record and the
+panic record still work). Cost: two record-sector writes per boot (the raise, the clear after the stable period) on a device with no selection too.
+
 ### The clock: the firmware's block counter **[D]**
 
 - **Not UI-loop passes.** Measured: the passes are timer driven, 30 to 32 a second at idle on both rigs (132 passes at the ready point, then
