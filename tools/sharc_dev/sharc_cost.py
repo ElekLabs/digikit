@@ -7,17 +7,31 @@ budget`. There is no stall model (no memory wait states, no pipeline effects).
 It is an upper bound over all paths: every instruction of the function counts
 once per iteration of the DO loops that contain it, and conditional branches
 are not pruned (both sides of an if are counted). Callees are added times the
-multiplier of their call site, down to `max_depth`; recursion is cut and
-noted. Indirect calls and jumps have no known target and are only counted in
-`unknown_calls`.
+multiplier of their call site, down to `max_depth`; a depth cut and a recursion
+cut are noted (a result that hit a recursion cut is never cached, so totals do
+not depend on query order). Indirect calls and jumps have no known target and
+are only counted in `unknown_calls`.
 
-Trip counts are literal when the DO instruction carries an immediate and
-symbolic (the register name, e.g. R2) when it loads the count from a register.
-Costs are polynomials in these names; `Poly.evaluate` substitutes values.
+Jumps to another function (conditional or not) are treated as tail calls. The
+targets of one function are alternatives, but `Poly` has no max, so the total
+sums them: "tail targets summed (upper bound)". With `values` that make every
+alternative constant, `FnCost.total_max` takes the largest alternative instead.
+
+Trip counts are literal when the DO instruction carries a non-zero immediate and
+symbolic when it loads the count from a register. A symbol names the register
+and the function it is read in: `R2@1cd286` (register@function entry, hex
+without 0x), because a callee's R2 is not the caller's R2. A missing immediate
+or a count of 0 (the PRM: LCNTR=0 runs 2^32 times) gives the unknown trip
+`trip?@fn`; DO UNTIL loops (form 13a) are costed once and noted.
+Costs are polynomials in these symbols; `Poly.evaluate` substitutes values.
 
 Run it through the firmware query tool (needs out/sharcdb/<image>.sqlite):
 
-    fw.py cost ADDR -i dt2-1.17 [--vars R2=32,R12=16] [--no-calls]
+    fw.py cost ADDR -i dt2-1.17 [--vars R2=32,R2@1cd286=16] [--vars-all R12=32]
+                                [--no-calls]
+
+`--vars NAME=V` sets the entry function's register, `NAME@FN=V` that of one
+function, `--vars-all NAME=V` the register in every function.
 """
 
 from __future__ import annotations
@@ -65,6 +79,9 @@ class Poly:
     @property
     def value(self) -> int:
         return self.terms.get((), 0)
+
+    def symbols(self) -> set[str]:
+        return {s for k, _ in self._t for s in k}
 
     def __add__(self, other: Poly) -> Poly:
         out = self.terms
@@ -137,8 +154,24 @@ class FnCost:
     dm_stores: Poly
     calls: list[tuple[int, Poly, bool]]  # (callee_sw, multiplier, is_tail_jump)
     unknown_calls: int
-    total: Poly
+    total: Poly  # tail targets summed (upper bound)
     notes: list[str] = field(default_factory=list)
+    # Total of each entry of `calls` as the main total used it (None: cut or
+    # not followed), so that self + sum(mult * callee) equals `total`.
+    call_totals: list[Poly | None] = field(default_factory=list)
+    # Tail alternatives replaced by their maximum, `values` substituted; None
+    # when no `values` were given or an alternative stays symbolic.
+    total_max: Poly | None = None
+
+
+def _sym(reg: str, entry: int) -> str:
+    return "%s@%x" % (reg, entry)
+
+
+def split_sym(sym: str) -> tuple[str, str]:
+    """`R2@1cd286` -> ('R2', '1cd286')."""
+    name, _, fn = sym.rpartition("@")
+    return name, fn
 
 
 def _trip_poly(trip: int | str) -> Poly:
@@ -170,18 +203,38 @@ def _own(db: sqlite3.Connection, image: str, entry: int) -> _Own:
         notes.append("no instructions for function 0x%x" % entry)
     raw_loops: list[tuple[int, int, int, int | str]] = []
     for sw, form, fields, width in rows:
+        if form == "13a":
+            notes.append(
+                "unhandled DO UNTIL (form 13a) at 0x%x in 0x%x: costed once"
+                % (sw, entry)
+            )
+            continue
         if form not in ("12a_imm", "12a_ureg"):
             continue
         f = sharcinv.merge_fields(json.loads(fields))
         reladdr = f.get("reladdr")
         if reladdr is None:
+            notes.append("DO at 0x%x without reladdr: ignored" % sw)
             continue
         # width is in bytes; sw counts 16-bit words (same as cfg.py).
         start = sw + (width or 6) // 2
         # Inclusive: end is the last body instruction, as cfg.py's end_sw.
         end = sw + sign_extend(reladdr, 23)
         trip: int | str
-        trip = f.get("data", 0) if form == "12a_imm" else ureg_name(f.get("ureg", 0))
+        if form == "12a_imm":
+            data = f.get("data")
+            if data is None:
+                notes.append("DO at 0x%x has no count data: trip unknown" % sw)
+                trip = _sym("trip?", entry)
+            elif data == 0:
+                notes.append(
+                    "DO with count 0 at 0x%x: runs 2^32 times (PRM); trip unknown" % sw
+                )
+                trip = _sym("trip?", entry)
+            else:
+                trip = data
+        else:
+            trip = _sym(ureg_name(f.get("ureg", 0)), entry)
         raw_loops.append((sw, start, end, trip))
 
     def mult_at(sw: int) -> Poly:
@@ -202,27 +255,41 @@ def _own(db: sqlite3.Connection, image: str, entry: int) -> _Own:
     for m in mults.values():
         self_cost = self_cost + m
     loads, stores = Poly(), Poly()
+    miss_mem: list[int] = []
     for sw, direction in db.execute(
         "SELECT m.sw, m.direction FROM mem_access m JOIN insn i "
         "ON i.image=m.image AND i.sw=m.sw "
         "WHERE m.image=? AND i.function_sw=? AND i.aligned=1 AND m.space='DM'",
         (image, entry),
     ):
-        m = mults.get(sw, Poly.const(1))
+        mm = mults.get(sw)
+        if mm is None:
+            miss_mem.append(sw)
+            mm = Poly.const(1)
         if direction == "store":
-            stores = stores + m
+            stores = stores + mm
         else:
-            loads = loads + m
+            loads = loads + mm
 
+    if miss_mem:
+        notes.append(
+            "%d mem_access rows of 0x%x not in its instruction rows, costed x1: %s"
+            % (len(miss_mem), entry, " ".join("0x%x" % a for a in miss_mem[:3]))
+        )
+    miss_edge: list[int] = []
+    cond_tail = False
     calls: list[tuple[int, Poly, bool]] = []
     unknown = 0
     tails: dict[int, Poly] = {}
-    for from_sw, to_sw, kind, to_fn in db.execute(
-        "SELECT from_sw, to_sw, kind, to_function FROM edges "
+    for from_sw, to_sw, kind, to_fn, cond in db.execute(
+        "SELECT from_sw, to_sw, kind, to_function, cond FROM edges "
         "WHERE image=? AND from_function=? AND kind IN ('call','jump','indirect')",
         (image, entry),
     ):
-        mult = mults.get(from_sw, Poly.const(1))
+        found = mults.get(from_sw)
+        if found is None:
+            miss_edge.append(from_sw)
+        mult = found if found is not None else Poly.const(1)
         if kind == "indirect":
             unknown += 1
         elif kind == "call":
@@ -232,12 +299,24 @@ def _own(db: sqlite3.Connection, image: str, entry: int) -> _Own:
             else:
                 calls.append((target, mult, False))
         elif to_fn is not None and to_fn != entry:
-            # Tail jumps are alternatives: one entry per target function, with
-            # the largest multiplier (compared with every symbol set to 1).
+            # Tail jumps (conditional ones too) are alternatives: one entry per
+            # target function, with the largest multiplier (compared with every
+            # symbol set to 1).
+            cond_tail = cond_tail or bool(cond)
             old = tails.get(to_fn)
             if old is None or sum(mult.terms.values()) > sum(old.terms.values()):
                 tails[to_fn] = mult
     calls.extend((t, m, True) for t, m in sorted(tails.items()))
+    if miss_edge:
+        notes.append(
+            "%d call/jump edges of 0x%x not in its instruction rows, costed x1: %s"
+            % (len(miss_edge), entry, " ".join("0x%x" % a for a in miss_edge[:3]))
+        )
+    if cond_tail:
+        notes.append(
+            "0x%x: conditional jumps to another function are treated as tail calls"
+            % entry
+        )
     return _Own(len(rows), loops, self_cost, loads, stores, calls, unknown, notes)
 
 
@@ -248,7 +327,13 @@ def fn_cost(
     *,
     follow_calls: bool = True,
     max_depth: int = 8,
+    values: dict[str, int] | None = None,
 ) -> FnCost:
+    """Cost of one call of the function at `entry_sw`.
+
+    `values` maps qualified symbols (`R2@1cd286`) to numbers. They do not change
+    `total`; they only fill `total_max` (tail alternatives by their maximum).
+    """
     owns: dict[int, _Own] = {}
 
     def own(e: int) -> _Own:
@@ -257,36 +342,84 @@ def fn_cost(
         return owns[e]
 
     notes: list[str] = []
-    memo: dict[tuple[int, int], Poly] = {}
 
-    def total(e: int, path: tuple[int, ...], depth: int) -> Poly:
-        o = own(e)
-        t = o.self_cost
-        if not follow_calls:
-            return t
-        for callee, mult, _tail in o.calls:
-            if callee in path or callee == e:
-                note = "recursion cut at 0x%x -> 0x%x" % (e, callee)
-                if note not in notes:
-                    notes.append(note)
-                continue
-            if depth <= 0:
-                note = "depth cut at 0x%x -> 0x%x" % (e, callee)
-                if note not in notes:
-                    notes.append(note)
-                continue
-            key = (callee, depth - 1)
-            if key not in memo:
-                memo[key] = total(callee, path + (callee,), depth - 1)
-            if not own(callee).n_insns:
-                note = "missing function 0x%x" % callee
-                if note not in notes:
-                    notes.append(note)
-            t = t + mult * memo[key]
-        return t
+    def note(text: str) -> None:
+        if text not in notes:
+            notes.append(text)
 
+    def run(tmax: dict[str, int] | None) -> tuple[Poly, list[Poly | None]]:
+        # Only results free of a recursion cut are cached: a cut depends on the
+        # path, so such a result would make totals depend on query order.
+        memo: dict[tuple[int, int], Poly] = {}
+        top_calls: list[Poly | None] = []
+
+        def total(
+            e: int, path: tuple[int, ...], depth: int, record: list[Poly | None] | None
+        ) -> tuple[Poly, bool]:
+            o = own(e)
+            t = o.self_cost
+            if tmax is not None:
+                t = t.evaluate(tmax)
+            if not follow_calls:
+                return t, False
+            cut = False
+            tails: list[Poly] = []
+            for callee, mult, tail in o.calls:
+                sub: Poly | None = None
+                if callee in path:
+                    note("recursion cut at 0x%x -> 0x%x" % (e, callee))
+                    cut = True
+                elif depth <= 0:
+                    note("depth cut at 0x%x -> 0x%x" % (e, callee))
+                else:
+                    key = (callee, depth - 1)
+                    if key in memo:
+                        sub = memo[key]
+                    else:
+                        got, c = total(callee, path + (callee,), depth - 1, None)
+                        sub = got
+                        if c:
+                            cut = True
+                        else:
+                            memo[key] = sub
+                    if not own(callee).n_insns:
+                        note("missing function 0x%x" % callee)
+                if record is not None:
+                    record.append(sub)
+                if sub is None:
+                    continue
+                term = mult * sub
+                if tmax is not None:
+                    term = term.evaluate(tmax)
+                if tail:
+                    tails.append(term)
+                else:
+                    t = t + term
+            if len(tails) > 1:
+                if tmax is None:
+                    note("tail targets of 0x%x summed (upper bound)" % e)
+                if tmax is not None and all(x.is_const for x in tails):
+                    t = t + max(tails, key=lambda x: x.value)
+                else:
+                    for x in tails:
+                        t = t + x
+            else:
+                for x in tails:
+                    t = t + x
+            return t, cut
+
+        tot, _cut = total(entry_sw, (entry_sw,), max_depth, top_calls)
+        return tot, top_calls
+
+    tot, call_totals = run(None)
+    total_max = None
+    if values and any(sum(1 for c in o.calls if c[2]) > 1 for o in owns.values()):
+        total_max, _ = run(values)
     top = own(entry_sw)
-    tot = total(entry_sw, (entry_sw,), max_depth)
+    all_notes = list(top.notes)
+    for e, o in owns.items():
+        if e != entry_sw:
+            all_notes.extend(n for n in o.notes if not n.startswith("no instructions"))
     return FnCost(
         entry_sw,
         top.n_insns,
@@ -297,5 +430,7 @@ def fn_cost(
         top.calls,
         top.unknown_calls,
         tot,
-        top.notes + notes,
+        all_notes + notes,
+        call_totals,
+        total_max,
     )
