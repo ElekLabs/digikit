@@ -287,6 +287,7 @@ const FIXTURE_SOURCE = {
   'dkrt-svc-lfo': fixture('lfo-shape'),
   'dkrt-svc-fx': [...fixture('dyn-fx-gain'), ...fixture('dyn-fx-gain-b')],
   'dkrt-svc-machines': fixture('sine'),
+  'dkrt-svc-shortcuts': fixture('shortcut-demo'),
 };
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.

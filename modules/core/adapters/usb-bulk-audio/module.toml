@@ -29,6 +29,10 @@ place = "cf.expansion"
 [object.externs]
 usb_port_table = "cf.usb.data.port_table"
 ua_init_next = "hook.cf.usb.site.init.tail"
+setup_next = "hook.cf.usb.fn.setup_dispatch.tail"
+ep0_send = "cf.usb.fn.ep0_send"
+usb_setup = "cf.usb.data.setup"
+usb_active_port = "cf.usb.value.active_port"
 
 [[op]]
 op = "hook"
@@ -37,3 +41,14 @@ to = "ua_init_hook"
 
 [[claim]]
 resource = "cf.usb.site.init"
+
+# The entry of the EP0 setup dispatcher goes to ua_setup_hook (a stub): ua_setup_handle answers the Windows WinUSB requests (device descriptor with bcdUSB 2.01, BOS, MS OS 2.0
+# descriptor set) in USB AUDIO/MIDI when interface 5 is attached, and the stub then returns to the USB interrupt. For everything else the stock dispatcher runs from its first
+# instruction (README.md "Windows (MS OS 2.0)").
+[[op]]
+op = "hook"
+hook = "cf.usb.hook.setup_dispatch"
+to = "ua_setup_hook"
+
+[[claim]]
+resource = "cf.usb.fn.setup_dispatch"

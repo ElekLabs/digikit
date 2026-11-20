@@ -382,13 +382,15 @@ async function runCase(
   const keepers = [...setup, ...pre].filter(
     (o): o is Extract<Op, { op: 'midi.note' }> => o.op === 'midi.note' && o.retrigger_ms !== undefined,
   );
+  // warm-up and capture windows hold emulated time (the emulator's `pauseEmulated`), not wall time
+  const hold = (ms: number): Promise<void> => (rig.clock.pauseEmulated ?? rig.clock.pause).call(rig.clock, ms);
   const pause = async (ms: number): Promise<void> => {
-    if (keepers.length === 0) return rig.clock.pause(ms);
+    if (keepers.length === 0) return hold(ms);
     const every = Math.min(...keepers.map((k) => k.retrigger_ms!));
     let next = every;
     for (let left = ms; left > 0;) {
       const slice = Math.min(next, left);
-      await rig.clock.pause(slice);
+      await hold(slice);
       left -= slice;
       // pressed again only when the wait goes on: a press at its end would start a voice that the next measurement sees from its first block
       if (left > 0) {

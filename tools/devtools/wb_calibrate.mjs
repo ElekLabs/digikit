@@ -93,7 +93,13 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   const record = devices.get(opts.device ?? info.port);
   if (!record.midi) fail(`the ${record.name} device file has no [midi] table`);
   const emu = Boolean(opts.emu);
-  const clock = emu ? { now: () => session.clock.now(), pause: (ms) => session.clock.pause(ms) } : wallClock;
+  const clock = emu
+    ? {
+        now: () => session.clock.now(),
+        pause: (ms) => session.clock.pause(ms),
+        pauseEmulated: (ms) => session.clock.pauseEmulated(ms),
+      }
+    : wallClock;
 
   // names of the module spans: the loaded modules by their record index, refreshed after a restart
   const names = new Map();

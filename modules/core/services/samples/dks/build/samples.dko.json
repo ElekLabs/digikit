@@ -430,14 +430,14 @@
    "type": "cf.32"
   },
   {
-   "addend": 6,
+   "addend": 134,
    "offset": 12,
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks14files_in_storeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "symbol": ".sec..rodata.global.1i",
    "type": "cf.32"
   },
   {
-   "addend": 204,
+   "addend": 548,
    "offset": 18,
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks14files_in_storeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "symbol": ".sec..rodata.global.1i",
@@ -2832,13 +2832,20 @@
   },
   {
    "addend": 22,
-   "offset": 48,
+   "offset": 32,
    "section": ".rodata.global.11",
    "symbol": ".sec..rodata.global.10",
    "type": "cf.32"
   },
   {
    "addend": 33,
+   "offset": 48,
+   "section": ".rodata.global.11",
+   "symbol": ".sec..rodata.global.10",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
    "offset": 64,
    "section": ".rodata.global.11",
    "symbol": ".sec..rodata.global.10",
@@ -3804,10 +3811,10 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 32,
    "offset": 230,
    "section": ".text._RNvMs1_NtCsaMgU3lEIvKO_8dkrt_abi4linkNtB5_6Stream5owned",
-   "symbol": ".sec..rodata.global.12",
+   "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
@@ -3815,13 +3822,6 @@
    "offset": 242,
    "section": ".text._RNvMs1_NtCsaMgU3lEIvKO_8dkrt_abi4linkNtB5_6Stream5owned",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 32,
-   "offset": 0,
-   "section": ".rodata.global.12",
-   "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
@@ -4675,7 +4675,7 @@
   },
   {
    "align": 2,
-   "hex": "2f2f00044eb90000000041f900000000223c00000000588f600441e80042b288670eb09066f44a28003867ee7001600242004e75",
+   "hex": "2f2f00044eb90000000041f900000000223c00000000588f600441e8008ab288670eb0a8ff8066f24a1067ee7001600242004e75",
    "kind": "text",
    "name": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks14files_in_storeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "size": 52
@@ -5179,10 +5179,10 @@
   },
   {
    "align": 2,
-   "hex": "00010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b000000100000000800000005010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b000000100000000800000007000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc0000000000000000000000000000000000001000101",
+   "hex": "00010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b00000010000000080000000500000010000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031000000000000000000000000000000010304010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b00000010000000080000000700000010000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031000000000000000000000000000000010304000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc0000000000000000000000000000000000000000000000000000000000000000c000d0000110000000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000001030401000101",
    "kind": "data",
    "name": ".rodata.global.1i",
-   "size": 198
+   "size": 414
   },
   {
    "align": 1,
@@ -5214,21 +5214,21 @@
   },
   {
    "align": 16,
-   "hex": "000000000000000a0000000000000000000000000000000a00000000000000003c72656461637465643e000000000000000000000000000a0000000000000000000000000000000a0000000000000000",
+   "hex": "000000000000000a0000000000000000000000000000000a0000000000000000000000000000000a0000000000000000000000000000000a0000000000000000000000000000000a0000000000000000",
    "kind": "data",
    "name": ".rodata.global.11",
    "size": 80
   },
   {
    "align": 1,
-   "hex": "3c72656461637465643e003c72656461637465643e003c72656461637465643e003c72656461637465643e00",
+   "hex": "3c72656461637465643e003c72656461637465643e003c72656461637465643e003c72656461637465643e003c72656461637465643e00",
    "kind": "data",
    "name": ".rodata.global.10",
-   "size": 44
+   "size": 55
   },
   {
    "align": 2,
-   "hex": "95bef02b",
+   "hex": "677f8e52",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -5689,13 +5689,6 @@
    "size": 36
   },
   {
-   "align": 16,
-   "hex": "000000000000000a0000000000000000",
-   "kind": "data",
-   "name": ".rodata.global.12",
-   "size": 16
-  },
-  {
    "align": 2,
    "hex": "2f2f00082f2f00084eb90000000020402241508f203c811c9dc560124a8867127398b380223c010001934c010800b3c866ea4e75",
    "kind": "text",
@@ -5997,7 +5990,7 @@
    "size": 28
   }
  ],
- "source_sha256": "b91e33477d30ec3b11df3256d4d521b5c09efd526a522f111d3a7b3e3674404a",
+ "source_sha256": "1ca9dac629f7213dfe0273bccf12f34d89be061bad9e3edfb36a797fb65211f8",
  "symbols": [
   {
    "global": false,
@@ -6069,12 +6062,6 @@
    "global": false,
    "name": ".sec..rodata.global.11",
    "section": ".rodata.global.11",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..rodata.global.12",
-   "section": ".rodata.global.12",
    "value": 0
   },
   {
@@ -7611,7 +7598,7 @@
  "toolchain": {
   "exports": "dk_module dk_sample_pool_add dk_sample_pool_clear dk_sample_pool_info dk_sample_pool_open dk_sample_pool_path dk_sample_pool_peaks dk_sample_pool_peaks_window dk_sample_pool_set dk_sample_pool_status dk_svc_abi pool_done_fill pool_lost_fill",
   "instructions_redecoded": "7129",
-  "isa_check": "e72d691b8221cc64ffe9e2dfb5d1807b795d1f73f6ab100eef17263806b2b314",
+  "isa_check": "f54b90ae692f55b4f5dabdfdf8b129e9d088c8fad904ff44edbacfb8318f6425",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

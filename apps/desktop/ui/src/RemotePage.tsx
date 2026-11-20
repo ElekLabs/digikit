@@ -2,7 +2,7 @@
 // The screen is the firmware's own Screenshot (stock MidiRpc 0x04), polled; keys and encoders are the commands of digikit/remote (KEY, TURN),
 // which work while digikit/remote is loaded at the device. The page speaks the protocol itself in TypeScript over the target of
 // target.ts: the emulator's USB capture or a MIDI port. No process is started.
-import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import type { DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
@@ -11,7 +11,9 @@ import {
   deviceOfPort,
   infoDue,
   isRemoteMissing,
+  keyErrorLine,
   leaveCancels,
+  remoteListed,
   remoteNotice,
   remotePaused,
   remoteRuntime,
@@ -44,13 +46,27 @@ export default function RemotePage(props: {
   const [state, setState] = createSignal<RemoteState>();
   const [stateError, setStateError] = createSignal<unknown>();
   const [screenError, setScreenError] = createSignal('');
+  // a failed key or turn: it stays until a key succeeds or the target changes (the screen poll does not clear it)
+  const [keyError, setKeyError] = createSignal('');
+  // whether MODULES lists digikit/remote, read when the state request failed (undefined: not read)
+  const [listed, setListed] = createSignal<boolean>();
   // oxlint-disable-next-line solid/reactivity -- the emulator's device is only the first guess; the target's INFO names the device
   const [device, setDevice] = createSignal<DeviceId>(props.fallbackDevice);
   let live: LivePanelApi | undefined;
   let alive = true;
   const panel = () => panels[device()];
-  const runtime = remoteRuntime(() => session());
-  const notice = () => remoteNotice(state(), stateError());
+  const runtime = remoteRuntime(() => session(), {
+    ok: () => setKeyError(''),
+    failed: (e) => setKeyError(keyErrorLine(e, targetLabel(target()))),
+  });
+  createEffect(
+    on(
+      () => targetLabel(target()),
+      () => setKeyError(''),
+      { defer: true },
+    ),
+  );
+  const notice = () => remoteNotice(state(), stateError(), listed());
   const noEmulator = () => target().kind === 'emulator' && !props.emulatorLoaded;
 
   /** Screen loop: one Screenshot after the other; an error shows and the loop tries again slowly. */
@@ -102,6 +118,7 @@ export default function RemotePage(props: {
         if (remoteStateWanted(missing, loaded)) {
           setState(await s.remoteState());
           setStateError(undefined);
+          setListed(undefined);
           missing = false;
           void noteReply(s, () => sameTarget(t, target()));
         }
@@ -110,6 +127,15 @@ export default function RemotePage(props: {
         infoAt = undefined;
         setState(undefined);
         setStateError(e);
+        // the module may be loaded without the optional state request: MODULES decides what the notice says
+        if (missing)
+          setListed(
+            remoteListed(
+              await session()
+                .then((s) => s.modules())
+                .catch(() => undefined),
+            ),
+          );
       }
       await new Promise((r) => setTimeout(r, STATE_MS));
     }
@@ -173,6 +199,11 @@ export default function RemotePage(props: {
             {screenError()}
           </p>
         </Show>
+        <Show when={keyError()}>
+          <p class="err" role="alert">
+            {keyError()}
+          </p>
+        </Show>
         {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
         <div class="remote-row">
           <main
@@ -182,7 +213,12 @@ export default function RemotePage(props: {
             style={{ '--accent': panel().accent, '--func-legend': panel().func_legend }}
           >
             <div class="surface">
-              <LivePanel panel={panel()} runtime={() => runtime} onError={setScreenError} ref={(api) => (live = api)} />
+              <LivePanel
+                panel={panel()}
+                runtime={() => runtime}
+                onError={() => {} /* key and turn failures are reported by the runtime above (keyError) */}
+                ref={(api) => (live = api)}
+              />
             </div>
           </main>
           <SidePanels host={props.host} visible session={session} where={() => targetLabel(target())} track={target} />

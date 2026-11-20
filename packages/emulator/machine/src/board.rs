@@ -44,6 +44,8 @@ pub const MIDI_UDR: u32 = 0xec07_400c;
 /// DMA timer 0's counter (DTCN0, MCF5441XRM chapter 39). Stock DN2 1.11 reads it as a free-running
 /// clock, and nothing in the main OS starts the timer: code before the main OS does.
 pub const DTCN0: u32 = 0xfc07_000c;
+/// ENDPTCTRL0 stall bits: TXS (bit 16) and RXS (bit 0).
+const ENDPTCTRL0_STALL: u32 = 0x0001_0001;
 /// Address of DTCN of DMA timer `channel` (0-3): the channels are 16 KiB apart.
 const fn dtcn_addr(channel: u32) -> u32 {
     DTCN0 + channel * 0x4000
@@ -251,6 +253,8 @@ pub struct Board {
     /// The ULPI PHY behind the USB controller's ULPI_VIEWPORT: its register file and the order of what the guest did to it (see `UsbPhyEvent`).
     usb_phy: Box<[u8; 256]>,
     usb_phy_log: Vec<UsbPhyEvent>,
+    /// A 32-bit write set a stall bit (TXS bit 16 or RXS bit 0) of ENDPTCTRL0 since the last `usb_ep0_stall_take`.
+    usb_ep0_stall: bool,
     /// VBUS present, as OTGSC.BSV shows it: a board input, off until a test or a host model sets it.
     usb_vbus: bool,
     /// Opt-in only: ordinary long-running execution must not retain every Bus access.
@@ -521,6 +525,7 @@ impl Board {
             last_epoch_addr: 0,
             usb_phy: Box::new([0; 256]),
             usb_phy_log: vec![],
+            usb_ep0_stall: false,
             usb_vbus: false,
             capture_guest_accesses: false,
             guest_reads: vec![],
@@ -2045,8 +2050,27 @@ impl Board {
                 }
                 v
             }
+            0xfc0b_01c0 => {
+                // ENDPTCTRL0
+                if value & ENDPTCTRL0_STALL != 0 {
+                    self.usb_ep0_stall = true;
+                }
+                value
+            }
             _ => value,
         }
+    }
+
+    /// True if a 32-bit write set a stall bit (TXS bit 16 or RXS bit 0) of ENDPTCTRL0 since the last call; clears the flag.
+    pub fn usb_ep0_stall_take(&mut self) -> bool {
+        std::mem::take(&mut self.usb_ep0_stall)
+    }
+
+    /// A SETUP packet arrives: the controller clears both EP0 stall bits (MCF5441x ENDPTCTRL0 TXS, RXS).
+    pub fn usb_ep0_setup(&mut self) {
+        let old = self.read_inner_unforced(0xfc0b_01c0, 4).unwrap_or(0);
+        self.ram_write(0xfc0b_01c0, 4, old & !ENDPTCTRL0_STALL);
+        self.usb_ep0_stall = false;
     }
 
     fn usb_phy_note(&mut self, event: UsbPhyEvent) {

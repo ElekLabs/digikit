@@ -181,7 +181,7 @@ pub const CAP_FIT: [(&str, u8, &str); 12] = [
     ("DSP_VOICES", CAPK_DSP_VOICES, "DSP voices"),
 ];
 /// The command ranges a module may register, as (first, last).
-pub const RANGES: [(u8, u8); 12] = [
+pub const RANGES: [(u8, u8); 13] = [
     (0x20, 0x22), // debug
     (0x1e, 0x1f), // debug_profile
     (0x1b, 0x1b), // debug_profile_dsp
@@ -192,6 +192,7 @@ pub const RANGES: [(u8, u8); 12] = [
     (0x32, 0x35), // probe
     (0x38, 0x3d), // remote
     (0x3e, 0x3f), // remote_state
+    (0x0f, 0x0f), // ui_views_test
     (0x2c, 0x2f), // usb_echo_test
     (0x36, 0x37), // usb_fast
 ];
@@ -205,5 +206,6 @@ pub const RANGE_FILE_WRITE_TEST_B: (u8, u8) = (0x28, 0x2b);
 pub const RANGE_PROBE: (u8, u8) = (0x32, 0x35);
 pub const RANGE_REMOTE: (u8, u8) = (0x38, 0x3d);
 pub const RANGE_REMOTE_STATE: (u8, u8) = (0x3e, 0x3f);
+pub const RANGE_UI_VIEWS_TEST: (u8, u8) = (0x0f, 0x0f);
 pub const RANGE_USB_ECHO_TEST: (u8, u8) = (0x2c, 0x2f);
 pub const RANGE_USB_FAST: (u8, u8) = (0x36, 0x37);

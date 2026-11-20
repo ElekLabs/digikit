@@ -46,6 +46,8 @@
 #define DK_UI_H
 #include <stdint.h>
 #include <dk/gen/imports.h>
+#include <dk/platform/canvas.h>
+#include <dk/gen/keys.h>
 
 /* Label limits include the terminator. Plain text rows in a list scroll when selected. */
 #define DK_UI_ROW 24
@@ -106,5 +108,55 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
      closes: a running timer costs a call per period.
    - Room for 4 timers in the image, shared by all modules. A longer period than 1,000,000 ms is cut.
    Returns 0 when set or stopped, a negative code when it could not be (fn 0, or the table is full). */
+
+/* ---- Module screens ----
+   `dk_ui_view_open(ui, &desc)` opens a screen the module draws. Context: ui. Returns a handle, or NULL when the desc is wrong or the pool is full (room for
+   DK_UI_VIEWS views in the image, shared by all modules).
+   - DK_UI_VIEW_OVERLAY: the view is drawn over the stock screen, and every key goes on to the stock views (`key` is not called). Without the flag the view
+     covers the screen and gets the keys first: `key` returns 1 when it used the key, and 0 to pass it on to the stock view below.
+   - `draw(arg, canvas)` runs for every frame while the view is open (<dk/platform/canvas.h>).
+   - `closed(arg)` runs once, after the view left the screen: after `dk_ui_view_close`, or when the system closed it. It may open a view again.
+   - `dk_ui_view_close` with the handle closes the view. Closing a handle twice, or after `closed`, does nothing. A view is closed for you when its module unloads
+     (without a `closed` call, as the module is gone), so a module with views stays unloadable.
+   - `desc` is copied. `arg` is kept: static or module memory, never the stack. Callbacks run in the UI task and must be short.
+   `key(arg, key, flags)` gets the logical key (<dk/gen/keys.h>) and the event flags: DK_UI_KEY_DOWN is set for a press and clear for a release; the other bits
+   are reserved. A key the device gives no name is not passed to the view and does not act on the stock screen. */
+#define DK_UI_KEY_DOWN 1u
+enum {
+    DK_UI_VIEW_OVERLAY = 1,
+};
+#define DK_UI_VIEWS 4
+
+typedef struct dk_ui_view_desc {
+    uint32_t flags; /* DK_UI_VIEW_* */
+    void (*draw)(void *arg, const dk_canvas *canvas);
+    int32_t (*key)(void *arg, dk_key key, uint32_t flags); /* full screen only; 1 = used */
+    void (*closed)(void *arg);                             /* 0 or a function */
+    void *arg;
+} dk_ui_view_desc;
+
+dk_ui_view *dk_ui_view_open(dk_ui *ui, const dk_ui_view_desc *desc);
+
+/* ---- A row in SETTINGS ----
+   `dk_ui_settings_row(ui, text, open, arg)`, in `init` only: adds a row `text` (up to DK_UI_ROW - 1 characters) at the end of the SETTINGS list.
+   `open(arg)` runs on YES, in the UI task. Rows are in load order, after the rows of the DIGIKIT menu. Room for DK_UI_SETTINGS_ROWS rows in the image.
+   The row goes away when the module unloads. Returns 0, DK_E_CONTRACT (no `text` or `open`) or DK_E_NOMEM (no room). */
+#define DK_UI_SETTINGS_ROWS 4
+
+/* ---- The stock naming screen ----
+   `dk_ui_text_input(ui, &desc)` opens the firmware's own text entry. `done(arg, text)` runs on YES only, with the text as edited (trailing blanks
+   removed); NO closes the screen and calls nothing. `title` is the prompt, `initial` the text to start from (NULL: empty; longer than `max_len`: cut).
+   `max_len` is 1 to DK_UI_TEXT_INPUT_MAX and must fit the screen. One entry screen at a time. Context: ui.
+   Returns 0 when shown, DK_E_CONTRACT (the desc is wrong) or DK_E_BUSY (a text input is open) or another negative code. */
+#define DK_UI_TEXT_INPUT_MAX 15
+
+typedef struct dk_ui_text_input_desc {
+    const char *title, *initial;
+    uint32_t max_len;
+    void (*done)(void *arg, const char *text);
+    void *arg;
+} dk_ui_text_input_desc;
+
+int32_t dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *desc);
 
 #endif

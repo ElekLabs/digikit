@@ -469,7 +469,9 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `svc-test-user` | A module with a hard NEED on `svc-test` (the provider and NEED path of the loader) | host, assembly, device |
 | `lfo-shape` | A service-type module that emits one `lfo_shape` record (key from `DK_KEY_SHAPE`); a test makes a second file with the same key by renaming a copy | assembly, device |
 | `lfo-shape-b` | A second shape (name STEP) under another module id, so another shape key: two shapes in one boot (numbers 7 and 8), a gap below the highest number; wrapper of the code of `lfo-shape` | device |
+| `shortcut-demo` | A module with a hard NEED on the `shortcuts` service: one `dk_shortcut_add` call, hold [TRK] and press [YES] (the record, the callbacks as image offsets, the card without the service) | host, assembly |
 | `entry-demo` | The module entry point: `dk_module` with `init`, `tick`, `fini`, `menu`, settings, log, time, an absent optional service; the module that owns a menu object (its `menu` function builds a submenu with `dk_ui_menu_new`, the case of `E_RELOAD_MENUS`) | host, device |
+| `ui-views` | The module screens of core/ui: a content module that adds two SETTINGS rows (`dk_ui_settings_row`), opens a full-screen view (frame, text, key handling), the stock text input (`dk_ui_text_input`) and an overlay; an unload closes its view and rows | device (`tests/fixtures/modules/ui-views/tests/live/`) |
 | `dyn-demo` | A raw module loaded from the card store with a counter in its `tick`: load, unload, store format, names | host, assembly, device |
 | `dyn-demo-stray` | The ColdFire memory audit: `dyn-demo` that writes one word outside its block | device |
 | `files-proof` | The public read-only listing boundary of the files API (deferred notifications, no tick) | host, device |
@@ -1382,6 +1384,17 @@ To test pages against a running emulator, `uv run python -m tools.devtools.emu_l
 starts a daemon, `apps/desktop/ui/preview/live.vite.config.ts` serves the pages over it
 (`DIGI_LIVE_SOCKET=SOCKET`), and `node tools/devtools/memory_live.mjs SOCKET [--check]` measures the
 Memory panel.
+
+## Waiting on runtime events and reading the screen
+
+- `rt.listen()` and `events.until(kind, match, { withinMs })` read the runtime log; the log commands exist only while `digikit/debug` is loaded (`installWithDebug`).
+- `ringWatch` (`tests/regression/runtime/runtime-menu.ts`) reads the runtime's small ring (32 events) straight from guest memory, so it works without the debug module, for
+  example in a card rig whose runtime has none (`CARD_SYMBOLS` of `card-rig.ts` carries the symbols). `next(kind, match, { withinMs })` waits in emulated time; poll every
+  100 ms, as the ring is short. Events a test must see are logged with `DK_LOG_F_KEEP`, which the ring keeps.
+  Use `rt.listen()` when the debug module is loaded anyway, `ringWatch` otherwise.
+- `viewStackFacts(device)` and `readViewStack(read, facts)` (`packages/test-support`, `boot-window.ts`) give the firmware's view stack from guest memory, the top view first (object, class
+  pointer, opaque byte): compare the identity of the top view, never count views. `readTopMenuItems(read, facts)` gives the item count of the top view's stock menu (SETTINGS).
+  `emulatorRead(session)` is the `read`. A screen is never read from pixels.
 
 ## The boot window
 
