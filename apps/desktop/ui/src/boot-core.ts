@@ -16,6 +16,27 @@ export function bootingStatus(b: Booting): string {
   return what ? `Booting ${what}…` : 'Booting…';
 }
 
+/** The kind of the target (`Target['kind']` of workbench-core); only `emulator` is the emulator. */
+export type TargetKind = string;
+
+/**
+ * Does the app boot a firmware at once when it starts? A command-line file always does. The last firmware of "Load on start" only when the target is
+ * the emulator: with a device as target the emulator waits for the first visit of its page (`bootOnEmulatorPage`).
+ */
+export function shouldBootOnStart(launchSyx: string | null | undefined, loadOnStart: boolean, targetKind: TargetKind): boolean {
+  return !!launchSyx || (loadOnStart && targetKind === 'emulator');
+}
+
+/** After the start deferred the boot of the last firmware: boot it when the Emulator page is shown with the emulator as target and nothing runs. */
+export function bootOnEmulatorPage(pending: boolean, page: string, targetKind: TargetKind, running: boolean, starting: boolean): boolean {
+  return pending && page === 'emulator' && targetKind === 'emulator' && !running && !starting;
+}
+
+/** The status bar text of the emulator: labelled when the target is another one, so it is not read as the state of the device. */
+export function emulatorStatus(text: string, targetKind: TargetKind): string {
+  return targetKind === 'emulator' ? text : `Emulator: ${text}`;
+}
+
 /** The Log entry when a boot starts. */
 export function bootingScreen(b: Booting): string {
   return `${bootingStatus(b)} the first boot of a firmware can take a minute`;
