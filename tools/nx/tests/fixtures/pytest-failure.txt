@@ -1,0 +1,16 @@
+============================= test session starts ==============================
+collected 3 items
+
+tests/devtools/test_x.py .F.                                             [100%]
+
+=================================== FAILURES ===================================
+______________________________ test_blocks_sleep _______________________________
+
+    def test_blocks_sleep():
+>       assert check("sleep 120") is None
+E       AssertionError: assert 'sleep 120 is over 60 s' is None
+
+tests/devtools/test_x.py:12: AssertionError
+=========================== short test summary info ============================
+FAILED tests/devtools/test_x.py::test_blocks_sleep - AssertionError: assert ...
+========================= 1 failed, 2 passed in 0.12s ==========================
