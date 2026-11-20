@@ -87,7 +87,7 @@ function fake(opts: { moduleCalls?: number; loaded?: string[]; sweepGeneration?:
       until: async (kind, match) => {
         const e = { seq: 1, kind, args: [], fields: { sweep: 3, generation: opts.sweepGeneration ?? 1, blocks: 50 } };
         log.push(`until ${kind}`);
-        if (!match(e as never)) throw new Error('no sweep of that generation');
+        if (match && !match(e as never)) throw new Error('no sweep of that generation');
         return e as never;
       },
     },

@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { MidiOut, RuntimeEvents, identifyDevice, wallClock } from '../../packages/dk-session/src/index.ts';
+import { MidiOut, RuntimeEvents, wallClock } from '../../packages/dk-session/src/index.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
 import { button, encoder } from '../../packages/test-support/src/keys.ts';
 import {
@@ -80,8 +80,9 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   }
   profile = addModuleCases(profile, moduleCases(root, fail));
   const { session } = link;
-  const who = opts.device ? { id: opts.device } : await identifyDevice(session, devices);
-  const record = devices.get(who.id);
+  // the runtime's INFO names the device by its id (the debug module is needed anyway); the stock Ping can fail on the emulator
+  const info = await session.info();
+  const record = devices.get(opts.device ?? info.port);
   if (!record.midi) fail(`the ${record.name} device file has no [midi] table`);
   const emu = Boolean(opts.emu);
   const clock = emu ? { now: () => session.clock.now(), pause: (ms) => session.clock.pause(ms) } : wallClock;
@@ -185,7 +186,6 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   };
 
   // the firmware identity both sides share: INFO `fw_id`, the first 8 bytes of the SHA-256 of the stock firmware (16 hex digits), also what the emulator's runtime reports
-  const info = await session.info();
   const run = { id: runId(emu ? 'emu' : 'dev', new Date()), target: record.id, runtime_version: info.runtime };
   if (info.fw_id) run.firmware_sha256 = info.fw_id;
   if (info.image_id) run.image_id = info.image_id;

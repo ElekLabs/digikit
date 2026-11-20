@@ -1,7 +1,7 @@
 // The calibration runner: plays a profile's cases on a target (an emulator or a device) and captures DSP stats and runtime spans, one `dk.profile/1`
 // per capture. The caller connects and gives the pieces (`Rig`); the runner holds no connection and no module-level state, so `wb profile calibrate run`
 // and the workbench's Profile pane use the same code. Host tests: tests/calibration-runner.test.ts. Format: docs/INSTRUMENTATION.md "Calibration runs".
-import type { Clock, LogKindName, MidiOut, RuntimeEvents } from '@digi/dk-session';
+import type { Clock, MidiOut, RuntimeEvents } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
 import { buildProfile, type DspRowOut } from '../profile/profile-artifact.ts';
 import { canonicalJson, sha256Hex, STOCK_CASE, type CalCase, type CalProfile } from './calprofile.ts';
