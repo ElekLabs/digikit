@@ -78,7 +78,7 @@ export function describeEmulator(status: object): string {
  * Free run: `now` is the emulated ms of `status()`. `pause(ms)` returns when the emulated clock has advanced by `ms` (the same ms as `now`), so a
  * wait or a capture window holds the same emulated time on any host speed; it reads `status()` every few wall ms only to see the progress.
  * A clock that drops (reboot, restore) adds nothing: only forward movement counts. While a job (boot, load) holds the clock still, `pause` returns after a wall interval, so the wait reads the state itself. When the clock stands still (and no job moves) for
- * `PAUSE_STUCK_BASE_MS + PAUSE_STUCK_PER_MS * ms` of wall time (a paused or halted emulator), `pause` throws with the emulator state.
+ * `hangMs` of the caller or, without one, `PAUSE_STUCK_BASE_MS + PAUSE_STUCK_PER_MS * ms` of wall time (a paused or halted emulator), `pause` throws with the emulator state.
  * The waits (`poll`, `waitClock`, the boot wait) keep their own stuck guards.
  */
 export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
@@ -92,13 +92,13 @@ export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
   };
   return {
     now: async () => emulatedMsOf(await read()),
-    pause: async (ms) => {
+    pause: async (ms, hangMs) => {
       if (!(ms > 0)) return;
       let last = emulatedMsOf(await read());
       let waited = 0;
       let token = progress;
       let moved = Date.now();
-      const stuckMs = PAUSE_STUCK_BASE_MS + PAUSE_STUCK_PER_MS * ms;
+      const stuckMs = hangMs ?? PAUSE_STUCK_BASE_MS + PAUSE_STUCK_PER_MS * ms;
       while (waited < ms) {
         await new Promise<void>((r) => setTimeout(r, PAUSE_READ_MS));
         const now = emulatedMsOf(await read());

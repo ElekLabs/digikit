@@ -9,7 +9,8 @@ export const WALL_POLL_MS = 500;
 /** Time for waits, in ms. `pause` lets about `ms` pass and may throw when time cannot pass. */
 export interface Clock {
   now(): Promise<number>;
-  pause(ms: number): Promise<void>;
+  /** `hangMs`: the wall ms the caller lets the clock stand still; a clock that waits for emulated time fails after that (default: its own guard). */
+  pause(ms: number, hangMs?: number): Promise<void>;
   /** What the source reports (mode, CPU state, ...): added to the message of a stuck clock. */
   describe?(): Promise<string>;
   /** Movement other than `now` (a cold boot moves counters while `now` stands still), as a token of the last reading; a changed token counts as movement. */
@@ -116,7 +117,7 @@ export async function poll<T>(
         `${typeof message === 'function' ? message() : message}: not seen within ${withinMs} ms of emulated time (last: ${failure ? String(failure) : JSON.stringify(value)})`,
       );
     }
-    await clock.pause(intervalMs);
+    await clock.pause(intervalMs, hangMs);
   }
 }
 
@@ -129,7 +130,7 @@ export async function waitClock(
   const start = await clock.now();
   const stuck = stuckGuard(`wait of ${ms} ms`, hangMs, clock);
   for (let now = start; now - start < ms;) {
-    await clock.pause(Math.min(50, ms - (now - start)));
+    await clock.pause(Math.min(50, ms - (now - start)), hangMs);
     now = await clock.now();
     await stuck(now);
   }

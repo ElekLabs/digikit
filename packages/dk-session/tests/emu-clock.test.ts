@@ -53,14 +53,14 @@ test('pause fails with the emulator state when emulated time stands still', asyn
   assert.match((err as Error).message, /pause\(1000 ms\): emulated clock stuck at 7\.0 ms.*mode paused/);
 });
 
-test('a poll on emulatedClock fails through the pause when the clock stands still and no job runs', async () => {
+test('a poll on emulatedClock trips when the clock stands still and no job runs', async () => {
   let n = 0;
   const clock = emulatedClock(async () => ({ mode: 'paused', elapsed: 5000, cf: { icount: n++ } }) as EmuStatus);
   const out = poll(clock, async () => 0, Boolean, { withinMs: 1000, intervalMs: 5, hangMs: 40, message: 'm' }).then(
     () => 'ok',
     (e: Error) => e,
   );
-  await vi.advanceTimersByTimeAsync(60_000 + 20 * 5 + 100);
+  for (let i = 0; i < 20; i++) await vi.advanceTimersByTimeAsync(10);
   const error = await out;
   assert.ok(error instanceof Error && /emulated clock stuck/.test(error.message), String(error));
   assert.ok(/mode paused/.test((error as Error).message), String(error));
