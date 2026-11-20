@@ -35,6 +35,18 @@ pub mod draw {
     }
 }
 
+pub mod filter {
+    // cf.filter.fn.accessor: no sig yet
+
+    // cf.filter.fn.get: no sig yet
+
+    // cf.filter.fn.list_vector: no sig yet
+
+    // cf.filter.fn.name: no sig yet
+
+    // cf.filter.fn.set: no sig yet
+}
+
 pub mod input {
     // cf.input.fn.enc_decoder: no sig yet
 
