@@ -1,0 +1,152 @@
+/* manager_screen: see manager_screen.h. Layout for 128 x 64 with the default font: title, the grid rows, a bar under named tracks, the selected
+ * track, the key line at the bottom. */
+#include "manager_screen.h"
+
+#include <dk/platform/settings.h>
+
+#include "active_track.h"
+#include "grid_cursor.h"
+#include "track_text.h"
+
+#define MARGIN 4
+#define CELL_W 14
+#define CELL_H 9
+#define TITLE_Y 0
+#define GRID_Y 11
+#define BAR_OFFSET 9 /* from the top of the number to the bar under it */
+#define SELECTED_GAP 4
+#define KEYS_Y_FROM_BOTTOM 9
+#define NAME_KEY "names"
+#define TITLE_MAX 24
+
+static dk_ui *ui;
+static track_names *names;
+static dk_settings *settings;
+static dk_ui_view *view;
+static grid_cursor cursor;
+static uint32_t editing; /* the track the naming screen is open for */
+
+static void save(void)
+{
+    uint8_t value[TRACK_NAMES_ENCODED_MAX];
+    uint32_t len = track_names_encode(names, value, sizeof value);
+    if (settings && len)
+        dk_settings_put(settings, NAME_KEY, value, len);
+}
+
+static void renamed(void *arg, const char *text)
+{
+    (void)arg;
+    if (track_names_rename(names, editing, text) == 0)
+        save();
+}
+
+static void open_naming(void)
+{
+    static char title[TITLE_MAX];
+    char number[3];
+    track_text_number(number, grid_cursor_track(&cursor));
+    const char *head = "TRACK ", *tail = " NAME";
+    uint32_t at = 0;
+    for (const char *s = head; *s; s++)
+        title[at++] = *s;
+    for (const char *s = number; *s; s++)
+        title[at++] = *s;
+    for (const char *s = tail; *s; s++)
+        title[at++] = *s;
+    title[at] = 0;
+    editing = grid_cursor_track(&cursor);
+    const dk_ui_text_input_desc desc = {
+        .title = title,
+        .initial = track_names_name_of(names, editing),
+        .max_len = TRACK_NAME_MAX,
+        .done = renamed,
+    };
+    dk_ui_text_input(ui, &desc);
+}
+
+static void draw(void *arg, const dk_canvas *canvas)
+{
+    (void)arg;
+    canvas->fill_rect(0, 0, (int32_t)canvas->width - 1, (int32_t)canvas->height - 1, 0);
+    canvas->text(MARGIN, TITLE_Y, "TRACK MANAGER");
+    for (uint32_t t = 0; t < cursor.count; t++) {
+        char number[3];
+        track_text_number(number, t);
+        int32_t x = MARGIN + (int32_t)(t % GRID_COLUMNS) * CELL_W;
+        int32_t y = GRID_Y + (int32_t)(t / GRID_COLUMNS) * (CELL_H + 2);
+        canvas->text(x, y, number);
+        int32_t w = canvas->text_width(number);
+        if (track_names_name_of(names, t)[0])
+            canvas->fill_rect(x, y + BAR_OFFSET, x + w - 1, y + BAR_OFFSET, 1);
+        if (t == grid_cursor_track(&cursor))
+            canvas->invert_rect(x - 1, y - 1, x + w, y + CELL_H - 2);
+    }
+    uint32_t track = grid_cursor_track(&cursor);
+    char line[TITLE_MAX + TRACK_NAME_MAX];
+    uint32_t at = 0;
+    char number[3];
+    track_text_number(number, track);
+    line[at++] = number[0];
+    line[at++] = number[1];
+    line[at++] = ' ';
+    line[at++] = ' ';
+    for (const char *s = track_names_name_of(names, track); *s; s++)
+        line[at++] = *s;
+    line[at] = 0;
+    int32_t keys_y = (int32_t)canvas->height - KEYS_Y_FROM_BOTTOM;
+    canvas->text(MARGIN, keys_y - CELL_H - SELECTED_GAP, line);
+    const char *exit_text = "[NO] EXIT";
+    canvas->text(MARGIN, keys_y, "[YES] RENAME");
+    canvas->text((int32_t)canvas->width - MARGIN - canvas->text_width(exit_text), keys_y,
+                 exit_text);
+}
+
+static int32_t key(void *arg, dk_key k, uint32_t flags)
+{
+    (void)arg;
+    if (!(flags & DK_UI_KEY_DOWN))
+        return 1;
+    if (k >= DK_KEY_TRIG1 && k < DK_KEY_TRIG1 + cursor.count)
+        grid_cursor_jump(&cursor, k - DK_KEY_TRIG1);
+    else if (k == DK_KEY_LEFT)
+        grid_cursor_move(&cursor, GRID_LEFT);
+    else if (k == DK_KEY_RIGHT)
+        grid_cursor_move(&cursor, GRID_RIGHT);
+    else if (k == DK_KEY_UP)
+        grid_cursor_move(&cursor, GRID_UP);
+    else if (k == DK_KEY_DOWN)
+        grid_cursor_move(&cursor, GRID_DOWN);
+    else if (k == DK_KEY_YES)
+        open_naming();
+    else if (k == DK_KEY_NO)
+        dk_ui_view_close(view);
+    return 1;
+}
+
+static void closed(void *arg)
+{
+    (void)arg;
+    view = 0;
+}
+
+void manager_screen_init(dk_ui *ui_handle, track_names *track_names_state,
+                         dk_settings *settings_handle)
+{
+    ui = ui_handle;
+    names = track_names_state;
+    settings = settings_handle;
+    view = 0;
+    grid_cursor_init(&cursor, names->count);
+}
+
+void manager_screen_open(void *arg)
+{
+    (void)arg;
+    if (view || !ui)
+        return;
+    grid_cursor_init(&cursor, names->count);
+    grid_cursor_jump(&cursor, active_track());
+    const dk_ui_view_desc desc = {.draw = draw, .key = key, .closed = closed};
+    view = dk_ui_view_open(ui, &desc);
+}
