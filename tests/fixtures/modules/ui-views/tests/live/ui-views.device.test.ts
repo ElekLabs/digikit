@@ -105,10 +105,12 @@ function firmware(rt: TestRuntime) {
   return { vptrs, topMenuItems };
 }
 
-/** Open SETTINGS and press YES on row `row` (counted from the top). */
-async function pressSettingsRow(rt: TestRuntime, row: number): Promise<void> {
+/** Open SETTINGS and press YES on row `row` (counted from the top) of a menu with `rows` rows. */
+async function pressSettingsRow(rt: TestRuntime, row: number, rows: number): Promise<void> {
   const tap = tapOf(rt);
   await tap('SETTINGS');
+  // the menu keeps its cursor from the last time and stops at its ends (it does not wrap): UP over every row puts the cursor on the first
+  for (let i = 0; i < rows; i++) await tap('UP');
   for (let i = 0; i < row; i++) await tap('DOWN');
   await tap('YES');
 }
@@ -161,7 +163,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   const row1 = rowsWith - 2;
 
   // The full-screen view: a new top view above the SETTINGS menu.
-  await pressSettingsRow(rt, row1);
+  await pressSettingsRow(rt, row1, rowsWith);
   await opened(0);
   const open = await until(rt, (r) => r.drawsFull > 0, 'the view was never drawn');
   expect(open.fullOpen, 'dk_ui_view_open returned a view').toBe(1);
@@ -200,7 +202,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
 
   // The overlay: the second row, a top view, closed by the module.
   await leave(rt);
-  await pressSettingsRow(rt, row1 + 1);
+  await pressSettingsRow(rt, row1 + 1, rowsWith);
   await opened(1);
   const overlay = await until(rt, (r) => r.drawsOverlay > 0, 'the overlay was never drawn');
   expect(overlay.closedOverlay).toBe(0);
@@ -221,7 +223,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   };
 
   // An unload takes an open view off the stack and removes the rows, without a fault.
-  await pressSettingsRow(rt, row1);
+  await pressSettingsRow(rt, row1, rowsWith);
   await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open before the unload');
   const beforeUnload = await fw.vptrs();
@@ -237,7 +239,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   // The pool is not stuck: the module loads again and opens a view (a slot of the unloaded one is free).
   await reload();
   expect((await stockRows()), 'the rows are back').toBe(rowsBefore + 2);
-  await pressSettingsRow(rt, row1);
+  await pressSettingsRow(rt, row1, rowsWith);
   await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'a view of the reloaded module did not open');
   await tap('NO');
@@ -247,6 +249,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
 
   // A stock row that was built before the unload does nothing when it is run afterwards.
   await tap('SETTINGS');
+  for (let i = 0; i < rowsWith; i++) await tap('UP');
   for (let i = 0; i < row1; i++) await tap('DOWN');
   const settingsOnly = await fw.vptrs();
   await unload('the unload with the SETTINGS menu open');
@@ -257,7 +260,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
 
   // An unload with the text input open: YES calls nothing of the unloaded module, the screen goes, and a text input of the reloaded module works.
   await reload();
-  await pressSettingsRow(rt, row1);
+  await pressSettingsRow(rt, row1, rowsWith);
   await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open for the text input case');
   await tap('YES');
@@ -272,7 +275,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await session.expectNoFault('YES on a text input of an unloaded module');
   await leave(rt);
   await reload();
-  await pressSettingsRow(rt, row1);
+  await pressSettingsRow(rt, row1, rowsWith);
   await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open after the reload');
   await tap('YES');
