@@ -71,8 +71,6 @@ function firmware(rt: TestRuntime) {
   const facts = viewStackFacts(device);
   if (!facts) throw new Error(`${device} has no [ui] facts`);
   const read = emulatorRead(rt.session);
-  /** The View objects of the stack, the top one first (the one walker: `readViewStack` of test-support). */
-  const views = async (): Promise<number[]> => (await readViewStack(read, facts, MAX_STACK)).map((v) => v.view);
   /** The vtable pointers of the stack, the top one first. */
   const vptrs = async () => (await readViewStack(read, facts, MAX_STACK)).map((v) => v.vptr);
   /** How many items the top view's menu has (the top view must be a menu: SETTINGS). */

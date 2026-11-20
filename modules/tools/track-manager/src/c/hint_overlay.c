@@ -14,7 +14,8 @@
 static dk_ui *ui;
 static const track_names *names;
 static dk_ui_view *view;
-static uintptr_t serial; /* which opening `view` is: `closed` of an older view must not clear a newer handle */
+static uintptr_t
+    serial; /* which opening `view` is: `closed` of an older view must not clear a newer handle */
 
 static void append(char *out, uint32_t *at, const char *text)
 {

@@ -38,7 +38,14 @@ extern "C" {
 /// The log events the pool asked for, as (kind, owner, a, b).
 fn events() -> Vec<(u32, u32, u32, u32)> {
     (0..unsafe { vw_events() })
-        .map(|i| unsafe { (vw_event(i, 0), vw_event(i, 1), vw_event(i, 2), vw_event(i, 3)) })
+        .map(|i| unsafe {
+            (
+                vw_event(i, 0),
+                vw_event(i, 1),
+                vw_event(i, 2),
+                vw_event(i, 3),
+            )
+        })
         .collect()
 }
 
@@ -346,7 +353,11 @@ fn a_view_opened_in_a_key_press_is_pushed_after_the_release_which_the_old_view_t
     assert_eq!(count(PUSHES, 0), 1);
     unsafe { vw_defer_poll() };
     assert_eq!(count(PUSHES, 0), 2, "pushed after the release");
-    assert_eq!(events().len(), 2, "logged when it was pushed, not when it was asked for");
+    assert_eq!(
+        events().len(),
+        2,
+        "logged when it was pushed, not when it was asked for"
+    );
     assert_eq!(unsafe { vw_defer_pending() }, 0);
     unsafe { vw_draw(slot(b)) };
     assert_eq!(count(DRAWS, 5), 1, "and drawn");
@@ -480,10 +491,25 @@ fn the_pool_logs_when_a_view_is_pushed_and_when_it_leaves_the_stack() {
     let _g = fresh();
     let h = open(7, OVERLAY, 0);
     let s = slot(h);
-    assert_eq!(events(), [(VIEW_OPENED, 7, OVERLAY, s)], "pushed: owner, flags, slot");
+    assert_eq!(
+        events(),
+        [(VIEW_OPENED, 7, OVERLAY, s)],
+        "pushed: owner, flags, slot"
+    );
     unsafe { vw_close(h) };
-    assert_eq!(events().len(), 1, "a close request is no event: the view is still on the stack");
+    assert_eq!(
+        events().len(),
+        1,
+        "a close request is no event: the view is still on the stack"
+    );
     unsafe { vw_gone(s) };
-    assert_eq!(events()[1], (VIEW_CLOSED, 7, s, 0), "the firmware removed it");
-    assert!(all_kept(), "both events carry the keep flag, so a card without the debug module keeps them");
+    assert_eq!(
+        events()[1],
+        (VIEW_CLOSED, 7, s, 0),
+        "the firmware removed it"
+    );
+    assert!(
+        all_kept(),
+        "both events carry the keep flag, so a card without the debug module keeps them"
+    );
 }

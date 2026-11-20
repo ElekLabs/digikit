@@ -54,7 +54,10 @@ fn a_row_needs_text_and_an_open_function() {
     let _g = session();
     unsafe { sr_reset() };
     assert_eq!(unsafe { sr_add_no_open(1, c"X".as_ptr()) }, E_CONTRACT);
-    assert_eq!(unsafe { sr_add(1, c"m".as_ptr(), std::ptr::null(), 0) }, E_CONTRACT);
+    assert_eq!(
+        unsafe { sr_add(1, c"m".as_ptr(), std::ptr::null(), 0) },
+        E_CONTRACT
+    );
     assert_eq!(unsafe { sr_count() }, 0);
 }
 
@@ -115,9 +118,17 @@ fn after_a_reload_the_old_stock_row_runs_the_reloaded_modules_row() {
     unsafe { sr_remove(1) };
     // the same module loads again into its record and adds its row again, with other callback data
     add_of(1, "digikit/demo", "A", 3);
-    assert_eq!(unsafe { sr_key(0) }, key, "the same module and the same row number: the same key");
+    assert_eq!(
+        unsafe { sr_key(0) },
+        key,
+        "the same module and the same row number: the same key"
+    );
     assert_eq!(unsafe { sr_run(key) }, 1);
-    assert_eq!((unsafe { sr_calls(0) }, unsafe { sr_calls(3) }), (0, 1), "the new registration ran");
+    assert_eq!(
+        (unsafe { sr_calls(0) }, unsafe { sr_calls(3) }),
+        (0, 1),
+        "the new registration ran"
+    );
 }
 
 #[test]
@@ -128,7 +139,10 @@ fn two_modules_with_rows_keep_their_own_and_a_module_numbers_its_rows() {
     add_of(1, "a/one", "A2", 1);
     add_of(2, "b/two", "B1", 2);
     let keys: Vec<usize> = (0..3).map(|i| unsafe { sr_key(i) }).collect();
-    assert!(keys[0] != keys[1] && keys[1] != keys[2] && keys[0] != keys[2], "three keys");
+    assert!(
+        keys[0] != keys[1] && keys[1] != keys[2] && keys[0] != keys[2],
+        "three keys"
+    );
     // module b alone unloads and reloads: only its row changes registration
     unsafe { sr_remove(2) };
     add_of(2, "b/two", "B1", 4);
@@ -136,7 +150,11 @@ fn two_modules_with_rows_keep_their_own_and_a_module_numbers_its_rows() {
         assert_eq!(unsafe { sr_run(k) }, 1);
         assert_eq!(unsafe { sr_calls(tag) }, 1, "key of tag {tag}");
     }
-    assert_eq!(unsafe { sr_calls(2) }, 0, "the old registration of b never ran");
+    assert_eq!(
+        unsafe { sr_calls(2) },
+        0,
+        "the old registration of b never ran"
+    );
 }
 
 #[test]
