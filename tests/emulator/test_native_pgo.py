@@ -392,16 +392,22 @@ def test_a_profile_covers_the_libraries_of_its_training_target():
 def test_fresh_profiles_prefer_the_both_profile_and_fall_back_to_the_device(
     monkeypatch,
 ):
+    seen = {}
+
     def launch_plan(environ, target):
+        seen[target] = environ.get("SHARC_GEN_DIR")
         profiles = {"dn2": "/dn2.p", "both": None, "dt2": "/dt2.p"}
         path = profiles[target]
         return (native_pgo.LaunchPlan([], [], {}, path, target) if path else None), ""
 
     monkeypatch.setattr(native_pgo, "launch_plan", launch_plan)
+    monkeypatch.setattr(native_pgo, "dt2_generated", lambda: pathlib.Path("/dt2-gen"))
     assert native_pgo.fresh_profiles(["dn2", "dt2"], {}) == {
         "dn2": pathlib.Path("/dn2.p"),
         "dt2": pathlib.Path("/dt2.p"),
     }
+    # the dt2 profile is resolved against the DT2 core, the others against the launcher's env
+    assert seen["dt2"] == "/dt2-gen" and seen["dn2"] is None
     monkeypatch.setattr(
         native_pgo,
         "launch_plan",
@@ -494,3 +500,18 @@ def test_a_failed_cache_write_keeps_the_list_and_leaves_no_part_file(
     assert native_pgo.tree_packages() == ["packages/a"]
     assert list((tmp_path / "dist").glob("*.part")) == []
     assert not (tmp_path / "dist" / "pgo-packages.json").exists()
+
+
+def test_desktop_digest_ignores_build_output_but_not_rust_source(tree):
+    crate = tree / native_pgo.DESKTOP_DIR
+    hasher = native_pgo.FileHasher(tree / "state" / "hash-cache.json")
+    before = native_pgo.desktop_digest(hasher)
+    for rel in ("gen/schemas/x.json", "icons/a.png", "project.json"):
+        (crate / rel).parent.mkdir(parents=True, exist_ok=True)
+        (crate / rel).write_text("rebuilt")
+    ui_dist = tree / "apps/desktop/ui/dist/index.html"
+    ui_dist.parent.mkdir(parents=True)
+    ui_dist.write_text("rebuilt ui")
+    assert native_pgo.desktop_digest(hasher) == before
+    (crate / "main.rs").write_text("changed code")
+    assert native_pgo.desktop_digest(hasher) != before

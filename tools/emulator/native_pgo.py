@@ -18,7 +18,7 @@ through ``core_store.build_plan(instrument=...)``), runs the workload with ``DIG
 instrumented libraries, and merges the ``.profraw`` files of the host and the libraries into one profile per training
 target (the libraries write theirs through the same ``LLVM_PROFILE_FILE``, into ``state/raw-<pid>``, removed after the
 merge). The ``-Cprofile-generate`` directory in the flags is fixed per target dir, so cargo keeps its builds between
-trainings. An instrumented library is built once per key in the lane and kept in the store
+trainings (`mise run perf:pgo` trains dn2, dt2, then both). An instrumented library is built once per key in the lane and kept in the store
 ``<git common dir>/sharc-core-pgo-instrument`` (the key holds no lane path), so every training and every lane restores it.
 ``train`` skips a device whose profile for the current key exists (``--force`` trains again; a workload edit that keeps
 the workload name needs ``--force``). Every manifest has ``phase_seconds``. The
@@ -604,9 +604,23 @@ def current_profile(
     return str(path) if path.is_file() else None
 
 
+# Top-level entries of the desktop crate that do not change its compiled Rust code: `gen/` is rewritten by every tauri
+# build (schemas, gitignored), `icons/` and `project.json` (Nx) are no code. The UI build output (`apps/desktop/ui/dist`)
+# lies outside the crate and is never hashed.
+DESKTOP_NON_CODE = {"gen", "icons", "project.json"}
+
+
 def desktop_digest(hasher: FileHasher) -> str:
-    """Digest of the desktop crate: recorded for reporting, not part of the key."""
-    return tree_digest(hasher, ROOT / DESKTOP_DIR, ROOT, set())[0]
+    """Digest of the desktop crate's code inputs (see DESKTOP_NON_CODE). It decides whether a dn2 training is current
+    (`current_training`), because the dn2 training builds this crate; it is not part of the profile key."""
+    top = ROOT / DESKTOP_DIR
+    outer = hashlib.sha256()
+    for path in tree_files(top):
+        rel = path.relative_to(top)
+        if rel.parts[0] in DESKTOP_NON_CODE:
+            continue
+        outer.update(f"{path.relative_to(ROOT)}\0{hasher.digest(path)}\n".encode())
+    return outer.hexdigest()
 
 
 @dataclasses.dataclass
@@ -849,8 +863,15 @@ def fresh_profiles(
     environ = os.environ if environ is None else environ
     found: dict[str, pathlib.Path] = {}
     for target in (BOTH, *devices):
+        target_env = environ
+        if target == "dt2" and not environ.get("SHARC_GEN_DIR"):
+            # The key of a dt2 profile holds the DT2 core; the launcher env names the DN2 one (as `plan` does).
+            try:
+                target_env = {**environ, "SHARC_GEN_DIR": str(dt2_generated())}
+            except (SystemExit, OSError):
+                continue
         try:
-            plan, _ = launch_plan(environ, target)
+            plan, _ = launch_plan(target_env, target)
         except SystemExit:  # `both` needs both generated cores
             continue
         for device, path in library_profiles(plan, environ).items():
@@ -942,7 +963,7 @@ def stale_notice(detail: str = "", device: str = "dn2") -> str:
     return (
         "WARNING: native PGO: profile is stale for this core; building without PGO "
         "(about 30% slower DSP). Retrain with "
-        "`mise run perf:pgo` (dn2 and dt2), `mise run perf:pgo:dn2`, `mise run perf:pgo:dt2` or "
+        "`mise run perf:pgo` (dn2, dt2 and both), `mise run perf:pgo:dn2`, `mise run perf:pgo:dt2` or "
         "`mise run perf:pgo:both` (the two-core desktop build; "
         "`uv run python -m tools.emulator.native_pgo train --device both`)."
     )
@@ -1558,7 +1579,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if args.device == BOTH:
         gen, _gen2 = both_generated()
         environ = {**os.environ, "SHARC_GEN_DIR": str(gen)}
-    profile = current_profile(args.device)
+    # The profile of this tree for DEVICE: its key holds the device's own core, so name it (as coupled-build does);
+    # without it dt2 would hash the DN2 core, miss its by-key manifest and fall back to the shared manifest.json
+    # (whatever tree trained last), and verify would compare the binary with another tree's profile.
+    gen = dt2_generated() if args.device == "dt2" else None
+    profile = current_profile(args.device, gen)
     profdata = pathlib.Path(profile) if profile else None
     if profdata is None:
         print("no trained profile to verify against")
