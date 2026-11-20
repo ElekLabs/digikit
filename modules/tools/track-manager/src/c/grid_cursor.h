@@ -3,7 +3,9 @@
 #define GRID_CURSOR_H
 #include <stdint.h>
 
-#define GRID_COLUMNS 8
+#define GRID_SHIFT                                                                                 \
+    3 /* columns are a power of two: shifts and masks, no division (the ColdFire code the packer accepts has none of 64-bit or remainder form) */
+#define GRID_COLUMNS (1u << GRID_SHIFT)
 
 typedef enum grid_dir { GRID_LEFT, GRID_RIGHT, GRID_UP, GRID_DOWN } grid_dir;
 

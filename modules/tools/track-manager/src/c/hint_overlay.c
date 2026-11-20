@@ -5,10 +5,10 @@
 #include "track_text.h"
 
 #define STRIP_MARGIN 4
-#define STRIP_HEIGHT 14
-#define STRIP_BOTTOM 4
 #define TEXT_PAD 4
 #define TEXT_TOP 3
+#define STRIP_HEIGHT (TM_GLYPH_H + 2 * TEXT_TOP)
+#define STRIP_BOTTOM 4
 #define LABEL_MAX 40
 
 static dk_ui *ui;

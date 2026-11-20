@@ -211,6 +211,35 @@ export async function readTopView(read: ReadMemory, facts: BootWindowFacts): Pro
   }
 }
 
+/** The opaque byte of a View (`View+0x16`, `View::vfunc_9` reads it; a full-screen view is 1, an overlay 0). */
+export const VIEW_OPAQUE_OFF = 0x16;
+
+/** One view of the firmware's view stack. */
+export interface StackView {
+  /** The View object. */
+  view: number;
+  /** Its vtable pointer: the class. */
+  vptr: number;
+  /** Its opaque byte: nonzero hides the views below it. */
+  opaque: number;
+}
+
+/** The firmware's view stack, the top view first. Empty before the Brain exists. */
+export async function readViewStack(read: ReadMemory, facts: ViewStackFacts, max = 32): Promise<StackView[]> {
+  const word = async (addr: number) => u32At(await read(addr, 4));
+  const brain = await word(facts.brainPtr);
+  if (brain === 0) return [];
+  const list = brain + facts.viewManagerOff + facts.listOff;
+  const out: StackView[] = [];
+  let node = await word(list + facts.listPrevOff);
+  while (node !== list && out.length < max) {
+    const view = await word(node + facts.nodeViewOff);
+    out.push({ view, vptr: await word(view), opaque: (await read(view + VIEW_OPAQUE_OFF, 1))[0]! });
+    node = await word(node + facts.listPrevOff);
+  }
+  return out;
+}
+
 /** Is the bottom view of the firmware's view stack the MainScreenView (the main screen is reached; overlays may sit above it)? undefined when a read fails: read again. */
 export async function readMainAtBottom(read: ReadMemory, facts: BootWindowFacts): Promise<boolean | undefined> {
   try {

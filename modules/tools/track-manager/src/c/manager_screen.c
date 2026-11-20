@@ -1,21 +1,25 @@
-/* manager_screen: see manager_screen.h. Layout for 128 x 64 with the default font: title, the grid rows, a bar under named tracks, the selected
- * track, the key line at the bottom. */
+/* manager_screen: see manager_screen.h. Layout for 128 x 64 with the stock font (glyphs 6 pixels high): title, the grid rows, a bar under named tracks, the
+ * selected track, the key line at the bottom; the right-aligned text uses `text_width`. */
 #include "manager_screen.h"
 
 #include <dk/platform/settings.h>
+
+/* a chain of key tests would become a PC-relative jump table, which is not ColdFire code the packer accepts */
+#pragma GCC optimize("no-jump-tables")
 
 #include "active_track.h"
 #include "grid_cursor.h"
 #include "track_text.h"
 
 #define MARGIN 4
-#define CELL_W 14
-#define CELL_H 9
+#define CELL_W                                                                                     \
+    14 /* two digits are at most 12 pixels wide in the stock font; the gap between cells is what is left */
+#define ROW_GAP 3 /* between the glyph rows of the grid, with room for the bar under a number */
 #define TITLE_Y 0
-#define GRID_Y 11
-#define BAR_OFFSET 9 /* from the top of the number to the bar under it */
+#define GRID_Y (TM_GLYPH_H + 5)     /* below the title */
+#define BAR_OFFSET (TM_GLYPH_H + 1) /* from the top of the number to the bar under it */
 #define SELECTED_GAP 4
-#define KEYS_Y_FROM_BOTTOM 9
+#define KEYS_Y_FROM_BOTTOM (TM_GLYPH_H + 1)
 #define NAME_KEY "names"
 #define TITLE_MAX 24
 
@@ -74,13 +78,13 @@ static void draw(void *arg, const dk_canvas *canvas)
         char number[3];
         track_text_number(number, t);
         int32_t x = MARGIN + (int32_t)(t % GRID_COLUMNS) * CELL_W;
-        int32_t y = GRID_Y + (int32_t)(t / GRID_COLUMNS) * (CELL_H + 2);
+        int32_t y = GRID_Y + (int32_t)(t / GRID_COLUMNS) * (TM_GLYPH_H + ROW_GAP);
         canvas->text(x, y, number);
         int32_t w = canvas->text_width(number);
         if (track_names_name_of(names, t)[0])
             canvas->fill_rect(x, y + BAR_OFFSET, x + w - 1, y + BAR_OFFSET, 1);
         if (t == grid_cursor_track(&cursor))
-            canvas->invert_rect(x - 1, y - 1, x + w, y + CELL_H - 2);
+            canvas->invert_rect(x - 1, y - 1, x + w, y + TM_GLYPH_H);
     }
     uint32_t track = grid_cursor_track(&cursor);
     char line[TITLE_MAX + TRACK_NAME_MAX];
@@ -95,7 +99,7 @@ static void draw(void *arg, const dk_canvas *canvas)
         line[at++] = *s;
     line[at] = 0;
     int32_t keys_y = (int32_t)canvas->height - KEYS_Y_FROM_BOTTOM;
-    canvas->text(MARGIN, keys_y - CELL_H - SELECTED_GAP, line);
+    canvas->text(MARGIN, keys_y - TM_GLYPH_H - SELECTED_GAP, line);
     const char *exit_text = "[NO] EXIT";
     canvas->text(MARGIN, keys_y, "[YES] RENAME");
     canvas->text((int32_t)canvas->width - MARGIN - canvas->text_width(exit_text), keys_y,

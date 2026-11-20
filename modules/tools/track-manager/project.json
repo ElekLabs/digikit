@@ -1,26 +1,13 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "digikit/track-manager",
-  "targets": {
-    "test-host": {
-      "executor": "nx:run-commands",
-      "cache": true,
-      "inputs": [
-        "{projectRoot}/project.json",
-        "{projectRoot}/src/c/track_names.*",
-        "{projectRoot}/src/c/grid_cursor.*",
-        "{projectRoot}/tests/**/*",
-        "jsToolchain",
-        "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host.projects.json",
-        { "externalDependencies": ["vitest"] }
-      ],
-      "outputs": [],
-      "options": {
-        "forwardAllArgs": false,
-        "command": "pnpm exec vitest run --config vitest.host.config.ts --project module-tests modules/tools/track-manager",
-        "cwd": "."
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/track-manager.device.test.ts"],
+        "tags": ["M:digikit/track-manager"],
+        "modules": ["core/services/shortcuts"]
       }
-    }
+    ]
   }
 }
