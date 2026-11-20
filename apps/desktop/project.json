@@ -14,7 +14,9 @@
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/devices/*.toml"
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/calibration.toml"
       ],
       "outputs": ["{projectRoot}/ui/dist"]
     },
@@ -47,7 +49,9 @@
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/devices/*.toml"
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/calibration.toml"
       ],
       "outputs": []
     },
@@ -82,6 +86,8 @@
         "{workspaceRoot}/packages/dksharc/src/**/*",
         "{workspaceRoot}/packages/dksharc/Cargo.toml",
         "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/calibration.toml",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json"
       ],

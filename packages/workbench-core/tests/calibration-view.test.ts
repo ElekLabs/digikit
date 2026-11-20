@@ -185,3 +185,49 @@ test('the progress parser follows what the shared runner logs', async () => {
   );
   assert.equal(events.filter((e) => e.kind === 'skip').length, 1);
 });
+
+test('malformed captures are refused with a message naming the file', () => {
+  const ok = cap('insn', 'bd', [[3, 1, 2]]);
+  const bad = (name: string, edit: (d: Record<string, unknown>) => void, re: RegExp) => {
+    const d = JSON.parse(JSON.stringify(ok)) as Record<string, unknown>;
+    edit(d);
+    assert.throws(() => readCaptureSet([{ name, text: JSON.stringify(d) }]), re);
+  };
+  bad('a.json', (d) => (d.dsp_rows = 'x'), /a\.json: capture bd: dsp_rows is not a list/);
+  bad(
+    'b.json',
+    (d) => (d.dsp_rows = [{ row: 1, calls: 'many', max_call: 1, max_block: 1 }]),
+    /b\.json: capture bd: a dsp row lacks numbers/,
+  );
+  bad('c.json', (d) => (d.dsp_rows = [null]), /c\.json: capture bd: a dsp row lacks numbers/);
+  bad('d.json', (d) => (d.dsp = { unit: 5 }), /d\.json: capture bd: the dsp header is malformed/);
+  bad('e.json', (d) => (d.spans = [{ owner: 1 }]), /e\.json: capture bd: a span lacks numbers/);
+  bad('f.json', (d) => (d.spans = {}), /f\.json: capture bd: spans is not a list/);
+  assert.throws(
+    () => readCaptureSet([{ name: 'g.json', text: JSON.stringify({ schema: 'dk.calcaptures/1', captures: [7] }) }]),
+    /g\.json: a capture is not a dk.profile\/1 document/,
+  );
+});
+
+test('a fit refuses two profiles; the saved run name has no path characters; skipped cases take no time', () => {
+  const mk = (unit: 'insn' | 'cycles', profile: string) =>
+    readCaptureSet([
+      {
+        name: 'x.json',
+        text: JSON.stringify({ schema: 'dk.calcaptures/1', profile, captures: [cap(unit, 'bd', [])] }),
+      },
+    ]);
+  assert.throws(
+    () => fitRequest(mk('insn', 'light'), mk('cycles', 'heavy')),
+    /profile light and the device run of heavy/,
+  );
+  assert.equal(captureSetFile({ profile: '../a b', captures: [] }).name, 'calibration-.._a_b-run.captures.json');
+  const { profiles } = loadCalibrationFiles({
+    profiles: {
+      'p/x.toml': `schema = "dk.calprofile/1"\nname = "x"\nwarmup_s = 1\ncapture_s = 4\nrepeats = 1\n[[case]]\nid = "stock"\nsteps = "s"\n[[case]]\nid = "b"\nsteps = "s"\n[[case]]\nid = "c"\nsteps = "s"\n`,
+    },
+    steps: {},
+    cases: {},
+  });
+  assert.equal(secondsLeft({ profile: profiles[0]!, case: 'stock', n: 1, intoCaptureS: 0, skipping: ['b'] }), 10);
+});

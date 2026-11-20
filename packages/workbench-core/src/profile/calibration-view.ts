@@ -185,8 +185,43 @@ export function captureSetFile(set: { profile: string; captures: readonly Pick<C
   const side = docs.length > 0 ? sideOf(docs[0] as CalProfileDoc) : undefined;
   return {
     text: `${JSON.stringify({ schema: CAPTURES_SCHEMA, profile: set.profile, side, captures: docs })}\n`,
-    name: `calibration-${set.profile}-${side ?? 'run'}.captures.json`,
+    name: `calibration-${set.profile.replace(/[^A-Za-z0-9._-]/g, '_')}-${side ?? 'run'}.captures.json`,
   };
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isNum = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+
+/** Refuse a capture the table and the fit cannot read: wrong schema, no case, a malformed `dsp` header, `dsp_rows` or `spans`. */
+function checkCapture(d: unknown, where: string): void {
+  if (!isObj(d) || d.schema !== 'dk.profile/1') throw new Error(`${where}: a capture is not a dk.profile/1 document`);
+  const run = d.run;
+  if (!isObj(run) || typeof run.case_id !== 'string' || run.case_id === '')
+    throw new Error(`${where}: a capture has no run.case_id (a calibration run writes it)`);
+  if (d.dsp !== undefined) {
+    const h = d.dsp;
+    const bad =
+      !isObj(h) ||
+      (h.unit !== undefined && typeof h.unit !== 'string') ||
+      (h.blocks !== undefined && !isNum(h.blocks)) ||
+      (h.max_stock_block_delta !== undefined && !isNum(h.max_stock_block_delta));
+    if (bad)
+      throw new Error(
+        `${where}: capture ${run.case_id}: the dsp header is malformed (unit text, blocks and max_stock_block_delta numbers)`,
+      );
+  }
+  if (d.dsp_rows !== undefined) {
+    if (!Array.isArray(d.dsp_rows)) throw new Error(`${where}: capture ${run.case_id}: dsp_rows is not a list`);
+    for (const r of d.dsp_rows)
+      if (!isObj(r) || !['row', 'calls', 'max_call', 'max_block'].every((k) => isNum(r[k])))
+        throw new Error(`${where}: capture ${run.case_id}: a dsp row lacks numbers row, calls, max_call and max_block`);
+  }
+  if (d.spans !== undefined) {
+    if (!Array.isArray(d.spans)) throw new Error(`${where}: capture ${run.case_id}: spans is not a list`);
+    for (const r of d.spans)
+      if (!isObj(r) || !isNum(r.owner) || !isNum(r.calls) || !isNum(r.sum_ticks) || !isNum(r.max_ticks))
+        throw new Error(`${where}: capture ${run.case_id}: a span lacks numbers owner, calls, sum_ticks and max_ticks`);
+  }
 }
 
 /**
@@ -212,9 +247,7 @@ export function readCaptureSet(files: readonly { name: string; text: string }[])
     } else if (o?.schema === 'dk.profile/1') docs.push(o as CalProfileDoc);
     else throw new Error(`${f.name}: neither ${CAPTURES_SCHEMA} nor dk.profile/1`);
   }
-  for (const d of docs)
-    if (d.schema !== 'dk.profile/1' || !d.run?.case_id)
-      throw new Error(`${files[0]!.name}: a capture has no run.case_id (a calibration run writes it)`);
+  for (const d of docs) checkCapture(d, files.length === 1 ? files[0]!.name : files.map((f) => f.name).join(', '));
   const sides = new Set(docs.map(sideOf));
   if (sides.size !== 1 || sides.has(undefined))
     throw new Error(
@@ -253,6 +286,10 @@ export function fitRequest(
   dev: CaptureSet,
 ): { device: unknown[]; model: unknown[]; sources: unknown } {
   if (emu.side !== 'emu' || dev.side !== 'dev') throw new Error('a fit pairs one emulator run with one device run');
+  if (emu.profile && dev.profile && emu.profile !== dev.profile)
+    throw new Error(
+      `the emulator run is of profile ${emu.profile} and the device run of ${dev.profile}: a fit needs the same profile on both`,
+    );
   return { device: dev.captures, model: emu.captures, sources: { model: emu.source, device: dev.source } };
 }
 
@@ -308,6 +345,8 @@ export const calibrationFileName = (c: CalibrationDoc): string => `dk-calibratio
 /** What a runner log line says that the pane shows: a capture started, or a case was skipped. */
 export type RunEvent =
   | { kind: 'capture'; case: string; n: number; of: number }
+  /** Before the first case: the cases this rig cannot play (they are skipped, and take no time). */
+  | { kind: 'plan'; skipping: string[] }
   | { kind: 'skip'; case: string; reason: string }
   | { kind: 'text'; text: string };
 
@@ -321,10 +360,17 @@ export function parseRunLine(line: string): RunEvent {
 }
 
 /** Seconds left of a run: the rest of this capture, the other captures of this case and every later case (module loads and restarts not counted). */
-export function secondsLeft(p: { profile: CalProfile; case: string; n: number; intoCaptureS: number }): number {
+export function secondsLeft(p: {
+  profile: CalProfile;
+  case: string;
+  n: number;
+  intoCaptureS: number;
+  /** Cases that will be skipped: they take no time. */
+  skipping?: readonly string[];
+}): number {
   const per = p.profile.warmup_s + p.profile.capture_s;
   const at = p.profile.cases.findIndex((c) => c.id === p.case);
-  const later = at < 0 ? 0 : p.profile.cases.length - at - 1;
+  const later = at < 0 ? 0 : p.profile.cases.slice(at + 1).filter((c) => !p.skipping?.includes(c.id)).length;
   const left = Math.max(0, per - p.intoCaptureS) + (p.profile.repeats - p.n) * per + later * p.profile.repeats * per;
   return Math.ceil(left);
 }

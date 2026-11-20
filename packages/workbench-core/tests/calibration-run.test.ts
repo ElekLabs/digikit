@@ -107,3 +107,29 @@ test('the device comes from the INFO port and must be in the registry', () => {
   assert.equal(deviceOfInfo('dn2-1.12'), 'dn2');
   assert.throws(() => deviceOfInfo('zz9-1.0'), /no known device/);
 });
+
+test('the run says up front which cases it cannot play, and hands over its clock', async () => {
+  const f = fake();
+  const withKeys = loadCalibrationFiles({
+    profiles: {
+      'p/k.toml': `schema = "dk.calprofile/1"\nname = "k"\nwarmup_s = 0.1\ncapture_s = 0.1\nrepeats = 1\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "keys"\nsteps = "press"\n`,
+    },
+    steps: {
+      'hold.toml': `schema = "dk.steps/1"\nname = "hold"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\n`,
+      'press.toml': `schema = "dk.steps/1"\nname = "press"\n[[step]]\naction = "key"\nkey = "play"\n`,
+    },
+    cases: {},
+  });
+  const events: RunEvent[] = [];
+  let clock: (() => Promise<number>) | undefined;
+  const out = await runCalibrationOnTarget(
+    { ...f.deps, files: withKeys },
+    { profile: 'k', onEvent: (e) => events.push(e), onClock: (c) => (clock = c) },
+  );
+  assert.deepEqual(
+    events.find((e) => e.kind === 'plan'),
+    { kind: 'plan', skipping: ['keys'] },
+  );
+  assert.equal(out.skipped.length, 1);
+  assert.equal(await clock!(), 0);
+});

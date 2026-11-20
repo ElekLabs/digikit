@@ -14,6 +14,7 @@ import {
   type RigModules,
 } from '../calibration/runner.ts';
 import { sessionStatsSource } from '../calibration/stats.ts';
+import { resolveRef, type Op } from '../calibration/steps.ts';
 import { runId } from './profile-artifact.ts';
 import { parseRunLine, type CalFiles, type RunEvent } from './calibration-view.ts';
 
@@ -42,6 +43,8 @@ export interface RunOptions {
   /** Stop: the run ends at its next wait, the teardown of the case in progress plays, the captures made are kept. */
   signal?: AbortSignal;
   onEvent?: (e: RunEvent) => void;
+  /** Called once with the run's clock (emulated time on the emulator), for the time left. */
+  onClock?: (now: () => Promise<number>) => void;
   onCapture?: (c: Capture) => void;
   onCase?: (r: CaseResult) => void;
 }
@@ -166,7 +169,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
             const { queued } = await call<{ queued: number }>('midi.usb.in', { bytes: '' });
             if (queued === 0) return;
             if (waited >= 1000) throw new Error('USB MIDI input not taken by the firmware');
-            await base.pause(20);
+            await clock.pause(20);
           }
         }
       : undefined;
@@ -187,6 +190,33 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   };
   if (info.fw_id) run.firmware_sha256 = info.fw_id;
   if (info.image_id) run.image_id = info.image_id;
+
+  // The cases this rig cannot play, as the runner will decide (it has no panel, no SETUP and no screenshots; waits need what the rig has).
+  const cannot = (ops: Op[], mods: string[]): boolean =>
+    mods.length > 0 && !modules
+      ? true
+      : ops.some(
+          (o) =>
+            o.op === 'setup' ||
+            o.op === 'key' ||
+            o.op === 'turn' ||
+            o.op === 'shot' ||
+            (o.op === 'wait' && !!o.event && !events) ||
+            (o.op === 'wait' && !!o.drained && !drained),
+        );
+  try {
+    const ctx = (where: string) => ({ midi: record.midi, where });
+    const around = [profile.setup, profile.teardown].flatMap((r) =>
+      r ? resolveRef(r, deps.files.steps, ctx('plan')) : [],
+    );
+    const skipping = profile.cases
+      .filter((c) => cannot([...around, ...resolveRef(c.steps, deps.files.steps, ctx(c.id))], c.modules))
+      .map((c) => c.id);
+    opts.onEvent?.({ kind: 'plan', skipping });
+  } catch {
+    // a wrong step name: the runner refuses it with its own message
+  }
+  opts.onClock?.(() => base.now());
 
   const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], stopped: false };
   try {
