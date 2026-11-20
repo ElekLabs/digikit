@@ -30,7 +30,7 @@ export default function CalibrationSection(props: {
   calibrator: Calibrator;
   /** The save dialog. */
   host?: Host;
-  /** `Emulator Digitone II 1.12`: the target the run plays on. */
+  /** `Emulator <device name> <firmware version>`: the target the run plays on. */
   target: string;
   /** The target is the emulator (a run fills the emulator column). */
   emulator: boolean;

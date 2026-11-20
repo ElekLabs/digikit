@@ -65,7 +65,7 @@ class Stopped extends Error {
 
 const hex = (d: ArrayBuffer): string => Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
 
-/** The device a session reports: the id of its INFO port (`dn2-1.12`), which must be in the registry and have a `[midi]` table. */
+/** The device a session reports: the id of its INFO port (`<id>-<version>`), which must be in the registry and have a `[midi]` table. */
 export function deviceOfInfo(port: string): string {
   const id = port.split('-')[0] ?? '';
   if (!registry.ids.includes(id)) throw new Error(`the target reports port ${port}, which is no known device`);

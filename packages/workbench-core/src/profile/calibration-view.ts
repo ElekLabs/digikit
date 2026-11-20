@@ -300,7 +300,7 @@ export function fitView(c: CalibrationDoc): FitView {
   };
 }
 
-/** `dk-calibration-dn2.json` */
+/** `dk-calibration-<device id>.json` */
 export const calibrationFileName = (c: CalibrationDoc): string => `dk-calibration-${c.key?.device ?? 'device'}.json`;
 
 // ---- progress ----
