@@ -38,8 +38,6 @@ extern "C" {
     fn dl_send_win();
     fn dl_poll();
     fn dyndsp_info();
-    // core/dynfx: the effect chain's table; 0 when the module is not in the image.
-    fn dynfx_info();
 }
 
 #[repr(C)]
@@ -55,6 +53,7 @@ pub struct DlStatus {
 pub(crate) const DL_DONE: u32 = 2;
 pub(crate) const DL_ERROR: u32 = 3;
 
+/// The loader's state (`DspState`). The voice rows and the effect rows are the services' own (`DKRT_VROWS`, `DKRT_FROWS`).
 #[no_mangle]
 pub static mut DKRT_DSP: DspState = unsafe { core::mem::zeroed() };
 
@@ -84,25 +83,6 @@ pub(crate) unsafe fn info() -> *const u32 {
 
 pub(crate) unsafe fn iw(k: usize) -> u32 {
     read_volatile(info().add(k))
-}
-
-/// The table of `core/dynfx`, or null (also when it is for another device or has another row size than the runtime knows).
-pub(crate) unsafe fn finfo() -> *const u32 {
-    #[cfg(test)] { return crate::cleanup_tests::fx_info(); }
-    #[cfg(not(test))] {
-        let a = fn_addr(dynfx_info);
-        if a == 0 || info().is_null() {
-            return core::ptr::null();
-        }
-        let p = a as *const u32;
-        if read_volatile(p.add(F_MAGIC)) != FX_INFO_MAGIC
-            || read_volatile(p.add(F_DEVICE)) != iw(I_DEVICE)
-            || read_volatile(p.add(F_WORDS)) != FX_ROW_WORDS
-        {
-            return core::ptr::null();
-        }
-        p
-    }
 }
 
 pub(crate) unsafe fn have_link() -> bool {
@@ -148,11 +128,6 @@ pub unsafe fn init_once() {
     let d = ds();
     if d.magic == STATE_MAGIC {
         return;
-    }
-    let mut i = 0;
-    while i < MAX_ROWS {
-        d.row_type[i] = FREE_TYPE;
-        i += 1;
     }
     d.magic = STATE_MAGIC;
 }
@@ -219,25 +194,10 @@ pub(crate) unsafe fn alloc_range(len: u32, align: u32) -> Option<u32> {
 
 // ---- checking a section --------------------------------------------------------------------------------------------------
 
-/// Bytes of the range a module needs, before the granule: image, bss, then (version 3) the state blocks of its voices, every block
-/// of `voices * state_bytes` rounded to 8 bytes, then (version 4) the state of each effect rounded to 8. The caller has checked the counts, so nothing overflows.
-pub(crate) unsafe fn extent(image_size: u32, bss: u32, voices: *const u8, nvoice: u32, vstride: u32, fxs: *const u8, nfx: u32) -> u32 {
-    let mut total = (image_size + bss + 7) & !7;
-    if vstride == VOICE_V3 {
-        let mut i = 0;
-        while i < nvoice {
-            let e = voices.add((vstride * i) as usize);
-            total += rd32(e.add(VOICE_VOICES as usize)) * ((rd32(e.add(VOICE_STATE_BYTES as usize)) + 7) & !7);
-            i += 1;
-        }
-    }
-    // then the state of each effect (version 4)
-    let mut i = 0;
-    while i < nfx {
-        total += (rd32(fxs.add((FX_REC * i) as usize + FX_STATE as usize)) + 7) & !7;
-        i += 1;
-    }
-    total
+/// Bytes of the range a module needs, before the granule: image, bss, then the state blocks the services counted (`Job::state_bytes`: the voices' and the effects' states,
+/// each block rounded to 8). The services checked the counts, so nothing overflows.
+pub(crate) fn extent(image_size: u32, bss: u32, state_bytes: u32) -> u32 {
+    ((image_size + bss + 7) & !7) + state_bytes
 }
 
 /// An exported DSP symbol of `dyndsp_info`; 0 when there is none of that name.
@@ -297,13 +257,9 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         || align & (align - 1) != 0
         || nreloc > MAX_RELOCS
         || nimport > MAX_IMPORTS
-        || nvoice as usize > MAX_VOICES
-        || nfx as usize > MAX_FX
-        || !in_sec(fx_off, nfx * FX_REC, size)
         || !in_sec(image_off, image_size, size)
         || !in_sec(reloc_off, nreloc * RELOC_LEN, size)
         || !in_sec(import_off, nimport * DSP_IMPORT_LEN, size)
-        || !in_sec(voice_off, nvoice * vstride, size)
     {
         return E_DSP_FORMAT;
     }
@@ -326,12 +282,19 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         bank_off,
     };
     // the entries of the tables the services own: track table, voices, effects
-    let r = services().dsp_check_sections(&sec);
+    job.state_bytes = 0;
+    job.accepted = 0;
+    let r = services().dsp_check_sections(&sec, job);
     if r != OK {
         return r;
     }
+    // an entry that no loaded service owns would load as nothing: refuse it as a missing service (the boot plan already refuses a module that needs a service nobody
+    // provides, `E_MISSING`; this is the backstop for a section whose header table does not say so)
+    if job.accepted != nvoice.saturating_add(nfx) {
+        return E_MISSING;
+    }
     // the range must fit the area at all (a later load may still find it taken: reserve())
-    let need = extent(image_size, bss, s.add(voice_off as usize), nvoice, vstride, s.add(fx_off as usize), nfx);
+    let need = extent(image_size, bss, job.state_bytes);
     if need > iw(I_AREA_BYTES) || (need + GRANULE - 1) & !(GRANULE - 1) > iw(I_AREA_BYTES) {
         return E_DSP_NOSPACE;
     }
@@ -406,7 +369,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         return r;
     }
     let d = ds();
-    let len = (extent(job.image_size, job.bss, job.voices, job.nvoice, job.vstride, job.fxs, job.nfx) + GRANULE - 1) & !(GRANULE - 1);
+    let len = (extent(job.image_size, job.bss, job.state_bytes) + GRANULE - 1) & !(GRANULE - 1);
     let off = match alloc_range(len, job.align) {
         Some(o) => o,
         None => return E_DSP_NOSPACE,

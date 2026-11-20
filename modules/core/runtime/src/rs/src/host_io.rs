@@ -75,6 +75,11 @@ pub(crate) fn card_read(sector: u32, bytes: u32, buf: *mut u8) -> Option<i32> {
     Some(0)
 }
 
+/// The capacity getter anchor: the installed card's total, or 0xFFFFFFFF (the driver is not ready) when no card is installed.
+pub(crate) fn card_capacity() -> u32 {
+    grab(&CARD).as_ref().map_or(u32::MAX, |c| c.total)
+}
+
 /// The block write anchor: `None` when no card is installed.
 pub(crate) fn card_write(sector: u32, bytes: u32, buf: *const u8) -> Option<i32> {
     let mut g = grab(&CARD);

@@ -89,6 +89,31 @@ main = 3
 dsp = 7
 readonly = [2, 4, 8]
 
+# MIDI map the calibration runner and the tests use (packages/dk-session `midi-out.ts`, `@digi/devices` `midi`). Source: Digitone II manual (OS 1.12) Appendix C, pp. 112-114; track channels: section 8.4 (default channels 1-16).
+# `track_channels[n]` is the factory MIDI channel (1-16) of track n+1 (SETTINGS > MIDI CONFIG > CHANNELS); a user can change it, so a runner reads or sets it.
+# The device also needs INPUT FROM = USB (or MIDI+USB), RECEIVE NOTES on and RECEIVE CC/NRPN on (SETTINGS > MIDI CONFIG > PORT CONFIG); the menu is the only place to read them.
+# A parameter has `cc` (7-bit, value 0-127) and `nrpn = [msb, lsb]` (14-bit).
+# DN2: the manual's AMP table gives CC 86 to both decay and sustain (a manual error); release is CC 88 (attack 84, hold 85, decay 86, ... mode 91). Parameters are the track channel's CC/NRPN of the active machine.
+[midi]
+track_channels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
+[midi.params]
+track_mute = { cc = 94, nrpn = [1, 108] }
+track_level = { cc = 95, nrpn = [1, 110] }
+filter_attack = { cc = 20, nrpn = [1, 16] }
+filter_decay = { cc = 21, nrpn = [1, 17] }
+filter_sustain = { cc = 22, nrpn = [1, 18] }
+filter_release = { cc = 23, nrpn = [1, 19] }
+filter_freq = { cc = 16, nrpn = [1, 20] }
+filter_reso = { cc = 17, nrpn = [1, 21] }
+filter_env_depth = { cc = 24, nrpn = [1, 26] }
+filter_base = { cc = 27, nrpn = [1, 24] }
+filter_width = { cc = 28, nrpn = [1, 25] }
+amp_release = { cc = 88, nrpn = [1, 34] }
+send_delay = { cc = 30, nrpn = [1, 36] }
+send_reverb = { cc = 31, nrpn = [1, 37] }
+send_chorus = { cc = 29, nrpn = [1, 35] }
+
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
 # ready_dir (private, firmware-derived, never committed; the one source of the ready directory, formerly tools/emulator/ready_inputs.json): rebuilt
@@ -254,6 +279,11 @@ stream_id = 0x10
 # This OS has no build floor (the validator checks the content checksum and the HMAC only), so there is no build_floor.
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`).
 main_dest = 0x40000400
+# Where the bootstrap stages the packed MAIN OS (section 3) before it unpacks it in place to main_dest (finding 01; the stage constant is in five places of section 2, 1.16 and 1.17 / 1.11 and 1.12).
+# patchkit refuses an image whose in-place unpack margin at this stage is below main_margin_min (finding 152). Default of main_margin_min: 8192.
+# Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
+boot_load = 0x80000400
+main_stage = 0x40400000
 dsp_l2_lo = 0x20000000
 dsp_l2_hi = 0x20100000
 
@@ -279,31 +309,12 @@ sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "co
 [input]
 backend = "panel-uart"
 
-[panel]
-# The wire carries (channel, bit); the firmware reports a control code.
-# Channels 0..5 are linear -- code = channel * 8 + bit + 1, codes 1..48 --
-# measured on this build with unicorn-reference-final:tools/panelsweep.py by reading the event
-# records the firmware emits.
-linear_channels = 6
-# The firmware's button decoder indexes its tables by channel with no bounds check: channels 0..6 are safe (finding 58). core/input refuses others.
-button_channels = 7
-encoders = 9
-
-# Channel 6 is not linear, and is not the same on the two products. Digitone
-# carries five more controls than Digitakt here, which is the whole reason the
-# name tables are resolved per build rather than written down once.
-[panel.exceptions]
-49 = [6, 1]
-50 = [6, 0]
-51 = [6, 4]
-52 = [6, 5]
-53 = [6, 6]
-54 = [6, 7]
-
-# Logical key names: name = panel code. The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS;
-# the groups below arrange the same codes). `patchkit gen` writes the C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical
-# name to code map of the profile and of `dkrt_dev`. A name a device lacks maps to 0. Names come from `[keys] order` of sdk/sdk.toml.
-[panel.keys]
+# Logical key names: name = the key's id in the firmware's key events (the id at +0xc of the event): the firmware's key index. It equals the panel code on this
+# device (the decoder tables are the identity, finding 58) and differs on the Syntakt (finding 153); it is not the wire code (channel, bit) that `dk_input_key` injects.
+# The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS; the groups below arrange the same codes). `patchkit gen` writes the
+# C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical name to id map of the profile and of `dkrt_dev`. A name a device lacks maps to 0.
+# Names come from `[keys] order` of sdk/sdk.toml. core/ui needs YES, NO, RIGHT and LEVEL_PUSH (the second YES key, id 49 here) by name.
+[input.keys]
 PAGE_TRIG = 1
 SRC = 2   # the panel prints SYN on this device; the logical key is the same (the firmware calls the page SourcePageView on both)
 FLTR = 3
@@ -353,6 +364,35 @@ ENC6 = 46
 ENC7 = 47
 ENC8 = 48
 LEVEL_PUSH = 49
+
+# The bits of the flags word (+0x10) of a key event, by meaning: set on a press (clear on a release), set while FUNC is held, set on the repeat of a held key, set on a
+# release. Read from the compact menu view's key handler (finding 71: bit 0 moves, bit 4 acts) and the key walker (finding 155) **[D]**.
+[input.key_flags]
+press = 0
+func = 1
+repeat = 3
+release = 4
+
+[panel]
+# The wire carries (channel, bit); the firmware reports a control code.
+# Channels 0..5 are linear -- code = channel * 8 + bit + 1, codes 1..48 --
+# measured on this build with unicorn-reference-final:tools/panelsweep.py by reading the event
+# records the firmware emits.
+linear_channels = 6
+# The firmware's button decoder indexes its tables by channel with no bounds check: channels 0..6 are safe (finding 58). core/input refuses others.
+button_channels = 7
+encoders = 9
+
+# Channel 6 is not linear, and is not the same on the two products. Digitone
+# carries five more controls than Digitakt here, which is the whole reason the
+# name tables are resolved per build rather than written down once.
+[panel.exceptions]
+49 = [6, 1]
+50 = [6, 0]
+51 = [6, 4]
+52 = [6, 5]
+53 = [6, 6]
+54 = [6, 7]
 
 # Groups are editorial: they say how to ARRANGE controls for display, nothing
 # more. The authoritative name of each code is the firmware's.

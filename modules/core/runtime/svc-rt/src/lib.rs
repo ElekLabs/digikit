@@ -91,12 +91,6 @@ impl CoreApi for ImportCore {
     unsafe fn legacy_state_clear(&self) -> i32 {
         dkc_legacy_state_clear()
     }
-    unsafe fn guard_faults(&self, ty: u32) -> u32 {
-        dkc_guard_faults(ty)
-    }
-    unsafe fn guard_disabled(&self, ty: u32) -> bool {
-        dkc_guard_disabled(ty)
-    }
     fn live_op(&self) -> u32 {
         unsafe { dkc_live_op() }
     }
@@ -178,12 +172,6 @@ impl CoreApi for ImportCore {
     }
     fn dsp(&self) -> &'static mut DspState {
         unsafe { &mut *dkc_dsp() }
-    }
-    unsafe fn dsp_info(&self) -> *const u32 {
-        dkc_dsp_info()
-    }
-    unsafe fn fx_info(&self) -> *const u32 {
-        dkc_fx_info()
     }
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         dkc_info(name_hash)

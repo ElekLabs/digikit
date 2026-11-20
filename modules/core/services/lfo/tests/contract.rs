@@ -8,7 +8,7 @@ use dkrt_svc_lfo::graph;
 use dkrt_svc_lfo::records::{
     name_of, number_of, owner_of, set_firmware, shape, used, Lfo, SAMPLES,
 };
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
+use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::FakeCore;
 use std::sync::Mutex;
 
@@ -119,6 +119,7 @@ fn fixture(device: u32) -> Fixture {
         parks_rows: false,
         kept: |_, _, _| false,
         kept_dsp: |_, _, _| false,
+        rows: Rows::NONE,
         absent_rows: None,
         live: None,
         salt_same: &[

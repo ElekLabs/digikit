@@ -6,7 +6,7 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
 use dkrt_svc_samples::records::Samples;
 use dkrt_svc_samples::tracks;
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
+use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::FakeCore;
 
 fn nothing(_: &mut Init) {}
@@ -62,6 +62,7 @@ fn fixture(device: u32) -> Fixture {
         parks_rows: false,
         kept: |_, _, _| false,
         kept_dsp: |_, _, _| false,
+        rows: Rows::NONE,
         absent_rows: None,
         live: None,
         salt_same: &[

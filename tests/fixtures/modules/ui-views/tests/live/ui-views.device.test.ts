@@ -21,7 +21,7 @@ import { pollEmulated } from '@digi/regression/runtime/waits.ts';
  * - the overlay is a new top view and goes away on the module's request;
  * - an unload with the view open takes it off the stack (the stack is what it was before the view) and removes the rows (the item count is what it was before the module), without a fault.
  */
-const REPORT = 0x1b;
+const REPORT = 0x0f;
 /** The elements of a menu's item vector are `shared_ptr<MenuItem>`: two words (core/ui `rows_of`). */
 
 const MAX_STACK = 32;
@@ -125,7 +125,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   // the fixture goes in with the debug module: a selection without it would take the log commands away at the restart
   await installWithDebug(rt, 'test/ui-views');
   events = await rt.listen();
-  expect(RANGES.ui_views_test, 'reserved command range of the fixture').toEqual([0x1b, 0x1b]);
+  expect(RANGES.ui_views_test, 'reserved command range of the fixture').toEqual([0x0f, 0x0f]);
   const first = await report(rt);
   expect([first.row1, first.row2], 'dk_ui_settings_row in init: both rows added').toEqual([0, 0]);
   expect([first.fullOpen, first.overlayOpen]).toEqual([0, 0]);

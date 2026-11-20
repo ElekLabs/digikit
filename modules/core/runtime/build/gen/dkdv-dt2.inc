@@ -4,7 +4,7 @@
 dkrt_dev:
     .long 0x444b4456    /* magic: DEV_MAGIC */
     .long 0x1    /* version: DEV_VERSION */
-    .long 0x140    /* size: the bytes of the struct */
+    .long 0x150    /* size: the bytes of the struct */
     .long 0xf    /* caps: DEV_HAS_* bits */
     .long 0xec070000    /* console_uart_base: CONSOLE_UART_BASE */
     .long 0x48000000    /* ddr_uncached_alias: DDR_UNCACHED_ALIAS */
@@ -82,3 +82,7 @@ dkrt_dev:
     .long 0x0    /* key_codes[61]: the panel code of logical key 61 (0: none) */
     .long 0x0    /* key_codes[62]: the panel code of logical key 62 (0: none) */
     .long 0x0    /* key_codes[63]: the panel code of logical key 63 (0: none) */
+    .long 0x0    /* key_flag_press: KEY_FLAG_PRESS */
+    .long 0x1    /* key_flag_func: KEY_FLAG_FUNC */
+    .long 0x3    /* key_flag_repeat: KEY_FLAG_REPEAT */
+    .long 0x4    /* key_flag_release: KEY_FLAG_RELEASE */

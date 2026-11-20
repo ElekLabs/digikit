@@ -105,6 +105,21 @@ pub fn key_codes() -> [u8; dkrt_abi::platform::KEY_SLOTS] {
     }
 }
 
+/// The bits of a key event's flags word (`[input.key_flags]`); an object this runtime cannot read gets the usual bits.
+pub fn key_flags() -> dkrt_abi::platform::KeyFlagBits {
+    use dkrt_abi::platform::KeyFlagBits;
+    if valid() {
+        KeyFlagBits {
+            press: d().key_flag_press as u8,
+            func: d().key_flag_func as u8,
+            repeat: d().key_flag_repeat as u8,
+            release: d().key_flag_release as u8,
+        }
+    } else {
+        KeyFlagBits { press: 0, func: 1, repeat: 3, release: 4 }
+    }
+}
+
 /// Is `t` one of the run-time machine types?
 pub fn is_dyn_type(t: u32) -> bool {
     t >= d().dyn_type_first && t - d().dyn_type_first < d().dyn_types

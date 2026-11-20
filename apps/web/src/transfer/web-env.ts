@@ -6,7 +6,8 @@ import { DkSession } from '@digi/dk-session';
 import type { DkTransport } from '@digi/dk-session';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
-import { deviceNameOf, deviceOfPort, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
+import { deviceNameOf, deviceOfPort } from '@digi/workbench-core/data/device-profiles.ts';
+import { siteDevices } from '../firmware/site-policy';
 import { createTransferApp, type TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { TransferEnv } from '@digi/workbench-core/transfer/env.ts';
 import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
@@ -81,7 +82,7 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
     moduleFiles: (id) => MODULE_FILES[id],
     wasm,
     deviceName: async (device) => deviceNameOf(device),
-    libraryDevices: [...runtimeDeviceIds],
+    libraryDevices: [...siteDevices()],
     // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another
     ...(webUsbAvailable() ? { bulk: { ...webUsbOpener(), requestAccess: () => WebUsbBulkLink.requestAccess() } } : {}),
     targets: {

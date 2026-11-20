@@ -194,16 +194,22 @@ uint32_t dk_debug_span_clock(uint32_t *out_hz);
 /* The poll function in slot 0 to 3 of `dkrt_poll_add` and its owner: returns 0 for an empty slot (or a slot past 3), 1 + the record index of the module whose loaded code holds the function, or 0xff for a function outside every module (the firmware image: the patched-in core modules). Writes the function's address to `*out_fn` when `out_fn` is not null and the slot is used. For a profiler that names the rows of the poll spans. Context: any. Since runtime 0.8.2. */
 uint32_t dk_debug_poll(uint32_t slot, uint32_t *out_fn);
 
+/* Control the DSP stats window (P8d): `on` 1 starts and 0 stops the counters and the stream of snapshots; `clear` is the clear generation, and the DSP clears its counters when it changes. Only the module that owns the span channel (`dk_span_sink_set`) may call it. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the span channel, or none does). See <dk/core/trace.h>. Context: any. Since runtime 0.10.2. */
+int32_t dk_dsp_stats_ctl(uint32_t on, uint32_t clear);
+
+/* Copy the newest complete DSP stats sweep to `out` and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. At most `max` words of 103 are copied: the window of 100 words (4 header words, then 16 rows of 6; zeros when there is no sweep), then the counters of the link's mirror (sweeps published, sweeps ended by a gap, records ignored), which are valid either way. See <dk/core/trace.h>. Context: any. Since runtime 0.10.2. */
+uint32_t dk_dsp_stats_read(uint32_t *out, uint32_t max);
+
 /* The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet. Context: ui. Since runtime 0.7.0. */
 int32_t dk_debug_track_type(uint32_t track);
 
 /* The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written). Context: ui. Since runtime 0.7.0. */
 int32_t dk_debug_selected_params(int16_t *out, uint32_t n);
 
-/* The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal. Context: any. Since runtime 0.10.2. */
+/* The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal. Context: any. Since runtime 0.10.4. */
 uint32_t dk_device_track_count(void);
 
-/* The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet. Context: ui. Since runtime 0.10.2. */
+/* The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet. Context: ui. Since runtime 0.10.4. */
 int32_t dk_selected_track(void);
 
 /* Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none). Context: any. Since runtime 0.7.0. */
@@ -307,10 +313,10 @@ int32_t dk_ui_toast(dk_ui *ui, const char *text);
 /* Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>. Context: ui. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns -1. */
 int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms);
 
-/* Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>. Context: init. Since runtime 0.10.2. Needs core/ui: without it the import binds to a stub that returns -1. */
+/* Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>. Context: init. Since runtime 0.10.4. Needs core/ui: without it the import binds to a stub that returns -1. */
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg);
 
-/* Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing. Context: ui. Since runtime 0.10.2. Needs core/ui: without it the import binds to a stub that does nothing. */
+/* Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing. Context: ui. Since runtime 0.10.4. Needs core/ui: without it the import binds to a stub that does nothing. */
 void dk_ui_view_close(dk_ui_view *view);
 
 /* Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched. Context: init. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns DK_E_MISSING. */
@@ -413,7 +419,7 @@ uint32_t dk_sdhc_large_ctl(dk_sdhc_large *sl, uint32_t key, uint32_t val);
 
 /* ---- service shortcuts ---- */
 
-/* Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>. Context: init. Since runtime 0.10.2. */
+/* Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>. Context: init. Since runtime 0.10.4. */
 int32_t dk_shortcut_add(dk_module_ctx *ctx, const dk_shortcut_def *def);
 
 #endif /* DK_GEN_IMPORTS_H */

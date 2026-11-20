@@ -35,6 +35,18 @@ pub mod draw {
     }
 }
 
+pub mod filter {
+    // cf.filter.fn.accessor: no sig yet
+
+    // cf.filter.fn.get: no sig yet
+
+    // cf.filter.fn.list_vector: no sig yet
+
+    // cf.filter.fn.name: no sig yet
+
+    // cf.filter.fn.set: no sig yet
+}
+
 pub mod input {
     // cf.input.fn.enc_decoder: no sig yet
 
@@ -532,6 +544,20 @@ pub mod param {
     }
 }
 
+pub mod peer {
+    unsafe extern "C" {
+        /// st-1.42 0x401181ec: the container section depacker. It skips the 8-byte stream header, has no output bound and returns the output length in D0.
+        #[link_name = "cf.peer.fn.depack"]
+        pub fn depack(src: *const u8, dst: *mut u8) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// st-1.42 0x40116d7a: the NOR flash read `void f(u32 src, u32 len, u8 *dst)` (byte loop on the SPI controller, takes the NOR mutex). The peer thread calls it for the section 6 and section 7 payloads; core/peer-image forwards the section 6 call to it.
+        #[link_name = "cf.peer.fn.nor_read"]
+        pub fn nor_read(src: u32, len: u32, dst: *mut u8);
+    }
+}
+
 pub mod project {
     unsafe extern "C" {
         /// `Kit *f(Project *)`: the active kit of a project. core/runtime uses it with the project singleton and track_type to watch each track's machine type.
@@ -726,6 +752,12 @@ pub mod storage {
         /// The firmware's normal writer of the boot record (finding 36 section 2; DT2 1.16 FUN_400f044a, 1.17 0x400f05ae; DN2 1.11 FUN_400f1e26, 1.12 FUN_400f1f8a): writes the arena to the next of the two record slots, invalidates the other, one shot per boot.
         #[link_name = "cf.storage.fn.boot_record_write"]
         pub fn boot_record_write();
+    }
+
+    unsafe extern "C" {
+        /// The eMMC driver's capacity getter (20 bytes): the card's capacity in 512-byte sectors, 0xFFFFFFFF while the driver is not ready (DT2 1.17 FUN_4012ddd6, DN2 1.12 0x4012c49a, Syntakt 1.42 0x4010f232; one hash on all three). The firmware's block read refuses a start at or past it.
+        #[link_name = "cf.storage.fn.capacity"]
+        pub fn capacity() -> u32;
     }
 
     unsafe extern "C" {

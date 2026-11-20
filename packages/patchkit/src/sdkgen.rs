@@ -37,7 +37,7 @@ pub const C_STATUS_OUT: &str = "sdk/include/dk/core/status.h";
 pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
 /// The runtime log kinds (`[[log.kind]]`) as C `#define`s, for code that logs through `dk_log_event`.
 pub const C_LOG_KINDS_OUT: &str = "sdk/include/dk/gen/log_kinds.h";
-/// The logical key names of the device files (`[panel.keys]`), written by `devgen::keys_h`.
+/// The logical key names of the device files (`[input.keys]`), written by `devgen::keys_h`.
 pub const C_KEYS_OUT: &str = "sdk/include/dk/gen/keys.h";
 /// The generated C header of the sample pool numbers, relative to the repository root.
 pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";

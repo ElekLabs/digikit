@@ -30,8 +30,13 @@ What a device file contains decides what the tools do with the device:
 `[capabilities]` says what the device has: `dsp` (`sharc` | `none`), `seal` (`hmac` | `none`), `sample_pool` (`stock` |
 `ddr` | `none`) and `card` (`path-fs` | `slots` | `none` | `unknown`). Code branches on these values, not on device names.
 `[container]` names the role of each syx section (`main`, `dsp`, `cf2`, `fpga`) and lists the `readonly` sections that are never
-written; a section may have a role and be read-only, but `main` may not be read-only. `devdata.rs` `validate` checks that
+written; a section may have a role and be read-only, but `main` may not be read-only. `repack` lists roles of read-only sections that a module may store packed
+when it declares that it unpacks them (`[[repack]]` of its `module.toml`, [PATCHING.md](../PATCHING.md) "Repacking a read-only section"); each must be a role with a read-only section. `devdata.rs` `validate` checks that
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
+`[patch] main_dest`, `main_stage`, `main_margin_min`, `boot_load`: where the bootstrap unpacks MAIN OS to (`main_dest`, 0x40000400), where it first stages the packed MAIN (`main_stage`: 0x40400000
+on the Digitakt II and Digitone II, 0x40200000 on the Syntakt), the least in-place margin an image may have there (`main_margin_min`, bytes of unread stream ahead of the output, default 8192) and the
+address the bootstrap is loaded at (`boot_load`, used by `tools/firmware/aplib_check.py`). patchkit stores MAIN with a literal tail when needed and refuses an image below the floor (finding 152).
+`main_staged_max` is a different bound: the decoded MAIN may not reach the next 4 MiB boundary.
 `[storage]` names the backend of each kind of content (`samples`: `stock-rpc`, `digikit` or `stock-slots`; `modules`: `digikit`); `@digi/devices` reads it, the samples code of the apps and `wb` branch on it, never on a device name. `[storage.slots]` (`stock-slots` only): `path`, `count`, `bytes_max` (audio bytes of one sample), `rate`, `channels`, `bits`, `byte_order`, `apply` (`restart`: the device reads the slots only at start).
 
 Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator/device-profile`); TS and Nx use `@digi/devices`
@@ -52,7 +57,7 @@ each reads the tables it needs and checks those.
 Faceplates and LED maps are not device-file tables. The web app and the workbench pair files by the stem of the device file
 (`devices/<stem>.toml`): the faceplate is `apps/web/src/data/faceplates/<stem>.toml`, the LED map `devices/<stem>-leds.toml`. A
 device has a faceplate when its faceplate file exists; the LED map is optional. The LED maps carry no `[device]` table, so
-readers that scan `devices/` skip them. The public site offers only the faceplates of runtime targets.
+readers that scan `devices/` skip them. Which devices the public site offers is not a device fact: `SITE_DEVICES` in `apps/web/src/data/site-devices.mjs` is the one list that its pages, gallery, emulator pick and Transfer library follow.
 
 ## Where each fact lives
 
@@ -69,7 +74,7 @@ readers that scan `devices/` skip them. The public site offers only the faceplat
 | Console UART, DDR window and uncached alias, eSDHC controller (absent: no `DEV_HAS_SDHC`) | `[board]` | `tramp.s` (soft reset), `fault.rs`, `api.rs` (`card_busy`), `platform.rs` (`word_at_literal`), `fx` service (`kit`) | `dkrt_dev` (below): `RealPlatform` fills `DeviceProfile` from it; a service takes its profile by device id |
 | Safe-mode key (a firmware key index; absent: no `DEV_HAS_SAFE_KEY`) | `[digikit] safe_key` | runtime boot (`safe_mode.rs`) | `dkrt_dev`; `DeviceProfile::safe_key` |
 | The tracks of the device (what a module that draws or counts tracks reads; absent: 0) | `[digikit] tracks` | modules, through the import `dk_device_track_count()` | `tracks` of `dkrt_dev`; `DeviceProfile::tracks` |
-| The logical keys: the panel key names and their codes (a name a device lacks maps to 0) | `[panel.keys]` (`NAME = code`; at most 63 names in the SDK list) | modules name a key as `dk_key` (`DK_KEY_TRK`, `DK_KEY_TRIG(n)`); the `shortcuts` service translates a panel code to the logical key | `sdk/include/dk/gen/keys.h` (the numbers are the order of `[keys] order` in `sdk/sdk.toml`, which only grows at the end; a device file may use only names of that list, and the generator refuses another); `key_codes` of `dkrt_dev` and `DeviceProfile::key_codes`, indexed by the number |
+| The logical keys: the key names and their ids in the firmware's key events (the firmware's key index: equal to the panel code on the Digitakt II and Digitone II, different on the Syntakt, and not the wire code that `dk_input_key` injects; a name a device lacks maps to 0) | `[input.keys]` (`NAME = id`; at most 63 names in the SDK list) | modules name a key as `dk_key` (`DK_KEY_TRK`, `DK_KEY_TRIG(n)`); the `shortcuts` service translates a panel code to the logical key | `sdk/include/dk/gen/keys.h` (the numbers are the order of `[keys] order` in `sdk/sdk.toml`, which only grows at the end; a device file may use only names of that list, and the generator refuses another); `key_codes` of `dkrt_dev` and `DeviceProfile::key_codes`, indexed by the number |
 | Where samples live and how long a sample path may be (the runtime branches on these, never on the device id) | `[capabilities] card` (`slots`: the store; `path-fs`: the firmware's folder filesystem), `[digikit] sample_path_max` | runtime `Platform::samples_in_store`, `sample_path_max` | `SAMPLES_IN_STORE`, `SAMPLE_PATH_MAX` in `device-<dev>.inc` (words `dkrt_samples_in_store`, `dkrt_sample_path_max` of `device.s`); `DeviceProfile` constants of `abi/src/profiles.rs` |
 | RAM that the firmware and boot code leave alone and that the emulator keeps across a soft reset (the crash record, the keep probe) | `[digikit] keep_base`, `keep_bytes` | runtime `fault.rs`; emulator (`device-profile` `keep_ram`) | `dkrt_dev`; the emulator reads the file |
 | The device's test cell: the firmware the acceptance tests run, the directory of the ready snapshot, whether a sample card is an input | `[acceptance] firmware`, `ready_dir`, `sample_card` | `tools/nx/device-inputs.mjs`, `packages/test-support/src/inputs.ts`, `tests/regression/runtime/devices.ts` | read directly; `ready_dir` is the one source of the ready directory (Python `digi_env.READY_JSON_DIRS`, `tools/nx/ready-dirs.mjs`, `@digi/devices`, `devdata.rs`) |
@@ -116,6 +121,14 @@ files and `types.toml`; `gen --check` fails when one is stale. The kinds (`packa
 - `sharc`: `#define` lines, one file per device, for DSP sources (`#include "device-dt2.inc"`). Each note is on its own line:
   the assembler's preprocessor keeps a trailing comment in a macro body, which swallows the rest of a line that uses the macro.
   `.PKBSS name, MACRO;` takes a `#define`d number as its size (`packages/patchkit/src/build/sharc_obj.rs`).
+
+A module that reads a table of the device file declares it in `[module] needs_device` (dotted paths, for example `["input.keys"]` for `core/ui`, whose
+`ui-<dev>.inc` holds the ids of its four keys and the flag bits). Every device file with a patch set that includes the module (as a root or through `requires`; a device with no
+`[digikit]` too) must have the table, or `patchkit gen`, `patchkit build`, `patchkit pack` and the module's own generator refuse, naming the device, the patch
+set, the module and the table. A module id in a patch set that the library lacks is an error. `[input.keys]` must name YES, NO, RIGHT and LEVEL_PUSH (the second YES key) for core/ui; `patchkit gen` refuses a device that names keys
+without one of them. `[input.key_flags]` (required with `[input]`) gives the bit numbers (0 to 31, all different) of a key event's flags word by meaning: `press`
+(set on a press, clear on a release), `func` (FUNC held), `repeat` (a held key repeating) and `release` (set on a release). Services and core/ui read them
+(`DeviceProfile.key_flags`, `KEY_FLAG_*` of the generated constants); no code holds a flag literal.
 
 The runtime object is built once and used on every device, so it has no device value in its code: what differs between devices is data of
 `dkrt_dev` (and of the other per-device symbols of `device.s`: `dkrt_device_id`, `dkrt_store_*`, `dkrt_peek_*`), which the runtime reads through

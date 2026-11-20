@@ -860,8 +860,9 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
     core.device = dkrt_abi::profiles::DN2.id;
     // the module DSP part claimed a voice row for the pinned machine type 0x12, which has a note_on routine
     const PINNED: u32 = 0x12;
+    dkrt_svc_machines::rows::reset();
     {
-        let d = core.dsp();
+        let d = dkrt_svc_machines::rows::vrows();
         d.row_owner[0] = 1;
         d.row_type[0] = PINNED;
         d.row_note_on[0] = 1;
@@ -886,12 +887,18 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
     assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
     // the loader's walker refuses the block here: it never gives the declare pass, and the rows are as they were
     assert_eq!(
-        (core.dsp().row_rng[0], core.dsp().row_latched[0]),
+        (
+            dkrt_svc_machines::rows::vrows().row_rng[0],
+            dkrt_svc_machines::rows::vrows().row_latched[0],
+        ),
         ([0; 8], 0)
     );
     unsafe { <Machines as Service<FakeCore>>::remove(&core, 1) };
     assert_eq!(
-        (core.dsp().row_rng[0], core.dsp().row_latched[0]),
+        (
+            dkrt_svc_machines::rows::vrows().row_rng[0],
+            dkrt_svc_machines::rows::vrows().row_latched[0],
+        ),
         ([0; 8], 0)
     );
     // a block that passes: the declare pass puts the ranges and the latch in the row
@@ -906,6 +913,9 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
     assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
     assert_eq!(commit(&core, commit_phase::DECLARE, &k, &mut out), OK);
-    assert_eq!(core.dsp().row_latched[0], 1);
-    assert_eq!(core.dsp().row_rng[0][1], 100 * 256 << 16);
+    assert_eq!(dkrt_svc_machines::rows::vrows().row_latched[0], 1);
+    assert_eq!(
+        dkrt_svc_machines::rows::vrows().row_rng[0][1],
+        100 * 256 << 16
+    );
 }

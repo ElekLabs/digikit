@@ -32,11 +32,11 @@ pub fn state() -> &'static mut Shortcuts {
     unsafe { &mut *addr_of_mut!(STATE) }
 }
 
-/// One key event of the panel for the dispatch hook: `code` is the device's panel code, `flags` are `shortcuts::key_flags`. It decides and queues the module's calls; it runs no module
+/// One key event of the panel for the dispatch hook: `code` is the key's id in the event, `flags` the event's flags word (read with `[input.key_flags]`). It decides and queues the module's calls; it runs no module
 /// code (the UI pass does, `Service::tick`).
 pub fn on_key<C: CoreApi>(core: &C, code: u32, flags: u32) -> Verdict {
     match DeviceProfile::by_id(core.device_id()) {
-        Some(p) => state().on_key(&p, code, flags),
+        Some(p) => state().on_key(&p, code, crate::shortcuts::classify_flags(&p, flags)),
         None => Verdict::Pass,
     }
 }

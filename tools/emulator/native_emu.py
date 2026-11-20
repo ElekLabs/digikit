@@ -325,6 +325,16 @@ def device_for_args(args: list[str]) -> str:
     return (digi_env.device_for_syx(syx) if syx else None) or "dn2"
 
 
+# What a training takes (measured on a lane, 2026-11-20). Warm: host build and instrumented library are in the
+# lane and the store, so only the runs and the merge are left. Cold: the instrumented library and host builds
+# (DN2 library 11 min, DT2 library 2.5 min, host builds 2 to 3 min each) are added; a full cold `perf:pgo` took 29 min.
+TRAIN_ESTIMATE = {
+    "dn2": "about 10 s warm, 13 s after an engine edit, 15 min with a cold library and host build",
+    "dt2": "about 1.5 min warm, 5 min with a cold library and host build",
+    "both": "about 4 min warm, 8 min with a cold two-core host build",
+}
+
+
 def train_profile(device: str = "dn2") -> str:
     """Run `native_pgo.py train`; returns "" on success, else why it failed."""
     try:
@@ -371,7 +381,8 @@ def pgo_plan(args: list[str]) -> object | None:
     Each single-core device has its own profile (`native_pgo.py train --device dt2`): a DN2
     profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%. A launch with a second engine (`--also-coupled`,
     the desktop default) has the profile of device `both` (`train --device both`), built in a target dir of its
-    own. The launcher never trains on its own. A stale or missing profile falls back
+    own; `mise run perf:pgo` trains it after dn2 and dt2, so a missing or stale `both` profile only prints
+    the notice and the launch builds without PGO. The launcher never trains on its own. A stale or missing profile falls back
     to the ordinary build (its own target dir, not the launcher's pgo-use). DIGI_EMU_PGO_TRAIN=1 trains a stale or missing
     profile here when the training inputs exist (`mise run perf:pgo` is the usual
     way); DIGI_EMU_PGO=0 skips PGO. Any failure falls back to the ordinary
@@ -396,7 +407,7 @@ def pgo_plan(args: list[str]) -> object | None:
                 detail = f"{detail}; cannot train: {blocker}"
             else:
                 print(
-                    f"native PGO: profile {status} ({detail}); training (~6 min, "
+                    f"native PGO: profile {status} ({detail}); training ({TRAIN_ESTIMATE[device]}, "
                     "DIGI_EMU_PGO_TRAIN=1)",
                     file=sys.stderr,
                     flush=True,
@@ -415,7 +426,11 @@ def pgo_plan(args: list[str]) -> object | None:
             print(native_pgo.fallback_notice(status, detail, device), file=sys.stderr)
             return None
     if status == "partial":
-        profile = native_pgo.current_profile(device)
+        profile = native_pgo.current_profile(
+            device,
+            native_pgo.device_generated(device, environ),
+            native_pgo.second_generated(environ) if device == "both" else None,
+        )
         if profile:
             note_pgo(status, detail)
             print(native_pgo.PARTIAL_NOTICE, file=sys.stderr)

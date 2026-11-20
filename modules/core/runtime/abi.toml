@@ -304,7 +304,7 @@ doc = "DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, 
 name = "CARD_TOO_SMALL"
 type = "u32"
 value = 5
-doc = "DkrtDiag.card_state: the card is smaller than the store area (its last sector cannot be read): there is no store."
+doc = "DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store."
 
 [[const]]
 name = "DIAG_MAGIC"
@@ -433,15 +433,19 @@ fields = [
     "u32 dyn_type_first // core/machines types.toml dynamic_first",
     "u32 dyn_types // run-time machine types (0 without DEV_HAS_DSP)",
     "u32 tracks // [digikit] tracks: the tracks of the device (0: not given)",
-    "u32 key_codes[DEV_KEYS] // [panel.keys]: the panel code of each logical key, indexed by the key's number (0: the device has no such key)",
+    "u32 key_codes[DEV_KEYS] // [input.keys]: the id of each logical key in the firmware's key events, indexed by the key's number (0: the device has no such key)",
+    "u32 key_flag_press // [input.key_flags] press: the bit of the key event's flags word set on a press",
+    "u32 key_flag_func // [input.key_flags] func: the bit set while FUNC is held",
+    "u32 key_flag_repeat // [input.key_flags] repeat: the bit of a repeating key",
+    "u32 key_flag_release // [input.key_flags] release: the bit set on a release",
 ]
 
 [[struct]]
 name = "DkrtHealth"
-doc = "dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000)."
+doc = "dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000)."
 fields = [
     "u32 magic // HEALTH_MAGIC",
-    "u32 version // 3",
+    "u32 version // 4",
     "u32 flags // HEALTH_*",
     "u32 blocks // DSP blocks seen since boot (1500 per second)",
     "u32 windows // windows (one second each) closed",
@@ -467,6 +471,8 @@ fields = [
     "u32 store_total // the module store (HEALTH_STORE), in KiB: the store may use in all (header, tables and files)",
     "u32 store_used // KiB the current header says are used",
     "u32 store_free // KiB a new file may still take in all (the room for the table's next entry kept back; not one contiguous piece)",
+    "u32 card_sectors // the card's capacity in 512-byte sectors as the firmware's eMMC driver reports it; 0xFFFFFFFF while the driver is not ready",
+    "u32 card_state // the card check's state (DKRT_CARD.state): 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small",
 ]
 
 [[struct]]

@@ -293,7 +293,27 @@ fn run(a: Args) -> Result<()> {
             storedump::run(&rest[1..]).map_err(Error)?;
         }
         #[cfg(not(target_arch = "wasm32"))]
-        "build" => build_cli::build(&a.root, rest)?,
+        "build" => {
+            // a module that needs device tables is not built for a device that lacks them (the objects hold the generated constants)
+            if !rest.iter().any(|a| a == "--status" || a == "--paths") {
+                // the modules being built (positional, `--tree` or all), with the tables each declares in its own module.toml
+                let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &[])?;
+                let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+                for dir in build_cli::module_dirs(&a.root, rest)? {
+                    let text = std::fs::read_to_string(dir.join("module.toml"))
+                        .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+                    let man: patchkit::module::Manifest = toml::from_str(&text)
+                        .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+                    patchkit::devgen::check_module_tables(
+                        &lib,
+                        &facts,
+                        &man.module.id,
+                        &man.module.needs_device,
+                    )?;
+                }
+            }
+            build_cli::build(&a.root, rest)?
+        }
         #[cfg(not(target_arch = "wasm32"))]
         "dko" => build_cli::dko(rest)?,
         "owners" => {
@@ -402,6 +422,9 @@ fn run(a: Args) -> Result<()> {
                     out.plan.writes.len(),
                     o.container_bytes
                 );
+                if let Some(b) = &o.budget {
+                    println!("{b}");
+                }
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -440,6 +463,9 @@ fn run(a: Args) -> Result<()> {
                 let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &only)?;
                 let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+                if only.is_empty() {
+                    patchkit::devgen::check_device_tables(&lib, &facts)?;
+                }
                 for m in &lib.modules {
                     if !only.is_empty() && !only.iter().any(|o| o == m.id()) {
                         continue;
@@ -589,7 +615,9 @@ plan.json {}",
                 Some(b) => Some(read(&b)?),
                 None => None,
             };
-            let rep = verify::verify(&raw, Some(&reg), base.as_deref())?;
+            // manifests only (no object builds): the claim of a repacked section is read from them
+            let lib = library_with(&a.root, &library_source(rest), false, Some(&[]))?;
+            let rep = verify::verify_with_library(&raw, Some(&reg), base.as_deref(), &lib)?;
             for c in &rep.checks {
                 println!("ok  {c}");
             }
@@ -680,6 +708,15 @@ plan.json {}",
                 std::slice::from_ref(id),
                 std::slice::from_ref(id),
             )?;
+            let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+            if let Some(m) = lib.get(id) {
+                patchkit::devgen::check_module_tables(
+                    &lib,
+                    &facts,
+                    id,
+                    &m.manifest.module.needs_device,
+                )?;
+            }
             let opts = patchkit::pack::PackOptions {
                 device: flag(rest, "--device"),
                 name: flag(rest, "--name"),
@@ -758,6 +795,21 @@ plan.json {}",
             }
             if ids.is_empty() {
                 return Err(Error(USAGE.into()));
+            }
+            {
+                // the same device-table check as `pack`, for each module of the batch
+                let lib = selected_library(&a.root, &library_source(&[]), true, &[], &[])?;
+                let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+                for id in &ids {
+                    if let Some(m) = lib.get(id) {
+                        patchkit::devgen::check_module_tables(
+                            &lib,
+                            &facts,
+                            id,
+                            &m.manifest.module.needs_device,
+                        )?;
+                    }
+                }
             }
             std::fs::create_dir_all(&out).map_err(|e| Error(format!("{}: {e}", out.display())))?;
             let mut failed = false;

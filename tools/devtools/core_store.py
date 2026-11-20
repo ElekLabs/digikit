@@ -47,6 +47,7 @@ LIB_STEM = "sharc_core_lib"
 PROFILE = "release"
 FEATURES: tuple[str, ...] = ()
 STORE_NAME = "sharc-core-cache"
+INSTRUMENT_STORE_NAME = "sharc-core-pgo-instrument"
 RUSTFLAG_VARS = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS")
 # Compiler wrappers change the built code too; CARGO_TARGET_<TRIPLE>_* (rustflags, linker, runner) is matched by prefix.
 WRAPPER_VARS = ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER")
@@ -80,6 +81,9 @@ class Plan:
     target: Path | None = (
         None  # the cargo target dir (the audit allows the files under it)
     )
+    instrument: Path | None = (
+        None  # the `-Cprofile-generate` directory of an instrumented build
+    )
 
 
 def lib_name() -> str:
@@ -90,6 +94,11 @@ def lib_name() -> str:
 
 def store_root() -> Path:
     return store.store_root(STORE_NAME, "DIGI_SHARC_CORE_STORE")
+
+
+def instrument_store_root() -> Path:
+    """The store of the instrumented libraries of a PGO training (`native_pgo.instrumented_library`)."""
+    return store.store_root(INSTRUMENT_STORE_NAME, "DIGI_SHARC_PGO_INSTRUMENT_STORE")
 
 
 def absolute(value: str) -> Path:
@@ -143,7 +152,7 @@ def build_plan(
     compiled `sharc-gen` of the host builds is reused). A plain build has no PGO flags (the header leaves the PGO flags
     out, so a PGO host accepts it and the other way round). With PROFDATA the library is built with `-Cprofile-use=PROFDATA`
     (a store entry: the profile content is part of its key); with INSTRUMENT (a directory for `.profraw` files) it is built
-    with `-Cprofile-generate=INSTRUMENT` for a training run (never stored). Both use `--target <triple>`, so the flags skip
+    with `-Cprofile-generate=INSTRUMENT` for a training run (stored in the instrument store, `instrument_store_root`). Both use `--target <triple>`, so the flags skip
     build scripts, and a target dir of their own. GEN overrides the device's generated core (the launcher knows it)."""
     from tools.emulator import digi_env, native_pgo, native_target
 
@@ -169,7 +178,9 @@ def build_plan(
     if FEATURES:
         argv += ["--features", ",".join(FEATURES)]
     built = target / digi_env.TRIPLE if flags else target
-    return Plan(argv, env, built / PROFILE / lib_name(), gen, profdata, target)
+    return Plan(
+        argv, env, built / PROFILE / lib_name(), gen, profdata, target, instrument
+    )
 
 
 def key_inputs(
@@ -194,8 +205,12 @@ def key_inputs(
         ):
             if plan.profdata:
                 value = value.replace(str(plan.profdata), "<profdata>")
+            if plan.instrument:
+                value = value.replace(str(plan.instrument), "<raw>")  # a lane path
             flags[f"env:{name}"] = value
-    flags["pgo"] = "profdata" if plan.profdata else "plain"
+    flags["pgo"] = (
+        "profdata" if plan.profdata else "instrument" if plan.instrument else "plain"
+    )
     names = emud_key.repo_files(root, CORE_SOURCE_GLOBS)
     return emud_key.EmudInputs(names, {"gen": plan.gen}, plan.profdata, rustc, flags)
 
@@ -213,8 +228,11 @@ def core_key(device: str, profdata: Path | None = None) -> str:
     return emud_key.key_of(current(device, profdata=profdata)[1])
 
 
-def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
-    """Run PLAN's cargo call, audit the dependency file against the key; the built file (cargo's own path, never stored)."""
+def build_core(
+    plan: Plan, inputs: emud_key.EmudInputs, log: Path | None = None
+) -> Path:
+    """Run PLAN's cargo call, audit the dependency file against the key; the built file (cargo's own path, never stored).
+    With LOG the output of cargo goes to that file, and a failure carries its last 30 lines."""
     if not (ROOT / CRATE / "Cargo.toml").is_file():
         raise CoreStoreError(
             f"the crate {CRATE} does not exist yet; the build would be: {' '.join(plan.argv)}"
@@ -225,11 +243,26 @@ def build_core(plan: Plan, inputs: emud_key.EmudInputs) -> Path:
     digi_env.check_generated(
         plan.gen
     )  # refuses a stale generated core, as tools/nx/rust-env.mjs --gen does
-    with benchlock.hold("shared", "sharc core library"):
-        done = subprocess.run(plan.argv, cwd=ROOT, env=plan.env, check=False)
+    if log is not None:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with benchlock.hold("shared", "sharc core library"), log.open("w") as handle:
+            done = subprocess.run(
+                plan.argv,
+                cwd=ROOT,
+                env=plan.env,
+                check=False,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+            )
+    else:
+        with benchlock.hold("shared", "sharc core library"):
+            done = subprocess.run(plan.argv, cwd=ROOT, env=plan.env, check=False)
     if done.returncode != 0 or not plan.library.is_file():
+        tail = ""
+        if log is not None:
+            tail = "\n" + "".join(log.read_text().splitlines(keepends=True)[-30:])
         raise CoreStoreError(
-            f"building the core library failed ({done.returncode}): {' '.join(plan.argv)}"
+            f"building the core library failed ({done.returncode}): {' '.join(plan.argv)}{tail}"
         )
     depfile = plan.library.with_suffix(".d")
     if not depfile.is_file():

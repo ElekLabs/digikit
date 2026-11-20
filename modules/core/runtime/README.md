@@ -1,8 +1,7 @@
 # core/runtime
 
 The digikit runtime: at boot, from the main-OS task entry, loads the `.dkm` modules of the saved selection from the card module store into
-a private arena, and calls the `tick` of every module once per UI-loop pass. The module set is fixed per session (no run-time load or unload:
-hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu changes the selection and restarts. Emulator only.
+a private arena, and calls the `tick` of every module once per UI-loop pass. The DIGIKIT menu changes the selection and restarts. The module set can also change while the device runs: the SysEx commands LOAD, UNLOAD and RELOAD (`admin_cmds.rs`) queue a live job that the UI task runs (`reload.rs`). It works on content modules; the command refuses a service file (`E_FORMAT`). `RELOAD_STATE` reports the job. Design: `docs/plans/extension-model.md` (E5, E5c).
 
 - Design, C ABI, sizes, hook: `docs/design/digikit-runtime.md`. File format: `docs/design/digikit-dkm.md`. Results:
   `docs/findings/29-runtime-v0.md`.
@@ -11,19 +10,21 @@ hot reload is archived, `docs/plans/digikit-hot-reload.md`). The DIGIKIT menu ch
   (about 25 s); tests: `tests/patchkit/test_patchkit_dkrt.py`.
 - Try it by hand: `patchkit pack test/dyn-demo -o plus_drive/dt2/digikit/modules/dyn-demo.dkm`, patch with `--modules core/runtime`,
   boot with that `plus_drive/`; put `modules/dyn-demo.dkm` in `plus_drive/dt2/digikit/selection.txt` (or use DIGIKIT > MODULES), and the boot loads it.
-- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (the services are crates in `modules/core/services/NAME` (`machines`, `fx`, `samples`, `lfo`), linked into the runtime object; `params.rs` the kind-free parameter row writers, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler;
+- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (the runtime links no service: the services are crates in `modules/core/services/NAME` (`machines`, `fx`, `samples`, `lfo`), packed as `.dks` files that the runtime loads from the card at boot; the parameter row writers are the crate `dkrt-svc-params`, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler;
   `state.rs` (`State` and the `DKRT_*` statics), `platform.rs` (device, block read and write, MIDI send, helpers), `imports.rs` (the import table),
   `api.rs` (the C ABI), `health.rs`, `report.rs` (status, capacity, diag, debug imports), `tick.rs`, `mailbox.rs`; boot: `boot.rs`, `selection.rs`, `safe_mode.rs`;
   upload: `transport.rs`, `store_cmds.rs`, `admin_cmds.rs`, `module_cmds.rs`; `fault.rs` (crash, hang and panic records), `invariants.rs` (the module table check); `src/cf/tramp.s` the
   hook trampoline and `dkrt_flush`; `src/cf/<dev>/device.s` the device id.
 - Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/transport.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task and dispatches them to `store_cmds.rs`, `admin_cmds.rs` and `module_cmds.rs` (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
 - Safe mode (finding 37): the boot counter is cleared after a stable period (45,000 DSP blocks = 30 s of UI loop, clock: the firmware's block counter,
-  anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device).
+  anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device). Every boot counts from the first one: with no selection record yet (a fresh flash) the first counted boot creates the record (two record writes per boot until the stable period has cleared it); a card the runtime does not write (foreign, unreadable, too small, no store) has no counter.
   `DKRT_STABLE_BLOCKS` and the record's `stable_blocks` shorten it for tests. Upload safety (finding 43): replies are dropped when the firmware's TX
   ring has no room (`cf.midi.site.tx_inflight_lit`), BEGIN makes the two store headers equal before staging, `DKRT_UPLOAD_TEAR` is a test knob.
 - Card safety (finding 46): every card write goes through `block_write` (`card.rs`): outside the store range it is refused (`E_RANGE`); on a card whose
   area is neither ours (valid store header or selection copy) nor blank (all 0x00 or 0xFF) the runtime is read-only (`E_CARD_RO`: no boot counter, no
-  selection, uploads answer `E_INUSE`, ABOUT says so). `dkrt_diag` reports it. An upload on a blank card claims the range with an empty store header pair first.
+  selection, uploads answer `E_INUSE`, ABOUT shows CARD READ-ONLY and NO BOOT COUNTER); a card too small for the store, or a device without one, has no counter either (ABOUT has no card row for it; the MODULES page says NO STORE).
+  `dkrt_diag` reports it. On a blank card the boot's own record write (the boot counter) marks the area ours, so no header claim is needed; a write of data into a blank range that no record marks
+  still claims it with an empty store header pair first.
 - Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dk_debug_log_sink_set`); the module `digikit/debug` (`modules/tools/debug`) holds the
   512-event ring and answers LOG 0x20, PEEK 0x21 (over `[digikit] peek` of the device file) and LOGCFG 0x22 for `tools/device/dklog.py`; the DSP diagnostics poll (`dl_diag`, optional) and its
   heartbeat watch (`watch.rs`); the firmware's exception hook (`cf.rtos.site.exc_hook_lit`) records a crash in kept RAM (`[digikit] keep_base`) and soft-resets, the next boot

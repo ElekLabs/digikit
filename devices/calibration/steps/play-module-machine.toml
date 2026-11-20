@@ -1,0 +1,19 @@
+schema = "dk.steps/1"
+name = "play-module-machine"
+description = "Set a track to a run-time machine of a loaded module and hold a note. The machine setter is the SETUP command of the debug module, which is not built yet: a runner without it skips the case."
+
+[args]
+track = 1
+key = 60
+velocity = 100
+
+[[step]]
+action = "setup"
+track = "{track}"
+machine = "{machine}"
+
+[[step]]
+action = "midi.note"
+track = "{track}"
+key = "{key}"
+velocity = "{velocity}"

@@ -883,6 +883,99 @@ def sharc_fn(img: Sharc, token: str) -> list[str]:
     return out
 
 
+def _cost_pairs(text: str | None, opt: str) -> list[tuple[str, int]]:
+    pairs: list[tuple[str, int]] = []
+    for part in (text or "").split(","):
+        if not part.strip():
+            continue
+        name, sep, val = part.partition("=")
+        try:
+            if not sep or not name.strip():
+                raise ValueError(part)
+            pairs.append((name.strip(), int(val, 0)))
+        except ValueError:
+            raise FwError("bad %s entry %r (want NAME=INT)" % (opt, part)) from None
+    return pairs
+
+
+def cmd_cost(
+    img: Image,
+    token: str,
+    vars_text: str | None = None,
+    follow_calls: bool = True,
+    vars_all_text: str | None = None,
+) -> list[str]:
+    if not isinstance(img, Sharc):
+        return ["error: cost is SHARC only"]
+    from tools.sharc_dev.sharc_cost import fn_cost, split_sym
+
+    pairs = _cost_pairs(vars_text, "--vars")
+    pairs_all = _cost_pairs(vars_all_text, "--vars-all")
+    entry = img.resolve(token)
+    c = fn_cost(img.db, img.image, entry, follow_calls=follow_calls)
+    present = sorted(c.total.symbols() | c.self_cost.symbols())
+    values: dict[str, int] = {}
+    for name, val in pairs:
+        sym = name if "@" in name else "%s@%x" % (name, entry)
+        if "@" in name:
+            base, _, fn = name.rpartition("@")
+            try:
+                sym = "%s@%x" % (base, int(fn, 16))
+            except ValueError:
+                raise FwError(
+                    "bad --vars function in %r (want NAME@HEXADDR)" % name
+                ) from None
+        if sym not in present:
+            raise FwError(
+                "--vars %s matches no symbol; symbols present: %s"
+                % (name, " ".join(present) or "(none)")
+            )
+        values[sym] = val
+    for name, val in pairs_all:
+        hit = [x for x in present if split_sym(x)[0] == name]
+        if not hit:
+            raise FwError(
+                "--vars-all %s matches no symbol; symbols present: %s"
+                % (name, " ".join(present) or "(none)")
+            )
+        for x in hit:
+            values[x] = val
+    c_max = fn_cost(img.db, img.image, entry, follow_calls=follow_calls, values=values)
+    out = ["%s insns %d self %s" % (img.label(entry), c.n_insns, c.self_cost)]
+    for lp in c.loops:
+        out.append(
+            "  loop 0x%x x %s body %d depth %d"
+            % (lp.do_sw, lp.trip, lp.body_insns, lp.depth)
+        )
+    out.append("  dm loads %s stores %s" % (c.dm_loads, c.dm_stores))
+    for (callee, mult, tail), sub in zip(c.calls, c.call_totals, strict=True):
+        out.append(
+            "  -> 0x%x x %s  total %s%s"
+            % (
+                callee,
+                mult,
+                "cut" if sub is None else sub,
+                " (tail alternative)" if tail else "",
+            )
+        )
+    if c.unknown_calls:
+        out.append("  -> indirect: %d" % c.unknown_calls)
+    out.extend("  note: " + n for n in c.notes)
+    fns = {split_sym(x)[1] for x in present}
+    if len(fns) > 1:
+        out.append(
+            "  note: total has symbols of %d functions (NAME@FN is one function's"
+            " register; --vars-all NAME=V sets it in all)" % len(fns)
+        )
+    out.append("total %s" % c.total)
+    if values:
+        shown = ",".join("%s=%d" % kv for kv in values.items())
+        out.append("with %s: %s" % (shown, c.total.evaluate(values)))
+        if c_max.total_max is not None:
+            out.append("with tail targets by max (tighter bound): %s" % c_max.total_max)
+    return out
+
+
 def sharc_disasm(img: Sharc, entry: int, n: int | None = None) -> list[str]:
     f = img.func_row(entry)
     if f is None:
@@ -1882,6 +1975,22 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("target", help="address (hex), Ghidra name or cf_names name")
     sp = common(
         sub.add_parser(
+            "cost", help="static SHARC instruction count with DO-loop trip counts"
+        )
+    )
+    sp.add_argument("target", help="address (hex) or name")
+    sp.add_argument(
+        "--vars",
+        help="values for trip symbols: NAME=V (entry function's register) or"
+        " NAME@FN=V (one function), e.g. R2=32,R12@1cd286=16",
+    )
+    sp.add_argument(
+        "--vars-all",
+        help="NAME=V,...: set a register name in every function, e.g. R2=32",
+    )
+    sp.add_argument("--no-calls", action="store_true", help="do not add callees")
+    sp = common(
+        sub.add_parser(
             "stores",
             help="read-only SHARC CALL-reachable store operands as uncapped JSON",
         )
@@ -2013,6 +2122,12 @@ def run(
         return capped(cmd_class(sess.get(image, None, "cf"), args.name), cap)
     if c == "path":
         return capped(cmd_path(sess.get(image, args.a, args.cpu), args.a, args.b), cap)
+    if c == "cost":
+        img = sess.get(image, args.target, args.cpu)
+        return capped(
+            cmd_cost(img, args.target, args.vars, not args.no_calls, args.vars_all),
+            cap,
+        )
     img = sess.get(image, args.target, args.cpu)
     fn = {
         "fn": cmd_fn,

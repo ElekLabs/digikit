@@ -16,6 +16,19 @@ pub mod key_flags {
     pub const REPEAT: u32 = 2;
 }
 
+/// The `key_flags` of a firmware key event: its flags word (`KeyEvent+0x10`) read with the device's bits (`[input.key_flags]`). A release is classified first: a clear
+/// press bit is a release whatever the other bits say; the repeat bit on a press is a repeat.
+pub fn classify_flags(profile: &DeviceProfile, fw: u32) -> u32 {
+    let bits = profile.key_flags;
+    if fw >> bits.press & 1 == 0 {
+        key_flags::RELEASE
+    } else if fw >> bits.repeat & 1 != 0 {
+        key_flags::REPEAT
+    } else {
+        0
+    }
+}
+
 /// What the key-dispatch hook does with the event.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Verdict {

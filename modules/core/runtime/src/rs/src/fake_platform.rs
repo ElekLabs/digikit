@@ -195,6 +195,9 @@ impl Platform for FakePlatform {
         self.calls.borrow_mut().push(Call::Word { addr, value });
         self.put_code(addr, &value.to_be_bytes());
     }
+    fn card_sectors(&self) -> u32 {
+        self.card_sectors.get()
+    }
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32 {
         self.reads.borrow_mut().push((sector, bytes));
         let n = bytes / 512;
@@ -334,6 +337,7 @@ fn card_reset() {
         checked: 0,
         claims: 0,
         writes: 0,
+        sectors: 0,
     };
     TEST_LAYOUT.with(|c| c.set(Some(L)));
 }
@@ -436,6 +440,66 @@ fn a_card_that_ends_before_the_store_has_no_store() {
 }
 
 #[test]
+fn the_card_check_decides_from_the_capacity_the_driver_reports() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let end = L.first + L.sectors;
+    // not ready (0xFFFFFFFF): nothing is decided, nothing is read, the write is refused this time and the check runs again at the next write
+    card_reset();
+    let f = FakePlatform::new(profiles::DT2);
+    f.card_sectors.set(u32::MAX);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), E_CARD_RO);
+    }
+    assert_eq!(card::state(), CARD_UNKNOWN);
+    assert!(f.reads.borrow().is_empty() && f.writes.borrow().is_empty(), "no card access");
+    assert_eq!(card::info().checked, 0, "asked again later");
+    assert_eq!(card::info().refused, 1, "the refusal is counted (and logged) with its own reason");
+    unsafe {
+        assert_eq!(write(&f, L.first + 11, 1), E_CARD_RO);
+    }
+    assert_eq!(card::info().refused, 2, "every refusal is counted, the event is logged once per period");
+    f.card_sectors.set(end + 10);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), OK);
+    }
+    assert_eq!(card::state(), CARD_OURS, "the second write claimed the blank area");
+    assert_eq!(card::info().sectors, end + 10, "the capacity is recorded");
+    // a capacity of 0 is no capacity either: undecided, no access, asked again (not CARD_TOO_SMALL for good)
+    card_reset();
+    let f = FakePlatform::new(profiles::DT2);
+    f.card_sectors.set(0);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), E_CARD_RO);
+    }
+    assert_eq!(card::state(), CARD_UNKNOWN);
+    assert!(f.reads.borrow().is_empty() && f.writes.borrow().is_empty());
+    f.card_sectors.set(end);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), OK);
+    }
+    assert_eq!(card::state(), CARD_OURS);
+    // one sector short: too small, and nothing was read
+    card_reset();
+    let f = FakePlatform::new(profiles::DT2);
+    f.card_sectors.set(end - 1);
+    unsafe {
+        assert_eq!(write(&f, L.first + 10, 1), E_CARD_RO);
+    }
+    assert_eq!(card::state(), CARD_TOO_SMALL);
+    assert!(f.reads.borrow().is_empty() && f.writes.borrow().is_empty());
+    // exactly the end of the area, and larger: the store is usable
+    for cap in [end, end + (1 << 12)] {
+        card_reset();
+        let f = FakePlatform::new(profiles::DT2);
+        f.card_sectors.set(cap);
+        unsafe {
+            assert_eq!(write(&f, L.first + 10, 1), OK);
+        }
+        assert_eq!(card::state(), CARD_OURS, "capacity {cap}");
+    }
+}
+
+#[test]
 fn an_unreadable_card_is_read_only() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     card_reset();
@@ -515,7 +579,7 @@ fn a_valid_selection_record_makes_the_area_ours_without_scanning_it() {
     check(&f);
     assert_eq!(card::state(), CARD_OURS);
     assert_eq!(card::info().first_nonblank, u32::MAX, "the range was not read");
-    assert_eq!(f.reads.borrow().len(), 5, "the end of the area and the four probes, nothing else");
+    assert_eq!(f.reads.borrow().len(), 4, "the four probes, nothing else (the capacity comes from the driver, not from a read)");
     unsafe {
         assert_eq!(write(&f, L.first + 10, 1), OK);
     }

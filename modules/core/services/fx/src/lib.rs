@@ -13,5 +13,6 @@ pub mod dsp;
 pub mod fxpage;
 pub mod fxsend;
 pub mod records;
+pub mod rows;
 pub mod slots;
 pub mod validate;

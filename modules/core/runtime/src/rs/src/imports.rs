@@ -128,6 +128,8 @@ import_table! {
     ("dk_debug_peek", debug_peek),
     ("dk_debug_span_clock", debug_span_clock),
     ("dk_debug_poll", debug_poll),
+    ("dk_dsp_stats_ctl", crate::dsp_stats::dk_dsp_stats_ctl),
+    ("dk_dsp_stats_read", crate::dsp_stats::dk_dsp_stats_read),
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
     ("dk_device_track_count", device_track_count),
@@ -144,6 +146,8 @@ const _: dkrt_sdk::api::DkLogFn = imp_log;
 const _: dkrt_sdk::api::DkLogEventFn = dlog::dk_log_event;
 const _: dkrt_sdk::api::DkSinkSetFn = dlog::dk_sink_set;
 const _: dkrt_sdk::api::DkSpanSinkSetFn = dlog::dk_span_sink_set;
+const _: dkrt_sdk::api::DkDspStatsCtlFn = crate::dsp_stats::dk_dsp_stats_ctl;
+const _: dkrt_sdk::api::DkDspStatsReadFn = crate::dsp_stats::dk_dsp_stats_read;
 const _: dkrt_sdk::api::DkTimeBlocksFn = dkrt_blocks;
 const _: dkrt_sdk::api::DkFwAllocFn = crate::platform::fw_alloc;
 const _: dkrt_sdk::api::DkFwFreeFn = crate::platform::fw_free;

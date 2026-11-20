@@ -350,3 +350,19 @@ fn a_press_of_a_swallowed_key_is_swallowed_again_and_calls_on_once() {
     assert_eq!(key(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
     assert_eq!(*log, ["on", "off"]);
 }
+
+/// The firmware's flags word is read with the device's bits: a clear press bit is a release whatever the other bits say; the repeat bit on a press is a repeat.
+#[test]
+fn the_firmware_flags_become_release_repeat_or_press() {
+    use dkrt_svc_shortcuts::shortcuts::classify_flags;
+    for p in ALL {
+        let b = p.key_flags;
+        let bit = |n: u8| 1u32 << n;
+        assert_eq!(classify_flags(&p, bit(b.press)), 0, "{}: press", p.name);
+        assert_eq!(classify_flags(&p, bit(b.press) | bit(b.func)), 0, "{}: press with FUNC", p.name);
+        assert_eq!(classify_flags(&p, bit(b.press) | bit(b.repeat)), REPEAT, "{}: repeat", p.name);
+        assert_eq!(classify_flags(&p, bit(b.release)), RELEASE, "{}: release", p.name);
+        assert_eq!(classify_flags(&p, 0), RELEASE, "{}: no bit", p.name);
+        assert_eq!(classify_flags(&p, bit(b.repeat)), RELEASE, "{}: a clear press bit is a release", p.name);
+    }
+}

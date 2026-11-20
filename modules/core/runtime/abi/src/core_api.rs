@@ -34,9 +34,6 @@ pub trait CoreApi: crate::mem::FwMem {
     /// The keys of record kind `kind` in the header table of the module at selection index `at` of the boot's plan (`out` takes at most 8): the keys a service numbers
     /// or checks a record against. None for an index the plan refused, one without a table, and a kind the table does not list. The core reads the table and names no kind.
     fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize;
-    /// What the DSP guard counted for machine type `ty`: faults and whether it disabled the type.
-    unsafe fn guard_faults(&self, ty: u32) -> u32;
-    unsafe fn guard_disabled(&self, ty: u32) -> bool;
 
     /// The module that a live operation changes (`reload::phase`): its owner (module record index + 1), or 0 when none runs. Today the only operation is a reload (E5); E5c
     /// (enable and disable from the menu) will extend the value to say which operation runs. From the checks of the new file until the job ends. A service
@@ -89,12 +86,8 @@ pub trait CoreApi: crate::mem::FwMem {
     unsafe fn job_cancel(&self, owner: u8, id: u32) -> i32;
 
     // ---- the DSP loader's state and tables -------------------------------------------------------------------------------
-    /// The DSP loader's state and row table.
+    /// The DSP loader's state (the module ranges and the load in flight); the voice and effect rows are the services' own.
     fn dsp(&self) -> &'static mut DspState;
-    /// The words of `dyndsp_info` (voice rows, the area); null without it.
-    unsafe fn dsp_info(&self) -> *const u32;
-    /// The words of `dynfx_info` (effect rows); null without it.
-    unsafe fn fx_info(&self) -> *const u32;
     /// The words of the entry `name_hash` of the image's one table `dkrt_info_table` (`dkneeds::keys::name_hash` of the name that an adapter's `[[info]]` gives): the data
     /// table of an image adapter, such as `fxpages_info`. Null when the image has no such entry or the core does not serve it. The caller checks the words (magic, device).
     /// The core forwards to `Platform::info`; it names no service and no table.

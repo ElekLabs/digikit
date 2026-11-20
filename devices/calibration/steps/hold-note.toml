@@ -1,0 +1,14 @@
+schema = "dk.steps/1"
+name = "hold-note"
+description = "Press a key on the tracks and hold it: the voices play for the whole capture."
+
+[args]
+tracks = "1"
+key = 60
+velocity = 100
+
+[[step]]
+action = "midi.note"
+track = "{tracks}"
+key = "{key}"
+velocity = "{velocity}"

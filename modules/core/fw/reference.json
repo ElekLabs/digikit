@@ -309,6 +309,476 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x400c24b0",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400c2614",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400c89c6",
+            "len": 6
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_accessor",
+        "rust": "dkfw::filter::accessor"
+      },
+      "cpu": "cf",
+      "doc": "Filter type to descriptor row (type at 4(sp); d0 and d1 free at the entry): unsigned `type <= 5` gives the row base + 0x2c * type, else the shared fallback row. DT2 FUN_400c89c6 (base 0x4293b858), DN2 FUN_400c2614 (base 0x424339cc). The hook answers 16..31 from the service row.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.accessor",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004b860",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004b860",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400506ac",
+            "len": 6
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_get",
+        "rust": "dkfw::filter::get"
+      },
+      "cpu": "cf",
+      "doc": "Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.get",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004dae2",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004dae2",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052c98",
+            "len": 6
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_list_vector",
+        "rust": "dkfw::filter::list_vector"
+      },
+      "cpu": "cf",
+      "doc": "The chooser's order vector (called from the filter list builder, DT2 FUN_400610e8 and DN2 FUN_4005b458): the first call allocates 0x18 bytes and copies the six static longs {0,1,4,3,5,2}; later calls hand out the same vector. DT2 FUN_40052c98, DN2 FUN_4004dae2.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.list_vector",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400dc3a4",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400dc508",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400da71e",
+            "len": 6
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_name",
+        "rust": "dkfw::filter::name"
+      },
+      "cpu": "cf",
+      "doc": "Filter name function (type at 4(sp)): `type < 6` returns the row of a table of 12-byte rows (long name, short name, 0), else the string \"ERROR\". DT2 FUN_400da71e (table 0x4020ef30), DN2 FUN_400dc508 (table 0x401f7bbc); one caller, the chooser list.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.name",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004cd7c",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004cd7c",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40051886",
+            "len": 6
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_set",
+        "rust": "dkfw::filter::set"
+      },
+      "cpu": "cf",
+      "doc": "Filter type setter, with no range check: it writes the byte and sends param 0xea (type << 7). DT2 FUN_40051886, DN2 FUN_4004cd7c. The service calls it to write the stock fallback type of a track.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.set",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4006eca0",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4006eca0",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40074580",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "`moveq #5,D0; cmp.l D4,D0; bcs.w default` in the filter page's graph draw (DT2 FUN_4007439e at 0x40074580, DN2 FUN_4006eabe at 0x4006eca0): d4 is the type from the getter, values 0..5 index a jump table of response curves, others go to the shared tail and draw no curve (the rectangle x 21..71, y 7..23 stays blank). d0 is free.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.graph_switch",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 482
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 482
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004db36",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db36",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052cec",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "`pea BEGIN` of the copy range (DT2 0x401f5440, DN2 0x401de150): the static table of six longs {0,1,4,3,5,2}, one per stock filter type in chooser order; the service points it and the end at a longer table with the added types.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.list_begin",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 84
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 84
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004db2c",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db2c",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052ce2",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "`pea END` of the copy range (DT2 0x401f5458, DN2 0x401de168): the end of the static table of six longs the order vector is copied from.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.list_end",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 74
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 74
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004db0c",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db0c",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052cc2",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "`pea (0x18).w` in the order vector's first-call path: the allocation size of the vector (six longs); the service raises it for the added types.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.list_size",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 42
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 42
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400dd2bc",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400dd420",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400db484",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "`move.b #7,D2b` in the sound loader (DT2 FUN_400db3b2 at 0x400db484, DN2 FUN_400dd34e at 0x400dd420): the bound of the next compare, which keeps a stored filter type below 7 and resets any other to 0 (the filter byte is rec[0xd3] on DT2 and rec[0xf5] on DN2; the machine byte uses an earlier bound). The immediate is the low byte of the word at +2.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.loader_bound",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 210
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 210
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4011fc2c",
             "len": 2
           }
@@ -11304,6 +11774,160 @@
     },
     {
       "at": {
+        "st-1.42": [
+          {
+            "addr": "0x401181ec",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_peer_depack",
+        "rust": "dkfw::peer::depack"
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x401181ec: the container section depacker. It skips the 8-byte stream header, has no output bound and returns the output length in D0.",
+      "file": "devices/fw/peer.toml",
+      "kind": "fn",
+      "mark": "O",
+      "name": "cf.peer.fn.depack",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 (const u8 *src, u8 *dst)",
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40116d7a",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_peer_nor_read",
+        "rust": "dkfw::peer::nor_read"
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x40116d7a: the NOR flash read `void f(u32 src, u32 len, u8 *dst)` (byte loop on the SPI controller, takes the NOR mutex). The peer thread calls it for the section 6 and section 7 payloads; core/peer-image forwards the section 6 call to it.",
+      "file": "devices/fw/peer.toml",
+      "kind": "fn",
+      "mark": "O",
+      "name": "cf.peer.fn.nor_read",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u32 src, u32 len, u8 *dst)",
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40082c24"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "st"
+      ],
+      "doc": "The `lea <NOR read>,A2` of the peer thread; the hook loads A2 with the wrapper that has the same stack signature and continues after the site.",
+      "file": "devices/fw/peer.toml",
+      "kind": "hook",
+      "mark": "O",
+      "mode": "replace",
+      "name": "cf.peer.hook.nor_read_lea",
+      "regs": {
+        "clobbers": [
+          "a2",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.peer.site.nor_read_lea",
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40082c24",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x40082c24: the 6-byte `lea <NOR read>.l,A2` in the peer thread (entry 0x40082c04, no function of the database). A2 is used only by the two `jsr (a2)` calls that read the section 6 and section 7 payloads. Found by the words of the thread's first 40 bytes.",
+      "file": "devices/fw/peer.toml",
+      "kind": "site",
+      "mark": "O",
+      "name": "cf.peer.site.nor_read_lea",
+      "rule": {
+        "st": {
+          "kind": "cf_words",
+          "len": 6,
+          "offset": 32
+        }
+      },
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40082e84",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x40082e84: the code the peer thread takes when the section 7 directory entry is missing: it stores status 1 (DSP BOOT FAILURE) and waits. The DMA is not armed then, so the second CPU gets no bytes.",
+      "file": "devices/fw/peer.toml",
+      "kind": "site",
+      "mark": "O",
+      "name": "cf.peer.site.status_fail",
+      "rule": {
+        "st": {
+          "kind": "cf_words",
+          "len": 2,
+          "offset": 640
+        }
+      },
+      "subsystem": "peer",
+      "users": [
+        "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x4003e41a",
@@ -13443,6 +14067,67 @@
       "was": [
         "dkrt.fw.boot_record_write"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c1ba",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c49a",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012ddd6",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f232",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_storage_capacity",
+        "rust": "dkfw::storage::capacity"
+      },
+      "cpu": "cf",
+      "doc": "The eMMC driver's capacity getter (20 bytes): the card's capacity in 512-byte sectors, 0xFFFFFFFF while the driver is not ready (DT2 1.17 FUN_4012ddd6, DN2 1.12 0x4012c49a, Syntakt 1.42 0x4010f232; one hash on all three). The firmware's block read refuses a start at or past it.",
+      "file": "devices/fw/storage.toml",
+      "kind": "fn",
+      "mark": "O",
+      "name": "cf.storage.fn.capacity",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 ()",
+      "subsystem": "storage",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -18387,6 +19072,536 @@
       "subsystem": "cache",
       "users": [
         "core/sample-pool"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392342",
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28392342",
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838cdc0",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Replaces the stage address load: a type in the service's range gets the address of its coefficient stub in I12, any other runs the displaced instruction. The bound value must be raised first, or the jump to the default skips the site.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "dsp.filter.hook.coef_lookup",
+      "regs": {
+        "clobbers": [
+          "r12",
+          "i12",
+          "i4",
+          "astat"
+        ],
+        "in": [
+          "i4",
+          "m4",
+          "i6",
+          "i9",
+          "i10"
+        ]
+      },
+      "site": "dsp.filter.site.coef_lookup",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28385886",
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28385886",
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x28384dc4",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Replaces the converter's table load; a type outside the stock table reads its S value from the service's table. The stub runs the displaced compute half (DT2 F10 with F11, DN2 F8) and the load itself.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "dsp.filter.hook.convert",
+      "regs": {
+        "clobbers": [
+          "r8",
+          "r10",
+          "astat"
+        ],
+        "in": [
+          "i4",
+          "i5",
+          "m0",
+          "r8",
+          "r10",
+          "r11"
+        ]
+      },
+      "site": "dsp.filter.site.convert",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b08",
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28392b08",
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838d826",
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Replaces the range check: a type in the service's range runs its process stub on the block and returns to the stage after the dispatch; any other runs the displaced jump.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "dsp.filter.hook.proc_range",
+      "regs": {
+        "clobbers": [],
+        "in": [
+          "astat",
+          "m4",
+          "r2",
+          "i3",
+          "i5",
+          "i6-i7",
+          "i9",
+          "i15"
+        ]
+      },
+      "site": "dsp.filter.site.proc_range",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392342",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28392342",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838cdc0",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The stage address load of the coefficient dispatch: DT2 0x1c66e0 in FUN_1c642a, DN2 0x1c91a1 in FUN_1c8ef1, `R12 = sub(R12, R12); I12 = DM(I4, M4)` with M4 the type. The indirect jump through I12 follows (DT2 0x1c66ec, DN2 0x1c91ad) after I4 is reloaded (I9 on DT2, I10 on DN2).",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.coef_lookup",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 688
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 694
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28385886",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28385886",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x28384dc4",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The converter's table load: DT2 0x1c26e2 in FUN_1c24e9 `F10 = float_by(F10, F11); S3 = DM(I4, M0)`, DN2 0x1c2c43 in FUN_1c2712 `F8 = float(F8); S0 = DM(I5, M0)`. M0 is the filter type, the load reads DM(base + type). One 48-bit instruction with a compute half the hook must run.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.convert",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1329
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 505
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b08",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28392b08",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838d826",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The range check of the process dispatch: DT2 0x1c6c13 in FUN_1c642a, DN2 0x1c9584 in FUN_1c8ef1, a non-delayed `JUMP IF GE` on the flags of the `compu` before it. The stage address load that follows is a 32-bit instruction, too short to hold a hook.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.proc_range",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1683
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2025
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x7",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x7",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x7",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The unsigned bound of the coefficient dispatch (DT2 `R5 = 0x7` at 0x1c66be, DN2 `R13 = 0x7` at 0x1c917f): `compu` of the type against it, then `JUMP IF GE` to the default (DT2 0x1c69ed, DN2 0x1c927e). Seven table entries; 7 and above skip the stage.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.filter.value.coef_bound",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_literal",
+          "offset": 654
+        },
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 660
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x8052dba4",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x8052dba4",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x8055c858",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The literal base of the coefficient table of seven stage addresses (DT2 `I4 = 0x8055c858` at 0x1c66cc, DN2 `I4 = 0x8052dba4` at 0x1c9188); the process table follows it 0x1c bytes later, so a type of 7 or more must not read past the end.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.filter.value.coef_table",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_literal",
+          "offset": 663
+        },
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 674
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x25d728",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x25d728",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2567a0",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The literal base of the filter converter's table (DT2 `I4 = 0x2567a0`, 32 words up to 0x2567bf; DN2 `I5 = 0x25d728`); word t is the S value of filter type t.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.filter.value.convert_table",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_literal",
+          "offset": 1317
+        },
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 502
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x7",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x7",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x7",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The unsigned bound of the process dispatch (DT2 `R1 = 0x7` at 0x1c6c0d, DN2 `R1 = 7` at 0x1c957e): `compu` of the type (R2) against it, then `JUMP IF GE` to the default (DT2 0x1c6eb7, DN2 0x1c98b9).",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.filter.value.proc_bound",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_literal",
+          "offset": 1677
+        },
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 2019
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x8052dbc0",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x8052dbc0",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x8055c874",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The literal base of the process table of seven stage addresses (DT2 `I4 = 0x8055c874` at 0x1c6c16, DN2 `I4 = 0x8052dbc0` at 0x1c9587), followed by `I12 = DM(I4, M4)` and, after I4 is reloaded from I9, the indirect jump (DT2 0x1c6c25, DN2 0x1c9595).",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "dsp.filter.value.proc_table",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_literal",
+          "offset": 1686
+        },
+        "dt2": {
+          "kind": "sharc_literal",
+          "offset": 2028
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines",
+        "core/dsp-voice"
       ],
       "was": []
     },
@@ -23392,6 +24607,13 @@
       "name": "draw"
     },
     {
+      "count": 10,
+      "cpu": "cf",
+      "file": "devices/fw/filter.toml",
+      "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",
+      "name": "filter"
+    },
+    {
       "count": 6,
       "cpu": "cf",
       "file": "devices/fw/input.toml",
@@ -23455,6 +24677,13 @@
       "name": "param"
     },
     {
+      "count": 5,
+      "cpu": "cf",
+      "file": "devices/fw/peer.toml",
+      "meaning": "the second ColdFire CPU of a device that has one: the thread that reads its image from the NOR flash and streams it, and the container section depacker",
+      "name": "peer"
+    },
+    {
       "count": 6,
       "cpu": "cf",
       "file": "devices/fw/project.toml",
@@ -23476,7 +24705,7 @@
       "name": "samples"
     },
     {
-      "count": 48,
+      "count": 49,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",
@@ -23530,6 +24759,13 @@
       "file": "devices/fw/dsp/cache.toml",
       "meaning": "cache configuration and startup ranges",
       "name": "cache"
+    },
+    {
+      "count": 11,
+      "cpu": "sharc",
+      "file": "devices/fw/dsp/filter.toml",
+      "meaning": "the filter type in the DSP: converter, coefficient and process dispatch",
+      "name": "filter"
     },
     {
       "count": 8,

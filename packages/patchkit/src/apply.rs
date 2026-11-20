@@ -106,6 +106,9 @@ pub struct PlanOutput {
     pub syx_bytes: u64,
     pub container_bytes: u64,
     pub changed_sections: Vec<(u32, u64, u64)>,
+    /// `bootstrap margin 9.1 KB, container 31.4 KB free` (the in-place margin of MAIN at the bootstrap's stage and the container space left).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget: Option<crate::verify::Budget>,
 }
 
 pub struct Applied {
@@ -547,6 +550,90 @@ impl Default for Options {
             flash_cap: true,
         }
     }
+}
+
+/// A `[[repack]]` of a module of the set, checked against the device: the section it names and the module that claims it.
+struct RepackClaim<'a> {
+    module: &'a Module,
+    def: &'a crate::module::RepackDef,
+    section: u32,
+}
+
+/// The `[[repack]]` claims of the set: refuses a claim on a section that the device does not list in `[container] repack`, and two claims on one role.
+fn repack_claims<'a>(
+    fw: &Firmware,
+    lib: &'a Library,
+    order: &[String],
+    dev: &str,
+) -> Result<Vec<RepackClaim<'a>>> {
+    let mut claimed: BTreeMap<String, String> = BTreeMap::new();
+    let mut out = vec![];
+    for id in order {
+        let m = lib.get(id).unwrap();
+        for r in m.manifest.repack.iter().filter(|r| on(&r.devices, dev)) {
+            let section = fw
+                .device
+                .role_section(&r.role)
+                .filter(|s| fw.device.is_repackable(*s))
+                .ok_or_else(|| {
+                    err!(
+                        "{id}: [[repack]] role {:?}: {} has no such section that can be stored packed ([container] repack {:?})",
+                        r.role,
+                        fw.device.short(),
+                        fw.device.repack_roles()
+                    )
+                })?;
+            if let Some(first) = claimed.insert(r.role.clone(), id.clone()) {
+                return Err(err!(
+                    "{id}: [[repack]] role {:?} is already claimed by {first}",
+                    r.role
+                ));
+            }
+            out.push(RepackClaim {
+                module: m,
+                def: r,
+                section,
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Store the sections of `claims` packed and check each stored stream against its module's buffer layout: the stock section is the one the module
+/// checks, the stream fits, and the in-place margin is above 0 (a margin of 0 or less would overwrite stream bytes that are not read yet).
+fn store_repacked(fw: &mut Firmware, claims: &[RepackClaim]) -> Result<()> {
+    for c in claims {
+        let (id, r, sec) = (c.module.id(), c.def, c.section);
+        let data = &fw.section(sec).unwrap().data;
+        if data.len() as u64 != r.len || sha256_hex(data) != r.sha256 {
+            return Err(err!(
+                "{id}: section {sec} of this image is not the one the module unpacks and checks ({} bytes, sha256 {}; expected {} bytes, {})",
+                data.len(),
+                sha256_hex(data),
+                r.len,
+                r.sha256
+            ));
+        }
+        let stored = fw.repack(sec)?;
+        let stream = &fw.section(sec).unwrap().stored;
+        if r.stage_end < r.dest + stored as u64 {
+            return Err(err!(
+                "{id}: the packed section {sec} ({stored} bytes) does not fit the buffer {:#x}..{:#x}",
+                r.dest,
+                r.stage_end
+            ));
+        }
+        let stage = r.stage_end - stored as u64;
+        let margin = crate::aplib::inplace_margin(stream, r.dest, stage)
+            .map_err(|e| err!("{id}: section {sec}: {e}"))?;
+        if let Some(m) = margin.filter(|m| *m <= 0) {
+            return Err(err!(
+                "{id}: unpacking section {sec} in place from {:#x} over the stream staged at {stage:#x} has margin {m}: it would overwrite bytes that are not read yet",
+                r.dest
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub fn apply(fw_bytes: &[u8], reg: &Registry, lib: &Library, ids: &[String]) -> Result<Applied> {
@@ -2119,11 +2206,23 @@ pub fn apply_with(
     }
 
     // The patch record: first in the segment chain when the expansion region is in use, else a DSP block.
+    let repacks = repack_claims(&fw, lib, &order, &dev)?;
     let rec = Record {
         base_sha256: fw.syx_sha256.clone(),
         modules: order.iter().map(|i| lib.get(i).unwrap().tag()).collect(),
+        repacks: repacks
+            .iter()
+            .map(|c| crate::record::Repack {
+                role: c.def.role.clone(),
+                module: c.module.tag(),
+                dest: c.def.dest as u32,
+                stage_end: c.def.stage_end as u32,
+                len: c.def.len as u32,
+                sha256: c.def.sha256.clone(),
+            })
+            .collect(),
     };
-    let rec_bytes = rec.encode();
+    let rec_bytes = rec.encode()?;
     let (rec_region, rec_addr) = if !opts.record {
         ("", 0)
     } else if in_expansion {
@@ -2331,6 +2430,7 @@ pub fn apply_with(
             ));
         }
     }
+    let mut main_tail: Option<(usize, usize)> = None;
     if mem.main_dirty {
         if mem.main.len() as u64 > lim.main_staged_max {
             return Err(err!(
@@ -2339,9 +2439,32 @@ pub fn apply_with(
                 lim.main_staged_max
             ));
         }
-        fw.replace(fw.device.main_section(), mem.main.clone())?;
+        // the bootstrap unpacks MAIN in place over its staged stream with no bounds check: keep the margin its stage needs (finding 152)
+        let (dest, stage, floor) = fw.device.main_unpack();
+        let packed = crate::aplib::pack_section_in_place(&mem.main, dest, stage, floor as i64)
+            .map_err(|e| err!("MAIN OS: {e}"))?;
+        main_tail = Some((
+            packed.literal_tail,
+            packed.stream.len() - packed.plain_len.min(packed.stream.len()),
+        ));
+        fw.replace_main_stored(mem.main.clone(), packed.stream)?;
     }
-    let syx = fw.build(opts.flash_cap.then_some(lim.container_max as usize))?;
+    store_repacked(&mut fw, &repacks)?;
+    // the cap of the OS-upgrade stage; when MAIN carries a literal tail for the bootstrap's margin, say what it cost
+    if opts.flash_cap {
+        let n = fw.container()?.len();
+        let max = lim.container_max as usize;
+        if n > max {
+            return Err(match main_tail {
+                Some((tail, extra)) if tail > 0 => err!(
+                    "container is {n} bytes, over the {max}-byte limit: MAIN OS needs a tail of {tail} bytes stored as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs {} bytes more than the container allows: trim the runtime or move it out of MAIN",
+                    n - max
+                ),
+                _ => err!("container is {n} bytes, over the {max}-byte limit"),
+            });
+        }
+    }
+    let syx = fw.build(None)?;
     let regions = allocs
         .iter()
         .map(|(k, v)| (k.clone(), (v.used, v.cap)))
@@ -2378,11 +2501,17 @@ pub fn apply_with(
         plan,
         image_id,
     };
-    let report = crate::verify::verify(&applied.syx, Some(reg), Some(fw_bytes))?;
+    // an image made without a record (oracles, tests) names no module whose claim could be checked
+    let report = if opts.record {
+        crate::verify::verify_with_library(&applied.syx, Some(reg), Some(fw_bytes), lib)?
+    } else {
+        crate::verify::verify_unrecorded(&applied.syx, Some(reg), Some(fw_bytes))?
+    };
     applied.plan.output = Some(PlanOutput {
         syx_sha256: sha256_hex(&applied.syx),
         syx_bytes: applied.syx.len() as u64,
         container_bytes: report.container_bytes,
+        budget: report.budget,
         changed_sections: fw
             .sections
             .iter()

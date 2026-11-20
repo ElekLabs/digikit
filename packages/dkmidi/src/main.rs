@@ -9,7 +9,7 @@ use std::process::exit;
 
 use dkmidi::Sysex;
 
-const USAGE: &str = "usage: dkmidi ports | dkmidi open NAME";
+const USAGE: &str = "usage: dkmidi ports | dkmidi open NAME [--raw] (--raw also sends the channel messages and start/stop written to stdin)";
 
 fn die(code: i32, msg: &str) -> ! {
     eprintln!("dkmidi: {msg}");
@@ -45,7 +45,8 @@ fn main() {
             Ok(names) => names.iter().for_each(|n| println!("{n}")),
             Err(e) => die(1, &e),
         },
-        ["open", want] => {
+        ["open", want] | ["open", want, "--raw"] => {
+            let raw = args.len() == 3;
             let names = dkmidi::ports("dkmidi").unwrap_or_else(|e| die(1, &e));
             let name = resolve(want, &names).unwrap_or_else(|e| die(2, &e));
             let port = dkmidi::open("dkmidi", &name).unwrap_or_else(|e| die(1, &e));
@@ -60,7 +61,11 @@ fn main() {
                     match stdin.read(&mut buf) {
                         Ok(0) => exit(0),
                         Ok(n) => {
-                            for m in assembler.feed(&buf[..n]) {
+                            for m in if raw {
+                                assembler.feed_out(&buf[..n])
+                            } else {
+                                assembler.feed(&buf[..n])
+                            } {
                                 if let Err(e) = out.send(&m) {
                                     die(1, &e);
                                 }

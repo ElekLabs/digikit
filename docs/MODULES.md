@@ -294,7 +294,7 @@ The module's own semantic version (header word 0x34) covers its saved data. Proj
  firmware         stock Elektron code
 ```
 
-Services (`.dks`, planned) sit between modules and adapters. Module imports do not change when they arrive.
+Services (`.dks` files on the card: `machines`, `fx`, `samples`, `lfo`) sit between modules and adapters. A module reaches a service through its `sdk.toml` imports; the runtime loads the services that the selected modules need.
 
 Who owns what: the SDK has no device code. Adapters and device profiles carry the device and firmware facts. Modules are device-neutral. The builder calls take device facts (knob positions, stock rows, level) from the profile that the runtime reads at commit, so a module does not name a device.
 

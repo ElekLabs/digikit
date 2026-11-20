@@ -20,9 +20,11 @@ pub(crate) fn profile<C: dkrt_abi::core_api::CoreApi>(
 pub mod assign;
 pub mod build;
 pub mod dsp;
+pub mod guard;
 pub mod info;
 pub mod nativepage;
 pub mod paramapi;
 pub mod records;
+pub mod rows;
 pub mod slots;
 pub mod validate;

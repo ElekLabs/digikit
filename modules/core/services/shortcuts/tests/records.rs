@@ -10,7 +10,7 @@ use dkrt_sdk::*;
 use dkrt_svc_shortcuts::bindings::Callback;
 use dkrt_svc_shortcuts::build::{begin, end, shortcut_add, ShortcutDef};
 use dkrt_svc_shortcuts::records::{on_key, state, ShortcutsService};
-use dkrt_svc_shortcuts::shortcuts::{key_flags, Verdict};
+use dkrt_svc_shortcuts::shortcuts::Verdict;
 use dkrt_svc_shortcuts::validate::{at, check_set, BODY_LEN};
 use dkrt_test_support::{Call, FakeCore};
 use std::sync::{Mutex, MutexGuard};
@@ -453,8 +453,10 @@ fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
     b.off = Some(off);
     state().table_mut().add(b);
     let pass = |phase: u32| unsafe { <Svc as Service<FakeCore>>::tick(&core, phase) };
-    assert_eq!(on_key(&core, p.key_code(trk), 0), Verdict::Pass);
-    assert_eq!(on_key(&core, p.key_code(yes), 0), Verdict::Swallow);
+    // the firmware's flags word, read with the device's bits
+    let (down, up) = (1u32 << p.key_flags.press, 1u32 << p.key_flags.release);
+    assert_eq!(on_key(&core, p.key_code(trk), down), Verdict::Pass);
+    assert_eq!(on_key(&core, p.key_code(yes), down), Verdict::Swallow);
     assert!(
         CALLS.lock().unwrap().is_empty(),
         "the hook runs no module code"
@@ -465,18 +467,18 @@ fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
     pass(dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on"]);
     assert_eq!(
-        on_key(&core, p.key_code(yes), key_flags::RELEASE),
+        on_key(&core, p.key_code(yes), up),
         Verdict::Swallow
     );
     assert_eq!(
-        on_key(&core, p.key_code(trk), key_flags::RELEASE),
+        on_key(&core, p.key_code(trk), up),
         Verdict::Pass
     );
     pass(dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on", "off"]);
     // a device the table does not know passes everything
     core.device = 999;
-    assert_eq!(on_key(&core, p.key_code(yes), 0), Verdict::Pass);
+    assert_eq!(on_key(&core, p.key_code(yes), down), Verdict::Pass);
     unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
 }
 

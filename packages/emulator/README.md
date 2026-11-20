@@ -145,8 +145,16 @@ the host does not have: `DIGI_SHARC_CORE_LIB_DT2: /path/dt2.dylib: core library 
 The DSP hot loop (the generated blocks and the interpreter) runs in the library, so PGO covers it only when the library
 is profile-guided. `uv run python -m tools.emulator.native_pgo train [--device dn2|dt2|both]` (`mise run perf:pgo`, or
 `perf:pgo:dn2`, `perf:pgo:dt2`, `perf:pgo:both`) builds the host and the library of each device it runs with
-`-Cprofile-generate`, runs the workload with `DIGI_SHARC_CORE_LIB_<DEV>` naming the instrumented libraries (own target dir,
-never the store) and merges the host's and the libraries' `.profraw` files into one profile per training target. A launch
+`-Cprofile-generate`, runs the workload with `DIGI_SHARC_CORE_LIB_<DEV>` naming the instrumented libraries and merges the
+host's and the libraries' `.profraw` files into one profile per training target. `mise run perf:pgo` trains `dn2`, `dt2` and then `both`
+(the two-core profile of the desktop build; the libraries of the first two trainings are restored from the store, so
+`both` costs a host build and its runs). Without a current `both` profile the two-core desktop build runs without PGO
+and prints the fallback notice. A training whose profile for the current key exists is skipped (`train --force`, or
+`mise run perf:pgo:dn2 -- --force`, trains again; a workload edit that keeps the workload name needs `--force`). The
+instrumented libraries are built once per key (the `-Cprofile-generate` directory is fixed per target dir and not in the
+key) and kept in `<git common dir>/sharc-core-pgo-instrument`, shared by all worktrees (the last 4 keys per device stay;
+`DIGI_SHARC_PGO_INSTRUMENT_STORE` moves it, tests only); a training restores them. Each training prints `phase <name>: N s`
+lines (`key`, `host-build`, `library-*`, `runs`, `merge`) and records them as `phase_seconds` in its manifest. A launch
 with a fresh profile uses it for the host (`-Cprofile-use`) and for the library of every device the profile covers (`dn2`:
 the DN2 library, `dt2`: the DT2 one, `both`: both): the library is a store entry whose key holds the profile content, so
 it is built once per profile. The launchers (`native_emu.py`, `verify_build daemons`) pick it when the profile is fresh and

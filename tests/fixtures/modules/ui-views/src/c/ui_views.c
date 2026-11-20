@@ -3,13 +3,13 @@
  * init:  opens core/ui, adds two SETTINGS rows (dk_ui_settings_row) and registers the report command.
  * row 1: opens a full-screen view: a frame and a line of text, drawn on every frame. YES opens the stock text input (title NAME, start text AB, 8
  *        characters); NO closes the view; any other key is not used.
- * row 2: opens an overlay (a filled box with text). An overlay gets no keys: the command 0x1b with a body byte asks `tick` (the UI task) to close it.
+ * row 2: opens an overlay (a filled box with text). An overlay gets no keys: the command 0x0f with a body byte asks `tick` (the UI task) to close it.
  *
- *   0x1b  with no body: report; reply, big-endian words:
+ *   0x0f  with no body: report; reply, big-endian words:
  *           0  result of the first dk_ui_settings_row   4  result of the second          8  1 while the full-screen view is open   12  1 while the overlay is open
  *          16  draws of the full-screen view           20  draws of the overlay          24  `closed` calls of the full-screen view   28  `closed` calls of the overlay
  *          32  `done` calls of the text input          36  key calls that were presses of the full-screen view   40  the text that `done` got last (16 bytes, NUL padded)
- *   0x1b  with one body byte 1: close the overlay (tick does it)
+ *   0x0f  with one body byte 1: close the overlay (tick does it)
  */
 #include <dk/core/bytes.h>
 #include <dk/core/module.h>
@@ -114,7 +114,7 @@ static int32_t command(uint32_t cmd, uint32_t seq, const void *request, uint32_t
 {
     uint8_t *out = reply;
     (void)seq;
-    if (cmd != 0x1b)
+    if (cmd != 0x0f)
         return -50;
     if (len == 1 && ((const uint8_t *)request)[0] == 1) {
         close_overlay = 1;
@@ -144,7 +144,7 @@ static int32_t init(dk_module_ctx *ctx)
         return r;
     r_row1 = dk_ui_settings_row(ui, "VIEW DEMO", open_full, 0);
     r_row2 = dk_ui_settings_row(ui, "OVERLAY DEMO", open_overlay, 0);
-    dk_host_register(0x1b, 1, command);
+    dk_host_register(0x0f, 1, command);
     return DK_OK;
 }
 

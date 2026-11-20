@@ -1,4 +1,4 @@
-/* The reverse lookup of the device's key map (`dkrt_dev.key_codes`, from [panel.keys] of the device file): the panel code of a firmware key event to the
+/* The reverse lookup of the device's key map (`dkrt_dev.key_codes`, from [input.keys] of the device file): the id of a firmware key event to the
    logical key (<dk/gen/keys.h>). Pure, so the host can test it (host/tests/keys.rs); panel_keys.c gives it the device's table. */
 #ifndef DK_UI_KEY_MAP_H
 #define DK_UI_KEY_MAP_H

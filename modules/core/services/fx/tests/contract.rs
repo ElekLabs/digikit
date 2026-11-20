@@ -2,9 +2,7 @@
 //! `tests/fixtures/modules/dyn-fx-gain` and `dyn-fx-gain-b`: each makes the builder calls of its `src/module.c` through the service's `build::*`.
 use core::ptr::addr_of;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::{
-    DspState, FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, F_FIRST, F_FREE, MAX_FX, MIX_ONE, WIN_FX,
-};
+use dkrt_abi::dsp::{FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{ALL, DT2};
@@ -13,8 +11,9 @@ use dkrt_svc_fx::build::{self, ROUTE_MASTER, ROUTE_SEND};
 use dkrt_svc_fx::fxpage::{self, INFO_HASH};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::records::Fx;
+use dkrt_svc_fx::rows::{self, FxRows};
 use dkrt_test_support::contract::{
-    contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module, ParkedKnobs,
+    contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module, ParkedKnobs, Rows,
 };
 use dkrt_test_support::FakeCore;
 
@@ -130,7 +129,7 @@ fn effects(i: &mut Init, n: u32) {
     }
 }
 
-/// The pc word of each of the four effect rows of the image (`image` gives `fx_table` first row 6): the word that skips a row.
+/// The pc word of each of the four effect rows of the image (`image` gives `dynfx_info` first row 6): the word that skips a row.
 const ENABLE: [(u32, u32, u32); 4] = [
     (WIN_FX, FX_ROW_WORDS * 6 + FXW_PC, FX_FREE_PC),
     (WIN_FX, FX_ROW_WORDS * 7 + FXW_PC, FX_FREE_PC),
@@ -152,10 +151,10 @@ fn kept(core: &FakeCore, addr: u32, _value: u32) -> bool {
     addr >= list + 4 * count && addr < list + 4 * 8
 }
 
-/// The DSP state bytes that differ from the start after a release, on purpose: the MIX word of a released effect row is 1.0f (`MIX_ONE`, the mix of a row without
-/// a page; the start state holds 0 because no row was ever released).
-fn kept_dsp(_core: &FakeCore, at: usize, value: u8) -> bool {
-    let mix = core::mem::offset_of!(DspState, fx_mix);
+/// The bytes of the service's row table that differ from the start after a release, on purpose: the MIX word of a released effect row is 1.0f (`MIX_ONE`, the mix of a
+/// row without a page; the start state holds 0 because no row was ever released).
+fn kept_rows(_core: &FakeCore, at: usize, value: u8) -> bool {
+    let mix = core::mem::offset_of!(FxRows, fx_mix);
     at >= mix && at < mix + 4 * MAX_FX && value == MIX_ONE.to_le_bytes()[(at - mix) % 4]
 }
 
@@ -226,8 +225,7 @@ fn image(core: &mut FakeCore) {
     d[dkrt_svc_params::dynreg::w::P_FIRST] = 0;
     d[dkrt_svc_params::dynreg::w::P_TEMPLATE_OFF] = 8;
     core.set_dynreg(d);
-    core.fx_table[F_FIRST] = 6;
-    core.fx_table[F_FREE] = 4;
+    core.set_dynfx(6, 4);
     unsafe { fxpage::unbind() };
 }
 
@@ -271,7 +269,14 @@ fn fixture(device: u32) -> Fixture {
         enable: &ENABLE,
         parks_rows: false,
         kept,
-        kept_dsp,
+        // the fx rows are the service's own table, not the loader's `DspState`: nothing of the loader's state is kept
+        kept_dsp: |_, _, _| false,
+        rows: Rows {
+            bytes: || rows::bytes().to_vec(),
+            reset: rows::reset,
+            kept: kept_rows,
+            ..Rows::NONE
+        },
         absent_rows: None,
         // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one
         live: LIVE,

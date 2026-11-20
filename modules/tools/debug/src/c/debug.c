@@ -63,6 +63,13 @@ typedef uint8_t u8;
 #define CMD_PROFILE_COUNT 2u
 #define CMD_PROFILE_STATE 0x1eu
 #define CMD_PROFILE_READ 0x1fu
+/* PROFILE_DSP: the `debug_profile_dsp` range of sdk/sdk.toml, the DSP stats window (docs/plans/profiling.md 13.1). */
+#define CMD_PROFILE_DSP 0x1bu
+#define DSP_ROWS 16u
+#define DSP_WINDOW_WORDS 100u
+#define DSP_READ_WORDS                                                                             \
+    (DSP_WINDOW_WORDS +                                                                            \
+     3u) /* the window, then the mirror's counters: sweeps, gaps, ignored records */
 
 #if !defined(DK_MAX_MODULES)
 #error                                                                                             \
@@ -696,11 +703,36 @@ static void span_reset(void)
     }
 }
 
+/* The DSP stats window (PROFILE_DSP): on while the DSP counts, and the clear generation last sent. Only the owner of the span channel may control it. */
+static u8 dsp_on;
+static u32
+    dsp_gen; /* starts at the block count of the load: a generation the DSP cannot be holding from an earlier load of the module */
+
 static void span_stop(void)
 {
     span_elapse();
+    if (dsp_on) {
+        dk_dsp_stats_ctl(0, dsp_gen); /* before the channel goes: the control is the owner's */
+        dsp_on = 0;
+    }
     dk_span_sink_set(0, 0);
     profiling = 0;
+}
+
+/* Own the span channel (the same claim as PROFILE_STATE start): 0 or the error. */
+static int32_t span_claim(void)
+{
+    int32_t r;
+    if (profiling)
+        return 0;
+    if (clk_addr == 0u)
+        return E_PROTO; /* no clock on this device */
+    r = dk_span_sink_set((uint8_t *)span_sink, (uint8_t *)span_clock);
+    if (r != 0)
+        return r; /* DK_E_BUSY: another module owns the span channel */
+    profiling = 1;
+    el_last = DEBUG_READ32(clk_addr);
+    return 0;
 }
 
 static int32_t cmd_profile_state(const u8 *body, u32 len, u8 *out)
@@ -709,14 +741,9 @@ static int32_t cmd_profile_state(const u8 *body, u32 len, u8 *out)
     if (len != 1u)
         return E_MSG;
     if (body[0] == 1u && !profiling) {
-        int32_t r;
-        if (clk_addr == 0u)
-            return E_PROTO; /* no clock on this device */
-        r = dk_span_sink_set((uint8_t *)span_sink, (uint8_t *)span_clock);
+        int32_t r = span_claim();
         if (r != 0)
-            return r; /* DK_E_BUSY: another module owns the span channel */
-        profiling = 1;
-        el_last = DEBUG_READ32(clk_addr);
+            return r;
     } else if (body[0] == 2u) {
         if (profiling)
             span_stop();
@@ -763,6 +790,53 @@ static int32_t cmd_profile_read(const u8 *body, u32 len, u8 *out)
         dk_bytes_put32(o + 12, w->max);
     }
     return (int32_t)(3u + 16u * n);
+}
+
+/* PROFILE_DSP: body u8 op (0 get, 1 start, 2 stop, 3 clear); the reply is the state after the op (layout: sdk/sdk.toml). Start takes the span channel when the
+ * module does not own it yet, as PROFILE_STATE start does; stopping the spans stops the DSP counters. */
+static u32 dsp_words[DSP_READ_WORDS];
+
+static int32_t cmd_profile_dsp(u32 c, u32 seq, const void *vbody, u32 len, void *vout)
+{
+    const u8 *body = vbody;
+    u8 *out = vout;
+    u32 sweep, i;
+    (void)seq;
+    if (c != CMD_PROFILE_DSP)
+        return E_PROTO;
+    if (len != 1u)
+        return E_MSG;
+    if (body[0] > 3u)
+        return E_PROTO;
+    if (body[0] == 1u && !dsp_on) {
+        int32_t r = span_claim();
+        if (r == 0)
+            r = dk_dsp_stats_ctl(1, dsp_gen);
+        if (r != 0)
+            return r;
+        dsp_on = 1;
+    } else if (body[0] == 2u && dsp_on) {
+        dk_dsp_stats_ctl(0, dsp_gen);
+        dsp_on = 0;
+    } else if (body[0] == 3u) {
+        if (!profiling)
+            return DK_E_STATE; /* the control is the span channel owner's: nothing could be sent */
+        dsp_gen++; /* the DSP and the mirror drop what they counted when they see the new generation */
+        dk_dsp_stats_ctl(dsp_on, dsp_gen);
+    }
+    sweep = dk_dsp_stats_read(dsp_words, DSP_READ_WORDS);
+    out[0] = 1; /* version */
+    out[1] = (u8)(dsp_on | (sweep ? 2u : 0u));
+    out[2] = (u8)dsp_gen;
+    out[3] = (u8)DSP_ROWS;
+    dk_bytes_put32(out + 4, sweep);
+    for (i = 0; i < 3u; i++)
+        dk_bytes_put32(out + 8u + 4u * i, dsp_words[DSP_WINDOW_WORDS + i]);
+    if (!sweep)
+        return 20;
+    for (i = 0; i < DSP_WINDOW_WORDS; i++)
+        dk_bytes_put32(out + 20u + 4u * i, dsp_words[i]);
+    return (int32_t)(20u + 4u * DSP_WINDOW_WORDS);
 }
 
 static int32_t cmd_profile(u32 c, u32 seq, const void *body, u32 len, void *out)
@@ -881,7 +955,12 @@ static int32_t init(dk_module_ctx *ctx)
         dk_log(DK_LOG_INFO, "debug: dk_host_register refused (profile)", 0);
         return DK_E_CMD_RANGE;
     }
+    if (dk_host_register(CMD_PROFILE_DSP, 1u, cmd_profile_dsp) != 0) {
+        dk_log(DK_LOG_INFO, "debug: dk_host_register refused (profile dsp)", 0);
+        return DK_E_CMD_RANGE;
+    }
     clk_addr = dk_debug_span_clock(&clk_hz);
+    dsp_gen = dk_time_blocks();
     cl_init(ctx);
     dk_debug_log_sink_set((uint8_t *)sink, (uint8_t *)tick);
     return DK_OK;

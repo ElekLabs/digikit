@@ -58,12 +58,6 @@ impl CoreApi for RealCore {
         r.map = [0; dkrt_sdk::sel::MAP_N];
         update(r, REC_COPY, REC_VALID)
     }
-    unsafe fn guard_faults(&self, ty: u32) -> u32 {
-        crate::watch::guard_faults(ty)
-    }
-    unsafe fn guard_disabled(&self, ty: u32) -> bool {
-        crate::watch::guard_disabled(ty)
-    }
     fn device_id(&self) -> u32 {
         PLATFORM.device_id()
     }
@@ -108,12 +102,6 @@ impl CoreApi for RealCore {
     }
     fn dsp(&self) -> &'static mut DspState {
         crate::dsp::ds()
-    }
-    unsafe fn dsp_info(&self) -> *const u32 {
-        crate::dsp::info()
-    }
-    unsafe fn fx_info(&self) -> *const u32 {
-        crate::dsp::finfo()
     }
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         PLATFORM.info(name_hash)

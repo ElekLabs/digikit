@@ -57,6 +57,7 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
+      "dependsOn": ["plusdrive-format:cli"],
       "inputs": [
         "hostTests",
         "^hostTests",

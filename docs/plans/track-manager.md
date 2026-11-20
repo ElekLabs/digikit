@@ -1,6 +1,6 @@
 # Track manager
 
-Status: phases 0 to 4 are done and host-green on branch `feat/track-manager`; phase 5 (the device proof) is pending. Findings: [151](../findings/151-key-event-path-module-views-and-naming-screen.md).
+Status: phases 0 to 4 are done and host-green on branch `feat/track-manager`; phase 5 (the device proof) is pending. Findings: [155](../findings/155-key-event-path-module-views-and-naming-screen.md).
 
 ## Goal
 
@@ -19,7 +19,7 @@ the active track while it is held. Three reusable pieces come with it: module-ow
 3. **Default binding [TRK]+[YES].** The stock `TrackSelectionView` (pushed while [TRK] is held) consumes only TRIG 1-16,
    REC, PLAY, STOP and, in one case, NO; every other key goes on to the view below (finding 122, static read of
    `vfunc_2`, DT2 `0x40078020`, DN2 `0x40072510`). So a combination is only clean if its last key is swallowed: the
-   `shortcuts` service owns a hook at the entry of the stock view walker (finding 151). The hook only decides; the module's
+   `shortcuts` service owns a hook at the entry of the stock view walker (finding 155). The hook only decides; the module's
    `on` and `off` run in the service's tick. Rebinding comes later.
 4. **Name length 15 characters.**
 5. **The runtime learns no feature.** It gains only one generic device fact (track count). Shortcuts, views and names stay
@@ -31,7 +31,7 @@ the active track while it is held. Three reusable pieces come with it: module-ow
 | --- | --- | --- |
 | `core/ui` (adapter) | L1 | Module views (full screen or overlay), the canvas, SETTINGS rows of modules, text input over the stock naming screen; owner handles; closes a module's views and drops its rows when the runtime's unload observer says the module goes; defers a push until the release of the key that asked for it |
 | `core/services/shortcuts` (new) | L3 | Binding records, held-key state, the key hook, the queue of `on` and `off` calls that its tick makes |
-| Device data + runtime | L2 data | `tracks` and `[panel.keys]` in the device files; `dk_device_track_count()`, `dk_selected_track()` and the key map read from the device object |
+| Device data + runtime | L2 data | `tracks` and `[input.keys]` in the device files; `dk_device_track_count()`, `dk_selected_track()` and the key map read from the device object |
 | `digikit/track-manager` (new tool module) | L4 | The names, the manager screen, the naming flow, the hint overlay |
 
 ## API (SDK additions)
@@ -88,7 +88,7 @@ int dk_shortcut_add(dk_module_ctx *ctx, const dk_shortcut_def *d);   // init onl
 ```
 
 - Keys are logical (`dk_key`, `DK_KEY_TRK`, `DK_KEY_YES`, `DK_KEY_TRIG(n)`): `[keys] order` in `sdk/sdk.toml` is the SDK's
-  append-only list of names (the order is the ABI). A device file maps a name to its panel code (`[panel.keys]`) and may use
+  append-only list of names (the order is the ABI). A device file maps a name to its panel code (`[input.keys]`) and may use
   only listed names; `patchkit gen` writes `sdk/include/dk/gen/keys.h`, the Rust constants, `DeviceProfile.key_codes` and
   `dkrt_dev` `key_codes` from them. A key a device lacks maps to 0. SRC is one key on both devices (the DN2 panel prints SYN).
   No module holds a panel code.
@@ -171,10 +171,10 @@ Device tests run on DT2 and DN2, with no DSP.
 
 | # | Work | Status |
 | --- | --- | --- |
-| 0 | Static: anchors for the view base, the naming screen and the key hook site; second-agent byte check; finding 151 | done |
+| 0 | Static: anchors for the view base, the naming screen and the key hook site; second-agent byte check; finding 155 | done |
 | 1 | `core/ui`: view pool, canvas, SETTINGS rows, logical keys, unload; host tests | done, host-green |
 | 2 | `core/ui`: `dk_ui_text_input` | done, host-green |
-| 3 | `shortcuts` service: crate, record kind, key hook, contract and assembly cases; device facts `tracks`, `[panel.keys]`, `dk_selected_track` | done, host-green |
+| 3 | `shortcuts` service: crate, record kind, key hook, contract and assembly cases; device facts `tracks`, `[input.keys]`, `dk_selected_track` | done, host-green |
 | 4 | `digikit/track-manager`: module, unit tests, device test | done, host-green |
 | 5 | Review, device gate (the three device tests above, gate-smoke, gate-pins on DT2 and DN2), PR | pending |
 

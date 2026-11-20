@@ -297,6 +297,7 @@ const COMPILE_SOURCE = {
     '{workspaceRoot}/modules/core/runtime/abi.toml',
     '{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json',
     '{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json',
+    '{workspaceRoot}/tests/fixtures/ping-vectors.json', // flash_rpc.rs: `include_str!` in its unit test
     '{workspaceRoot}/devices/*.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/pins.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/m68k-cf-none-elf-a2.json',

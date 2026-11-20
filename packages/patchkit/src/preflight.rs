@@ -231,6 +231,13 @@ pub fn preflight(
                 "section {id} ({}) identical to the stock base, stored and decoded: {sizes}",
                 name(id)
             ));
+        } else if fw.device.is_repackable(id) && b.data == p.data && b.dest == p.dest {
+            // the stored form is packed by a module that unpacks it; the verify below checks that the patch record names the module and layout
+            o.ok(format!(
+                "section {id} ({}) stored packed, decoded bytes identical to the stock base: {sizes} (stock {} stored)",
+                name(id),
+                b.stored.len()
+            ));
         } else {
             o.fail(format!(
                 "section {id} ({}) DIFFERS from the stock base (never allowed): stored {}/{} bytes equal {}, decoded {}/{} equal {}, dest {:#x}/{:#x}",

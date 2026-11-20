@@ -445,18 +445,46 @@ fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
 }
 
 #[test]
-fn the_machine_types_of_a_module_and_the_guard_counts_are_what_the_runtime_exports_ask_for() {
-    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them() {
+    // TEST_LOCK first (this file's statics, as its neighbours), then the contract lock (the service row statics)
+    let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = dkrt_test_support::contract::locked();
     let core = core();
+    dkrt_svc_machines::rows::reset();
+    let first = dkrt_abi::profiles::DT2.dyn_type_first;
+    // module record 1 (owner 2) has a machine row (type first + 3) and a voice row of another type (a DSP-only machine) and one of the type of its machine row
     rstate().mach_owner[3] = 2;
-    let mut out = [0u8; 8];
-    let n = dkrt_svc_machines::records::owned_ids(&core, 2, &mut out);
-    assert_eq!(n, 1);
-    assert_eq!(out[0], dkrt_abi::profiles::DT2.dyn_type_first as u8 + 3);
-    assert_eq!(dkrt_svc_machines::records::owned_ids(&core, 5, &mut out), 0);
-    let g = unsafe { dkrt_svc_machines::records::guard_state(&core, 16) };
-    assert_eq!((g.faults, g.disabled), unsafe {
-        (core.guard_faults(16), core.guard_disabled(16))
-    });
+    let v = dkrt_svc_machines::rows::vrows();
+    for (k, t) in [(0usize, first + 3), (1, 0x1e)] {
+        v.row_owner[k] = 2;
+        v.row_type[k] = t;
+    }
+    v.mod_rows[1] = 0b11;
+    let m = dkrt_svc_machines::records::module_info(&core, 2);
+    assert_eq!(
+        (m.rows, m.nt, m.types[0], m.types[1]),
+        (0b11, 2, first as u8 + 3, 0x1e),
+        "the machine row's type, then the voice row's type that no machine row names (the shared type once)"
+    );
+    // a module with neither
+    assert_eq!(
+        dkrt_svc_machines::records::module_info(&core, 5),
+        Default::default()
+    );
+    // the guard's counts of its types
+    let mut w = [0u32; dkrt_sdk::fault::DIAG_WORDS];
+    w[17] = 3 | 1 << 24;
+    w[18] = 0x1e;
+    w[23] = 0x1e;
+    unsafe { <Machines as Service<FakeCore>>::diag(&core, &w) };
+    let m = dkrt_svc_machines::records::module_info(&core, 2);
+    assert_eq!((m.faults, m.guard_off), (3, 1));
+    // at most 8 types
+    for k in 0..8 {
+        v.row_owner[k] = 2;
+        v.row_type[k] = 0x40 + k as u32;
+    }
+    assert_eq!(dkrt_svc_machines::records::module_info(&core, 2).nt, 8);
     rstate().mach_owner[3] = 0;
+    dkrt_svc_machines::rows::reset();
 }

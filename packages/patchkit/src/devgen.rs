@@ -42,6 +42,8 @@ struct Doc {
     input: Option<InputDoc>,
     panel: Option<PanelDoc>,
     fx: Option<FxDoc>,
+    #[serde(default)]
+    patch_sets: BTreeMap<String, Vec<String>>,
 }
 /// `[fx]`: the facts of the effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
 /// effect values, which of them the firmware does not use (effect row k owns `value_indices[8k .. 8k + 8]`), the page numbering and the stock
@@ -88,7 +90,40 @@ struct FxDoc {
 #[derive(Deserialize)]
 struct InputDoc {
     backend: String,
+    /// `[input.keys]`: logical key name = the key's id in the firmware's key events (the id at +0xc of the event). The one source of the C names (`dk_key`), the
+    /// profile's key map and `DkrtDevice.key_codes`. These are firmware key indices: they equal the panel code on some devices and differ
+    /// on others (finding 153), and they are not the wire codes (channel, bit) that `dk_input_key` injects.
+    #[serde(default)]
+    keys: BTreeMap<String, u64>,
+    /// `[input.key_flags]`: the bits of the key event's flags word (+0x10), named by meaning.
+    #[serde(default)]
+    key_flags: Option<KeyFlagsDoc>,
 }
+/// `[input.key_flags]`: bit numbers (0 to 31) of the flags word of a key event: `press` is set on a press and clear on a release, `func` is set while FUNC is held,
+/// `repeat` marks a held key repeating, `release` is set on a release (the stock list handler acts on it).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeyFlagsDoc {
+    press: u64,
+    func: u64,
+    repeat: u64,
+    release: u64,
+}
+/// The value of `UI_KEY_YES2` is the id of `LEVEL_PUSH`: a second key that acts as YES (the stock handler treats it like YES).
+/// core/ui's four keys, by the names of `[input.keys]`: the constant they generate, and the key name. A device file without one of them is refused.
+const UI_KEY_NOTES: [&str; 4] = [
+    "[input.keys] YES (the key id of YES in a key event)",
+    "[input.keys] LEVEL_PUSH (a second YES key)",
+    "[input.keys] NO (the key id of NO)",
+    "[input.keys] RIGHT (the key id of RIGHT)",
+];
+const UI_KEYS: [(&str, &str); 4] = [
+    ("UI_KEY_YES", "YES"),
+    ("UI_KEY_YES2", "LEVEL_PUSH"),
+    ("UI_KEY_NO", "NO"),
+    ("UI_KEY_RIGHT", "RIGHT"),
+];
+
 /// `[panel]`: the key codes: codes 1 to 8 * `linear_channels` are linear (code = channel * 8 + bit + 1), `[panel.exceptions]` lists the others as
 /// code = [channel, bit]. Only these numbers are generated; the groups are for hosts that draw the panel.
 #[derive(Deserialize)]
@@ -99,9 +134,6 @@ struct PanelDoc {
     encoders: u64,
     #[serde(default)]
     exceptions: BTreeMap<String, [u64; 2]>,
-    /// `[panel.keys]`: logical key name = panel code. The one source of the C names (`dk_key`), the profile's key map and `DkrtDevice.key_codes`.
-    #[serde(default)]
-    keys: BTreeMap<String, u64>,
 }
 #[derive(Deserialize)]
 struct AdapterDoc {
@@ -221,6 +253,16 @@ struct Store {
 #[derive(Debug, Default)]
 pub struct Facts {
     docs: BTreeMap<String, Entry>,
+    /// Every device file (a runtime target or not): the tables a module's `needs_device` can name, and the patch sets.
+    devices: BTreeMap<String, DeviceTables>,
+}
+
+#[derive(Debug)]
+struct DeviceTables {
+    /// The tables of the device file as dotted paths (`input`, `input.keys`).
+    tables: std::collections::BTreeSet<String>,
+    /// `[patch_sets]`: the root modules of each named set.
+    patch_sets: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -235,7 +277,7 @@ struct Entry {
     adapter: Option<AdapterF>,
     sample_pool: Option<SamplePoolF>,
     input: InputF,
-    /// `[panel.keys]`: logical key name to panel code (empty: the device has no key names).
+    /// `[input.keys]`: logical key name to the key's id in the firmware's key events (empty: the device has no key names).
     keys: BTreeMap<String, u64>,
     fx: FxF,
     profile: ProfileF,
@@ -346,6 +388,10 @@ struct InputF {
     encoders: u64,
     /// (code, channel, bit)
     exceptions: Vec<[u64; 3]>,
+    /// The ids of the keys core/ui compares (`UI_KEYS` order: yes, yes2, no, right), from `[input.keys]`.
+    ui_keys: [u64; 4],
+    /// The flag bits of a key event (`[input.key_flags]`: press, func, repeat, release).
+    key_flags: [u64; 4],
 }
 #[derive(Debug)]
 struct SamplePoolF {
@@ -424,6 +470,7 @@ struct StoreF {
 impl Facts {
     pub fn from_texts<'a>(texts: impl IntoIterator<Item = &'a str>) -> Result<Facts> {
         let mut docs = BTreeMap::new();
+        let mut devices = BTreeMap::new();
         let texts: Vec<&str> = texts.into_iter().collect();
         let models = crate::typed::Models::from_texts(texts.iter().copied())?;
         for t in texts {
@@ -434,6 +481,18 @@ impl Facts {
             }
             let d: Doc = toml::from_str(t)?;
             let short = d.device.short.clone();
+            if devices
+                .insert(
+                    short.clone(),
+                    DeviceTables {
+                        tables: table_paths(&table),
+                        patch_sets: d.patch_sets.clone(),
+                    },
+                )
+                .is_some()
+            {
+                return Err(err!("two device files describe {short}"));
+            }
             // only a runtime target (a file with [digikit]) has shared constants; an identity-only or patch-only device is skipped
             let Some(k) = d.digikit else {
                 continue;
@@ -507,8 +566,8 @@ impl Facts {
                 k.dsp_area_bytes.unwrap_or(0),
                 &crate::sdkgen::limits_max(),
             )?;
-            let keys = key_facts(&short, d.panel.as_ref().map(|p| &p.keys))?;
-            let input = input_facts(&short, d.input, d.panel)?;
+            let keys = key_facts(&short, d.input.as_ref().map(|i| &i.keys))?;
+            let input = input_facts(&short, d.input, d.panel, &keys)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
             let (adapter_machine, sample_pool) = match d.adapter {
                 Some(a) => (a.machine, a.sample_pool),
@@ -579,7 +638,7 @@ impl Facts {
                 return Err(err!("two device files describe {short}"));
             }
         }
-        Ok(Facts { docs })
+        Ok(Facts { docs, devices })
     }
 
     /// The logical key names in the order of their numbers: `[keys] order` of sdk/sdk.toml (`DK_KEY_NONE` is 0, the names follow from 1). A device file may use only
@@ -589,7 +648,7 @@ impl Facts {
         for (dev, e) in &self.docs {
             if let Some(n) = e.keys.keys().find(|n| !names.contains(n)) {
                 return Err(err!(
-                    "{dev}: [panel.keys] {n}: not a name of [keys] order in sdk/sdk.toml (add it at the end of that list)"
+                    "{dev}: [input.keys] {n}: not a name of [keys] order in sdk/sdk.toml (add it at the end of that list)"
                 ));
             }
         }
@@ -768,7 +827,7 @@ fn fx_facts(short: &str, f: Option<FxDoc>, fx_slots: u64, send_slots: u64) -> Re
     })
 }
 
-/// The logical keys of `[panel.keys]`: a name is capital letters, digits and `_` (it becomes `DK_KEY_<name>`), a code is 1 to 255 and names one key.
+/// The logical keys of `[input.keys]`: a name is capital letters, digits and `_` (it becomes `DK_KEY_<name>`), a code is 1 to 255 and names one key.
 fn key_facts(short: &str, keys: Option<&BTreeMap<String, u64>>) -> Result<BTreeMap<String, u64>> {
     let Some(keys) = keys else {
         return Ok(BTreeMap::new());
@@ -781,17 +840,17 @@ fn key_facts(short: &str, keys: Option<&BTreeMap<String, u64>>) -> Result<BTreeM
                 .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
         if !ok {
             return Err(err!(
-                "{short}: [panel.keys] {name:?}: a name is capital letters, digits and _, starting with a letter"
+                "{short}: [input.keys] {name:?}: a name is capital letters, digits and _, starting with a letter"
             ));
         }
         if !(1..=255).contains(code) {
             return Err(err!(
-                "{short}: [panel.keys] {name} = {code}: a code is 1 to 255"
+                "{short}: [input.keys] {name} = {code}: a code is 1 to 255"
             ));
         }
         if let Some(other) = seen.insert(*code, name) {
             return Err(err!(
-                "{short}: [panel.keys] {other} and {name} have the same code {code}"
+                "{short}: [input.keys] {other} and {name} have the same code {code}"
             ));
         }
     }
@@ -806,7 +865,12 @@ fn key_slots() -> Result<usize> {
         .ok_or_else(|| err!("core/runtime/abi.toml has no DEV_KEYS"))
 }
 
-fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<InputF> {
+fn input_facts(
+    short: &str,
+    i: Option<InputDoc>,
+    p: Option<PanelDoc>,
+    keys: &BTreeMap<String, u64>,
+) -> Result<InputF> {
     let Some(i) = i else {
         return Ok(InputF::default());
     };
@@ -849,7 +913,44 @@ fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<
         }
         exceptions.push([code, *ch, *bit]);
     }
+    let Some(f) = &i.key_flags else {
+        return Err(err!(
+            "{short}: [input] needs [input.key_flags] (press, func, repeat and release: bit numbers of the key event's flags word)"
+        ));
+    };
+    let key_flags = [f.press, f.func, f.repeat, f.release];
+    for (n, (what, bit)) in ["press", "func", "repeat", "release"]
+        .iter()
+        .zip(key_flags)
+        .enumerate()
+    {
+        if bit >= 32 {
+            return Err(err!(
+                "{short}: [input.key_flags] {what} = {bit}: a bit number of the 32-bit flags word, 0 to 31"
+            ));
+        }
+        if let Some(other) = key_flags[..n].iter().position(|b| *b == bit) {
+            return Err(err!(
+                "{short}: [input.key_flags] {what} and {} are both bit {bit}",
+                ["press", "func", "repeat", "release"][other]
+            ));
+        }
+    }
+    let mut ui_keys = [0u64; 4];
+    // A device that names keys names the four that core/ui needs: it compares the ids of the key events with them.
+    if !keys.is_empty() {
+        for (slot, (_, name)) in UI_KEYS.iter().enumerate() {
+            let Some(id) = keys.get(*name) else {
+                return Err(err!(
+                    "{short}: [input.keys] has no {name}: core/ui needs YES, NO, RIGHT and LEVEL_PUSH (the second YES key)"
+                ));
+            };
+            ui_keys[slot] = *id;
+        }
+    }
     Ok(InputF {
+        ui_keys,
+        key_flags,
         backend: backend as u64 + 1,
         linear_channels: p.linear_channels,
         button_channels: p.button_channels,
@@ -1432,6 +1533,22 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         "[panel] button_channels (the button decoder's tables: a key channel is below it)",
     ));
     v.push(c("PANEL_ENCODERS", inp.encoders, "[panel] encoders"));
+    for (slot, (name, key)) in UI_KEYS.iter().enumerate() {
+        v.push(C {
+            name,
+            value: inp.ui_keys[slot] as i64,
+            note: UI_KEY_NOTES[slot],
+        });
+        let _ = key;
+    }
+    for (name, value, note) in [
+        ("KEY_FLAG_PRESS", inp.key_flags[0], "[input.key_flags] press (set on a press, clear on a release)"),
+        ("KEY_FLAG_FUNC", inp.key_flags[1], "[input.key_flags] func (set while FUNC is held)"),
+        ("KEY_FLAG_REPEAT", inp.key_flags[2], "[input.key_flags] repeat (a held key repeating)"),
+        ("KEY_FLAG_RELEASE", inp.key_flags[3], "[input.key_flags] release (set on a release)"),
+    ] {
+        v.push(c(name, value, note));
+    }
     v.push(c(
         "PANEL_EXC_N",
         inp.exceptions.len() as u64,
@@ -1722,12 +1839,12 @@ fn block_cycles(clock_hz: u64, blocks_per_second: u64) -> Option<u64> {
     (blocks_per_second != 0).then(|| (clock_hz + blocks_per_second / 2) / blocks_per_second)
 }
 
-/// `sdk/include/dk/gen/keys.h`: the logical key names of the device files (`[panel.keys]`) as `dk_key` numbers. A module names a key with these and holds no
+/// `sdk/include/dk/gen/keys.h`: the logical key names of the device files (`[input.keys]`) as `dk_key` numbers. A module names a key with these and holds no
 /// panel code; the profile and `dkrt_dev` map the number to the device's code. `DK_KEY_NONE` is 0 and a name that a device lacks maps to 0 there.
 pub fn keys_h(facts: &Facts) -> Result<String> {
     let names = facts.key_names()?;
     let mut s = format!(
-        "/* {NOTE_SDK} */\n/* sdk/include/dk/gen/keys.h -- the logical keys: panel key names of the device files ([panel.keys]), numbered in the order below. */\n#ifndef DK_GEN_KEYS_H\n#define DK_GEN_KEYS_H\n\n#include <stdint.h>\n\n/* A logical key: DK_KEY_NONE or a DK_KEY_* number. */\ntypedef uint32_t dk_key;\n\n#define DK_KEY_NONE 0\n"
+        "/* {NOTE_SDK} */\n/* sdk/include/dk/gen/keys.h -- the logical keys: panel key names of the device files ([input.keys]), numbered in the order below. */\n#ifndef DK_GEN_KEYS_H\n#define DK_GEN_KEYS_H\n\n#include <stdint.h>\n\n/* A logical key: DK_KEY_NONE or a DK_KEY_* number. */\ntypedef uint32_t dk_key;\n\n#define DK_KEY_NONE 0\n"
     );
     for (i, n) in names.iter().enumerate() {
         let _ = writeln!(s, "#define DK_KEY_{n} {}", i + 1);
@@ -1758,7 +1875,7 @@ pub fn keys_h(facts: &Facts) -> Result<String> {
 }
 
 const NOTE_SDK: &str =
-    "Generated by `patchkit gen` from the device files ([panel.keys]). Do not edit.";
+    "Generated by `patchkit gen` from the device files ([input.keys]). Do not edit.";
 
 /// The runtime's ABI file: the constants and the `DkrtDevice` struct that this generator writes the device object from.
 const ABI_TEXT: &str = include_str!("../../../modules/core/runtime/abi.toml");
@@ -1816,7 +1933,7 @@ fn dkdv_fields() -> Result<Vec<(String, usize)>> {
 }
 
 /// The constant that fills a `DkrtDevice` field (the four header words are not in this table).
-const DKDV_VALUE: [(&str, &str); 12] = [
+const DKDV_VALUE: [(&str, &str); 16] = [
     ("console_uart_base", "CONSOLE_UART_BASE"),
     ("ddr_uncached_alias", "DDR_UNCACHED_ALIAS"),
     ("ddr_cached_base", "DDR_CACHED_BASE"),
@@ -1829,6 +1946,10 @@ const DKDV_VALUE: [(&str, &str); 12] = [
     ("dyn_type_first", "DYN_TYPE_FIRST"),
     ("dyn_types", "DYN_TYPES"),
     ("tracks", "TRACKS"),
+    ("key_flag_press", "KEY_FLAG_PRESS"),
+    ("key_flag_func", "KEY_FLAG_FUNC"),
+    ("key_flag_repeat", "KEY_FLAG_REPEAT"),
+    ("key_flag_release", "KEY_FLAG_RELEASE"),
 ];
 
 /// The array field of `DkrtDevice` that holds the panel code of each logical key (index = the key's number).
@@ -1909,7 +2030,7 @@ const NOTE: &str =
 /// (`device.s`, `dkrt_dev`) and what the host tests' `FakePlatform` and a service (through the device id) take their facts from, so they cannot differ.
 fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
     let mut s = format!(
-        "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::DeviceProfile;\n"
+        "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::{{DeviceProfile, KeyFlagBits}};\n"
     );
     let mut names = vec![];
     for (dev, e) in &facts.docs {
@@ -1949,7 +2070,7 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
         };
         let _ = writeln!(
             s,
-            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n}};",
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n    key_flags: KeyFlagBits {{ press: {}, func: {}, repeat: {}, release: {} }},\n}};",
             v("DEVICE_ID")?,
             hex(v("DEVICE_NAME_WORD")? as i64),
             e.digikit.samples_in_store,
@@ -1968,6 +2089,10 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
             v("DYN_TYPE_FIRST")?,
             v("DYN_TYPES")?,
             v("TRACKS")?,
+            v("KEY_FLAG_PRESS")?,
+            v("KEY_FLAG_FUNC")?,
+            v("KEY_FLAG_REPEAT")?,
+            v("KEY_FLAG_RELEASE")?,
         );
         names.push(up);
     }
@@ -1993,6 +2118,26 @@ fn c_shared(module: &str) -> String {
         max.dsp_area_bytes / 4,
         crate::sdkgen::dsp_slot_words()
     )
+}
+
+/// The `[[repack]]` entries of a module as C macros (`REPACK_<ROLE>_DEST`, `_STAGE_END`, `_LEN` and `_SHA256`, an initializer list of 32 bytes): the layout
+/// that patchkit checks the stored stream against is the one the module's code uses, from one source.
+fn c_repack(module: &str, repacks: &[crate::module::RepackDef]) -> Result<String> {
+    if repacks.is_empty() {
+        return Err(err!("{module}: a `c-repack` gen needs a [[repack]]"));
+    }
+    let mut s = format!("/* {module}: {NOTE}. The [[repack]] of module.toml. */\n");
+    for r in repacks {
+        let role = r.role.to_ascii_uppercase();
+        let sha = crate::error::unhex(&r.sha256)
+            .map_err(|_| err!("{module}: [[repack]] sha256 is not hex"))?;
+        let bytes: Vec<String> = sha.iter().map(|b| format!("{b:#04x}")).collect();
+        let _ = writeln!(s, "#define REPACK_{role}_DEST {:#x}u", r.dest);
+        let _ = writeln!(s, "#define REPACK_{role}_STAGE_END {:#x}u", r.stage_end);
+        let _ = writeln!(s, "#define REPACK_{role}_LEN {}u", r.len);
+        let _ = writeln!(s, "#define REPACK_{role}_SHA256 {{ {} }}", bytes.join(", "));
+    }
+    Ok(s)
 }
 
 fn gas(module: &str, dev: &str, cs: &[C], emit: Option<&[&str]>) -> String {
@@ -2122,7 +2267,7 @@ fn check_sources(
     ))
 }
 
-/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-`; a module that lists neither is for every device.
+/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-` (TODO: the port file format, devices/ports/, has no device field; the prefix is the identity, as in apps/web/src/data/modules.ts; finding 153); a module that lists neither is for every device.
 fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     let prefix = format!("{short}-");
     let listed = m.module.ports.iter().chain(m.targets.keys());
@@ -2136,11 +2281,84 @@ fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     !any
 }
 
-/// The files a module asks for with `[[gen]]` (empty: it asks for none).
+/// The tables of a device file as dotted paths (`input`, `input.keys`).
+fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
+    fn walk(t: &toml::Table, prefix: &str, out: &mut std::collections::BTreeSet<String>) {
+        for (k, v) in t {
+            if let toml::Value::Table(sub) = v {
+                let path = if prefix.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{prefix}.{k}")
+                };
+                out.insert(path.clone());
+                walk(sub, &path, out);
+            }
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    walk(t, "", &mut out);
+    out
+}
+
+/// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.keys`): every device (runtime target or not)
+/// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
+/// module should run on. This whole-library check (`patchkit gen`) also refuses a module id of a patch set that the library does not have.
+pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
+    for (dev, e) in &facts.devices {
+        for (set, roots) in &e.patch_sets {
+            let (ids, _) = lib
+                .with_requires(roots)
+                .map_err(|x| err!("{dev}: patch set {set}: {x}"))?;
+            for id in ids {
+                let m = lib
+                    .get(&id)
+                    .ok_or_else(|| err!("{dev}: patch set {set}: unknown module {id}"))?;
+                check_needs(dev, set, &id, &m.manifest.module.needs_device, e)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The same check for one module and the tables it declares (`needs`), for the generator of the module, `build` and `pack`. A device is checked when a patch set
+/// lists the module; a set that cannot be resolved in this library (`pack --manifest`: no core modules) counts when the module is one of its roots, and is skipped
+/// otherwise. Other modules are not looked at, so a device without a table never stops the build of a module that does not need it.
+pub fn check_module_tables(lib: &Library, facts: &Facts, id: &str, needs: &[String]) -> Result<()> {
+    if needs.is_empty() {
+        return Ok(());
+    }
+    for (dev, e) in &facts.devices {
+        for (set, roots) in &e.patch_sets {
+            let includes = match lib.with_requires(roots) {
+                Ok((ids, _)) => ids.iter().any(|i| i == id),
+                Err(_) => roots.iter().any(|r| r == id),
+            };
+            if includes {
+                check_needs(dev, set, id, needs, e)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_needs(dev: &str, set: &str, id: &str, needs: &[String], e: &DeviceTables) -> Result<()> {
+    for need in needs {
+        if !e.tables.contains(need) {
+            return Err(err!(
+                "{dev}: patch set {set} includes {id}, which needs [{need}] in the device file"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The files a module asks for with `[[gen]]` (empty: it asks for none). A module with `needs_device` is first checked against every device that patches it in.
 pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFile>> {
     let m = lib
         .get(module)
         .ok_or_else(|| err!("unknown module {module}"))?;
+    check_module_tables(lib, facts, module, &m.manifest.module.needs_device)?;
     if m.manifest.gens.is_empty() {
         return Ok(vec![]);
     }
@@ -2225,6 +2443,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), rust_profiles(module, lib, facts)?));
+            }
+            "c-repack" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `c-repack` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), c_repack(module, &m.manifest.repack)?));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {

@@ -358,10 +358,10 @@ The rejected runs include `0x4031041c` (3045 B, referenced by
 1024-1376 B, each a live buffer with one reference.
 
 From the MCF5441x reference manual: CACR is written once, `0xa50ce100`
-(caches enabled and invalidated in the same write), and ACR0 once,
+(instruction and branch caches enabled and invalidated, data cache default cache-inhibited, in the same write), and ACR0 once,
 `0x4007e020` (`0x40000000-0x47ffffff`, copyback cacheable, not
-write-protected); there is no ACR1-3 write. Flashed cave code is in SDRAM
-before the caches are enabled, so it needs no cache maintenance.
+write-protected); there is no ACR1-3 write. At MAIN's entry the instruction cache and the branch cache are already on (the bootstrap leaves `CACR = 0x0008c000`),
+the data cache is off. Flashed cave code is in SDRAM before any instruction is fetched from it, so it needs no cache maintenance.
 
 
 ## Bootstrap on the ColdFire core (spike 0.2) **[V]** unless marked
@@ -389,7 +389,7 @@ debug-register write) comes from a stage outside section 2, so the model passes 
    chords (tested at 0x80000c2a and 0x80000d92) are evaluated only when the upgrade
    routine 0x80001c48 returned non-zero; with a stock return of 0 only FUNC decides.
 3. 0x80000596 finds section 3 in the flash container table (0x80020 + 0x10*i), copies
-   it to 0x40400000, depacks it (0x80000432) to 0x40000400 and 0x80000ef4 calls through
+   it to the device's stage (0x40400000 on the Digitakt II and Digitone II; **0x40200000 on the Syntakt**, finding 152), depacks it (0x80000432) to 0x40000400 and 0x80000ef4 calls through
    the first longword. **Nothing checks a checksum or HMAC of MAIN OS** (the compares in
    0x800053ec are the container magic 'ELE3' and 0x2b, the Digitakt II value; the
    Digitone II bootstrap compares 0x34, `moveq #0x34` at 0x80005424 **[C]**), and a missing section is ignored.
@@ -627,10 +627,10 @@ caches are enabled and invalidated, so it needs no cache maintenance. A module
 that DMAs from its region must use the `+0x08000000` alias. Module bss is not
 zeroed by the reset (the region is outside the clear): the loader must do it.
 
-**Staging limit [V].** The bootstrap stages the packed MAIN OS at `0x40400000`
-(`pea 0x40400000` at `0x800005c6` and `0x80000636`) and unpacks to `0x40000400`, so an image longer
-than `0x3FFC00` = 4,193,280 bytes writes over the staged stream while it is still
-being read. That is harmless while the stream is read ahead of the write point:
+**Staging limit [V].** The bootstrap stages the packed MAIN OS at the device's stage (`[patch] main_stage` of the device file: `0x40400000` on the Digitakt II and
+Digitone II (`pea 0x40400000` at `0x800005c6` and `0x80000636`), `0x40200000` on the Syntakt, finding 152) and unpacks to `0x40000400` in place, so an unpacked image longer
+than the stage minus the load address (`0x3FFC00` = 4,193,280 bytes on the Digitakt II, `0x1FFC00` = 2,096,128 on the Syntakt) writes over the staged stream while it is still
+being read. patchkit refuses an image whose margin is below `main_margin_min` (8 KiB) and stores a literal tail when that is needed. That is harmless while the stream is read ahead of the write point:
 `tools.firmware.aplibpack.inplace_margin(stream)` returns the smallest slack. For a DT2 1.16
 image with 1 MiB of incompressible payload appended it is 2.1 MB with the
 packer below and 4.7 MB store-only. It is a hard limit if a section is stored

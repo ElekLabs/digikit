@@ -82,6 +82,10 @@ function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+/** Rows and words of the DSP stats window (P8d): a header of 4 words, then 16 rows of 6 words. */
+const DSP_STATS_ROWS = 16;
+const DSP_STATS_WORDS = 4 + 6 * DSP_STATS_ROWS;
+
 /**
  * A used poll slot of the runtime (`dkrt_poll_add`), from PROFILE_STATE: the module record that registered the function (`'runtime'`: the firmware
  * image, a patched-in core module) and the function's address. An empty slot is `undefined`.
@@ -99,6 +103,31 @@ export interface ProfileSpan {
   calls: number;
   sumTicks: bigint;
   maxTicks: number;
+}
+
+/** One row of the DSP stats window (P8d): a DSP dispatch row, 0 to 7 machines and 8 to 15 effects. Cycles are in DSP cycles (the emulator: instructions). */
+export interface DspRow {
+  row: number;
+  kind: 'machine' | 'effect';
+  calls: number;
+  sumCycles: bigint;
+  maxCall: number;
+  maxBlock: number;
+}
+
+/** The state and the newest complete sweep of the DSP stats window, from PROFILE_DSP. `sweep` is absent until a sweep of the current generation is complete. */
+export interface DspStats {
+  on: boolean;
+  generation: number;
+  /** The mirror counters: complete sweeps, sweeps ended by a gap, records ignored. */
+  counts: { sweeps: number; gaps: number; ignored: number };
+  sweep?: {
+    number: number;
+    blocks: number;
+    maxStockBlockDelta: number;
+    overruns: number;
+    rows: DspRow[];
+  };
 }
 
 export class DkError extends Error {
@@ -601,6 +630,14 @@ export interface DkInfoFull extends DkInfo {
   runtime: number;
   caps: number | null;
   card_read_only: boolean;
+  /** INFO flags bit 3: the debug module's log sink is present. */
+  log_sink: boolean;
+  /** INFO flags bit 4: the runtime found a fault record from an earlier run (`crate::fault::seen`). Reading it does not send the FAULT command. */
+  fault_found: boolean;
+  /** The card's capacity in 512-byte sectors as the firmware's driver reports it (0xFFFFFFFF: the driver is not ready), or null when the runtime does not report it. */
+  card_sectors: number | null;
+  /** The card check's state: 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small; null when the runtime does not report it. */
+  card_state: number | null;
   /** The id of the flashed image as 16 hex digits (runtime 0.5.2 and later; patchkit stamps it), or null when the reply has none. */
   image_id: string | null;
   /** The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), or null when the runtime does not report it. */
@@ -1136,6 +1173,8 @@ export class DkSession {
     let imageId: string | null = null;
     let svcAbi: number | null = null;
     let fwId: string | null = null;
+    let cardSectors: number | null = null;
+    let cardState: number | null = null;
     if (b.length >= at + 9 + 8 + 8) {
       runtime = u32(b, at + 9 + 8);
       caps = u32(b, at + 9 + 12);
@@ -1147,8 +1186,16 @@ export class DkSession {
       if (caps !== null && ((caps >>> GCAP.SVC_ABI) & 1) === 1 && b.length >= at + 9 + 24 + 4)
         svcAbi = u32(b, at + 9 + 24);
       // then the firmware identity (8 bytes), when the capability FW_ID is set
-      if (svcAbi !== null && caps !== null && ((caps >>> GCAP.FW_ID) & 1) === 1 && b.length >= at + 9 + 28 + 8)
-        fwId = Array.from(b.subarray(at + 9 + 28, at + 9 + 36), (x) => x.toString(16).padStart(2, '0')).join('');
+      let o = at + 9 + 28;
+      if (svcAbi !== null && caps !== null && ((caps >>> GCAP.FW_ID) & 1) === 1 && b.length >= o + 8) {
+        fwId = Array.from(b.subarray(o, o + 8), (x) => x.toString(16).padStart(2, '0')).join('');
+        o += 8;
+      }
+      // then the card's capacity in sectors and the card check's state (4 bytes each)
+      if (b.length >= o + 8) {
+        cardSectors = u32(b, o);
+        cardState = u32(b, o + 4);
+      }
     }
     return {
       protocol,
@@ -1158,12 +1205,16 @@ export class DkSession {
       image_id: imageId,
       svc_abi: svcAbi,
       fw_id: fwId,
+      card_sectors: cardSectors,
+      card_state: cardState,
       port,
       free_bytes: free,
       max_chunk: maxChunk,
       safe_mode: (flags & 1) !== 0,
       upload_open: (flags & 2) !== 0,
       card_read_only: (flags & 4) !== 0,
+      log_sink: (flags & 8) !== 0,
+      fault_found: (flags & 16) !== 0,
     };
   }
 
@@ -1476,6 +1527,39 @@ export class DkSession {
       rows.push({ calls: view.getUint32(at), sumTicks: view.getBigUint64(at + 4), maxTicks: view.getUint32(at + 12) });
     }
     return { first: u16(b, 0), rows };
+  }
+  /** PROFILE_DSP (debug module): `get` the DSP stats, `start` or `stop` the counters, or `clear` them (a new clear generation). The reply is the state after the op. */
+  async profileDsp(op: 'get' | 'start' | 'stop' | 'clear' = 'get', quick: Quick = false): Promise<DspStats> {
+    const code = { get: 0, start: 1, stop: 2, clear: 3 }[op];
+    const b = await this.ok(SERVICE_CMD.PROFILE_DSP, 'profile dsp', Uint8Array.of(code), quick);
+    if (b.length < 20 || b[0] !== 1 || b[3] !== DSP_STATS_ROWS)
+      throw new DkError({ error: 'profile dsp: malformed reply', kind: 'protocol' });
+    const hasSweep = (b[1]! & 2) !== 0;
+    if (hasSweep && b.length < 20 + 4 * DSP_STATS_WORDS)
+      throw new DkError({ error: 'profile dsp: malformed reply', kind: 'protocol' });
+    const out: DspStats = {
+      on: (b[1]! & 1) !== 0,
+      generation: b[2]!,
+      counts: { sweeps: u32(b, 8), gaps: u32(b, 12), ignored: u32(b, 16) },
+    };
+    if (hasSweep) {
+      const view = new DataView(b.buffer, b.byteOffset, b.length);
+      const w = (i: number) => view.getUint32(20 + 4 * i);
+      const rows: DspRow[] = [];
+      for (let i = 0; i < DSP_STATS_ROWS; i++) {
+        const at = 4 + 6 * i;
+        rows.push({
+          row: i,
+          kind: i < 8 ? 'machine' : 'effect',
+          calls: w(at),
+          sumCycles: (BigInt(w(at + 2)) << 32n) | BigInt(w(at + 1)),
+          maxCall: w(at + 3),
+          maxBlock: w(at + 4),
+        });
+      }
+      out.sweep = { number: u32(b, 4), blocks: w(0), maxStockBlockDelta: w(1), overruns: w(2), rows };
+    }
+    return out;
   }
   /**
    * All span rows: the state, then pages of PROFILE_READ. Row layout: 0..M-1 module records, then 3 service phases (early, late, last), then

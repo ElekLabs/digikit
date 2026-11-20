@@ -9,16 +9,23 @@ export const RPC_PING = 0x01;
 export const RPC_SOFTWARE_VERSION = 0x02;
 
 /**
- * The model name in the reply of Ping. The payload is `u8 blobLen`, the blob of request types the device answers, then NUL-ended strings; the first
- * string is the name. The blob and what follows the name are not read. Undefined when the reply is empty, cut short or has an empty name.
+ * The model name in the reply of Ping. Two layouts, told apart by the framing and not by their content:
+ * - plain: `u8 blobLen`, the blob of request types, NUL-ended strings (the first is the name);
+ * - length-prefixed: `u8 rest`, then the plain layout, where `rest` is the number of bytes after the `blobLen` byte (the Syntakt 1.42 reply,
+ *   `1e 16 <22 types> "Syntakt" 00`, finding 144). A payload whose first byte is two less than its length is this one.
+ * Undefined when the payload is empty, cut short, or the first string is not printable ASCII. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parse_ping` of
+ * `packages/patchkit/src/flash_rpc.rs`.
  */
 export function parsePing(payload: Uint8Array): string | undefined {
-  const first = payload[0];
+  const body = payload.length >= 2 && payload[0] === payload.length - 2 ? payload.subarray(1) : payload;
+  const first = body[0];
   if (first === undefined) return undefined;
   const start = 1 + first;
-  const end = payload.indexOf(0, start);
-  if (start >= payload.length || end < 0 || end === start) return undefined;
-  return new TextDecoder('latin1').decode(payload.subarray(start, end));
+  const end = body.indexOf(0, start);
+  if (start >= body.length || end < 0 || end === start) return undefined;
+  const name = body.subarray(start, end);
+  // a name is printable text: an unknown or damaged reply gives no name, not junk
+  return name.every((b) => b >= 0x20 && b < 0x7f) ? new TextDecoder('latin1').decode(name) : undefined;
 }
 
 /** The OS version in the reply of SoftwareVersion (`"00"`, `"79"`, `"1.17"`: the string that looks like a version), or undefined. */

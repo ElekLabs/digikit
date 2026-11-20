@@ -88,6 +88,31 @@ main = 3
 dsp = 7
 readonly = [2, 4, 8]
 
+# MIDI map the calibration runner and the tests use (packages/dk-session `midi-out.ts`, `@digi/devices` `midi`). Source: Digitakt II manual (OS 1.03A) Appendix B, pp. 104-107; track channels: section 8.4 (default channels 1-8).
+# `track_channels[n]` is the factory MIDI channel (1-16) of track n+1 (SETTINGS > MIDI CONFIG > CHANNELS); a user can change it, so a runner reads or sets it.
+# The device also needs INPUT FROM = USB (or MIDI+USB), RECEIVE NOTES on and RECEIVE CC/NRPN on (SETTINGS > MIDI CONFIG > PORT CONFIG); the menu is the only place to read them.
+# A parameter has `cc` (7-bit, value 0-127) and `nrpn = [msb, lsb]` (14-bit).
+# DT2 has 16 tracks, each audio or MIDI. The manual (section 8.4) states the default channels 1-8 only for tracks 1-8, so only those are listed; a runner reads or sets the channel of a track above 8 in SETTINGS > MIDI CONFIG > CHANNELS. The manual lists `filter_env_depth` and an "Env. Delay" with the same NRPN 1/23 (a manual error); CC 77 is unambiguous.
+[midi]
+track_channels = [1, 2, 3, 4, 5, 6, 7, 8]
+
+[midi.params]
+track_mute = { cc = 94, nrpn = [1, 101] }
+track_level = { cc = 95, nrpn = [1, 100] }
+filter_attack = { cc = 70, nrpn = [1, 16] }
+filter_decay = { cc = 71, nrpn = [1, 17] }
+filter_sustain = { cc = 72, nrpn = [1, 18] }
+filter_release = { cc = 73, nrpn = [1, 19] }
+filter_freq = { cc = 74, nrpn = [1, 20] }
+filter_reso = { cc = 75, nrpn = [1, 21] }
+filter_env_depth = { cc = 77, nrpn = [1, 23] }
+filter_base = { cc = 26, nrpn = [1, 51] }
+filter_width = { cc = 27, nrpn = [1, 52] }
+amp_release = { cc = 83, nrpn = [1, 34] }
+send_delay = { cc = 84, nrpn = [1, 36] }
+send_reverb = { cc = 85, nrpn = [1, 37] }
+send_chorus = { cc = 12, nrpn = [1, 35] }
+
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
 # part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
 # ready_dir (private, firmware-derived, never committed; the one source of the ready directory): rebuilt from the .syx alone with
@@ -284,6 +309,11 @@ stream_id = 0x0f
 build_floor = "0060"
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`).
 main_dest = 0x40000400
+# Where the bootstrap stages the packed MAIN OS (section 3) before it unpacks it in place to main_dest (finding 01; the stage constant is in five places of section 2, 1.16 and 1.17 / 1.11 and 1.12).
+# patchkit refuses an image whose in-place unpack margin at this stage is below main_margin_min (finding 152). Default of main_margin_min: 8192.
+# Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
+boot_load = 0x80000400
+main_stage = 0x40400000
 dsp_l2_lo = 0x20000000
 dsp_l2_hi = 0x20100000
 
@@ -310,27 +340,12 @@ overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", 
 [input]
 backend = "panel-uart"
 
-[panel]
-# The wire carries (channel, bit); the firmware reports a control code.
-# Channels 0..5 are linear -- code = channel * 8 + bit + 1, codes 1..48 --
-# measured on this build with unicorn-reference-final:tools/panelsweep.py by reading the event
-# records the firmware emits.
-linear_channels = 6
-# The firmware's button decoder indexes its tables by channel with no bounds check: channels 0..6 are safe (finding 58). core/input refuses others.
-button_channels = 7
-encoders = 9
-
-# Channel 6 is not linear, and is not the same on the two products. Digitakt's
-# name table ends at code 50, so bits 2..7 have nothing to report and are
-# absent here rather than guessed at.
-[panel.exceptions]
-49 = [6, 1]
-50 = [6, 0]
-
-# Logical key names: name = panel code. The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS;
-# the groups below arrange the same codes). `patchkit gen` writes the C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical
-# name to code map of the profile and of `dkrt_dev`. A name a device lacks maps to 0. Names come from `[keys] order` of sdk/sdk.toml.
-[panel.keys]
+# Logical key names: name = the key's id in the firmware's key events (the id at +0xc of the event): the firmware's key index. It equals the panel code on this
+# device (the decoder tables are the identity, finding 58) and differs on the Syntakt (finding 153); it is not the wire code (channel, bit) that `dk_input_key` injects.
+# The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS; the groups below arrange the same codes). `patchkit gen` writes the
+# C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical name to id map of the profile and of `dkrt_dev`. A name a device lacks maps to 0.
+# Names come from `[keys] order` of sdk/sdk.toml. core/ui needs YES, NO, RIGHT and LEVEL_PUSH (the second YES key, id 49 here) by name.
+[input.keys]
 PAGE_TRIG = 1
 SRC = 2
 FLTR = 3
@@ -380,6 +395,31 @@ ENC6 = 46
 ENC7 = 47
 ENC8 = 48
 LEVEL_PUSH = 49
+
+# The bits of the flags word (+0x10) of a key event, by meaning: set on a press (clear on a release), set while FUNC is held, set on the repeat of a held key, set on a
+# release. Read from the compact menu view's key handler (finding 71: bit 0 moves, bit 4 acts) and the key walker (finding 155) **[D]**.
+[input.key_flags]
+press = 0
+func = 1
+repeat = 3
+release = 4
+
+[panel]
+# The wire carries (channel, bit); the firmware reports a control code.
+# Channels 0..5 are linear -- code = channel * 8 + bit + 1, codes 1..48 --
+# measured on this build with unicorn-reference-final:tools/panelsweep.py by reading the event
+# records the firmware emits.
+linear_channels = 6
+# The firmware's button decoder indexes its tables by channel with no bounds check: channels 0..6 are safe (finding 58). core/input refuses others.
+button_channels = 7
+encoders = 9
+
+# Channel 6 is not linear, and is not the same on the two products. Digitakt's
+# name table ends at code 50, so bits 2..7 have nothing to report and are
+# absent here rather than guessed at.
+[panel.exceptions]
+49 = [6, 1]
+50 = [6, 0]
 
 # Groups are editorial: they say how to ARRANGE controls for display, nothing
 # more. The authoritative name of each code is the firmware's.

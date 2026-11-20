@@ -449,6 +449,10 @@
    "owner": "python:tools/devtools",
    "purpose": "Directory of the core library store instead of <git common dir>/sharc-core-cache (tests only)"
   },
+  "DIGI_SHARC_PGO_INSTRUMENT_STORE": {
+   "owner": "python:tools/devtools",
+   "purpose": "Directory of the instrumented core library store of PGO training instead of <git common dir>/sharc-core-pgo-instrument (tests only)"
+  },
   "DIGI_SHARC_RIG": {
    "owner": "ts:packages/sharc-rig-kit",
    "purpose": "Path to the sharc-rig binary (default dist/bin/sharc-rig)"

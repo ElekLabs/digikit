@@ -85,6 +85,7 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
+  PROFILE_DSP: 0x1b,
   PROFILE_STATE: 0x1e,
   PROFILE_READ: 0x1f,
   LOG: 0x20,
@@ -110,7 +111,11 @@ export const STATUS: [number, string, string][] = [
   [-58, 'E_READ', "the firmware's block read failed"],
   [-59, 'E_NOFILE', 'that path is not in the store'],
   [-60, 'E_PROTO', 'unknown protocol version, command or option'],
-  [-61, 'E_NOSTORE', 'the store header is unreadable (CLEAR still works)'],
+  [
+    -61,
+    'E_NOSTORE',
+    'the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)',
+  ],
   [-62, 'E_INUSE', "the card's store area is not ours and not blank"],
   [-63, 'E_PEEK', 'PEEK range not allowed, or length 0 or over 512'],
   [-64, 'E_CMD_RANGE', 'command range not reserved, taken, or empty'],
@@ -251,13 +256,14 @@ export const CAP = {
 export const RANGES = {
   debug: [0x20, 0x22],
   debug_profile: [0x1e, 0x1f],
+  debug_profile_dsp: [0x1b, 0x1b],
   entry_demo_test: [0x1c, 0x1d],
   file_write_test: [0x24, 0x27],
   file_write_test_b: [0x28, 0x2b],
   probe: [0x32, 0x35],
   remote: [0x38, 0x3d],
   remote_state: [0x3e, 0x3f],
-  ui_views_test: [0x1b, 0x1b],
+  ui_views_test: [0x0f, 0x0f],
   usb_echo_test: [0x2c, 0x2f],
   usb_fast: [0x36, 0x37],
 } as const;
@@ -346,6 +352,7 @@ export const LOG_KIND = {
   MODULE_LATCH: 45,
   DSP_LINK: 46,
   FW_READY: 47,
+  DSP_SWEEP: 48,
   SHORTCUT_CLASH: 52,
   SHORTCUT_INACTIVE: 53,
   VIEW_OPENED: 54,
@@ -357,7 +364,7 @@ export const LOG_KIND = {
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
 export const LOG_KINDS: Record<number, [string, [string, string, string, string, string]]> = {
   1: ['BOOT_START', ['runtime', 'device', 'stable_blocks', 'record_seq', 'boot_counter']],
-  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', '-']],
+  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', 'sectors']],
   3: ['SAFE', ['reason', 'boot_counter', 'record_seq', '-', '-']],
   4: ['BOOT_RECORD', ['seq', 'copy', 'boot_counter', 'selected', 'flags']],
   5: ['MOD_LOAD', ['index', 'result', 'name0', 'name1', 'name2']],
@@ -403,6 +410,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
   46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
+  48: ['DSP_SWEEP', ['sweep', 'generation', 'blocks', '-', '-']],
   52: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
   53: ['SHORTCUT_INACTIVE', ['module', 'key0', 'key1', '-', '-']],
   54: ['VIEW_OPENED', ['owner', 'flags', 'slot', '-', '-']],

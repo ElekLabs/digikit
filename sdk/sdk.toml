@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -15,7 +15,7 @@ version = "0.10.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import change
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
 # The logical keys (`dk_key`, <dk/gen/keys.h>): the order is the ABI. A module is built with the number of a name, so the list only grows at the end: never
-# remove, rename or reorder a name. A device file maps a name to its panel code (`[panel.keys]` of devices/*.toml) and may use only the names listed here;
+# remove, rename or reorder a name. A device file maps a name to its panel code (`[input.keys]` of devices/*.toml) and may use only the names listed here;
 # `patchkit gen` numbers the names from 1 in this order (0 is DK_KEY_NONE). At most 63 names.
 [keys]
 order = [
@@ -320,7 +320,7 @@ absent = "-1"
 [[import]]
 name = "dk_ui_settings_row"
 service = "ui"
-since = "0.10.2"
+since = "0.10.4"
 context = "init"
 sig = "i32 (dk_ui *ui, const char *text, ui_settings_open_fn open, void *arg)"
 doc = "Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>."
@@ -330,7 +330,7 @@ absent = "-1"
 [[import]]
 name = "dk_ui_view_open"
 service = "ui"
-since = "0.10.2"
+since = "0.10.4"
 context = "ui"
 sig = "dk_ui_view *(dk_ui *ui, const void *desc)"
 doc = "Open a screen the module draws from a `dk_ui_view_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype); NULL when the desc is wrong or the pool is full. Closed for the module when it unloads."
@@ -341,7 +341,7 @@ absent = "0"
 [[import]]
 name = "dk_ui_view_close"
 service = "ui"
-since = "0.10.2"
+since = "0.10.4"
 context = "ui"
 sig = "void (dk_ui_view *view)"
 doc = "Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing."
@@ -351,7 +351,7 @@ absent = "void"
 [[import]]
 name = "dk_ui_text_input"
 service = "ui"
-since = "0.10.2"
+since = "0.10.4"
 context = "ui"
 sig = "i32 (dk_ui *ui, const void *desc)"
 doc = "Open the stock naming screen from a `dk_ui_text_input_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype): `done(arg, text)` runs on YES only. 0 when shown, a negative code when not (DK_E_CONTRACT: the desc is wrong)."
@@ -709,18 +709,7 @@ sig = "i32 (u32 track, u32 word, i32 raw)"
 doc = "Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn. Same click flow as dk_param_get. Returns 0, DK_PARAM_E_STATE, DK_PARAM_E_ARG or DK_PARAM_E_HELD."
 
 [[import]]
-name = "dk_machines_guard_state"
-service = "machines"
-provided = true
-internal = true
-wrapper = "rt"
-since = "0.8.3"
-context = "ui"
-sig = "u32 (u32 ty, u8 *out)"
-doc = "The runtime's: the guard's counts of machine type `ty` as a `GuardState` into `out` for the MODULES reply; 1 when the machines service has the type, else 0."
-
-[[import]]
-name = "dk_machines_owned_ids"
+name = "dk_machines_module_info"
 service = "machines"
 provided = true
 internal = true
@@ -728,7 +717,7 @@ wrapper = "rt"
 since = "0.8.3"
 context = "ui"
 sig = "u32 (u32 owner, u8 *out)"
-doc = "The runtime's: the machine type numbers of the rows module record `owner` (1 ..) filled, in row order, as bytes into `out` (8 at most) for the MODULES reply; how many."
+doc = "The runtime's: what the MODULES reply says of the machines of module record `owner` (1 ..) as a `ModuleMachines` into `out`: the voice rows it owns (mask), its machine type numbers (the machine rows, then the voice rows' types, 8 at most), the guard's faults for them and whether the guard switched one off; 1 when the machines service answers."
 
 [[import]]
 name = "dk_module_ctx_add_machine"
@@ -1340,6 +1329,22 @@ context = "any"
 sig = "u32 (u32 slot, u32 *out_fn)"
 doc = "The poll function in slot 0 to 3 of `dkrt_poll_add` and its owner: returns 0 for an empty slot (or a slot past 3), 1 + the record index of the module whose loaded code holds the function, or 0xff for a function outside every module (the firmware image: the patched-in core modules). Writes the function's address to `*out_fn` when `out_fn` is not null and the slot is used. For a profiler that names the rows of the poll spans."
 
+[[import]]
+name = "dk_dsp_stats_ctl"
+service = "runtime"
+since = "0.10.2"
+context = "any"
+sig = "i32 (u32 on, u32 clear)"
+doc = "Control the DSP stats window (P8d): `on` 1 starts and 0 stops the counters and the stream of snapshots; `clear` is the clear generation, and the DSP clears its counters when it changes. Only the module that owns the span channel (`dk_span_sink_set`) may call it. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the span channel, or none does). See <dk/core/trace.h>."
+
+[[import]]
+name = "dk_dsp_stats_read"
+service = "runtime"
+since = "0.10.2"
+context = "any"
+sig = "u32 (u32 *out, u32 max)"
+doc = "Copy the newest complete DSP stats sweep to `out` and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. At most `max` words of 103 are copied: the window of 100 words (4 header words, then 16 rows of 6; zeros when there is no sweep), then the counters of the link's mirror (sweeps published, sweeps ended by a gap, records ignored), which are valid either way. See <dk/core/trace.h>."
+
 # Test-only (`test = true`): an import of the test-only service `svc-test`, which a `.dks` provider (tests/fixtures/modules/svc-test) exports. It is in no
 # public header, doc or template and not in the runtime's table (no `requires`): a module that calls it resolves it at load from the provider's EXPORTS.
 [[import]]
@@ -1381,7 +1386,7 @@ doc = "The selected track and its Sound parameter words (read-only, from the fir
 [[import]]
 name = "dk_device_track_count"
 service = "runtime"
-since = "0.10.2"
+since = "0.10.4"
 context = "any"
 sig = "u32 ()"
 doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal."
@@ -1390,7 +1395,7 @@ doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when 
 name = "dk_shortcut_add"
 service = "shortcuts"
 provided = true
-since = "0.10.2"
+since = "0.10.4"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"
 doc = "Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>."
@@ -1398,7 +1403,7 @@ doc = "Bind a key combination: while `def->keys[0]` is held, pressing `def->keys
 [[import]]
 name = "dk_selected_track"
 service = "runtime"
-since = "0.10.2"
+since = "0.10.4"
 context = "ui"
 sig = "i32 ()"
 doc = "The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet."
@@ -1447,7 +1452,7 @@ args = ["runtime", "device", "stable_blocks", "record_seq", "boot_counter"]
 [[log.kind]]
 id = 2
 name = "CARD_CHECK"
-args = ["state", "first_nonblank", "hash", "read_errors", "-"]
+args = ["state", "first_nonblank", "hash", "read_errors", "sectors"]
 
 [[log.kind]]
 id = 3
@@ -1712,6 +1717,14 @@ id = 47
 name = "FW_READY"
 args = ["blocks", "-", "-", "-", "-"]
 
+# the ColdFire mirror of the DSP stats window published a complete sweep (info level, not kept in the small ring; logged only while the counters run, once per sweep,
+# about every 50 blocks): `sweep` is the sweep number PROFILE_DSP reports, `generation` the clear generation (an 8-bit counter) the sweep belongs to, `blocks` the block count of the
+# sweep's header. The source is the module that owns the span channel (the debug module). A host waits on it instead of polling PROFILE_DSP.
+[[log.kind]]
+id = 48
+name = "DSP_SWEEP"
+args = ["sweep", "generation", "blocks", "-", "-"]
+
 # a shortcut was not enabled because an earlier module (the first owner keeps it) binds the same two logical keys (warn level): the module's record index + 1 of the disabled
 # shortcut, the record index + 1 of the owner that keeps the binding, the two logical keys (`dk_key`).
 [[log.kind]]
@@ -1796,12 +1809,13 @@ remote_state = [0x3e, 0x3f]   # digikit/remote: the state
 probe = [0x32, 0x35]   # digikit/probe: collector status, raw reads, reset (docs/plans/debug-mode-and-probes.md)
 debug = [0x20, 0x22]   # digikit/debug: LOG, PEEK, LOGCFG (docs/findings/46-digikit-debug.md)
 debug_profile = [0x1e, 0x1f]   # digikit/debug: PROFILE_STATE, PROFILE_READ
+debug_profile_dsp = [0x1b, 0x1b]   # digikit/debug: PROFILE_DSP
 file_write_test = [0x24, 0x27]   # test/file-write: start an I/O job that writes a file, its status, wake it, a file call outside an I/O step
 usb_fast = [0x36, 0x37]   # usb-fast: SET_NONCE (the host proves which USB device is on its MIDI port, docs/plans/usb-fast.md section 5)
 file_write_test_b = [0x28, 0x2b]   # test/file-write-b: the same commands for a second module
 usb_echo_test = [0x2c, 0x2f]   # test/usb-echo: its status, hold, reenable, disable
 entry_demo_test = [0x1c, 0x1d]   # test/entry-demo: its report (what init and tick saw), and a settings write that tick runs
-ui_views_test = [0x1b, 0x1b]   # test/ui-views: its report (rows, views, text input); with a body byte 1 it closes its overlay
+ui_views_test = [0x0f, 0x0f]   # test/ui-views: its report (rows, views, text input); with a body byte 1 it closes its overlay
 
 [protocol.service]  # the commands of run-time service modules, by name; each lies in a range above (a module registers them with dk_host_register)
 REMOTE_KEY = 0x38      # digikit/remote: code (u8), down (u8)
@@ -1812,6 +1826,7 @@ PEEK = 0x21            # digikit/debug: body u32 addr, u16 len (1 to 512, inside
 LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded); op 2 = card log get (no more body), op 3 = card log set (body: u8 op=3, u8 on); reply for op 2 and op 3 (16 bytes): u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes (this boot), i32 last_status, u32 ms_since_write (0xffffffff = none yet); a debug module without the card log replies to op 2 with an error status
 PROFILE_STATE = 0x1e   # digikit/debug: profiling start and stop, and its state
 PROFILE_READ = 0x1f    # digikit/debug: read the span records
+PROFILE_DSP = 0x1b     # digikit/debug: the DSP stats window: body u8 op (0 get, 1 start, 2 stop, 3 clear); reply (big-endian) u8 version (1), u8 flags (bit 0 stats on, bit 1 a sweep follows), u8 clear generation, u8 rows (16), u32 sweep number, u32 sweeps, u32 gaps, u32 ignored, then when bit 1 is set the 100 words of the window (4 header words: blocks, largest stock block delta, overruns, spare; 16 rows of 6 words: calls, cycles low, cycles high, largest call, largest block, spare)
 USB_FAST_NONCE = 0x36  # usb-fast: body nonce[8]; the module keeps it and returns it in the INFO reply of the bulk link; reply empty
 REMOTE_STATE = 0x3e    # reply: enabled (u8, always 1 while the module is loaded), state format (u8), turn limit (u8)
 
@@ -1853,7 +1868,7 @@ E_WRITE = { code = -57, text = "the firmware's block write failed" }
 E_READ = { code = -58, text = "the firmware's block read failed" }
 E_NOFILE = { code = -59, text = "that path is not in the store" }
 E_PROTO = { code = -60, text = "unknown protocol version, command or option" }
-E_NOSTORE = { code = -61, text = "the store header is unreadable (CLEAR still works)" }
+E_NOSTORE = { code = -61, text = "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)" }
 E_INUSE = { code = -62, text = "the card's store area is not ours and not blank" }
 E_PEEK = { code = -63, text = "PEEK range not allowed, or length 0 or over 512" }
 E_CMD_RANGE = { code = -64, text = "command range not reserved, taken, or empty" }

@@ -256,7 +256,9 @@ def pack_section(data, **kw):
     return struct.pack(">II", len(body), sum(body) & 0xFFFFFFFF) + body
 
 
-def inplace_margin(stream, dest=0x40000400, stage=0x40400000):
+def inplace_margin(
+    stream, dest=0x40000400, stage=0x40400000
+):  # stage: [patch] main_stage of the device (0x40200000 on the Syntakt)
     """Slack, in bytes, of unpacking `stream` where the bootstrap does.
 
     The bootstrap stages a packed section at `stage` and unpacks it to `dest`

@@ -55,8 +55,23 @@ pub struct DeviceProfile {
     pub dyn_types: u32,
     /// `[digikit] tracks`: the tracks of the device (0: the file gives none).
     pub tracks: u32,
-    /// `[panel.keys]`: the panel code of each logical key (`dk_key`, `sdk/include/dk/gen/keys.h`), indexed by the key's number; 0 where the device has no such key.
+    /// `[input.keys]`: the id of each logical key (`dk_key`, `sdk/include/dk/gen/keys.h`) in the firmware's key events, indexed by the key's number; 0 where the device has no such key.
     pub key_codes: [u8; KEY_SLOTS],
+    /// `[input.key_flags]`: the bits of a key event's flags word.
+    pub key_flags: KeyFlagBits,
+}
+
+/// The bit numbers of the flags word of a key event (`KeyEvent+0x10`), named by meaning (`[input.key_flags]`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyFlagBits {
+    /// Set on a press, clear on a release.
+    pub press: u8,
+    /// Set while FUNC is held.
+    pub func: u8,
+    /// Set on the repeat of a held key.
+    pub repeat: u8,
+    /// Set on a release.
+    pub release: u8,
 }
 
 /// The logical keys a profile maps: `dk_key` numbers are below it (`DEV_KEYS` of `abi.toml`).
@@ -182,6 +197,8 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     // ---- the card --------------------------------------------------------------------------------------------------------
     /// Read `bytes` (a multiple of 512) from `sector` into `buf`; 0 or a negative error.
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32;
+    /// The card's capacity in 512-byte sectors as the firmware's eMMC driver reports it (`cf.storage.fn.capacity`); `0xFFFFFFFF` while the driver is not ready.
+    fn card_sectors(&self) -> u32;
     /// The firmware's block write, ungated. Only the one gated write (`platform::block_write`) and the card claim call it.
     unsafe fn block_write_raw(&self, sector: u32, bytes: u32, buf: *const u8) -> i32;
 

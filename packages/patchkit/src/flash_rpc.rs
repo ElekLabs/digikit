@@ -18,6 +18,8 @@ use crate::syx;
 
 /// Every MidiRpc request starts with this envelope.
 pub const ENVELOPE: [u8; 6] = [0xf0, 0x00, 0x20, 0x3c, 0x10, 0x00];
+/// The stock MidiRpc Ping (no payload): the reply names the model (finding 144).
+pub const RPC_PING: u8 = 0x01;
 pub const RPC_OS_START: u8 = 0x50;
 pub const RPC_OS_WRITE: u8 = 0x51;
 pub const RPC_OS_END: u8 = 0x52;
@@ -76,6 +78,27 @@ pub fn parse_reply(msg: &[u8]) -> Option<(u16, u8, Vec<u8>)> {
         body[4] & 0x7f,
         body[5..].to_vec(),
     ))
+}
+
+/// The model name in the payload of a Ping reply. Two layouts, told apart by the framing and not by their content:
+/// - plain: `u8 blobLen`, the blob of request types, NUL-ended strings (the first is the name);
+/// - length-prefixed: `u8 rest`, then the plain layout, where `rest` is the number of bytes after the `blobLen` byte (the Syntakt 1.42 reply,
+///   `1e 16 <22 types> "Syntakt" 00`, finding 144). A payload whose first byte is two less than its length is this one.
+///
+/// `None` when the payload is empty, cut short, or the first string is not printable ASCII. The vectors are `tests/fixtures/ping-vectors.json`, shared with `parsePing` of
+/// `packages/dk-session/src/identify.ts`.
+pub fn parse_ping(payload: &[u8]) -> Option<String> {
+    let body = match payload.split_first() {
+        Some((&rest, body)) if payload.len() >= 2 && rest as usize == payload.len() - 2 => body,
+        _ => payload,
+    };
+    let start = 1 + *body.first()? as usize;
+    let strings = body.get(start..)?;
+    let end = strings.iter().position(|&b| b == 0)?;
+    // a name is printable text: an unknown or damaged reply gives no name, not junk
+    let name = &strings[..end];
+    (end > 0 && name.iter().all(|b| (0x20..0x7f).contains(b)))
+        .then(|| name.iter().map(|&b| b as char).collect())
 }
 
 /// Why a run ended without a flash.
@@ -529,6 +552,42 @@ fn text_of(b: &[u8]) -> String {
         .trim()
         .trim_end_matches(['.', '!'])
         .to_string()
+}
+
+#[cfg(test)]
+mod ping_tests {
+    use super::*;
+    use crate::error::unhex;
+
+    /// The reply of a booted Syntakt to `Ping` (seq 1), as the emulator's `midi.usb.out` returned it.
+    const SYNTAKT_PING_REPLY: &str = "f000203c10000400290001011e1600010203040607090050525153545556005758595a5b5c5d005e53796e74616b007400f7";
+
+    #[test]
+    fn a_real_ping_reply_gives_its_seq_and_the_model_name() {
+        let msg = unhex(SYNTAKT_PING_REPLY).unwrap();
+        let (seq, ty, payload) = parse_reply(&msg).expect("the reply parses");
+        assert_eq!((seq, ty), (1, RPC_PING));
+        assert_eq!(parse_ping(&payload).as_deref(), Some("Syntakt"));
+    }
+
+    /// The vectors shared with the TypeScript parser.
+    #[test]
+    fn the_shared_ping_vectors() {
+        let doc: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/ping-vectors.json"))
+                .unwrap();
+        let cases = doc["cases"].as_array().unwrap();
+        assert!(cases.len() >= 8);
+        for c in cases {
+            let payload = unhex(c["payload"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                parse_ping(&payload).as_deref(),
+                c["model"].as_str(),
+                "{}",
+                c["name"]
+            );
+        }
+    }
 }
 
 #[cfg(test)]
