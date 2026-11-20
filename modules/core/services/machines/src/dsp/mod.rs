@@ -214,7 +214,7 @@ pub(crate) unsafe fn free_placeholders<C: CoreApi>(core: &C) {
 }
 
 /// DSP section, version 3 voices: the state counts must be sane before the range is computed from them.
-pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
+pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec, job: &mut Job) -> i32 {
     let (s, voice_off, vstride, nvoice, image_size) = (
         sec.s,
         sec.voice_off,
@@ -250,6 +250,7 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
             i += 1;
         }
     }
+    job.accepted += nvoice;
     OK
 }
 

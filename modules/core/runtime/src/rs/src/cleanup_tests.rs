@@ -576,11 +576,12 @@ fn attribution_names_the_module_of_every_site_the_watch_reports() {
         // a voice site: the module that owns the machine type
         assert_eq!(services().attribute(SITE_VOICE, 7), Some(1));
         assert_eq!(services().attribute(SITE_VOICE, 8), None);
-        // every other site is an effect row of the chain's table, by the byte offset the DSP reports (96 bytes a row; first row 0 in the test table)
-        assert_eq!(services().attribute(SITE_FX_MASTER, 96), Some(2));
-        assert_eq!(services().attribute(SITE_FX_SEND, 96), Some(2));
-        assert_eq!(services().attribute(SITE_NONE, 96), Some(2));
-        assert_eq!(services().attribute(9, 96), Some(2));
+        // every other site is an effect row of the chain's table, by the byte offset the DSP reports (`4 * FX_ROW_WORDS` bytes a row; first row 0 in the test table)
+        let row_bytes = 4 * dkrt_abi::dsp::FX_ROW_WORDS;
+        assert_eq!(services().attribute(SITE_FX_MASTER, row_bytes), Some(2));
+        assert_eq!(services().attribute(SITE_FX_SEND, row_bytes), Some(2));
+        assert_eq!(services().attribute(SITE_NONE, row_bytes), Some(2));
+        assert_eq!(services().attribute(9, row_bytes), Some(2));
         assert_eq!(services().attribute(SITE_FX_MASTER, 0), None);
     }
 }

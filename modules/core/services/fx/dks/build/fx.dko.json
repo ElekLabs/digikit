@@ -844,21 +844,21 @@
   },
   {
    "addend": 0,
-   "offset": 90,
+   "offset": 96,
    "section": ".text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx3dsp14check_sectionsNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 96,
+   "offset": 102,
    "section": ".text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx3dsp14check_sectionsNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "symbol": ".sec..text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx3dsp10area_bytesNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 102,
+   "offset": 108,
    "section": ".text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx3dsp14check_sectionsNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3dsp6rd32le",
    "type": "cf.32"
@@ -6880,10 +6880,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffcc48d77cfc206f003c2a6f0040222800307004b081650001322028002c22680008b3c0650001242401ed8a93c0b3c2650001184a816700011e2e102c28000c206800102f48002c2440d5c72202d287d2802f41003047f9000000004df90000000049f900000000605ed6af002cd6872f034e94588f0c80444b4658660000cc2043486800044e94588f7201b280660000ba2043486800084e94588fb085660000aa20434868000c4e94588fb0826600009a5e8270f8c480d5ad003845ea0040b5ef0030670000902f0a4e932800486a00044e932600486a00084e932400486a000c4e932a004fef0010b886645c0804000066567003c0834a80664eb686624a200690837217b28064407003c0824a8066382f2f00384e96588fb082652c7008b0856526486a00104e93588f7207b28065187206c2804a816700ff300800000067087002b0816600ff2270e14cd77cfc4fef00344e75428060f2",
+   "hex": "4fefffc848d77cfc206f00402a6f0044202800302f4000347204b280650001402028002c22280008b28065000132242f0034ed8a9280b282650001244aaf003467302e102c28000c206800102f48002c2440d5c72202d287d2802f41003047f9000000004df90000000049f900000000606a202f0034d1ad003c4280600000e2d6af002cd6872f034e94588f0c80444b4658660000ca2043486800044e94588f7201b280660000b82043486800084e94588fb085660000a820434868000c4e94588fb082660000985e8270f8c480d5ad003845ea0040b5ef003067962f0a4e932800486a00044e932600486a00084e932400486a000c4e932a004fef0010b886645c0804000066567003c0834a80664eb686624a200690837217b28064407003c0824a8066382f2f003c4e96588fb082652c7008b0856526486a00104e93588f7207b28065187206c2804a816700ff320800000067087002b0816600ff2470e14cd77cfc4fef00384e75",
    "kind": "text",
    "name": ".text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx3dsp14check_sectionsNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
-   "size": 348
+   "size": 362
   },
   {
    "align": 2,
@@ -7650,7 +7650,7 @@
   },
   {
    "align": 2,
-   "hex": "8ee22920",
+   "hex": "7ff241f9",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -8762,7 +8762,7 @@
    "size": 28
   }
  ],
- "source_sha256": "571097ddd9d292271df58c3f23956d06c62527310ad10eef883641195e6b7110",
+ "source_sha256": "da5eb8d082515eb698bb39f89b11f1936a6c1396de6c0892eb246f9f15495144",
  "symbols": [
   {
    "global": false,
@@ -10951,8 +10951,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
-  "instructions_redecoded": "8823",
-  "isa_check": "3c077f0f8ba230d3bd3782df7e4e45e090acf27335f257aec1419e8cbd2b9612",
+  "instructions_redecoded": "8826",
+  "isa_check": "31f1bb6ad52208297f4071e7bfcad6e0afb63b852733261340284e05d5ed6cfc",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

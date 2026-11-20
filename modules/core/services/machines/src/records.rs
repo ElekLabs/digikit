@@ -252,8 +252,8 @@ impl<C: CoreApi> Service<C> for Machines {
         }
     }
 
-    unsafe fn dsp_check_sections(core: &C, sec: &DspSec, _job: &mut Job) -> i32 {
-        dsp::check_sections(core, sec)
+    unsafe fn dsp_check_sections(core: &C, sec: &DspSec, job: &mut Job) -> i32 {
+        dsp::check_sections(core, sec, job)
     }
 
     unsafe fn dsp_check_rows(core: &C, sec: &DspSec) -> i32 {

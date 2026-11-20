@@ -7,7 +7,9 @@ use dkrt_sdk::fault::{DIAG_WORDS, SITE_FX_MASTER, SITE_FX_SEND, SITE_VOICE};
 use dkrt_sdk::logk;
 use dkrt_svc_fx::records::Fx;
 use dkrt_svc_fx::rows::{self, frows};
+use dkrt_test_support::contract::locked;
 use dkrt_test_support::{Call, FakeCore};
+use std::sync::MutexGuard;
 
 const ROW_BYTES: u32 = 4 * FX_ROW_WORDS;
 const FIRST_ROW: u32 = 6;
@@ -17,14 +19,14 @@ const REC: usize = 3;
 type S = Fx;
 
 /// A core with the effect table starting at row `FIRST_ROW`, the service's rows and the guard's memory at the start, and effect row 1 owned by module record `REC`.
-fn core() -> FakeCore {
+fn core() -> (MutexGuard<'static, ()>, FakeCore) {
+    let rows_lock = locked();
     rows::reset();
-    dkrt_svc_fx::dsp::guard_reset();
     let mut core = FakeCore::new();
     core.set_dynfx(FIRST_ROW, 4);
     frows().fx_owner[1] = REC as u8 + 1;
     frows().mod_fx[REC] = 1 << 1;
-    core
+    (rows_lock, core)
 }
 
 fn diag(core: &FakeCore, words: &[u32; DIAG_WORDS]) {
@@ -56,7 +58,7 @@ fn source() -> u16 {
 
 #[test]
 fn a_new_effect_fault_logs_once_with_the_module_of_the_row_and_a_second_equal_block_logs_nothing() {
-    let core = core();
+    let (_rows, core) = core();
     let row = FIRST_ROW + 1;
     let w = words(1, row * ROW_BYTES, None);
     diag(&core, &w);
@@ -83,7 +85,7 @@ fn a_new_effect_fault_logs_once_with_the_module_of_the_row_and_a_second_equal_bl
 
 #[test]
 fn a_row_switched_off_logs_once_and_a_cleared_word_logs_nothing() {
-    let core = core();
+    let (_rows, core) = core();
     let row = FIRST_ROW + 1;
     diag(&core, &words(8, row * ROW_BYTES, Some(row * ROW_BYTES)));
     let l = logs(&core);
@@ -106,7 +108,7 @@ fn a_row_switched_off_logs_once_and_a_cleared_word_logs_nothing() {
 
 #[test]
 fn the_machines_words_of_the_block_are_not_the_effect_guards() {
-    let core = core();
+    let (_rows, core) = core();
     let mut w = [0u32; DIAG_WORDS];
     for i in 14..24 {
         w[i] = 0x1234_5678;
@@ -117,7 +119,7 @@ fn the_machines_words_of_the_block_are_not_the_effect_guards() {
 
 #[test]
 fn fault_sites_are_named_by_the_byte_offset_and_the_voice_site_is_not_the_effect_services() {
-    let core = core();
+    let (_rows, core) = core();
     let at = |site: u32, id: u32| unsafe { <S as Service<FakeCore>>::attribute(&core, site, id) };
     let off = (FIRST_ROW + 1) * ROW_BYTES;
     assert_eq!(at(SITE_FX_MASTER, off), Some(REC));
@@ -145,7 +147,7 @@ fn check(core: &FakeCore, used: u32) -> (u32, TableFault) {
 
 #[test]
 fn the_table_check_accepts_a_consistent_table_and_names_each_kind_of_mismatch() {
-    let core = core();
+    let (_rows, core) = core();
     let used = 1 << REC;
     assert_eq!(check(&core, used).0, 0);
     // an owned row of a record that is not used
@@ -268,7 +270,7 @@ fn check_sections(core: &FakeCore, sec: &DspSec, job: &mut Job) -> i32 {
 
 #[test]
 fn the_section_check_adds_the_states_of_the_effects_rounded_to_eight() {
-    let mut core = core();
+    let (_rows, mut core) = core();
     // the area of the DSP: the state of an effect must fit it
     let mut t = vec![0u32; 12];
     t[dkrt_abi::dsp::I_MAGIC] = dkrt_abi::dsp::INFO_MAGIC;
@@ -307,6 +309,7 @@ fn the_section_check_adds_the_states_of_the_effects_rounded_to_eight() {
 
 #[test]
 fn without_the_table_of_the_effect_chain_the_service_has_no_rows_and_no_slot() {
+    let _rows = locked();
     rows::reset();
     let core = FakeCore::new();
     unsafe {

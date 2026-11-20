@@ -1,5 +1,5 @@
-//! The DSP side's shared types and constants: the words of the info tables, the row table state (`DspState`), the loader's pending load, the checked
-//! section (`Job`, `DspSec`). The core owns the object `DKRT_DSP` (a host tool reads its layout); a service reaches it through `CoreApi::dsp`.
+//! The DSP side's shared types and constants: the words of the info tables, the loader's state and the voice rows (`DspState`), the loader's pending load, the checked
+//! section (`Job`, `DspSec`). The core owns the object `DKRT_DSP`; a service reaches it through `CoreApi::dsp`. The effect rows are the fx service's own (`DKRT_FROWS`).
 use crate::{MAX_MODULES, REC_MAX};
 use dkneeds;
 use dkrt_sdk::*;
@@ -133,7 +133,7 @@ pub struct Pending {
     pub send_buf: u32,
 }
 
-/// The DSP loader's state, one object a host can peek (`DKRT_DSP` in plan.json symbols).
+/// The DSP loader's state and, until the machines service owns them, the voice rows: one object a host can peek (`DKRT_DSP`).
 #[repr(C)]
 pub struct DspState {
     pub magic: u32,
@@ -174,23 +174,6 @@ pub struct DspState {
     pub row_stride: [u32; MAX_ROWS],
     pub row_clear: [u32; MAX_ROWS],
     pub row_latched: [u32; MAX_ROWS],
-    /// Per effect row (the free rows of `core/dynfx`, in order): the owner (module record + 1, 0: free), whether its pc word was written to the DSP (so it needs
-    /// clearing), the pc, the byte addresses of the desc and the state, and the words p0 to p7 to publish.
-    pub fx_owner: [u8; MAX_FX],
-    pub fx_pub: [u8; MAX_FX],
-    pub fx_pc: [u32; MAX_FX],
-    pub fx_desc: [u32; MAX_FX],
-    pub fx_state: [u32; MAX_FX],
-    pub fx_par: [[u32; 8]; MAX_FX],
-    /// Per effect row: the MIX word to publish (`MIX_ONE` unless the effect's page says otherwise).
-    pub fx_mix: [u32; MAX_FX],
-    /// Per effect row: the route and the four amount words to publish (before the pc: a send effect never runs on the master).
-    pub fx_route: [u32; MAX_FX],
-    pub fx_amt: [[u32; 4]; MAX_FX],
-    /// Per effect row: the flags word of its record (`FXF_*`: the routes the effect may run on and its default route; 0 = master only).
-    pub fx_flags: [u32; MAX_FX],
-    /// Per module record: the effect rows it owns (bit mask).
-    pub mod_fx: [u32; REC_MAX],
     /// The slot writes of a provider file's DSP part sent so far (0: not started, 1: the sequence of its slots is in flight or done).
     pub slot_run: u32,
 }
@@ -216,6 +199,9 @@ pub struct Job {
     pub bank: *const u8,
     /// Bytes of the state blocks of the entries the services own, behind the image and bss (each block rounded to 8): the services add them in `dsp_check_sections`.
     pub state_bytes: u32,
+    /// How many entries of the section's voice and effect tables the services accepted (each adds the count it checked in `dsp_check_sections`): the core refuses a section
+    /// with entries that no loaded service owns.
+    pub accepted: u32,
     pub import_vals: [u32; MAX_IMPORTS as usize],
 }
 
@@ -237,6 +223,7 @@ impl Job {
             nfx: 0,
             bank: core::ptr::null(),
             state_bytes: 0,
+            accepted: 0,
             import_vals: [0; MAX_IMPORTS as usize],
         }
     }

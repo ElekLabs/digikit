@@ -53,6 +53,7 @@ pub struct DlStatus {
 pub(crate) const DL_DONE: u32 = 2;
 pub(crate) const DL_ERROR: u32 = 3;
 
+/// The loader's state and, until the machines service owns them, the voice rows (`DspState`). The effect rows are the fx service's own (`DKRT_FROWS`).
 #[no_mangle]
 pub static mut DKRT_DSP: DspState = unsafe { core::mem::zeroed() };
 
@@ -299,9 +300,14 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     };
     // the entries of the tables the services own: track table, voices, effects
     job.state_bytes = 0;
+    job.accepted = 0;
     let r = services().dsp_check_sections(&sec, job);
     if r != OK {
         return r;
+    }
+    // an entry that no loaded service owns would load as nothing: refuse it (its rows do not exist)
+    if job.accepted != nvoice + nfx {
+        return E_DSP_ROWS;
     }
     // the range must fit the area at all (a later load may still find it taken: reserve())
     let need = extent(image_size, bss, s.add(voice_off as usize), nvoice, vstride, job.state_bytes);

@@ -8,7 +8,9 @@ use dkrt_sdk::{E_NO_REGISTRY, OK};
 use dkrt_svc_fx::fxpage;
 use dkrt_svc_fx::records::Fx;
 use dkrt_svc_fx::rows::frows;
+use dkrt_test_support::contract::locked;
 use dkrt_test_support::{Call, FakeCore};
+use std::sync::MutexGuard;
 
 // A `FakeCore` has no `fxpages_info` table (`info_tables` is empty): an image without effect pages.
 
@@ -16,7 +18,8 @@ const REC: usize = 3;
 const FIRST_ROW: u32 = 6;
 
 /// A core whose `dynfx_info` says the effect table starts at row `FIRST_ROW`, with effect row 1 claimed by module record `REC` and published.
-fn core_with_row() -> FakeCore {
+fn core_with_row() -> (MutexGuard<'static, ()>, FakeCore) {
+    let rows_lock = locked();
     dkrt_svc_fx::rows::reset();
     let mut core = FakeCore::new();
     core.set_dynfx(FIRST_ROW, 4);
@@ -24,13 +27,13 @@ fn core_with_row() -> FakeCore {
     d.fx_owner[1] = REC as u8 + 1;
     d.fx_pub[1] = 1;
     d.fx_pc[1] = 0x1234;
-    core
+    (rows_lock, core)
 }
 
 /// An image without effect pages refuses an effect record before it writes anything, and its tick does nothing: the fx service runs over a fake core.
 #[test]
 fn without_effect_pages_a_record_is_refused_and_the_tick_is_silent() {
-    let core = core_with_row();
+    let (_rows, core) = core_with_row();
     let rec = [0u8; fxpage::LEN_EFFECT as usize];
     let ctx = ApplyCtx {
         owner: REC as u8 + 1,
@@ -60,7 +63,7 @@ fn without_effect_pages_a_record_is_refused_and_the_tick_is_silent() {
 /// A declared effect takes its flags and defaults on its claimed row, and the loader reads its words in the row's publishing order.
 #[test]
 fn a_declared_effect_publishes_its_words_in_order() {
-    let core = core_with_row();
+    let (_rows, core) = core_with_row();
     let par = [10, 11, 12, 13, 14, 15, 16, 17];
     unsafe {
         // effect ordinal 0 of the module is the claimed row 1; ordinal 1 does not exist
@@ -104,7 +107,7 @@ fn a_declared_effect_publishes_its_words_in_order() {
 /// Clearing the rows of a module sends one sequence for the row (the pc to "free" first), drops its live values and frees the row.
 #[test]
 fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
-    let core = core_with_row();
+    let (_rows, core) = core_with_row();
     unsafe {
         assert!(<Fx as Service<FakeCore>>::dsp_clear(&core, REC));
         let at = FX_ROW_WORDS * (FIRST_ROW + 1);
@@ -131,7 +134,7 @@ fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
 /// module or another's, published row or not.
 #[test]
 fn a_published_effect_row_never_refuses_a_teardown() {
-    let core = core_with_row();
+    let (_rows, core) = core_with_row();
     let owner = REC as u8 + 1;
     let ask = |who: u8| unsafe { <Fx as Service<FakeCore>>::teardown_refusal(&core, who) };
     for route in [0, 1] {
@@ -148,7 +151,7 @@ fn a_published_effect_row_never_refuses_a_teardown() {
 #[test]
 fn the_rows_of_the_module_being_reloaded_count_as_free_in_the_row_check() {
     use dkrt_abi::dsp::DspSec;
-    let mut core = core_with_row();
+    let (_rows, mut core) = core_with_row();
     core.set_dynfx(FIRST_ROW, 4);
     let d = frows();
     for k in 0..4 {

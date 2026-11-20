@@ -97,9 +97,14 @@ fn machine_keys_of_file(f: &[u8], out: &mut [u32; 8]) -> usize {
 
 /// Run the runtime's check of the DSP section of `f` on a DSP of `device`: the result code and what the check found.
 fn check(f: &[u8], device: u32) -> (i32, Job) {
+    check_with(f, device, true)
+}
+
+/// As `check`; `fx` says whether the fx service is loaded.
+fn check_with(f: &[u8], device: u32, fx: bool) -> (i32, Job) {
     let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     // an effect module's DSP section is checked by the fx service, a file of the card
-    let _fx = crate::handlers::fx_fixture::LoadedFx::new();
+    let _fx = fx.then(crate::handlers::fx_fixture::LoadedFx::new);
     let info = info_table(device, &imports_of(f));
     let mut job = Job::empty();
     let (off, size) = section(f);
@@ -183,6 +188,17 @@ fn the_effect_fixture_passes_the_check_and_reads_back_what_it_declares() {
             let words: Vec<u32> = (0..fx::DK_FX_DESC_WORDS).map(|k| le(&f, desc + 4 * k)).collect();
             assert_eq!(words, decl, "{device}");
         }
+    }
+}
+
+/// The effect entries of a section that no loaded service owns would load as nothing: the check refuses the section (the services count the entries they accepted).
+#[test]
+fn a_section_with_effect_entries_and_no_fx_service_is_refused() {
+    let (leaf, ..) = FX;
+    for (device, id) in DEVICES {
+        let f = packed(device, leaf);
+        assert_eq!(check_with(&f, id, false).0, E_DSP_ROWS, "{device}");
+        assert_eq!(check_with(&f, id, true).0, OK, "{device}");
     }
 }
 

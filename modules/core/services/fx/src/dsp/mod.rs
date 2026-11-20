@@ -281,6 +281,7 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec, job: &mu
         job.state_bytes += (state + 7) & !7;
         i += 1;
     }
+    job.accepted += nfx;
     OK
 }
 

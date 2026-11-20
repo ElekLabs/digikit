@@ -42,7 +42,8 @@ pub fn bytes() -> &'static [u8] {
     }
 }
 
-/// Back to the start (zero): the host tests' reset between two cores.
+/// Back to the start: the rows are zero and the guard's memory (`DKRT_FXGUARD`) has seen nothing. The host tests' reset between two cores: every static of the service.
 pub fn reset() {
     unsafe { core::ptr::write_bytes(addr_of_mut!(DKRT_FROWS), 0, 1) }
+    crate::dsp::guard_reset();
 }

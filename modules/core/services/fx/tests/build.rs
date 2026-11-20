@@ -8,9 +8,10 @@ use dkrt_sdk::*;
 use dkrt_svc_fx::build::{self, *};
 use dkrt_svc_fx::fxpage::{KIND_EFFECT, LEN_EFFECT};
 use dkrt_svc_fx::records::Fx;
+use dkrt_test_support::contract::locked;
 use dkrt_test_support::FakeCore;
 use std::boxed::Box;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::vec::Vec;
 
 /// The tests that drive the statics of the crate (the open collection, the effect ids) take this lock.
@@ -190,13 +191,14 @@ const REC: usize = 3;
 const FIRST_ROW: u32 = 6;
 
 /// A core whose `dynfx_info` says the effect table starts at row `FIRST_ROW`, with effect row 1 claimed by module record `REC` (the row the effect of ordinal 0 declares to).
-fn core() -> FakeCore {
+fn core() -> (MutexGuard<'static, ()>, FakeCore) {
+    let rows_lock = locked();
     dkrt_svc_fx::rows::reset();
     let mut core = FakeCore::new();
     core.set_dynfx(FIRST_ROW, 4);
     let d = dkrt_svc_fx::rows::frows();
     d.fx_owner[1] = REC as u8 + 1;
-    core
+    (rows_lock, core)
 }
 
 fn commit(core: &FakeCore, rec: usize, phase: u32, k: &KeysCopy, sink: &mut RecordSink) -> i32 {
@@ -234,7 +236,7 @@ fn collect_effect(core: &FakeCore, rec: usize) {
 #[test]
 fn the_commit_measures_then_writes_and_declares_the_effects_row() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = core();
+    let (_rows, core) = core();
     collect_effect(&core, REC);
     let k = keys(&[FXID]);
     let mut measured = RecordSink::measure();
