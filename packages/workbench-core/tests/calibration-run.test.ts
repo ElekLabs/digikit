@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, type Clock, type DkSession } from '@digi/dk-session';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { runCalibrationOnTarget, deviceOfInfo } from '../src/profile/calibration-run';
-import { untilBootStable } from '../src/calibration/rigsetup';
+import { sessionSetup, untilBootStable } from '../src/calibration/rigsetup';
 import { loadCalibrationFiles, type RunEvent } from '../src/profile/calibration-view';
 
 const files = loadCalibrationFiles({
@@ -171,16 +172,52 @@ test('with the debug log a machine step is a SETUP request for the machine type 
   );
 });
 
-test('a boot whose log cannot be read is not waited for', async () => {
+test('a boot that is not seen stable stops the run with a clear message, and one whose events say it is stable does not wait', async () => {
   let t = 0;
   const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
-  const lines: string[] = [];
   const noLog = {
     logPage: async () => Promise.reject(new Error('no log')),
     logConfig: async () => Promise.reject(new Error('no log')),
     setLogConfig: async () => ({}),
     modules: async () => [],
   };
-  await untilBootStable(noLog as never, clock, (l) => lines.push(l));
-  assert.match(lines[0]!, /restarting anyway/);
+  await assert.rejects(untilBootStable(noLog as never, clock), /not seen stable.*the run stops here/);
+  // BOOT_START (stable_blocks 3000) at block 100 and a later event at block 3200: stable by the blocks, though STABLE itself was dropped from the ring
+  const word = [0, 0, 0];
+  const events = [
+    { seq: 1, time: 100, kind: LOG_KIND.BOOT_START, flags: 2, args: [0x0a04, 1, 3000, 1, 1] },
+    { seq: 2, time: 3200, kind: LOG_KIND.HEALTH, flags: 2, args: [...word, 0, 0] },
+  ];
+  const log = {
+    logPage: async (from: number) => [1, 2, events.filter((e) => e.seq >= from)] as never,
+    logConfig: async () => ({ level: 2, modules: [] }),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  };
+  await untilBootStable(log as never, clock);
+});
+
+test('the machine step remembers the type the firmware reported as the old one and puts it back with `original`', async () => {
+  const sent: [string, number, number][] = [];
+  const session = {
+    modules: async () => [{ name: 'a/b', types: [17] }],
+    setup: async (what: string, track: number, type: number) => {
+      sent.push([what, track, type]);
+      return sent.length;
+    },
+  };
+  const clock: Clock = { now: async () => 0, pause: async () => {} };
+  const events = {
+    // SETUP_DONE of the request, and the watch's MACHINE_CHANGE of the first one: track 3 had type 2
+    until: async () => ({ fields: { seq: sent.length, status: 0 } }),
+    tryUntil: async () => ({ fields: { track: 3, new_type: 17, old_type: 2 } }),
+  };
+  const setup = sessionSetup(session as never, events as never, clock);
+  await setup('machine', 3, 'a/b');
+  await setup('machine', 3, 'original');
+  assert.deepEqual(sent, [
+    ['machine', 2, 17],
+    ['machine', 2, 2],
+  ]);
+  await assert.rejects(setup('machine', 5, 'original'), /none to put back/);
 });

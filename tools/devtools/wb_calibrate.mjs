@@ -147,7 +147,7 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
     async select(ids) {
       // the debug module's log is what the run waits on: it stays selected with the case's modules
       const stay = keep.filter((id) => library.has(id) && !ids.includes(id));
-      await untilBootStable(session, clock, (l) => console.error(`calibrate: ${l}`));
+      await untilBootStable(session, clock);
       await session.select([...ids, ...stay].map((id) => library.get(id).path));
       await restartDevice(session, emit, { bootTimeoutMs, loadedTimeoutMs: bootTimeoutMs ? 120_000 : undefined });
       await events.listen({ fromBoot: true });
@@ -242,10 +242,10 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
     writeIndex();
   };
   const onCase = (r) => {
-    if (!r.skipped) return;
+    if (!r.skipped && !r.failed) return;
     skipped++;
-    console.log(`  ${r.id}: SKIPPED, ${r.skipped}`);
-    index.push({ case: r.id, skipped: r.skipped });
+    console.log(`  ${r.id}: ${r.skipped ? `SKIPPED, ${r.skipped}` : `FAILED, ${r.failed}`}`);
+    index.push({ case: r.id, ...(r.skipped ? { skipped: r.skipped } : { failed: r.failed }) });
     writeIndex();
   };
   try {

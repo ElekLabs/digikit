@@ -217,7 +217,7 @@ export class RuntimeEvents {
   }
 
   async until(
-    kind: LogKindName | LogKindName[],
+    kind: LogKindName | LogKindName[] | '*',
     match: (e: RuntimeEvent) => boolean = () => true,
     { withinMs = 2000 }: WaitOpts = {},
   ): Promise<RuntimeEvent> {
@@ -266,20 +266,24 @@ export class RuntimeEvents {
 
   /**
    * After a boot or restart of a selection of `count` content modules: wait on the runtime's own events until every module of the selection has its result: MOD_LOAD
-   * with 0, or with 1 and then MOD_DSP with 0 (the DSP part). A module the runtime refused (a negative result; E_IMPORT also has its MOD_NEEDS, the missing core
-   * module) is `ModuleLoadRefused`. The cursor must be at the start of the boot (`listen({ fromBoot: true })`). Provider files (services) have no index here.
+   * with 0, or with 1 and then MOD_DSP with 0 (the DSP part; `dsp: false` for a session without the DSP, where no DSP part completes: the CF part is final). A module
+   * the runtime refused (a negative result) is `ModuleLoadRefused`; E_IMPORT has its MOD_NEEDS right after (the missing core module), which is waited for a moment and
+   * is empty when it does not come. The cursor must be at the start of the boot (`listen({ fromBoot: true })`). Provider files (services) have no index here.
    */
-  async untilModulesActive(count: number, { withinMs = 120_000 }: WaitOpts = {}): Promise<void> {
+  async untilModulesActive(
+    count: number,
+    { withinMs = 120_000, dsp: withDsp = true }: WaitOpts & { dsp?: boolean } = {},
+  ): Promise<void> {
+    if (count < 1)
+      throw new Error(
+        'untilModulesActive: the selection has no module, so the runtime logs no module event: the debug module file (digikit/debug) is missing from the selection or the library',
+      );
     const E_IMPORT = -7;
     const result = new Map<number, number>();
     const dsp = new Set<number>();
     const needs = new Map<number, string>();
-    const final = (i: number) => result.has(i) && !dsp.has(i);
     const complete = () => {
-      for (let i = 0; i < count; i++) {
-        if (!final(i)) return false;
-        if (result.get(i) === E_IMPORT && !needs.has(i)) return false;
-      }
+      for (let i = 0; i < count; i++) if (!result.has(i) || dsp.has(i)) return false;
       return true;
     };
     await this.until(
@@ -290,8 +294,10 @@ export class RuntimeEvents {
         if (index >= count) return false;
         if (e.kind === 'MOD_LOAD') {
           const r = Number(e.fields.result);
-          result.set(index, r);
-          if (r === 1) dsp.add(index);
+          if (r === 1 && withDsp) {
+            result.set(index, r);
+            dsp.add(index);
+          } else result.set(index, r === 1 ? 0 : r);
         } else if (e.kind === 'MOD_DSP') {
           dsp.delete(index);
           result.set(index, Number(e.fields.result));
@@ -300,8 +306,16 @@ export class RuntimeEvents {
       },
       { withinMs },
     );
-    for (let i = 0; i < count; i++)
-      if (result.get(i)! !== 0) throw new ModuleLoadRefused(i, result.get(i)!, needs.get(i));
+    for (let i = 0; i < count; i++) {
+      const r = result.get(i)!;
+      if (r === 0) continue;
+      if (r === E_IMPORT && !needs.has(i)) {
+        // MOD_NEEDS follows its MOD_LOAD at once
+        const e = await this.tryUntil('MOD_NEEDS', (x) => Number(x.fields.index) === i, { withinMs: 500 });
+        if (e) needs.set(i, String(e.fields.needs));
+      }
+      throw new ModuleLoadRefused(i, r, needs.get(i) ?? (r === E_IMPORT ? '' : undefined));
+    }
   }
 
   untilBoot(opts?: WaitOpts) {
@@ -339,13 +353,17 @@ export class RuntimeEvents {
 
   /** Read what is new and return the first matching event; later events stay queued for the next wait. */
   private async scan(
-    kind: LogKindName | LogKindName[],
+    kind: LogKindName | LogKindName[] | '*',
     match: (e: RuntimeEvent) => boolean,
   ): Promise<RuntimeEvent | null> {
     for (;;) {
       while (this.queue.length > 0) {
         const e = this.queue.shift()!;
-        if ((Array.isArray(kind) ? kind.includes(e.kind as LogKindName) : e.kind === kind) && match(e)) return e;
+        if (
+          (kind === '*' || (Array.isArray(kind) ? kind.includes(e.kind as LogKindName) : e.kind === kind)) &&
+          match(e)
+        )
+          return e;
       }
       const r = await this.cursor.read();
       if (r.newBoot) {

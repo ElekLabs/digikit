@@ -331,3 +331,20 @@ test('untilModulesActive waits on MOD_LOAD and MOD_DSP of each module of the sel
     (e: unknown) => e instanceof ModuleLoadRefused && e.index === 1 && e.result === -7 && e.needs === 'sample-pool',
   );
 });
+
+test('untilModulesActive: an E_IMPORT without MOD_NEEDS is final with an empty name, a session without the DSP does not wait for MOD_DSP, and no module is an error naming the debug module', async () => {
+  const log = new FakeLog();
+  const { ev } = make(log);
+  await ev.listen({ fromBoot: true });
+  log.add('MOD_LOAD', [0, -7 >>> 0, 0, 0, 0]);
+  await assert.rejects(
+    ev.untilModulesActive(1),
+    (e: unknown) => e instanceof ModuleLoadRefused && e.result === -7 && e.needs === '',
+  );
+  const noDsp = new FakeLog();
+  const n = make(noDsp);
+  await n.ev.listen({ fromBoot: true });
+  noDsp.add('MOD_LOAD', [0, 1, 0, 0, 0]); // the DSP part never reports without the DSP
+  await n.ev.untilModulesActive(1, { dsp: false });
+  await assert.rejects(ev.untilModulesActive(0), /debug module file/);
+});

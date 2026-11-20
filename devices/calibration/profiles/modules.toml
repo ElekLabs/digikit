@@ -6,7 +6,7 @@ capture_s = 5
 repeats = 3
 discover = "modules"
 teardown = { steps = "release-notes", args = { tracks = "1" } }
-module_teardown = { steps = "reset-machine", args = { track = "1" } }
+module_teardown = { steps = "reset-machine" }
 
 [[case]]
 id = "stock"

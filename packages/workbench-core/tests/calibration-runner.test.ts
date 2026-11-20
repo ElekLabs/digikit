@@ -513,10 +513,10 @@ test('a module capture in which no row counted a call is refused, and a case who
       parseCalCase(`schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\n${needs}steps = "${steps}"\n`, 'm'),
     ]);
   const input = { steps: lib, midi, run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' }, dspUnit: 'insn' };
-  await assert.rejects(
-    runCalibration({ ...input, profile: withCase('mach', ''), rig: f.rig }),
-    /counted no calls of any machine or effect row/,
-  );
+  // a case whose capture counted no call fails as a case, with its reason; the run goes on and the next case runs
+  const [, failedCase] = await runCalibration({ ...input, profile: withCase('mach', ''), rig: f.rig });
+  assert.match(failedCase!.failed!, /counted no calls of any machine or effect row/);
+  assert.equal(failedCase!.captures.length, 0, 'the empty capture is not kept');
   // the runtime refuses the module for an import of a core module that the case declares: skipped, the run goes on
   const g = fake();
   g.rig.setup = async () => {};
@@ -548,4 +548,44 @@ test('a module capture in which no row counted a call is refused, and a case who
     throw new ModuleLoadRefused(0, -7, 'sample-pool');
   };
   await assert.rejects(runCalibration({ ...input, profile: withCase('mach', ''), rig: h.rig }), /did not load/);
+});
+
+test('when putting the machine type back is refused the run stops, before the next case can unload the module', async () => {
+  const f = fake({ moduleCalls: 5 });
+  f.rig.setup = async (_what, _track, type) => {
+    if (type === 0) throw new Error('SETUP refused');
+  };
+  const profile = addModuleCases(
+    parseCalProfile(
+      base + `discover = "modules"\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [
+      parseCalCase('schema = "dk.calcase/1"\nid = "m1"\nmodule = "a/b"\nsteps = "mach"\n', 'm1'),
+      parseCalCase('schema = "dk.calcase/1"\nid = "m2"\nmodule = "c/d"\nsteps = "mach"\n', 'm2'),
+    ],
+  );
+  await assert.rejects(
+    runCalibration({
+      profile,
+      steps: lib,
+      rig: f.rig,
+      midi,
+      run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+      dspUnit: 'insn',
+    }),
+    /putting the track's machine type back failed.*the run stops before the next case/,
+  );
+  assert.ok(!f.log.includes('select c/d'), 'the module of the next case was not loaded');
+});
+
+test('the module teardown takes the track of the case', () => {
+  const p = addModuleCases(
+    parseCalProfile(
+      base + `discover = "modules"\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [parseCalCase('schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\nsteps = "mach"\nargs = { track = 3 }\n', 'm')],
+  );
+  assert.deepEqual(p.cases[1]!.teardown, { steps: 'reset', args: { track: 3 } });
 });

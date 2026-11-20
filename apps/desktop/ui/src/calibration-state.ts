@@ -108,6 +108,7 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
               setProgress(progressLine({ ...e, left: left(e.n, e.case, 0) }));
             });
           } else if (e.kind === 'skip') setNotes((n) => [...n, `case ${e.case} skipped: ${e.reason}`]);
+          else if (e.kind === 'fail') setNotes((n) => [...n, `case ${e.case} failed: ${e.reason}`]);
         },
       });
       if (out.captures.length > 0) {

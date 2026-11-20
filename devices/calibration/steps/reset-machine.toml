@@ -1,6 +1,6 @@
 schema = "dk.steps/1"
 name = "reset-machine"
-description = "Put a stock machine back on the track (the teardown of a module case: the next case starts from a track that plays a stock machine, and a module that unloads leaves no type of its own in the kit). Type 0 is a stock machine on every device."
+description = "Put the machine type the track had before the case back on it (the teardown of a module case: a module that unloads must leave no type of its own in the kit). The runner remembers the type the firmware reports as the old type of its first SETUP on that track (`original`); `track` is the case's own track."
 
 [args]
 track = 1
@@ -8,4 +8,4 @@ track = 1
 [[step]]
 action = "setup"
 track = "{track}"
-machine = 0
+machine = "original"

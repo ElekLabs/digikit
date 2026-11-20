@@ -88,7 +88,9 @@ export async function installModules(
         // the debug module's log is there: the runtime's own events say when each module of the selection is in (MOD_LOAD, and MOD_DSP for a DSP part), no list poll
         const events = new RuntimeEvents(dk, dk.clock);
         await events.listen({ fromBoot: true });
-        await events.untilModulesActive(modules.length, { withinMs: MODULES_LOADED_EMULATED_MS * 4 });
+        // a DSP part completes (MOD_DSP) only when the session runs the SHARC DSP: without it the CF part (MOD_LOAD) is final
+        const dsp = session ? (await session.status()).dsp === 'sharc' : true;
+        await events.untilModulesActive(modules.length, { withinMs: MODULES_LOADED_EMULATED_MS * 4, dsp });
         return;
       }
       const loaded = async () => (await dk.modules()).map((entry) => entry.name);

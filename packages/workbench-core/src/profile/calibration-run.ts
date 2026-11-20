@@ -55,6 +55,8 @@ export interface RunOutcome {
   emulator: boolean;
   captures: Capture[];
   skipped: { case: string; reason: string }[];
+  /** Cases that failed (a capture with no call of any module row); the run went on with the next case. */
+  failed: { case: string; reason: string }[];
   /** The run was stopped by the user. */
   stopped: boolean;
   /** Why the run failed (the captures made before are in `captures`). */
@@ -242,7 +244,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   }
   opts.onClock?.(() => base.now());
 
-  const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], stopped: false };
+  const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], failed: [], stopped: false };
   try {
     await runCalibration({
       profile,
@@ -257,6 +259,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       },
       onCase: (r) => {
         if (r.skipped) out.skipped.push({ case: r.id, reason: r.skipped });
+        if (r.failed) out.failed.push({ case: r.id, reason: r.failed });
         opts.onCase?.(r);
       },
       log: (line) => opts.onEvent?.(parseRunLine(line)),

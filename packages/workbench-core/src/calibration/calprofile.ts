@@ -181,6 +181,13 @@ export function parseCalCase(text: string, file: string): CalCaseFile {
   return { id: doc.id, module: doc.module, needs: strings(file, 'needs', doc.needs), steps: ref(file, 'case', doc) };
 }
 
+/** The module teardown of a case: its step reference, with the `track` of the case's own arguments (the track the case set up), when it gives one. */
+function teardownOf(t: StepRef, own: StepRef): StepRef {
+  const track = 'args' in own ? own.args?.track : undefined;
+  if (track === undefined || !('steps' in t)) return t;
+  return { ...t, args: { ...t.args, track } };
+}
+
 /** The profile with the discovered module cases added after its own, and their modules in its module list. A profile without `discover` takes none. */
 export function addModuleCases(profile: CalProfile, found: readonly CalCaseFile[]): CalProfile {
   if (profile.discover !== 'modules') return profile;
@@ -195,7 +202,7 @@ export function addModuleCases(profile: CalProfile, found: readonly CalCaseFile[
       steps: f.steps,
       modules: [f.module],
       ...(f.needs.length ? { needs: f.needs } : {}),
-      ...(profile.module_teardown ? { teardown: profile.module_teardown } : {}),
+      ...(profile.module_teardown ? { teardown: teardownOf(profile.module_teardown, f.steps) } : {}),
     });
   }
   return { ...profile, cases, modules };

@@ -83,6 +83,8 @@ export interface CaseResult {
   captures: Capture[];
   /** Why the case did not run (the target lacks something it needs). */
   skipped?: string;
+  /** Why the case failed (a module capture without a call of any row): the captures before it are kept, the run goes on with the next case. */
+  failed?: string;
 }
 
 const isSetup = (o: Op) => o.op === 'setup';
@@ -128,13 +130,13 @@ function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
   return undefined;
 }
 
-async function play(o: Op, rig: Rig): Promise<void> {
-  await playOp(o, rig);
+async function play(o: Op, rig: Rig, pause?: (ms: number) => Promise<void>): Promise<void> {
+  await playOp(o, rig, pause);
   // a case must not start capturing before the firmware took the notes it was sent
   if (o.op.startsWith('midi.') && rig.drained) await rig.drained();
 }
 
-async function playOp(o: Op, rig: Rig): Promise<void> {
+async function playOp(o: Op, rig: Rig, pause?: (ms: number) => Promise<void>): Promise<void> {
   switch (o.op) {
     case 'midi.note':
       return rig.midi.note(o.ch, o.key, o.velocity);
@@ -159,7 +161,7 @@ async function playOp(o: Op, rig: Rig): Promise<void> {
     case 'capture':
       return;
     case 'wait': {
-      if (o.ms !== undefined) return rig.clock.pause(o.ms);
+      if (o.ms !== undefined) return (pause ?? ((ms) => rig.clock.pause(ms)))(o.ms);
       if (o.drained) return rig.drained!();
       const match = o.match ?? {};
       await rig.events!.until(o.event as never, (e) => Object.entries(match).every(([k, v]) => e.fields[k] === v), {
@@ -169,8 +171,8 @@ async function playOp(o: Op, rig: Rig): Promise<void> {
   }
 }
 
-async function playAll(ops: Op[], rig: Rig): Promise<void> {
-  for (const o of ops) await play(o, rig);
+async function playAll(ops: Op[], rig: Rig, pause?: (ms: number) => Promise<void>): Promise<void> {
+  for (const o of ops) await play(o, rig, pause);
 }
 
 /** Split a case's operations at its `capture start` and `capture stop` markers: before, the measured window, after. Without markers the window is empty. */
@@ -264,7 +266,7 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
         await i.onCase?.(r);
         continue;
       }
-      const r = await runCase(i, c, setup, ops, [...teardown, ...after], hashes, caps.dsp, log);
+      const r = await runCase(i, c, setup, ops, teardown, after, hashes, caps.dsp, log);
       results.push(r);
       await i.onCase?.(r);
     }
@@ -295,6 +297,7 @@ async function runCase(
   setup: Op[],
   ops: Op[],
   teardown: Op[],
+  after: Op[],
   hashes: Record<string, string>,
   dsp: boolean,
   log: (l: string) => void,
@@ -312,7 +315,7 @@ async function runCase(
       modules: c.modules,
       setup,
       case: ops,
-      teardown,
+      teardown: [...teardown, ...after],
     }),
   );
   const captures: Capture[] = [];
@@ -341,14 +344,22 @@ async function runCase(
   const pause = async (ms: number): Promise<void> => {
     if (keepers.length === 0) return rig.clock.pause(ms);
     const every = Math.min(...keepers.map((k) => k.retrigger_ms!));
+    let next = every;
     for (let left = ms; left > 0;) {
-      const slice = Math.min(every, left);
+      const slice = Math.min(next, left);
       await rig.clock.pause(slice);
       left -= slice;
       // pressed again only when the wait goes on: a press at its end would start a voice that the next measurement sees from its first block
-      if (left > 0) for (const k of keepers) await play(k, rig);
+      if (left > 0) {
+        // sending the key takes clock time too (the drain wait): the next slice is shorter by it, so the period stays `retrigger_ms`
+        const before = await rig.clock.now();
+        for (const k of keepers) await play(k, rig);
+        next = Math.max(1, every - ((await rig.clock.now()) - before));
+      } else next = every;
     }
   };
+  let failed: string | undefined;
+  let stopError: Error | undefined;
   try {
     await playAll(setup, rig);
     await playAll(pre, rig);
@@ -360,7 +371,7 @@ async function runCase(
         await rig.stats.start();
         await pause(profile.warmup_s * 1000);
         const { generation } = await rig.stats.clear();
-        if (marked) await playAll(body, rig);
+        if (marked) await playAll(body, rig, pause);
         else await pause(profile.capture_s * 1000);
         if (dsp) {
           // the window ends with the first complete sweep of this clear generation that the mirror publishes after it (about 50 blocks): the runtime logs DSP_SWEEP
@@ -383,10 +394,12 @@ async function runCase(
       if (dsp && !dspOut) throw new Error(`case ${c.id}: no complete DSP sweep after the capture`);
       if (dspOut && c.modules.length > 0) {
         const busy = dspOut.rows.filter((x) => x.calls > 0);
-        if (busy.length === 0)
-          throw new Error(
-            `case ${c.id}: capture ${r} counted no calls of any machine or effect row: nothing of the module sounded in the window (a voice that ends by itself needs retrigger_ms on its note)`,
-          );
+        if (busy.length === 0) {
+          // a failure of this case, recorded; the run goes on with the next case
+          failed = `capture ${r} counted no calls of any machine or effect row: nothing of the module sounded in the window (a voice that ends by itself needs retrigger_ms on its note)`;
+          log(`case ${c.id}: failed, ${failed}`);
+          break;
+        }
         for (const x of busy)
           if (x.calls < 0.5 * dspOut.header.blocks)
             log(
@@ -412,14 +425,22 @@ async function runCase(
       captures.push(capture);
       await i.onCapture?.(capture);
     }
-    await playAll(post, rig);
+    if (!failed) await playAll(post, rig);
   } finally {
     // the notes of the case must not hold on into the next one, also after a failure
     await playAll(teardown, rig).catch((e) =>
       log(`case ${c.id}: teardown failed: ${e instanceof Error ? e.message : e}`),
     );
+    // what the case changed on the target (the track's machine type) is put back before the next case loads other modules; a refusal stops the run
+    await playAll(after, rig).catch((e) => {
+      stopError = e instanceof Error ? e : new Error(String(e));
+    });
   }
-  return { id: c.id, captures };
+  if (stopError)
+    throw new Error(
+      `case ${c.id}: putting the track's machine type back failed (${stopError.message}): the run stops before the next case unloads the module, so that no track keeps the machine type of an unloaded module`,
+    );
+  return { id: c.id, captures, ...(failed ? { failed } : {}) };
 }
 
 export type { StepRef };
