@@ -212,7 +212,7 @@ A `sig` may return a pointer: our m68k-elf gcc and the Rust backend read it from
 A `site` with `bind = "static"` also becomes a static (like a `data` entry), for a module that takes only its address.
 No other `bind` value exists, and `bind` is allowed on a `site` only.
 
-An `fn`, `site`, `data`, `value` or `sites` entry with `codegen = false` is a fact for tests and tools: its rule resolves into the port files and is checked like any other, but `patchkit gen` writes no extern, static or function for it and no `reference.json` entry. Use it for an address that only device tests read (`users = ["tests/regression"]`), so that adding it does not change the inputs of the core modules.
+An `fn`, `site`, `data`, `value` or `sites` entry with `codegen = false` is a fact for tests and tools: its rule resolves into the port files and is checked like any other, but `patchkit gen` writes no extern, static or function for it and no `reference.json` entry. Use it for an address that only device tests read (`users = ["tests/regression"]`), or that only a core module's `[object.externs]` names (its C or assembly declares the symbol itself), so that adding it does not change the inputs of the other core modules.
 
 A `[[struct]]` field has `name`, `off` and a `type`: a scalar, `ptr` (a 32-bit pointer on the device) or the short name
 of another struct (its size). The generator sorts fields by `off`, fills gaps with padding and refuses overlaps and

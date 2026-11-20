@@ -86,7 +86,7 @@ description = "Build the dkmidi MIDI bridge (the workbench's MIDI port code on s
 
 ["dkbulk:build"]
 run = "cargo build -p dkbulk --release --offline --target-dir \"$(SHARC_GEN_DIR= uv run python -m tools.emulator.native_target dir)\""
-description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) into the nogen target dir, where tools/devtools/wb.mjs looks; `dkbulk list` shows the devices that offer the bulk interface"
+description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) into the nogen target dir, where tools/devtools/wb.mjs looks; `dkbulk list` shows the devices that offer the bulk interface; `dkbulk descriptors [ID]` checks the WinUSB descriptors of a device"
 
 ["wb:cli"]
 depends = ["dkmidi:build", "dkbulk:build", "services:pack"]

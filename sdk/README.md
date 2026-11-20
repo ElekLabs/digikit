@@ -62,7 +62,8 @@ callback argument. A new builder call is an `[[import]]` and the `build::*` func
 - The naming rules (`dk_<area>_<verb>`, `ctx` and `arg`, `_fn` callback types) are in [docs/plans/sdk.md](../docs/plans/sdk.md) section 10.
 
 The headers of the services are `core/log.h`, `core/mem.h`, `core/time.h`, `platform/host.h`, `settings.h`, `files.h`, `io.h`, `hash32.h`,
-`intro.h`, `param.h`, `samples.h`, `ui.h`, `input.h`, `usb_bulk.h`, `dsp_link.h` and `debug.h`, and `page/page.h` for canvas pages.
+`intro.h`, `param.h`, `samples.h`, `shortcuts.h`, `ui.h`, `input.h`, `usb_bulk.h`, `dsp_link.h` and `debug.h`, and `page/page.h` for canvas pages. The logical key names
+(`DK_KEY_TRK`, `DK_KEY_TRIG(n)`, type `dk_key`) are in the generated `gen/keys.h`: `patchkit gen` writes them from `[input.keys]` of the device files.
 
 ## Include paths
 

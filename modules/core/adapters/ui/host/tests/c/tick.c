@@ -16,7 +16,7 @@ static void cb(void *ctx)
     int id = (int)(intptr_t)ctx;
     calls[id]++;
     if (stop_after[id] && calls[id] >= (int)stop_after[id])
-        ui_ticks_set(&ts, cb, ctx, 0, 0);
+        ui_ticks_set(&ts, 0, cb, ctx, 0, 0);
 }
 
 static void cb_other(void *ctx)
@@ -35,15 +35,15 @@ void tk_reset(void)
 }
 int tk_set(int id, uint32_t ms, uint32_t now)
 {
-    return ui_ticks_set(&ts, cb, (void *)(intptr_t)id, ms, now);
+    return ui_ticks_set(&ts, 0, cb, (void *)(intptr_t)id, ms, now);
 }
 int tk_set_other(uint32_t ms, uint32_t now)
 {
-    return ui_ticks_set(&ts, cb_other, 0, ms, now);
+    return ui_ticks_set(&ts, 0, cb_other, 0, ms, now);
 }
 int tk_set_null(void)
 {
-    return ui_ticks_set(&ts, 0, 0, 10, 0);
+    return ui_ticks_set(&ts, 0, 0, 0, 10, 0);
 }
 uint32_t tk_run(uint32_t now, uint32_t per_s)
 {
@@ -56,6 +56,15 @@ int tk_calls(int id)
 void tk_stop_after(int id, uint32_t n)
 {
     stop_after[id] = n;
+}
+/* A timer of `owner` (the id as the context). */
+int tk_set_owned(uintptr_t owner, int id, uint32_t ms, uint32_t now)
+{
+    return ui_ticks_set(&ts, owner, cb, (void *)(intptr_t)id, ms, now);
+}
+uint32_t tk_remove_owner(uintptr_t owner)
+{
+    return ui_ticks_remove_owner(&ts, owner);
 }
 uint32_t tk_active(void)
 {

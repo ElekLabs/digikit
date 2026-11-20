@@ -4,12 +4,13 @@
 /// `dk_svc_declare` of a service file: the declarations of `init` without `setup`, for the device that `device` gives.
 pub type DeclareFn = unsafe fn(*mut u8, fn() -> u32) -> i32;
 
-/// The four Rust service files: (file name, declarations).
-pub fn declarations() -> [(&'static str, DeclareFn); 4] {
+/// The Rust service files: (file name, declarations).
+pub fn declarations() -> [(&'static str, DeclareFn); 5] {
     [
         ("machines", dkrt_svc_machines_dks::dk_svc_declare),
         ("fx", dkrt_svc_fx_dks::dk_svc_declare),
         ("lfo", dkrt_svc_lfo_dks::dk_svc_declare),
         ("samples", dkrt_svc_samples_dks::dk_svc_declare),
+        ("shortcuts", dkrt_svc_shortcuts_dks::dk_svc_declare),
     ]
 }

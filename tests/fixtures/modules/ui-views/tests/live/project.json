@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "sdk-ui-views-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "ui-views.device.test.ts"
+        ],
+        "tags": [
+          "C:loading",
+          "A:core/ui"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/ui-views"
+        ],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      }
+    ]
+  }
+}

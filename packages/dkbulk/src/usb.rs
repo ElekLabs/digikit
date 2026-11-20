@@ -99,6 +99,62 @@ pub fn list() -> Result<Vec<Candidate>, String> {
         .collect())
 }
 
+/// Open the device `id` (`bus:address` of `list`), or the first device with the vendor id when `id` is None. No interface is claimed: only control transfers follow.
+pub fn open_device(id: Option<&str>) -> Result<(nusb::Device, String), String> {
+    let all = nusb::list_devices().wait().map_err(|e| e.to_string())?;
+    let info = all
+        .filter(|d| d.vendor_id() == VID)
+        .find(|d| id.is_none_or(|w| id_of(d) == w))
+        .ok_or_else(|| match id {
+            Some(w) => format!("no USB device {w} with vendor id {VID:#06x}"),
+            None => format!("no USB device with vendor id {VID:#06x}"),
+        })?;
+    let device = info.open().wait().map_err(|e| format!("open: {e}"))?;
+    Ok((device, id_of(&info)))
+}
+
+/// One IN control transfer to the device (no interface claimed); `vendor` selects the vendor request type, the recipient is the device.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub fn control_in(
+    device: &nusb::Device,
+    vendor: bool,
+    request: u8,
+    value: u16,
+    index: u16,
+    length: u16,
+) -> Result<Vec<u8>, TransferError> {
+    use nusb::transfer::{ControlIn, ControlType, Recipient};
+    device
+        .control_in(
+            ControlIn {
+                control_type: if vendor {
+                    ControlType::Vendor
+                } else {
+                    ControlType::Standard
+                },
+                recipient: Recipient::Device,
+                request,
+                value,
+                index,
+                length,
+            },
+            Duration::from_secs(1),
+        )
+        .wait()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn control_in(
+    _device: &nusb::Device,
+    _vendor: bool,
+    _request: u8,
+    _value: u16,
+    _index: u16,
+    _length: u16,
+) -> Result<Vec<u8>, TransferError> {
+    Err(TransferError::InvalidArgument)
+}
+
 /// The OUT half.
 pub struct UsbTx {
     out: Endpoint<Bulk, Out>,
