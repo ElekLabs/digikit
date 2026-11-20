@@ -175,7 +175,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
     midi: new MidiOut(deps.sink),
     stats: sessionStatsSource(session, nameOf),
     clock,
-    ...(events ? { events: events as unknown as NonNullable<Rig['events']> } : {}),
+    ...(events ? { events } : {}),
     ...(modules ? { modules } : {}),
     ...(drained ? { drained } : {}),
   };

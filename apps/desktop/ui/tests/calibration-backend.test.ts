@@ -29,6 +29,10 @@ function deps(extra: Partial<CalibrationDeps> = {}) {
     },
     profileState: async () => ({}),
     profileAll: async () => ({ hz: 1, elapsedTicks: 0n, spans: [] }),
+    // a debug module without PROFILE_DSP: spans only
+    profileDsp: async () => {
+      throw new Error('E_PROTO');
+    },
   } as unknown as DkSession;
   const d: CalibrationDeps = {
     session: async () => session,

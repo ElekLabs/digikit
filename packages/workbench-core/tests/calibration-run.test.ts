@@ -47,6 +47,10 @@ function fake(opts: { hangOnPause?: number; fwId?: string | null } = {}) {
     },
     profileState: async (op: string) => void calls.push(`state ${op}`),
     profileAll: async () => ({ hz: 1, elapsedTicks: 0n, spans: [] }),
+    // a debug module without PROFILE_DSP: spans only
+    profileDsp: async () => {
+      throw new Error('E_PROTO');
+    },
   } as unknown as DkSession;
   return {
     deps: {

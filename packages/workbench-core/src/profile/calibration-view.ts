@@ -279,7 +279,7 @@ export function fitView(c: CalibrationDoc): FitView {
     details.push(
       e.loo_worst == null
         ? 'leave-one-out: n/a (one row only)'
-        : `leave-one-out: worst under ${pct(e.loo_worst)}, budget factor ${pct(e.loo_budget_under ?? 0)}`,
+        : `leave-one-out: worst under ${pct(e.loo_worst)}, budget under ${pct(e.loo_budget_under ?? 0)}`,
     );
     if (d.steady && d.steady.n > 0)
       details.push(

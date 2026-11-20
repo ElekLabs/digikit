@@ -77,7 +77,7 @@ test('the fit view: headline, null leave-one-out as n/a, refusals and warnings',
     ...fit,
     dsp: { ...fit.dsp!, error: { ...fit.dsp!.error, loo_worst: 0.021, loo_budget_under: 0 } },
   });
-  assert.equal(loo.details[0], 'leave-one-out: worst under 2.1 %, budget factor 0.0 %');
+  assert.equal(loo.details[0], 'leave-one-out: worst under 2.1 %, budget under 0.0 %');
   const none = fitView({ refused: [], warnings: [] });
   assert.equal(none.hasFit, false);
   assert.match(none.headline, /no DSP pairs/);
@@ -165,7 +165,7 @@ test('the progress parser follows what the shared runner logs', async () => {
       stats: {
         capabilities: async () => ({ dsp: false, spans: true }),
         start: async () => {},
-        clear: async () => {},
+        clear: async () => ({}),
         stop: async () => {},
         read: async () => ({}),
       },
