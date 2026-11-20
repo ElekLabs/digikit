@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { Clock, DkSession } from '@digi/dk-session';
+import { DkError, type Clock, type DkSession } from '@digi/dk-session';
 import { runCalibrationOnTarget, deviceOfInfo } from '../src/profile/calibration-run';
 import { loadCalibrationFiles, type RunEvent } from '../src/profile/calibration-view';
 
@@ -49,7 +49,7 @@ function fake(opts: { hangOnPause?: number; fwId?: string | null } = {}) {
     profileAll: async () => ({ hz: 1, elapsedTicks: 0n, spans: [] }),
     // a debug module without PROFILE_DSP: spans only
     profileDsp: async () => {
-      throw new Error('E_PROTO');
+      throw new DkError({ error: 'unknown command', kind: 'device', status: 'E_PROTO' });
     },
   } as unknown as DkSession;
   return {

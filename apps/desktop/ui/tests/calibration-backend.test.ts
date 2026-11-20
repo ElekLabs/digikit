@@ -2,7 +2,7 @@
 // through dkprof.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { DkSession } from '@digi/dk-session';
+import { DkError, type DkSession } from '@digi/dk-session';
 import type { DkProf } from '@digi/dk-session/dkprof';
 import { readCaptureSet } from '@digi/workbench-core/profile/calibration-view.ts';
 import { createCalibrator, type CalibrationDeps } from '../src/calibration-backend.ts';
@@ -31,7 +31,7 @@ function deps(extra: Partial<CalibrationDeps> = {}) {
     profileAll: async () => ({ hz: 1, elapsedTicks: 0n, spans: [] }),
     // a debug module without PROFILE_DSP: spans only
     profileDsp: async () => {
-      throw new Error('E_PROTO');
+      throw new DkError({ error: 'unknown command', kind: 'device', status: 'E_PROTO' });
     },
   } as unknown as DkSession;
   const d: CalibrationDeps = {
