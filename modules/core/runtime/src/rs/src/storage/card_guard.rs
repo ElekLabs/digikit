@@ -34,24 +34,38 @@ pub unsafe fn stats<P: Platform>(p: &P) -> Stats {
     Stats { version: w[0], refused_writes: w[1], refused_erases: w[2], last_sector: w[3], last_sectors: w[4], last_class_kind: w[5] }
 }
 
-/// The number of refusals the log has reported.
+/// The number of refusals the log has reported, and the clock reading of the last event.
 static mut REPORTED: u32 = 0;
+static mut LAST_EVENT: u32 = 0;
+/// Whether an event was ever raised (the first one needs no wait).
+static mut RAISED: bool = false;
 
-/// Raise one `CARD_GUARD_REFUSED` event when refusals happened since the last call: the last request and the totals. At most one event per call, so a stock
-/// writer that retries a refused request cannot flood the log. Returns whether it raised one.
-pub unsafe fn tick_with<P: Platform>(p: &P, reported: *mut u32) -> bool {
+/// The least time between two events, in the clock's units (firmware blocks, 1500 per second: 5 seconds). A stock writer that keeps trying a refused request
+/// raises one event per window, not one per UI pass.
+pub const COOLDOWN: u32 = 7500;
+
+/// Raise one `CARD_GUARD_REFUSED` event when refusals happened since the last event and at least `COOLDOWN` has passed since it (the first event needs no
+/// wait): the last request and the totals. Refusals that come during the wait stay counted; the next event after the wait reports them all, so a burst is one
+/// event (plus one more for what followed it). `now` is a clock that rises. Returns whether it raised one.
+pub unsafe fn tick_with<P: Platform>(p: &P, reported: *mut u32, last: *mut u32, raised: *mut bool, now: u32) -> bool {
     let s = stats(p);
     if s.version == 0 || s.refused() == read_volatile(reported) {
         return false;
     }
+    if read_volatile(raised) && now.wrapping_sub(read_volatile(last)) < COOLDOWN {
+        return false;
+    }
     write_volatile(reported, s.refused());
+    write_volatile(last, now);
+    write_volatile(raised, true);
     dlog::ev(logk::CARD_GUARD_REFUSED, logk::F_ERROR, [s.last_sector, s.last_sectors, s.last_class_kind, s.refused_writes, s.refused_erases]);
     true
 }
 
-/// Called from the UI tick.
+/// Called from the UI tick. The clock is the firmware's block counter; without it (no core/health) the UI pass count, which only ever rises too.
 pub unsafe fn tick() {
-    tick_with(&crate::PLATFORM, addr_of_mut!(REPORTED));
+    let now = crate::fw_blocks().unwrap_or_else(|| crate::platform::st().ticks);
+    tick_with(&crate::PLATFORM, addr_of_mut!(REPORTED), addr_of_mut!(LAST_EVENT), addr_of_mut!(RAISED), now);
 }
 
 #[cfg(test)]
@@ -63,10 +77,10 @@ mod tests {
     #[test]
     fn no_guard_in_the_image_reports_zeros_and_raises_nothing() {
         let f = FakePlatform::new(profiles::ALL[0]);
-        let mut seen = 0u32;
+        let mut c = Clock::default();
         unsafe {
             assert_eq!(stats(&f), Stats::default());
-            assert!(!tick_with(&f, &mut seen));
+            assert!(!c.tick(&f, 0));
         }
     }
 
@@ -85,25 +99,61 @@ mod tests {
     fn a_refusal_raises_one_event_with_the_last_request_and_the_totals() {
         let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let f = FakePlatform::new(profiles::ALL[0]);
-        let mut seen = 0u32;
+        let mut c = Clock::default();
         let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };
         let last = || unsafe { (*core::ptr::addr_of!(dlog::DKRT_LOG))[(events() as usize - 1) % dlog::RING] };
         let before = events();
         f.guard_stats.set([1, 0, 0, 0, 0, 0]);
         unsafe {
-            assert!(!tick_with(&f, &mut seen), "a guard with no refusal raises nothing");
+            assert!(!c.tick(&f, 10), "a guard with no refusal raises nothing");
             f.guard_stats.set([1, 2, 1, 0x200000, 3, 0x100]);
-            assert!(tick_with(&f, &mut seen));
-            assert_eq!(seen, 3);
-            assert!(!tick_with(&f, &mut seen), "the same count again: nothing new");
+            assert!(c.tick(&f, 20), "the first event needs no wait");
+            assert_eq!(c.reported, 3);
+            assert!(!c.tick(&f, 30), "the same count again: nothing new");
             assert_eq!(events(), before.wrapping_add(1));
             f.guard_stats.set([1, 2, 2, 0x180000, 1, 0x001]);
-            assert!(tick_with(&f, &mut seen), "one event for all refusals since the last tick");
+            assert!(c.tick(&f, 20 + COOLDOWN), "one event for all refusals since the last one, after the wait");
         }
         assert_eq!(events(), before.wrapping_add(2));
         let e = last();
         assert_eq!(e.kind, logk::CARD_GUARD_REFUSED);
         assert_eq!(e.a, [0x180000, 1, 0x001, 2, 2]);
         assert_eq!(e.flags & logk::F_ERROR, logk::F_ERROR);
+    }
+
+    #[test]
+    fn a_writer_that_keeps_trying_raises_one_event_per_wait_not_one_per_pass() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let f = FakePlatform::new(profiles::ALL[0]);
+        let mut c = Clock::default();
+        let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };
+        let before = events();
+        let mut raised = 0;
+        // 100 000 passes, a new refusal at every one, 5 passes per millisecond-ish: the clock rises by 1 per pass
+        for pass in 0..100_000u32 {
+            f.guard_stats.set([1, pass + 1, 0, 0x200000, 1, 0]);
+            if unsafe { c.tick(&f, 1000 + pass) } {
+                raised += 1;
+            }
+        }
+        assert_eq!(raised, 100_000 / COOLDOWN + 1, "one event at the start and one per window");
+        assert_eq!(events(), before.wrapping_add(raised));
+        // what came during the last wait is reported by the next event, with the totals
+        f.guard_stats.set([1, 100_001, 0, 0x200000, 1, 0]);
+        assert!(!unsafe { c.tick(&f, 1000 + 100_000) });
+        assert!(unsafe { c.tick(&f, 1000 + 100_000 + COOLDOWN) });
+    }
+
+    /// The statics of `tick` as a value, for the tests.
+    #[derive(Default)]
+    struct Clock {
+        reported: u32,
+        last: u32,
+        raised: bool,
+    }
+    impl Clock {
+        unsafe fn tick<P: Platform>(&mut self, p: &P, now: u32) -> bool {
+            tick_with(p, &mut self.reported, &mut self.last, &mut self.raised, now)
+        }
     }
 }

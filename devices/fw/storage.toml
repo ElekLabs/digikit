@@ -35,9 +35,9 @@ name = "cf.storage.fn.block.erase"
 cpu = "cf"
 sig = "i32 (u32 sector, u32 count)"
 rule = { kind = "cf_func", hash = "925ab4297f7c5d4d24f735ebc22fea1c", offset = 0x0, len = 8 }
-mark = "O"
+mark = "V"
 users = ["core/card-guard"]
-doc = "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156)."
+doc = "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. A second agent checked hash, size, address, displaced bytes and the st-1.42 callers against the image bytes **[V]**; most callers test the result, five st-1.42 sites ignore it (finding 156 section 3). Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156)."
 
 # Hooks of the eMMC write and erase entries for core/card-guard (docs/plans/card-write-guard.md). Both functions are the same code on the three devices (same hash, offset 0).
 # Each starts `lea (-N,SP),SP; movem.l {D2...},(SP)`: eight bytes, no PC-relative operand, so a `before` hook copies them to its tail unchanged.
@@ -46,7 +46,7 @@ doc = "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 st
 name = "cf.storage.site.block_write.entry"
 cpu = "cf"
 rule = { kind = "cf_func", hash = "0dd5a176b94c6e30225068661b58a898", offset = 0x0, len = 8 }
-mark = "O"
+mark = "V"
 users = ["core/card-guard"]
 doc = "Entry of the block write, `lea (-0x14,SP),SP; movem.l {D2 D3 D4 D5 A2},(SP)`. At the entry 0(SP) = return address, 4(SP) = sector, 8(SP) = bytes, 12(SP) = buffer."
 
@@ -58,13 +58,13 @@ mode = "before"
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
 mark = "O"
 users = ["core/card-guard"]
-doc = "Before the block write's own code: the hook may return to the caller itself (rts with D0 = an error code) instead of continuing in the tail; the stock code has taken no lock and changed no state at the entry."
+doc = "Before the block write's own code: the hook may return to the caller itself (rts with D0 = an error code) instead of continuing in the tail; the stock code has taken no lock and changed no state at the entry. The behaviour at the callers of dt2-1.17 and dn2-1.12 was not read **[O]**."
 
 [[site]]
 name = "cf.storage.site.block_write.split_ret"
 cpu = "cf"
 rule = { kind = "cf_func", hash = "0dd5a176b94c6e30225068661b58a898", offset = 0x36, len = 4 }
-mark = "O"
+mark = "V"
 users = ["core/card-guard"]
 doc = "The instruction after the block write's own `jsr (A2)` (`lea (0xc,SP),SP`): the return address of the nested call that a write of more than 64 KiB makes for each 64 KiB piece. The address, not code to patch."
 
@@ -72,7 +72,7 @@ doc = "The instruction after the block write's own `jsr (A2)` (`lea (0xc,SP),SP`
 name = "cf.storage.site.block_erase.entry"
 cpu = "cf"
 rule = { kind = "cf_func", hash = "925ab4297f7c5d4d24f735ebc22fea1c", offset = 0x0, len = 8 }
-mark = "O"
+mark = "V"
 users = ["core/card-guard"]
 doc = "Entry of the block erase, `lea (-0xc,SP),SP; movem.l {D2 D3 A2},(SP)`. At the entry 0(SP) = return address, 4(SP) = sector, 8(SP) = count."
 

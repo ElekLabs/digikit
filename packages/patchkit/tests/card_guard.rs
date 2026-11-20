@@ -14,6 +14,22 @@ fn image() -> Option<Vec<u8>> {
     std::fs::read(root().join("firmware/Syntakt_OS1.42.syx")).ok()
 }
 
+/// A symbol of the plan by module id and name; the version of the module is not part of the lookup.
+fn symbol(plan: &serde_json::Value, module: &str, name: &str) -> u64 {
+    let prefix = format!("{module}@");
+    plan["symbols"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| {
+            k.strip_prefix(&prefix)
+                .and_then(|r| r.split_once(':'))
+                .is_some_and(|(_, n)| n == name)
+        })
+        .and_then(|(_, v)| v.as_u64())
+        .unwrap_or(0)
+}
+
 fn registry() -> Registry {
     Registry::from_dir(&root().join("devices/ports")).unwrap()
 }
@@ -41,11 +57,7 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
     for set in ["device", "emulator"] {
         let plan = plan_of(&raw, set);
         let hooks = plan["hooks"].as_array().unwrap();
-        let sym = |name: &str| {
-            plan["symbols"][format!("core/card-guard@0.1.0:{name}")]
-                .as_u64()
-                .unwrap_or(0)
-        };
+        let sym = |name: &str| symbol(&plan, "core/card-guard", name);
         let hook = |anchor: &str| {
             hooks
                 .iter()
@@ -75,7 +87,7 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
         ];
         for (anchor, entry, shim, displaced) in rows {
             let h = hook(anchor);
-            assert_eq!(h["module"], "core/card-guard@0.1.0");
+            assert!(h["module"].as_str().unwrap().starts_with("core/card-guard@"));
             assert_eq!(
                 h["addr"].as_u64(),
                 Some(entry),
@@ -119,12 +131,8 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
         ] {
             assert_ne!(sym(name), 0, "{set}: {name}");
         }
-        let raw_ret = plan["symbols"]["core/runtime@0.9.0:dkrt_raw_write_ret"]
-            .as_u64()
-            .unwrap_or(0);
-        let raw_write = plan["symbols"]["core/runtime@0.9.0:dkrt_raw_block_write"]
-            .as_u64()
-            .unwrap_or(0);
+        let raw_ret = symbol(&plan, "core/runtime", "dkrt_raw_write_ret");
+        let raw_write = symbol(&plan, "core/runtime", "dkrt_raw_block_write");
         assert!(
             raw_write != 0 && raw_ret > raw_write && raw_ret < raw_write + 32,
             "{set}: the label follows the jsr of the trampoline"

@@ -1780,7 +1780,7 @@ id = 57
 name = "TEXT_INPUT_DONE"
 args = ["owner", "-", "-", "-", "-"]
 
-# core/card-guard refused a request to the firmware's eMMC block write or erase (error level; the runtime raises it from its tick, at most once per tick, for all refusals since the last one):
+# core/card-guard refused a request to the firmware's eMMC block write or erase (error level; the runtime raises it from its tick, at most one per wait of five seconds, for all refusals since the last event):
 # the sector and the length in sectors of the LAST refused request, its writer class and kind (class | kind << 8: class 0 stock, 1 runtime; kind 0 write, 1 erase) and the totals of
 # refused writes and refused erases since boot. Nothing is shown on the device screen (docs/plans/card-write-guard.md).
 [[log.kind]]

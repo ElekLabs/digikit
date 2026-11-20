@@ -1280,8 +1280,8 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
         }
         v
     };
-    if rows.iter().any(|r| r.first >= r.end || r.end > 1 << 32) {
-        return bad("every row needs first < end <= 0x100000000".into());
+    if rows.iter().any(|r| r.first >= r.end || r.end > 0xFFFF_FFFF) {
+        return bad("every row needs first < end <= 0xFFFFFFFF (rows are 32-bit sector numbers)".into());
     }
     rows.sort_by_key(|r| (r.first, r.end));
     // merge touching or overlapping rows of one class
@@ -3098,6 +3098,13 @@ mod guard_tests {
             row("runtime", 0x20_0000, 0x30_0000),
         ]));
         assert!(e.contains("first < end"), "{e}");
+        // rows are u32 in the generated table: an end above 0xFFFFFFFF is refused
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+            row("stock", 0x4000_0000, 0x1_0000_0000),
+        ]));
+        assert!(e.contains("0xFFFFFFFF"), "{e}");
         let mut c = device_card("syntakt.toml");
         c.store = None;
         let e = err_of(&c);
