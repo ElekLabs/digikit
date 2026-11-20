@@ -212,7 +212,9 @@ export default function FirmwarePage(): JSX.Element {
     const d = device();
     const id = d.kind === 'connected' ? d.d.model : undefined;
     const p = ready()?.p.device;
-    return deviceNameOf(id ?? (isDeviceId(p ?? '') ? (p as DeviceId) : (runtimeDeviceIds[0] ?? '')));
+    return deviceNameOf(
+      id ?? (isDeviceId(p ?? '') ? (p as DeviceId) : ((fw.env.devices ?? runtimeDeviceIds)[0] ?? '')),
+    );
   };
   const shortName = (d: string) => d.toUpperCase();
   /** The device id the default modules are for: the image's device, else the connected one. */
@@ -294,7 +296,8 @@ export default function FirmwarePage(): JSX.Element {
               <Switch>
                 <Match when={prepared().kind === 'none'}>
                   <span class="dim">
-                    No file yet. Choose the stock .syx of your device ({newestReleasesText()}). It is not uploaded.
+                    No file yet. Choose the stock .syx of your device ({newestReleasesText(fw.env.devices)}). It is not
+                    uploaded.
                   </span>
                 </Match>
                 <Match when={working()}>

@@ -27,6 +27,11 @@ pub struct DeviceInfo {
     pub dsp_stored_max: u64,
     pub dsp_depacked_max: u64,
     pub main_staged_max: u64,
+    /// `[patch] main_dest`: where MAIN OS is unpacked to. `main_stage`: where the bootstrap stages the packed MAIN before it unpacks it in place.
+    /// `main_margin_min`: the least in-place margin (bytes of unread stream ahead of the output) an image may have; default 8192.
+    pub main_dest: u64,
+    pub main_stage: u64,
+    pub main_margin_min: u64,
     /// `[patch] stream_id`: the id byte of the OS UPGRADE header message (0x0f DT2, 0x10 DN2).
     pub stream_id: u8,
     /// `[patch] build_floor`: the four ASCII characters the OS validator compares the container's build word with (DT2 "0060");
@@ -89,6 +94,23 @@ pub struct Container {
     /// Sections patchkit never changes.
     #[serde(default)]
     pub readonly: Vec<u32>,
+    /// Roles (`dsp`, `cf2`, `fpga`) of read-only sections that a module may store packed when it declares that it unpacks them (`[[repack]]` of a
+    /// `module.toml`). The decoded bytes stay the stock bytes; only the stored form shrinks.
+    #[serde(default)]
+    pub repack: Vec<String>,
+}
+
+impl Container {
+    /// The section of a role (`main`, `dsp`, `cf2`, `fpga`), if the device has one.
+    pub fn role_section(&self, role: &str) -> Option<u32> {
+        match role {
+            "main" => Some(self.main),
+            "dsp" => self.dsp,
+            "cf2" => self.cf2,
+            "fpga" => self.fpga,
+            _ => None,
+        }
+    }
 }
 
 /// `[acceptance]`: the device's test cell.
@@ -200,6 +222,9 @@ struct Patch {
     main_staged_max: u64,
     stream_id: u8,
     build_floor: Option<String>,
+    main_dest: u64,
+    main_stage: u64,
+    main_margin_min: Option<u64>,
 }
 
 /// Words each capability may take.
@@ -304,6 +329,25 @@ fn validate(n: &str, f: &File, caps: &Capabilities, c: &Container, short: &str) 
             ));
         }
     }
+    // a section that a module may store packed is a role section that is read-only in content
+    for role in &c.repack {
+        if role == "main" {
+            return bad("[container] repack: the main section is changed, not repacked".into());
+        }
+        match c.role_section(role) {
+            None => {
+                return bad(format!(
+                    "[container] repack: the device has no {role} section"
+                ));
+            }
+            Some(id) if !c.readonly.contains(&id) => {
+                return bad(format!(
+                    "[container] repack {role}: section {id} must be in readonly"
+                ));
+            }
+            Some(_) => {}
+        }
+    }
     if f.digikit.is_some() && f.patch.is_none() {
         return bad("[digikit] needs [patch]: a runtime target must be patchable".into());
     }
@@ -369,6 +413,9 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
             dsp_stored_max: p.dsp_stored_max.unwrap_or(0),
             dsp_depacked_max: p.dsp_depacked_max.unwrap_or(0),
             main_staged_max: p.main_staged_max,
+            main_dest: p.main_dest,
+            main_stage: p.main_stage,
+            main_margin_min: p.main_margin_min.unwrap_or(8192),
             stream_id: p.stream_id,
             build_floor: match p.build_floor {
                 None => None,
@@ -478,7 +525,7 @@ mod tests {
         assert_eq!((ids.len(), patchable.len()), (1, 0));
         assert!(!ids[0].patchable && !ids[0].runtime_target);
         let patch = format!(
-            "[device]\nname = \"X\"\nshort = \"x\"\nsyx_id = 0x30\n{caps}[patch]\ncontainer_max = 1\nmain_staged_max = 1\nstream_id = 1\n"
+            "[device]\nname = \"X\"\nshort = \"x\"\nsyx_id = 0x30\n{caps}[patch]\ncontainer_max = 1\nmain_staged_max = 1\nstream_id = 1\nmain_dest = 16\nmain_stage = 32\n"
         );
         let (ids, patchable) = parse_all(&[("x.toml", patch.as_str())]).unwrap();
         assert!(ids[0].patchable && !ids[0].runtime_target);
@@ -508,6 +555,19 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(e.contains("must be patchable"), "{e}");
+    }
+
+    #[test]
+    fn repack_names_a_read_only_role_section() {
+        let text = "[device]\nname = \"S\"\nshort = \"st\"\n[capabilities]\ndsp = \"none\"\nseal = \"none\"\nsample_pool = \"none\"\ncard = \"unknown\"\n[container]\nmain = 3\ncf2 = 7\nfpga = 1\nreadonly = [1, 2, 4, 6, 7, 8]\n";
+        let ok = format!("{text}repack = [\"cf2\"]\n");
+        let (ids, _) = parse_all(&[("s.toml", ok.as_str())]).unwrap();
+        assert_eq!(ids[0].container.repack, ["cf2"]);
+        // the role's section must be read-only: the same file without 7 in readonly is already refused, so test the other roles
+        let no_role = text.replace("cf2 = 7\n", "") + "repack = [\"cf2\"]\n";
+        assert!(parse_all(&[("s.toml", no_role.as_str())]).is_err());
+        let unknown = format!("{text}repack = [\"cpu9\"]\n");
+        assert!(parse_all(&[("s.toml", unknown.as_str())]).is_err());
     }
 
     #[test]
@@ -552,6 +612,22 @@ mod tests {
             (
                 "fpga section not read-only",
                 edit(DT2, "dsp = 7\n", "dsp = 7\nfpga = 9\n"),
+            ),
+            (
+                "repack of a role the device lacks",
+                edit(
+                    DT2,
+                    "readonly = [2, 4, 8]",
+                    "readonly = [2, 4, 8]\nrepack = [\"cf2\"]",
+                ),
+            ),
+            (
+                "repack of the main section",
+                edit(
+                    DT2,
+                    "readonly = [2, 4, 8]",
+                    "readonly = [2, 4, 8]\nrepack = [\"main\"]",
+                ),
             ),
             (
                 "one section, two roles",

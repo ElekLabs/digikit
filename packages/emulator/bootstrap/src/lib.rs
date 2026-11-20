@@ -30,9 +30,11 @@ pub const DDR_SIZE: u32 = 0x400_0000;
 pub const FLAG_BASE: u32 = 0x4800_0000;
 pub const FLASH_SIZE: usize = 0x100_0000;
 pub const CONTAINER_FLASH_OFFSET: usize = 0x8_0000;
-/// MAIN OS is depacked to 0x4000_0400; the packed copy is staged at 0x4040_0000.
+/// MAIN OS is depacked to 0x4000_0400 (`[patch] main_dest` of the Digitakt II file, the device this runner models) and runs below the 4 MiB boundary `MAIN_END`: a pc in
+/// `MAIN_LOAD..MAIN_END` is MAIN. `MAIN_END` is where MAIN's image may end, not the bootstrap's stage (that is `[patch] main_stage`, which differs per device, finding 152); the runner
+/// stages nothing itself, the bootstrap's own code does. The runner is for the Digitakt II recovery only.
 pub const MAIN_LOAD: u32 = 0x4000_0400;
-pub const MAIN_STAGE: u32 = 0x4040_0000;
+pub const MAIN_END: u32 = 0x4040_0000;
 
 const UART2: u32 = 0xec07_0000; // panel
 const UART3: u32 = 0xec07_4000; // MIDI DIN
@@ -689,7 +691,7 @@ impl Machine {
                     self.icount += 1;
                     continue;
                 }
-            } else if (MAIN_LOAD..MAIN_STAGE).contains(&pc) {
+            } else if (MAIN_LOAD..MAIN_END).contains(&pc) {
                 if self.main_os_entry.is_none() {
                     self.main_os_entry = Some((pc, self.icount));
                 }

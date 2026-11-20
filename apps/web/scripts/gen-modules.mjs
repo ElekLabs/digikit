@@ -18,10 +18,12 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
 import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { SITE_DEVICES } from '../src/data/site-devices.mjs';
 import { loadDevices } from '@digi/devices/node';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const deviceIds = loadDevices().runtimeIds;
+// The devices the site ships modules for: the runtime devices that the site offers (src/data/site-devices.mjs). A module whose targets are all outside the list is not shipped or listed.
+const deviceIds = loadDevices().runtimeIds.filter((d) => SITE_DEVICES.includes(d));
 export const repoRoot = resolve(here, '../../..');
 
 const walk = (dir, name, out = []) => {
@@ -100,20 +102,32 @@ const objectText = (dir, d, o, stored) =>
     'utf8',
   );
 
-/** `{bundle}` from the committed tree under `root` plus the built objects of the content modules. */
-export function buildModuleData(root = repoRoot) {
+/** The device ids that a module is for: the prefixes of its `ports` and `[targets]`; empty: every device. */
+const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.targets ?? {})].map((p) => p.split('-')[0]);
+
+/**
+ * `{bundle}` from the committed tree under `root` plus the built objects of the content modules. `offered`: only the ports of these devices go in, and the modules
+ * that are for other devices only (the site passes its list: the browser patches only what the site offers; the device files stay whole, they identify a user's firmware).
+ * Omitted: everything (the Python bundle's content, which a test compares).
+ */
+export function buildModuleData(root = repoRoot, offered = undefined) {
   const ports = readdirSync(join(root, 'devices', 'ports'))
-    .filter((f) => f.endsWith('.toml'))
+    .filter((f) => f.endsWith('.toml') && (!offered || offered.includes(f.split('-')[0])))
     .sort()
     .map((f) => readFileSync(join(root, 'devices', 'ports', f), 'utf8'));
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
   // The published site leaves out the test fixtures: only the site's tests use them, and some need the Rust toolchain for ColdFire.
   const roots = process.env.DIGI_SITE_NO_FIXTURES ? ['modules'] : ['modules', join('tests', 'fixtures', 'modules')];
   const manifests = roots.flatMap((r) => walk(join(root, r), 'module.toml').sort(byParts));
-  const parsed = manifests.map((file) => {
-    const text = readFileSync(file, 'utf8');
-    return { dir: dirname(file), text, d: parse(text) };
-  });
+  const parsed = manifests
+    .map((file) => {
+      const text = readFileSync(file, 'utf8');
+      return { dir: dirname(file), text, d: parse(text) };
+    })
+    .filter(({ d }) => {
+      const mine = moduleDevices(d);
+      return !offered || mine.length === 0 || mine.some((x) => offered.includes(x));
+    });
   const built = (d) => d.module.category !== 'core' && (d.object ?? []).some((o) => (o.sources ?? []).length > 0);
   const builtDirs = parsed.filter((m) => built(m.d)).map((m) => m.dir);
   buildObjects(builtDirs, root);
@@ -188,7 +202,7 @@ function packAll(root, ids, device, to) {
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
 export function shipModules(out, root = repoRoot) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
-  for (const sub of [...deviceIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
+  for (const sub of [...loadDevices().runtimeIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
   const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
     walk(join(root, 'modules', r), 'module.toml').sort(byParts),
@@ -335,7 +349,7 @@ if (
   writeFileSync(MODULE_FILES_TS, moduleFilesSource());
   const i = process.argv.indexOf('--out');
   const out = i > 0 ? resolve(process.argv[i + 1]) : join(here, '..', 'public', 'modules');
-  const { bundle } = buildModuleData();
+  const { bundle } = buildModuleData(repoRoot, SITE_DEVICES);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
   const index = shipModules(out);

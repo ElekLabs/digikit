@@ -55,10 +55,12 @@ export function settingsCase(device: Device) {
     symbols: ['DKRT_MAILBOX', 'DKRT_CARD', ...RING_SYMBOLS],
     // an empty selection record: the area is ours, the settings copies are zero
     initial: () => ({ selection: [] }),
-    // the settings copies and the empty header pair of a claimed blank area
+    // the settings copies (the empty header pair is claimed only by a data write into a blank range with no record, which no boot does now)
     storeExtra: [...settingsArea, first, first + limit],
   });
-  const written = () => kit.storeWrites();
+  // The boot counts itself in the selection record (a boot writes copy B, the stable-period clear writes A), so the selection sectors are no
+  // evidence about the settings store: these tests look at every other store sector.
+  const written = async () => (await kit.storeWrites()).filter((x) => x !== s.selA && x !== s.selB);
   const dump = async (card: string, ...flags: string[]) =>
     (await patchkit(['store', 'dump', card, ...overlayArgs(card), '--device', device, ...flags])).stdout;
   const dumpJson = async (card: string) => JSON.parse(await dump(card, '--json'));

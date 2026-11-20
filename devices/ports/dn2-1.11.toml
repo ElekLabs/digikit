@@ -2841,6 +2841,16 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.fn.capacity"
+cpu = "cf"
+kind = "code"
+addr = 0x4012c1ba
+len = 4
+sha256 = "958d3d598d6f5a5f0aae1886cecc577d9c169eec942f68eb8baadd29bb5638d4"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.site.block_read.clamp_chunk"
 cpu = "cf"
 kind = "code"

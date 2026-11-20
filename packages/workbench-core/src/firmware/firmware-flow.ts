@@ -8,6 +8,7 @@ import {
   NO_ANSWER_TEXT,
   STOPPED_WAITING_TEXT,
   judge,
+  leavesRuntime,
   noReturnText,
   samePortName,
   sendFailedText,
@@ -153,7 +154,7 @@ async function within<T>(p: Promise<T>, ms: number, signal: AbortSignal): Promis
  * device accepted End with commit 1; menu: the last message was sent). No step can hang the run: `release`, `ports` and `ask` have a time
  * limit each, and the restart need not be seen (a restart faster than one poll is only asked for).
  */
-async function afterSend(
+export async function afterSend(
   ops: Pick<FlowOps, 'now' | 'sleep' | 'release' | 'ports' | 'ask' | 'port' | 'moved' | 'log'>,
   p: PreparedFlash,
   signal: AbortSignal,
@@ -261,12 +262,13 @@ async function afterSend(
     // A restore ends when the stock firmware answers and no runtime does, twice in a row: a patched image answers SoftwareVersion
     // a little before its runtime answers INFO.
     last = a;
-    if (p.restore && !a.runtime && a.os === p.os && ++stockSeen < 2) continue;
+    const noRuntime = !leavesRuntime(p);
+    if (noRuntime && !a.runtime && a.os === p.os && ++stockSeen < 2) continue;
     // a patched image answers SoftwareVersion before its runtime answers INFO: wait for the runtime
-    if (!p.restore && !a.runtime) continue;
+    if (!noRuntime && !a.runtime) continue;
     // The old image can still answer for a moment (also when the port never seemed to leave): keep asking while the answer is not
     // the patch's, and judge the last answer when the time is up.
-    if (!p.restore && (a.runtime !== p.runtime || (a.imageId ?? null) !== p.imageId)) continue;
+    if (!noRuntime && (a.runtime !== p.runtime || (a.imageId ?? null) !== p.imageId)) continue;
     return done(verdict(a));
   }
   if (last && !signal.aborted) return done(verdict(last));

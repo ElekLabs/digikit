@@ -1,6 +1,7 @@
 // The Modules page: filter the shipped modules, pick some, and hand the picks to the Transfer page.
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { deviceNameOf, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
+import { deviceNameOf } from '@digi/workbench-core/data/device-profiles.ts';
+import { siteDevices } from '../firmware/site-policy';
 import type { Category } from '../data/module-labels';
 import type { ModuleInfo } from '../data/modules';
 import ModuleCard from './ModuleCard';
@@ -23,7 +24,7 @@ const FILTER_LABEL: Partial<Record<Category, string>> = {
 
 const DEVICE_OPTIONS = [
   { id: 'any', label: 'Any device' },
-  ...runtimeDeviceIds.map((id) => ({ id, label: deviceNameOf(id) })),
+  ...siteDevices().map((id) => ({ id, label: deviceNameOf(id) })),
 ];
 
 export default function ModuleBrowser(props: ModuleBrowserProps) {

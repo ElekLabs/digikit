@@ -17,12 +17,14 @@ a private arena, and calls the `tick` of every module once per UI-loop pass. The
   hook trampoline and `dkrt_flush`; `src/cf/<dev>/device.s` the device id.
 - Module upload (finding 43, `docs/design/digikit-upload.md`): `src/rs/src/transport.rs` handles the SysEx messages that start `F0 7D 64 6B` from a hook in the firmware's MIDI task and dispatches them to `store_cmds.rs`, `admin_cmds.rs` and `module_cmds.rs` (`cf.midi.site.rx`, `dkrt_midi_hook` in `tramp.s`); the host is `tools/device/dkupload.py`. `DKRT_UPLOAD_CUT` is the power-cut test knob.
 - Safe mode (finding 37): the boot counter is cleared after a stable period (45,000 DSP blocks = 30 s of UI loop, clock: the firmware's block counter,
-  anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device).
+  anchor `cf.link.site.block_isr.counter_lit`), not at the first UI pass; a hang or a fault before then counts as a bad boot (a CPU fault halts the device). Every boot counts from the first one: with no selection record yet (a fresh flash) the first counted boot creates the record (two record writes per boot until the stable period has cleared it); a card the runtime does not write (foreign, unreadable, too small, no store) has no counter.
   `DKRT_STABLE_BLOCKS` and the record's `stable_blocks` shorten it for tests. Upload safety (finding 43): replies are dropped when the firmware's TX
   ring has no room (`cf.midi.site.tx_inflight_lit`), BEGIN makes the two store headers equal before staging, `DKRT_UPLOAD_TEAR` is a test knob.
 - Card safety (finding 46): every card write goes through `block_write` (`card.rs`): outside the store range it is refused (`E_RANGE`); on a card whose
   area is neither ours (valid store header or selection copy) nor blank (all 0x00 or 0xFF) the runtime is read-only (`E_CARD_RO`: no boot counter, no
-  selection, uploads answer `E_INUSE`, ABOUT says so). `dkrt_diag` reports it. An upload on a blank card claims the range with an empty store header pair first.
+  selection, uploads answer `E_INUSE`, ABOUT shows CARD READ-ONLY and NO BOOT COUNTER); a card too small for the store, or a device without one, has no counter either (ABOUT has no card row for it; the MODULES page says NO STORE).
+  `dkrt_diag` reports it. On a blank card the boot's own record write (the boot counter) marks the area ours, so no header claim is needed; a write of data into a blank range that no record marks
+  still claims it with an empty store header pair first.
 - Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dk_debug_log_sink_set`); the module `digikit/debug` (`modules/tools/debug`) holds the
   512-event ring and answers LOG 0x20, PEEK 0x21 (over `[digikit] peek` of the device file) and LOGCFG 0x22 for `tools/device/dklog.py`; the DSP diagnostics poll (`dl_diag`, optional) and its
   heartbeat watch (`watch.rs`); the firmware's exception hook (`cf.rtos.site.exc_hook_lit`) records a crash in kept RAM (`[digikit] keep_base`) and soft-resets, the next boot

@@ -310,6 +310,9 @@ impl Platform for RealPlatform {
     unsafe fn block_write_raw(&self, sector: u32, bytes: u32, buf: *const u8) -> i32 {
         dkfw::storage::block_write(sector, bytes, buf)
     }
+    fn card_sectors(&self) -> u32 {
+        unsafe { dkfw::storage::capacity() }
+    }
 
     unsafe fn midi_send(&self, port: u32, msg: &[u8]) {
         dkfw::midi::send(msg.len() as u32, msg.as_ptr(), port)

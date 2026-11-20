@@ -28,6 +28,10 @@ pub struct Manifest {
     pub info: Vec<InfoDef>,
     #[serde(default)]
     pub claim: Vec<Claim>,
+    /// `[[repack]]`: container sections of a read-only role that this module unpacks before they are used, so that patchkit may store them packed
+    /// (`[container] repack` of the device file allows it per device).
+    #[serde(default)]
+    pub repack: Vec<RepackDef>,
     /// P1: sections copied from the user's image (and extended) at apply time.
     #[serde(default)]
     pub section: Vec<SectionDef>,
@@ -102,6 +106,26 @@ impl Manifest {
             ));
         }
         self.provided_service()?;
+        for r in &self.repack {
+            let who = &self.module.id;
+            if r.role.is_empty() || r.role.len() > 255 {
+                return Err(err!("{who}: [[repack]] role must be 1 to 255 bytes"));
+            }
+            if r.sha256.len() != 64 || !r.sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return Err(err!("{who}: [[repack]] sha256 must be 64 hex digits"));
+            }
+            if [r.dest, r.stage_end, r.len]
+                .iter()
+                .any(|n| *n > u32::MAX as u64)
+            {
+                return Err(err!(
+                    "{who}: [[repack]] dest, stage_end and len must fit 32 bits (the patch record stores them as words)"
+                ));
+            }
+            if r.stage_end < r.dest {
+                return Err(err!("{who}: [[repack]] stage_end is below dest"));
+            }
+        }
         for (table, ids) in [("machine", &self.machines), ("fx", &self.fxs)] {
             let mut seen = std::collections::BTreeSet::new();
             for r in ids {
@@ -681,6 +705,10 @@ pub struct ModuleInfo {
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]
     pub dynamic: bool,
+    /// Tables of the device file that the module reads, as dotted paths (`input.view_keys`). Every device whose patch sets include the module must have them
+    /// (`devgen::check_device_tables` for `patchkit gen`, `devgen::check_module_tables` for the generator of the module, `build` and `pack`); the module's `[[gen]]` constants come from them.
+    #[serde(default)]
+    pub needs_device: Vec<String>,
 }
 
 impl ModuleInfo {
@@ -817,6 +845,23 @@ pub struct OpReloc {
     pub symbol: String,
     #[serde(default)]
     pub addend: i64,
+}
+
+/// `[[repack]] role = "cf2", dest = 0x.., stage_end = 0x.., len = N, sha256 = "..."`: the module unpacks the section of `role` in place. The packed stream is read so that it ends at
+/// `stage_end` and is unpacked from `dest` upward; patchkit refuses the build when the unpacked output would reach stream bytes that are not read yet
+/// (`aplib::inplace_margin` is not above 0). The module's code uses the same two addresses.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepackDef {
+    pub role: String,
+    pub dest: u64,
+    pub stage_end: u64,
+    /// The length and SHA-256 (hex) of the section's decoded stock bytes, which the module checks after it unpacks them; patchkit refuses a stock
+    /// section that differs, because the module would refuse it at every boot.
+    pub len: u64,
+    pub sha256: String,
+    #[serde(default)]
+    pub devices: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

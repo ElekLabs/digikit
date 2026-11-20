@@ -82,3 +82,20 @@ test('the sender comes from the wasm source once, through a stub kit', async () 
   assert.equal(made, 1);
   assert.deepEqual(wasm.asked, ['patchkit.wasm']);
 });
+
+test('the site environment offers the devices of its policy list only', () => {
+  const env = createWebFirmwareEnv({ workers: createFakeWorkers({}), base: '/site/', wasm: memoryWasmSource() });
+  assert.equal(env.offersPatched?.('dt2'), true);
+  assert.equal(env.offersPatched?.('dn2'), true);
+  assert.equal(env.offersPatched?.('st'), false, 'the Syntakt is not in the list yet');
+  assert.equal(env.offersPatched?.('nothing'), false);
+});
+
+test('the site environments pass the site list: Firmware devices and Transfer libraryDevices', async () => {
+  const { siteDevices } = await import('../src/firmware/site-policy.ts');
+  const { createWebEnv } = await import('../src/transfer/web-env.ts');
+  const fw = createWebFirmwareEnv({ workers: createFakeWorkers({}), base: '/site/', wasm: memoryWasmSource() });
+  assert.deepEqual([...(fw.devices ?? [])], [...siteDevices()]);
+  const { env } = createWebEnv(() => ({}) as never);
+  assert.deepEqual(env.libraryDevices, [...siteDevices()]);
+});

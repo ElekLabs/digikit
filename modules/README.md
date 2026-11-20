@@ -82,6 +82,7 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 | `requires` | module ids that must be selected too (frameworks) |
 | `conflicts` | module ids that must not be selected |
 | `ports` | optional: only these ports, for example `["dt2-1.17"]` (empty: any firmware whose anchors resolve) |
+| `needs_device` | optional: tables of the device file the module reads, as dotted paths (`["input.view_keys"]`). Every device whose patch sets include the module (as a root or through `requires`) must have them; `patchkit gen` refuses a device without one, naming the table, the set and the module |
 | `dynamic` | optional, default false: a run-time module (a content module, see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). It is never patched into an image (patchkit refuses it). `patchkit pack` makes a `.dkm` from it. Its machines have no number in `modules/core/adapters/machines/types.toml`: the runtime assigns a type in 16 to 23 when it loads the module (docs/design/digikit-registry.md "Machine keys") |
 
 ```toml
@@ -232,6 +233,19 @@ What registers are free at a hook site is the module's business: document it in 
 | Key | Meaning |
 |---|---|
 | `resource` | name of the resource, for example `dsp.fx.hook` or `cf.rtos.fn.reset.init_calls` |
+| `devices` | optional device filter |
+
+### `[[repack]]`
+
+A module that unpacks a container section of a read-only role before the firmware uses it lets patchkit store that section packed. The device file must allow it
+(`[container] repack`, a list of roles), and the decoded section stays the stock one. Used by `core/peer-image` ([PATCHING.md](../docs/PATCHING.md) "Repacking a read-only section").
+
+| Key | Meaning |
+|---|---|
+| `role` | the section's role in the device file: `cf2`, `fpga` or `dsp` (`main` is never repacked) |
+| `dest` | the address the module unpacks the section to |
+| `stage_end` | the end of the buffer the packed stream is read into: the stream is read to `stage_end - length` and unpacked forward from `dest` |
+| `len`, `sha256` | the decoded length and SHA-256 of the stock section: patchkit refuses an image whose section differs (the module would refuse it at every boot) |
 | `devices` | optional device filter |
 
 ### Anchor rules (`devices/fw/`)

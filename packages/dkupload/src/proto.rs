@@ -94,7 +94,7 @@ impl Status {
             Status::NoFile => "that path is not in the store",
             Status::Proto => "unknown protocol version or command",
             Status::NoStore => {
-                "the device has no module store, or its header is unreadable (CLEAR still works)"
+                "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)"
             }
             Status::Unknown(_) => "unknown status code",
         }

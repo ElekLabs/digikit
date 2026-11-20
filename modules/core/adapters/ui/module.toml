@@ -11,10 +11,13 @@ summary = "The UI adapter behind <dk/platform/ui.h>: menus, text pages, lists wi
 requires = ["core/runtime"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
+# The key ids of the firmware's key events (build/gen/ui-<dev>.inc): a device without the table would give zeros.
+needs_device = ["input.view_keys"]
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # One C source for both devices: every firmware call is a generated anchor (modules/core/fw/include/dk_fw_*.h), so the object has no
 # externs table for C. The assembly shim maps its own symbol below. The dk_ui_* functions are plain global symbols that other
@@ -36,3 +39,28 @@ to = "dk_hook"
 
 [[claim]]
 resource = "cf.menu.site.settings_list.tail"
+
+# The key ids of the firmware's key events differ per device (the Syntakt's decoder table is not the identity): the device file's [input.view_keys],
+# generated into build/gen/ui-<dev>.inc and put in a small per-device object that ui.c reads (`dk_ui_view_keys`).
+[[gen]]
+kind = "gas"
+path = "build/gen/ui-{dev}.inc"
+uses = ["UI_KEY_*", "UI_KEYFL_*"]
+
+[[object]]
+path = "build/keys-dt2.dko.json"
+sources = ["src/keys/dt2.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[[object]]
+path = "build/keys-dn2.dko.json"
+sources = ["src/keys/dn2.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[[object]]
+path = "build/keys-st.dko.json"
+sources = ["src/keys/st.s"]
+place = "cf.expansion"
+devices = ["st"]

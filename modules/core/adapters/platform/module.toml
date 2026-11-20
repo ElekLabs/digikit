@@ -16,6 +16,7 @@ ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 "dt2-1.17" = "experimental"
 "dn2-1.11" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # The runtime (core/runtime) requires this module, and the objects of the two link by name: the trampolines here call the runtime's exports
 # (`dkrt_tick`, `dkrt_boot`, `dkrt_midi_rx`, `dkrt_exc`), and the runtime calls `dkplat_exc_install`. `requires` has no cycle because only the

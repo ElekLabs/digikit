@@ -131,3 +131,193 @@ fn a_sealed_device_with_a_dsp_changes_main_and_the_dsp_only() {
     fw.replace(7, vec![0; 16]).unwrap();
     fw.replace(3, vec![0; 16]).unwrap();
 }
+
+/// Section content that packs well and unpacks to itself.
+fn compressible() -> Vec<u8> {
+    (0..4000u32).map(|i| (i % 13) as u8).collect()
+}
+
+#[test]
+fn a_repackable_section_is_stored_packed_and_decodes_to_the_same_bytes() {
+    let dev = bare();
+    // the device file lists the second CPU's section: a role, read-only in content, that a module may store packed
+    assert!(dev.is_repackable(7));
+    assert!(
+        !dev.is_repackable(1),
+        "the FPGA bitstream is never repacked"
+    );
+    assert!(!dev.is_repackable(2));
+    let mut fw = image(dev, &[1, 3, 7]);
+    let data = compressible();
+    {
+        let s = fw.sections.iter_mut().find(|s| s.id == 7).unwrap();
+        // stock form: stored raw
+        s.data = data.clone();
+        s.stored = data.clone();
+    }
+    let stored = fw.repack(7).unwrap();
+    let s = fw.section(7).unwrap();
+    assert!(s.changed);
+    assert_eq!(s.data, data, "the decoded bytes do not change");
+    assert!(stored < data.len() && s.stored.len() == stored);
+    let back = dt2_firmware_loader::depack_section(&s.stored, 0, 1 << 20).unwrap();
+    assert_eq!(back, data, "the stored stream unpacks to the stock bytes");
+    // a section that is not listed, and the read-only rule itself, stay as they are
+    for id in [1u32, 2] {
+        let e = fw.repack(id).unwrap_err().to_string();
+        assert!(e.contains("cannot be stored packed"), "section {id}: {e}");
+        assert!(fw.section(id).is_none_or(|s| !s.changed));
+    }
+    assert!(
+        fw.replace(7, data)
+            .unwrap_err()
+            .to_string()
+            .contains("read-only")
+    );
+}
+
+#[test]
+fn a_device_without_repack_roles_stores_nothing_packed() {
+    let dev = sealed();
+    assert!(dev.repack_roles().is_empty());
+    let mut fw = image(dev, &[2, 3, 4, 7, 8]);
+    for id in [2u32, 4, 7, 8] {
+        assert!(fw.repack(id).is_err(), "section {id}");
+    }
+}
+
+/// MAIN data that packs to almost nothing and is longer than the bootstrap's stage lies above its load address: 3 MiB of zeros against the stage 2 MiB up.
+fn big_main() -> Vec<u8> {
+    vec![0u8; 3 << 20]
+}
+
+#[test]
+fn a_main_stream_whose_unpack_overtakes_the_staged_stream_is_refused_and_a_literal_tail_repairs_it()
+{
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    assert!(
+        stage - dest < 3 << 20,
+        "the test data reaches past the stage"
+    );
+    let data = big_main();
+    // the plain stream is a few bytes: the output passes the stage with nothing read ahead
+    let mut fw = image(dev, &[3]);
+    let plain = patchkit::aplib::pack_section(&data);
+    fw.replace_main_stored(data.clone(), plain.clone()).unwrap();
+    let e = patchkit::verify::main_budget(&fw, 0, 1 << 22)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("in-place margin") && e.contains("hang before MAIN starts"),
+        "{e}"
+    );
+    // the same bytes with the shortest literal tail that reaches the floor
+    let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
+    assert!(made.literal_tail > 0 && made.stream.len() > plain.len());
+    assert!(made.margin.unwrap() >= floor as i64);
+    // shortest: one token less of literals would not do (the tail is minimal up to one token)
+    assert_eq!(
+        patchkit::aplib::inplace_margin(&made.stream, dest, stage).unwrap(),
+        made.margin,
+        "the margin is that of the final stream"
+    );
+    let back = dt2_firmware_loader::depack_section(&made.stream, 0, 1 << 24).unwrap();
+    assert!(
+        back == data,
+        "the stream with the tail decodes to the same bytes"
+    );
+    fw.replace_main_stored(data, made.stream).unwrap();
+    let line = patchkit::verify::main_budget(&fw, 1 << 20, 1 << 21)
+        .unwrap()
+        .to_string();
+    assert!(
+        line.starts_with("bootstrap margin ") && line.contains("KB free"),
+        "{line}"
+    );
+}
+
+#[test]
+fn a_main_stream_with_room_is_packed_exactly_as_before() {
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    let data: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+    let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
+    assert_eq!(made.literal_tail, 0);
+    assert_eq!(
+        made.stream,
+        patchkit::aplib::pack_section(&data),
+        "no tail: the bytes of the plain packer"
+    );
+    assert_eq!(made.margin, None, "the output stays below the stage");
+}
+
+/// A MAIN stream of `n` zeros with the last `tail` bytes as literals: the cut falls inside the long zero match.
+fn zeros_with_tail(n: usize, tail: usize) -> (Vec<u8>, Vec<u8>) {
+    let data = vec![0u8; n];
+    let toks = patchkit::aplib::plan_with(&data, 24, 96);
+    let body = patchkit::aplib::emit(&data, &toks, n - tail);
+    (data, patchkit::aplib::section_of(body))
+}
+
+#[test]
+fn a_margin_of_exactly_the_floor_passes_and_one_byte_less_is_refused() {
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    let room = (stage - dest) as usize;
+    let margin = |n: usize, tail: usize| {
+        let (_, s) = zeros_with_tail(n, tail);
+        patchkit::aplib::inplace_margin(&s, dest, stage).unwrap()
+    };
+    // output 100,000 bytes past the stage: the tail of literals buys the margin, 9/8 of a byte per tail byte
+    let mut n = room + 100_000;
+    let (mut lo, mut hi) = (1usize, 200_000usize);
+    while hi - lo > 1 {
+        let mid = (lo + hi) / 2;
+        if margin(n, mid).unwrap() >= floor as i64 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    let tail = hi;
+    // the margin falls by one for each more byte of output: bring it to exactly the floor
+    while margin(n, tail).unwrap() > floor as i64 {
+        n += 1;
+    }
+    assert_eq!(margin(n, tail), Some(floor as i64));
+    let check = |n: usize| {
+        let (data, s) = zeros_with_tail(n, tail);
+        let mut fw = image(dev, &[3]);
+        fw.replace_main_stored(data, s).unwrap();
+        patchkit::verify::main_budget(&fw, 0, 1 << 22)
+    };
+    assert!(check(n).is_ok(), "margin == floor passes");
+    assert_eq!(margin(n + 1, tail), Some(floor as i64 - 1));
+    let e = check(n + 1).unwrap_err().0;
+    assert!(e.contains("in-place margin"), "{e}");
+}
+
+#[test]
+fn the_literal_tail_is_cut_inside_a_long_match_and_is_nearly_minimal() {
+    let dev = bare();
+    let (dest, stage, floor) = dev.main_unpack();
+    let n = (stage - dest) as usize + 100_000;
+    let data = vec![0u8; n];
+    let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
+    // the output crosses the stage inside the tail: the margin there is 9/8 of the tail bytes before the crossing, so the tail is 100,000 + floor * 8 / 9
+    // bytes, not the whole token of up to a MiB that a cut at token boundaries would literalize
+    let want = 100_000 + floor as usize * 8 / 9;
+    assert!(
+        made.literal_tail + 64 > want && made.literal_tail < want + 64,
+        "tail {}",
+        made.literal_tail
+    );
+    assert!(
+        made.margin.unwrap() >= floor as i64 && made.margin.unwrap() < floor as i64 + 16,
+        "{:?}",
+        made.margin
+    );
+    let back = dt2_firmware_loader::depack_section(&made.stream, 0, 1 << 24).unwrap();
+    assert!(back == data);
+}

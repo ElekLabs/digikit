@@ -694,6 +694,11 @@ pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
 #[no_mangle]
 pub extern "C" fn dkrt_info_table() {}
 
+#[export_name = "cf.storage.fn.capacity"]
+pub extern "C" fn card_capacity() -> u32 {
+    crate::host_io::card_capacity()
+}
+
 #[export_name = "cf.storage.fn.block.read"]
 pub extern "C" fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
     match crate::host_io::card_read(sector, bytes, buf) {

@@ -128,7 +128,10 @@ STATUS: dict[int, tuple[str, str]] = {
     -58: ("E_READ", "the firmware's block read failed"),
     -59: ("E_NOFILE", "that path is not in the store"),
     -60: ("E_PROTO", "unknown protocol version, command or option"),
-    -61: ("E_NOSTORE", "the store header is unreadable (CLEAR still works)"),
+    -61: (
+        "E_NOSTORE",
+        "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)",
+    ),
     -62: ("E_INUSE", "the card's store area is not ours and not blank"),
     -63: ("E_PEEK", "PEEK range not allowed, or length 0 or over 512"),
     -64: ("E_CMD_RANGE", "command range not reserved, taken, or empty"),

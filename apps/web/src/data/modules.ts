@@ -1,7 +1,8 @@
 // The module gallery, read at build time from the committed modules/**/module.toml and each module's
 // gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.ts checks what an icon may contain).
+import { siteDevices } from '../firmware/site-policy';
 import { parse } from 'smol-toml';
-import { runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
+import type { DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { isShipped } from './shipped.mjs';
 import type { Category } from './module-labels';
 
@@ -109,11 +110,13 @@ type Manifest = {
   claim?: { resource: string }[];
 };
 
-const order: readonly DeviceId[] = runtimeDeviceIds;
+// The devices the site names, in registry order (site-policy.ts): the gallery's device lists and filters follow it, not the modules' `[targets]`.
+const order = siteDevices() as readonly DeviceId[];
 
 export const modules: ModuleInfo[] = Object.entries(manifests)
   .map(([path, text]) => {
     const { module: m, targets = {}, claim = [] } = parse(text) as unknown as Manifest;
+    // TODO: the device is the prefix of the port name; the port file format (devices/ports/) has no device field (as `targets_device` in devgen.rs; finding 153)
     const named = new Set(Object.keys(targets).map((port) => port.split('-')[0]));
     const dir = path.replace(/^(\.\.\/)+/, '').replace(/\/module\.toml$/, '');
     return {

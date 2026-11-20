@@ -1,5 +1,6 @@
 //! The health report: the measurements of `core/health` with the arena and DSP area (`dkrt_health`), and the block clock.
 
+use dkrt_abi::platform::Platform;
 use crate::{fw_blocks, has_dsp};
 use crate::platform::st;
 use crate::state::init_once;
@@ -89,6 +90,8 @@ pub unsafe extern "C" fn dkrt_health(out: *mut DkrtHealth) {
     init_once();
     dkrt_health_light(&mut *out, true);
     store::figures(&mut *out);
+    (*out).card_sectors = crate::PLATFORM.card_sectors();
+    (*out).card_state = crate::card::state();
 }
 
 
@@ -99,7 +102,7 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     let s = st();
     let (afree, alargest) = arena::stats();
     o.magic = HEALTH_MAGIC;
-    o.version = 3;
+    o.version = 4;
     o.flags = 0;
     o.arena_total = s.arena_hi - s.arena_lo;
     o.arena_free = afree;

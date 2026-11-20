@@ -1,5 +1,6 @@
 //! The upload commands about the runtime itself: INFO, CAPACITY, SETTINGS, FAULT and RESTART (with the pending restart that `restart_poll` runs).
 
+use dkrt_abi::platform::Platform;
 use crate::store_writer::{self as sw};
 use crate::store_writer::{copy, free_bytes};
 use crate::platform::{rd32, tx_in_flight, wr32};
@@ -51,15 +52,20 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     // appended after the image id: the ABI fingerprint of interfaces B and C (`dkrt_abi::SVC_ABI`, CAP_SVC_ABI), the word a service file carries at header 0x3c
     wr32(rb.add(41), dkrt_abi::service::SVC_ABI);
     // appended after the ABI fingerprint, with CAP_FW_ID: the firmware identity (8 bytes), which names the port file of this image
+    let mut n = 45;
     if let Some(id) = fw_id {
         let mut i = 0;
         while i < 8 {
             *rb.add(45 + i) = id[i];
             i += 1;
         }
-        return reply(CMD_INFO, seq, OK, 53);
+        n = 53;
     }
-    reply(CMD_INFO, seq, OK, 45)
+    // then the card's capacity in sectors (0xFFFFFFFF: the driver is not ready) and the card check's state (0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable,
+    // 5 too small); a client that stops earlier ignores them
+    wr32(rb.add(n), crate::PLATFORM.card_sectors());
+    wr32(rb.add(n + 4), card::state());
+    reply(CMD_INFO, seq, OK, n + 8)
 }
 
 /// CAPACITY: per resource of the runtime, its limit, what is used and the largest free piece. Body: none. Reply: `u8 version` (1), `u8 n`, then

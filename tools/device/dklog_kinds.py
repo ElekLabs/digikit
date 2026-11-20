@@ -8,7 +8,7 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
         "BOOT_START",
         ("runtime", "device", "stable_blocks", "record_seq", "boot_counter"),
     ),
-    2: ("CARD_CHECK", ("state", "first_nonblank", "hash", "read_errors", "-")),
+    2: ("CARD_CHECK", ("state", "first_nonblank", "hash", "read_errors", "sectors")),
     3: ("SAFE", ("reason", "boot_counter", "record_seq", "-", "-")),
     4: ("BOOT_RECORD", ("seq", "copy", "boot_counter", "selected", "flags")),
     5: ("MOD_LOAD", ("index", "result", "name0", "name1", "name2")),

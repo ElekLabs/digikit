@@ -67,6 +67,11 @@ pub struct ShipMap {
 }
 
 impl Prepared {
+    /// Whether the flashed image carries the digikit runtime (and so answers INFO after the restart): not a restore, and the patch has an image id.
+    /// A patch without the runtime (the Syntakt's `device` set) is confirmed by the stock identity instead.
+    pub fn leaves_runtime(&self) -> bool {
+        !self.restore && self.image_id.is_some()
+    }
     /// Every check passed (and there is something to send).
     pub fn ok(&self) -> bool {
         !self.messages.is_empty() && self.checks.iter().all(|c| c.ok)
@@ -96,7 +101,7 @@ impl Prepared {
             "sha_image": self.sha_image,
             "image_id": self.image_id_hex(),
             // the runtime version the patch carries (a restore has none)
-            "runtime": (!self.restore).then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version())),
+            "runtime": self.leaves_runtime().then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version())),
             "pace_ms": PACE_MS,
             "bytes": self.image.len(),
             "ends": self.messages.iter().map(|m| m.end).collect::<Vec<_>>(),
@@ -320,9 +325,18 @@ fn finish(
                 Ok(r)
             })
             .map(|r| {
+                // the bootstrap budget first: the detail is cut when it is shown
+                let budget = r.budget.map(|b| b.to_string());
+                let rest: Vec<&str> = r
+                    .checks
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|c| Some(*c) != budget.as_deref())
+                    .collect();
                 let d = format!(
-                    "{}; container {} bytes, {} data messages",
-                    r.checks.join("; "),
+                    "{}{}; container {} bytes, {} data messages",
+                    budget.map_or(String::new(), |b| format!("{b}; ")),
+                    rest.join("; "),
                     r.container_bytes,
                     r.data_messages
                 );

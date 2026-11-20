@@ -50,18 +50,18 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
 
 ## FPGA
 
-- MAIN does not configure the FPGA. In the boot thread `FUN_40082578`,
-  `_DAT_454e4c14 = DAT_4029a778 >> 12 & 0xf` at 0x40082798. `DAT_4029a778` is
-  the bootstrap flags word.
-- The self-test screen `FUN_40080646` (0x40081e62) decodes the value: 1 INITB
-  never went high, 2 INITB low during data, 3 INITB low after data, 4 DONE
-  never went high. This is Xilinx-style INIT_B/DONE configuration, so the
-  bootstrap configures the FPGA.
-- The bootstrap uses peripherals that the DT2 bootstrap does not use:
-  - DSPI at 0xFC03C000 (MCR 0x80030c00), at 0x80001242-0x80001276.
-  - An eDMA TCD (0xFC0451E0..0xFC0451FE) that feeds PUSHR 0xFC03C034 from
-    buffer 0x80007af0, at 0x80001066 (file offset 0 = 0x800003ec).
-- That this transfer carries the bitstream: **[O]**.
+- MAIN configures the FPGA from section 1 **[D]**. `FUN_400bd74e` (0x400bd75e) reads id 1 of the OS directory, allocates a heap block for it,
+  unpacks it with `FUN_401181ec` to 0x43be315c and stores its length at 0x43be3158. `FUN_400bcb4e` (registered at the end of `FUN_400bd74e`)
+  sets the GPIO pins and DSPI 0xFC03C000 (MCR 0x80030c00), waits for INIT (0xEC09401C bit 0) and shifts the bytes from 0x43be315c out.
+  Section 1 is 149,516 bytes unpacked.
+- In the boot thread `FUN_40082578`, `_DAT_454e4c14 = DAT_4029a778 >> 12 & 0xf` at 0x40082798. `DAT_4029a778` is the bootstrap flags word.
+- The self-test screen `FUN_40080646` (0x40081e62) decodes the value: 1 INITB never went high, 2 INITB low during data, 3 INITB low after
+  data, 4 DONE never went high. This is Xilinx-style INIT_B/DONE configuration.
+- The bootstrap uses the same peripherals: DSPI 0xFC03C000 (MCR 0x80030c00) at 0x80001242-0x80001276 and an eDMA TCD (0xFC0451E0..0xFC0451FE)
+  that feeds PUSHR 0xFC03C034 from buffer 0x80007af0, at 0x80001066 (file offset 0 = 0x800003ec). That buffer is a double-buffered DSPI command
+  queue (two halves of 0x830 bytes, frames of 0x8000AAAA .. 0x08005555), not data. Its routines have no static caller **[O]**.
+- Section 7 is not read for the FPGA by MAIN. It holds a second bitstream at 0x40041060 that the peer loads through its own DSPI 0xFC03C000
+  (finding 136). The peer must therefore receive the exact stock bytes ([finding 151](151-syntakt-section7-pack.md)).
 
 ## Peer link ("DSP boot")
 

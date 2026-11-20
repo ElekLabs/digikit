@@ -13,6 +13,12 @@ export interface CheckResult {
   port: string | null;
   modules: CheckModule[];
 }
+/** The bootstrap budget of an image (`verify::Budget`): the in-place margin of MAIN at the device's stage (null: the unpack stays below the stage) and the container bytes left under the limit. */
+export interface BootstrapBudget {
+  margin: number | null;
+  stage: number;
+  container_free: number;
+}
 export interface PatchPlan {
   base: { device: string; version: string; syx_sha256: string };
   modules: string[];
@@ -24,6 +30,7 @@ export interface PatchPlan {
     syx_bytes: number;
     container_bytes: number;
     changed_sections: [number, number, number][];
+    budget?: BootstrapBudget;
   };
 }
 export interface VerifyReport {
@@ -33,6 +40,7 @@ export interface VerifyReport {
   sections: [number, number, number][];
   record: { modules: string[] } | null;
   port: string | null;
+  budget?: BootstrapBudget | null;
   checks: string[];
 }
 export interface PatchResult {

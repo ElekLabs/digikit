@@ -18,6 +18,7 @@ optional_anchors = ["cf.link.site.reply_copy_lit", "cf.link.hook.block_isr", "cf
 "dt2-1.17" = "experimental"
 "dn2-1.11" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # Three measurements, no DSP patch (finding 41):
 #

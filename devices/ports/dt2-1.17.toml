@@ -2832,6 +2832,16 @@ mark = "D"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
+name = "cf.storage.fn.capacity"
+cpu = "cf"
+kind = "code"
+addr = 0x4012ddd6
+len = 4
+sha256 = "0f860731ddd4c488d8144100282c4b2e4097653810158a9207ef35a969e234dd"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.fn.directory.metadata"
 cpu = "cf"
 kind = "code"

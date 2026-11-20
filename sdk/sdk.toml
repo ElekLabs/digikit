@@ -1379,7 +1379,7 @@ args = ["runtime", "device", "stable_blocks", "record_seq", "boot_counter"]
 [[log.kind]]
 id = 2
 name = "CARD_CHECK"
-args = ["state", "first_nonblank", "hash", "read_errors", "-"]
+args = ["state", "first_nonblank", "hash", "read_errors", "sectors"]
 
 [[log.kind]]
 id = 3
@@ -1747,7 +1747,7 @@ E_WRITE = { code = -57, text = "the firmware's block write failed" }
 E_READ = { code = -58, text = "the firmware's block read failed" }
 E_NOFILE = { code = -59, text = "that path is not in the store" }
 E_PROTO = { code = -60, text = "unknown protocol version, command or option" }
-E_NOSTORE = { code = -61, text = "the store header is unreadable (CLEAR still works)" }
+E_NOSTORE = { code = -61, text = "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)" }
 E_INUSE = { code = -62, text = "the card's store area is not ours and not blank" }
 E_PEEK = { code = -63, text = "PEEK range not allowed, or length 0 or over 512" }
 E_CMD_RANGE = { code = -64, text = "command range not reserved, taken, or empty" }

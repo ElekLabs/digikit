@@ -282,6 +282,11 @@ stream_id = 0x0f
 build_floor = "0060"
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`).
 main_dest = 0x40000400
+# Where the bootstrap stages the packed MAIN OS (section 3) before it unpacks it in place to main_dest (finding 01; the stage constant is in five places of section 2, 1.16 and 1.17 / 1.11 and 1.12).
+# patchkit refuses an image whose in-place unpack margin at this stage is below main_margin_min (finding 152). Default of main_margin_min: 8192.
+# Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
+boot_load = 0x80000400
+main_stage = 0x40400000
 dsp_l2_lo = 0x20000000
 dsp_l2_hi = 0x20100000
 
@@ -307,6 +312,15 @@ overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", 
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).
 [input]
 backend = "panel-uart"
+
+# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Digitakt II 1.17 (DN2 1.12 is the same): the decoder tables are the identity (finding 58); `yes2` is a second YES key (0x31); the flag bits are read from the compact menu view's key handler (finding 71: bit 0 moves, bit 4 acts) **[D]**.
+[input.view_keys]
+yes = 10
+yes2 = 49
+no = 12
+right = 15
+move_flag = 0
+act_flag = 4
 
 [panel]
 # The wire carries (channel, bit); the firmware reports a control code.

@@ -77,7 +77,9 @@ mise run patch:mem -- core/machines core/params --device dt2 --firmware 1.17    
   placement's message when the set does not fit. Without modules it lists the port's free regions and needs no firmware.
   `pk_harness run` writes the same readout as `memory` into `out/runs/patchkit/dsp/CELL.json`.
 - `verify` re-decodes the image and checks the container (packet checksums, content checksum, HMAC trailer), the size
-  limits and the patch record. With `--base` it also checks that sections 2, 4 and 8 equal the stock image.
+  limits and the patch record. With `--base` it also checks that the read-only sections (the device file's `[container] readonly`:
+  2, 4 and 8 on the Digitakt II and Digitone II) equal the stock image. A section that a module stored packed
+  ([Repacking](#repacking-a-read-only-section)) passes when it decodes to the stock bytes.
 - `explain` lists the allocation map (what went where, per region), each patched site with the bytes before and
   after, and the SHARC+ listing of DSP sites. Its output contains disassembly of firmware code: keep it out of
   commits.
@@ -540,13 +542,64 @@ patchkit stores a `DKPR` record in the image: format version, the SHA-256 of the
 `id@version`. It lives in `cf.expansion` when the patch uses it, otherwise in an appended DSP block. `inspect` and
 `verify` read it, and a patched image is never patched again. Nothing on the device reads it.
 
+An optional `RPK1` block follows the padded module list (format version 1 stays): one entry per read-only section that a module stores packed
+([Repacking](#repacking-a-read-only-section)), with the role, the claiming module and its layout (`dest`, `stage_end`) and the stock section's length and
+SHA-256. A reader that stops after the module list does not see it, and a record without it decodes with no entries (`record.rs`).
+
+### Repacking a read-only section
+
+A section of `[container] readonly` is never changed. A device file may also list roles in `[container] repack` (the Syntakt: `repack = ["cf2"]`, the second
+CPU's program, section 7). Such a section keeps its decoded bytes but may be stored packed, to make the image smaller. This is allowed only when the firmware
+unpacks it before it uses it, so a module has to do that: it declares the section in its manifest and patches the reader.
+
+```toml
+[[repack]]
+role = "cf2"
+dest = 0x4f84f2c6        # where the module unpacks the section to
+stage_end = 0x4f8af2c1   # the packed stream is read to end here (stage_end - length), then unpacked forward over it
+len = 383760             # the stock section: decoded length and SHA-256
+sha256 = "daf6451c..."
+```
+
+patchkit stores the section packed (`pack_section`) only when a module of the set declares it. The build is refused when:
+
+- the role is not in the device's `repack` list (`main` never is), or two modules claim the same role;
+- the stock section is not the one with the declared `len` and `sha256` (the module checks the same values at boot, so it would fail at every boot);
+- the packed stream is longer than `stage_end - dest`;
+- the in-place margin is 0 or less. `aplib::inplace_margin` unpacks the stream's tokens without output and returns the smallest, over the tokens, of (stream bytes read) -
+  (output bytes written at or past the stream's start). A margin of 0 or less means that the output would overwrite stream bytes that are not read yet.
+  `tools.firmware.aplibpack.inplace_margin` is the reference. For the Syntakt section 7 it is 9,444 bytes.
+
+`verify --base` and the `image_report` tool accept the repacked section when it decodes to the stock bytes. `verify` needs the patch record's `RPK1` entry for every packed repackable
+section and rechecks from it what the hook relies on: the stream header length and byte sum, that the decoded section is the stock one the entry names (length and
+SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 0. The entry's module must be a module of the record. This needs no module
+manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
+A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
+prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
+([README](../modules/core/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
+over `container_max`; with it the container fits (`flash` and `verify` print the free space).
+
+### The bootstrap's in-place unpack of MAIN
+
+The bootstrap stages the packed MAIN OS (section 3) at the device's stage (`[patch] main_stage`: 0x40400000 on the Digitakt II and Digitone II, 0x40200000 on the Syntakt) and unpacks it
+from `main_dest` over its own staged stream, with no bounds check ([finding 152](findings/152-syntakt-bootstrap-main-stage.md)). If the output passes the unread part of the stream, the
+decoder runs away before MAIN starts and the unit stays at its logo. The **in-place margin** is the least, over the stream, of the bytes consumed minus the output written past the stage
+(`aplib::inplace_margin`; `tools.firmware.aplibpack.inplace_margin` is the reference).
+
+- `apply` packs MAIN with `aplib::pack_section_in_place`: the plain stream when its margin is at least `[patch] main_margin_min` (default 8 KiB) or the output never reaches the stage (the Digitakt II and
+  Digitone II images are byte for byte as before), otherwise the same optimal path with the shortest tail written as literals that reaches the floor (the bootstrap reads them like any token). When the tail
+  and the container cap cannot both be met, `apply` refuses and says how much the tail costs: trim the runtime or move it out of MAIN.
+- `verify` (with and without a library), `preflight`, `flash` and the workbench path refuse a stored MAIN stream below the floor.
+- They print the budget: `bootstrap margin 8.0 KB, container 20.3 KB free` (the numbers of the current image) (`bootstrap margin: the unpack stays below the stage ...` when the output never reaches it).
+
 ### Codec and safety rules
 
 - The codec reproduces all four stock images byte for byte (framing, 8-in-7 coding, packet checksums, content
   checksum, HMAC trailer). Sections that a patch does not change keep their stored bytes. Changed sections are packed
   with an aPLib packer that produces the same bytes as `tools/firmware/aplibpack.py` and runs about 25 times faster.
 - **Sections 2 (bootstrap), 4 (updater) and 8 never change.** patchkit has no override. The bootstrap is what lets you
-  recover from a bad MAIN OS.
+  recover from a bad MAIN OS. The Syntakt's FPGA bitstream (1) and the second CPU's sections (6, 7) are read-only too; section 7 may be
+  stored packed, but only with its decoded bytes unchanged ([Repacking](#repacking-a-read-only-section)).
 - An image for flashing has a container of at most `container_max` (`0x1FFE00` bytes, a port limit): the OS-upgrade
   receiver copies the image into a 2 MiB RAM stage without a size check ([finding 146](findings/146-syntakt-os-upgrade-receiver.md)).
   The limit applies to images built for flashing: the Firmware page, `patchkit apply` without `--no-flash-cap`, and the
@@ -576,6 +629,39 @@ STARTUP menu over a MAIN OS that faults at reset, accepts patchkit images, rejec
 itself for a 1.16 or 1.17 image (finding 01, spike 0.2). Patched images boot to the main screen with DSP audio
 (DT2 1.17, DN2 1.12), the smoke matrix passes, and the module proofs measure the sound. None of this is a
 hardware result.
+
+### Flashing a Syntakt
+
+A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the image of each is under the 2 MiB `container_max` only because
+`core/peer-image` stores section 7 packed ([finding 151](findings/151-syntakt-section7-pack.md)). Both images boot on a unit: the `device-peer` image and the full `device` image. Section 7 packing and MAIN's unpack are proven on the hardware. The store area is not yet confirmed on the unit.
+
+| Set | Modules | Container (OS 1.42) | Flashed by |
+|---|---|---|---|
+| `device` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | under `container_max` | the workbench Firmware page, as on the other devices |
+| `device-peer` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | well under `container_max` | the command line only: an optional first flash |
+
+`device-peer` changes MAIN only at the peer thread's NOR read and the reset-path loader, and section 7 is stored packed: it shows on its own whether the unit boots and
+the second CPU loads the unpacked program. Before any flash: **back up the +Drive card**, keep `Syntakt_OS1.42.syx`, and do not use Transfer to put samples or
+sounds into the stock slots until the Data API guard exists (plan: docs/plans/syntakt.md). Recovery is the section above: hold FUNC at power-on, TRIG 4 (OS UPGRADE),
+the stock file over 5-pin MIDI DIN.
+
+```sh
+# the full set: the workbench Firmware page, or from the command line
+patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device
+# optional first flash, the peer image alone
+patchkit flash firmware/Syntakt_OS1.42.syx --port "Syntakt" --set device-peer
+patchkit flash STOCK.syx --port NAME --set device --dry-run --save OUT.syx   # patch and check only; then `patchkit preflight OUT.syx`
+```
+
+The public site does not offer the Syntakt (patched image and module gallery): which devices it offers is a publication decision kept in one place, `SITE_DEVICES` in
+`apps/web/src/data/site-devices.mjs` (device ids; the Digitakt II and Digitone II are in it, the Syntakt is not). The site's Firmware page prepares no patched image for another
+device and says so; restoring stock stays available for every device. To offer a device after its hardware proof, add its `[device] short` to that list in a change of its own.
+The desktop workbench has no such list.
+
+After a flash of an image without the runtime (`device-peer`) the workbench and `patchkit flash` do not look for a runtime: a patch without the runtime has no image id, so INFO is not asked.
+The restart is confirmed by the stock identity instead (MidiRpc Ping names the model, [finding 144](findings/144-stock-device-identity.md)), the page reports the flash as done
+("patched without a runtime"), and it skips binding services and installing the default modules (`leavesRuntime` in `firmware-core.ts`, `Prepared::leaves_runtime`).
+A device that still runs a runtime after such a flash is an error. After a `device` flash they follow as on the other devices.
 
 ### Recovery
 
