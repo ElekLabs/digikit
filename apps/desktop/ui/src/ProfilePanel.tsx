@@ -35,6 +35,9 @@ import { createEmulatorNames } from './log-names-backend';
 import { deviceOfPort } from './remote-core';
 import { createRecorder, type ProfileReading } from './profile-backend';
 import { createReadGate } from './read-gate-core';
+import CalibrationSection from './CalibrationSection';
+import { calibrationTexts } from './calibration-data';
+import { createCalibrator } from './calibration-backend';
 import './card-panel.css';
 import './profile-panel.css';
 
@@ -89,6 +92,25 @@ export default function ProfilePanel(props: {
     names: props.host && prof ? createEmulatorNames(props.host, prof) : undefined,
   });
 
+  // a calibration run owns the counters: the pane does not read while it plays
+  const [calibrating, setCalibrating] = createSignal(false);
+  const calibrator = createCalibrator({
+    session: async () => props.session(),
+    get rpc() {
+      return onEmulator() ? props.host?.rpc : undefined;
+    },
+    get midi() {
+      return props.host?.ports.midi;
+    },
+    loadLibrary: app.loadLibrary,
+    // Transfer installs on the selected target: only when this pane reads it
+    get install() {
+      return readsTarget() ? async (ids: string[]) => void (await app.backend.install(ids, () => {})) : undefined;
+    },
+    prof: prof ?? (async () => Promise.reject(new Error('dkprof.wasm needs the desktop host'))),
+    texts: calibrationTexts,
+  });
+
   const running = () => {
     const r = reading();
     return !!r && !r.noDebug && r.snap.running;
@@ -131,7 +153,7 @@ export default function ProfilePanel(props: {
     },
   });
 
-  const active = createMemo(() => props.visible);
+  const active = createMemo(() => props.visible && !calibrating());
   // read when the tab is shown, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
@@ -562,6 +584,16 @@ export default function ProfilePanel(props: {
                     Per-module DSP needs the DSP stats window.
                   </span>
                 </div>
+              </Show>
+              <Show when={props.host}>
+                <CalibrationSection
+                  calibrator={calibrator}
+                  host={props.host}
+                  target={`${emu() ? 'Emulator' : 'USB'} ${device()}`.trim()}
+                  emulator={emu()}
+                  disabled={!!acting()}
+                  onRunning={setCalibrating}
+                />
               </Show>
               <span class="foot">
                 Reads every second while this tab is open. Export writes dk.profile/1 (

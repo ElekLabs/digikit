@@ -1,0 +1,187 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import {
+  captureSetFile,
+  fitRequest,
+  groupByCase,
+  fitView,
+  loadCalibrationFiles,
+  parseRunLine,
+  progressLine,
+  readCaptureSet,
+  secondsLeft,
+  sideOf,
+  tableRows,
+  type CalibrationDoc,
+  type CalProfileDoc,
+} from '../src/profile/calibration-view';
+import { runCalibration } from '../src/calibration/runner';
+import { MidiOut, type Clock } from '@digi/dk-session';
+
+const cap = (unit: 'insn' | 'cycles', caseId: string, rows: [number, number, number][]): CalProfileDoc => ({
+  schema: 'dk.profile/1',
+  run: { id: `${unit === 'insn' ? 'emu' : 'dev'}-1-${caseId}`, case_id: caseId, target: 'dn2' },
+  dsp: { unit, blocks: 100, max_stock_block_delta: 5 },
+  dsp_rows: rows.map(([row, max_call, max_block]) => ({ row, kind: 'machine', calls: 10, max_call, max_block })),
+});
+
+const fit: CalibrationDoc = {
+  schema: 'dk.calibration/1',
+  key: { device: 'dn2' },
+  dsp: {
+    factor: { fit: 1.3167, budget: 1.34 },
+    error: { n: 9, mean: 0, worst_under: 0.018, loo_worst: null, loo_budget_under: null },
+    steady: { n: 0, mean: 0, worst_under: 0 },
+    pairs: [{ case: 'bd', id: 'row 3', stat: 'max_block', model: 1000, device: 1300, ratio: 1.3, error: 0.0127 }],
+  },
+  refused: [{ section: 'case', case: 'lp4', id: 'device', reason: 'captures differ in input hash' }],
+  warnings: ['block cycles unknown'],
+};
+
+test('a run on one side fills its column; the other side and the fit fill the rest of the same row', () => {
+  const emu = [cap('insn', 'bd', [[3, 900, 1000]]), cap('insn', 'bd', [[3, 950, 990]])];
+  const dev = [cap('cycles', 'bd', [[3, 1200, 1300]])];
+  const alone = tableRows({ emu });
+  assert.equal(alone.length, 2);
+  const block = alone.find((r) => r.label === 'bd · row 3 · block')!;
+  assert.equal(block.emu, 1000); // the largest of the captures
+  assert.equal(block.dev, undefined);
+  assert.equal(block.factor, undefined);
+  const both = tableRows({ emu, dev }, fit).find((r) => r.label === 'bd · row 3 · block')!;
+  assert.deepEqual([both.emu, both.dev, both.factor, both.error], [1000, 1300, 1.3, 0.0127]);
+  // a row of the call statistic has no pair in this fit: no factor
+  assert.equal(tableRows({ emu, dev }, fit).find((r) => r.label.endsWith('call'))!.factor, undefined);
+  assert.deepEqual(
+    groupByCase(tableRows({ emu, dev }, fit)).map((g) => [g.case, g.rows.map((r) => r.what)]),
+    [['bd', ['row 3 · block', 'row 3 · call']]],
+  );
+});
+
+test('rows without calls are left out; the side comes from the DSP unit', () => {
+  const c = cap('cycles', 'x', [[1, 0, 0]]);
+  c.dsp_rows![0]!.calls = 0;
+  assert.deepEqual(tableRows({ dev: [c] }), []);
+  assert.equal(sideOf(c), 'dev');
+  assert.equal(sideOf({ run: { id: 'emu-2026' } }), 'emu');
+  assert.equal(sideOf({}), undefined);
+});
+
+test('the fit view: headline, null leave-one-out as n/a, refusals and warnings', () => {
+  const v = fitView(fit);
+  assert.equal(v.headline, 'fit 1.32 · budget 1.34 · worst under 1.8 % · n 9');
+  assert.deepEqual(v.details, ['leave-one-out: n/a (one row only)']);
+  assert.deepEqual(v.refused, ['case lp4 device: captures differ in input hash']);
+  assert.deepEqual(v.warnings, ['block cycles unknown']);
+  assert.equal(v.hasFit, true);
+  const loo = fitView({
+    ...fit,
+    dsp: { ...fit.dsp!, error: { ...fit.dsp!.error, loo_worst: 0.021, loo_budget_under: 0 } },
+  });
+  assert.equal(loo.details[0], 'leave-one-out: worst under 2.1 %, budget factor 0.0 %');
+  const none = fitView({ refused: [], warnings: [] });
+  assert.equal(none.hasFit, false);
+  assert.match(none.headline, /no DSP pairs/);
+});
+
+test('a capture set file round-trips; loose dk.profile files give one set; mixed sides and foreign files are refused by name', () => {
+  const emu = [cap('insn', 'bd', [[3, 1, 2]]), cap('insn', 'stock', [])];
+  const f = captureSetFile({
+    profile: 'heavy',
+    captures: emu.map((profile) => ({ profile: profile as unknown as Record<string, unknown> })),
+  });
+  assert.equal(f.name, 'calibration-heavy-emu.captures.json');
+  const back = readCaptureSet([{ name: f.name, text: f.text }]);
+  assert.equal(back.side, 'emu');
+  assert.equal(back.profile, 'heavy');
+  assert.equal(back.captures.length, 2);
+  const loose = readCaptureSet(emu.map((c, i) => ({ name: `c${i}.profile.json`, text: JSON.stringify(c) })));
+  assert.equal(loose.source, '2 files');
+  assert.throws(
+    () =>
+      readCaptureSet([
+        { name: 'a.json', text: JSON.stringify(emu[0]) },
+        { name: 'b.json', text: JSON.stringify(cap('cycles', 'bd', [])) },
+      ]),
+    /a\.json, b\.json: the captures are not all/,
+  );
+  assert.throws(() => readCaptureSet([{ name: 'x.json', text: '{"schema":"other"}' }]), /x\.json: neither/);
+  assert.throws(() => readCaptureSet([{ name: 'y.json', text: 'nope' }]), /y\.json: not JSON/);
+  assert.throws(
+    () => readCaptureSet([{ name: 'z.json', text: JSON.stringify({ schema: 'dk.profile/1', run: {} }) }]),
+    /no run.case_id/,
+  );
+});
+
+test('a fit pairs an emulator set with a device set and refuses two of one side', () => {
+  const e = readCaptureSet([{ name: 'e.json', text: JSON.stringify(cap('insn', 'bd', [])) }]);
+  const d = readCaptureSet([{ name: 'd.json', text: JSON.stringify(cap('cycles', 'bd', [])) }]);
+  const req = fitRequest(e, d);
+  assert.equal(req.model.length, 1);
+  assert.deepEqual(req.sources, { model: 'e.json', device: 'd.json' });
+  assert.throws(() => fitRequest(e, e), /one emulator run with one device run/);
+});
+
+test('progress: the runner log lines parse, and the time left counts the later captures and cases', () => {
+  assert.deepEqual(parseRunLine('case lp4: capture 2 of 3'), { kind: 'capture', case: 'lp4', n: 2, of: 3 });
+  assert.deepEqual(parseRunLine('case lp4: skipped, it presses keys'), {
+    kind: 'skip',
+    case: 'lp4',
+    reason: 'it presses keys',
+  });
+  assert.deepEqual(parseRunLine('loading a/b'), { kind: 'text', text: 'loading a/b' });
+  const { profiles } = loadCalibrationFiles({
+    profiles: {
+      'p/light.toml': `schema = "dk.calprofile/1"\nname = "light"\nwarmup_s = 1\ncapture_s = 4\nrepeats = 3\n[[case]]\nid = "stock"\nsteps = "s"\n[[case]]\nid = "lp4"\nsteps = "s"\n`,
+    },
+    steps: {},
+    cases: {},
+  });
+  const p = profiles[0]!;
+  // capture 2 of 3 of the first case, 2 s in: 3 s here, one more capture (5 s), one whole later case (15 s)
+  assert.equal(secondsLeft({ profile: p, case: 'stock', n: 2, intoCaptureS: 2 }), 3 + 5 + 15);
+  assert.equal(secondsLeft({ profile: p, case: 'lp4', n: 3, intoCaptureS: 9 }), 0);
+  assert.equal(progressLine({ case: 'lp4', n: 2, of: 3, left: 6 }), 'running case lp4 · capture 2/3 · 6 s left');
+});
+
+test('the progress parser follows what the shared runner logs', async () => {
+  const { profiles, steps } = loadCalibrationFiles({
+    profiles: {
+      'light.toml': `schema = "dk.calprofile/1"\nname = "light"\nwarmup_s = 0.1\ncapture_s = 0.1\nrepeats = 2\n[[case]]\nid = "stock"\nsteps = "s"\n[[case]]\nid = "k"\nsteps = "keys"\n`,
+    },
+    steps: {
+      'a.toml': `schema = "dk.steps/1"\nname = "s"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\n`,
+      'b.toml': `schema = "dk.steps/1"\nname = "keys"\n[[step]]\naction = "key"\nkey = "play"\n`,
+    },
+    cases: {},
+  });
+  const lines: string[] = [];
+  const clock: Clock = { now: async () => 0, pause: async () => {} };
+  await runCalibration({
+    profile: profiles[0]!,
+    steps,
+    rig: {
+      midi: new MidiOut({ send: async () => {} }),
+      clock,
+      stats: {
+        capabilities: async () => ({ dsp: false, spans: true }),
+        start: async () => {},
+        clear: async () => {},
+        stop: async () => {},
+        read: async () => ({}),
+      },
+    },
+    midi: { trackChannels: [1], params: {} },
+    run: { id: 'r', target: 't', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+    log: (l) => lines.push(l),
+  });
+  const events = lines.map(parseRunLine);
+  assert.deepEqual(
+    events.filter((e) => e.kind === 'capture'),
+    [
+      { kind: 'capture', case: 'stock', n: 1, of: 2 },
+      { kind: 'capture', case: 'stock', n: 2, of: 2 },
+    ],
+  );
+  assert.equal(events.filter((e) => e.kind === 'skip').length, 1);
+});
