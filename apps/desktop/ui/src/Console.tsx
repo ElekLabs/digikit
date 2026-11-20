@@ -17,6 +17,7 @@ import {
   bootingScreen,
   bootingStatus,
   bootOnEmulatorPage,
+  keepDeferredBoot,
   emulatorStatus,
   loadFailure,
   shouldBootOnStart,
@@ -201,6 +202,10 @@ export default function Console(props: { host: Host }) {
   const [deferredBoot, setDeferredBoot] = createSignal<string>();
   createEffect(() => {
     const path = deferredBoot();
+    if (path && !keepDeferredBoot(!!status(), !!booting())) {
+      setDeferredBoot(undefined);
+      return;
+    }
     if (path && bootOnEmulatorPage(true, page(), target().kind, !!status(), !!booting())) {
       setDeferredBoot(undefined);
       void bootPath(path, 'Loaded at');

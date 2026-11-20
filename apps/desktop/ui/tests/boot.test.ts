@@ -7,6 +7,7 @@ import {
   bootingStatus,
   bootOnEmulatorPage,
   emulatorStatus,
+  keepDeferredBoot,
   loadFailure,
   shouldBootOnStart,
 } from '../src/boot-core';
@@ -50,6 +51,11 @@ describe('loading state', () => {
     expect(bootOnEmulatorPage(true, 'emulator', 'midi', false, false)).toBe(false);
     expect(bootOnEmulatorPage(true, 'emulator', 'emulator', true, false)).toBe(false);
     expect(bootOnEmulatorPage(true, 'emulator', 'emulator', false, true)).toBe(false);
+  });
+  it('drops a deferred start once a firmware runs or starts', () => {
+    expect(keepDeferredBoot(false, false)).toBe(true);
+    expect(keepDeferredBoot(true, false)).toBe(false);
+    expect(keepDeferredBoot(false, true)).toBe(false);
   });
   it('labels the emulator status when the target is another one', () => {
     expect(emulatorStatus('no firmware', 'emulator')).toBe('no firmware');
