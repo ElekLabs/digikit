@@ -20,17 +20,17 @@ void sr_reset(void)
     memset(&reg, 0, sizeof reg);
     memset(calls, 0, sizeof calls);
 }
-int sr_add(uintptr_t owner, const char *text, int tag)
+int sr_add(uintptr_t owner, const char *name, const char *text, int tag)
 {
-    return ui_rows_add(&reg, owner, 1, text, open_a, (void *)(intptr_t)tag);
+    return ui_rows_add(&reg, owner, name, 1, text, open_a, (void *)(intptr_t)tag);
 }
 int sr_add_outside_init(uintptr_t owner, const char *text)
 {
-    return ui_rows_add(&reg, owner, 0, text, open_a, 0);
+    return ui_rows_add(&reg, owner, "m", 0, text, open_a, 0);
 }
 int sr_add_no_open(uintptr_t owner, const char *text)
 {
-    return ui_rows_add(&reg, owner, 1, text, 0, 0);
+    return ui_rows_add(&reg, owner, "m", 1, text, 0, 0);
 }
 uint32_t sr_remove(uintptr_t owner)
 {
@@ -44,13 +44,13 @@ const char *sr_text(uint32_t i)
 {
     return reg.row[i].text;
 }
-uint32_t sr_id(uint32_t i)
+uintptr_t sr_key(uint32_t i)
 {
-    return reg.row[i].id;
+    return (uintptr_t)reg.row[i].key;
 }
-int sr_run(uint32_t id)
+int sr_run(uintptr_t key)
 {
-    return ui_rows_run(&reg, id);
+    return ui_rows_run(&reg, (const ui_row_key *)key);
 }
 int sr_calls(int tag)
 {

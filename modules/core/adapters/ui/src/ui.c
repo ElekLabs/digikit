@@ -1055,10 +1055,10 @@ static int observe_unloads(void)
 
 /* -- SETTINGS rows -- */
 
-static void run_settings_row(void *id, int32_t unused)
+static void run_settings_row(void *key, int32_t unused)
 {
     (void)unused;
-    ui_rows_run(&g_rows, (uint32_t)(uintptr_t)id);
+    ui_rows_run(&g_rows, (const ui_row_key *)key);
 }
 
 /* Called from dk_hook (shim.s) after the app's rows. */
@@ -1066,12 +1066,30 @@ void ui_settings_rows_tail(uint8_t *settings_menu)
 {
     for (uint32_t i = 0; i < g_rows.n; i++)
         dk_ui_stock_row(settings_menu, g_rows.row[i].text, run_settings_row,
-                        (void *)(uintptr_t)g_rows.row[i].id);
+                        (void *)g_rows.row[i].key);
+}
+
+/* The name of the loaded module whose owner handle this is (its record index + 1): what a SETTINGS row is keyed by, which a reload of the module gives again. */
+static void module_name_of(uintptr_t handle, char out[DK_UI_MODULE_NAME])
+{
+    DkrtModule m;
+    out[0] = 0;
+    for (uint32_t i = 0; dkrt_module(i, &m) == 0; i++) {
+        if (m.ctx && (uintptr_t)dkrt_ctx_owner(m.ctx) + 1 == handle) {
+            for (uint32_t k = 0; k < DK_UI_MODULE_NAME; k++)
+                out[k] = (char)m.name[k];
+            out[DK_UI_MODULE_NAME - 1] = 0;
+            return;
+        }
+    }
 }
 
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
-    return ui_rows_add(&g_rows, owner_of(ui), dkrt_phase() == DKRT_PHASE_INIT, text, open, arg);
+    char name[DK_UI_MODULE_NAME];
+    module_name_of(owner_of(ui), name);
+    return ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text, open,
+                       arg);
 }
 
 /* -- canvas: the firmware side of canvas_map.h -- */

@@ -12,23 +12,68 @@ static void move_row(ui_settings_row *d, const ui_settings_row *s)
     d->open = s->open;
     d->arg = s->arg;
     d->owner = s->owner;
-    d->id = s->id;
+    d->key = s->key;
     for (uint32_t i = 0; i < DK_UI_ROW; i++)
         d->text[i] = s->text[i];
 }
 
-int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, int in_init, const char *text,
-                    dk_ui_settings_open_fn *open, void *arg)
+static int same_name(const char *a, const char *b)
+{
+    for (uint32_t i = 0; i < DK_UI_MODULE_NAME; i++) {
+        if (a[i] != b[i])
+            return 0;
+        if (!a[i])
+            return 1;
+    }
+    return 1;
+}
+
+/* The key of (name, index): the one that exists, or a free one. 0 when all are used. */
+static const ui_row_key *key_of(ui_settings_rows *s, const char *name, uint32_t index)
+{
+    ui_row_key *free_key = 0;
+    for (uint32_t i = 0; i < DK_UI_SETTINGS_ROWS * 2; i++) {
+        ui_row_key *k = &s->key[i];
+        if (!k->used) {
+            if (!free_key)
+                free_key = k;
+        } else if (k->index == index && same_name(k->name, name)) {
+            return k;
+        }
+    }
+    if (free_key) {
+        uint32_t i = 0;
+        while (name[i] && i + 1 < DK_UI_MODULE_NAME) {
+            free_key->name[i] = name[i];
+            i++;
+        }
+        free_key->name[i] = 0;
+        free_key->index = index;
+        free_key->used = 1;
+    }
+    return free_key;
+}
+
+int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *name, int in_init,
+                    const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
     ui_settings_row *r;
-    uint32_t i = 0;
+    const ui_row_key *key;
+    uint32_t i = 0, index = 0;
     if (!in_init)
         return DK_E_CONTEXT;
     if (!text || !open)
         return DK_E_CONTRACT;
     if (s->n == DK_UI_SETTINGS_ROWS)
         return DK_E_NOMEM;
+    for (i = 0; i < s->n; i++)
+        if (s->row[i].owner == owner)
+            index++;
+    key = key_of(s, name ? name : "", index);
+    if (!key)
+        return DK_E_NOMEM;
     r = &s->row[s->n];
+    i = 0;
     while (text[i] && i + 1 < DK_UI_ROW) {
         r->text[i] = text[i];
         i++;
@@ -37,9 +82,7 @@ int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, int in_init, const cha
     r->open = open;
     r->arg = arg;
     r->owner = owner;
-    do
-        r->id = ++s->last_id;
-    while (r->id == 0);
+    r->key = key;
     s->n++;
     return DK_OK;
 }
@@ -61,10 +104,10 @@ uint32_t ui_rows_remove_owner(ui_settings_rows *s, uintptr_t owner)
     return from;
 }
 
-int ui_rows_run(const ui_settings_rows *s, uint32_t id)
+int ui_rows_run(const ui_settings_rows *s, const ui_row_key *key)
 {
     for (uint32_t i = 0; i < s->n; i++)
-        if (s->row[i].id == id) {
+        if (s->row[i].key == key) {
             s->row[i].open(s->row[i].arg);
             return 1;
         }
