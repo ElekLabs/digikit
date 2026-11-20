@@ -1,5 +1,5 @@
-// The right-hand column of the Emulator page and the Remote page: tabs over one panel at a time. The Emulator page offers Memory, Metrics
-// and Profile; the Remote page Memory and Profile. The column folds to a narrow rail so the faceplate takes the width
+// The right-hand column of the Emulator page and the Remote page: tabs over one panel at a time. The Emulator page offers Memory, Metrics,
+// Profile and Calibration; the Remote page Memory, Profile and Calibration. The column folds to a narrow rail so the faceplate takes the width
 // back; the rail lists the tabs vertically, and a click on one opens the column on it. The chosen tab and the fold are kept (panel-open.ts).
 // Memory and Profile read through the one session of their target (target.ts), and only while their tab is shown.
 import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
@@ -7,6 +7,9 @@ import type { DkSession } from '@digi/dk-session';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
 import ProfilePanel from './ProfilePanel';
+import CalibrationPanel from './CalibrationPanel';
+import { createCalibrationHub } from './calibration-hub';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { TAB_LABEL, shownTab, type InspectorTab } from './inspector-core';
 import { inspectorOpen, inspectorTab, setInspectorOpen, setInspectorTab } from './panel-open';
 import './card-panel.css';
@@ -26,7 +29,14 @@ export default function SidePanels(props: {
   where: () => string;
   track?: () => unknown;
 }): JSX.Element {
-  const offered = (): InspectorTab[] => ['memory', ...(props.metrics ? (['metrics'] as const) : []), 'profile'];
+  // shared by the Profile and Calibration tabs: a run in progress, and the calibration kept per device
+  const hub = createCalibrationHub(useTransferApp().storage);
+  const offered = (): InspectorTab[] => [
+    'memory',
+    ...(props.metrics ? (['metrics'] as const) : []),
+    'profile',
+    ...(props.host ? (['calibration'] as const) : []),
+  ];
   const tab = () => shownTab(inspectorTab(), offered());
   const reads = (t: InspectorTab) => props.visible && (props.active ?? true) && inspectorOpen() && tab() === t;
   const tabpanel = (t: InspectorTab) =>
@@ -64,7 +74,7 @@ export default function SidePanels(props: {
   return (
     <div
       class="side-col"
-      classList={{ rail: !inspectorOpen(), wide: inspectorOpen() && tab() === 'profile' }}
+      classList={{ rail: !inspectorOpen(), wide: inspectorOpen() && (tab() === 'profile' || tab() === 'calibration') }}
       hidden={!props.visible}
     >
       <div class="side-head">
@@ -161,8 +171,20 @@ export default function SidePanels(props: {
         where={props.where}
         track={props.track}
         host={props.host}
+        hub={hub}
         tabpanel={tabpanel('profile')}
       />
+      <Show when={props.host}>
+        <CalibrationPanel
+          visible={reads('calibration')}
+          session={props.session}
+          where={props.where}
+          track={props.track}
+          host={props.host}
+          hub={hub}
+          tabpanel={tabpanel('calibration')}
+        />
+      </Show>
       <Show when={props.metrics}>
         <div
           class="card-panel metrics-panel"
