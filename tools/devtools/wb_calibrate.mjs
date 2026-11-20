@@ -57,7 +57,7 @@ function stepLibrary(root) {
 }
 
 /**
- * The `calibration.toml` a module ships in its own directory (modules/machines|fx|tools/NAME/), for the modules whose `module.toml` lists a port of `device` (`dn2`):
+ * The `calibration.toml` a module ships in its own directory (modules/machines|fx|tools/NAME/), for the modules whose `module.toml` lists a port of `device` (the id before the version of the INFO port):
  * a module that is not built for the target has no case on it (the install would refuse it and end the run).
  */
 function moduleCases(root, fail, device) {
