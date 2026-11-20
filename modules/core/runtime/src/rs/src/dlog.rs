@@ -160,6 +160,9 @@ const BOOT_KINDS: u32 = (1 << logk::BOOT_START)
 /// after another module sees what that module logged. Then boot events and error events, except the long detail of a replayed crash record and the raw
 /// DSP words of a stop (the fault record holds both).
 fn keeps(kind: u16, flags: u16) -> bool {
+    if flags & logk::F_KEEP != 0 {
+        return true; // the producer marked it notable: any kind, any level
+    }
     if flags & logk::F_ERROR != 0 {
         return kind != logk::CRASH_REG && kind != logk::CRASH_STACK && kind != logk::CRASH_TAIL && kind != logk::DSP_DIAG;
     }
@@ -502,6 +505,17 @@ mod tests {
         LOGGED += 1;
         LAST_KIND = (*e).kind;
     }
+    /// An event with the keep flag is in the small ring after the first UI frame, at any level and of any kind; one without it is not (an info-level event of an ordinary kind).
+    #[test]
+    fn the_small_ring_keeps_an_event_with_the_keep_flag() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::boot::info().ui_reached = 1;
+        assert!(keeps(logk::HEALTH, logk::F_KEEP));
+        assert!(keeps(logk::MOD_LOG, logk::F_KEEP | (logk::L_DEBUG << logk::LEVEL_SHIFT)));
+        assert!(!keeps(logk::HEALTH, 0));
+        crate::boot::info().ui_reached = 0;
+    }
+
     unsafe extern "C" fn fake_span(s: *const Span) {
         SPANS += 1;
         LAST_SPAN = ((*s).owner, (*s).cycles);

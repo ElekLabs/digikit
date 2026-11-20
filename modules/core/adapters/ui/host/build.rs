@@ -37,5 +37,19 @@ fn main() {
         .file(sdk_src.join("chooser/logic.c"))
         .file(sdk_src.join("core/text.c"))
         .file(sdk_src.join("core/path.c"));
+    // The pure logic of core/ui (no firmware): the SETTINGS rows, the view pool, the canvas mapping and the text input checks.
+    // panel_keys.c is not linked: tests/c/views.c has its own ui_key_of_code.
+    let ui_src = root.join("../src");
+    println!("cargo:rerun-if-changed={}", ui_src.display());
+    for f in [
+        "settings_rows.c",
+        "view_pool.c",
+        "key_defer.c",
+        "key_map.c",
+        "canvas_map.c",
+        "text_input.c",
+    ] {
+        build.file(ui_src.join(f));
+    }
     build.compile("dkuisample");
 }

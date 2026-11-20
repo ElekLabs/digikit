@@ -1098,7 +1098,7 @@ kind = "code"
 addr = 0x400ffe22
 len = 4
 sha256 = "1f6b50a3616f922607a92f5ea30e249ecfae4035c48517445d22acbd059dd2ec"
-mark = "D"
+mark = "V"
 rule = "fw/view:cf_func"
 
 [[anchor]]

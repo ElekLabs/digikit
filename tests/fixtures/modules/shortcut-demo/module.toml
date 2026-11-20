@@ -1,0 +1,21 @@
+[module]
+id = "test/shortcut-demo"
+version = "0.1.0"
+name = "Shortcut demo"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: binds [TRK]+[YES] with dk_shortcut_add, so it has a hard NEED on the shortcuts service; no firmware effect."
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/shortcut-demo`).
+[[object]]
+path = "build/shortcut-demo.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"

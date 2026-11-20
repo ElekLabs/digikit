@@ -239,6 +239,16 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.input.site.key_event_walk"
+cpu = "cf"
+kind = "code"
+addr = 0x4011de30
+len = 8
+sha256 = "3d25d06bf11f3a7bccef894d0016b52adbb4ae468a0f475dd497d7b5966e2694"
+mark = "V"
+rule = "fw/input:cf_func"
+
+[[anchor]]
 name = "cf.lfo.data.wave_row.1"
 cpu = "cf"
 kind = "data"
@@ -2983,6 +2993,16 @@ mark = "D"
 rule = "fw/string:cf_func"
 
 [[anchor]]
+name = "cf.text.data.font_large"
+cpu = "cf"
+kind = "data"
+addr = 0x40291c3c
+len = 20
+sha256 = "ca010dc4278c16fd76818ca69f30b217d523986d03cf1393885d5934c5aa6e72"
+mark = "V"
+rule = "fw/text:cf_words"
+
+[[anchor]]
 name = "cf.text.fn.draw"
 cpu = "cf"
 kind = "code"
@@ -3009,6 +3029,16 @@ kind = "code"
 addr = 0x4011545c
 len = 4
 sha256 = "f88a5638ad9d3568653cf1237c4f5dfbaa69278b8fef4895f61411923397600d"
+mark = "D"
+rule = "fw/text:cf_func"
+
+[[anchor]]
+name = "cf.text.fn.width"
+cpu = "cf"
+kind = "code"
+addr = 0x40115d0e
+len = 4
+sha256 = "23201b350b902ad73d89ce6a89eee29dfa14dd42612057eede16e4b546dc6759"
 mark = "D"
 rule = "fw/text:cf_func"
 
@@ -3195,7 +3225,7 @@ kind = "code"
 addr = 0x4011c7ba
 len = 4
 sha256 = "1f6b50a3616f922607a92f5ea30e249ecfae4035c48517445d22acbd059dd2ec"
-mark = "D"
+mark = "V"
 rule = "fw/view:cf_func"
 
 [[anchor]]
@@ -3220,6 +3250,16 @@ mark = "D"
 rule = "fw/view:cf_ptr"
 
 [[anchor]]
+name = "cf.view.fn.view_ctor"
+cpu = "cf"
+kind = "code"
+addr = 0x4011c702
+len = 4
+sha256 = "945e33bb4b14d28a5813755f8106ac0c2dbec82302f81140d3b1bf6fc964d321"
+mark = "V"
+rule = "fw/view:cf_func"
+
+[[anchor]]
 name = "cf.view.fn.view_push"
 cpu = "cf"
 kind = "code"
@@ -3228,6 +3268,17 @@ len = 4
 sha256 = "7b530b25939fbe347fbdca9bc607e4240a2f48c532375707069ec848ec2b38ca"
 mark = "D"
 rule = "fw/view:cf_func"
+
+[[anchor]]
+name = "cf.view.site.sp_view_cb_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x401d9890
+src = 0x4011b77c
+len = 4
+sha256 = "8310da63344807e123844b74aaee02d87af45baea54ae6f8bdd0c10f2acfbf40"
+mark = "D"
+rule = "fw/view:cf_ptr"
 
 [[anchor]]
 name = "cf.view.site.ui_loop"
@@ -3248,6 +3299,17 @@ len = 4
 sha256 = "46baa2225d9f997ccb54982a333f592e3560ca3f9790b2fe866787ba0dd6fd17"
 mark = "D"
 rule = "fw/view:cf_words"
+
+[[anchor]]
+name = "cf.view.site.view_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x402074ec
+src = 0x4011c73a
+len = 4
+sha256 = "bd51a9be29b290db0cc5c0bf2eaa2dd5644e2b77dd5cdc2a942799e2def89678"
+mark = "V"
+rule = "fw/view:cf_ptr"
 
 [[anchor]]
 name = "cf.view.value.brain"
@@ -3278,6 +3340,16 @@ addr = 0x401181b2
 len = 4
 sha256 = "90dc61142907269c3a05b62e1564c7ed49dec5c08711d5509b8ae38f1b97c382"
 mark = "D"
+rule = "fw/window:cf_func"
+
+[[anchor]]
+name = "cf.window.fn.name_ctor"
+cpu = "cf"
+kind = "code"
+addr = 0x40119156
+len = 4
+sha256 = "3f2a7a23497cd06e30629c3e1ea8ba643f614ea616aba5feafae54b013ae9750"
+mark = "V"
 rule = "fw/window:cf_func"
 
 [[anchor]]
@@ -3340,6 +3412,17 @@ addr = 0x401ed794
 src = 0x400a3fc6
 len = 4
 sha256 = "1f04ff69753ceb1db59ad4e92aa02f6625c94a9014124ac82dcbd5899d9f9974"
+mark = "D"
+rule = "fw/window:cf_ptr"
+
+[[anchor]]
+name = "cf.window.site.name_cb_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x401e0bc8
+src = 0x400796d4
+len = 4
+sha256 = "0403de52c1a4396bedf2660bc6362980fdcdf463407d118449057e11477b885d"
 mark = "D"
 rule = "fw/window:cf_ptr"
 
@@ -4178,6 +4261,15 @@ len = 6
 sha256 = "f6353ecd25610b1605fe58097dae09f6182ee62fef7a0e305380a0f3e36ab25e"
 mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
+
+[[hook]]
+name = "cf.input.hook.key_event"
+site = "cf.input.site.key_event_walk"
+mode = "replace"
+clobbers = ["ccr"]
+len = 8
+kind = "tail"
+check = "3d25d06bf11f3a7b"
 
 [[hook]]
 name = "cf.lfo.hook.graph_vec"

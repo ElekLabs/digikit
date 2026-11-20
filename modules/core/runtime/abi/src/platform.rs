@@ -56,12 +56,52 @@ pub struct DeviceProfile {
     /// How many stock machine types the firmware has (`stock_types` of core/machines `types.toml`; 0 without a DSP): the types `0 .. stock_machine_types`. The numbers
     /// from there to `dyn_type_first` are built-in or gap rows that no chooser offers.
     pub stock_machine_types: u32,
+    /// `[digikit] tracks`: the tracks of the device (0: the file gives none).
+    pub tracks: u32,
+    /// `[input.keys]`: the id of each logical key (`dk_key`, `sdk/include/dk/gen/keys.h`) in the firmware's key events, indexed by the key's number; 0 where the device has no such key.
+    pub key_codes: [u8; KEY_SLOTS],
+    /// `[input.key_flags]`: the bits of a key event's flags word.
+    pub key_flags: KeyFlagBits,
 }
+
+/// The bit numbers of the flags word of a key event (`KeyEvent+0x10`), named by meaning (`[input.key_flags]`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyFlagBits {
+    /// Set on a press, clear on a release.
+    pub press: u8,
+    /// Set while FUNC is held.
+    pub func: u8,
+    /// Set on the repeat of a held key.
+    pub repeat: u8,
+    /// Set on a release.
+    pub release: u8,
+}
+
+/// The logical keys a profile maps: `dk_key` numbers are below it (`DEV_KEYS` of `abi.toml`).
+pub const KEY_SLOTS: usize = dkrt_sdk::DEV_KEYS;
 
 impl DeviceProfile {
     /// Is `a` an address of the cached DDR window?
     pub fn ddr_contains(&self, a: u32) -> bool {
         a >= self.ddr_base && a - self.ddr_base < self.ddr_bytes
+    }
+
+    /// The panel code of the logical key `key` (a `dk_key`); 0 when the device has no such key or `key` is `DK_KEY_NONE`.
+    pub fn key_code(&self, key: u32) -> u32 {
+        self.key_codes
+            .get(key as usize)
+            .map_or(0, |c| u32::from(*c))
+    }
+
+    /// The logical key (`dk_key`) of the panel code `code`; 0 when no logical key has that code on this device.
+    pub fn logical_key(&self, code: u32) -> u32 {
+        if code == 0 {
+            return 0;
+        }
+        self.key_codes
+            .iter()
+            .position(|c| u32::from(*c) == code)
+            .map_or(0, |i| i as u32)
     }
 
     /// Is `t` one of the run-time machine types?
@@ -330,6 +370,23 @@ pub fn locked<P: Platform, T>(p: &P, f: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A logical key maps to the device's panel code and back; a key the device lacks, `DK_KEY_NONE` and a number past the table are 0.
+    #[test]
+    fn a_profile_maps_logical_keys_to_panel_codes_and_back() {
+        let mut p = crate::profiles::ALL[0];
+        p.key_codes = [0; KEY_SLOTS];
+        p.key_codes[3] = 16;
+        p.key_codes[5] = 10;
+        assert_eq!((p.key_code(3), p.key_code(5)), (16, 10));
+        assert_eq!((p.logical_key(16), p.logical_key(10)), (3, 5));
+        // the device has no key 4; code 0 is no key; a number past the table has no code
+        assert_eq!(
+            (p.key_code(4), p.key_code(0), p.key_code(KEY_SLOTS as u32)),
+            (0, 0, 0)
+        );
+        assert_eq!((p.logical_key(0), p.logical_key(99)), (0, 0));
+    }
 
     /// Entries are found by hash; a missing hash, another magic, no table and a count that is too big give null.
     #[test]

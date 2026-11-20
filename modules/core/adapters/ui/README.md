@@ -25,3 +25,16 @@ Details: [docs/findings/71-ui-components-1-17.md](../../../../docs/findings/71-u
 
 The font of a plain menu or text page is read from the operand of one instruction of the firmware's VerticalMenuView constructor
 (`cf.menu.site.vertical_menu_view_ctor.font_ref`), not from a fixed offset in the view: the class layout differs between firmwares.
+
+## Module screens, SETTINGS rows and text input
+
+Written for the track manager (docs/plans/track-manager.md). `dk_ui_open(ctx, &ui)` gives each module its own handle (its owner id from `dkrt_ctx_owner`, plus one);
+core/ui registers one unload observer with the runtime (`dkrt_unload_observer_add`) and, when a module is unloaded, closes its views, removes its SETTINGS rows and its
+`dk_ui_tick` timers and drops its pending text input callback.
+
+- `dk_ui_settings_row(ui, text, open, arg)` (init only): `src/settings_rows.{h,c}`, at most 4 rows in load order. A stock row holds a key, the module's name and the row's number in the module, and runs the row that has that key now: rows survive a reload (the old stock row runs the reloaded module's row), and after a plain unload the stale row stays in the list built by the firmware and does nothing. A module loaded live for the first time after SETTINGS was built gets its row at the firmware's next rebuild of the list. `dk_hook` (shim.s) calls the app's `dk_app_settings_rows`, then `ui_settings_rows_tail`, which adds the registered rows with `dk_ui_stock_row`. A stock row finds its entry by id.
+- `dk_ui_view_open/close`: `src/view_pool.{h,c}`, a pool of 4. The pool holds no firmware: `ui_view_fw` (push, close, invalidate) is implemented in ui.c with the stock View: a make_shared block (the control-block vtable of the stock ConfirmWindow, whose dispose calls slot 0), View::ctor, a copy of the View vtable with slot 2 (key) and 4 (draw) replaced, the opaque byte (1 full screen, 0 overlay) set before the push, our reference released after it. The firmware draws only after an invalidate, so the pool asks for a redraw of every open view on each UI pass while any is open. Keys come through the device's key map (`src/key_map.c`, `dkrt_dev.key_codes` reversed): an overlay passes every key on, a full-screen view takes the keys it does not pass on itself.
+- `dk_canvas` (`sdk/include/dk/platform/canvas.h`): `src/canvas_map.{h,c}` turns the top-left calls into the firmware's (text y and rectangle rows count from the screen bottom; the stock paint code draws its title bar at rows 0x39 to 0x3f) and clips; a frame is four clipped lines. `text_in` and `text_width_in` take a `dk_font`: the stock font (box height 6) or the large ROM font (box height 15, anchor `cf.text.data.font_large`, optional: a port without it draws the small font).
+- `dk_ui_text_input`: `src/text_input.{h,c}` checks the desc (`max_len` 1 to 15 and within the screen's 16); ui.c builds the stock NameView (8-argument constructor, no number) with `done` as the `std::function<void(std::string, int)>` the firmware calls on YES. One input at a time (`DK_E_BUSY`).
+- Host tests: `host/tests/{settings_rows,views,canvas,text_input,keys,tick}.rs`; device test: `tests/fixtures/modules/ui-views/tests/live/`.
+- SETTINGS row keys (module name, row number) are kept for the session, at most 8 distinct pairs.

@@ -7,7 +7,7 @@ use crate::entry::{self, Ctx};
 use crate::state::{DKRT_POLLS, POLLS};
 use crate::tick::{phase, poll_all};
 use core::ptr::addr_of_mut;
-use dkrt_sdk::OK;
+use dkrt_sdk::{E_CONTRACT, E_NOMEM, OK};
 use std::vec::Vec;
 
 /// The fake clock: each read returns `NOW` and then adds `STEP`, so a span of one read pair is `STEP` cycles whatever the measured code does.
@@ -241,6 +241,76 @@ fn a_poll_slot_records_the_module_that_registered_it() {
     }
 }
 
+static mut CALLED: Vec<u32> = Vec::new();
+unsafe extern "C" fn observer_a(owner: u32) {
+    (*core::ptr::addr_of_mut!(CALLED)).push(owner);
+}
+unsafe extern "C" fn observer_b(owner: u32) {
+    (*core::ptr::addr_of_mut!(CALLED)).push(owner + 100);
+}
+
+/// The unload observers: a table of four, adding one twice keeps one slot, an observer inside the unloaded module is dropped and not called, and the
+/// others are called in table order with the owner.
+#[test]
+fn unload_observers_are_called_with_the_owner_and_an_own_observer_is_dropped() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        (*core::ptr::addr_of_mut!(CALLED)).clear();
+        let a = observer_a as *const () as usize;
+        let b = observer_b as *const () as usize;
+        assert_eq!(crate::dkrt_unload_observer_add(0), E_CONTRACT);
+        assert_eq!(crate::dkrt_unload_observer_add(a), OK);
+        assert_eq!(crate::dkrt_unload_observer_add(a), OK, "in the table already");
+        assert_eq!(crate::dkrt_unload_observer_add(b), OK);
+        crate::api::notify_unload(3, 0, 0);
+        assert_eq!(*core::ptr::addr_of!(CALLED), [3, 103]);
+        // an observer in the range of the unloaded module (a fake address: it must not be called) is dropped
+        assert_eq!(crate::dkrt_unload_observer_add(0x5010), OK);
+        (*core::ptr::addr_of_mut!(CALLED)).clear();
+        crate::api::notify_unload(4, 0x5000, 0x100);
+        assert_eq!(*core::ptr::addr_of!(CALLED), [4, 104]);
+        (*core::ptr::addr_of_mut!(CALLED)).clear();
+        crate::api::notify_unload(5, 0x5000, 0x100);
+        assert_eq!(*core::ptr::addr_of!(CALLED), [5, 105]);
+        crate::dkrt_unload_observer_remove(a);
+        // four slots
+        for i in 1..4usize {
+            assert_eq!(crate::dkrt_unload_observer_add(0x7000 + i), OK);
+        }
+        assert_eq!(crate::dkrt_unload_observer_add(0x7100), E_NOMEM);
+        crate::dkrt_unload_observer_remove(b);
+        assert_eq!(crate::dkrt_unload_observer_add(0x7100), OK);
+        for f in [0x7001usize, 0x7002, 0x7003, 0x7100] {
+            crate::dkrt_unload_observer_remove(f);
+        }
+        assert_eq!(*core::ptr::addr_of!(crate::state::DKRT_UNLOAD_OBSERVERS), [0; 4]);
+        reset(0, 5);
+    }
+}
+
+/// `dkrt_ctx_owner` gives the record of a live module context and refuses any other pointer.
+#[test]
+fn a_module_context_names_its_owner() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        crate::entry::bind(2);
+        // the host's addresses are 64 bits wide: take the address of the context itself, not `ctx_addr`'s u32
+        let ctx = core::ptr::addr_of!(entry::DKRT_CTXS[2]) as usize;
+        assert_eq!(crate::dkrt_ctx_owner(ctx), 2);
+        assert_eq!(crate::dkrt_ctx_owner(ctx + 1), E_CONTRACT);
+        assert_eq!(crate::dkrt_ctx_owner(0), E_CONTRACT);
+        assert_eq!(crate::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[3]) as usize), E_CONTRACT, "record 3 is not loaded");
+        crate::entry::unbind(2);
+        // a service file's record has a context too, but no owner id is given out for it
+        crate::entry::bind(crate::MAX_MODULES);
+        assert_eq!(crate::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[crate::MAX_MODULES]) as usize), E_CONTRACT);
+        crate::entry::unbind(crate::MAX_MODULES);
+        reset(0, 5);
+    }
+}
+
 /// `dkrt_menu_built` counts a menu for the module record that holds the fill function, else the descriptor; an address in no module counts for none.
 #[test]
 fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
@@ -329,5 +399,22 @@ fn the_job_reads_the_menu_count_of_its_own_record() {
         }
         assert!(ops.menu_built(1), "the count stays at its top and does not wrap to 0");
         reset(0, 5);
+    }
+}
+
+/// `dkrt_phase` says what the running module code is.
+#[test]
+fn the_phase_is_that_of_the_running_module_code() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset(0, 5);
+        assert_eq!(crate::dkrt_phase(), 0);
+        let prev = dlog::enter_module(0, dlog::PHASE_INIT);
+        assert_eq!(crate::dkrt_phase(), 1);
+        dlog::leave_module(prev);
+        let prev = dlog::enter_module(0, dlog::PHASE_TICK);
+        assert_eq!(crate::dkrt_phase(), 2);
+        dlog::leave_module(prev);
+        assert_eq!(crate::dkrt_phase(), 0);
     }
 }

@@ -169,6 +169,8 @@ dsp_blocks_per_second = 1500
 [digikit]
 id = 2
 name = "dn2"
+# The tracks of the device: what a module that draws or counts tracks reads through `dk_device_track_count()` (a Syntakt file gives its own number later; absent: 0).
+tracks = 16
 # Run-time modules (ids) that the workbench installs and enables together with the firmware, on a device after its flash and in the emulator
 # after it loads the patched image. Each is ticked by default in the Firmware pane and next to the emulator's firmware file; the user can untick it.
 # The list is data: add an id here (for example digikit/debug) and the workbench offers it. Desktop workbench only; the site does not install modules.
@@ -253,6 +255,14 @@ send_indices = [100]
 # window that ends its boot, so it has no [ui.boot_window] table and the view stack offsets of the Digitakt II file are not needed here.
 [ui]
 brain_ptr = 0x44648900
+# The view stack: the view manager is the object at Brain + 0x40, its list sentinel at +0x14, a std::list node has next at +0 and prev at +4 and its View pointer at +8. The offsets are those of the
+# Digitakt II: the key runner (DT2 0x40030bd0, DN2 0x4002c5c8) and the key walker (DT2 0x4011c79c, DN2 0x4011e110) have the same hashes on both devices and take Brain + 0x40 and the list at +0x14
+# (docs/findings: key event dispatch). The top view is the node before the sentinel (the prev pointer), the bottom view the node after it. No boot window facts here: this table is enough to read the stack.
+view_manager_off = 0x40
+list_off = 0x14
+list_next_off = 0
+list_prev_off = 4
+node_view_off = 8
 
 # What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.
@@ -299,14 +309,69 @@ sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "co
 [input]
 backend = "panel-uart"
 
-# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Digitone II 1.12 (the same numbers as the Digitakt II): the decoder tables are the identity (finding 58); `yes2` is a second YES key (0x31); the flag bits are those of finding 71 **[D]**.
-[input.view_keys]
-yes = 10
-yes2 = 49
-no = 12
-right = 15
-move_flag = 0
-act_flag = 4
+# Logical key names: name = the key's id in the firmware's key events (the id at +0xc of the event): the firmware's key index. It equals the panel code on this
+# device (the decoder tables are the identity, finding 58) and differs on the Syntakt (finding 153); it is not the wire code (channel, bit) that `dk_input_key` injects.
+# The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS; the groups below arrange the same codes). `patchkit gen` writes the
+# C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical name to id map of the profile and of `dkrt_dev`. A name a device lacks maps to 0.
+# Names come from `[keys] order` of sdk/sdk.toml. core/ui needs YES, NO, RIGHT and LEVEL_PUSH (the second YES key, id 49 here) by name.
+[input.keys]
+PAGE_TRIG = 1
+SRC = 2   # the panel prints SYN on this device; the logical key is the same (the firmware calls the page SourcePageView on both)
+FLTR = 3
+AMP = 4
+FX = 5
+MOD = 6
+PRESET = 7
+SETTINGS = 8
+TEMPO = 9
+YES = 10
+UP = 11
+NO = 12
+LEFT = 13
+DOWN = 14
+RIGHT = 15
+TRK = 16
+FUNC = 17
+KEYBOARD = 18
+RECORD = 19
+PLAY = 20
+STOP = 21
+PAGE = 22
+PTN = 23
+SONG = 24
+TRIG1 = 25
+TRIG2 = 26
+TRIG3 = 27
+TRIG4 = 28
+TRIG5 = 29
+TRIG6 = 30
+TRIG7 = 31
+TRIG8 = 32
+TRIG9 = 33
+TRIG10 = 34
+TRIG11 = 35
+TRIG12 = 36
+TRIG13 = 37
+TRIG14 = 38
+TRIG15 = 39
+TRIG16 = 40
+ENC1 = 41
+ENC2 = 42
+ENC3 = 43
+ENC4 = 44
+ENC5 = 45
+ENC6 = 46
+ENC7 = 47
+ENC8 = 48
+LEVEL_PUSH = 49
+
+# The bits of the flags word (+0x10) of a key event, by meaning: set on a press (clear on a release), set while FUNC is held, set on the repeat of a held key, set on a
+# release. Read from the compact menu view's key handler (finding 71: bit 0 moves, bit 4 acts) and the key walker (finding 155) **[D]**.
+[input.key_flags]
+press = 0
+func = 1
+repeat = 3
+release = 4
 
 [panel]
 # The wire carries (channel, bit); the firmware reports a control code.
