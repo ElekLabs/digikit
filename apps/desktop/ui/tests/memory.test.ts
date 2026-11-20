@@ -194,6 +194,22 @@ test('the largest free block is named only when it is smaller than the free tota
   assert.equal(capped.largest, 100);
 });
 
+test('a count never names a largest block: its runtime largest is 0 by contract', () => {
+  const bars = buildBars(
+    { MODULES: { limit: 8, used: 0, largest: 0 }, MACHINE_ROWS: { limit: 8, used: 2, largest: 0 } },
+    [],
+    library,
+  );
+  const modules = by(bars, 'MODULES');
+  assert.equal(modules.split, false);
+  assert.equal(freeTitle(modules), 'Free: 8');
+  assert.equal(noteText(modules), null);
+  const machines = by(bars, 'MACHINE_ROWS');
+  assert.equal(machines.split, false);
+  assert.equal(freeTitle(machines), 'Free: 6');
+  assert.equal(noteText(machines), null);
+});
+
 test('the texts: KiB for bytes, counts for rows, the module name and amount on hover', () => {
   const bars = buildBars(dn2, loaded, library);
   const dsp = by(bars, 'DSP_AREA');
