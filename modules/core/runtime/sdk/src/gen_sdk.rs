@@ -523,7 +523,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 124] = [
+    pub const IMPORT_NAMES: [&str; 125] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -646,12 +646,13 @@ pub mod api {
         "dk_debug_poll",
         "dk_debug_track_type",
         "dk_debug_selected_params",
+        "dk_device_track_count",
         "dk_debug_log_sink_set",
         "dk_debug_speed_flags",
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`, and not provided by a service file.
-    pub const BUILTIN_NAMES: [&str; 59] = [
+    pub const BUILTIN_NAMES: [&str; 60] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -709,6 +710,7 @@ pub mod api {
         "dk_debug_poll",
         "dk_debug_track_type",
         "dk_debug_selected_params",
+        "dk_device_track_count",
         "dk_debug_log_sink_set",
         "dk_debug_speed_flags",
     ];
@@ -1078,6 +1080,9 @@ pub mod api {
 
     /// `dk_debug_selected_params`: The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written).
     pub type DkDebugSelectedParamsFn = unsafe extern "C" fn(out: *mut i16, n: u32) -> i32;
+
+    /// `dk_device_track_count`: The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal.
+    pub type DkDeviceTrackCountFn = unsafe extern "C" fn() -> u32;
 
     /// `dk_debug_log_sink_set`: Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none).
     pub type DkDebugLogSinkSetFn = unsafe extern "C" fn(sink: *mut u8, tick: *mut u8);

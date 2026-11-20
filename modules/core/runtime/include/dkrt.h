@@ -35,6 +35,8 @@
 #define DKRT_STAGE_BYTES 131072
 /* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
 #define DKRT_MACHINE_ROWS 8
+/* The logical keys of a device: DkrtDevice.key_codes has this many entries, indexed by the key's number (dk_key of sdk/include/dk/gen/keys.h; entry 0 is DK_KEY_NONE). `patchkit gen` refuses more key names. */
+#define DKRT_DEV_KEYS 64
 /* DkrtDevice.magic: DKDV. */
 #define DKRT_DEV_MAGIC 0x444b4456u
 /* DkrtDevice.version. */
@@ -264,6 +266,8 @@ typedef struct DkrtDevice {
     uint32_t dsp_block_cycles;                   /* [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP) */
     uint32_t dyn_type_first;                     /* core/machines types.toml dynamic_first */
     uint32_t dyn_types;                          /* run-time machine types (0 without DEV_HAS_DSP) */
+    uint32_t tracks;                             /* [digikit] tracks: the tracks of the device (0: not given) */
+    uint32_t key_codes[DKRT_DEV_KEYS];           /* [panel.keys]: the panel code of each logical key, indexed by the key's number (0: the device has no such key) */
 } DkrtDevice;
 
 /* dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
@@ -462,7 +466,7 @@ _Static_assert(offsetof(DkrtCap, kind) == 0, "DkrtCap.kind");
 _Static_assert(offsetof(DkrtCap, limit) == 4, "DkrtCap.limit");
 _Static_assert(offsetof(DkrtCap, used) == 8, "DkrtCap.used");
 _Static_assert(offsetof(DkrtCap, largest) == 12, "DkrtCap.largest");
-_Static_assert(sizeof(DkrtDevice) == 60, "DkrtDevice size");
+_Static_assert(sizeof(DkrtDevice) == 320, "DkrtDevice size");
 _Static_assert(offsetof(DkrtDevice, magic) == 0, "DkrtDevice.magic");
 _Static_assert(offsetof(DkrtDevice, version) == 4, "DkrtDevice.version");
 _Static_assert(offsetof(DkrtDevice, size) == 8, "DkrtDevice.size");
@@ -478,6 +482,8 @@ _Static_assert(offsetof(DkrtDevice, keep_bytes) == 44, "DkrtDevice.keep_bytes");
 _Static_assert(offsetof(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevice.dsp_block_cycles");
 _Static_assert(offsetof(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
 _Static_assert(offsetof(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
+_Static_assert(offsetof(DkrtDevice, tracks) == 60, "DkrtDevice.tracks");
+_Static_assert(offsetof(DkrtDevice, key_codes) == 64, "DkrtDevice.key_codes");
 _Static_assert(sizeof(DkrtHealth) == 108, "DkrtHealth size");
 _Static_assert(offsetof(DkrtHealth, magic) == 0, "DkrtHealth.magic");
 _Static_assert(offsetof(DkrtHealth, version) == 4, "DkrtHealth.version");

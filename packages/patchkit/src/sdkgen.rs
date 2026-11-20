@@ -35,6 +35,8 @@ pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 pub const C_STATUS_OUT: &str = "sdk/include/dk/core/status.h";
 /// The generated C header of the record kinds, relative to the repository root.
 pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
+/// The logical key names of the device files (`[panel.keys]`), written by `devgen::keys_h`.
+pub const C_KEYS_OUT: &str = "sdk/include/dk/gen/keys.h";
 /// The generated C header of the sample pool numbers, relative to the repository root.
 pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";
 /// The generated SHARC+ include of the sample pool record layout, relative to the repository root.
@@ -3305,5 +3307,7 @@ pub fn generate(root: &std::path::Path) -> Result<Vec<(String, String)>> {
     files.extend(crate::abigen::render(&abi, &abi_inputs(&text)?)?);
     files.push((SVC_ABI_OUT.to_string(), svc_abi_rs(root)?));
     files.extend(gen_exports(&parse(&text)?, root)?);
+    let facts = crate::devgen::Facts::from_dir(&root.join("devices"))?;
+    files.push((C_KEYS_OUT.to_string(), crate::devgen::keys_h(&facts)?));
     Ok(files)
 }

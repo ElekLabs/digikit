@@ -14,3 +14,5 @@
     .equ DKDV_DSP_BLOCK_CYCLES, 48
     .equ DKDV_DYN_TYPE_FIRST, 52
     .equ DKDV_DYN_TYPES, 56
+    .equ DKDV_TRACKS, 60
+    .equ DKDV_KEY_CODES, 64

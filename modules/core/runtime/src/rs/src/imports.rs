@@ -6,7 +6,7 @@ use crate::state::log_at;
 use crate::{arena, aux, collect, dlog, entry, hash32, intro, io, worker};
 use crate::debug_selected_params;
 use crate::health::dkrt_blocks;
-use crate::report::{debug_peek, debug_poll, debug_span_clock, debug_speed_flags, debug_track_type};
+use crate::report::{device_track_count, debug_peek, debug_poll, debug_span_clock, debug_speed_flags, debug_track_type};
 
 extern "C" {
     // Helpers from compiler_builtins, linked into this object.
@@ -130,6 +130,7 @@ import_table! {
     ("dk_debug_poll", debug_poll),
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
+    ("dk_device_track_count", device_track_count),
     ("dk_debug_log_sink_set", dlog::dk_debug_log_sink_set),
     ("dk_debug_speed_flags", debug_speed_flags),
 }
@@ -187,6 +188,7 @@ const _: dkrt_sdk::api::DkDebugSpanClockFn = debug_span_clock;
 const _: dkrt_sdk::api::DkDebugPollFn = debug_poll;
 const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
 const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;
+const _: dkrt_sdk::api::DkDeviceTrackCountFn = device_track_count;
 const _: dkrt_sdk::api::DkDebugLogSinkSetFn = dlog::dk_debug_log_sink_set;
 const _: dkrt_sdk::api::DkDebugSpeedFlagsFn = debug_speed_flags;
 

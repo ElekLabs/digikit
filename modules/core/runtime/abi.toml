@@ -97,6 +97,12 @@ value = 8
 doc = "Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start)."
 
 [[const]]
+name = "DEV_KEYS"
+type = "usize"
+value = 64
+doc = "The logical keys of a device: DkrtDevice.key_codes has this many entries, indexed by the key's number (dk_key of sdk/include/dk/gen/keys.h; entry 0 is DK_KEY_NONE). `patchkit gen` refuses more key names."
+
+[[const]]
 name = "DEV_MAGIC"
 type = "u32"
 value = 0x444b4456
@@ -420,6 +426,8 @@ fields = [
     "u32 dsp_block_cycles // [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP)",
     "u32 dyn_type_first // core/machines types.toml dynamic_first",
     "u32 dyn_types // run-time machine types (0 without DEV_HAS_DSP)",
+    "u32 tracks // [digikit] tracks: the tracks of the device (0: not given)",
+    "u32 key_codes[DEV_KEYS] // [panel.keys]: the panel code of each logical key, indexed by the key's number (0: the device has no such key)",
 ]
 
 [[struct]]

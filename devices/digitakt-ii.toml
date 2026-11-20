@@ -141,6 +141,8 @@ dsp_blocks_per_second = 1500
 [digikit]
 id = 1
 name = "dt2"
+# The tracks of the device: what a module that draws or counts tracks reads through `dk_device_track_count()` (a Syntakt file gives its own number later; absent: 0).
+tracks = 16
 # Run-time modules (ids) that the workbench installs and enables together with the firmware, on a device after its flash and in the emulator
 # after it loads the patched image. Each is ticked by default in the Firmware pane and next to the emulator's firmware file; the user can untick it.
 # The list is data: add an id here (for example digikit/debug) and the workbench offers it. Desktop workbench only; the site does not install modules.
@@ -324,6 +326,60 @@ encoders = 9
 [panel.exceptions]
 49 = [6, 1]
 50 = [6, 0]
+
+# Logical key names: name = panel code. The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS;
+# the groups below arrange the same codes). `patchkit gen` writes the C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical
+# name to code map of the profile and of `dkrt_dev`. A name a device lacks maps to 0. DN2 labels code 2 SYN, DT2 labels it SRC.
+[panel.keys]
+PAGE_TRIG = 1
+SRC = 2
+FLTR = 3
+AMP = 4
+FX = 5
+MOD = 6
+PRESET = 7
+SETTINGS = 8
+TEMPO = 9
+YES = 10
+UP = 11
+NO = 12
+LEFT = 13
+DOWN = 14
+RIGHT = 15
+TRK = 16
+FUNC = 17
+KEYBOARD = 18
+RECORD = 19
+PLAY = 20
+STOP = 21
+PAGE = 22
+PTN = 23
+SONG = 24
+TRIG1 = 25
+TRIG2 = 26
+TRIG3 = 27
+TRIG4 = 28
+TRIG5 = 29
+TRIG6 = 30
+TRIG7 = 31
+TRIG8 = 32
+TRIG9 = 33
+TRIG10 = 34
+TRIG11 = 35
+TRIG12 = 36
+TRIG13 = 37
+TRIG14 = 38
+TRIG15 = 39
+TRIG16 = 40
+ENC1 = 41
+ENC2 = 42
+ENC3 = 43
+ENC4 = 44
+ENC5 = 45
+ENC6 = 46
+ENC7 = 47
+ENC8 = 48
+LEVEL_PUSH = 49
 
 # Groups are editorial: they say how to ARRANGE controls for display, nothing
 # more. The authoritative name of each code is the firmware's.

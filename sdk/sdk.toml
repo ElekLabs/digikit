@@ -1365,6 +1365,14 @@ sig = "i32 (i16 *out, u32 n)"
 doc = "The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written)."
 
 [[import]]
+name = "dk_device_track_count"
+service = "runtime"
+since = "0.10.2"
+context = "any"
+sig = "u32 ()"
+doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal."
+
+[[import]]
 name = "dk_debug_log_sink_set"
 service = "runtime"
 since = "0.7.0"

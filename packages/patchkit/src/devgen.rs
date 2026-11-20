@@ -99,6 +99,9 @@ struct PanelDoc {
     encoders: u64,
     #[serde(default)]
     exceptions: BTreeMap<String, [u64; 2]>,
+    /// `[panel.keys]`: logical key name = panel code. The one source of the C names (`dk_key`), the profile's key map and `DkrtDevice.key_codes`.
+    #[serde(default)]
+    keys: BTreeMap<String, u64>,
 }
 #[derive(Deserialize)]
 struct AdapterDoc {
@@ -193,6 +196,9 @@ struct Digikit {
     keep_bytes: u64,
     sample_path_max: u64,
     peek: Vec<[u64; 2]>,
+    /// The tracks of the device (0: not given).
+    #[serde(default)]
+    tracks: u64,
     #[serde(default)]
     span_clock: u64,
     #[serde(default)]
@@ -229,6 +235,8 @@ struct Entry {
     adapter: Option<AdapterF>,
     sample_pool: Option<SamplePoolF>,
     input: InputF,
+    /// `[panel.keys]`: logical key name to panel code (empty: the device has no key names).
+    keys: BTreeMap<String, u64>,
     fx: FxF,
     profile: ProfileF,
     /// DSP instructions per block left for modules (`dkprof::budget`: the block at the default margin, less the stock firmware's load). 0 where `devices/cycle-factors.json`
@@ -400,6 +408,7 @@ struct DigikitF {
     sample_path_max: u64,
     samples_in_store: bool,
     peek: Vec<[u64; 2]>,
+    tracks: u64,
     span_clock: u64,
     span_clock_hz: u64,
 }
@@ -498,6 +507,7 @@ impl Facts {
                 k.dsp_area_bytes.unwrap_or(0),
                 &crate::sdkgen::limits_max(),
             )?;
+            let keys = key_facts(&short, d.panel.as_ref().map(|p| &p.keys))?;
             let input = input_facts(&short, d.input, d.panel)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
             let (adapter_machine, sample_pool) = match d.adapter {
@@ -533,6 +543,7 @@ impl Facts {
                             sample_path_max: k.sample_path_max,
                             samples_in_store,
                             peek: k.peek,
+                            tracks: k.tracks,
                             span_clock: k.span_clock,
                             span_clock_hz: k.span_clock_hz,
                         },
@@ -557,6 +568,7 @@ impl Facts {
                         adapter,
                         sample_pool,
                         input,
+                        keys,
                         fx,
                         profile: profile_facts(&short, models.by_device.get(&short))?,
                         dsp_headroom,
@@ -568,6 +580,37 @@ impl Facts {
             }
         }
         Ok(Facts { docs })
+    }
+
+    /// The logical key names of all devices, in the order of their numbers: `DK_KEY_NONE` is 0 and the names follow from 1, sorted with a trailing number
+    /// as a number. Every device file adds its names, so a name that no file has is not in the list.
+    pub fn key_names(&self) -> Result<Vec<String>> {
+        let mut names: Vec<String> = self
+            .docs
+            .values()
+            .flat_map(|e| e.keys.keys().cloned())
+            .collect();
+        names.sort_by_key(|n| key_order(n));
+        names.dedup();
+        if names.len() >= KEY_SLOTS {
+            return Err(err!(
+                "[panel.keys] names {} keys, the tables hold {} (KEY_SLOTS of devgen.rs and DEV_KEYS of core/runtime/abi.toml)",
+                names.len(),
+                KEY_SLOTS - 1
+            ));
+        }
+        Ok(names)
+    }
+
+    /// The panel code of each logical key of `dev`, indexed by the key's number (`KEY_SLOTS` entries; a key the device lacks is 0).
+    fn key_codes(&self, dev: &str) -> Result<[u64; KEY_SLOTS]> {
+        let mut out = [0; KEY_SLOTS];
+        if let Some(e) = self.docs.get(dev) {
+            for (i, n) in self.key_names()?.iter().enumerate() {
+                out[i + 1] = e.keys.get(n).copied().unwrap_or(0);
+            }
+        }
+        Ok(out)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -722,6 +765,46 @@ fn fx_facts(short: &str, f: Option<FxDoc>, fx_slots: u64, send_slots: u64) -> Re
         send_indices: f.send_indices,
     })
 }
+
+/// The logical keys of `[panel.keys]`: a name is capital letters, digits and `_` (it becomes `DK_KEY_<name>`), a code is 1 to 255 and names one key.
+fn key_facts(short: &str, keys: Option<&BTreeMap<String, u64>>) -> Result<BTreeMap<String, u64>> {
+    let Some(keys) = keys else {
+        return Ok(BTreeMap::new());
+    };
+    let mut seen: BTreeMap<u64, &str> = BTreeMap::new();
+    for (name, code) in keys {
+        let ok = name.starts_with(|c: char| c.is_ascii_uppercase())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+        if !ok {
+            return Err(err!(
+                "{short}: [panel.keys] {name:?}: a name is capital letters, digits and _, starting with a letter"
+            ));
+        }
+        if !(1..=255).contains(code) {
+            return Err(err!(
+                "{short}: [panel.keys] {name} = {code}: a code is 1 to 255"
+            ));
+        }
+        if let Some(other) = seen.insert(*code, name) {
+            return Err(err!(
+                "{short}: [panel.keys] {other} and {name} have the same code {code}"
+            ));
+        }
+    }
+    Ok(keys.clone())
+}
+
+/// The order of two key names: letters first, then a trailing number as a number, so TRIG2 comes before TRIG10 and the numbered keys are consecutive.
+fn key_order(name: &str) -> (String, u64) {
+    let stem = name.trim_end_matches(|c: char| c.is_ascii_digit());
+    let n = name[stem.len()..].parse().unwrap_or(0);
+    (stem.to_string(), n)
+}
+
+/// A device's numbers for the logical key names: the number of names the shared header can hold (index 0 is `DK_KEY_NONE`).
+pub const KEY_SLOTS: usize = 64;
 
 fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<InputF> {
     let Some(i) = i else {
@@ -1196,6 +1279,7 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             k.sample_path_max,
             "[digikit] sample_path_max",
         ),
+        c("TRACKS", k.tracks, "[digikit] tracks (0: not given)"),
         c(
             "STORE_FIRST",
             store_first,
@@ -1638,6 +1722,43 @@ fn block_cycles(clock_hz: u64, blocks_per_second: u64) -> Option<u64> {
     (blocks_per_second != 0).then(|| (clock_hz + blocks_per_second / 2) / blocks_per_second)
 }
 
+/// `sdk/include/dk/gen/keys.h`: the logical key names of the device files (`[panel.keys]`) as `dk_key` numbers. A module names a key with these and holds no
+/// panel code; the profile and `dkrt_dev` map the number to the device's code. `DK_KEY_NONE` is 0 and a name that a device lacks maps to 0 there.
+pub fn keys_h(facts: &Facts) -> Result<String> {
+    let names = facts.key_names()?;
+    let mut s = format!(
+        "/* {NOTE_SDK} */\n/* sdk/include/dk/gen/keys.h -- the logical keys: panel key names of the device files ([panel.keys]), numbered in the order below. */\n#ifndef DK_GEN_KEYS_H\n#define DK_GEN_KEYS_H\n\n#include <stdint.h>\n\n/* A logical key: DK_KEY_NONE or a DK_KEY_* number. */\ntypedef uint32_t dk_key;\n\n#define DK_KEY_NONE 0\n"
+    );
+    for (i, n) in names.iter().enumerate() {
+        let _ = writeln!(s, "#define DK_KEY_{n} {}", i + 1);
+    }
+    let _ = writeln!(
+        s,
+        "#define DK_KEY_COUNT {} /* the names above, without DK_KEY_NONE */",
+        names.len()
+    );
+    for (macro_, stem) in [("TRIG", "TRIG"), ("ENC", "ENC")] {
+        let first = format!("{stem}1");
+        if let Some(i) = names.iter().position(|n| *n == first) {
+            let run = (1..)
+                .take_while(|k| {
+                    names
+                        .get(i + k - 1)
+                        .is_some_and(|n| *n == format!("{stem}{k}"))
+                })
+                .count();
+            let _ = writeln!(
+                s,
+                "/* DK_KEY_{macro_}(n), n = 1 to {run}: the numbered keys are consecutive. */\n#define DK_KEY_{macro_}(n) ((dk_key)(DK_KEY_{stem}1 + (n) - 1))"
+            );
+        }
+    }
+    s.push_str("\n#endif /* DK_GEN_KEYS_H */\n");
+    Ok(s)
+}
+
+const NOTE_SDK: &str = "Generated by `patchkit gen` from devices/*.toml [panel.keys]. Do not edit.";
+
 /// The runtime's ABI file: the constants and the `DkrtDevice` struct that this generator writes the device object from.
 const ABI_TEXT: &str = include_str!("../../../modules/core/runtime/abi.toml");
 
@@ -1653,8 +1774,10 @@ fn abi_consts() -> Result<BTreeMap<String, u64>> {
     Ok(out)
 }
 
-/// `DkrtDevice`: its field names in order (every field is a u32), from `core/runtime/abi.toml`.
-fn dkdv_fields() -> Result<Vec<String>> {
+/// `DkrtDevice`: its field names in order with their length in words (1, or the length of an array field `u32 name[N]`; every field is a u32), from
+/// `core/runtime/abi.toml`.
+fn dkdv_fields() -> Result<Vec<(String, usize)>> {
+    let abi = abi_consts()?;
     let t: toml::Table = toml::from_str(ABI_TEXT)?;
     let st = t["struct"]
         .as_array()
@@ -1669,13 +1792,30 @@ fn dkdv_fields() -> Result<Vec<String>> {
         if w.next() != Some("u32") {
             return Err(err!("DkrtDevice: every field must be a u32: {decl:?}"));
         }
-        out.push(w.next().unwrap_or("").to_string());
+        let name = w.next().unwrap_or("");
+        let (name, len) = match name.split_once('[') {
+            Some((n, rest)) => {
+                let l = rest.trim_end_matches(']');
+                let len = l
+                    .parse::<usize>()
+                    .ok()
+                    .or_else(|| abi.get(l).map(|v| *v as usize))
+                    .ok_or_else(|| {
+                        err!(
+                            "DkrtDevice: field {n}: array length {l:?} is not a number or constant"
+                        )
+                    })?;
+                (n, len)
+            }
+            None => (name, 1),
+        };
+        out.push((name.to_string(), len));
     }
     Ok(out)
 }
 
 /// The constant that fills a `DkrtDevice` field (the four header words are not in this table).
-const DKDV_VALUE: [(&str, &str); 11] = [
+const DKDV_VALUE: [(&str, &str); 12] = [
     ("console_uart_base", "CONSOLE_UART_BASE"),
     ("ddr_uncached_alias", "DDR_UNCACHED_ALIAS"),
     ("ddr_cached_base", "DDR_CACHED_BASE"),
@@ -1687,10 +1827,14 @@ const DKDV_VALUE: [(&str, &str); 11] = [
     ("dsp_block_cycles", "DSP_BLOCK_CYCLES"),
     ("dyn_type_first", "DYN_TYPE_FIRST"),
     ("dyn_types", "DYN_TYPES"),
+    ("tracks", "TRACKS"),
 ];
 
+/// The array field of `DkrtDevice` that holds the panel code of each logical key (index = the key's number).
+const DKDV_KEY_CODES: &str = "key_codes";
+
 /// The device object of one device (`gas-dkdv`): `dkrt_dev`, the struct `DkrtDevice` as `.long` words.
-fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
+fn gas_dkdv(module: &str, dev: &str, cs: &[C], key_codes: &[u64; KEY_SLOTS]) -> Result<String> {
     let abi = abi_consts()?;
     let fields = dkdv_fields()?;
     let value = |name: &str| {
@@ -1703,12 +1847,27 @@ fn gas_dkdv(module: &str, dev: &str, cs: &[C]) -> Result<String> {
         "/* {module} on {dev}: {NOTE}. The struct DkrtDevice of core/runtime/abi.toml. */\n"
     );
     s.push_str("    .balign 4\n    .globl dkrt_dev\ndkrt_dev:\n");
-    for f in &fields {
+    for (f, len) in &fields {
+        if f == DKDV_KEY_CODES {
+            if *len != KEY_SLOTS {
+                return Err(err!(
+                    "{module}: DkrtDevice.{f} has {len} words, devgen KEY_SLOTS is {KEY_SLOTS}"
+                ));
+            }
+            for (i, code) in key_codes.iter().enumerate() {
+                let _ = writeln!(
+                    s,
+                    "    .long {}    /* {f}[{i}]: the panel code of logical key {i} (0: none) */",
+                    hex(*code as i64)
+                );
+            }
+            continue;
+        }
         let (v, note) = match f.as_str() {
             "magic" => (abi["DEV_MAGIC"] as i64, "DEV_MAGIC".to_string()),
             "version" => (abi["DEV_VERSION"] as i64, "DEV_VERSION".to_string()),
             "size" => (
-                (fields.len() * 4) as i64,
+                (fields.iter().map(|f| f.1).sum::<usize>() * 4) as i64,
                 "the bytes of the struct".to_string(),
             ),
             "caps" => (value("DKDV_CAPS")?, "DEV_HAS_* bits".to_string()),
@@ -1729,8 +1888,10 @@ fn gas_dkdv_offsets(module: &str) -> String {
     let mut s = format!(
         "/* {module}: {NOTE}. Byte offsets of the fields of struct DkrtDevice (core/runtime/abi.toml). */\n"
     );
-    for (i, f) in dkdv_fields().unwrap_or_default().iter().enumerate() {
-        let _ = writeln!(s, "    .equ DKDV_{}, {}", f.to_uppercase(), i * 4);
+    let mut word = 0;
+    for (f, len) in dkdv_fields().unwrap_or_default() {
+        let _ = writeln!(s, "    .equ DKDV_{}, {}", f.to_uppercase(), word * 4);
+        word += len;
     }
     s
 }
@@ -1744,12 +1905,12 @@ const NOTE: &str =
 
 /// `DeviceProfile` constants of every device (the type is `dkrt_abi::platform::DeviceProfile`): what the real platform reads from the device object
 /// (`device.s`, `dkrt_dev`) and what the host tests' `FakePlatform` and a service (through the device id) take their facts from, so they cannot differ.
-fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) -> Result<String> {
+fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
     let mut s = format!(
         "// {module}: {NOTE}.\n// One DeviceProfile for each device file, from the same facts as the device objects' words.\n\nuse crate::platform::DeviceProfile;\n"
     );
     let mut names = vec![];
-    for (dev, e) in docs {
+    for (dev, e) in &facts.docs {
         let cs = constants(lib, dev, e)?;
         let v = |name: &str| -> Result<u64> {
             cs.iter()
@@ -1759,6 +1920,26 @@ fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) ->
         };
         let k = &e.digikit;
         let up = dev.to_uppercase();
+        let key_codes = {
+            let all = facts.key_codes(dev)?;
+            // filled to 100 columns, as rustfmt lays out a long list of numbers
+            let mut rows = String::from("[\n");
+            let mut line = String::new();
+            for c in all {
+                let cell = format!("{c},");
+                if !line.is_empty() && 8 + line.len() + 1 + cell.len() > 99 {
+                    let _ = writeln!(rows, "        {line}");
+                    line.clear();
+                }
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(&cell);
+            }
+            let _ = writeln!(rows, "        {line}");
+            rows.push_str("    ]");
+            rows
+        };
         let safe_key = if e.caps & DEV_HAS_SAFE_KEY != 0 {
             format!("Some({})", k.safe_key)
         } else {
@@ -1766,7 +1947,7 @@ fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) ->
         };
         let _ = writeln!(
             s,
-            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n}};",
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n}};",
             v("DEVICE_ID")?,
             hex(v("DEVICE_NAME_WORD")? as i64),
             e.digikit.samples_in_store,
@@ -1784,6 +1965,7 @@ fn rust_profiles(module: &str, lib: &Library, docs: &BTreeMap<String, Entry>) ->
             v("DSP_BLOCK_CYCLES")?,
             v("DYN_TYPE_FIRST")?,
             v("DYN_TYPES")?,
+            v("TRACKS")?,
         );
         names.push(up);
     }
@@ -2019,7 +2201,11 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 for (dev, cs) in &per_dev {
-                    out.push((g.path.replace("{dev}", dev), gas_dkdv(module, dev, cs)?));
+                    let keys = facts.key_codes(dev)?;
+                    out.push((
+                        g.path.replace("{dev}", dev),
+                        gas_dkdv(module, dev, cs, &keys)?,
+                    ));
                 }
             }
             "gas-dkdv-offsets" => {
@@ -2036,7 +2222,7 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                         "{module}: a `rust-profiles` gen is one file for all devices"
                     ));
                 }
-                out.push((g.path.clone(), rust_profiles(module, lib, &facts.docs)?));
+                out.push((g.path.clone(), rust_profiles(module, lib, facts)?));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {

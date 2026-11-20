@@ -65,7 +65,7 @@ fn the_runtime_constants_are_the_device_files_numbers() {
     let common = [
         "0x444b4456", // magic
         "0x1",        // version
-        "0x3c",       // size
+        "0x140",      // size: the header words, the facts, `tracks` and the 64 key codes
         "0xf",        // caps: DSP, store, eSDHC, safe key
         "0xec070000", // console UART
         "0x48000000", // uncached alias
@@ -78,10 +78,16 @@ fn the_runtime_constants_are_the_device_files_numbers() {
         "0xa2c2b",    // DSP cycles in a block
         "0x10",       // first run-time machine type
         "0x8",        // run-time machine types
+        "0x10",       // tracks
     ];
-    // both devices have the same numbers today
+    // both devices have the same numbers today (the key codes after them differ: `the_key_map_...`)
     assert_eq!(objects.len(), 2);
-    assert!(objects.iter().all(|o| o == &common), "{objects:?}");
+    assert!(
+        objects
+            .iter()
+            .all(|o| o.len() == 0x140 / 4 && o[..common.len()] == common),
+        "{objects:?}"
+    );
     let offsets = get("build/gen/dkdv-offsets.inc");
     for want in [
         ".equ DKDV_CAPS, 12",
@@ -806,4 +812,135 @@ fn only_runtime_targets_enter_the_shared_constants() {
     assert!(Facts::from_texts([ident]).is_ok());
     let half = "[device]\nname = \"X\"\nshort = \"x\"\n[digikit]\nid = 9\nname = \"x\"\n";
     assert!(Facts::from_texts([half]).is_err());
+}
+
+/// The words of a device's `dkrt_dev` as generated for `core/runtime`.
+fn device_object(facts: &Facts, dev: &str) -> Vec<u64> {
+    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
+    let files = devgen::generate(&lib, facts, "core/runtime").unwrap();
+    let text = &files
+        .iter()
+        .find(|f| f.0 == format!("build/gen/dkdv-{dev}.inc"))
+        .unwrap()
+        .1;
+    text.lines()
+        .filter_map(|l| l.trim().strip_prefix(".long "))
+        .map(|l| {
+            let w = l.split_whitespace().next().unwrap();
+            u64::from_str_radix(w.trim_start_matches("0x"), 16).unwrap()
+        })
+        .collect()
+}
+
+#[test]
+fn the_logical_keys_are_numbered_with_the_trig_keys_in_a_row() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let names = facts.key_names().unwrap();
+    let number = |n: &str| names.iter().position(|x| x == n).unwrap() + 1;
+    for n in 1..=16 {
+        assert_eq!(number(&format!("TRIG{n}")), number("TRIG1") + n - 1);
+    }
+    let h = devgen::keys_h(&facts).unwrap();
+    assert!(h.contains("#define DK_KEY_NONE 0\n"), "{h}");
+    assert!(
+        h.contains(&format!("#define DK_KEY_TRK {}\n", number("TRK"))),
+        "{h}"
+    );
+    assert!(
+        h.contains("#define DK_KEY_TRIG(n) ((dk_key)(DK_KEY_TRIG1 + (n) - 1))"),
+        "{h}"
+    );
+    assert!(
+        h.contains(&format!("#define DK_KEY_COUNT {} ", names.len())),
+        "{h}"
+    );
+}
+
+#[test]
+fn the_key_map_gives_each_device_its_codes_and_a_missing_key_is_zero() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let names = facts.key_names().unwrap();
+    let number = |n: &str| names.iter().position(|x| x == n).unwrap() + 1;
+    // the words of the object: 15 fields, `tracks`, then the key codes indexed by the key's number
+    let (tracks, keys) = (15, 16);
+    let (d, n) = (device_object(&facts, "dt2"), device_object(&facts, "dn2"));
+    let key = |o: &[u64], name: &str| o[keys + number(name)];
+    for o in [&d, &n] {
+        assert_eq!(o[tracks], 16);
+        assert_eq!(o[keys], 0, "entry 0 is DK_KEY_NONE");
+        assert_eq!(key(o, "TRK"), 16);
+        assert_eq!(key(o, "YES"), 10);
+        assert_eq!(key(o, "TRIG10"), 34);
+        assert_eq!(key(o, "ENC3"), 43);
+    }
+    // the label of code 2 differs: DT2 has SRC, DN2 has SYN; each lacks the other's key
+    assert_eq!((key(&d, "SRC"), key(&d, "SYN")), (2, 0));
+    assert_eq!((key(&n, "SRC"), key(&n, "SYN")), (0, 2));
+}
+
+#[test]
+fn the_profile_has_the_same_key_codes_as_the_device_object() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let profiles = &files
+        .iter()
+        .find(|f| f.0.ends_with("profiles.rs"))
+        .unwrap()
+        .1;
+    for dev in ["dt2", "dn2"] {
+        let obj = device_object(&facts, dev);
+        let from = profiles
+            .find(&format!("pub const {}:", dev.to_uppercase()))
+            .unwrap();
+        let rest = &profiles[from..];
+        let list = rest
+            .split("key_codes: [")
+            .nth(1)
+            .unwrap()
+            .split(']')
+            .next()
+            .unwrap();
+        let codes: Vec<u64> = list
+            .split(',')
+            .filter_map(|c| c.trim().parse().ok())
+            .collect();
+        assert_eq!(codes.len(), 64, "{dev}");
+        assert_eq!(codes[..], obj[obj.len() - 64..], "{dev}");
+    }
+}
+
+#[test]
+fn a_key_table_with_a_clash_or_a_bad_name_is_refused() {
+    let (dt2, dn2) = device_texts();
+    for (what, from, to, want) in [
+        ("clash", "TRK = 16", "TRK = 17", "same code"),
+        ("lower case", "TRK = 16", "trk = 16", "capital letters"),
+        ("zero", "TRK = 16", "TRK = 0", "1 to 255"),
+        ("too big", "TRK = 16", "TRK = 256", "1 to 255"),
+    ] {
+        let bad = dt2.replace(from, to);
+        assert_ne!(bad, dt2, "{what}: the text did not change");
+        let e = Facts::from_texts([bad.as_str(), dn2.as_str()])
+            .unwrap_err()
+            .0;
+        assert!(e.contains(want), "{what}: {e}");
+    }
+    // more names than the tables hold
+    let letters = |i: usize| {
+        format!(
+            "Z{}{}",
+            (b'A' + (i / 26) as u8) as char,
+            (b'A' + (i % 26) as u8) as char
+        )
+    };
+    let many: String = (0..70)
+        .map(|i| format!("{} = {}\n", letters(i), 100 + i))
+        .collect();
+    let bad = dt2.replace("[panel.keys]\n", &format!("[panel.keys]\n{many}"));
+    let facts = Facts::from_texts([bad.as_str(), dn2.as_str()]).unwrap();
+    assert!(facts.key_names().unwrap_err().0.contains("names"));
 }

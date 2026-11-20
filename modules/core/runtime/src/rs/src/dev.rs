@@ -87,6 +87,16 @@ pub fn dyn_types() -> u32 {
     d().dyn_types
 }
 
+/// The tracks of the device (0: the device file gives none).
+pub fn tracks() -> u32 {
+    d().tracks
+}
+
+/// The panel code of each logical key, as the profile carries them (a code that does not fit a byte is 0).
+pub fn key_codes() -> [u8; dkrt_abi::platform::KEY_SLOTS] {
+    core::array::from_fn(|i| u8::try_from(d().key_codes[i]).unwrap_or(0))
+}
+
 /// Is `t` one of the run-time machine types?
 pub fn is_dyn_type(t: u32) -> bool {
     t >= d().dyn_type_first && t - d().dyn_type_first < d().dyn_types
@@ -134,6 +144,7 @@ mod tests {
         // the fixture's object and the profile the host tests run as are one device
         let p = dkrt_abi::profiles::DT2;
         assert_eq!((p.ddr_base, p.ddr_bytes, p.keep_base, p.dyn_type_first, p.dyn_types), (ddr_base(), ddr_bytes(), keep_base(), dyn_type_first(), dyn_types()));
+        assert_eq!((tracks(), key_codes()), (16, [0; dkrt_abi::platform::KEY_SLOTS]));
     }
 
     #[test]

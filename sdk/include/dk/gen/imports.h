@@ -199,6 +199,9 @@ int32_t dk_debug_track_type(uint32_t track);
 /* The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written). Context: ui. Since runtime 0.7.0. */
 int32_t dk_debug_selected_params(int16_t *out, uint32_t n);
 
+/* The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal. Context: any. Since runtime 0.10.2. */
+uint32_t dk_device_track_count(void);
+
 /* Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none). Context: any. Since runtime 0.7.0. */
 void dk_debug_log_sink_set(uint8_t *sink, uint8_t *tick);
 
