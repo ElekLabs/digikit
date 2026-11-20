@@ -78,8 +78,6 @@ _pd_booted:
     R1 = 0x3e800000;                      // 0.25
     F9 = F0 * F1;
 
-
-
     // ---- DETUNE -> increment 2 = increment 1 x (1 + detune x 0.03) ----
     R1 = 0x38010204;
     R0 = DM(3, I1);                       // FOLD, the fourth parameter

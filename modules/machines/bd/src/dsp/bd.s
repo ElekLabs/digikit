@@ -14,8 +14,7 @@
 //
 //  The amplitude decay is the track's AMP envelope, so the machine only has to sound right for the first 50 ms.
 //
-//  State: carrier phase, block counter, modulator phase (all zeroed at note-on, which is the envelope trigger), the
-//  index, and the modulator's last value. Nothing survives a trigger, so there is nothing to seed.
+//  Note-on clears the carrier phase, block counter and modulator phase. The noise generator keeps its state across hits.
 //
 //  Register map (F and R are one file):
 //    F13 carrier phase   F15 modulator phase   F12 carrier inc   F14 modulator inc
@@ -239,8 +238,13 @@ _bd_last: MODIFY(I0, 4);
 
 _bd_note_on:
     I3 = R4;
-    R0 = 0x2545f491;                      // seed the noise: a zero xorshift state stays zero
+    // Seed a fresh voice once. Later hits continue its noise sequence.
+    R0 = DM(5, I3);
+    R0 = PASS R0;
+    IF NE JUMP _bd_seeded;
+    R0 = 0x2545f491;
     DM(5, I3) = R0;
+_bd_seeded:
     R0 = 0;
     JUMP (M13, I13);
 

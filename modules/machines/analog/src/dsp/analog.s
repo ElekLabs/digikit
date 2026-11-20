@@ -96,8 +96,6 @@ _va_booted:
     NOP;
     F9 = F9 * F0;
 
-
-
     // ---- DETUNE -> increment 2 = increment 1 x (1 + detune x 0.03). Full range: 0 is two saws in unison and the top
     // is a few percent apart, which on two saws is the rolling reese beat rather than a mild chorus. ----
     R1 = 0x38010204;                      // 1 / 32512
@@ -157,7 +155,6 @@ _va_booted:
     NOP;
     F15 = F15 + F2;                       // pulse width = 0.05 + 0.45 t2
     LCNTR = DK_BLOCK, DO _va_last UNTIL LCE;
-    // ---- the two oscillators, both running the WAVE shape ----
     // ---- the two oscillators, both running the WAVE shape ----
     // ---- oscillator 1 (phase 1): saw -> triangle by t1, then -> pulse by t2 ----
     F8 = F13 + F13;                     // 2 ph
