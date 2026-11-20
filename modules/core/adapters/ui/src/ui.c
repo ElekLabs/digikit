@@ -257,10 +257,10 @@ static row *add_row(dk_ui_menu *m)
 /* One MenuItem with a text label and an action. `adj` is an empty or an encoder function, `draw` 0 (no value drawn) or the function
    that draws the value. `keep_icon`: keep the stock icon the builder gives every item (a row among the stock SETTINGS rows). */
 static uint8_t *make_item(const char *text, const fn *act, const fn *adj, const fn *draw,
-                          int keep_icon)
+                          int keep_icon, uint32_t label_size)
 {
-    char label[DK_UI_ROW];
-    cut(label, sizeof label, text);
+    char label[DK_UI_LIST_TEXT];
+    cut(label, label_size, text);
     uint8_t *item = fw_new(sizeof(MenuItem));
     if (!item)
         return 0;
@@ -338,7 +338,9 @@ static void add_item(dk_ui_menu *m, const char *text, int i, int with_value)
     if (with_value && m->rows[i].kind == R_VALUE)
         adj = make_fn((uint32_t)m, (uint32_t)i, inv_adjust);
     fn draw = make_fn((uint32_t)m, (uint32_t)i, inv_draw);
-    uint8_t *item = make_item(text, &act, &adj, with_value && !in_list ? &draw : 0, 0);
+    int list_text = m->kind == K_LIST && i < m->n && m->rows[i].kind == R_TEXT;
+    uint8_t *item = make_item(text, &act, &adj, with_value && !in_list ? &draw : 0, 0,
+                              list_text ? DK_UI_LIST_TEXT : DK_UI_ROW);
     if (item)
         dk_fw_menu_add_item(m->obj, item);
 }
@@ -354,7 +356,7 @@ void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_action_fn *fn_
     fn act = make_fn((uint32_t)fn_, (uint32_t)ctx, inv_stock);
     fn adj = make_fn(0, 0, 0);
     adj.mgr = 0;
-    uint8_t *item = make_item(text, &act, &adj, 0, 1);
+    uint8_t *item = make_item(text, &act, &adj, 0, 1, DK_UI_ROW);
     if (item)
         dk_fw_menu_add_item(stock_menu, item);
 }

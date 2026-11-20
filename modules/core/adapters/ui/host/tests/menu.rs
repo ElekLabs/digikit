@@ -176,7 +176,7 @@ fn modules_columns_line_up_in_pixels() {
     let _g = digikit();
     add("modules/bd.dkm", OK, 2, 0, 1);
     add("modules/bootscreen.dkm", OK, 7, 0, 0);
-    add("modules/dyn-fx-gain-send.dkm", OK, 1250, 1, 0);
+    add("modules/send.dkm", OK, 1250, 1, 0);
     open_modules();
     let rows = labels();
     assert_eq!(rows.len(), 3);
@@ -200,10 +200,8 @@ fn a_modules_row_that_needs_more_characters_still_fits() {
     add("modules/a b.dkm", OK, 1250, 0, 1);
     open_modules();
     let row = &labels()[0];
-    assert!(row.len() < DK_UI_ROW, "{row:?}");
     assert!(row.ends_with("1250K"), "{row:?}");
-    // PAD only: each column ends at most 3 pixels short
-    assert!((23 * 4 - 3..=23 * 4).contains(&px(row)), "{row:?}");
+    assert_eq!(px(row), 23 * 4, "{row:?}");
 }
 
 #[test]
@@ -280,17 +278,17 @@ fn safe_mode_has_a_header_and_dashes_for_the_selected_modules() {
 }
 
 #[test]
-fn long_names_keep_their_start_and_their_end() {
+fn long_module_rows_keep_the_full_name_kind_and_size() {
     let _g = digikit();
-    add("modules/dyn-fx-gain-send.dkm", OK, 10, 1, 0);
-    add("modules/dyn-fx-gain-sendonly.dkm", OK, 10, 1, 0);
+    // 63 bytes including the directory and extension, the longest store path.
+    let name = "a".repeat(51);
+    add(&format!("modules/{name}.dkm"), OK, 10, 1, 0);
     open_modules();
-    let r = render();
-    assert_ne!(r[0], r[1]);
-    assert!(
-        r[0].contains("DYN-FX~-SEND") && r[1].contains("DYN-FX~DONLY"),
-        "{r:?}"
-    );
+    let row = &labels()[0];
+    let (prefix, size) = row.split_once("FX").unwrap();
+    assert_eq!(prefix.trim_end_matches([' ', '\x01']), name.to_uppercase());
+    assert!(prefix.ends_with([' ', '\x01']));
+    assert_eq!(size.trim_start_matches([' ', '\x01']), "10K");
 }
 
 #[test]

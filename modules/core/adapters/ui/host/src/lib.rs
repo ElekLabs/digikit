@@ -9,6 +9,7 @@ use std::sync::{Mutex, MutexGuard};
 pub mod driver;
 
 pub const DK_UI_ROW: usize = 24;
+pub const DK_UI_LIST_TEXT: usize = 80;
 pub const DK_UI_TOAST: usize = 32;
 pub const DK_UI_TEXT_PAGE: u32 = 1;
 pub const DK_UI_LIST: u32 = 2;
@@ -225,7 +226,16 @@ pub(crate) fn open_id(id: usize) -> c_int {
 
 fn add(m: *mut DkUiMenu, text: *const c_char, kind: Kind, what: &str) {
     let Some(id) = id_of(m) else { return };
-    let text = row_text(text);
+    let list_text = matches!(kind, Kind::Text)
+        && desc_of(id).is_some_and(|d| d.flags & (DK_UI_LIST | DK_UI_WIDE) != 0);
+    let text = text_cut(
+        text,
+        if list_text {
+            DK_UI_LIST_TEXT
+        } else {
+            DK_UI_ROW
+        } - 1,
+    );
     with(|s| {
         s.log(format!("{what} {text}"));
         s.menus[id].rows.push(Row { text, kind });
