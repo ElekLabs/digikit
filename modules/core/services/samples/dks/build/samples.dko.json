@@ -5200,7 +5200,7 @@
   },
   {
    "align": 2,
-   "hex": "1bdac3f5",
+   "hex": "b181fc41",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -5969,7 +5969,7 @@
    "size": 28
   }
  ],
- "source_sha256": "2d3acb0416a15e72377a14990bea4acc0be66d2d28f0bca0cb1ce352f4669adb",
+ "source_sha256": "d535415fd6f70960050ec2ecebda8ec7a913aded3728a163b6f9980e38be8978",
  "symbols": [
   {
    "global": false,
@@ -7571,7 +7571,7 @@
  "toolchain": {
   "exports": "dk_module dk_sample_pool_add dk_sample_pool_clear dk_sample_pool_info dk_sample_pool_open dk_sample_pool_path dk_sample_pool_peaks dk_sample_pool_peaks_window dk_sample_pool_set dk_sample_pool_status dk_svc_abi pool_done_fill pool_lost_fill",
   "instructions_redecoded": "7126",
-  "isa_check": "4cffabcad6a6d9583345cd751f56dbc82e8251051dfb89addfac6bf6cc71175b",
+  "isa_check": "965c22517043468a6945786927499064d5c46b9d6d36f03b1e58f418759485a5",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

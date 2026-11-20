@@ -84,6 +84,7 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
+  PROFILE_DSP: 0x1b,
   PROFILE_STATE: 0x1e,
   PROFILE_READ: 0x1f,
   LOG: 0x20,
@@ -254,6 +255,7 @@ export const CAP = {
 export const RANGES = {
   debug: [0x20, 0x22],
   debug_profile: [0x1e, 0x1f],
+  debug_profile_dsp: [0x1b, 0x1b],
   entry_demo_test: [0x1c, 0x1d],
   file_write_test: [0x24, 0x27],
   file_write_test_b: [0x28, 0x2b],

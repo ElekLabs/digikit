@@ -16,7 +16,6 @@ export const E_BAD_STORE = -2;
 export const DELAY_MS = 2000; // the runtime writes the record this long after the last change
 export const SECTOR = 512;
 export const MODULE = 'test/c-demo';
-export const MODULE_PATH = 'modules/c-demo.dkm';
 export const byte = (n: number) => Buffer.from([n]);
 export const text = (s: string) => Buffer.from(s);
 export const padded = (b: Buffer) => Buffer.concat([b, Buffer.alloc(SECTOR - b.length)]);

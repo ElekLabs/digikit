@@ -127,3 +127,62 @@ test('an error status is a DkError', async () => {
   await assert.rejects(session([{ status: -63 }]).s.profileState('start'), DkError);
   await assert.rejects(session([{ status: -63 }]).s.profileRead(0), DkError);
 });
+
+// PROFILE_DSP: header (version, flags, generation, rows, sweep number, three counters), then the 100 words of a sweep when flag bit 1 is set.
+const dspHead = (flags: number, gen: number, sweep: number) => [
+  1,
+  flags,
+  gen,
+  16,
+  ...be(sweep, 4),
+  ...be(11, 4),
+  ...be(2, 4),
+  ...be(5, 4),
+];
+const dspWindow = () => {
+  const w = Array.from({ length: 100 }, () => 0);
+  w[0] = 1500; // blocks
+  w[1] = 666_000; // largest stock block delta
+  w[2] = 3; // overruns
+  // row 9 (an effect): 7 calls, 2^32 + 5 cycles, largest call 900, largest block 4000
+  w.splice(4 + 6 * 9, 5, 7, 5, 1, 900, 4000);
+  return w.flatMap((x) => be(x, 4));
+};
+
+test('profileDsp sends the op byte and decodes the header, counters and rows', async () => {
+  for (const [op, code] of Object.entries({ get: 0, start: 1, stop: 2, clear: 3 })) {
+    const { dev, s } = session([{ body: [...dspHead(3, 4, 12), ...dspWindow()] }]);
+    const d = await s.profileDsp(op as 'get');
+    assert.deepEqual(dev.requests, [{ cmd: SERVICE_CMD.PROFILE_DSP, body: [code] }]);
+    assert.equal(d.on, true);
+    assert.equal(d.generation, 4);
+    assert.deepEqual(d.counts, { sweeps: 11, gaps: 2, ignored: 5 });
+    assert.deepEqual(
+      [d.sweep!.number, d.sweep!.blocks, d.sweep!.maxStockBlockDelta, d.sweep!.overruns],
+      [12, 1500, 666_000, 3],
+    );
+    assert.equal(d.sweep!.rows.length, 16);
+    assert.deepEqual(d.sweep!.rows[9], {
+      row: 9,
+      kind: 'effect',
+      calls: 7,
+      sumCycles: 2n ** 32n + 5n,
+      maxCall: 900,
+      maxBlock: 4000,
+    });
+    assert.equal(d.sweep!.rows[0]!.kind, 'machine');
+  }
+});
+
+test('profileDsp without a complete sweep has counters only', async () => {
+  const { s } = session([{ body: dspHead(0, 0, 0) }]);
+  assert.deepEqual(await s.profileDsp(), { on: false, generation: 0, counts: { sweeps: 11, gaps: 2, ignored: 5 } });
+});
+
+test('profileDsp refuses a short or foreign reply', async () => {
+  const bad = (body: number[]) =>
+    assert.rejects(session([{ body }]).s.profileDsp(), (e) => e instanceof DkError && e.kind === 'protocol');
+  await bad([1, 0, 0]);
+  await bad(dspHead(3, 0, 1)); // a sweep flagged but not sent
+  await bad([2, ...dspHead(0, 0, 0).slice(1)]); // another version
+});

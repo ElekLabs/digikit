@@ -82,6 +82,10 @@ function abortable<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+/** Rows and words of the DSP stats window (P8d): a header of 4 words, then 16 rows of 6 words. */
+const DSP_STATS_ROWS = 16;
+const DSP_STATS_WORDS = 4 + 6 * DSP_STATS_ROWS;
+
 /**
  * A used poll slot of the runtime (`dkrt_poll_add`), from PROFILE_STATE: the module record that registered the function (`'runtime'`: the firmware
  * image, a patched-in core module) and the function's address. An empty slot is `undefined`.
@@ -99,6 +103,31 @@ export interface ProfileSpan {
   calls: number;
   sumTicks: bigint;
   maxTicks: number;
+}
+
+/** One row of the DSP stats window (P8d): a DSP dispatch row, 0 to 7 machines and 8 to 15 effects. Cycles are in DSP cycles (the emulator: instructions). */
+export interface DspRow {
+  row: number;
+  kind: 'machine' | 'effect';
+  calls: number;
+  sumCycles: bigint;
+  maxCall: number;
+  maxBlock: number;
+}
+
+/** The state and the newest complete sweep of the DSP stats window, from PROFILE_DSP. `sweep` is absent until a sweep of the current generation is complete. */
+export interface DspStats {
+  on: boolean;
+  generation: number;
+  /** The mirror counters: complete sweeps, sweeps ended by a gap, records ignored. */
+  counts: { sweeps: number; gaps: number; ignored: number };
+  sweep?: {
+    number: number;
+    blocks: number;
+    maxStockBlockDelta: number;
+    overruns: number;
+    rows: DspRow[];
+  };
 }
 
 export class DkError extends Error {
@@ -1498,6 +1527,39 @@ export class DkSession {
       rows.push({ calls: view.getUint32(at), sumTicks: view.getBigUint64(at + 4), maxTicks: view.getUint32(at + 12) });
     }
     return { first: u16(b, 0), rows };
+  }
+  /** PROFILE_DSP (debug module): `get` the DSP stats, `start` or `stop` the counters, or `clear` them (a new clear generation). The reply is the state after the op. */
+  async profileDsp(op: 'get' | 'start' | 'stop' | 'clear' = 'get', quick: Quick = false): Promise<DspStats> {
+    const code = { get: 0, start: 1, stop: 2, clear: 3 }[op];
+    const b = await this.ok(SERVICE_CMD.PROFILE_DSP, 'profile dsp', Uint8Array.of(code), quick);
+    if (b.length < 20 || b[0] !== 1 || b[3] !== DSP_STATS_ROWS)
+      throw new DkError({ error: 'profile dsp: malformed reply', kind: 'protocol' });
+    const hasSweep = (b[1]! & 2) !== 0;
+    if (hasSweep && b.length < 20 + 4 * DSP_STATS_WORDS)
+      throw new DkError({ error: 'profile dsp: malformed reply', kind: 'protocol' });
+    const out: DspStats = {
+      on: (b[1]! & 1) !== 0,
+      generation: b[2]!,
+      counts: { sweeps: u32(b, 8), gaps: u32(b, 12), ignored: u32(b, 16) },
+    };
+    if (hasSweep) {
+      const view = new DataView(b.buffer, b.byteOffset, b.length);
+      const w = (i: number) => view.getUint32(20 + 4 * i);
+      const rows: DspRow[] = [];
+      for (let i = 0; i < DSP_STATS_ROWS; i++) {
+        const at = 4 + 6 * i;
+        rows.push({
+          row: i,
+          kind: i < 8 ? 'machine' : 'effect',
+          calls: w(at),
+          sumCycles: (BigInt(w(at + 2)) << 32n) | BigInt(w(at + 1)),
+          maxCall: w(at + 3),
+          maxBlock: w(at + 4),
+        });
+      }
+      out.sweep = { number: u32(b, 4), blocks: w(0), maxStockBlockDelta: w(1), overruns: w(2), rows };
+    }
+    return out;
   }
   /**
    * All span rows: the state, then pages of PROFILE_READ. Row layout: 0..M-1 module records, then 3 service phases (early, late, last), then
