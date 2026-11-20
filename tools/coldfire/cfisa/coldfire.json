@@ -74,7 +74,9 @@
 
     {"id": "move", "mn": "move", "enc": ["00ss RRRM MMmm mrrr"], "size": {"f": "s", "map": {"1": "b", "3": "w", "2": "l"}}, "ops": ["ea:m,r:all", "ea:M,R:dalt"],
      "deny": [{"ops": {"0": ["disp", "pcdisp"], "1": ["idx", "absw", "absl"]}},
-              {"ops": {"0": ["idx", "pcidx", "absw", "absl", "imm"], "1": ["idx", "absw", "absl"]}}],
+              {"ops": {"0": ["idx", "pcidx", "absw", "absl"], "1": ["disp", "idx", "absw", "absl"]}},
+              {"ops": {"0": ["imm"], "1": ["idx", "absw", "absl"]}},
+              {"ops": {"0": ["imm"], "1": ["disp"]}, "sizes": ["l"]}],
      "unit": "isa_a", "page": "CFPRM p.112-113 (source/destination combinations p.113)"},
     {"id": "movea", "mn": "movea", "enc": ["00ss aaa0 01mm mrrr"], "size": {"f": "s", "map": {"3": "w", "2": "l"}}, "ops": ["ea:m,r:all", "a:a"], "unit": "isa_a", "page": "CFPRM p.114"},
 

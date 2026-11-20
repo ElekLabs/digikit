@@ -326,6 +326,22 @@ fn bit_instructions() {
 }
 
 #[test]
+fn btst_dynamic_on_immediate() {
+    // btst d1,#0x85 three times: the bit number is taken modulo 8 and the
+    // tested byte is the immediate (CFPRM p.92)
+    let (mut cpu, mut ram) = machine(&[0x033c, 0x0085, 0x033c, 0x0085, 0x033c, 0x0085]);
+    cpu.d[1] = 7; // bit 7 of 0x85 is set
+    cpu.step(&mut ram).unwrap();
+    assert_eq!(cpu.sr & sr::Z, 0);
+    cpu.d[1] = 1; // bit 1 is clear
+    cpu.step(&mut ram).unwrap();
+    assert_eq!(cpu.sr & sr::Z, sr::Z);
+    cpu.d[1] = 8; // 8 mod 8 = bit 0, set
+    cpu.step(&mut ram).unwrap();
+    assert_eq!(cpu.sr & sr::Z, 0);
+}
+
+#[test]
 fn movem_store_and_load_ind_and_disp() {
     // movem.l d0-d1,(a0) ; movem.l (0,a0),d2-d3 -- ColdFire's MOVEM addresses
     // only (An) and (d16,An) (CFPRM p.115-116's ea table has no

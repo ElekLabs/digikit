@@ -80,6 +80,19 @@ fn length_limit_and_ea_restrictions() {
     );
     // (d16,Ay) source to (xxx).L destination is excluded (CFPRM p.113)
     assert!(dec(0, &[0x23e8, 0x0004]).is_none());
+    // (d8,Ay,Xi), (d8,PC,Xi) and (xxx).W sources to a (d16,Ax) destination
+    // are excluded too (CFPRM p.113); these fit in 6 bytes, so only the
+    // deny rule rejects them
+    assert!(dec(0, &[0x2370, 0x0800, 0x0010]).is_none());
+    assert!(dec(0, &[0x237b, 0x0800, 0x0010]).is_none());
+    assert!(dec(0, &[0x3378, 0x1000, 0x0010]).is_none());
+    // the neighbouring combinations stay legal
+    assert_eq!(
+        text(0, &[0x117c, 0x0012, 0x0010]),
+        "move.b #0x12,(0x10,a0) [6]"
+    );
+    assert_eq!(dec(0, &[0x2368, 0x0004, 0x0008]).unwrap().len, 6);
+    assert_eq!(dec(0, &[0x22b0, 0x0800]).unwrap().len, 4);
     // TST.B An (CFPRM p.150), 68000-only byte arithmetic
     assert!(dec(0, &[0x4a08]).is_none());
     assert!(dec(0, &[0x9000]).is_none());
