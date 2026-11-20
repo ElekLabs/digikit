@@ -7,15 +7,25 @@
 #include <stddef.h>
 #include "dk_fw_string.h"
 
-/* View (finding 71 section 2, "View vtable"): the vptr at +0, the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. The fields are [D] (finding 71); the size is [O]: derived windows start their own fields at +0x4c. */
+/* View (finding 71 section 2, "View vtable"): the vptr at +0, the redraw flag at +0x14, the opaque byte at +0x16 (the relayout draws from the topmost opaque view up and sets +0x17 on the views below it), the name C string pointer at +0x28 (not copied), the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. Size 0x4c, +0x14, +0x16, +0x17 and +0x2c checked by a second agent on both devices; +0x28 is [D]. */
 typedef struct View {
     uint32_t vptr;
-    uint8_t _pad0[40];
+    uint8_t _pad0[16];
+    uint8_t dirty;
+    uint8_t _pad1[1];
+    uint8_t opaque;
+    uint8_t blocked;
+    uint8_t _pad2[16];
+    uint32_t name;
     uint32_t mgr;
-    uint8_t _pad1[28];
+    uint8_t _pad3[28];
 } View;
 _Static_assert(sizeof(View) == 0x4c, "View size");
 _Static_assert(offsetof(View, vptr) == 0x0, "View.vptr offset");
+_Static_assert(offsetof(View, dirty) == 0x14, "View.dirty offset");
+_Static_assert(offsetof(View, opaque) == 0x16, "View.opaque offset");
+_Static_assert(offsetof(View, blocked) == 0x17, "View.blocked offset");
+_Static_assert(offsetof(View, name) == 0x28, "View.name offset");
 _Static_assert(offsetof(View, mgr) == 0x2c, "View.mgr offset");
 
 /* The Brain singleton. */
@@ -24,12 +34,14 @@ uint8_t * dk_fw_view_brain_instance(void) __asm__("cf.view.fn.brain.instance");
 void dk_fw_view_brain_push(uint8_t *menu, const shared_ptr *sp) __asm__("cf.view.fn.brain.push");
 /* The view manager of a Brain (Brain + 0x40). */
 uint8_t * dk_fw_view_brain_view_manager(uint8_t *brain) __asm__("cf.view.fn.brain.view_manager");
-/* `View::invalidate(View *)`: asks for a redraw of the view. */
+/* `View::invalidate(View *)`, DT2 0x4011b126, DN2 0x4011ca9a (34 bytes): when +0x17 is clear sets +0x14 and tail-jumps through the manager (+0x2c) to set the redraw flag VC+0x20. The render draws only when that flag is set, from the topmost opaque view up. */
 void dk_fw_view_invalidate(uint8_t *view) __asm__("cf.view.fn.invalidate");
 /* Converting copy `shared_ptr<View>(const shared_ptr<Derived> &)` for a class with its View sub-object at +0x38 (the Menu views): out.ptr = src.ptr + 0x38 (0 stays 0), out.ctl = src.ctl, and the use count of the control block is incremented. It does not make a new control block; a raw pointer cannot be wrapped with it. The caller releases `out` afterwards. */
 void dk_fw_view_shared_ptr_as_view(shared_ptr *out, const shared_ptr *src) __asm__("cf.view.fn.shared_ptr_as_view");
 /* `ViewController::push(mgr, shared_ptr<View> *, exclusive)`. */
 uint32_t dk_fw_view_view_controller_push(uint8_t *mgr, const shared_ptr *sp, uint32_t exclusive) __asm__("cf.view.fn.view_controller_push");
+/* `View::View(this, name)`: DT2 0x4011b06e, DN2 0x4011c9e2. Builds the handler bases and secondary vptrs, stores `name` (not copied) at +0x28 and the View vptr at +0, zeroes +0x1c..+0x24, +0x2c and +0x34..+0x48. It does not clear +0x14, +0x16, +0x17 or +0x30: allocate zeroed. */
+void dk_fw_view_view_ctor(uint8_t *this, const char *name) __asm__("cf.view.fn.view_ctor");
 /* `View::push(view, shared_ptr<View> *, exclusive)`: pushes a view on the view stack through the ViewController of `view` (the manager pointer at View+0x2c; returns 0 when it is null). The call copies the shared_ptr (use count +1), so the caller releases its own. The stock PRESET MANAGER code calls it with exclusive 0 on the view that handled the key. */
 uint8_t dk_fw_view_view_push(uint8_t *view, const shared_ptr *sp, uint8_t exclusive) __asm__("cf.view.fn.view_push");
 /* The literal queue address of the UI loop's `pea <queue>` (the boot hook peeks the queue for a held safe-mode key). */

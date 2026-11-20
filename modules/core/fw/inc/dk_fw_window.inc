@@ -16,3 +16,14 @@
 .equ MultiChoiceWindow_cb, 0x8c
 .equ MultiChoiceWindow_selected, 0x9c
 .equ MultiChoiceWindow_vertical, 0xac
+/* cf.window.struct.NameView: NameView (View at +0, own fields from +0x4c). Prompt, number, show_number, number_fmt, text, maxlen, done and allow_empty checked by a second agent on both devices. */
+.equ NameView_size, 0xa0
+.equ NameView_view, 0x0
+.equ NameView_prompt, 0x4c
+.equ NameView_number, 0x50
+.equ NameView_show_number, 0x54
+.equ NameView_number_fmt, 0x58
+.equ NameView_text, 0x60
+.equ NameView_maxlen, 0x6c
+.equ NameView_done, 0x7c
+.equ NameView_allow_empty, 0x94
