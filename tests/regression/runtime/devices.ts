@@ -13,7 +13,8 @@ const KNOWN_DEVICES: readonly Device[] = ['dt2', 'dn2', 'st'];
 export function selectDevices(list: readonly Device[] = ALL_DEVICES): Device[] {
   const only = process.env.DIGI_DEVICE;
   if (only === undefined || only === '') return [...list];
-  if (!KNOWN_DEVICES.includes(only as Device)) throw new Error(`DIGI_DEVICE must be one of ${KNOWN_DEVICES.join(', ')}, got '${only}'`);
+  if (!KNOWN_DEVICES.includes(only as Device))
+    throw new Error(`DIGI_DEVICE must be one of ${KNOWN_DEVICES.join(', ')}, got '${only}'`);
   return list.filter((device) => device === only);
 }
 
@@ -133,11 +134,15 @@ const coldDaemons = new Map<Device, string>();
 function coldDaemon(device: Device): string {
   const known = coldDaemons.get(device);
   if (known) return known;
-  const out = execFileSync('uv', ['run', 'python', '-m', 'tools.emulator.native_emu', '--daemon', '--build-only', stockImage(device)], {
-    cwd: repoRoot(),
-    encoding: 'utf8',
-    timeout: 3_600_000,
-  });
+  const out = execFileSync(
+    'uv',
+    ['run', 'python', '-m', 'tools.emulator.native_emu', '--daemon', '--build-only', stockImage(device)],
+    {
+      cwd: repoRoot(),
+      encoding: 'utf8',
+      timeout: 3_600_000,
+    },
+  );
   const binary = out.trim().split('\n').at(-1)!;
   if (!fs.existsSync(binary)) throw new Error(`the ${device} daemon build printed no binary: ${out.slice(-300)}`);
   coldDaemons.set(device, binary);

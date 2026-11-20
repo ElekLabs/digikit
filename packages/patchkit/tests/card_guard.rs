@@ -87,7 +87,12 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
         ];
         for (anchor, entry, shim, displaced) in rows {
             let h = hook(anchor);
-            assert!(h["module"].as_str().unwrap().starts_with("core/card-guard@"));
+            assert!(
+                h["module"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("core/card-guard@")
+            );
             assert_eq!(
                 h["addr"].as_u64(),
                 Some(entry),

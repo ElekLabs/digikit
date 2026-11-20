@@ -18,7 +18,7 @@ import { bootScreenCard, IB, lastFrame } from './introblank-support.ts';
 /** The stock intro's length in ticks (the five stock scene tables and the adapter's table). */
 const STOCK_TICKS = 175;
 /** The intro's drawn-frame counter (`_DAT_43153a0c` on the DT2, `_DAT_42c4cad8` on the DN2: the setup function clears it). */
-const TICK_COUNTER: Record<Device, number> = { dt2: 0x43153a0c, dn2: 0x42c4cad8 };
+const TICK_COUNTER: Record<Device, number> = { dt2: 0x43153a0c, dn2: 0x42c4cad8, st: 0 }; // st: no intro test
 /** ColdFire instructions per DSP block (132 M a second, 1500 blocks a second). */
 const INSNS_PER_BLOCK = 88_000;
 

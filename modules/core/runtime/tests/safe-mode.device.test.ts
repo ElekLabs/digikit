@@ -27,9 +27,9 @@ const SAFE_FLAG = 3;
 const CRASH_HANG_UI = 3;
 const CRASH_RESET_IN_INIT = 4;
 /** Scenario safe-fault: the module that follows `fault` on the card of the safe-once flag. */
-const FLAG_MODULES: Record<Device, string[]> = { dt2: ['test/sine'], dn2: ['test/dyn-dn2'] };
+const FLAG_MODULES: Record<Device, string[]> = { dt2: ['test/sine'], dn2: ['test/dyn-dn2'], st: [] };
 /** `cut-selection.toml`. */
-const CUT_MODULES: Record<Device, string[]> = { dt2: ['test/sine'], dn2: ['test/dyn-dn2', 'test/sine'] };
+const CUT_MODULES: Record<Device, string[]> = { dt2: ['test/sine'], dn2: ['test/dyn-dn2', 'test/sine'], st: [] };
 /** Scenario safe-late-fault: the stable period is shortened to 9,000 blocks; the module hangs the UI task 8,000 or 10,000 blocks in. */
 const LATE = { stable: 9000, early: 8000, late: 10000 };
 /** `cut-selection.toml` cases: the copies A and B, and what the boot uses. */
