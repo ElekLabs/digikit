@@ -9,6 +9,8 @@
 
 /* Result of a call that worked. The error codes are negative (`E_*` of sdk/sdk.toml [load.status]). */
 #define DKRT_OK 0
+/* dkrt_phase: module code runs in its `init`. */
+#define DKRT_PHASE_INIT 1
 /* The boot-time load of a module with DSP code answers LOADING: its ColdFire part is live, the DSP part follows over the first UI-loop passes. The final result is in DkrtBootInfo.results. A module whose DSP part is still going has state MOD_LOADING in dkrt_module. */
 #define DKRT_LOADING 1
 /* DkrtStatus.state: nothing is being sent. */
@@ -35,6 +37,8 @@
 #define DKRT_STAGE_BYTES 131072
 /* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
 #define DKRT_MACHINE_ROWS 8
+/* The logical keys of a device: DkrtDevice.key_codes has this many entries, indexed by the key's number (dk_key of sdk/include/dk/gen/keys.h; entry 0 is DK_KEY_NONE). `patchkit gen` refuses more key names. */
+#define DKRT_DEV_KEYS 64
 /* DkrtDevice.magic: DKDV. */
 #define DKRT_DEV_MAGIC 0x444b4456u
 /* DkrtDevice.version. */
@@ -264,6 +268,12 @@ typedef struct DkrtDevice {
     uint32_t dsp_block_cycles;                   /* [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP) */
     uint32_t dyn_type_first;                     /* core/machines types.toml dynamic_first */
     uint32_t dyn_types;                          /* run-time machine types (0 without DEV_HAS_DSP) */
+    uint32_t tracks;                             /* [digikit] tracks: the tracks of the device (0: not given) */
+    uint32_t key_codes[DKRT_DEV_KEYS];           /* [input.keys]: the id of each logical key in the firmware's key events, indexed by the key's number (0: the device has no such key) */
+    uint32_t key_flag_press;                     /* [input.key_flags] press: the bit of the key event's flags word set on a press */
+    uint32_t key_flag_func;                      /* [input.key_flags] func: the bit set while FUNC is held */
+    uint32_t key_flag_repeat;                    /* [input.key_flags] repeat: the bit of a repeating key */
+    uint32_t key_flag_release;                   /* [input.key_flags] release: the bit set on a release */
 } DkrtDevice;
 
 /* dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
@@ -464,7 +474,7 @@ _Static_assert(offsetof(DkrtCap, kind) == 0, "DkrtCap.kind");
 _Static_assert(offsetof(DkrtCap, limit) == 4, "DkrtCap.limit");
 _Static_assert(offsetof(DkrtCap, used) == 8, "DkrtCap.used");
 _Static_assert(offsetof(DkrtCap, largest) == 12, "DkrtCap.largest");
-_Static_assert(sizeof(DkrtDevice) == 60, "DkrtDevice size");
+_Static_assert(sizeof(DkrtDevice) == 336, "DkrtDevice size");
 _Static_assert(offsetof(DkrtDevice, magic) == 0, "DkrtDevice.magic");
 _Static_assert(offsetof(DkrtDevice, version) == 4, "DkrtDevice.version");
 _Static_assert(offsetof(DkrtDevice, size) == 8, "DkrtDevice.size");
@@ -480,6 +490,12 @@ _Static_assert(offsetof(DkrtDevice, keep_bytes) == 44, "DkrtDevice.keep_bytes");
 _Static_assert(offsetof(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevice.dsp_block_cycles");
 _Static_assert(offsetof(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
 _Static_assert(offsetof(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
+_Static_assert(offsetof(DkrtDevice, tracks) == 60, "DkrtDevice.tracks");
+_Static_assert(offsetof(DkrtDevice, key_codes) == 64, "DkrtDevice.key_codes");
+_Static_assert(offsetof(DkrtDevice, key_flag_press) == 320, "DkrtDevice.key_flag_press");
+_Static_assert(offsetof(DkrtDevice, key_flag_func) == 324, "DkrtDevice.key_flag_func");
+_Static_assert(offsetof(DkrtDevice, key_flag_repeat) == 328, "DkrtDevice.key_flag_repeat");
+_Static_assert(offsetof(DkrtDevice, key_flag_release) == 332, "DkrtDevice.key_flag_release");
 _Static_assert(sizeof(DkrtHealth) == 116, "DkrtHealth size");
 _Static_assert(offsetof(DkrtHealth, magic) == 0, "DkrtHealth.magic");
 _Static_assert(offsetof(DkrtHealth, version) == 4, "DkrtHealth.version");
@@ -655,6 +671,18 @@ int32_t dkrt_poll_add(uintptr_t f);
 
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
 void dkrt_poll_remove(uintptr_t f);
+
+/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. */
+int32_t dkrt_unload_observer_add(uintptr_t f);
+
+/* Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table. */
+void dkrt_unload_observer_remove(uintptr_t f);
+
+/* What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init`. UI task. */
+uint32_t dkrt_phase(void);
+
+/* The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded content module (a service file has a context too, but its record is never given out: the observers are for content modules). */
+int32_t dkrt_ctx_owner(uintptr_t ctx);
 
 /* A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect. */
 void dkrt_menu_built(uintptr_t code, uintptr_t data);

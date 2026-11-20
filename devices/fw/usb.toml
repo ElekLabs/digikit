@@ -16,7 +16,7 @@ name = "cf.usb.value.active_port"
 cpu = "cf"
 rule = { kind = "cf_literal", hash = "6ca45a25378d0a0f22d18114089f4984", offset = 0x14, len = 4 }
 mark = "D"
-users = ["core/usb-bulk"]
+users = ["core/usb-bulk", "core/usb-bulk-audio"]
 doc = "The active USB port index (u32): 2 USB MIDI, 5 USB AUDIO/MIDI, 6 Overbridge; written by the mode switch `FUN_40006c16` and at boot by `FUN_40006c52`. DT2 1.17 0x40965a60, DN2 1.12 0x4058f2a8. RAM at run time."
 
 [[value]]
@@ -113,3 +113,43 @@ rule = { kind = "cf_func", hash = "f6c30c569e250564446808c0d8b0aa51", offset = 0
 mark = "D"
 users = ["core/usb-bulk"]
 doc = "Start the USB device again when the stop delay has ended (`FUN_40006bc6`, 0x40006bc6); the second half of a re-enumeration."
+
+[[fn]]
+name = "cf.usb.fn.setup_dispatch"
+cpu = "cf"
+sig = "void ()"
+rule = { kind = "cf_func", hash = "d087df8ba0a25c3f0056e3c88348bd32", offset = 0x0, len = 6 }
+codegen = false
+mark = "D"
+users = ["core/usb-bulk-audio"]
+doc = "The EP0 setup dispatcher `FUN_40005ff6` (0x40005ff6 on DT2 1.17 and DN2 1.12, 1912 bytes). It reads the 8 setup bytes from `cf.usb.data.setup` and answers the standard and class requests; it preserves only A6 and D2. Its one caller is the USB interrupt handler."
+
+[[fn]]
+name = "cf.usb.fn.ep0_send"
+cpu = "cf"
+sig = "void (i32 len, const u8 *data)"
+rule = { kind = "cf_func", hash = "b22d775bf58fc4171ffded80168c3714", offset = 0x0, len = 6 }
+codegen = false
+mark = "D"
+users = ["core/usb-bulk-audio"]
+doc = "Queue an EP0 IN data stage and its status OUT stage (`FUN_40005f30`, 0x40005f30 on both). Stack arguments (len, ptr); returns at once when len > 0x1000, else tail-calls `FUN_40005be2`."
+
+[[data]]
+name = "cf.usb.data.setup"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "d087df8ba0a25c3f0056e3c88348bd32", offset = 0x8, len = 4 }
+codegen = false
+mark = "D"
+users = ["core/usb-bulk-audio"]
+doc = "The 8 setup packet bytes in wire order (bmRequestType, bRequest, wValue, wIndex, wLength, little-endian fields), the literal of the dispatcher's `move.l (abs).l,d1` at +6. DT2 1.17 0x47db4198, DN2 1.12 0x4664bf10. RAM at run time."
+
+[[hook]]
+name = "cf.usb.hook.setup_dispatch"
+site = "cf.usb.fn.setup_dispatch"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["d0-d1", "a0-a1", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/usb-bulk-audio"]
+doc = "Entry of the EP0 setup dispatcher; the stub answers a request or continues in the displaced `movea.w`."

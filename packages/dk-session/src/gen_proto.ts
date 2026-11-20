@@ -44,6 +44,7 @@ export const RECORD_KIND = {
   NATIVE_PAGE: 6,
   NATIVE_PAGE_V2: 7,
   LFO_SHAPE: 8,
+  SHORTCUT: 9,
 } as const;
 
 /** The resources of a module's `uses` (`[records.resources]`). */
@@ -264,6 +265,7 @@ export const RANGES = {
   probe: [0x32, 0x35],
   remote: [0x38, 0x3d],
   remote_state: [0x3e, 0x3f],
+  ui_views_test: [0x0f, 0x0f],
   usb_echo_test: [0x2c, 0x2f],
   usb_fast: [0x36, 0x37],
 } as const;
@@ -354,6 +356,12 @@ export const LOG_KIND = {
   FW_READY: 47,
   DSP_SWEEP: 48,
   SETUP_DONE: 49,
+  SHORTCUT_CLASH: 52,
+  SHORTCUT_INACTIVE: 53,
+  VIEW_OPENED: 54,
+  VIEW_CLOSED: 55,
+  TEXT_INPUT_OPENED: 56,
+  TEXT_INPUT_DONE: 57,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -407,6 +415,12 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
   48: ['DSP_SWEEP', ['sweep', 'generation', 'blocks', '-', '-']],
   49: ['SETUP_DONE', ['op', 'track', 'type', 'seq', 'status']],
+  52: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
+  53: ['SHORTCUT_INACTIVE', ['module', 'key0', 'key1', '-', '-']],
+  54: ['VIEW_OPENED', ['owner', 'flags', 'slot', '-', '-']],
+  55: ['VIEW_CLOSED', ['owner', 'slot', '-', '-', '-']],
+  56: ['TEXT_INPUT_OPENED', ['owner', 'max_len', '-', '-', '-']],
+  57: ['TEXT_INPUT_DONE', ['owner', '-', '-', '-', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
@@ -415,9 +429,10 @@ export const GUARD_KINDS: Record<number, string> = {
   2: 'overlevel',
 };
 
-/** The `flags` word of a LOG event: the error bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
+/** The `flags` word of a LOG event: the error bit, the keep bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
 export const LOG_FLAGS = {
   ERROR: 1,
+  KEEP: 16,
   LEVEL_SHIFT: 1,
   LEVEL_MASK: 7,
   SOURCE_SHIFT: 8,

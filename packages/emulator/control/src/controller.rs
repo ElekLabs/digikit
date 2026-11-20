@@ -2086,6 +2086,7 @@ impl Actor {
             "midi.out" | "midi.usb.out" => self.rpc_midi_out(method, &p).map(Some),
             "usb.bulk.in" => self.rpc_bulk_in(&p).map(Some),
             "usb.bulk.out" => self.rpc_bulk_out(&p).map(Some),
+            "usb.ctrl" => self.rpc_usb_ctrl(&p).map(Some),
             "usb.phy" => self.rpc_usb_phy(&p).map(Some),
             "card.export" => self.rpc_card_export(&p).map(Some),
             "watchdog.config" => self.rpc_watchdog(&p).map(Some),
@@ -2880,6 +2881,37 @@ impl Actor {
         }
         let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         Ok(json!({"bytes": bytes.len(), "hex": hex, "status": status}))
+    }
+
+    /// `usb.ctrl {setup, setup_addr, call, send}`: one control request to the firmware's EP0 handling (docs/CONTROL.md). Runs the emulator until the
+    /// setup handler `call` has returned. Result: `sends`, every entry to `send` in order as `{len, bytes}` (hex; empty array if `send` was not entered), and `stalled`.
+    fn rpc_usb_ctrl(&mut self, p: &Params) -> RpcResult {
+        let addr = |key: &str| -> Result<u32, RpcError> {
+            let v = p
+                .opt_u64(key)?
+                .ok_or_else(|| RpcError::bad_params(format!("{key} is required")))?;
+            u32::try_from(v).map_err(|_| RpcError::bad_params(format!("{key} is a 32-bit address")))
+        };
+        let setup = p
+            .opt_str("setup")?
+            .ok_or_else(|| RpcError::bad_params("setup is required"))?;
+        let setup: [u8; 8] = decode_hex(setup)
+            .map_err(RpcError::bad_params)?
+            .try_into()
+            .map_err(|_| RpcError::bad_params("setup is 8 bytes (16 hex digits)"))?;
+        let (setup_addr, call, send) = (addr("setup_addr")?, addr("call")?, addr("send")?);
+        let (sent, stalled) = self.with_runtime(|r| {
+            r.usb_ctrl(setup, setup_addr, call, send)
+                .map_err(RpcError::bad_params)
+        })?;
+        let sends: Vec<_> = sent
+            .iter()
+            .map(|(len, bytes)| {
+                let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                json!({"len": len, "bytes": hex})
+            })
+            .collect();
+        Ok(json!({"sends": sends, "stalled": stalled}))
     }
 
     /// `usb.phy {vbus?, run?}`: `vbus` sets VBUS present (OTGSC.BSV, off by default); `run` sets or clears USBCMD.RS as a write (a controller started or stopped by something else). The USB controller's PHY events since the last call, oldest first (`{"w": [reg, value]}` a ULPI viewport write, `{"r": [reg, value]}` a read,

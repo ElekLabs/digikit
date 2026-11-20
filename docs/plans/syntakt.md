@@ -240,7 +240,7 @@ State on Em's unit: the `device-peer` image and the repaired full `device` image
 - [x] Bootstrap MAIN stage at 0x40200000 (`[patch] main_stage`) and the in-place margin guard: patchkit refuses an image whose margin is below the floor, and prints the budget ([finding 152](../findings/152-syntakt-bootstrap-main-stage.md)).
 - [x] Hardware sets: `device` (the full set) and `device-peer` (`core/peer-image` only, the optional first flash); the workbench skips the runtime follow-ups for an image without the runtime.
 - [x] The flash flow: the INFO failure of step A is confirmed through a Ping; the Ping reply layout of the Syntakt (length byte before the blob) is read at both offsets.
-- [x] The MODULES freeze: `core/ui` compared key events with the Digitakt II ids; `[input.view_keys]` of the device file holds the Syntakt's ids and flag bits, and a module that reads a device table declares it with `needs_device` ([finding 153](../findings/153-syntakt-view-keys.md)).
+- [x] The MODULES freeze: `core/ui` compared key events with the Digitakt II ids; `[input.keys]` of the device file holds the Syntakt's ids and flag bits, and a module that reads a device table declares it with `needs_device` ([finding 153](../findings/153-syntakt-view-keys.md)).
 - [x] HEALTH shows the card capacity (INFO `card_sectors`, `card_state`); the runtime refuses a card whose capacity is unknown.
 - [x] The store at 0x200000..0x300000 of the second ColdFire's flash window, checked against the driver's capacity ([finding 154](../findings/154-syntakt-card-capacity-store.md)).
 - [x] The site publishes only the devices of `SITE_DEVICES` (`apps/web/src/data/site-devices.mjs`): the build, the pages, the gallery and the emulator page follow it.

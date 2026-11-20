@@ -82,7 +82,7 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 | `requires` | module ids that must be selected too (frameworks) |
 | `conflicts` | module ids that must not be selected |
 | `ports` | optional: only these ports, for example `["dt2-1.17"]` (empty: any firmware whose anchors resolve) |
-| `needs_device` | optional: tables of the device file the module reads, as dotted paths (`["input.view_keys"]`). Every device whose patch sets include the module (as a root or through `requires`) must have them; `patchkit gen` refuses a device without one, naming the table, the set and the module |
+| `needs_device` | optional: tables of the device file the module reads, as dotted paths (`["input.keys"]`). Every device whose patch sets include the module (as a root or through `requires`) must have them; `patchkit gen` refuses a device without one, naming the table, the set and the module |
 | `dynamic` | optional, default false: a run-time module (a content module, see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). It is never patched into an image (patchkit refuses it). `patchkit pack` makes a `.dkm` from it. Its machines have no number in `modules/core/adapters/machines/types.toml`: the runtime assigns a type in 16 to 23 when it loads the module (docs/design/digikit-registry.md "Machine keys") |
 
 ```toml

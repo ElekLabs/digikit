@@ -6,6 +6,7 @@ import {
   readCheckPending,
   readTopView,
   settleBootWindow,
+  viewStackFactsOf,
   type BootWindowFacts,
   type BootWindowTarget,
 } from '../src/boot-window.ts';
@@ -370,4 +371,19 @@ test('settleBootWindow presses again when the window stays unanswered, and fails
     /not settled within 2500 ms.*last: boot-window\(unanswered\).*tap NO @0 ms.*tap NO @1000 ms/,
   );
   assert.deepEqual(tapped, [0, 1000, 2000]);
+});
+
+test('viewStackFactsOf: the view stack needs the six [ui] facts and no [ui.boot_window]; a device file without brain_ptr gives none', () => {
+  const ui = { brain_ptr: 1, view_manager_off: 2, list_off: 3, list_next_off: 0, list_prev_off: 4, node_view_off: 8 };
+  assert.deepEqual(viewStackFactsOf({ ui }), {
+    brainPtr: 1,
+    viewManagerOff: 2,
+    listOff: 3,
+    listNextOff: 0,
+    listPrevOff: 4,
+    nodeViewOff: 8,
+  });
+  assert.equal(viewStackFactsOf({}), undefined);
+  assert.equal(viewStackFactsOf({ ui: { view_manager_off: 2 } }), undefined);
+  assert.throws(() => viewStackFactsOf({ ui: { brain_ptr: 1 } }), /view_manager_off/);
 });
