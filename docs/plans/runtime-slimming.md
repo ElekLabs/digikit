@@ -1,6 +1,6 @@
 # Runtime slimming: the core loads modules, keeps the card safe and reports faults
 
-Status: not started. Roadmap rows: "RS-S storage restructure and samples.dks" and "RS-C machines and fx leftovers out of the core" in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md).
+Status: RS-S and RS-C are done: the core links no service (`gen_services.rs`: `STATIC = 0`) and `samples.dks` exists. Roadmap rows: "RS-S storage restructure and samples.dks" and "RS-C machines and fx leftovers out of the core" in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md).
 
 Inputs: [runtime-and-services.md](runtime-and-services.md) (sections 3, 13, 13.2), [storage.md](storage.md) (store format v3), [digikit-hot-reload.md](digikit-hot-reload.md), [test-architecture.md](test-architecture.md) (T2 test pyramid), [docs/ARCHITECTURE.md](../ARCHITECTURE.md). Paths below are relative to `modules/core/runtime/src/rs/src/` unless they are given another way.
 
