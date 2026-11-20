@@ -645,6 +645,8 @@ pub static dkrt_dev: dkrt_sdk::DkrtDevice = dkrt_sdk::DkrtDevice {
     dsp_block_cycles: 0xa_2c2b,
     dyn_type_first: 16,
     dyn_types: 8,
+    tracks: 16,
+    key_codes: [0; dkrt_sdk::DEV_KEYS],
 };
 #[no_mangle]
 pub static dkrt_sample_fs: [u32; 4] = [0; 4];

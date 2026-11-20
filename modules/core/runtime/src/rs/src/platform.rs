@@ -154,6 +154,8 @@ impl Platform for RealPlatform {
                 dsp_block_cycles: dev::dsp_block_cycles(),
                 dyn_type_first: dev::dyn_type_first(),
                 dyn_types: dev::dyn_types(),
+                tracks: dev::tracks(),
+                key_codes: dev::key_codes(),
             }
         }
     }

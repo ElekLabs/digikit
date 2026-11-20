@@ -30,6 +30,8 @@ pub const ARENA_BYTES: usize = 524288;
 pub const STAGE_BYTES: usize = 131072;
 /// Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start).
 pub const MACHINE_ROWS: usize = 8;
+/// The logical keys of a device: DkrtDevice.key_codes has this many entries, indexed by the key's number (dk_key of sdk/include/dk/gen/keys.h; entry 0 is DK_KEY_NONE). `patchkit gen` refuses more key names.
+pub const DEV_KEYS: usize = 64;
 /// DkrtDevice.magic: DKDV.
 pub const DEV_MAGIC: u32 = 0x444b4456;
 /// DkrtDevice.version.
@@ -224,8 +226,12 @@ pub struct DkrtDevice {
     pub dyn_type_first: u32,
     /// run-time machine types (0 without DEV_HAS_DSP)
     pub dyn_types: u32,
+    /// [digikit] tracks: the tracks of the device (0: not given)
+    pub tracks: u32,
+    /// [panel.keys]: the panel code of each logical key, indexed by the key's number (0: the device has no such key)
+    pub key_codes: [u32; DEV_KEYS],
 }
-const _: () = assert!(size_of::<DkrtDevice>() == 60, "DkrtDevice size");
+const _: () = assert!(size_of::<DkrtDevice>() == 320, "DkrtDevice size");
 const _: () = assert!(offset_of!(DkrtDevice, magic) == 0, "DkrtDevice.magic");
 const _: () = assert!(offset_of!(DkrtDevice, version) == 4, "DkrtDevice.version");
 const _: () = assert!(offset_of!(DkrtDevice, size) == 8, "DkrtDevice.size");
@@ -241,6 +247,8 @@ const _: () = assert!(offset_of!(DkrtDevice, keep_bytes) == 44, "DkrtDevice.keep
 const _: () = assert!(offset_of!(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevice.dsp_block_cycles");
 const _: () = assert!(offset_of!(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
 const _: () = assert!(offset_of!(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
+const _: () = assert!(offset_of!(DkrtDevice, tracks) == 60, "DkrtDevice.tracks");
+const _: () = assert!(offset_of!(DkrtDevice, key_codes) == 64, "DkrtDevice.key_codes");
 
 /// dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000).
 #[repr(C)]
