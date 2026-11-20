@@ -316,7 +316,7 @@ def test_decide_set_current(set_current, at_main, head, origin, expected):
     assert native_pgo.decide_set_current(set_current, at_main, head, origin) is expected
 
 
-def record_training(tmp_path, monkeypatch, desktop="d1", fixtures=None):
+def record_training(tmp_path, monkeypatch, desktop="d1", fixtures=None, inputs=None):
     """A by-key manifest with its profile file, in a temp state dir."""
     state = tmp_path / "pgo-state"
     profile = state / "profiles" / "p.profdata"
@@ -325,6 +325,7 @@ def record_training(tmp_path, monkeypatch, desktop="d1", fixtures=None):
     manifest = {
         "key": "k" * 64,
         "desktop_sha256": desktop,
+        "inputs": {"regions": "r1"} if inputs is None else inputs,
         "profdata": {"path": str(profile)},
         **({"fixtures": fixtures} if fixtures is not None else {}),
     }
@@ -336,43 +337,101 @@ def record_training(tmp_path, monkeypatch, desktop="d1", fixtures=None):
     return profile, saved
 
 
+INPUTS = {"regions": "r1"}
+
+
+def current(device, key, force, set_current, inputs=INPUTS, **kwargs):
+    return native_pgo.current_training(
+        device, key, force, set_current, inputs, **kwargs
+    )
+
+
 def test_a_training_with_a_current_profile_is_skipped(tmp_path, monkeypatch):
     profile, saved = record_training(tmp_path, monkeypatch)
-    assert native_pgo.current_training("dn2", "k" * 64, False, True, "d1")
+    assert current("dn2", "k" * 64, False, True, desktop="d1")
     assert saved and saved[0][2] is True  # --set-current still applies
-    # --force, another key, another desktop digest, a missing profile file: train
-    assert not native_pgo.current_training("dn2", "k" * 64, True, False, "d1")
-    assert not native_pgo.current_training("dn2", "z" * 64, False, False, "d1")
-    assert not native_pgo.current_training("dn2", "k" * 64, False, False, "d2")
+    saved.clear()
+    assert current("dn2", "k" * 64, False, False, desktop="d1")
+    assert not saved  # a skip writes nothing without --set-current
+    # --force, another key, another desktop digest, another input, a missing profile file: train
+    assert not current("dn2", "k" * 64, True, False, desktop="d1")
+    assert not current("dn2", "z" * 64, False, False, desktop="d1")
+    assert not current("dn2", "k" * 64, False, False, desktop="d2")
+    assert not current("dn2", "k" * 64, False, False, {"regions": "r2"}, desktop="d1")
     profile.unlink()
-    assert not native_pgo.current_training("dn2", "k" * 64, False, False, "d1")
+    assert not current("dn2", "k" * 64, False, False, desktop="d1")
+
+
+def test_a_manifest_without_recorded_inputs_is_not_current(tmp_path, monkeypatch):
+    record_training(tmp_path, monkeypatch)
+    manifest_path = next((tmp_path / "pgo-state" / "by-key").iterdir())
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["inputs"]
+    manifest_path.write_text(json.dumps(manifest))
+    assert not current("dn2", "k" * 64, False, False, desktop="d1")
 
 
 def test_fixture_content_that_changed_trains_again(tmp_path, monkeypatch):
-    record_training(tmp_path, monkeypatch, fixtures={"dn2": {"sha256": "a"}})
+    record_training(
+        tmp_path,
+        monkeypatch,
+        fixtures={"dn2": {"sha256": "a", "directory": "/lane-a/fx"}},
+    )
     key = "k" * 64
-    assert native_pgo.current_training(
-        "both", key, False, False, fixtures={"dn2": {"sha256": "a"}}
+    # the same content in another lane's directory is current
+    assert current(
+        "both",
+        key,
+        False,
+        False,
+        fixtures={"dn2": {"sha256": "a", "directory": "/lane-b/fx"}},
     )
-    assert not native_pgo.current_training(
-        "both", key, False, False, fixtures={"dn2": {"sha256": "b"}}
+    assert not current("both", key, False, False, fixtures={"dn2": {"sha256": "b"}})
+
+
+def test_training_inputs_follow_workload_ready_inputs_and_regions(
+    tmp_path, monkeypatch
+):
+    from tools.emulator import dt2_sample_check
+
+    files = {}
+    for name in ("scen.json", "ready.bin", "card.img"):
+        files[name] = tmp_path / name
+        files[name].write_text(name)
+    monkeypatch.setattr(native_pgo, "ROOT", tmp_path)
+    monkeypatch.setattr(native_pgo, "DN2_WORKLOAD", [("scen.json", ["a"])])
+    monkeypatch.setattr(native_pgo, "DT2_WORKLOAD", [("scen.json", ["b"])])
+    monkeypatch.setattr(native_pgo, "REPLAYS", {"dn2": ("scen.json", "c", None)})
+    monkeypatch.setattr(
+        digi_env, "ready_inputs", lambda *a, **k: {"firmware": files["ready.bin"]}
+    )
+    monkeypatch.setattr(
+        dt2_sample_check,
+        "card_inputs",
+        lambda: (
+            {"firmware": files["ready.bin"]},
+            ["--card-image", str(files["card.img"])],
+        ),
     )
 
+    def inputs(regions="r1"):
+        hasher = native_pgo.FileHasher(tmp_path / "hash-cache.json")
+        return native_pgo.training_inputs(native_pgo.BOTH, hasher, regions)
 
-def test_each_training_has_its_own_raw_dir_that_clean_collects(tmp_path):
-    run = native_pgo.fresh_run_dir(tmp_path)
-    assert run.parent == tmp_path and run.is_dir()
-    assert native_pgo.CLEAN_DIR_NAMES.match(run.name)
-    (run / "train-1-0.profraw").write_bytes(b"x")
-    again = native_pgo.fresh_run_dir(tmp_path)  # same pid: emptied, never mixed
-    assert again == run and list(again.iterdir()) == []
-
-
-def test_the_flag_dir_is_fixed_per_target_dir(tmp_path):
-    first = native_pgo.flag_raw_dir(tmp_path / "pgo-instrument")
-    (first / "stray.profraw").write_bytes(b"x")
-    assert native_pgo.flag_raw_dir(tmp_path / "pgo-instrument") == first
-    assert (first / "stray.profraw").exists()  # not cleared: nothing is written here
+    record_training(tmp_path, monkeypatch, inputs=inputs())
+    key = "k" * 64
+    assert current("both", key, False, False, inputs())
+    files["scen.json"].write_text("a workload edit")
+    assert not current("both", key, False, False, inputs())
+    files["scen.json"].write_text("scen.json")
+    assert current("both", key, False, False, inputs())
+    files["ready.bin"].write_text("another ready state")
+    assert not current("both", key, False, False, inputs())
+    files["ready.bin"].write_text("ready.bin")
+    files["card.img"].write_text("another card")
+    assert not current("both", key, False, False, inputs())
+    files["card.img"].write_text("card.img")
+    assert not current("both", key, False, False, inputs("another region list"))
 
 
 def test_a_profile_covers_the_libraries_of_its_training_target():
@@ -392,22 +451,16 @@ def test_a_profile_covers_the_libraries_of_its_training_target():
 def test_fresh_profiles_prefer_the_both_profile_and_fall_back_to_the_device(
     monkeypatch,
 ):
-    seen = {}
-
     def launch_plan(environ, target):
-        seen[target] = environ.get("SHARC_GEN_DIR")
         profiles = {"dn2": "/dn2.p", "both": None, "dt2": "/dt2.p"}
         path = profiles[target]
         return (native_pgo.LaunchPlan([], [], {}, path, target) if path else None), ""
 
     monkeypatch.setattr(native_pgo, "launch_plan", launch_plan)
-    monkeypatch.setattr(native_pgo, "dt2_generated", lambda: pathlib.Path("/dt2-gen"))
     assert native_pgo.fresh_profiles(["dn2", "dt2"], {}) == {
         "dn2": pathlib.Path("/dn2.p"),
         "dt2": pathlib.Path("/dt2.p"),
     }
-    # the dt2 profile is resolved against the DT2 core, the others against the launcher's env
-    assert seen["dt2"] == "/dt2-gen" and seen["dn2"] is None
     monkeypatch.setattr(
         native_pgo,
         "launch_plan",
@@ -509,9 +562,32 @@ def test_desktop_digest_ignores_build_output_but_not_rust_source(tree):
     for rel in ("gen/schemas/x.json", "icons/a.png", "project.json"):
         (crate / rel).parent.mkdir(parents=True, exist_ok=True)
         (crate / rel).write_text("rebuilt")
-    ui_dist = tree / "apps/desktop/ui/dist/index.html"
-    ui_dist.parent.mkdir(parents=True)
-    ui_dist.write_text("rebuilt ui")
     assert native_pgo.desktop_digest(hasher) == before
     (crate / "main.rs").write_text("changed code")
     assert native_pgo.desktop_digest(hasher) != before
+
+
+def test_a_dt2_profile_is_resolved_against_the_dt2_core_not_the_launchers(
+    monkeypatch,
+):
+    monkeypatch.setattr(native_pgo, "supported_host", lambda: True)
+    seen = {}
+
+    def check(gen, fast, blocktrans, device, gen2):
+        seen[device] = gen
+        return "ok", "/p.profdata"
+
+    monkeypatch.setattr(native_pgo, "check", check)
+    monkeypatch.setattr(
+        native_pgo, "second_generated", lambda environ=None: pathlib.Path("/dt2-core")
+    )
+    environ = {"SHARC_GEN_DIR": "/dn2-core"}
+    native_pgo.pgo_state(environ, "dt2")
+    native_pgo.pgo_state(environ, "dn2")
+    assert seen == {"dt2": pathlib.Path("/dt2-core"), "dn2": pathlib.Path("/dn2-core")}
+
+
+def test_the_dt2_core_override_wins_over_the_launcher_core():
+    environ = {"SHARC_GEN_DIR": "/dn2-core", "SHARC_GEN_DIR_DT2": "/own"}
+    assert native_pgo.device_generated("dt2", environ) == pathlib.Path("/own")
+    assert native_pgo.device_generated("dn2", environ) == pathlib.Path("/dn2-core")

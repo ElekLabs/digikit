@@ -186,6 +186,22 @@ def generated_dir(
     return digi_env.generated_dir(environ)
 
 
+def device_generated(
+    device: str, environ: dict[str, str] | os._Environ[str] | None = None
+) -> pathlib.Path:
+    """The generated core a profile of DEVICE is keyed with (a pure lookup: no card build, no ready state).
+
+    dn2 and both (its first core): :func:`generated_dir`. dt2: SHARC_GEN_DIR_DT2, else the core registered for the DT2
+    ready DSP image, else :func:`generated_dir`. A launcher or `verify_build` env normally names the DN2 core in
+    SHARC_GEN_DIR, which is not the DT2 core: SHARC_GEN_DIR must not decide for dt2 while a DT2 core is known."""
+    environ = os.environ if environ is None else environ
+    if device == "dt2":
+        found = second_generated(environ)
+        if found is not None:
+            return found
+    return generated_dir(environ)
+
+
 def second_generated(
     environ: dict[str, str] | os._Environ[str] | None = None,
 ) -> pathlib.Path | None:
@@ -794,7 +810,7 @@ def pgo_state(
     if environ.get("RUSTFLAGS") or environ.get("CARGO_ENCODED_RUSTFLAGS"):
         return "skipped", "RUSTFLAGS is set"
     return check(
-        generated_dir(environ),
+        device_generated(device, environ),
         environ.get("SHARC_FAST_REGIONS", ""),
         environ.get("SHARC_BLOCKTRANS", ""),
         device,
@@ -863,15 +879,8 @@ def fresh_profiles(
     environ = os.environ if environ is None else environ
     found: dict[str, pathlib.Path] = {}
     for target in (BOTH, *devices):
-        target_env = environ
-        if target == "dt2" and not environ.get("SHARC_GEN_DIR"):
-            # The key of a dt2 profile holds the DT2 core; the launcher env names the DN2 one (as `plan` does).
-            try:
-                target_env = {**environ, "SHARC_GEN_DIR": str(dt2_generated())}
-            except (SystemExit, OSError):
-                continue
         try:
-            plan, _ = launch_plan(target_env, target)
+            plan, _ = launch_plan(environ, target)
         except SystemExit:  # `both` needs both generated cores
             continue
         for device, path in library_profiles(plan, environ).items():
@@ -1015,7 +1024,7 @@ def launch_plan(
     if status == "partial":
         profile = current_profile(
             device,
-            generated_dir(environ),
+            device_generated(device, environ),
             second_generated(environ) if device == BOTH else None,
         )
         if profile:
@@ -1413,36 +1422,110 @@ def instrumented_library(
         ) from exc
 
 
+def fixture_content(records: dict | None) -> dict | None:
+    """The part of fixture records that says what the runs replay (not where the fixture lies: a lane has its own copy)."""
+    if records is None:
+        return None
+    return {
+        name: {
+            "sha256": (record or {}).get("sha256"),
+            "firmware_version": (record or {}).get("firmware_version"),
+        }
+        for name, record in records.items()
+    }
+
+
 def current_training(
     device: str,
     key: str,
     force: bool,
     set_current: bool,
+    inputs: dict,
     desktop: str | None = None,
     fixtures: dict | None = None,
 ) -> bool:
     """True when `by-key/<key>.json` has its profile file and nothing the key does not cover differs: the training is skipped.
 
-    The key covers sources, workspace, gen, rustc, triple, features and the workload NAME. It does not cover the desktop
-    digest (dn2) or the fixture content (both): those are compared here. A workload edit that keeps the name needs --force
-    (or a new name)."""
+    The key covers sources, workspace, gen, rustc, triple, features and the workload NAME. The manifest also records what
+    the key leaves out (:func:`training_inputs`: workload files, ready inputs and card, region lists), the desktop digest
+    (dn2) and the fixture content (both); all are compared here, and a manifest without them is not current. A workload
+    that changes in a way none of them sees needs --force. Nothing is written unless SET_CURRENT applies."""
     if force:
         return False
     manifest = read_by_key(device, key)
     if manifest is None or not profdata_path(manifest, device).is_file():
         return False
+    if manifest.get("inputs") != inputs:
+        return False
     if desktop is not None and manifest.get("desktop_sha256") != desktop:
         return False
-    if fixtures is not None and manifest.get("fixtures") != fixtures:
+    if fixtures is not None and fixture_content(
+        manifest.get("fixtures")
+    ) != fixture_content(fixtures):
         return False
-    save_manifest(
-        device, manifest, set_current
-    )  # --set-current-at-main still applies to an existing profile
+    if set_current:
+        save_manifest(
+            device, manifest, True
+        )  # --set-current(-at-main) still applies to an existing profile
     print(
         f"{device} profile {key[:16]} is current: training skipped (--force trains again)",
         flush=True,
     )
     return True
+
+
+def text_digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def training_inputs(
+    device: str, hasher: FileHasher, regions: object
+) -> dict[str, object]:
+    """Digests of what a training of DEVICE reads that the profile key does not hold: the scenario files it plays, the ready
+    inputs (and card) it boots, and the region lists (REGIONS: they decide which DSP code runs as generated blocks, so they
+    shape the counters). Stored in the manifest as `inputs` and compared by :func:`current_training`. The scenario files
+    are hashed alone: what they import is not followed."""
+    scenarios = {
+        "dn2": [],
+        "dt2": [f for f, _ in DT2_WORKLOAD],
+        BOTH: [f for f, _ in (*DN2_WORKLOAD, *DT2_WORKLOAD)]
+        + [f for f, _, _ in REPLAYS.values()],
+    }[device]
+    ready: dict[str, pathlib.Path] = {}
+    if device in ("dn2", BOTH):
+        ready.update(
+            {f"dn2 {k}": v for k, v in digi_env.ready_inputs(device="dn2").items()}
+        )
+    if device == "dn2":
+        for path in tree_files(
+            pathlib.Path(run_env(pathlib.Path("."))["DIGI_COUPLED_FIXTURES"])
+        ):
+            ready[f"fixtures {path.name}"] = path
+    if device in ("dt2", BOTH):
+        from tools.emulator import dt2_sample_check
+
+        found, card_args = dt2_sample_check.card_inputs()
+        ready.update({f"dt2 {k}": v for k, v in found.items()})
+        ready["dt2 card"] = pathlib.Path(card_args[1])
+    return {
+        "scenarios": {f: hasher.digest(ROOT / f) for f in sorted(set(scenarios))},
+        "ready": {
+            name: hasher.digest(pathlib.Path(path))
+            for name, path in sorted(ready.items())
+        },
+        "regions": text_digest(regions),
+    }
+
+
+def dt2_fast_env() -> dict[str, str]:
+    """The region lists and block-translation roots a DT2 training run gets."""
+    return {
+        key: value
+        for key, value in coupled_module()
+        .run_env(syx=coupled_module().inputs("dt2")["firmware"])
+        .items()
+        if key.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
+    }
 
 
 def cmd_train(args: argparse.Namespace) -> None:
@@ -1456,10 +1539,13 @@ def cmd_train(args: argparse.Namespace) -> None:
     blocktrans = blocktrans_roots()
     components, nfiles = compute_components(packages, gen, hasher, fast, blocktrans)
     desktop = desktop_digest(hasher)
+    inputs = training_inputs("dn2", hasher, [fast, fallback_regions(), blocktrans])
     hasher.save()
     key = key_of(components)
     phases.done("key")
-    if current_training("dn2", key, args.force, args.set_current, desktop):
+    if current_training(
+        "dn2", key, args.force, args.set_current, inputs, desktop=desktop
+    ):
         return
 
     target = native_target().target_dir("", "pgo-instrument")
@@ -1517,6 +1603,7 @@ def cmd_train(args: argparse.Namespace) -> None:
         "components": components,
         "packages": packages,
         "desktop_sha256": desktop,
+        "inputs": inputs,
         "generated_dir": str(gen),
         "fallback_regions": fallback_regions(),
         "fast_regions": fast,
@@ -1579,10 +1666,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if args.device == BOTH:
         gen, _gen2 = both_generated()
         environ = {**os.environ, "SHARC_GEN_DIR": str(gen)}
-    # The profile of this tree for DEVICE: its key holds the device's own core, so name it (as coupled-build does);
+    # The profile of this tree for DEVICE: its key holds the device's own core, so name it;
     # without it dt2 would hash the DN2 core, miss its by-key manifest and fall back to the shared manifest.json
     # (whatever tree trained last), and verify would compare the binary with another tree's profile.
-    gen = dt2_generated() if args.device == "dt2" else None
+    gen = device_generated(args.device) if args.device == "dt2" else None
     profile = current_profile(args.device, gen)
     profdata = pathlib.Path(profile) if profile else None
     if profdata is None:
@@ -1812,10 +1899,12 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
     hasher = FileHasher(state / "hash-cache.json")
     components, nfiles = compute_components(packages, gen, hasher)
     components["workload"] = DT2_WORKLOAD_NAME
+    fast_env = dt2_fast_env()
+    inputs = training_inputs("dt2", hasher, fast_env)
     hasher.save()
     key = key_of(components)
     phases.done("key")
-    if current_training("dt2", key, args.force, args.set_current):
+    if current_training("dt2", key, args.force, args.set_current, inputs):
         return
     variant = args.variant or "pgo-dt2-instrument"
     target = native_target().target_dir("", variant)
@@ -1866,13 +1955,8 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
         "components": components,
         "packages": packages,
         "generated_dir": str(gen),
-        "fast_env": {
-            key: value
-            for key, value in coupled_module()
-            .run_env(syx=coupled_module().inputs("dt2")["firmware"])
-            .items()
-            if key.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
-        },
+        "fast_env": fast_env,
+        "inputs": inputs,
         "file_count": nfiles,
         "rustc_vV": rustc_version(),
         "triple": TRIPLE,
@@ -2082,6 +2166,20 @@ def both_items(
     return items
 
 
+def both_fast_env(items: list[WorkItem]) -> dict[str, dict[str, str]]:
+    """The region lists and block-translation roots of each item of the two-core training, by item label."""
+    return {
+        item.label: {
+            k: v
+            for k, v in digi_env.slot_env(
+                item.device, digi_env.fast_env(syx=item.fast_syx, context="pgo")
+            ).items()
+            if k.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
+        }
+        for item in items
+    }
+
+
 def both_workload_text(items: list[WorkItem]) -> list[str]:
     return [f"{i.label}:{i.scenarios_file}={'+'.join(i.names)}" for i in items]
 
@@ -2102,6 +2200,8 @@ def cmd_train_both(args: argparse.Namespace) -> None:
     hasher = FileHasher(state / "hash-cache.json")
     components, nfiles = compute_components(packages, gen, hasher, gen2=gen2)
     components["workload"] = both_workload_name(reset is not None)
+    fast_env = both_fast_env(items)
+    inputs = training_inputs(BOTH, hasher, fast_env)
     hasher.save()
     key = key_of(components)
     phases.done("key")
@@ -2109,7 +2209,9 @@ def cmd_train_both(args: argparse.Namespace) -> None:
         **{device: fx.record() for device, fx in fixtures.items()},
         **({"dn2-reset": reset.record()} if reset is not None else {}),
     }
-    if current_training(BOTH, key, args.force, args.set_current, fixtures=records):
+    if current_training(
+        BOTH, key, args.force, args.set_current, inputs, fixtures=records
+    ):
         return
     variant = args.variant or "pgo-both-instrument"
     target = native_target().target_dir("", variant)
@@ -2173,16 +2275,8 @@ def cmd_train_both(args: argparse.Namespace) -> None:
         # Device order: generated_dir is the DN2 core, generated_dir_2 the DT2 core.
         "generated_dir": str(gen),
         "generated_dir_2": str(gen2),
-        "fast_env": {
-            item.label: {
-                k: v
-                for k, v in digi_env.slot_env(
-                    item.device, digi_env.fast_env(syx=item.fast_syx, context="pgo")
-                ).items()
-                if k.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
-            }
-            for item in items
-        },
+        "fast_env": fast_env,
+        "inputs": inputs,
         "fixtures": records,
         "file_count": nfiles,
         "rustc_vV": rustc_version(),
