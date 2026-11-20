@@ -101,6 +101,16 @@ SHARC instruction semantics belong only in `tools/sharc_dev/sharc_core/`; trace/
 
 Builds and benchmarks use `tools/devtools/benchlock.py`. `coupled_ab.py`, `native_pgo.py`, `sharc_regionbench.py`, `pk_modcheck` and the scenario runner already take the lock, and the Nx launcher (`pnpm nx:pilot`) takes it for heavy task runs; do not wrap them again (it deadlocks). Launcher outputs in `out/native/target/*/pgo-use` are reserved; experiments use another `DIGI_EMU_PGO_VARIANT`.
 
+## Sub-agents and reports
+
+One agent per step with a self-contained brief: branch, files, exact checks, and named device targets (change -> test), never area tags. Resume an agent only for a one-line follow-up; after a rebase or a review round start a fresh agent. Project agents live in `.claude/agents/` (`lane-worker` for implementation lanes, `coder`, `scout`, `reviewer`).
+
+Report contract, at most 200 words: Result (one line); Commits (hashes); Checks (target: pass/fail); Device runs (targets, minutes); Open items. Details belong in commit messages and the PR text. A reviewer reports ranked findings with `file:line` and a failure scenario, at most about 300 words.
+
+Read failures, not logs: use the gate's failure summary or the failing task's error block; never print a whole Nx terminal output or run log.
+
+Wait on firmware events (`packages/dk-session/src/runtime-events.ts`) or emulated time. A flaky timing test is fixed to wait on an event, never given a longer timeout or a retry.
+
 ## Worktrees
 
 Use warm lanes (`tools/devtools/lane.sh NAME [BASE]`) for parallel native edits or long measurements; small edits and reading stay in the main tree. Lanes share artifacts and the virtualenv: do not change Python dependencies there. Use a separate dev-server port per lane.

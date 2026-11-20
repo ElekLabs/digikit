@@ -375,6 +375,10 @@ Build times: the Rust runtime 2.3 s, a C object under 1 s. `uv run python -m too
 - Recovery is the bootstrap's STARTUP menu (hold FUNC at power-on, then the stock OS over MIDI DIN); it has not been rehearsed.
 - Read `docs/findings/01-container-and-patching.md` before you install anything.
 
+## Agent workflow
+
+Project agents are in `.claude/agents/`: `lane-worker` runs an implementation lane in a named worktree; `coder`, `scout` and `reviewer` override the user-level agents of the same name. `reviewer` is limited to read-only Git by `tools/devtools/restrict_readonly_bash.py`. Every agent returns the report contract of AGENTS.md "Sub-agents and reports" (at most 200 words).
+
 ## Repository layout
 
 ```
