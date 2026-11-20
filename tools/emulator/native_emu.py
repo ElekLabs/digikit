@@ -325,11 +325,13 @@ def device_for_args(args: list[str]) -> str:
     return (digi_env.device_for_syx(syx) if syx else None) or "dn2"
 
 
-# What a training takes when the host builds and instrumented libraries are warm; a cold lane takes far longer.
+# What a training takes (measured on a lane, 2026-11-20). Warm: host build and instrumented library are in the
+# lane and the store, so only the runs and the merge are left. Cold: the instrumented library and host builds
+# (DN2 library 11 min, DT2 library 2.5 min, host builds 2 to 3 min each) are added; a full cold `perf:pgo` took 29 min.
 TRAIN_ESTIMATE = {
-    "dn2": "about 6 min warm, 30 min or more with a cold build",
-    "dt2": "about 6 min warm, 30 min or more with a cold build",
-    "both": "about 10 min warm, up to an hour with a cold two-core build and two instrumented libraries",
+    "dn2": "about 10 s warm, 13 s after an engine edit, 15 min with a cold library and host build",
+    "dt2": "about 1.5 min warm, 5 min with a cold library and host build",
+    "both": "about 4 min warm, 8 min with a cold two-core host build",
 }
 
 
