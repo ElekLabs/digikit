@@ -79,10 +79,23 @@ export function deviceOfInfo(port: string): string {
 }
 
 export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): Promise<RunOutcome> {
-  const profile = deps.files.profiles.find((p) => p.name === opts.profile);
-  if (!profile) throw new Error(`no calibration profile ${opts.profile}`);
+  const whole = deps.files.profiles.find((p) => p.name === opts.profile);
+  if (!whole) throw new Error(`no calibration profile ${opts.profile}`);
   const { session, emulator } = deps;
   const info = await session.info();
+  // A module case whose module has no build for the target (the library holds the builds of this target's device only) is skipped with that reason, and the rest runs.
+  const notBuilt: { case: string; reason: string }[] = [];
+  let profile = whole;
+  if (deps.modules) {
+    const built = new Set((await deps.modules.library()).map((f) => f.id));
+    const keepCases = whole.cases.filter((c) => {
+      const missing = c.modules.filter((id) => !built.has(id));
+      if (missing.length === 0) return true;
+      notBuilt.push({ case: c.id, reason: `not built for ${info.port}: ${missing.join(', ')}` });
+      return false;
+    });
+    if (notBuilt.length) profile = { ...whole, cases: keepCases };
+  }
   const device = deviceOfInfo(info.port);
   const record = registry.get(device);
   if (!record.midi) throw new Error(`the ${record.name} device file has no [midi] table`);
@@ -238,13 +251,18 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         ),
       )
       .map((c) => c.id);
-    opts.onEvent?.({ kind: 'plan', skipping });
+    opts.onEvent?.({ kind: 'plan', skipping: [...notBuilt.map((n) => n.case), ...skipping] });
   } catch {
     // a wrong step name: the runner refuses it with its own message
   }
   opts.onClock?.(() => base.now());
 
   const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], failed: [], stopped: false };
+  for (const n of notBuilt) {
+    out.skipped.push(n);
+    opts.onEvent?.({ kind: 'skip', case: n.case, reason: n.reason });
+    opts.onCase?.({ id: n.case, captures: [], skipped: n.reason });
+  }
   try {
     await runCalibration({
       profile,

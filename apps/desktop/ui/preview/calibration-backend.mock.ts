@@ -40,7 +40,8 @@ export function createCalibrator(deps: CalibrationDeps): Calibrator {
       const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
       for (const c of profile.cases.slice(0, 3)) {
         for (let n = 1; n <= profile.repeats; n++) {
-          if (opts.signal?.aborted) return { profile: profile.name, emulator, captures, skipped: [], stopped: true };
+          if (opts.signal?.aborted)
+            return { profile: profile.name, emulator, captures, skipped: [], failed: [], stopped: true };
           opts.onEvent?.(parseRunLine(`case ${c.id}: capture ${n} of ${profile.repeats}`));
           await wait(slow ? 3000 : 250);
           const cap = {
@@ -53,7 +54,7 @@ export function createCalibrator(deps: CalibrationDeps): Calibrator {
           opts.onCapture?.(cap);
         }
       }
-      return { profile: profile.name, emulator, captures, skipped: [], stopped: false };
+      return { profile: profile.name, emulator, captures, skipped: [], failed: [], stopped: false };
     },
     async fit(emu, dev) {
       const m = worstValues(emu.captures as CalProfileDoc[]);
