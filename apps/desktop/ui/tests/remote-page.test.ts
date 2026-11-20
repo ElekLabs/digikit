@@ -13,7 +13,9 @@ import {
   remoteNotice,
   remotePaused,
   remoteRuntime,
+  remoteReleaseDue,
   remoteStateWanted,
+  stateProbeKey,
 } from '../src/remote-core.ts';
 
 test('the notice: nothing when the module is on, where to check it, how to load the module', () => {
@@ -122,4 +124,20 @@ test('a key reports its failure, then throws; a key that works reports ok', asyn
   await rt.press(3);
   await rt.turn(1, 1);
   assert.deepEqual(seen, ['missing', 'ok', 'ok']);
+});
+
+test('a module listed without the state request is not asked again until the target or the list changes', () => {
+  const listed = [{ name: 'digikit/remote' }];
+  const key = stateProbeKey('midi A', listed);
+  assert.equal(remoteStateWanted(true, listed, key, key), false);
+  assert.equal(remoteStateWanted(true, listed, key, stateProbeKey('midi B', listed)), true);
+  assert.equal(remoteStateWanted(true, listed, key, stateProbeKey('midi A', [...listed, { name: 'x/y' }])), true);
+  assert.equal(stateProbeKey('t', [{ name: 'b' }, { name: 'a' }]), stateProbeKey('t', [{ name: 'a' }, { name: 'b' }]));
+});
+
+test('held keys are released on leaving when the module answered the state or is listed', () => {
+  assert.equal(remoteReleaseDue({ enabled: true, format: 1, turnLimit: 30 }, undefined), true);
+  assert.equal(remoteReleaseDue(undefined, true), true);
+  assert.equal(remoteReleaseDue(undefined, false), false);
+  assert.equal(remoteReleaseDue(undefined, undefined), false);
 });

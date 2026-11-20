@@ -17,7 +17,9 @@ import {
   remoteNotice,
   remotePaused,
   remoteRuntime,
+  remoteReleaseDue,
   remoteStateWanted,
+  stateProbeKey,
 } from './remote-core';
 import { windowShown } from './log-follow-core';
 import type { Host } from '@digi/workbench-core/host/host.ts';
@@ -94,6 +96,8 @@ export default function RemotePage(props: {
   const stateLoop = async () => {
     // set when the device answered E_PROTO: from then on the MODULES list says when digikit/remote is there (no failing request every poll)
     let missing = false;
+    // set when digikit/remote is listed but REMOTE_STATE answered E_PROTO: not asked again until the target or the module list changes
+    let unavailableKey: string | undefined;
     // INFO only names the device for the faceplate: ask when the target changed, after an error and now and then, not every poll
     let infoKey = '';
     let infoAt: number | undefined;
@@ -103,6 +107,7 @@ export default function RemotePage(props: {
         continue;
       }
       const t = target();
+      let loaded: Awaited<ReturnType<DkSession['modules']>> | undefined;
       try {
         await asked(async () => checkRuntime(target()));
         const s = await session();
@@ -114,28 +119,32 @@ export default function RemotePage(props: {
           const d = deviceOfPort(info.port);
           if (d && d !== device() && Object.hasOwn(panels, d)) setDevice(d);
         }
-        const loaded = missing ? await s.modules().catch(() => undefined) : undefined;
-        if (remoteStateWanted(missing, loaded)) {
+        loaded = missing ? await s.modules().catch(() => undefined) : undefined;
+        const probe = stateProbeKey(key, loaded);
+        if (remoteStateWanted(missing, loaded, unavailableKey, probe)) {
           setState(await s.remoteState());
           setStateError(undefined);
           setListed(undefined);
           missing = false;
+          unavailableKey = undefined;
           void noteReply(s, () => sameTarget(t, target()));
-        }
+        } else if (loaded) setListed(remoteListed(loaded));
       } catch (e) {
         missing = isRemoteMissing(e);
         infoAt = undefined;
         setState(undefined);
         setStateError(e);
         // the module may be loaded without the optional state request: MODULES decides what the notice says
-        if (missing)
-          setListed(
-            remoteListed(
-              await session()
-                .then((s) => s.modules())
-                .catch(() => undefined),
-            ),
-          );
+        if (missing) {
+          const list =
+            loaded ??
+            (await session()
+              .then((s) => s.modules())
+              .catch(() => undefined));
+          const isListed = remoteListed(list);
+          setListed(isListed);
+          unavailableKey = isListed ? stateProbeKey(targetLabel(t), list) : undefined;
+        }
       }
       await new Promise((r) => setTimeout(r, STATE_MS));
     }
@@ -151,7 +160,7 @@ export default function RemotePage(props: {
     if (leaveCancels(busy())) cancelPending();
     live?.releaseAll();
     // let go of the keys the page pressed (the module remembers them)
-    if (state())
+    if (remoteReleaseDue(state(), listed()))
       void session()
         .then((s) => s.remoteRelease())
         .catch(() => {});
