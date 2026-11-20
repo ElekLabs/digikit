@@ -57,18 +57,18 @@ export function sessionSetup(
   };
 }
 
-/** `STABLE_BLOCKS` of the runtime when the boot record names none: 30 s of DSP blocks (1500 a second). */
-const DEFAULT_STABLE_BLOCKS = 45_000;
+/** `STABLE_BLOCKS` of the runtime when the boot record names none: 30 s of DSP blocks (1500 a second). A host test keeps it equal to `modules/core/runtime/abi.toml`. */
+export const DEFAULT_STABLE_BLOCKS = 45_000;
 const BLOCKS_PER_S = 1500;
 
 /**
- * Wait until the runtime has called the running boot stable: its STABLE event, or, when the ring dropped that event (counting floods it), an event whose block count is
- * the boot's `stable_blocks` (BOOT_START) past the boot's own. The runtime counts boots that were not stable, and a second one in a row starts in safe mode with no
- * module loaded, so a run that changes the loaded modules by restarts must not restart earlier. The wait reads the log from the start of the boot with a cursor of its
- * own (the runner's waits have consumed earlier events). A device that was up for a long time logs nothing new, so the wait first provokes an event that carries the
- * device's block count now: the runtime logs every upload command that is not marked quiet (LIST), and that event, compared with BOOT_START, tells the boot's age at once.
- * A boot younger than `stable_blocks` waits for its STABLE; when none comes in time (no log, or a boot that does not run) it throws, and the run stops instead of
- * restarting into a boot that may be a safe-mode one. `onWait` gets the seconds waited and the seconds of the stable period once a second.
+ * Wait until the runtime has called the running boot stable: its STABLE event, or an event whose block count is at least the boot's `stable_blocks` (BOOT_START, or
+ * the default when the ring dropped it). The log's time is the firmware's block counter, which counts from the boot, so one recent event decides, whatever the ring
+ * lost. The runtime counts boots that were not stable, and a second one in a row starts in safe mode with no module loaded, so a run that changes the loaded modules
+ * by restarts must not restart earlier. The wait reads the log from the start of the boot with a cursor of its own. A device that was up for a long time logs nothing
+ * new, so the wait first provokes an event with the block count now: the runtime logs every upload command that is not marked quiet (LIST). A younger boot waits for
+ * its STABLE; when none comes in time (no log, or a boot that does not run) it throws, and the run stops instead of restarting into a boot that may be a safe-mode
+ * one. `onWait` gets the seconds waited and the seconds of the stable period once a second.
  */
 export async function untilBootStable(
   session: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'> &
@@ -77,7 +77,6 @@ export async function untilBootStable(
   onWait?: (waitedS: number, ofS: number) => void,
 ): Promise<void> {
   const events = new RuntimeEvents(session, clock);
-  let bootAt: number | undefined;
   let stable = DEFAULT_STABLE_BLOCKS;
   try {
     await events.listen({ fromBoot: true });
@@ -85,10 +84,9 @@ export async function untilBootStable(
     await Promise.resolve(session.list?.()).catch(() => undefined);
     const match = (e: RuntimeEvent): boolean => {
       if (e.kind === 'BOOT_START') {
-        bootAt = e.blocks;
         if (Number(e.fields.stable_blocks) > 0) stable = Number(e.fields.stable_blocks);
       }
-      return e.kind === 'STABLE' || (bootAt !== undefined && e.blocks - bootAt >= stable);
+      return e.kind === 'STABLE' || e.blocks >= stable;
     };
     const start = await clock.now();
     for (;;) {

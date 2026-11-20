@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, type Clock, type DkSession } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { runCalibrationOnTarget, deviceOfInfo } from '../src/profile/calibration-run';
-import { sessionSetup, untilBootStable } from '../src/calibration/rigsetup';
+import { DEFAULT_STABLE_BLOCKS, sessionSetup, untilBootStable } from '../src/calibration/rigsetup';
 import { loadCalibrationFiles, type RunEvent } from '../src/profile/calibration-view';
 
 const files = loadCalibrationFiles({
@@ -239,6 +240,39 @@ test('an idle long boot is stable at once: a probe event carries the block count
     [2, 2],
   );
   assert.ok(t >= 2000);
+});
+
+test('BOOT_START dropped from the ring: the probe event alone decides against the default stable period', async () => {
+  let t = 0;
+  const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
+  const events: { seq: number; time: number; kind: number; flags: number; args: number[] }[] = [];
+  const make = (nowBlocks: number) => ({
+    logPage: async (from: number) => [5, 5 + events.length, events.filter((e) => e.seq >= from)] as never,
+    list: async () => {
+      events.push({ seq: 6, time: nowBlocks, kind: LOG_KIND.UPLOAD, flags: 2, args: [0, 0, 0, 0, 0] });
+      return [];
+    },
+    info: async () => ({ log_sink: true }),
+    logConfig: async () => ({ level: 2, modules: [] }),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  });
+  await untilBootStable(make(DEFAULT_STABLE_BLOCKS + 1000) as never, clock);
+  assert.equal(t, 0);
+  events.length = 0;
+  const waits: number[] = [];
+  await untilBootStable(make(DEFAULT_STABLE_BLOCKS - 3000) as never, clock, (w) => {
+    waits.push(w);
+    if (waits.length === 1)
+      events.push({ seq: 7, time: DEFAULT_STABLE_BLOCKS, kind: LOG_KIND.STABLE, flags: 2, args: [0, 0, 0, 0, 0] });
+  });
+  assert.ok(waits.length >= 1 && t >= 1000);
+});
+
+test('the default stable period is the runtime ABI constant', () => {
+  const abi = readFileSync(new URL('../../../modules/core/runtime/abi.toml', import.meta.url), 'utf8');
+  const m = /name = "STABLE_BLOCKS"\s*\ntype = "u32"\s*\nvalue = (\d+)/.exec(abi);
+  assert.equal(DEFAULT_STABLE_BLOCKS, Number(m![1]));
 });
 
 test('the machine step remembers the type the firmware reported as the old one and puts it back with `original`', async () => {
