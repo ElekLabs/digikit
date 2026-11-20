@@ -160,19 +160,16 @@ const BOOT_KINDS: u32 = (1 << logk::BOOT_START)
 /// after another module sees what that module logged. Then boot events and error events, except the long detail of a replayed crash record and the raw
 /// DSP words of a stop (the fault record holds both).
 fn keeps(kind: u16, flags: u16) -> bool {
+    if flags & logk::F_KEEP != 0 {
+        return true; // the producer marked it notable: any kind, any level
+    }
     if flags & logk::F_ERROR != 0 {
         return kind != logk::CRASH_REG && kind != logk::CRASH_STACK && kind != logk::CRASH_TAIL && kind != logk::DSP_DIAG;
     }
     if crate::boot::info().ui_reached == 0 {
         return true;
     }
-    kind == logk::SETTINGS_LOAD || kind == logk::FW_READY || is_screen_kind(kind) || (kind < 32 && (BOOT_KINDS >> kind) & 1 != 0)
-}
-
-/// The events of a module's screens (core/ui: a view pushed or removed, the naming screen opened or answered). They come from key presses, a few a second at most, and a device
-/// test on a card without the debug module waits on them in this ring.
-fn is_screen_kind(kind: u16) -> bool {
-    kind == logk::VIEW_OPENED || kind == logk::VIEW_CLOSED || kind == logk::TEXT_INPUT_OPENED || kind == logk::TEXT_INPUT_DONE
+    kind == logk::SETTINGS_LOAD || kind == logk::FW_READY || (kind < 32 && (BOOT_KINDS >> kind) & 1 != 0)
 }
 
 /// Set (or, with 0, clear) the sink and its tick. The events of the small ring, oldest first, are handed to a new sink at once, so it starts with the boot.
@@ -494,14 +491,15 @@ mod tests {
         LOGGED += 1;
         LAST_KIND = (*e).kind;
     }
-    /// The screen events of core/ui are in the small ring after the first UI frame, an info-level event of another kind is not.
+    /// An event with the keep flag is in the small ring after the first UI frame, at any level and of any kind; one without it is not (an info-level event of an ordinary kind).
     #[test]
-    fn the_small_ring_keeps_the_screen_events_of_core_ui() {
-        for kind in [logk::VIEW_OPENED, logk::VIEW_CLOSED, logk::TEXT_INPUT_OPENED, logk::TEXT_INPUT_DONE] {
-            assert!(is_screen_kind(kind), "{kind}");
-        }
-        assert!(!is_screen_kind(logk::HEALTH));
-        assert!(!is_screen_kind(logk::MOD_LOG));
+    fn the_small_ring_keeps_an_event_with_the_keep_flag() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::boot::info().ui_reached = 1;
+        assert!(keeps(logk::HEALTH, logk::F_KEEP));
+        assert!(keeps(logk::MOD_LOG, logk::F_KEEP | (logk::L_DEBUG << logk::LEVEL_SHIFT)));
+        assert!(!keeps(logk::HEALTH, 0));
+        crate::boot::info().ui_reached = 0;
     }
 
     unsafe extern "C" fn fake_span(s: *const Span) {

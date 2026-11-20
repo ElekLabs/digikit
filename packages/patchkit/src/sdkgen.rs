@@ -945,6 +945,7 @@ struct Spans {
 #[serde(deny_unknown_fields)]
 struct Log {
     f_error: u16,
+    f_keep: u16,
     level_shift: u16,
     level_mask: u16,
     source_shift: u16,
@@ -1329,6 +1330,7 @@ fn rust(sdk: &Sdk) -> String {
     let l = &sdk.log;
     for (n, v) in [
         ("F_ERROR", l.f_error),
+        ("F_KEEP", l.f_keep),
         ("LEVEL_SHIFT", l.level_shift),
         ("LEVEL_MASK", l.level_mask),
         ("SOURCE_SHIFT", l.source_shift),
@@ -1689,8 +1691,8 @@ fn ts_proto(sdk: &Sdk) -> String {
     let l = &sdk.log;
     let _ = write!(
         s,
-        "}};\n\n/** The `flags` word of a LOG event: the error bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */\nexport const LOG_FLAGS = {{\n  ERROR: {},\n  LEVEL_SHIFT: {},\n  LEVEL_MASK: {},\n  SOURCE_SHIFT: {},\n  SOURCE_MASK: {},\n}} as const;\n\n",
-        l.f_error, l.level_shift, l.level_mask, l.source_shift, l.source_mask
+        "}};\n\n/** The `flags` word of a LOG event: the error bit, the keep bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */\nexport const LOG_FLAGS = {{\n  ERROR: {},\n  KEEP: {},\n  LEVEL_SHIFT: {},\n  LEVEL_MASK: {},\n  SOURCE_SHIFT: {},\n  SOURCE_MASK: {},\n}} as const;\n\n",
+        l.f_error, l.f_keep, l.level_shift, l.level_mask, l.source_shift, l.source_mask
     );
     let levels: Vec<String> = LEVELS.iter().map(|n| ts_str(n)).collect();
     let _ = writeln!(
@@ -1818,6 +1820,7 @@ fn python(sdk: &Sdk) -> Result<String> {
     let l = &sdk.log;
     for (n, v) in [
         ("F_ERROR", l.f_error),
+        ("F_KEEP", l.f_keep),
         ("LEVEL_SHIFT", l.level_shift),
         ("LEVEL_MASK", l.level_mask),
         ("SOURCE_SHIFT", l.source_shift),
@@ -3157,6 +3160,11 @@ fn registers_md(sdk: &Sdk) -> String {
 fn log_kinds_h(sdk: &Sdk) -> String {
     let mut s = format!(
         "/* {HEADER} */\n/* sdk/include/dk/gen/log_kinds.h -- the kinds of the runtime's log events (`[[log.kind]]`), for dk_log_event(kind, flags, args). */\n#ifndef DK_GEN_LOG_KINDS_H\n#define DK_GEN_LOG_KINDS_H\n\n"
+    );
+    let _ = writeln!(
+        s,
+        "/* flags bit 4 of dk_log_event: the event is kept in the small ring (the log's `f_keep`). */\n#define DK_LOG_F_KEEP {}\n",
+        sdk.log.f_keep
     );
     for k in &sdk.log.kind {
         let _ = writeln!(s, "#define DK_LOG_{} {}", k.name, k.id);

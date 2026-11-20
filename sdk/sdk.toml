@@ -1421,6 +1421,7 @@ doc = "The run-time switches of the speed levers: one RAM word, both bits set at
 
 [log]
 f_error = 1        # flags bit 0: error (kept even when debug is off)
+f_keep = 16        # flags bit 4: notable (kept in the small ring even when debug is off, whatever the level and kind): a producer sets it on an event that a test or a late debug module is to find
 level_shift = 1     # flags bits 1-3: level 0 error, 1 warn, 2 info, 3 debug, 4 trace
 level_mask = 7
 source_shift = 8    # flags bits 8-15: source module (0 = runtime, n = module table index + 1)

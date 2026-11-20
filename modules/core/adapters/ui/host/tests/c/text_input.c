@@ -44,11 +44,15 @@ static uint32_t pushed_serial;
 static char pushed_initial[16];
 static int opened_events, done_events;
 
-static void f_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a)
+static int unkept_events;
+
+static void f_emit(void *fw, uint32_t kind, uint32_t flags, uintptr_t owner, uint32_t a)
 {
     (void)fw;
     (void)owner;
     (void)a;
+    if (flags != DK_LOG_F_KEEP)
+        unkept_events++;
     if (kind == DK_LOG_TEXT_INPUT_OPENED)
         opened_events++;
     else if (kind == DK_LOG_TEXT_INPUT_DONE)
@@ -56,6 +60,8 @@ static void f_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a)
 }
 int ti_events(int kind)
 {
+    if (kind == 2)
+        return unkept_events;
     return kind ? done_events : opened_events;
 }
 
@@ -92,7 +98,7 @@ void ti_reset(void)
     fake.fw = 0;
     fake.push = f_push;
     fake.emit = f_emit;
-    opened_events = done_events = 0;
+    opened_events = done_events = unkept_events = 0;
     memset(&defer, 0, sizeof defer);
     input.fw = &fake;
     input.defer = &defer;

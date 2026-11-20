@@ -46,7 +46,7 @@ static int32_t push_now(ui_text_input *t)
         t->done = 0;
         t->pending = 0;
     } else {
-        t->fw->emit(t->fw->fw, DK_LOG_TEXT_INPUT_OPENED, t->owner, t->max_len);
+        t->fw->emit(t->fw->fw, DK_LOG_TEXT_INPUT_OPENED, DK_LOG_F_KEEP, t->owner, t->max_len);
     }
     return r;
 }
@@ -100,7 +100,7 @@ void ui_text_done(ui_text_input *t, const char *text)
     void *arg = t->arg;
     t->open = 0;
     t->done = 0;
-    t->fw->emit(t->fw->fw, DK_LOG_TEXT_INPUT_DONE, t->owner, 0);
+    t->fw->emit(t->fw->fw, DK_LOG_TEXT_INPUT_DONE, DK_LOG_F_KEEP, t->owner, 0);
     if (done)
         done(arg, text);
 }

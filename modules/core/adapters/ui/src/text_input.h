@@ -22,8 +22,8 @@ typedef struct ui_text_fw {
     /* Build and push the naming screen for `d` with the start text `initial`; the screen calls ui_text_done on YES and ui_text_gone(serial) when it left the stack.
        0 when shown, else a negative code (the screen is not shown and calls nothing). */
     int32_t (*push)(void *fw, const dk_ui_text_input_desc *d, const char *initial, uint32_t serial);
-    /* A log event (`DK_LOG_TEXT_INPUT_OPENED` or `DK_LOG_TEXT_INPUT_DONE` of <dk/gen/log_kinds.h>) with the owner handle and a word. */
-    void (*emit)(void *fw, uint32_t kind, uintptr_t owner, uint32_t a);
+    /* A log event (`DK_LOG_TEXT_INPUT_OPENED` or `DK_LOG_TEXT_INPUT_DONE` of <dk/gen/log_kinds.h>) with its flags (always `DK_LOG_F_KEEP`), the owner handle and a word. */
+    void (*emit)(void *fw, uint32_t kind, uint32_t flags, uintptr_t owner, uint32_t a);
 } ui_text_fw;
 
 typedef struct ui_text_input {

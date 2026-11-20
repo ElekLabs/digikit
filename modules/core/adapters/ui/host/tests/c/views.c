@@ -24,7 +24,7 @@ static int reopen_tag = -1;
 static uintptr_t reopened;
 static uint32_t last_canvas_w;
 /* the log events the pool asked for: (kind, owner, a, b) in order */
-static uint32_t ev[16][4];
+static uint32_t ev[16][5];
 static int ev_n;
 
 /* Panel codes 100 and 101 have names (1 and 2); every other code has none. */
@@ -64,7 +64,7 @@ static void f_close(void *fw, uint32_t view)
     if (close_n < 16)
         close_log[close_n++] = view;
 }
-static void f_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b)
+static void f_emit(void *fw, uint32_t kind, uint32_t flags, uintptr_t owner, uint32_t a, uint32_t b)
 {
     (void)fw;
     if (ev_n < 16) {
@@ -72,6 +72,7 @@ static void f_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a, uint32_
         ev[ev_n][1] = (uint32_t)owner;
         ev[ev_n][2] = a;
         ev[ev_n][3] = b;
+        ev[ev_n][4] = flags;
         ev_n++;
     }
 }

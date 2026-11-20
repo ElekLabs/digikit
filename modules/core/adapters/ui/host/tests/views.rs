@@ -42,6 +42,12 @@ fn events() -> Vec<(u32, u32, u32, u32)> {
         .collect()
 }
 
+// `DK_LOG_F_KEEP` of sdk/sdk.toml `[log] f_keep`: every event of the pool carries it
+const KEEP: u32 = 16;
+fn all_kept() -> bool {
+    (0..unsafe { vw_events() }).all(|i| unsafe { vw_event(i, 4) } == KEEP)
+}
+
 // the kinds of sdk/sdk.toml `[[log.kind]]`
 const VIEW_OPENED: u32 = 54;
 const VIEW_CLOSED: u32 = 55;
@@ -479,4 +485,5 @@ fn the_pool_logs_when_a_view_is_pushed_and_when_it_leaves_the_stack() {
     assert_eq!(events().len(), 1, "a close request is no event: the view is still on the stack");
     unsafe { vw_gone(s) };
     assert_eq!(events()[1], (VIEW_CLOSED, 7, s, 0), "the firmware removed it");
+    assert!(all_kept(), "both events carry the keep flag, so a card without the debug module keeps them");
 }

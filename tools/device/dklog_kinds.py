@@ -66,6 +66,7 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1
+F_KEEP = 16
 LEVEL_SHIFT = 1
 LEVEL_MASK = 7
 SOURCE_SHIFT = 8

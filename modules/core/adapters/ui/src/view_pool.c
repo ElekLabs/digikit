@@ -50,7 +50,7 @@ static int push_slot(ui_views *p, uint32_t slot)
         return 0;
     }
     v->state = UI_VIEW_OPEN;
-    p->fw->emit(p->fw->fw, DK_LOG_VIEW_OPENED, v->owner, v->desc.flags, slot);
+    p->fw->emit(p->fw->fw, DK_LOG_VIEW_OPENED, DK_LOG_F_KEEP, v->owner, v->desc.flags, slot);
     return 1;
 }
 
@@ -226,7 +226,7 @@ void ui_views_gone(ui_views *p, uint32_t slot)
         return;
     closed = v->desc.closed;
     arg = v->desc.arg;
-    p->fw->emit(p->fw->fw, DK_LOG_VIEW_CLOSED, v->owner, slot, 0);
+    p->fw->emit(p->fw->fw, DK_LOG_VIEW_CLOSED, DK_LOG_F_KEEP, v->owner, slot, 0);
     /* free first: `closed` may open a view and get this slot */
     v->state = UI_VIEW_FREE;
     v->fw_view = 0;

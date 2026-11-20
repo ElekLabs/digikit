@@ -417,9 +417,10 @@ export const GUARD_KINDS: Record<number, string> = {
   2: 'overlevel',
 };
 
-/** The `flags` word of a LOG event: the error bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
+/** The `flags` word of a LOG event: the error bit, the keep bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
 export const LOG_FLAGS = {
   ERROR: 1,
+  KEEP: 16,
   LEVEL_SHIFT: 1,
   LEVEL_MASK: 7,
   SOURCE_SHIFT: 8,

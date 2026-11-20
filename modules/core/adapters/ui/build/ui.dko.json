@@ -236,7 +236,7 @@
   {
    "addend": 0,
    "offset": 42,
-   "section": ".text.fwv_emit",
+   "section": ".text.fwt_emit",
    "symbol": "dk_log_event",
    "type": "cf.32"
   },
@@ -767,6 +767,13 @@
   },
   {
    "addend": 0,
+   "offset": 44,
+   "section": ".text.fwv_emit",
+   "symbol": "dk_log_event",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 24,
    "section": ".text.push_shared",
    "symbol": "cf.view.fn.brain.instance",
@@ -1106,13 +1113,6 @@
    "offset": 188,
    "section": ".text.inv_act",
    "symbol": ".sec..text.value_changed",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 40,
-   "section": ".text.fwt_emit",
-   "symbol": "dk_log_event",
    "type": "cf.32"
   },
   {
@@ -2589,9 +2589,9 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffec2d6e0010ffec486effec42a742aefff842aefffc2f2e000c2d6e0014fff02d6e0018fff44eb9000000004fef000c4e5e4e75",
+   "hex": "4e56ffec2d6e0014ffec486effec2f2e001042aefff442aefff842aefffc2f2e000c2d6e0018fff04eb9000000004fef000c4e5e4e75",
    "kind": "text",
-   "name": ".text.fwv_emit",
+   "name": ".text.fwt_emit",
    "size": 54
   },
   {
@@ -2757,6 +2757,13 @@
   },
   {
    "align": 2,
+   "hex": "4e56ffec2d6e0014ffec486effec2f2e001042aefff842aefffc2f2e000c2d6e0018fff02d6e001cfff44eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.fwv_emit",
+   "size": 56
+  },
+  {
+   "align": 2,
    "hex": "4e56fff4202e0008204041e800102d48fff82d40fffc4eb9000000002f004eb90000000042a7486efff82f004eb900000000486efffc2d40fff44eb9000000004aaefff456c04fef0014710044804e5e4e75",
    "kind": "text",
    "name": ".text.push_shared",
@@ -2810,13 +2817,6 @@
    "kind": "text",
    "name": ".text.inv_act",
    "size": 202
-  },
-  {
-   "align": 2,
-   "hex": "4e56ffec2d6e0010ffec486effec42a742aefff442aefff842aefffc2f2e000c2d6e0014fff04eb9000000004fef000c4e5e4e75",
-   "kind": "text",
-   "name": ".text.fwt_emit",
-   "size": 52
   },
   {
    "align": 2,
@@ -3170,10 +3170,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffff0700148d71c04242f0018266f0014eb8a206b008045f32800c0aa000c49ea000c2f002f2f001c2f10206800084e904fef000c254000084a806622178028004280429442aa001042aa001442aa001842aa001c4cd71c044fef00104e75700217802800206b00802f2f00182f142f2a0004487800362f10206800144e904fef0014700160ce",
+   "hex": "4feffff0700148d71c04242f0018266f0014eb8a206b008045f32800c0aa000c49ea000c2f002f2f001c2f10206800084e904fef000c254000084a806622178028004280429442aa001042aa001442aa001842aa001c4cd71c044fef00104e75700217802800206b00802f2f00182f142f2a000448780010487800362f10206800144e904fef0018700160ca",
    "kind": "text",
    "name": ".text.push_slot",
-   "size": 136
+   "size": 140
   },
   {
    "align": 2,
@@ -3240,10 +3240,10 @@
   },
   {
    "align": 2,
-   "hex": "518f2f0b70032f0a222f0018206f0014b081656e2001eb8845f008004a126762202a001c226a0018206800802f40000c42a72f012f2a00044878003747ea00042f10206800142f49001c4e90421242aa00084fef0014226f0008429342aa000c42aa001042aa001442aa001842aa001c4a89670e2f6f000c0014245f265f508f4ed1245f265f508f4e75",
+   "hex": "518f2f0b70032f0a222f0018206f0014b08165722001eb8845f008004a126766202a001c226a0018206800802f40000c42a72f012f2a0004487800104878003747ea00042f10206800142f4900204e90421242aa00084fef0018226f0008429342aa000c42aa001042aa001442aa001842aa001c4a89670e2f6f000c0014245f265f508f4ed1245f265f508f4e75",
    "kind": "text",
    "name": ".text.ui_views_gone",
-   "size": 138
+   "size": 142
   },
   {
    "align": 2,
@@ -3394,10 +3394,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffe8206e0008226e0008202e000806800000003141e800192d48ffec20512d690042fff42d690008fff82d40fff02d69000cfffc2f2900142f00486effec2f10206800044e904fef0010226e00084a806712420142a9001442a90008134100184e5e4e7520512f2900422f290010487800382f10206800082d40ffe84e904fef0010202effe860d8",
+   "hex": "4e56ffe8206e0008226e0008202e000806800000003141e800192d48ffec20512d690042fff42d690008fff82d40fff02d69000cfffc2f2900142f00486effec2f10206800044e904fef0010226e00084a806712420142a9001442a90008134100184e5e4e7520512f2900422f29001048780010487800382f10206800082d40ffe84e904fef0014202effe860d4",
    "kind": "text",
    "name": ".text.push_now",
-   "size": 138
+   "size": 142
   },
   {
    "align": 2,
@@ -3422,10 +3422,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffff42f0a206f00142f6f0018000c42a800142468000c2268000842a8000820102f4a000842a72f2800104878003920402f10206800082f4900144e904fef0010226f00044a8967142f6f000c00182f6f00080014245f4fef000c4ed1245f4fef000c4e75",
+   "hex": "4feffff42f0a206f00142f6f0018000c42a800142468000c2268000842a8000820102f4a000842a72f280010487800104878003920402f10206800082f4900184e904fef0014226f00044a8967142f6f000c00182f6f00080014245f4fef000c4ed1245f4fef000c4e75",
    "kind": "text",
    "name": ".text.ui_text_done",
-   "size": 102
+   "size": 106
   },
   {
    "align": 2,
@@ -3442,7 +3442,7 @@
    "size": 72
   }
  ],
- "source_sha256": "b7de991280bf575cb2bcda7457ede286f9a17f70f281cd8a240a427e15e7e3d6",
+ "source_sha256": "39a7b0b6d5f4b06088f46a8d8302beb0887dbd62a405c1f068913f5006e0aec4",
  "symbols": [
   {
    "global": false,
@@ -5099,8 +5099,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3643",
-  "isa_check": "911be137ad18e968ac675a7f864dac26f977bf01b60014f06cb4c07bfd0d7dc2",
+  "instructions_redecoded": "3647",
+  "isa_check": "0134ea28da9c56caa1f6044178ffc83c7779e6b039a91b1c7506c2614c3c28f5",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

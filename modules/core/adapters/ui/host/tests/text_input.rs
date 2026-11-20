@@ -239,6 +239,7 @@ fn an_input_opened_in_a_key_press_is_pushed_after_the_release() {
         assert_eq!(ti_events(1), 0);
         yes("OK");
         assert_eq!(ti_events(1), 1, "TEXT_INPUT_DONE on YES");
+        assert_eq!(ti_events(2), 0, "both events carry the keep flag");
         assert_eq!((ti_done_calls(0), text_of(0)), (1, "OK".to_string()));
     }
 }

@@ -3,6 +3,9 @@
 #ifndef DK_GEN_LOG_KINDS_H
 #define DK_GEN_LOG_KINDS_H
 
+/* flags bit 4 of dk_log_event: the event is kept in the small ring (the log's `f_keep`). */
+#define DK_LOG_F_KEEP 16
+
 #define DK_LOG_BOOT_START 1
 #define DK_LOG_CARD_CHECK 2
 #define DK_LOG_SAFE 3

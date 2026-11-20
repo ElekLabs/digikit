@@ -61,6 +61,7 @@ pub mod logk {
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;
     pub const F_ERROR: u16 = 1;
+    pub const F_KEEP: u16 = 16;
     pub const LEVEL_SHIFT: u16 = 1;
     pub const LEVEL_MASK: u16 = 7;
     pub const SOURCE_SHIFT: u16 = 8;

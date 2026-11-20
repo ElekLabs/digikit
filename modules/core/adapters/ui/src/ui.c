@@ -1216,25 +1216,27 @@ static int32_t fwv_poll_start(void *fw)
 }
 
 /* A runtime log event of a module screen (`dk_log_event`); the owner handle is the first word. */
-static void emit_event(uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b)
+static void emit_event(uint32_t kind, uint32_t flags, uintptr_t owner, uint32_t a, uint32_t b)
 {
     uint32_t args[5] = {(uint32_t)owner, a, b, 0, 0};
-    dk_log_event(kind, 0, args);
+    dk_log_event(kind, flags, args);
 }
 
-static void fwv_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b)
+static void fwv_emit(void *fw, uint32_t kind, uint32_t flags, uintptr_t owner, uint32_t a,
+                     uint32_t b)
 {
     (void)fw;
-    emit_event(kind, owner, a, b);
+    emit_event(kind, flags, owner, a, b);
 }
 
-static void fwt_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a)
+static void fwt_emit(void *fw, uint32_t kind, uint32_t flags, uintptr_t owner, uint32_t a)
 {
     (void)fw;
-    emit_event(kind, owner, a, 0);
+    emit_event(kind, flags, owner, a, 0);
 }
 
-static const ui_view_fw g_view_fw = {0, fwv_poll_start, fwv_push, fwv_close, fwv_invalidate, fwv_emit};
+static const ui_view_fw g_view_fw = {0,         fwv_poll_start, fwv_push,
+                                     fwv_close, fwv_invalidate, fwv_emit};
 
 /* The queue of actions that wait for a key release starts the per-pass poll when it gets one. */
 static int32_t defer_start(void *unused)
