@@ -41,6 +41,7 @@ RECORD_KIND: dict[str, int] = {
     "NATIVE_PAGE": 6,
     "NATIVE_PAGE_V2": 7,
     "LFO_SHAPE": 8,
+    "SHORTCUT": 9,
 }
 
 # the resources of a module's uses ([records.resources])

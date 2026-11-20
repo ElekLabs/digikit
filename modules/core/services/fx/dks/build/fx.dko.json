@@ -5569,30 +5569,30 @@
   },
   {
    "addend": 0,
-   "offset": 32,
+   "offset": 38,
    "section": ".text._RINvYINtNtNtCs6uNbiqmv1Ak_4core5slice4iter4IterNtNtCs4NVp4pdP0rZ_8dkrt_abi8platform13DeviceProfileENtNtNtNtBa_4iter6traits8iterator8Iterator8try_folduNCINvNtNtB1F_8adapters6copied13copy_try_foldBJ_uINtNtNtBa_3ops12control_flow11ControlFlowBJ_ENCINvNvB1z_4find5checkBJ_NCNvMBL_BJ_5by_id0E0E0B3a_EBN_",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 172,
+   "offset": 176,
    "section": ".text._RINvYINtNtNtCs6uNbiqmv1Ak_4core5slice4iter4IterNtNtCs4NVp4pdP0rZ_8dkrt_abi8platform13DeviceProfileENtNtNtNtBa_4iter6traits8iterator8Iterator8try_folduNCINvNtNtB1F_8adapters6copied13copy_try_foldBJ_uINtNtNtBa_3ops12control_flow11ControlFlowBJ_ENCINvNvB1z_4find5checkBJ_NCNvMBL_BJ_5by_id0E0E0B3a_EBN_",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
-   "addend": 268,
+   "addend": 476,
    "offset": 16,
    "section": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile5by_id",
-   "symbol": ".sec..rodata.global.14",
+   "symbol": ".sec..rodata.global.15",
    "type": "cf.32"
   },
   {
-   "addend": 82,
+   "addend": 86,
    "offset": 22,
    "section": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile5by_id",
-   "symbol": ".sec..rodata.global.14",
+   "symbol": ".sec..rodata.global.15",
    "type": "cf.32"
   },
   {
@@ -5620,28 +5620,28 @@
    "addend": 16,
    "offset": 22,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 28,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 34,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 46,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.16",
+   "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
@@ -6712,7 +6712,7 @@
   },
   {
    "align": 2,
-   "hex": "4fefffc02f2f00444eb9000000002f0041ef000a4eb900000000508f71ef00027202b280671e222f001cb2af00486210202f00489081b0af002055c0448060064200600242007201c0814fef00404e75",
+   "hex": "4fefff7c2f2f00884eb9000000002f0041ef000a4eb900000000508f71ef00027202b280671e222f001cb2af008c6210202f008c9081b0af002055c0448060064200600242007201c0814fef00844e75",
    "kind": "text",
    "name": ".text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx6fxpage6in_ddrNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "size": 80
@@ -7138,11 +7138,11 @@
    "size": 38
   },
   {
-   "align": 1,
-   "hex": "66782f726f7574652f",
+   "align": 16,
+   "hex": "66782f726f7574652f000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.global.18",
-   "size": 9
+   "size": 30
   },
   {
    "align": 8,
@@ -7152,25 +7152,25 @@
    "size": 8
   },
   {
-   "align": 16,
-   "hex": "000000000000000000000000000000000000000000000000000000000000",
+   "align": 1,
+   "hex": "00",
    "kind": "data",
    "name": ".rodata.global.16",
-   "size": 30
+   "size": 1
   },
   {
    "align": 16,
-   "hex": "4d4958000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fffffffff0000",
+   "hex": "4d4958000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007fffffffff000000010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b00000010000000080000001000040e292a2b2c2d2e2f30031105120d31060c1601140717130f081800150209191a1b1c1d1e1f202122232425262728100b0a00000000000000000000000000010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b00000010000000080000001000040e292a2b2c2d2e2f30031105120d31060c1601140717130f081802150009191a1b1c1d1e1f202122232425262728100b0a00000000000000000000000000000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000101",
    "kind": "data",
    "name": ".rodata.global.15",
-   "size": 86
+   "size": 476
   },
   {
    "align": 16,
-   "hex": "4d69780000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000001300000002646e32000000009700016a7c00000010400000000800000047fe000000001000fc0cc000000a2c2b0000001000000008010101010001000000130000000164743200000000fe0002f6c400000010400000000800000047fe000000001000fc0cc000000a2c2b0000001000000008000101010001000000270000000373740000000000970000000000000000400000000800000047bf000000001000fc0cc00000000000000000000000000001000101",
+   "hex": "4d697800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.global.14",
-   "size": 268
+   "size": 82
   },
   {
    "align": 1,
@@ -7195,7 +7195,7 @@
   },
   {
    "align": 2,
-   "hex": "77db6299",
+   "hex": "e9a708f1",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -7755,10 +7755,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fee048d73c7c2848266e00082a6e000c2a2b0004260e0683ffffff8445f900000000280e0684ffffffc22c0e0686ffffff462213ba816700009e204141e8003e26884a81670000904878003e2f012f034e924878003e2f032f044e92202eff8a2d40ff044fef0018b09566c62d40ffc84878003e2f042f064e92342effc24fef000c71c27202b28067a83d42ff46206eff042d48ff4c260e0683ffffff084878003e486eff462f0345f9000000004e923d42ff08202eff042d40ff0e4878003e2f032f0c4e924fef0018200c4cee3c7cfee04e5e4e7538bc000260ee",
+   "hex": "4e56fdcc48d73cfc2848266e00082a6e000c2a2b0004260e0683fffffefc243c0000008245f900000000280e0684ffffff7e2c0e0686fffffe7a2213ba816700009a204141e8008226884a816700008c2f022f012f034e922f022f032f044e92202eff022d40fdf44fef0018b09566ca2d40ff842f022f042f064e923e2eff7e4fef000c71c77202b28067ae3d47fe7a206efdf42d48fe80240e0682fffffdf8263c000000822f03486efe7a2f0245f9000000004e923d47fdf8202efdf42d40fdfe2f032f022f0c4e924fef0018200c4cee3cfcfdcc4e5e4e7538bc000260ee",
    "kind": "text",
    "name": ".text._RINvYINtNtNtCs6uNbiqmv1Ak_4core5slice4iter4IterNtNtCs4NVp4pdP0rZ_8dkrt_abi8platform13DeviceProfileENtNtNtNtBa_4iter6traits8iterator8Iterator8try_folduNCINvNtNtB1F_8adapters6copied13copy_try_foldBJ_uINtNtNtBa_3ops12control_flow11ControlFlowBJ_ENCINvNvB1z_4find5checkBJ_NCNvMBL_BJ_5by_id0E0E0B3a_EBN_",
-   "size": 222
+   "size": 224
   },
   {
    "align": 2,
@@ -7790,7 +7790,7 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffb02d48ffb02d6e0008ffb64879000000004879000000004eb900000000508f2d40ffba2d41ffbe486effb6486effba41eeffc24eb900000000508f71eeffc27202b280671e4878003e486effc22f2effb04eb9000000004fef000c202effb04e5e4e75206effb030bc000260ee",
+   "hex": "4e56ff6c2d48ff6c2d6e0008ff724879000000004879000000004eb900000000508f2d40ff762d41ff7a486eff72486eff7641eeff7e4eb900000000508f71eeff7e7202b280671e48780082486eff7e2f2eff6c4eb9000000004fef000c202eff6c4e5e4e75206eff6c30bc000260ee",
    "kind": "text",
    "name": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile5by_id",
    "size": 112
@@ -8293,7 +8293,7 @@
    "size": 28
   }
  ],
- "source_sha256": "3df002500d6aa44c298171c5c37a5a5df458fd882846ecc6f16af7c92d7f292e",
+ "source_sha256": "6c565ae39c7adbefb16e678011cb78507e18c86373c3e5b070268bdd11d3a62b",
  "symbols": [
   {
    "global": false,
@@ -10410,8 +10410,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
-  "instructions_redecoded": "8650",
-  "isa_check": "c40440024941accf30fae99fa9cde295b05899c3f0024652749e79111a8fe427",
+  "instructions_redecoded": "8652",
+  "isa_check": "d4a8838ae1e287e29e665874964fcc162cdfdecec0da7e86d759900e7578f3dc",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

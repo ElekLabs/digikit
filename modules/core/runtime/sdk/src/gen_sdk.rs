@@ -51,6 +51,7 @@ pub mod logk {
     pub const MODULE_LATCH: u16 = 45;
     pub const DSP_LINK: u16 = 46;
     pub const FW_READY: u16 = 47;
+    pub const SHORTCUT_CLASH: u16 = 48;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;
@@ -95,8 +96,10 @@ pub mod records {
     pub const LEN_NATIVE_PAGE_V2: u32 = 0x98;
     pub const KIND_LFO_SHAPE: u32 = 8;
     pub const LEN_LFO_SHAPE: u32 = 0x50;
+    pub const KIND_SHORTCUT: u32 = 9;
+    pub const LEN_SHORTCUT: u32 = 0x44;
     /// Every record kind in the order of its number: (kind, record length with its header, owning service).
-    pub const KINDS: [(u32, u32, &str); 8] = [
+    pub const KINDS: [(u32, u32, &str); 9] = [
         (KIND_PARAM, LEN_PARAM, "machines"),
         (KIND_MACHINE, LEN_MACHINE, "machines"),
         (KIND_PAGE, LEN_PAGE, "machines"),
@@ -105,6 +108,7 @@ pub mod records {
         (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE, "machines"),
         (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
+        (KIND_SHORTCUT, LEN_SHORTCUT, "shortcuts"),
     ];
     /// The kinds of the `machines` service: (kind, record length).
     pub const KINDS_MACHINES: [(u32, u32); 6] = [
@@ -123,6 +127,10 @@ pub mod records {
     pub const KINDS_LFO: [(u32, u32); 1] = [
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE),
     ];
+    /// The kinds of the `shortcuts` service: (kind, record length).
+    pub const KINDS_SHORTCUTS: [(u32, u32); 1] = [
+        (KIND_SHORTCUT, LEN_SHORTCUT),
+    ];
     /// The services of `[handle] services` that are in the runtime image (not the ones a `.dks` provides): the names a module's `NEEDS` meets without a provider (hashed by `dkneeds::keys::name_hash`).
     pub const HANDLE_SERVICES: [&str; 6] = [
         "runtime",
@@ -133,7 +141,7 @@ pub mod records {
         "sdhc_large",
     ];
     /// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
-    pub const KIND_NAMES: [(&str, u32); 8] = [
+    pub const KIND_NAMES: [(&str, u32); 9] = [
         ("param", KIND_PARAM),
         ("machine", KIND_MACHINE),
         ("page", KIND_PAGE),
@@ -142,6 +150,7 @@ pub mod records {
         ("native_page", KIND_NATIVE_PAGE),
         ("native_page_v2", KIND_NATIVE_PAGE_V2),
         ("lfo_shape", KIND_LFO_SHAPE),
+        ("shortcut", KIND_SHORTCUT),
     ];
     /// The kinds a module emits with `dk_record_add`.
     pub const GENERIC_KINDS: [u32; 1] = [
@@ -520,7 +529,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 121] = [
+    pub const IMPORT_NAMES: [&str; 122] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -640,6 +649,7 @@ pub mod api {
         "dk_debug_track_type",
         "dk_debug_selected_params",
         "dk_device_track_count",
+        "dk_shortcut_add",
         "dk_debug_log_sink_set",
         "dk_debug_speed_flags",
     ];
@@ -709,7 +719,7 @@ pub mod api {
     ];
 
     /// The imports a service file provides (`provided = true`): (service, import name), in order.
-    pub const PROVIDED: [(&str, &str); 26] = [
+    pub const PROVIDED: [(&str, &str); 27] = [
         ("machines", "dk_param_get"),
         ("machines", "dk_param_set"),
         ("machines", "dk_module_ctx_add_machine"),
@@ -736,6 +746,7 @@ pub mod api {
         ("samples", "dk_sample_pool_set"),
         ("samples", "dk_sample_pool_peaks"),
         ("samples", "dk_sample_pool_peaks_window"),
+        ("shortcuts", "dk_shortcut_add"),
     ];
 
     /// `dk_ui_confirm`: A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory).
@@ -1070,6 +1081,9 @@ pub mod api {
 
     /// `dk_device_track_count`: The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal.
     pub type DkDeviceTrackCountFn = unsafe extern "C" fn() -> u32;
+
+    /// `dk_shortcut_add`: Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>.
+    pub type DkShortcutAddFn = unsafe extern "C" fn(ctx: *mut u8, def: *const u8) -> i32;
 
     /// `dk_debug_log_sink_set`: Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none).
     pub type DkDebugLogSinkSetFn = unsafe extern "C" fn(sink: *mut u8, tick: *mut u8);

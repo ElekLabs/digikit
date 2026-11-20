@@ -1,0 +1,1 @@
+Test fixture of the `shortcuts` service: `init` makes one `dk_shortcut_add` call (hold [TRK], press [YES], `on` and `off` count). The call list of `core/services/shortcuts/tests/contract.rs` mirrors it.

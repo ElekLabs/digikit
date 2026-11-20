@@ -474,16 +474,19 @@ const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
+/// A module that binds a key combination with `dk_shortcut_add`: a user of the shortcuts service file, no DSP section.
+const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortcut-demo" };
 /// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
 const TRACK_SELECT: Fixture = Fixture { leaf: "track-select", nx: "test/track-select" };
 
-/// The service files of the card: the four services of the runtime and the test service.
-const SERVICES: [Fixture; 5] = [
+/// The service files of the card: the services of the runtime and the test service.
+const SERVICES: [Fixture; 6] = [
     Fixture { leaf: "fx", nx: "core/services/fx" },
     Fixture { leaf: "machines", nx: "core/services/machines" },
     Fixture { leaf: "lfo", nx: "core/services/lfo" },
     Fixture { leaf: "samples", nx: "core/services/samples" },
     Fixture { leaf: "svc-test", nx: "test/svc-test" },
+    Fixture { leaf: "shortcuts", nx: "core/services/shortcuts" },
 ];
 
 fn card_of(dev: Dev, modules: &[&Fixture], services: &[Fixture]) -> Vec<(String, Vec<u8>)> {
@@ -943,8 +946,8 @@ fn every_service_of_the_card_loads_together_on_the_emulator_and_the_device_image
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         for set in ["emulator", "device"] {
-            let mut modules: Vec<&Fixture> = std::vec![&SINE, &FX_GAIN, &LFO_SHAPE, &SVC_USER];
-            let mut want = std::vec!["machines", "fx", "lfo", "svc-test"];
+            let mut modules: Vec<&Fixture> = std::vec![&SINE, &FX_GAIN, &LFO_SHAPE, &SVC_USER, &SHORTCUT_DEMO];
+            let mut want = std::vec!["machines", "fx", "lfo", "svc-test", "shortcuts"];
             // the samples service file needs the sample-pool adapter (`requires`), which the DN2 device image leaves out (the DN2 pool is not proven on hardware)
             if !(dev.name == "dn2" && set == "device") {
                 modules.push(&TRACK_SELECT);
@@ -1022,6 +1025,45 @@ fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
         unsafe {
             let (_l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES[1..]); // machines, lfo and the test service
             assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("fx"))), "{}", dev.name);
+            assert_eq!(plan.verdicts[0].result(), E_MISSING);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The shortcuts seam: a module that calls `dk_shortcut_add` has a hard NEED on the service file, its builder import is an export of `shortcuts.dks`, and the file owns the
+/// SHORTCUT kind of the module's records. A card without the file refuses the module naming the service.
+#[test]
+fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let module = table_of(&packed(*dev, SHORTCUT_DEMO.leaf, "dkm", SHORTCUT_DEMO.nx));
+        let needs: Vec<(u32, bool)> = Keys::parse(&module).unwrap().needs().map(|n| (n.service, n.hard)).collect();
+        assert_eq!(needs, [(name_hash("shortcuts"), true)], "{}: the module's needs", dev.name);
+        let owner = service_file(*dev, "shortcuts", "core/services/shortcuts");
+        let t = table_of(&owner);
+        let keys = Keys::parse(&t).unwrap();
+        let kinds: Vec<u32> = (0..keys.count(tag::KINDS)).map(|i| keys.words(tag::KINDS, i).unwrap().0).collect();
+        assert_eq!(kinds, [dkrt_sdk::records::KIND_SHORTCUT], "{}: the kinds shortcuts.dks declares", dev.name);
+        assert_eq!(keys.count(tag::HOOKS), 0, "{}: shortcuts.dks takes no hook yet", dev.name);
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            // with the file on the card the module is accepted and the file is the provider that loads, and its builder import is one of its exports
+            let (mut l, mut plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[5..]);
+            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
+            assert!(found(&l, &plan).contains("services/shortcuts.dks"), "{}", dev.name);
+            l.load_providers(&plan);
+            l.settle(&mut plan, 1);
+            assert!(l.exports.resolve(name_hash("dk_shortcut_add")).is_some(), "{}: dk_shortcut_add is no export of shortcuts.dks", dev.name);
+            let listed: Vec<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
+            assert_eq!(listed, [name_hash("dk_shortcut_add")], "{}: the header table's exports", dev.name);
+            assert!(import_names(&packed(*dev, SHORTCUT_DEMO.leaf, "dkm", SHORTCUT_DEMO.nx)).iter().any(|n| n == "dk_shortcut_add"), "{}", dev.name);
+        }
+        let _ = clean_state();
+        unsafe {
+            // a card without the file refuses it, naming the service
+            let (_l, plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[..5]);
+            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("shortcuts"))), "{}", dev.name);
             assert_eq!(plan.verdicts[0].result(), E_MISSING);
         }
         let _ = clean_state();
@@ -1233,7 +1275,7 @@ fn every_hook_and_firmware_import_of_a_service_file_is_listed_by_the_port_file()
 #[test]
 fn the_service_objects_and_files_carry_the_abi_word_of_the_runtime_object() {
     let runtime = runtime_object();
-    for s in SERVICES.iter().take(3) {
+    for s in SERVICES.iter().filter(|s| s.nx.starts_with("core/") && s.leaf != "samples") {
         let json = read(&repo().join(format!("modules/core/services/{}/dks/build/{}.dko.json", s.leaf, s.leaf)), "patchkit build modules/core");
         let abi = object_abi(std::str::from_utf8(&json).unwrap()).to_string();
         assert!(

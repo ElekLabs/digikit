@@ -57,6 +57,7 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     45: ("MODULE_LATCH", ("index", "machine", "latched", "-", "-")),
     46: ("DSP_LINK", ("what", "a", "b", "c", "d")),
     47: ("FW_READY", ("blocks", "-", "-", "-", "-")),
+    48: ("SHORTCUT_CLASH", ("module", "owner", "key0", "key1", "-")),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

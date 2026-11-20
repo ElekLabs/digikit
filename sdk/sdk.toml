@@ -15,8 +15,8 @@ version = "0.10.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import change
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event"]
-services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large"]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
+services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
 # The callback types of the service imports (docs/plans/sdk.md section 10, Naming). The key ends in `_fn`; the C type is `dk_<key>` (the generated
@@ -1329,6 +1329,15 @@ sig = "u32 ()"
 doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal."
 
 [[import]]
+name = "dk_shortcut_add"
+service = "shortcuts"
+provided = true
+since = "0.10.2"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"
+doc = "Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>."
+
+[[import]]
 name = "dk_debug_log_sink_set"
 service = "runtime"
 since = "0.7.0"
@@ -1636,6 +1645,13 @@ id = 47
 name = "FW_READY"
 args = ["blocks", "-", "-", "-", "-"]
 
+# a shortcut was not enabled because an earlier module (the first owner keeps it) binds the same two logical keys (warn level): the module's record index + 1 of the disabled
+# shortcut, the record index + 1 of the owner that keeps the binding, the two logical keys (`dk_key`).
+[[log.kind]]
+id = 48
+name = "SHORTCUT_CLASH"
+args = ["module", "owner", "key0", "key1", "-"]
+
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
 polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
@@ -1808,6 +1824,9 @@ name = "fx"
 [[service]]
 name = "lfo"
 
+[[service]]
+name = "shortcuts"
+
 # A `[[service]]` without `rust` is provided by a `.dks` provider (a module with `role = "service"`), not by a runtime row: it is in no generated table.
 # `test = true`: a test-only service; it and its `[[import]]` rows (also `test = true`) are left out of the public SDK headers, docs and templates.
 [[service]]
@@ -1828,6 +1847,7 @@ EFFECT = { id = 4, len = 0x1a4, service = "fx" }
 ACTION = { id = 5, len = 0x10, service = "machines" }
 NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
 NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
+SHORTCUT = { id = 9, len = 68, service = "shortcuts" }   # id (16 bytes, NUL padded), label (24), two logical keys (`dk_key`), `on` and `off` as image offsets (0: none), `arg` as given (the builder `dk_shortcut_add` writes it)
 LFO_SHAPE = { id = 8, len = 80, service = "lfo", generic = true }   # u32 key (`DK_KEY_<ID>`: not 0), 4 characters of name (space to tilde), 32 samples of i16 (big-endian)
 
 # The resources a module counts in its `uses` (R7, the header table of a `.dkm`): one id each. `capacity` names the [capacity.kinds] entry the

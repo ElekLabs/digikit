@@ -44,6 +44,7 @@ export const RECORD_KIND = {
   NATIVE_PAGE: 6,
   NATIVE_PAGE_V2: 7,
   LFO_SHAPE: 8,
+  SHORTCUT: 9,
 } as const;
 
 /** The resources of a module's `uses` (`[records.resources]`). */
@@ -344,6 +345,7 @@ export const LOG_KIND = {
   MODULE_LATCH: 45,
   DSP_LINK: 46,
   FW_READY: 47,
+  SHORTCUT_CLASH: 48,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -395,6 +397,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
   46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
+  48: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
