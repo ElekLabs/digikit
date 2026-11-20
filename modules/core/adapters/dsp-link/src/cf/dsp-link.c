@@ -25,7 +25,7 @@
  *       with the copy of the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
  *   void dl_tick_cb_drop(u32 lo, u32 hi);   the runtime calls it after a module's fini: clears the callback when it points into [lo, hi)
  *   void dl_stats_hook(u32 (*cb)(u32 tag, u32 a, u32 b));   the runtime's feed of the DSP stats pages (P8d): dl_tick calls it for every reply whose
- *       acknowledgement slot holds a page of the stats window (tag magic DL_STATS_MAGIC, src/dsp/dsp-link.inc). Set once, when stats are first started; off costs one pointer test per block.
+ *       acknowledgement slot holds a page of the stats window (tag magic DL_STATS_MAGIC, src/dsp/dsp-link.inc). Set by the runtime while the counters run and cleared when they stop or their owner is gone (with stats off the slot holds stock data); off costs one pointer test per block.
  * dst_l2 is a byte address in window 0 of the DSP: the reserved area (_dl_area; DL_AREA_BYTES - DL_SLOT_WORDS * 4 long) or the slot block of the hook stubs (DL_SLOT_WORDS words directly
  * below _dl_area, which a write may not leave), 4-aligned; len is a multiple of 4;
  * buf must stay valid until the state is DL_DONE or DL_ERROR. DL_DONE means the DSP has taken every chunk, has the bytes

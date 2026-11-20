@@ -22,13 +22,23 @@ static mut MIRROR: Mirror = Mirror::new();
 /// The clear generation the control words last carried (the published sweep belongs to an older one when it differs).
 static mut LAST_CLEAR: u32 = 0;
 
-/// Hand `dkrt_dsp_stats_feed` to `dl_tick` (once is enough; again is harmless).
-unsafe fn hook_feed() {
+/// Set (the feed) or clear (0) the hook of `dl_tick`. The feed is set while the counters run and only then: with stats off the slot holds stock data.
+unsafe fn set_hook(feed: usize) {
     if core::hint::black_box(dl_stats_hook as usize) == 0 {
         return;
     }
-    let set: unsafe extern "C" fn(unsafe extern "C" fn(u32, u32, u32) -> u32) = core::mem::transmute(dl_stats_hook as unsafe extern "C" fn());
-    set(dkrt_dsp_stats_feed);
+    let set: unsafe extern "C" fn(usize) = core::mem::transmute(dl_stats_hook as unsafe extern "C" fn());
+    set(feed);
+}
+
+/// The generation the mirror expects is set (a page of another one is ignored).
+static mut ARMED: bool = false;
+
+/// The owner of the span channel is gone (its `fini`, a failed `init`, or it gave the channel up): the DSP stops counting and streaming (a stopped DSP writes
+/// nothing into the slot, which on the Digitone II holds effect-bus audio) and the feed is unhooked. The mirror keeps its last sweep.
+pub unsafe fn owner_gone() {
+    set_hook(0);
+    crate::link::lk().set_stats_ctl(STATS_ON, 0);
 }
 
 pub fn mirror() -> &'static mut Mirror {
@@ -46,14 +56,16 @@ pub unsafe extern "C" fn dk_dsp_stats_ctl(on: u32, clear: u32) -> i32 {
     if dlog::span_owner() != me {
         return E_BUSY;
     }
-    if on & 1 != 0 {
-        hook_feed();
-    }
-    if clear != LAST_CLEAR {
-        // the DSP clears its window for the new generation: the sweep the mirror holds, and what it counted, are stale
+    if !ARMED || clear != LAST_CLEAR {
+        // the DSP clears its window for the new generation: the sweep the mirror holds, and what it counted, are stale. The block interrupt feeds the mirror:
+        // it is masked while the main context starts it again.
+        let sr = crate::irq_mask();
         LAST_CLEAR = clear;
-        *mirror() = Mirror::new();
+        ARMED = true;
+        mirror().reset_for(clear as u8);
+        crate::irq_restore(sr);
     }
+    set_hook(if on & 1 != 0 { dkrt_dsp_stats_feed as usize } else { 0 });
     let l = crate::link::lk();
     l.set_stats_ctl(STATS_ON, on & 1);
     l.set_stats_ctl(STATS_CLEAR, clear);
@@ -98,6 +110,8 @@ mod tests {
 
     unsafe fn reset() {
         LAST_CLEAR = 0;
+        ARMED = false;
+        crate::cleanup_tests::STATS_HOOK.store(0, core::sync::atomic::Ordering::SeqCst);
         dlog::test_reset_sinks();
         *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
         *mirror() = Mirror::new();
@@ -159,6 +173,7 @@ mod tests {
         unsafe {
             reset();
             in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 0)), OK, "the first start arms the mirror for generation 0");
             for p in 0..PAGES as u8 {
                 dkrt_dsp_stats_feed(tag(0, p), p as u32, 7);
             }
@@ -169,6 +184,41 @@ mod tests {
             assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 1)), OK);
             assert_eq!(dk_dsp_stats_read(out.as_mut_ptr(), 103), 0, "a new generation: no sweep until the DSP sends one");
             assert_eq!(&out[100..], &[0, 0, 0]);
+            reset();
+        }
+    }
+
+    fn hook() -> usize {
+        crate::cleanup_tests::STATS_HOOK.load(core::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[test]
+    fn the_feed_is_hooked_only_while_the_counters_run_and_a_page_of_another_generation_is_ignored() {
+        let _g = LOCK.lock().unwrap();
+        unsafe {
+            reset();
+            in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 5)), OK);
+            assert_ne!(hook(), 0, "on: dl_tick feeds the mirror");
+            assert_eq!(dkrt_dsp_stats_feed(tag(5, 0), 1, 2), 1);
+            assert_eq!(dkrt_dsp_stats_feed(tag(6, 1), 1, 2), 0, "another generation: stock data that carries the magic");
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(0, 5)), OK);
+            assert_eq!(hook(), 0, "off: the slot holds stock data and dl_tick does not look at it");
+            reset();
+        }
+    }
+
+    #[test]
+    fn the_dsp_counters_stop_when_the_owner_of_the_span_channel_is_released() {
+        let _g = LOCK.lock().unwrap();
+        unsafe {
+            reset();
+            in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
+            assert_eq!(in_module(1, || dk_dsp_stats_ctl(1, 0)), OK);
+            assert_ne!(hook(), 0);
+            dlog::release_sinks(1);
+            assert_eq!(hook(), 0, "a module that is gone without a fini: no feed");
+            assert_eq!(dlog::span_owner(), 0);
             reset();
         }
     }

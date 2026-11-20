@@ -11,7 +11,9 @@
 // record each block, so an acknowledgement written earlier would be erased) and is about to store the record's first word:
 //   in    I4 = the record pointer (live), R1 = the ring toggle value (live), R2 = the record's first word (live),
 //         I6 = the handler's frame: DM(I6 - 3) is the pointer to the receive ring in use, DM(I6 - 2) the record pointer.
-//   free  R10, R11, R13, R14, R15, I2, I3, I5: the epilogue reloads them from the frame right after.
+//   free  R10, R11, R13, R14, R15, I2, I3, I5: the epilogue reloads them from the frame right after (checked in the stock code for the stats fold, which uses R11 and I2:
+//         `R11 = DM(I6 - 21)` and `I2 = DM(I6 - 17)` follow the site at DT2 1.17 0x1c75cd and 0x1c75c5, DN2 1.12 0x1c9e6b and 0x1c9e63; the instruction after the site is
+//         `DM(I4, M5) = R2`, so R2 is the live record word the fold reads and I4 the record pointer).
 //   saved here  R0, R3, R4, R5, R6, and M5, M6, L2, L3 (set to 0, 1, 0, 0 for the routine and put back at the exit: the
 //         firmware restores these per DSP context, so their values here are the context's, not constants, finding 45).
 //         Not touched: R1, R2, I4, I6, I7, I12, the other M registers. No DO loop is open at the site of a hook that itself

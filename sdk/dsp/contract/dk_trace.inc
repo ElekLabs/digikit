@@ -20,6 +20,10 @@
 
 // ---- spans (docs/plans/sdk.md section 9, docs/plans/profiling.md 13.1) ----
 //
+// What a span is: the call of the module's own routine, nothing else. In the machines service one span covers each call of the module's note_on and each call of its render (the contract
+// adapter's work around them, the guard and idle or disabled voices are outside), in the fx service the call of the effect's process routine. A voice that is idle or whose type is disabled
+// takes no span, so a row's calls are the module's real calls on both devices. A row of the old form (a routine with no note_on) is not measured.
+//
 // DK_SPAN_BEGIN(SKIP, PTR, RP, IX);   reads the cycle counter into the window's span word, when the stats window is on.
 // DK_SPAN_END(SKIP, PTR, RP, IX);     reads it again and adds the span to the row `DK_SPAN_ROW_CODE` names.
 //

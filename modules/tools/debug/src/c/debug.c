@@ -704,7 +704,9 @@ static void span_reset(void)
 }
 
 /* The DSP stats window (PROFILE_DSP): on while the DSP counts, and the clear generation last sent. Only the owner of the span channel may control it. */
-static u8 dsp_on, dsp_gen;
+static u8 dsp_on;
+static u32
+    dsp_gen; /* starts at the block count of the load: a generation the DSP cannot be holding from an earlier load of the module */
 
 static void span_stop(void)
 {
@@ -817,14 +819,15 @@ static int32_t cmd_profile_dsp(u32 c, u32 seq, const void *vbody, u32 len, void 
         dk_dsp_stats_ctl(0, dsp_gen);
         dsp_on = 0;
     } else if (body[0] == 3u) {
+        if (!profiling)
+            return DK_E_STATE; /* the control is the span channel owner's: nothing could be sent */
         dsp_gen++; /* the DSP and the mirror drop what they counted when they see the new generation */
-        if (profiling)
-            dk_dsp_stats_ctl(dsp_on, dsp_gen);
+        dk_dsp_stats_ctl(dsp_on, dsp_gen);
     }
     sweep = dk_dsp_stats_read(dsp_words, DSP_READ_WORDS);
     out[0] = 1; /* version */
     out[1] = (u8)(dsp_on | (sweep ? 2u : 0u));
-    out[2] = dsp_gen;
+    out[2] = (u8)dsp_gen;
     out[3] = (u8)DSP_ROWS;
     dk_bytes_put32(out + 4, sweep);
     for (i = 0; i < 3u; i++)
@@ -957,6 +960,7 @@ static int32_t init(dk_module_ctx *ctx)
         return DK_E_CMD_RANGE;
     }
     clk_addr = dk_debug_span_clock(&clk_hz);
+    dsp_gen = dk_time_blocks();
     cl_init(ctx);
     dk_debug_log_sink_set((uint8_t *)sink, (uint8_t *)tick);
     return DK_OK;

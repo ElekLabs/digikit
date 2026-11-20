@@ -297,14 +297,12 @@ _dv_scan:
     R6 = 4;                               // `last`: the core is about to call the module; the module step is cleared (fault table, dsp-link.inc)
     R7 = 0;
     CALL _dv_mark;
-    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's span (profiling 13.1): R3 and I1 are free here
     I13 = _dv_back;
     JUMP (M13, I12);                      // the routine returns with JUMP (M13, I13)
 _dv_back:
     R6 = 5;                               // `last`: the module returned (its step stays)
     R7 = -1;
     CALL _dv_mark;
-    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     I4 = _dv_ctx;
     R0 = DM(11, I4);
     MODE1 = R0;
@@ -597,9 +595,11 @@ _dv_cnoclr:
     I12 = R0;                             // the note_on pc
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's note_on (profiling 13.1): R3 and I1 are free here
     I13 = _dv_nback;
     JUMP (M13, I12);
 _dv_nback:
+    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     R0 = PASS R0;
     IF LT JUMP _dv_nfault;
 _dv_crender:
@@ -610,9 +610,11 @@ _dv_crender:
     R4 = DM(_dv_c + 28);
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp2, _dv_diag + 124, R3, I1);   // the module's render
     I13 = _dv_rback;
     JUMP (M13, I12);
 _dv_rback:
+    DK_SPAN_END(_dv_sp3, _dv_diag + 124, R3, I1);
     R1 = DK_STEREO;                       // contract 1.2: the stereo bit goes to _gs_post, the rest is the status
     R2 = R0 AND R1;
     DM(_dv_c + 48) = R2;

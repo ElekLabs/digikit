@@ -5,6 +5,7 @@ import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { pickSine } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
+import { selectTrack } from '@digi/regression/runtime/fx-track-ui.ts';
 import { sendCc, sendNote } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
@@ -15,6 +16,7 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * acknowledgement slot, the runtime's mirror and the command are all in the path; the emulator counts instructions where the device counts cycles.
  *
  * - Off: no counters, no sweep.
+ * - Two tracks have the machine (one row of the registry) and only track 1 plays: the idle voice calls no module and takes no span, so the row counts one call per block, not two.
  * - Start: a sweep appears (50 blocks, one page each). Over the time between two sweeps the machine row (stats row 0) counts one call per block (one voice) and the effect row
  *   (row 8) one call per block, both with cycles. The rows of one sweep are up to 50 blocks apart, so the ratio is taken over about 1500 blocks and has a few per cent of slack.
  * - Stop: the sweep number stays when the DSP stops.
@@ -33,7 +35,10 @@ async function expectDspStats(rt: TestRuntime): Promise<void> {
   const artifacts = liveArtifacts(session, 'debug-dsp-stats');
   await cliInstall(session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE, 'test/dyn-fx-gain']);
   const device = session.options.device as 'dt2' | 'dn2';
-  await pickSine(rt);
+  await pickSine(rt); // track 1 plays
+  await selectTrack(rt, 2);
+  await pickSine(rt); // track 2 has the same machine and stays silent
+  await selectTrack(rt, 1);
   await sendCc(rt, MIDI_CHANNEL, AMP_CC[device].hold, 127);
   await sendCc(rt, MIDI_CHANNEL, AMP_CC[device].decay, 64);
   for (const cc of SEND_CC[device]) await sendCc(rt, MIDI_CHANNEL, cc, 0);
@@ -65,7 +70,7 @@ async function expectDspStats(rt: TestRuntime): Promise<void> {
     const a = first.rows[row]!;
     const b = second.rows[row]!;
     const ratio = (b.calls - a.calls) / blocks;
-    expect(ratio, `${name} row: calls per block (one voice, one effect)`).toBeGreaterThan(0.9);
+    expect(ratio, `${name} row: calls per block (one playing voice, the silent track adds none; one effect)`).toBeGreaterThan(0.9);
     expect(ratio, `${name} row: calls per block`).toBeLessThan(1.1);
     expect(b.sumCycles - a.sumCycles, `${name} row: cycles`).toBeGreaterThan(0n);
     expect(b.maxCall, `${name} row: the largest call`).toBeGreaterThan(0);

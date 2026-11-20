@@ -858,7 +858,6 @@ _dv_f3b:
 #else
     CALL _dv_crumb;                       // stage 4: the routine is about to be called (R3, R5, I4 are free here)
 #endif
-    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's span (profiling 13.1): R3 and I1 are free here
     R3 = LSHIFT R2 BY 2;                  // the track's stereo flag starts the block clear (the odd voice normally consumes it; stale if it did not run)
     R5 = _dv_st;
     R5 = R5 + R3;
@@ -956,7 +955,6 @@ _dv_back:
 #else
     CALL _dv_crumb;                       // stage 5: the routine returned
 #endif
-    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     JUMP _dv_gcheck;
 _dv_odd:
     R3 = LSHIFT R2 BY 2;                  // the even voice of the track wrote R (stereo machine): keep it, clear the flag
@@ -1490,9 +1488,11 @@ _dv_cnoclr:
     I12 = R0;                             // the note_on pc
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's note_on (profiling 13.1): R3 and I1 are free here
     I13 = _dv_nback;
     JUMP (M13, I12);
 _dv_nback:
+    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     R0 = PASS R0;
     IF LT JUMP _dv_nfault;
 _dv_crender:
@@ -1503,9 +1503,11 @@ _dv_crender:
     R4 = DM(_dv_c + 12);
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp2, _dv_diag + 124, R3, I1);   // the module's render
     I13 = _dv_rback;
     JUMP (M13, I12);
 _dv_rback:
+    DK_SPAN_END(_dv_sp3, _dv_diag + 124, R3, I1);
     R2 = DM(_dv_g + 12);                  // contract 1.2: a stereo machine or-s DK_STEREO into the status; the track's flag tells the odd voice to keep the R it wrote
     R2 = LSHIFT R2 BY 2;
     R3 = _dv_st;

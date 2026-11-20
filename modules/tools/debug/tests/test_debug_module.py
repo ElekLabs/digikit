@@ -640,9 +640,7 @@ def test_profile_dsp_reply_carries_the_sweep_when_one_is_complete(harness):
     assert words == tuple(3000 + i for i in range(100))
 
 
-def test_profile_dsp_clear_is_a_new_generation_and_only_reaches_the_dsp_when_on(
-    harness,
-):
+def test_profile_dsp_clear_is_a_new_generation_and_needs_the_span_channel(harness):
     out = run(
         harness,
         [
@@ -656,12 +654,12 @@ def test_profile_dsp_clear_is_a_new_generation_and_only_reaches_the_dsp_when_on(
             "dspctl",
         ],
     )
-    assert dsp_reply(out[2])[1] == 1 and out[3] == "ctl 0 0 0", (
-        "off: the generation moves, the DSP is told at the next start"
+    assert out[2].startswith("reply -53") and out[3] == "ctl 0 0 0", (
+        "without the span channel nothing could be sent: refused"
     )
-    assert dsp_reply(out[4])[:2] == (1, 1), "start sends the generation"
-    assert dsp_reply(out[5])[1] == 2 and out[6] == "ctl 1 2 2"
-    assert dsp_reply(out[8])[1] == 3 and out[9] == "ctl 0 3 4", (
+    assert dsp_reply(out[4])[:2] == (1, 0), "start sends the generation"
+    assert dsp_reply(out[5])[1] == 1 and out[6] == "ctl 1 1 2"
+    assert dsp_reply(out[8])[1] == 2 and out[9] == "ctl 0 2 4", (
         "stopped, the spans still on: the new generation reaches the DSP with on = 0"
     )
 
