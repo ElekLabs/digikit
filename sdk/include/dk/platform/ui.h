@@ -47,8 +47,9 @@
 #include <stdint.h>
 #include <dk/gen/imports.h>
 
-/* Bytes of row text, terminator included. Longer text is cut. */
+/* Label limits include the terminator. Plain text rows in a list scroll when selected. */
 #define DK_UI_ROW 24
+#define DK_UI_LIST_TEXT 80
 /* Characters a toast shows. */
 #define DK_UI_TOAST 32
 
