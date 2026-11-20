@@ -3,7 +3,7 @@
 // feature-checked: a session without it gives spans only). Tests give a fake.
 import { spansPart, type SpansPart } from '../profile/profile-artifact.ts';
 
-import type { DspStats } from '@digi/dk-session';
+import { DkError, type DspStats } from '@digi/dk-session';
 
 export type { DspRow, DspStats } from '@digi/dk-session';
 
@@ -41,11 +41,17 @@ export function sessionStatsSource(
   nameOf: (s: { kind: 'module' | 'phase' | 'poll'; index: number }) => string,
 ): StatsSource {
   let dsp: boolean | undefined;
+  // only the runtime's answer to an unknown command (E_PROTO: this debug module has no PROFILE_DSP) means "no DSP stats"; a timeout, busy or not-ready target throws, so a
+  // calibration never silently becomes spans-only
   const hasDsp = async (): Promise<boolean> => {
-    dsp ??= await session.profileDsp('get').then(
-      () => true,
-      () => false,
-    );
+    if (dsp !== undefined) return dsp;
+    try {
+      await session.profileDsp('get');
+      dsp = true;
+    } catch (e) {
+      if (!(e instanceof DkError) || e.status !== 'E_PROTO') throw e;
+      dsp = false;
+    }
     return dsp;
   };
   return {
@@ -53,6 +59,9 @@ export function sessionStatsSource(
       return { dsp: await hasDsp(), spans: true };
     },
     async start() {
+      // counters an earlier run left on (a stale generation) are stopped first
+      await session.profileState('stop');
+      if (await hasDsp()) await session.profileDsp('stop');
       await session.profileState('reset');
       await session.profileState('start');
       if (await hasDsp()) {

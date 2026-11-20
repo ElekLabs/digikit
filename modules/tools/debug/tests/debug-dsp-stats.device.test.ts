@@ -30,15 +30,11 @@ const MACHINE_ROW = 0;
 const EFFECT_ROW = 8;
 
 /** No DSP_SWEEP event within `ms` of emulated time. A sweep whose last page was already on the way when the DSP stopped may still complete: it is drained once, then a second one fails. */
-async function expectNoSweepEvent(events: RuntimeEvents, ms: number, what: string): Promise<void> {
+/** Returns how many sweeps were drained first. */
+async function expectNoSweepEvent(events: RuntimeEvents, ms: number, what: string): Promise<number> {
   for (let drained = 0; ; drained++) {
     await events.listen();
-    try {
-      await events.until('DSP_SWEEP', undefined, { withinMs: ms });
-    } catch (e) {
-      if (/not seen within/.test(String(e))) return;
-      throw e;
-    }
+    if ((await events.tryUntil('DSP_SWEEP', undefined, { withinMs: ms })) === null) return drained;
     expect(drained, `${what}: a sweep appeared again`).toBeLessThan(1);
   }
 }
@@ -96,10 +92,11 @@ async function expectDspStats(rt: TestRuntime): Promise<void> {
 
   const stopped = await dk.profileDsp('stop');
   expect(stopped.on).toBe(false);
-  await expectNoSweepEvent(events, 2000, 'stopped: the mirror publishes no sweep');
+  const drained = await expectNoSweepEvent(events, 2000, 'stopped: the mirror publishes no sweep');
   const frozen = (await dk.profileDsp('get')).sweep!.number;
-  await expectNoSweepEvent(events, 2000, 'stopped: still none');
-  expect((await dk.profileDsp('get')).sweep!.number, 'stopped: the sweep number does not move').toBe(frozen);
+  // a sweep that was complete on the way when the DSP stopped may have been published first; none moves it after
+  if (drained === 0) expect(frozen, 'stopped: the sweep number does not move').toBe(stopped.sweep!.number);
+  else expect(frozen).toBeGreaterThan(stopped.sweep!.number);
 
   expect((await dk.profileDsp('clear')).sweep, 'a new clear generation drops the old sweep').toBeUndefined();
   await events.listen();

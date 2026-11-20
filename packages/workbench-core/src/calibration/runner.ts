@@ -220,7 +220,14 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
     throw new Error(
       'the target has DSP stats, and the runner waits for their DSP_SWEEP event: the rig needs the runtime log',
     );
+  if (!caps.dsp && profile.cases.some((c) => c.modules.length > 0))
+    throw new Error(
+      'the profile has module cases, and the target has no DSP stats (PROFILE_DSP): their captures would carry no DSP rows, so nothing is written',
+    );
   if (!caps.dsp) log('DSP stats are not available on this target (no PROFILE_DSP): the captures carry spans only');
+
+  // counters an earlier run left on would keep DSP_SWEEP in the log and count a stale generation: stop them first
+  await rig.stats.stop();
 
   // decide what runs before the target is touched: a skipped case installs and loads nothing
   const plan = resolved.map(({ c, ops }) => ({

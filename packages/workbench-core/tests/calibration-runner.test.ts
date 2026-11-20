@@ -120,6 +120,7 @@ test('a case plays its steps once and captures `repeats` times: start, warm up, 
   const f = fake();
   const res = await run(f.rig, base + `teardown = { steps = "off" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`);
   assert.deepEqual(f.log, [
+    'stats.stop', // counters an earlier run left on
     'midi 144,60,100',
     ...[1, 2].flatMap(() => [
       'stats.start',
@@ -173,6 +174,7 @@ test('markers make the steps between them the capture window, in place of captur
   const f = fake();
   await run(f.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "win"\n`);
   assert.deepEqual(f.log, [
+    'stats.stop',
     'stats.start',
     'pause 1000',
     'stats.clear',
@@ -364,7 +366,7 @@ test('after a MIDI step the runner waits until the target took it', async () => 
   const f = fake();
   f.rig.drained = async () => void f.log.push('drained');
   await run(f.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "hold"\n`);
-  assert.deepEqual(f.log.slice(0, 2), ['midi 144,60,100', 'drained']);
+  assert.deepEqual(f.log.slice(1, 3), ['midi 144,60,100', 'drained']);
 });
 
 test('the counters are stopped when a capture fails, and a capture is read after they stop', async () => {
@@ -374,4 +376,20 @@ test('the counters are stopped when a capture fails, and a capture is read after
   };
   await assert.rejects(run(f.rig, base + `[[case]]\nid = "stock"\nsteps = "hold"\n`), /clear failed/);
   assert.ok(f.log.includes('stats.stop'));
+});
+
+test('a profile with module cases is refused when the target has no DSP stats, before anything is written', async () => {
+  const f = fake();
+  f.rig.stats = { ...f.rig.stats, capabilities: async () => ({ dsp: false, spans: true }) };
+  const text =
+    base +
+    'modules = ["a/b"]\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "m"\nmodules = ["a/b"]\nsteps = "hold"\n';
+  const delivered: string[] = [];
+  await assert.rejects(run(f.rig, text, { onCapture: (c) => void delivered.push(c.file) }), /no DSP stats/);
+  assert.deepEqual([f.log, delivered], [[], []]);
+  // a stock-only profile may go on with spans only
+  const g = fake();
+  g.rig.stats = { ...g.rig.stats, capabilities: async () => ({ dsp: false, spans: true }) };
+  const [c] = await run(g.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "hold"\n`);
+  assert.equal(c!.captures.length, 1);
 });

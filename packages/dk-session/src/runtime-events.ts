@@ -123,6 +123,9 @@ export class LogCursor {
   }
 }
 
+/** `RuntimeEvents.until` ran out of time: the event was not seen. */
+export class EventTimeout extends Error {}
+
 export interface RuntimeEventsOptions {
   /** Real or clock milliseconds between polls, default 50. */
   pollMs?: number;
@@ -220,11 +223,25 @@ export class RuntimeEvents {
           return hit;
         }
         if ((await this.clock.now()) - start >= withinMs)
-          throw new Error(`events.until ${kind}: not seen within ${withinMs} ms. Last events:\n${this.seen()}`);
+          throw new EventTimeout(`events.until ${kind}: not seen within ${withinMs} ms. Last events:\n${this.seen()}`);
         await this.clock.pause(this.pollMs);
       }
     } catch (e) {
       await done(false);
+      throw e;
+    }
+  }
+
+  /** `until`, but `null` when the event is not seen in time (a wait for the absence of an event). Other failures still throw. */
+  async tryUntil(
+    kind: LogKindName,
+    match: (e: RuntimeEvent) => boolean = () => true,
+    opts: WaitOpts = {},
+  ): Promise<RuntimeEvent | null> {
+    try {
+      return await this.until(kind, match, opts);
+    } catch (e) {
+      if (e instanceof EventTimeout) return null;
       throw e;
     }
   }

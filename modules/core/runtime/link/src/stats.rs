@@ -131,7 +131,9 @@ impl Mirror {
         if !self.valid {
             return None;
         }
-        Some((self.seq, self.gen, self.buf[self.front][0]))
+        // checked: this runs in the block interrupt, which must not link a bounds-check panic
+        let blocks = *self.buf.get(self.front)?.first()?;
+        Some((self.seq, self.gen, blocks))
     }
 
     /// `seq` moves with every publish; written with volatile stores, read the same way, so that the reader's recheck stays.

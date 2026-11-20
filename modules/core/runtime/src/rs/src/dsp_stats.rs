@@ -88,8 +88,13 @@ pub unsafe extern "C" fn dkrt_dsp_stats_feed(tag: u32, a: u32, b: u32) -> u32 {
 /// A complete sweep was published (once per sweep, about every 50 blocks): the `DSP_SWEEP` event, so a host waits on it instead of polling PROFILE_DSP. `ev` masks
 /// interrupts itself, so this is safe from the block interrupt; the source is the owner of the span channel (the debug module), whose level filter applies.
 unsafe fn publish_event(m: &Mirror) {
+    let owner = dlog::span_owner();
+    // no owner: `ev` would take the source of the module the interrupt hit, so there is no event (the counters are about to stop with the owner anyway)
+    if owner == 0 {
+        return;
+    }
     if let Some((sweep, generation, blocks)) = m.published() {
-        let src = (dlog::span_owner() as u16) << dkrt_sdk::logk::SOURCE_SHIFT;
+        let src = (owner as u16) << dkrt_sdk::logk::SOURCE_SHIFT;
         dlog::ev(dkrt_sdk::logk::DSP_SWEEP, dlog::INFO | src, [sweep, generation as u32, blocks, 0, 0]);
     }
 }
