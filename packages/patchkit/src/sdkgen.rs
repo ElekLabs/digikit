@@ -3351,7 +3351,11 @@ pub fn generate(root: &std::path::Path) -> Result<Vec<(String, String)>> {
     files.extend(crate::abigen::render(&abi, &abi_inputs(&text)?)?);
     files.push((SVC_ABI_OUT.to_string(), svc_abi_rs(root)?));
     files.extend(gen_exports(&parse(&text)?, root)?);
-    let facts = crate::devgen::Facts::from_dir(&root.join("devices"))?;
-    files.push((C_KEYS_OUT.to_string(), crate::devgen::keys_h(&facts)?));
+    // the device files are read from disk: not in the browser build
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let facts = crate::devgen::Facts::from_dir(&root.join("devices"))?;
+        files.push((C_KEYS_OUT.to_string(), crate::devgen::keys_h(&facts)?));
+    }
     Ok(files)
 }

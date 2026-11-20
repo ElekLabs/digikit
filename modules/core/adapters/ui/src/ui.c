@@ -1122,6 +1122,16 @@ static void fwc_invert(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t
     dk_fw_draw_invert_rect((uint8_t *)bitmap, x0, y0, x1, y1, -1);
 }
 
+/* The anchors behind module screens (the text width, the View constructor, the naming screen and its callback vtable) are optional in module.toml: a firmware that
+   lacks them links 0. A module's view or text input is then refused (`dk_ui_view_open` returns 0, `dk_ui_text_input` DK_E_CONTRACT) instead of calling address 0. The
+   pointers go through volatile objects so that the compiler does not fold the test (a symbol's address is never 0 to it). */
+static int fw_screens(void)
+{
+    void *volatile p[4] = {(void *)dk_fw_text_width, (void *)dk_fw_view_view_ctor,
+                           (void *)dk_fw_window_name_ctor, (void *)&fw_name_cb_vt};
+    return p[0] && p[1] && p[2] && p[3];
+}
+
 /* The width routine takes the font data and a std::string (a pointer to the one-word COW object). */
 static int32_t fwc_text_width(const char *s)
 {
@@ -1208,6 +1218,8 @@ static void own_view_vtable(uint8_t *obj)
 static uint32_t fwv_push(void *fw, uint32_t slot, int overlay)
 {
     (void)fw;
+    if (!fw_screens())
+        return 0;
     uint8_t *blk = new_block(VIEW_OBJ_SIZE, &fw_confirm_cb_vt);
     if (!blk)
         return 0;
@@ -1316,6 +1328,8 @@ static int32_t fwt_push(void *fw, const dk_ui_text_input_desc *d, const char *in
                         uint32_t serial)
 {
     (void)fw;
+    if (!fw_screens())
+        return DK_E_CONTRACT;
     uint8_t *blk = new_block(sizeof(NameView), &fw_name_cb_vt);
     if (!blk)
         return DK_E_NOMEM;

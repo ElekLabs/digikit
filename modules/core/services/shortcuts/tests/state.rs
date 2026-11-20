@@ -359,10 +359,30 @@ fn the_firmware_flags_become_release_repeat_or_press() {
         let b = p.key_flags;
         let bit = |n: u8| 1u32 << n;
         assert_eq!(classify_flags(&p, bit(b.press)), 0, "{}: press", p.name);
-        assert_eq!(classify_flags(&p, bit(b.press) | bit(b.func)), 0, "{}: press with FUNC", p.name);
-        assert_eq!(classify_flags(&p, bit(b.press) | bit(b.repeat)), REPEAT, "{}: repeat", p.name);
-        assert_eq!(classify_flags(&p, bit(b.release)), RELEASE, "{}: release", p.name);
+        assert_eq!(
+            classify_flags(&p, bit(b.press) | bit(b.func)),
+            0,
+            "{}: press with FUNC",
+            p.name
+        );
+        assert_eq!(
+            classify_flags(&p, bit(b.press) | bit(b.repeat)),
+            REPEAT,
+            "{}: repeat",
+            p.name
+        );
+        assert_eq!(
+            classify_flags(&p, bit(b.release)),
+            RELEASE,
+            "{}: release",
+            p.name
+        );
         assert_eq!(classify_flags(&p, 0), RELEASE, "{}: no bit", p.name);
-        assert_eq!(classify_flags(&p, bit(b.repeat)), RELEASE, "{}: a clear press bit is a release", p.name);
+        assert_eq!(
+            classify_flags(&p, bit(b.repeat)),
+            RELEASE,
+            "{}: a clear press bit is a release",
+            p.name
+        );
     }
 }

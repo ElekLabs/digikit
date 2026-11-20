@@ -1542,10 +1542,26 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         let _ = key;
     }
     for (name, value, note) in [
-        ("KEY_FLAG_PRESS", inp.key_flags[0], "[input.key_flags] press (set on a press, clear on a release)"),
-        ("KEY_FLAG_FUNC", inp.key_flags[1], "[input.key_flags] func (set while FUNC is held)"),
-        ("KEY_FLAG_REPEAT", inp.key_flags[2], "[input.key_flags] repeat (a held key repeating)"),
-        ("KEY_FLAG_RELEASE", inp.key_flags[3], "[input.key_flags] release (set on a release)"),
+        (
+            "KEY_FLAG_PRESS",
+            inp.key_flags[0],
+            "[input.key_flags] press (set on a press, clear on a release)",
+        ),
+        (
+            "KEY_FLAG_FUNC",
+            inp.key_flags[1],
+            "[input.key_flags] func (set while FUNC is held)",
+        ),
+        (
+            "KEY_FLAG_REPEAT",
+            inp.key_flags[2],
+            "[input.key_flags] repeat (a held key repeating)",
+        ),
+        (
+            "KEY_FLAG_RELEASE",
+            inp.key_flags[3],
+            "[input.key_flags] release (set on a release)",
+        ),
     ] {
         v.push(c(name, value, note));
     }
@@ -2070,7 +2086,7 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
         };
         let _ = writeln!(
             s,
-            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n    key_flags: KeyFlagBits {{ press: {}, func: {}, repeat: {}, release: {} }},\n}};",
+            "\n/// `{dev}`: the device files' facts: [digikit] id, name, sample_path_max, keep_*, safe_key, [board], [capabilities], [card.store] and the DSP headroom and voices.\npub const {up}: DeviceProfile = DeviceProfile {{\n    id: {},\n    name: {},\n    samples_in_store: {},\n    sample_path_max: {},\n    dsp_headroom: {},\n    dsp_voices: {},\n    has_dsp: {},\n    has_store: {},\n    has_sdhc: {},\n    safe_key: {safe_key},\n    ddr_base: {},\n    ddr_bytes: {},\n    keep_base: {},\n    keep_bytes: {},\n    esdhc_base: {},\n    dsp_block_cycles: {},\n    dyn_type_first: {},\n    dyn_types: {},\n    tracks: {},\n    key_codes: {key_codes},\n    key_flags: KeyFlagBits {{\n        press: {},\n        func: {},\n        repeat: {},\n        release: {},\n    }},\n}};",
             v("DEVICE_ID")?,
             hex(v("DEVICE_NAME_WORD")? as i64),
             e.digikit.samples_in_store,

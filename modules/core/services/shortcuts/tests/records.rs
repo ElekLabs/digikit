@@ -323,7 +323,7 @@ fn a_second_module_with_the_same_keys_loads_with_its_shortcut_disabled_and_a_log
         .calls()
         .into_iter()
         .filter_map(|c| match c {
-            Call::Log { kind, args } => Some((kind, args)),
+            Call::Log { kind, args, .. } => Some((kind, args)),
             _ => None,
         })
         .collect();
@@ -466,14 +466,8 @@ fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
     assert!(CALLS.lock().unwrap().is_empty());
     pass(dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on"]);
-    assert_eq!(
-        on_key(&core, p.key_code(yes), up),
-        Verdict::Swallow
-    );
-    assert_eq!(
-        on_key(&core, p.key_code(trk), up),
-        Verdict::Pass
-    );
+    assert_eq!(on_key(&core, p.key_code(yes), up), Verdict::Swallow);
+    assert_eq!(on_key(&core, p.key_code(trk), up), Verdict::Pass);
     pass(dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on", "off"]);
     // a device the table does not know passes everything
@@ -499,7 +493,7 @@ fn a_binding_with_a_key_the_device_lacks_is_disabled_and_never_keeps_the_pair() 
         core.calls()
             .into_iter()
             .filter_map(|c| match c {
-                Call::Log { kind, args } => Some((kind, args)),
+                Call::Log { kind, args, .. } => Some((kind, args)),
                 _ => None,
             })
             .collect()

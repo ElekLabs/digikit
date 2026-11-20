@@ -118,6 +118,7 @@ fn fixture(device: u32) -> Fixture {
         parks_rows: false,
         kept: |_, _, _| false,
         kept_dsp: |_, _, _| false,
+        rows: Rows::NONE,
         absent_rows: None,
         live: None,
         salt_same: &[

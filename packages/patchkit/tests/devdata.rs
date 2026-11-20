@@ -65,27 +65,27 @@ fn the_runtime_constants_are_the_device_files_numbers() {
     let common = [
         "0x444b4456", // magic
         "0x1",        // version
-        "0x140",      // size: the header words, the facts, `tracks` and the 64 key codes
-        "0xf",        // caps: DSP, store, eSDHC, safe key
+        "0x150", // size: the header words, the facts, `tracks`, the 64 key codes and the four key flag bits
+        "0xf",   // caps: DSP, store, eSDHC, safe key
         "0xec070000", // console UART
         "0x48000000", // uncached alias
         "0x40000000", // cached base
-        "0x8000000",  // DDR bytes
+        "0x8000000", // DDR bytes
         "0xfc0cc000", // eSDHC
-        "0x13",       // safe key
+        "0x13",  // safe key
         "0x47fe0000", // keep base
-        "0x1000",     // keep bytes
-        "0xa2c2b",    // DSP cycles in a block
-        "0x10",       // first run-time machine type
-        "0x8",        // run-time machine types
-        "0x10",       // tracks
+        "0x1000", // keep bytes
+        "0xa2c2b", // DSP cycles in a block
+        "0x10",  // first run-time machine type
+        "0x8",   // run-time machine types
+        "0x10",  // tracks
     ];
     // both devices have the same numbers today (the key codes after them differ: `the_key_map_...`)
     assert_eq!(objects.len(), 2);
     assert!(
         objects
             .iter()
-            .all(|o| o.len() == 0x140 / 4 && o[..common.len()] == common),
+            .all(|o| o.len() == 0x150 / 4 && o[..common.len()] == common),
         "{objects:?}"
     );
     let offsets = get("build/gen/dkdv-offsets.inc");
@@ -1091,17 +1091,25 @@ fn the_key_flag_table_is_generated_and_checked() {
     };
     let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
     let facts = Facts::from_texts([st.as_str()]).unwrap();
+    // core/ui reads the press and release bits; the device object has all four (after the key codes)
     let inc = ui_constants(&lib, &facts, "ui-st.inc");
-    for (name, value) in [
-        ("KEY_FLAG_PRESS", "0x0"),
-        ("KEY_FLAG_FUNC", "0x1"),
-        ("KEY_FLAG_REPEAT", "0x3"),
-        ("KEY_FLAG_RELEASE", "0x4"),
-    ] {
-        assert!(inc.contains(&format!(".equ {name}, {value} ")), "{name}\n{inc}");
+    for (name, value) in [("KEY_FLAG_PRESS", "0x0"), ("KEY_FLAG_RELEASE", "0x4")] {
+        assert!(
+            inc.contains(&format!(".equ {name}, {value} ")),
+            "{name}\n{inc}"
+        );
     }
+    let object = device_object(&facts, "st");
+    assert_eq!(
+        object[object.len() - 4..],
+        [0, 1, 3, 4],
+        "press, func, repeat, release"
+    );
     let bad = st.replace("release = 4", "release = 32");
-    let e = Facts::from_texts([bad.as_str()]).err().expect("32 is refused").0;
+    let e = Facts::from_texts([bad.as_str()])
+        .err()
+        .expect("32 is refused")
+        .0;
     assert!(e.contains("release = 32"), "{e}");
     let bad = st.replace("release = 4", "release = 3");
     let e = Facts::from_texts([bad.as_str()]).err().expect("a clash").0;
@@ -1109,7 +1117,10 @@ fn the_key_flag_table_is_generated_and_checked() {
     let start = st.find("[input.key_flags]").unwrap();
     let end = st[start..].find("\n\n").map_or(st.len(), |n| start + n);
     let without = format!("{}{}", &st[..start], &st[end..]);
-    let e = Facts::from_texts([without.as_str()]).err().expect("required").0;
+    let e = Facts::from_texts([without.as_str()])
+        .err()
+        .expect("required")
+        .0;
     assert!(e.contains("[input.key_flags]"), "{e}");
 }
 

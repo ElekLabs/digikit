@@ -542,7 +542,7 @@
   "packages/patchkit/src/verify.rs": 1,
   "packages/patchkit/tests/codec.rs": 2,
   "packages/patchkit/tests/conflicts.rs": 9,
-  "packages/patchkit/tests/devdata.rs": 158,
+  "packages/patchkit/tests/devdata.rs": 159,
   "packages/patchkit/tests/dynamic.rs": 6,
   "packages/patchkit/tests/flash.rs": 40,
   "packages/patchkit/tests/frameworks.rs": 13,
