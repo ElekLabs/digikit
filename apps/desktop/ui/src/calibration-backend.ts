@@ -4,11 +4,14 @@
 // test gives fakes. The preview replaces this module (preview/calibration-backend.mock.ts).
 import type { DkSession, MidiSink } from '@digi/dk-session';
 import { emuMidiSink } from '@digi/dk-session';
+import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { profileTracks } from '@digi/workbench-core/calibration/runner.ts';
 import type { DkProf } from '@digi/dk-session/dkprof';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
 import type { CalProfile } from '@digi/workbench-core/calibration/calprofile.ts';
 import {
+  deviceOfInfo,
   runCalibrationOnTarget,
   type RunOptions,
   type RunOutcome,
@@ -49,6 +52,8 @@ export interface ProfileChoice {
 
 export interface Calibrator {
   profiles(): ProfileChoice[];
+  /** The tracks (1 to 16) the profile uses on the pane's target: a run puts them on the stock machine to start and leaves them there. */
+  tracks?(name: string): Promise<number[]>;
   run(opts: RunOptions): Promise<RunOutcome>;
   fit(emu: CaptureSet, dev: CaptureSet): Promise<CalibrationDoc>;
 }
@@ -64,6 +69,11 @@ export function createCalibrator(deps: CalibrationDeps): Calibrator {
         seconds: p.cases.length * p.repeats * (p.warmup_s + p.capture_s),
         profile: p,
       })),
+    async tracks(name) {
+      const profile = files().profiles.find((p) => p.name === name);
+      const midi = registry.get(deviceOfInfo((await (await deps.session()).info()).port)).midi;
+      return profile && midi ? profileTracks(profile, files().steps, midi) : [];
+    },
     async run(opts) {
       const session = await deps.session();
       const emulator = !!deps.rpc;

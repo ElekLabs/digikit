@@ -165,9 +165,9 @@ test('with the debug log a machine step is a SETUP request for the machine type 
   let t = 0;
   (f.deps.session as unknown as { clock: Clock }).clock.now = async () => (t += 1000);
   const out = await runCalibrationOnTarget({ ...f.deps, files: withMachine }, { profile: 'm' });
-  // the request was made for the module's own type and the 0-based track, and its SETUP_DONE was awaited
-  assert.deepEqual(setups, [['machine', 2, 17]]);
-  assert.match(out.error ?? '', /SETUP_DONE/);
+  // the run starts by putting the first used track on the stock machine (0-based track 0, type 0) and awaits its SETUP_DONE, which this log never holds: the run refuses up front
+  assert.deepEqual(setups, [['machine', 0, 0]]);
+  assert.match(out.error ?? '', /stock machine before the first case.*SETUP_DONE/s);
   assert.deepEqual(
     out.skipped.map((x) => x.case),
     [],
@@ -275,7 +275,7 @@ test('the default stable period is the runtime ABI constant', () => {
   assert.equal(DEFAULT_STABLE_BLOCKS, Number(m![1]));
 });
 
-test('the machine step remembers the type the firmware reported as the old one and puts it back with `original`', async () => {
+test('the machine step sets a number as the type and a module id as its first reported type; it restores nothing', async () => {
   const sent: [string, number, number][] = [];
   const session = {
     modules: async () => [{ name: 'a/b', types: [17] }],
@@ -286,18 +286,16 @@ test('the machine step remembers the type the firmware reported as the old one a
   };
   const clock: Clock = { now: async () => 0, pause: async () => {} };
   const events = {
-    // SETUP_DONE of the request, and the watch's MACHINE_CHANGE of the first one: track 3 had type 2
     until: async () => ({ fields: { seq: sent.length, status: 0 } }),
-    tryUntil: async () => ({ fields: { track: 3, new_type: 17, old_type: 2 } }),
+    tryUntil: async () => undefined,
   };
   const setup = sessionSetup(session as never, events as never, clock);
   await setup('machine', 3, 'a/b');
-  await setup('machine', 3, 'original');
+  await setup('machine', 3, 0);
   assert.deepEqual(sent, [
     ['machine', 2, 17],
-    ['machine', 2, 2],
+    ['machine', 2, 0],
   ]);
-  await assert.rejects(setup('machine', 5, 'original'), /none to put back/);
 });
 
 test('a module case whose module has no build for the target is skipped with that reason and the rest of the profile runs', async () => {
