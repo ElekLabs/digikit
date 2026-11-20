@@ -37,7 +37,7 @@ export default function CalibrationPanel(props: {
   const onEmulator = () => readsEmulator() || target().kind === 'emulator';
   const prof = props.host ? createDkProfLoader(props.host) : undefined;
 
-  // the device of the target, from its INFO port (`dn2-1.12`)
+  // the device of the target, from its INFO port (`<id>-<version>`)
   const [port, setPort] = createSignal('');
   let latest: object | undefined;
   createEffect(() => {

@@ -16,7 +16,7 @@ export interface ActiveCalibration {
 
 const KEY = (device: string) => `digikit.calibration.${device}`;
 
-/** Read a calibration file for `device` (a device id: `dn2`), or the reason it cannot be used. */
+/** Read a calibration file for `device` (a device id), or the reason it cannot be used. */
 export function checkCalibration(
   text: string,
   device: string | undefined,
@@ -116,7 +116,7 @@ export function estimateDsp(view: DspView, cal: CalibrationDoc): Estimate | unde
   };
 }
 
-/** `calibrated: DN2 1.12, fit 1.31 ±1.3 %` */
+/** `calibrated: <name> <version>, fit 1.31 ±1.3 %` */
 export function calibrationChip(deviceName: string, cal: CalibrationDoc): string {
   const d = cal.dsp;
   return `calibrated: ${deviceName}, fit ${fmtFactor(d?.factor.fit)} ±${((d?.error.worst_under ?? 0) * 100).toFixed(1)} %`;
