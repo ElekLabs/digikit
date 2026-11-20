@@ -14,9 +14,14 @@ State lives under ``out/native/pgo/dn2/<host-triple>/`` (ignored by git):
 The hosts (app, ``coupled-run``, ``digi-emud``) hold no generated core: the DSP hot loop (the generated blocks and
 interpreter of a device) runs in the core library that the host loads from the store. Training covers both: every
 ``train`` builds the host AND the core library of each device it runs instrumented (``-Cprofile-generate``, the library
-through ``core_store.build_plan(instrument=...)``, in its own target dir, never a store entry), runs the workload with
-``DIGI_SHARC_CORE_LIB_<DEV>`` naming the instrumented libraries, and merges the ``.profraw`` files of the host and the
-libraries into one profile per training target (the libraries write theirs through the same ``LLVM_PROFILE_FILE``). The
+through ``core_store.build_plan(instrument=...)``), runs the workload with ``DIGI_SHARC_CORE_LIB_<DEV>`` naming the
+instrumented libraries, and merges the ``.profraw`` files of the host and the libraries into one profile per training
+target (the libraries write theirs through the same ``LLVM_PROFILE_FILE``, into ``state/raw-<pid>``, removed after the
+merge). The ``-Cprofile-generate`` directory in the flags is fixed per target dir, so cargo keeps its builds between
+trainings (`mise run perf:pgo` trains dn2, dt2, then both). An instrumented library is built once per key in the lane and kept in the store
+``<git common dir>/sharc-core-pgo-instrument`` (the key holds no lane path), so every training and every lane restores it.
+``train`` skips a device whose profile for the current key exists (``--force`` trains again; a workload edit that keeps
+the workload name needs ``--force``). Every manifest has ``phase_seconds``. The
 profile is used twice: ``-Cprofile-use`` for the host (the launcher's ``pgo-use`` build) and for the library of each
 device it covers (``profile_devices``: ``dn2`` the DN2 library, ``dt2`` the DT2 one, ``both`` both). A profile-guided
 library is a store entry whose key holds the profile content (``core_store.build_plan(profdata=...)``;
@@ -179,6 +184,30 @@ def generated_dir(
     environ: dict[str, str] | os._Environ[str] | None = None,
 ) -> pathlib.Path:
     return digi_env.generated_dir(environ)
+
+
+def device_generated(
+    device: str, environ: dict[str, str] | os._Environ[str] | None = None
+) -> pathlib.Path:
+    """The generated core a profile of DEVICE is keyed with: the one resolution of training, lookup and `coupled-build`
+    (a pure lookup: no card build, no ready state).
+
+    dn2: :func:`generated_dir`. both: its DN2 core (:func:`both_generated`, which also takes SHARC_GEN_DIR_DN2 and the
+    registered core). dt2: SHARC_GEN_DIR_DT2, else the core registered for the DT2 ready DSP image (the card-ready state
+    holds the same image). The launcher's SHARC_GEN_DIR is the DN2 core and never decides for dt2. Raises SystemExit when
+    no DT2 core is known."""
+    environ = os.environ if environ is None else environ
+    if device == BOTH:
+        return both_generated(environ)[0]
+    if device == "dt2":
+        found = second_generated(environ)
+        if found is None:
+            raise SystemExit(
+                "no generated DT2 core registered for the DT2 DSP image "
+                "(mise run perf:aot -- dt2 --card-image IMG, or set SHARC_GEN_DIR_DT2)"
+            )
+        return found
+    return generated_dir(environ)
 
 
 def second_generated(
@@ -599,9 +628,23 @@ def current_profile(
     return str(path) if path.is_file() else None
 
 
+# Top-level entries of the desktop crate that do not change its compiled Rust code: `gen/` is rewritten by every tauri
+# build (schemas, gitignored), `icons/` and `project.json` (Nx) are no code. The UI build output (`apps/desktop/ui/dist`)
+# lies outside the crate and is never hashed.
+DESKTOP_NON_CODE = {"gen", "icons", "project.json"}
+
+
 def desktop_digest(hasher: FileHasher) -> str:
-    """Digest of the desktop crate: recorded for reporting, not part of the key."""
-    return tree_digest(hasher, ROOT / DESKTOP_DIR, ROOT, set())[0]
+    """Digest of the desktop crate's code inputs (see DESKTOP_NON_CODE). It decides whether a dn2 training is current
+    (`current_training`), because the dn2 training builds this crate; it is not part of the profile key."""
+    top = ROOT / DESKTOP_DIR
+    outer = hashlib.sha256()
+    for path in tree_files(top):
+        rel = path.relative_to(top)
+        if rel.parts[0] in DESKTOP_NON_CODE:
+            continue
+        outer.update(f"{path.relative_to(ROOT)}\0{hasher.digest(path)}\n".encode())
+    return outer.hexdigest()
 
 
 @dataclasses.dataclass
@@ -774,8 +817,12 @@ def pgo_state(
         return "off", ""
     if environ.get("RUSTFLAGS") or environ.get("CARGO_ENCODED_RUSTFLAGS"):
         return "skipped", "RUSTFLAGS is set"
+    try:
+        gen = device_generated(device, environ)
+    except SystemExit as exc:
+        return "missing", str(exc)
     return check(
-        generated_dir(environ),
+        gen,
         environ.get("SHARC_FAST_REGIONS", ""),
         environ.get("SHARC_BLOCKTRANS", ""),
         device,
@@ -937,7 +984,7 @@ def stale_notice(detail: str = "", device: str = "dn2") -> str:
     return (
         "WARNING: native PGO: profile is stale for this core; building without PGO "
         "(about 30% slower DSP). Retrain with "
-        "`mise run perf:pgo` (all three), `mise run perf:pgo:dn2`, `mise run perf:pgo:dt2` or "
+        "`mise run perf:pgo` (dn2, dt2 and both), `mise run perf:pgo:dn2`, `mise run perf:pgo:dt2` or "
         "`mise run perf:pgo:both` (the two-core desktop build; "
         "`uv run python -m tools.emulator.native_pgo train --device both`)."
     )
@@ -989,7 +1036,7 @@ def launch_plan(
     if status == "partial":
         profile = current_profile(
             device,
-            generated_dir(environ),
+            device_generated(device, environ),
             second_generated(environ) if device == BOTH else None,
         )
         if profile:
@@ -1306,84 +1353,235 @@ def require_inputs(gen: pathlib.Path) -> None:
             raise SystemExit(f"missing private input {path}")
 
 
-def fresh_raw_dir(target: pathlib.Path) -> pathlib.Path:
-    """An empty directory for the training's .profraw files, inside the instrumented target dir.
+class Phases:
+    """Wall seconds per training step: printed as each ends (so they are in the log) and recorded in the manifest."""
 
-    Its path is part of the instrumented build's RUSTFLAGS (``-Cprofile-generate=``), and
-    cargo rebuilds every crate, the 80 MB generated core included, when the flags change.
-    A path named by the profile key changed with every source edit; this one is stable per
-    target dir (a worktree has its own), so only the edited crates rebuild. It is cleared at
-    the start of each training so files of an earlier one never mix in.
+    def __init__(self) -> None:
+        self.seconds: dict[str, float] = {}
+        self._t = time.monotonic()
+        self._start = self._t
+
+    def done(self, name: str) -> None:
+        now = time.monotonic()
+        self.seconds[name] = round(now - self._t, 2)
+        self._t = now
+        print(f"phase {name}: {self.seconds[name]} s", flush=True)
+
+    def total(self) -> float:
+        return round(time.monotonic() - self._start, 1)
+
+
+def flag_raw_dir(target: pathlib.Path) -> pathlib.Path:
+    """The fixed `-Cprofile-generate=` directory of an instrumented host target dir.
+
+    The path is part of the build's RUSTFLAGS, and cargo rebuilds every crate when the flags change, so it must be the
+    same in every training. Nothing is written here: a training names its own output through LLVM_PROFILE_FILE, which
+    wins over this path (see `fresh_run_dir`).
     """
     raw = target / "profraw"
-    shutil.rmtree(raw, ignore_errors=True)
-    raw.mkdir(parents=True)
+    raw.mkdir(parents=True, exist_ok=True)
     return raw
 
 
-def build_instrumented_library(
-    device: str, raw: pathlib.Path, gen: pathlib.Path, log: pathlib.Path
+def fresh_run_dir(state: pathlib.Path) -> pathlib.Path:
+    """An empty directory for the .profraw files of this training only (LLVM_PROFILE_FILE), under the state dir, so
+    two trainings never mix files and nothing is cleared inside a cargo target dir. `native_pgo clean` collects the
+    directory of a crashed run (``raw-*``)."""
+    run = state / f"raw-{os.getpid()}"
+    shutil.rmtree(run, ignore_errors=True)
+    run.mkdir(parents=True)
+    return run
+
+
+def library_raw_dir(device: str, gen: pathlib.Path) -> pathlib.Path:
+    """The fixed `-Cprofile-generate=` directory of DEVICE's instrumented library: one per library target dir, never
+    cleared and never read. A training names its own output through LLVM_PROFILE_FILE, which wins over this path, so the
+    flag is identical in every training and cargo keeps the compiled library."""
+    return native_target().target_dir(gen, "pgo-lib-instrument") / "profraw"
+
+
+def instrumented_library(
+    device: str, gen: pathlib.Path, log: pathlib.Path
 ) -> pathlib.Path:
-    """The core library of DEVICE built with `-Cprofile-generate=RAW` (its own target dir, never a store entry). A training
-    run loads it through `DIGI_SHARC_CORE_LIB_<DEV>`: the profile then holds the counters of the DSP hot loop, which runs in
-    the library, beside those of the host."""
-    from tools.devtools import core_store
+    """DEVICE's core library built with `-Cprofile-generate` (a fixed dir, see library_raw_dir): restored from the
+    instrument store when its key is there, else built once in the lane's pgo-lib-instrument dir and inserted. A training
+    run loads it through DIGI_SHARC_CORE_LIB_<DEV>; the profile then holds the counters of the DSP hot loop."""
+    import functools
+
+    from tools.devtools import core_store, emud_key
 
     digi_env.check_generated(gen)
-    plan = core_store.build_plan(device, gen=gen, instrument=raw)
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with (
-        benchlock("shared", f"pgo instrumented {device} core library"),
-        log.open("w") as handle,
-    ):
-        done = subprocess.run(
-            plan.argv, cwd=ROOT, env=plan.env, stdout=handle, stderr=subprocess.STDOUT
+
+    def resolve():
+        plan = core_store.build_plan(
+            device, gen=gen, instrument=library_raw_dir(device, gen)
         )
-    if done.returncode or not plan.library.is_file():
-        tail = "".join(log.read_text().splitlines(keepends=True)[-30:])
+        return plan, core_store.key_inputs(
+            plan, digi_env.TRIPLE, emud_key.rustc_version()
+        )
+
+    try:
+        return core_store.ensure_core(
+            device,
+            core_store.instrument_store_root(),
+            resolve=resolve,
+            build=functools.partial(core_store.build_core, log=log),
+            worktrees=[],  # no pins in this store; `store.evict` keeps the last KEEP keys
+        )
+    except core_store.CoreStoreError as exc:
         raise SystemExit(
-            f"instrumented {device} core library failed (see {log}):\n{tail}"
+            f"instrumented {device} core library failed (see {log}): {exc}"
+        ) from exc
+
+
+def fixture_content(records: dict | None) -> dict | None:
+    """The part of fixture records that says what the runs replay (not where the fixture lies: a lane has its own copy)."""
+    if records is None:
+        return None
+    return {
+        name: {
+            "sha256": (record or {}).get("sha256"),
+            "firmware_version": (record or {}).get("firmware_version"),
+        }
+        for name, record in records.items()
+    }
+
+
+def current_training(
+    device: str,
+    key: str,
+    force: bool,
+    set_current: bool,
+    inputs: dict,
+    desktop: str | None = None,
+    fixtures: dict | None = None,
+) -> bool:
+    """True when `by-key/<key>.json` has its profile file and nothing the key does not cover differs: the training is skipped.
+
+    The key covers sources, workspace, gen, rustc, triple, features and the workload NAME. The manifest also records what
+    the key leaves out (:func:`training_inputs`: workload files, ready inputs and card, region lists), the desktop digest
+    (dn2) and the fixture content (both); all are compared here, and a manifest without them is not current. A workload
+    that changes in a way none of them sees needs --force. Nothing is written unless SET_CURRENT applies."""
+    if force:
+        return False
+    manifest = read_by_key(device, key)
+    if manifest is None or not profdata_path(manifest, device).is_file():
+        return False
+    if manifest.get("inputs") != inputs:
+        return False
+    if desktop is not None and manifest.get("desktop_sha256") != desktop:
+        return False
+    if fixtures is not None and fixture_content(
+        manifest.get("fixtures")
+    ) != fixture_content(fixtures):
+        return False
+    if set_current:
+        save_manifest(
+            device, manifest, True
+        )  # --set-current(-at-main) still applies to an existing profile
+    print(
+        f"{device} profile {key[:16]} is current: training skipped (--force trains again)",
+        flush=True,
+    )
+    return True
+
+
+def text_digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def training_inputs(
+    device: str, hasher: FileHasher, regions: object, runs: int
+) -> dict[str, object]:
+    """Digests of what a training of DEVICE reads that the profile key does not hold: the scenario files it plays, the ready
+    inputs (and card) it boots, and the region lists (REGIONS: they decide which DSP code runs as generated blocks, so they
+    shape the counters), and the run settings (RUNS and the workload lists). Stored in the manifest as `inputs` and compared by :func:`current_training`. The scenario files
+    are hashed alone: what they import is not followed."""
+    scenarios = {
+        "dn2": [],
+        "dt2": [f for f, _ in DT2_WORKLOAD],
+        BOTH: [f for f, _ in (*DN2_WORKLOAD, *DT2_WORKLOAD)]
+        + [f for f, _, _ in REPLAYS.values()],
+    }[device]
+    workload = {
+        "dn2": [WORKLOAD, EXPECTED_FRAMES],
+        "dt2": DT2_WORKLOAD,
+        BOTH: [DN2_WORKLOAD, DT2_WORKLOAD, REPLAYS],
+    }[device]
+    ready: dict[str, pathlib.Path] = {}
+    if device in ("dn2", BOTH):
+        ready.update(
+            {f"dn2 {k}": v for k, v in digi_env.ready_inputs(device="dn2").items()}
         )
-    return plan.library
+    if device == "dn2":
+        for path in tree_files(
+            pathlib.Path(os.environ.get("DIGI_COUPLED_FIXTURES", str(READY)))
+        ):
+            ready[f"fixtures {path.name}"] = path
+    if device in ("dt2", BOTH):
+        from tools.emulator import dt2_sample_check
+
+        found, card_args = dt2_sample_check.card_inputs()
+        ready.update({f"dt2 {k}": v for k, v in found.items()})
+        ready["dt2 card"] = pathlib.Path(card_args[card_args.index("--card-image") + 1])
+    return {
+        "scenarios": {f: hasher.digest(ROOT / f) for f in sorted(set(scenarios))},
+        "ready": {
+            name: hasher.digest(pathlib.Path(path))
+            for name, path in sorted(ready.items())
+        },
+        "regions": text_digest(regions),
+        "runs": runs,
+        "workload": text_digest(workload),
+    }
+
+
+def dt2_fast_env() -> dict[str, str]:
+    """The region lists and block-translation roots a DT2 training run gets."""
+    return {
+        key: value
+        for key, value in coupled_module()
+        .run_env(syx=coupled_module().inputs("dt2")["firmware"])
+        .items()
+        if key.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
+    }
 
 
 def cmd_train(args: argparse.Namespace) -> None:
     gen = generated_dir()
     require_inputs(gen)
     state = state_dir()
-    timings: dict[str, float] = {}
-    started = time.monotonic()
-
-    def phase(name: str, since: float) -> float:
-        now = time.monotonic()
-        timings[name] = round(now - since, 2)
-        print(f"phase {name}: {timings[name]} s", flush=True)
-        return now
-
-    t = time.monotonic()
+    phases = Phases()
     packages = local_package_dirs()
     hasher = FileHasher(state / "hash-cache.json")
     fast = fast_regions()
     blocktrans = blocktrans_roots()
     components, nfiles = compute_components(packages, gen, hasher, fast, blocktrans)
     desktop = desktop_digest(hasher)
+    inputs = training_inputs(
+        "dn2", hasher, [fast, fallback_regions(), blocktrans], args.runs
+    )
     hasher.save()
     key = key_of(components)
-    t = phase("key", t)
+    phases.done("key")
+    if current_training(
+        "dn2", key, args.force, args.set_current, inputs, desktop=desktop
+    ):
+        return
 
     target = native_target().target_dir("", "pgo-instrument")
-    raw = fresh_raw_dir(target)
+    flag = flag_raw_dir(target)
     binary = build_tests(
         target,
-        f"-Cprofile-generate={raw}",
+        f"-Cprofile-generate={flag}",
         gen,
         state / "instrument-build.log",
         app=True,
     )
-    library = build_instrumented_library(
-        "dn2", raw, gen, state / "instrument-lib-dn2.log"
-    )
-    t = phase("instrumented-build", t)
+    phases.done("host-build")
+    library = instrumented_library("dn2", gen, state / "instrument-lib-dn2.log")
+    phases.done("library-dn2")
+    run_dir = fresh_run_dir(state)
 
     gates = []
     for number in range(1, args.runs + 1):
@@ -1392,7 +1590,7 @@ def cmd_train(args: argparse.Namespace) -> None:
                 binary,
                 state / f"train-{number}.log",
                 {
-                    "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
+                    "LLVM_PROFILE_FILE": str(run_dir / f"train-{number}-%m.profraw"),
                     "DIGI_SHARC_CORE_LIB_DN2": str(library),
                     "SHARC_FAST_REGIONS": fast,
                     "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
@@ -1405,10 +1603,10 @@ def cmd_train(args: argparse.Namespace) -> None:
             f"train run {number}: elapsed {result.elapsed:.3f} s frames {result.frames}",
             flush=True,
         )
-    t = phase("training-runs", t)
+    phases.done("runs")
 
-    merged = raw / "merged.profdata"
-    raws = sorted(str(p) for p in raw.glob("*.profraw"))
+    merged = run_dir / "merged.profdata"
+    raws = sorted(str(p) for p in run_dir.glob("*.profraw"))
     if not raws:
         raise SystemExit("training produced no .profraw files")
     merge = [str(llvm_profdata()), "merge", "-o", str(merged), *raws]
@@ -1418,14 +1616,15 @@ def cmd_train(args: argparse.Namespace) -> None:
     profiles.mkdir(parents=True, exist_ok=True)
     final = profiles / f"{digest}.profdata"
     shutil.move(str(merged), final)
-    shutil.rmtree(raw, ignore_errors=True)
-    t = phase("merge", t)
+    shutil.rmtree(run_dir, ignore_errors=True)
+    phases.done("merge")
 
     manifest = {
         "key": key,
         "components": components,
         "packages": packages,
         "desktop_sha256": desktop,
+        "inputs": inputs,
         "generated_dir": str(gen),
         "fallback_regions": fallback_regions(),
         "fast_regions": fast,
@@ -1441,19 +1640,19 @@ def cmd_train(args: argparse.Namespace) -> None:
             "size": final.stat().st_size,
         },
         "train_commands": {
-            "build_rustflags": f"-Cprofile-generate={raw}",
+            "build_rustflags": f"-Cprofile-generate={flag}",
             "libraries": ["dn2"],
             "runs": args.runs,
             "merge": merge[:4] + ["<raw>..."],
             "workload": f"{WORKLOAD} --pgo-train",
         },
         "gate_lines": gates,
-        "phase_seconds": timings,
+        "phase_seconds": phases.seconds,
         "created": datetime.datetime.now(datetime.UTC).isoformat(),
     }
     save_manifest("dn2", manifest, args.set_current)
     print(
-        f"trained {final} ({final.stat().st_size} bytes) key {key[:16]} in {time.monotonic() - started:.1f} s"
+        f"trained {final} ({final.stat().st_size} bytes) key {key[:16]} in {phases.total()} s"
     )
     auto_clean()
 
@@ -1488,7 +1687,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if args.device == BOTH:
         gen, _gen2 = both_generated()
         environ = {**os.environ, "SHARC_GEN_DIR": str(gen)}
-    profile = current_profile(args.device)
+    # The profile of this tree for DEVICE: its key holds the device's own core, so name it;
+    # without it dt2 would hash the DN2 core, miss its by-key manifest and fall back to the shared manifest.json
+    # (whatever tree trained last), and verify would compare the binary with another tree's profile.
+    gen = device_generated(args.device) if args.device == "dt2" else None
+    profile = current_profile(args.device, gen)
     profdata = pathlib.Path(profile) if profile else None
     if profdata is None:
         print("no trained profile to verify against")
@@ -1511,8 +1714,6 @@ def cmd_plan(args: argparse.Namespace) -> int:
         "SHARC_FAST_FALLBACK_REGIONS": fallback_regions(),
         "SHARC_BLOCKTRANS": blocktrans_roots(),
     }
-    if args.device == "dt2" and not environ.get("SHARC_GEN_DIR"):
-        environ["SHARC_GEN_DIR"] = str(dt2_generated())
     if args.device == BOTH:
         gen, _gen2 = both_generated()
         environ["SHARC_GEN_DIR"] = str(gen)
@@ -1552,11 +1753,8 @@ def coupled_module():
 
 
 def dt2_generated() -> pathlib.Path:
-    """SHARC_GEN_DIR, else the core registered for the DT2 DSP image."""
-    from tools.emulator import dt2_sample_check
-
-    _, _, ready, _ = dt2_sample_check.prepare()
-    return coupled_module().generated("dt2", ready / "digi-audio-dn2-image.bin")
+    """The DT2 core of a training, lookup and `coupled-build` (see :func:`device_generated`)."""
+    return device_generated("dt2")
 
 
 def build_coupled(
@@ -1712,26 +1910,31 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
     gen = dt2_generated()
     digi_env.check_generated(gen)
     state = state_dir(device="dt2")
-    started = time.monotonic()
+    phases = Phases()
     packages = local_package_dirs()
     hasher = FileHasher(state / "hash-cache.json")
     components, nfiles = compute_components(packages, gen, hasher)
     components["workload"] = DT2_WORKLOAD_NAME
+    fast_env = dt2_fast_env()
+    inputs = training_inputs("dt2", hasher, fast_env, args.runs)
     hasher.save()
     key = key_of(components)
+    phases.done("key")
+    if current_training("dt2", key, args.force, args.set_current, inputs):
+        return
     variant = args.variant or "pgo-dt2-instrument"
     target = native_target().target_dir("", variant)
-    raw = fresh_raw_dir(target)
+    flag = flag_raw_dir(target)
     binary = build_coupled(
         target,
-        f"-Cprofile-generate={raw}",
+        f"-Cprofile-generate={flag}",
         gen,
         state / "instrument-build.log",
     )
-    library = build_instrumented_library(
-        "dt2", raw, gen, state / "instrument-lib-dt2.log"
-    )
-    print(f"instrumented build {time.monotonic() - started:.1f} s", flush=True)
+    phases.done("host-build")
+    library = instrumented_library("dt2", gen, state / "instrument-lib-dt2.log")
+    phases.done("library-dt2")
+    run_dir = fresh_run_dir(state)
     seconds = []
     for number in range(1, args.runs + 1):
         outdir = state / f"train-{number}"
@@ -1742,35 +1945,34 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
                     binary,
                     outdir,
                     {
-                        "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
+                        "LLVM_PROFILE_FILE": str(
+                            run_dir / f"train-{number}-%m.profraw"
+                        ),
                         "DIGI_SHARC_CORE_LIB_DT2": str(library),
                     },
                 )
             )
         print(f"train run {number}: {seconds[-1]:.1f} s", flush=True)
-    raws = sorted(str(p) for p in raw.glob("*.profraw"))
+    phases.done("runs")
+    raws = sorted(str(p) for p in run_dir.glob("*.profraw"))
     if not raws:
         raise SystemExit("training produced no .profraw files")
-    merged = raw / "merged.profdata"
+    merged = run_dir / "merged.profdata"
     merge = [str(llvm_profdata()), "merge", "-o", str(merged), *raws]
     subprocess.run(merge, check=True)
     digest = sha256_file(merged)
     (state / "profiles").mkdir(parents=True, exist_ok=True)
     final = state / "profiles" / f"{digest}.profdata"
     shutil.move(str(merged), final)
-    shutil.rmtree(raw, ignore_errors=True)
+    shutil.rmtree(run_dir, ignore_errors=True)
+    phases.done("merge")
     manifest = {
         "key": key,
         "components": components,
         "packages": packages,
         "generated_dir": str(gen),
-        "fast_env": {
-            key: value
-            for key, value in coupled_module()
-            .run_env(syx=coupled_module().inputs("dt2")["firmware"])
-            .items()
-            if key.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
-        },
+        "fast_env": fast_env,
+        "inputs": inputs,
         "file_count": nfiles,
         "rustc_vV": rustc_version(),
         "triple": TRIPLE,
@@ -1780,17 +1982,18 @@ def cmd_train_dt2(args: argparse.Namespace) -> None:
             "size": final.stat().st_size,
         },
         "train_commands": {
-            "build_rustflags": f"-Cprofile-generate={raw}",
+            "build_rustflags": f"-Cprofile-generate={flag}",
             "runs": args.runs,
             "workload": DT2_WORKLOAD,
         },
         "run_seconds": seconds,
+        "phase_seconds": phases.seconds,
         "created": datetime.datetime.now(datetime.UTC).isoformat(),
     }
     save_manifest("dt2", manifest, args.set_current)
     print(
         f"trained {final} ({final.stat().st_size} bytes) key {key[:16]} "
-        f"in {time.monotonic() - started:.1f} s"
+        f"in {phases.total()} s"
     )
     auto_clean()
 
@@ -1979,6 +2182,20 @@ def both_items(
     return items
 
 
+def both_fast_env(items: list[WorkItem]) -> dict[str, dict[str, str]]:
+    """The region lists and block-translation roots of each item of the two-core training, by item label."""
+    return {
+        item.label: {
+            k: v
+            for k, v in digi_env.slot_env(
+                item.device, digi_env.fast_env(syx=item.fast_syx, context="pgo")
+            ).items()
+            if k.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
+        }
+        for item in items
+    }
+
+
 def both_workload_text(items: list[WorkItem]) -> list[str]:
     return [f"{i.label}:{i.scenarios_file}={'+'.join(i.names)}" for i in items]
 
@@ -1994,31 +2211,43 @@ def cmd_train_both(args: argparse.Namespace) -> None:
     reset = load_reset_fixture()
     items = both_items(fixtures, reset)
     state = device_state(BOTH)
-    started = time.monotonic()
+    phases = Phases()
     packages = local_package_dirs(FEATURES)
     hasher = FileHasher(state / "hash-cache.json")
     components, nfiles = compute_components(packages, gen, hasher, gen2=gen2)
     components["workload"] = both_workload_name(reset is not None)
+    fast_env = both_fast_env(items)
+    inputs = training_inputs(BOTH, hasher, fast_env, args.runs)
     hasher.save()
     key = key_of(components)
+    phases.done("key")
+    records = {
+        **{device: fx.record() for device, fx in fixtures.items()},
+        **({"dn2-reset": reset.record()} if reset is not None else {}),
+    }
+    if current_training(
+        BOTH, key, args.force, args.set_current, inputs, fixtures=records
+    ):
+        return
     variant = args.variant or "pgo-both-instrument"
     target = native_target().target_dir("", variant)
-    raw = fresh_raw_dir(target)
+    flag = flag_raw_dir(target)
     binary = build_coupled(
         target,
-        f"-Cprofile-generate={raw}",
+        f"-Cprofile-generate={flag}",
         gen,
         state / "instrument-build.log",
     )
+    phases.done("host-build")
     libraries = {
-        "dn2": build_instrumented_library(
-            "dn2", raw, gen, state / "instrument-lib-dn2.log"
-        ),
-        "dt2": build_instrumented_library(
-            "dt2", raw, gen2, state / "instrument-lib-dt2.log"
-        ),
+        "dn2": instrumented_library("dn2", gen, state / "instrument-lib-dn2.log")
     }
-    print(f"instrumented build {time.monotonic() - started:.1f} s", flush=True)
+    phases.done("library-dn2")
+    libraries["dt2"] = instrumented_library(
+        "dt2", gen2, state / "instrument-lib-dt2.log"
+    )
+    phases.done("library-dt2")
+    run_dir = fresh_run_dir(state)
     seconds = []
     for number in range(1, args.runs + 1):
         outdir = state / f"train-{number}"
@@ -2029,7 +2258,9 @@ def cmd_train_both(args: argparse.Namespace) -> None:
                     binary,
                     outdir,
                     {
-                        "LLVM_PROFILE_FILE": str(raw / f"train-{number}-%m.profraw"),
+                        "LLVM_PROFILE_FILE": str(
+                            run_dir / f"train-{number}-%m.profraw"
+                        ),
                         **{
                             f"DIGI_SHARC_CORE_LIB_{d.upper()}": str(p)
                             for d, p in libraries.items()
@@ -2040,17 +2271,19 @@ def cmd_train_both(args: argparse.Namespace) -> None:
                 )
             )
         print(f"train run {number}: {seconds[-1]:.1f} s", flush=True)
-    raws = sorted(str(p) for p in raw.glob("*.profraw"))
+    phases.done("runs")
+    raws = sorted(str(p) for p in run_dir.glob("*.profraw"))
     if not raws:
         raise SystemExit("training produced no .profraw files")
-    merged = raw / "merged.profdata"
+    merged = run_dir / "merged.profdata"
     merge = [str(llvm_profdata()), "merge", "-o", str(merged), *raws]
     subprocess.run(merge, check=True)
     digest = sha256_file(merged)
     (state / "profiles").mkdir(parents=True, exist_ok=True)
     final = state / "profiles" / f"{digest}.profdata"
     shutil.move(str(merged), final)
-    shutil.rmtree(raw, ignore_errors=True)
+    shutil.rmtree(run_dir, ignore_errors=True)
+    phases.done("merge")
     manifest = {
         "key": key,
         "components": components,
@@ -2058,20 +2291,9 @@ def cmd_train_both(args: argparse.Namespace) -> None:
         # Device order: generated_dir is the DN2 core, generated_dir_2 the DT2 core.
         "generated_dir": str(gen),
         "generated_dir_2": str(gen2),
-        "fast_env": {
-            item.label: {
-                k: v
-                for k, v in digi_env.slot_env(
-                    item.device, digi_env.fast_env(syx=item.fast_syx, context="pgo")
-                ).items()
-                if k.startswith(("SHARC_FAST_", "SHARC_BLOCKTRANS"))
-            }
-            for item in items
-        },
-        "fixtures": {
-            **{device: fx.record() for device, fx in fixtures.items()},
-            **({"dn2-reset": reset.record()} if reset is not None else {}),
-        },
+        "fast_env": fast_env,
+        "inputs": inputs,
+        "fixtures": records,
         "file_count": nfiles,
         "rustc_vV": rustc_version(),
         "triple": TRIPLE,
@@ -2082,17 +2304,18 @@ def cmd_train_both(args: argparse.Namespace) -> None:
             "size": final.stat().st_size,
         },
         "train_commands": {
-            "build_rustflags": f"-Cprofile-generate={raw}",
+            "build_rustflags": f"-Cprofile-generate={flag}",
             "runs": args.runs,
             "workload": both_workload_text(items),
         },
         "run_seconds": seconds,
+        "phase_seconds": phases.seconds,
         "created": datetime.datetime.now(datetime.UTC).isoformat(),
     }
     save_manifest(BOTH, manifest, args.set_current)
     print(
         f"trained {final} ({final.stat().st_size} bytes) key {key[:16]} "
-        f"in {time.monotonic() - started:.1f} s"
+        f"in {phases.total()} s"
     )
     auto_clean()
 
@@ -2690,6 +2913,11 @@ def main(argv: list[str] | None = None) -> int:
         help="act as --set-current only when HEAD is origin/main's commit (mise run perf:pgo)",
     )
     train.add_argument("--device", choices=["dn2", "dt2", BOTH], default="dn2")
+    train.add_argument(
+        "--force",
+        action="store_true",
+        help="train even when the profile of this key exists",
+    )
     train.add_argument(
         "--variant", help="dt2, both: target-dir variant of the instrumented build"
     )
