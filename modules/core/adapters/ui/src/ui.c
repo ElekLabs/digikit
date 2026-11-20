@@ -54,7 +54,8 @@ void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 /* The key ids of the firmware's key events (the id at +0xc of the event): the device's `[input.view_keys]`, in the per-device object src/keys/<dev>.s. */
 extern const uint32_t dk_ui_view_keys[6];
 #define KEY_YES (dk_ui_view_keys[0])
-#define KEY_YES2 (dk_ui_view_keys[1]) /* 0xffffffff: the device has no second YES key (no key event has that id) */
+/* KEY_YES2 is 0xffffffff when the device has no second YES key: no key event has that id. */
+#define KEY_YES2 (dk_ui_view_keys[1])
 #define KEY_NO (dk_ui_view_keys[2])
 #define KEY_RIGHT (dk_ui_view_keys[3])
 /* The flags word of a key event (+0x10): the bit the move keys act on, the bit YES and NO act on (the firmware's own handler reads them). Device data too. */
