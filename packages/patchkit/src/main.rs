@@ -296,9 +296,21 @@ fn run(a: Args) -> Result<()> {
         "build" => {
             // a module that needs device tables is not built for a device that lacks them (the objects hold the generated constants)
             if !rest.iter().any(|a| a == "--status" || a == "--paths") {
+                // the modules being built (positional, `--tree` or all), with the tables each declares in its own module.toml
                 let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &[])?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
-                patchkit::devgen::check_device_tables(&lib, &facts, None)?;
+                for dir in build_cli::module_dirs(&a.root, rest)? {
+                    let text = std::fs::read_to_string(dir.join("module.toml"))
+                        .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+                    let man: patchkit::module::Manifest = toml::from_str(&text)
+                        .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+                    patchkit::devgen::check_module_tables(
+                        &lib,
+                        &facts,
+                        &man.module.id,
+                        &man.module.needs_device,
+                    )?;
+                }
             }
             build_cli::build(&a.root, rest)?
         }
@@ -452,7 +464,7 @@ fn run(a: Args) -> Result<()> {
                 let models = patchkit::typed::Models::from_dir(&a.root.join("devices"))?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
                 if only.is_empty() {
-                    patchkit::devgen::check_device_tables(&lib, &facts, None)?;
+                    patchkit::devgen::check_device_tables(&lib, &facts)?;
                 }
                 for m in &lib.modules {
                     if !only.is_empty() && !only.iter().any(|o| o == m.id()) {
@@ -697,7 +709,14 @@ plan.json {}",
                 std::slice::from_ref(id),
             )?;
             let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
-            patchkit::devgen::check_device_tables(&lib, &facts, Some(id))?;
+            if let Some(m) = lib.get(id) {
+                patchkit::devgen::check_module_tables(
+                    &lib,
+                    &facts,
+                    id,
+                    &m.manifest.module.needs_device,
+                )?;
+            }
             let opts = patchkit::pack::PackOptions {
                 device: flag(rest, "--device"),
                 name: flag(rest, "--name"),
@@ -782,7 +801,14 @@ plan.json {}",
                 let lib = selected_library(&a.root, &library_source(&[]), true, &[], &[])?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
                 for id in &ids {
-                    patchkit::devgen::check_device_tables(&lib, &facts, Some(id))?;
+                    if let Some(m) = lib.get(id) {
+                        patchkit::devgen::check_module_tables(
+                            &lib,
+                            &facts,
+                            id,
+                            &m.manifest.module.needs_device,
+                        )?;
+                    }
                 }
             }
             std::fs::create_dir_all(&out).map_err(|e| Error(format!("{}: {e}", out.display())))?;

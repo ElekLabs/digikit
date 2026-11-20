@@ -57,7 +57,7 @@ each reads the tables it needs and checks those.
 Faceplates and LED maps are not device-file tables. The web app and the workbench pair files by the stem of the device file
 (`devices/<stem>.toml`): the faceplate is `apps/web/src/data/faceplates/<stem>.toml`, the LED map `devices/<stem>-leds.toml`. A
 device has a faceplate when its faceplate file exists; the LED map is optional. The LED maps carry no `[device]` table, so
-readers that scan `devices/` skip them. Which devices the public site offers is not a device fact: `SITE_DEVICES` in `apps/web/src/firmware/site-policy.ts` is the one list that its pages, gallery, emulator pick and Transfer library follow.
+readers that scan `devices/` skip them. Which devices the public site offers is not a device fact: `SITE_DEVICES` in `apps/web/src/data/site-devices.mjs` is the one list that its pages, gallery, emulator pick and Transfer library follow.
 
 ## Where each fact lives
 

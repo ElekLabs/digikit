@@ -2093,33 +2093,51 @@ fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
 
 /// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.view_keys`): every device (runtime target or not)
 /// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
-/// module should run on. A module id of a patch set that the library does not have is an error (the whole-library checks, `only` = `None`: `patchkit gen`, `build`).
-/// `only`: check the devices for this module only (the generator of one module, `pack`); a patch set that cannot be resolved in a library without the core modules
-/// is then skipped unless the module is one of its roots.
-pub fn check_device_tables(lib: &Library, facts: &Facts, only: Option<&str>) -> Result<()> {
+/// module should run on. This whole-library check (`patchkit gen`) also refuses a module id of a patch set that the library does not have.
+pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
     for (dev, e) in &facts.devices {
         for (set, roots) in &e.patch_sets {
-            let ids = match lib.with_requires(roots) {
-                Ok((ids, _)) => ids,
-                // a library without the core modules (`pack --manifest`): only the sets that name the module checked here matter
-                Err(_) if only.is_some_and(|o| !roots.iter().any(|r| r == o)) => continue,
-                Err(x) => return Err(err!("{dev}: patch set {set}: {x}")),
-            };
+            let (ids, _) = lib
+                .with_requires(roots)
+                .map_err(|x| err!("{dev}: patch set {set}: {x}"))?;
             for id in ids {
-                if only.is_some_and(|o| o != id) {
-                    continue;
-                }
                 let m = lib
                     .get(&id)
                     .ok_or_else(|| err!("{dev}: patch set {set}: unknown module {id}"))?;
-                for need in &m.manifest.module.needs_device {
-                    if !e.tables.contains(need) {
-                        return Err(err!(
-                            "{dev}: patch set {set} includes {id}, which needs [{need}] in the device file"
-                        ));
-                    }
-                }
+                check_needs(dev, set, &id, &m.manifest.module.needs_device, e)?;
             }
+        }
+    }
+    Ok(())
+}
+
+/// The same check for one module and the tables it declares (`needs`), for the generator of the module, `build` and `pack`. A device is checked when a patch set
+/// lists the module; a set that cannot be resolved in this library (`pack --manifest`: no core modules) counts when the module is one of its roots, and is skipped
+/// otherwise. Other modules are not looked at, so a device without a table never stops the build of a module that does not need it.
+pub fn check_module_tables(lib: &Library, facts: &Facts, id: &str, needs: &[String]) -> Result<()> {
+    if needs.is_empty() {
+        return Ok(());
+    }
+    for (dev, e) in &facts.devices {
+        for (set, roots) in &e.patch_sets {
+            let includes = match lib.with_requires(roots) {
+                Ok((ids, _)) => ids.iter().any(|i| i == id),
+                Err(_) => roots.iter().any(|r| r == id),
+            };
+            if includes {
+                check_needs(dev, set, id, needs, e)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_needs(dev: &str, set: &str, id: &str, needs: &[String], e: &DeviceTables) -> Result<()> {
+    for need in needs {
+        if !e.tables.contains(need) {
+            return Err(err!(
+                "{dev}: patch set {set} includes {id}, which needs [{need}] in the device file"
+            ));
         }
     }
     Ok(())
@@ -2130,9 +2148,7 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
     let m = lib
         .get(module)
         .ok_or_else(|| err!("unknown module {module}"))?;
-    if !m.manifest.module.needs_device.is_empty() {
-        check_device_tables(lib, facts, Some(module))?;
-    }
+    check_module_tables(lib, facts, module, &m.manifest.module.needs_device)?;
     if m.manifest.gens.is_empty() {
         return Ok(vec![]);
     }

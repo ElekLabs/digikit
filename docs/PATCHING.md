@@ -654,7 +654,7 @@ patchkit flash STOCK.syx --port NAME --set device --dry-run --save OUT.syx   # p
 ```
 
 The public site does not offer the Syntakt (patched image and module gallery): which devices it offers is a publication decision kept in one place, `SITE_DEVICES` in
-`apps/web/src/firmware/site-policy.ts` (device ids; the Digitakt II and Digitone II are in it, the Syntakt is not). The site's Firmware page prepares no patched image for another
+`apps/web/src/data/site-devices.mjs` (device ids; the Digitakt II and Digitone II are in it, the Syntakt is not). The site's Firmware page prepares no patched image for another
 device and says so; restoring stock stays available for every device. To offer a device after its hardware proof, add its `[device] short` to that list in a change of its own.
 The desktop workbench has no such list.
 

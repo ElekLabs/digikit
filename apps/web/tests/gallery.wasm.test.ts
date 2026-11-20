@@ -152,3 +152,13 @@ test.skipIf(!have)('worker core: a firmware of the other device, and garbage, ar
     assert.ok(c.modules.every((m) => !m.ok && /no port/.test(m.error ?? '')));
   }
 });
+
+test('the site bundle holds the ports and modules of the site list only; the device files stay whole', () => {
+  const all = buildModuleData(root).bundle;
+  const site = buildModuleData(root, SITE_DEVICES).bundle;
+  assert.ok(site.ports.length > 0 && site.ports.length < all.ports.length, 'the Syntakt port is left out');
+  assert.ok(site.modules.length < all.modules.length, 'a module for the Syntakt only is left out');
+  assert.ok(site.modules.some((m) => m.manifest.includes('"core/runtime"')));
+  assert.ok(!site.modules.some((m) => m.manifest.includes('id = "core/peer-image"')));
+  assert.deepEqual(site.devices, all.devices);
+});

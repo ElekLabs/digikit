@@ -821,7 +821,7 @@ fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
     };
     // every device of the repository has the tables of the modules in its patch sets
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    patchkit::devgen::check_device_tables(&lib, &facts, None).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
     // core/ui declares `input.view_keys`: a device file without it is refused, naming the table, the set and the module
     let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
     let start = dt2
@@ -830,7 +830,7 @@ fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
     let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
     let without = format!("{}{}", &dt2[..start], &dt2[end..]);
     let facts = Facts::from_texts([without.as_str()]).unwrap();
-    let e = patchkit::devgen::check_device_tables(&lib, &facts, None)
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
         .unwrap_err()
         .0;
     assert!(
@@ -847,7 +847,7 @@ name = "Bare"
 device = ["core/ui"]
 "#;
     let facts = Facts::from_texts([bare]).unwrap();
-    let e = patchkit::devgen::check_device_tables(&lib, &facts, None)
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
         .unwrap_err()
         .0;
     assert!(
@@ -856,7 +856,7 @@ device = ["core/ui"]
     );
     let ghost = bare.replace("core/ui", "core/no-such-module");
     let facts = Facts::from_texts([ghost.as_str()]).unwrap();
-    let e = patchkit::devgen::check_device_tables(&lib, &facts, None)
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
         .unwrap_err()
         .0;
     assert!(e.contains("core/no-such-module"), "{e}");
@@ -886,7 +886,7 @@ fn view_keys_flag_bits_are_range_checked_and_the_second_yes_key_is_optional() {
 }
 
 #[test]
-fn a_library_from_manifests_checks_only_the_patch_sets_that_name_the_module() {
+fn a_module_is_checked_against_its_own_tables_in_any_library() {
     // `pack --manifest` loads a library without the core modules: the patch sets of the repository's devices cannot resolve in it
     let manifest = root().join("tests/fixtures/modules/c-demo/module.toml");
     let defines: Vec<String> = vec![];
@@ -899,7 +899,30 @@ fn a_library_from_manifests_checks_only_the_patch_sets_that_name_the_module() {
     let lib =
         Library::from_manifests(build, &[manifest], true, &only).expect("the fixture library");
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    devgen::check_device_tables(&lib, &facts, Some("test/c-demo")).unwrap();
-    // the whole-library check does report the unresolved roots
-    assert!(devgen::check_device_tables(&lib, &facts, None).is_err());
+    let need = vec!["input.view_keys".to_string()];
+    // the repository's devices have the table, whatever the library can resolve
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
+    assert!(
+        devgen::check_device_tables(&lib, &facts).is_err(),
+        "the whole-library check reports the unresolved roots"
+    );
+    // a device without the table that lists the module as a root of a set that cannot resolve here is refused ...
+    let bare = r#"[device]
+short = "xx"
+[patch_sets]
+device = ["core/ui", "test/c-demo"]
+"#;
+    let facts = Facts::from_texts([bare]).unwrap();
+    let e = devgen::check_module_tables(&lib, &facts, "test/c-demo", &need)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("xx: patch set device includes test/c-demo") && e.contains("input.view_keys"),
+        "{e}"
+    );
+    // ... a module that needs nothing is not stopped by it, and a set that cannot resolve and does not list the module is skipped
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &[]).unwrap();
+    let other = bare.replace(", \"test/c-demo\"", "");
+    let facts = Facts::from_texts([other.as_str()]).unwrap();
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
 }

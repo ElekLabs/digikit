@@ -102,20 +102,32 @@ const objectText = (dir, d, o, stored) =>
     'utf8',
   );
 
-/** `{bundle}` from the committed tree under `root` plus the built objects of the content modules. */
-export function buildModuleData(root = repoRoot) {
+/** The device ids that a module is for: the prefixes of its `ports` and `[targets]`; empty: every device. */
+const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.targets ?? {})].map((p) => p.split('-')[0]);
+
+/**
+ * `{bundle}` from the committed tree under `root` plus the built objects of the content modules. `devices`: only the ports of these devices go in, and the modules
+ * that are for other devices only (the site passes its list: the browser patches only what the site offers; the device files stay whole, they identify a user's firmware).
+ * Omitted: everything (the Python bundle's content, which a test compares).
+ */
+export function buildModuleData(root = repoRoot, devices = undefined) {
   const ports = readdirSync(join(root, 'devices', 'ports'))
-    .filter((f) => f.endsWith('.toml'))
+    .filter((f) => f.endsWith('.toml') && (!devices || devices.includes(f.split('-')[0])))
     .sort()
     .map((f) => readFileSync(join(root, 'devices', 'ports', f), 'utf8'));
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
   // The published site leaves out the test fixtures: only the site's tests use them, and some need the Rust toolchain for ColdFire.
   const roots = process.env.DIGI_SITE_NO_FIXTURES ? ['modules'] : ['modules', join('tests', 'fixtures', 'modules')];
   const manifests = roots.flatMap((r) => walk(join(root, r), 'module.toml').sort(byParts));
-  const parsed = manifests.map((file) => {
-    const text = readFileSync(file, 'utf8');
-    return { dir: dirname(file), text, d: parse(text) };
-  });
+  const parsed = manifests
+    .map((file) => {
+      const text = readFileSync(file, 'utf8');
+      return { dir: dirname(file), text, d: parse(text) };
+    })
+    .filter(({ d }) => {
+      const mine = moduleDevices(d);
+      return !devices || mine.length === 0 || mine.some((x) => devices.includes(x));
+    });
   const built = (d) => d.module.category !== 'core' && (d.object ?? []).some((o) => (o.sources ?? []).length > 0);
   const builtDirs = parsed.filter((m) => built(m.d)).map((m) => m.dir);
   buildObjects(builtDirs, root);
@@ -337,7 +349,7 @@ if (
   writeFileSync(MODULE_FILES_TS, moduleFilesSource());
   const i = process.argv.indexOf('--out');
   const out = i > 0 ? resolve(process.argv[i + 1]) : join(here, '..', 'public', 'modules');
-  const { bundle } = buildModuleData();
+  const { bundle } = buildModuleData(repoRoot, SITE_DEVICES);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
   const index = shipModules(out);

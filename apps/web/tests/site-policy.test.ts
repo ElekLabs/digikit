@@ -63,5 +63,6 @@ test('no page, component, script or config of the site lists the registry device
 test('the site build ships modules only for the site list', () => {
   const src = readFileSync(join(root, 'apps/web/scripts/gen-modules.mjs'), 'utf8');
   assert.match(src, /import \{ SITE_DEVICES \} from '..\/src\/data\/site-devices\.mjs'/);
+  assert.match(src, /buildModuleData\(repoRoot, SITE_DEVICES\)/);
   assert.match(src, /runtimeIds\.filter\(\(d\) => SITE_DEVICES\.includes\(d\)\)/);
 });
