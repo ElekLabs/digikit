@@ -31,7 +31,7 @@ export function createTransferState({
   storage,
   jobs,
 }: {
-  env: Pick<TransferEnv, 'extras'>;
+  env: Pick<TransferEnv, 'extras' | 'libraryDevices'>;
   storage: KeyValue;
   jobs: JobsApp;
 }) {
