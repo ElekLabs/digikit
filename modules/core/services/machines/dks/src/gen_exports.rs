@@ -62,12 +62,11 @@ const _: api::DkPageBindFn = dk_page_bind;
 const _: api::DkPageBindLocalFn = dk_page_bind_local;
 
 /// The entries `service!` declares, by name hash, in the order of `sdk/sdk.toml`.
-pub fn exports() -> [(u32, *const u8); 14] {
+pub fn exports() -> [(u32, *const u8); 13] {
     [
         (dkrt_svc_rt::name_hash("dk_param_get"), crate::fw::dk_param_get as *const u8),
         (dkrt_svc_rt::name_hash("dk_param_set"), crate::fw::dk_param_set as *const u8),
-        (dkrt_svc_rt::name_hash("dk_machines_guard_state"), crate::rt::dk_machines_guard_state as *const u8),
-        (dkrt_svc_rt::name_hash("dk_machines_owned_ids"), crate::rt::dk_machines_owned_ids as *const u8),
+        (dkrt_svc_rt::name_hash("dk_machines_module_info"), crate::rt::dk_machines_module_info as *const u8),
         (dkrt_svc_rt::name_hash("dk_module_ctx_add_machine"), dk_module_ctx_add_machine as *const u8),
         (dkrt_svc_rt::name_hash("dk_machine_add_page"), dk_machine_add_page as *const u8),
         (dkrt_svc_rt::name_hash("dk_page_add_param"), dk_page_add_param as *const u8),

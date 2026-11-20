@@ -295,6 +295,11 @@ impl Platform for RealPlatform {
         write_volatile(addr as *mut u32, value)
     }
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
+        // host tests link no image: the tables of the runtime's own tests (`dyndsp_info`, `dynfx_info`)
+        #[cfg(test)]
+        if let Some(t) = crate::cleanup_tests::test_info(name_hash) {
+            return t;
+        }
         dkrt_abi::platform::info_find(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
     }
     unsafe fn info_slot(&self, name_hash: u32) -> *const u32 {

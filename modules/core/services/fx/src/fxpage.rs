@@ -946,6 +946,7 @@ mod tests {
     fn a_knob_gets_its_row_then_a_change_is_set_on_the_link() {
         let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
         let mut core = FakeCore::new();
+        core.set_dynfx(0, 0);
         // the parameter table of the firmware, as a fake: rows of 0x40 bytes at 0x1000, the mirror index in the second word
         let mut t = std::vec![0; 96];
         t[dkrt_svc_params::dynreg::w::P_TABLE] = 0x1000;
@@ -1005,7 +1006,8 @@ mod tests {
     #[test]
     fn a_fast_turn_sends_the_last_value_and_the_dsp_value_follows_the_confirmation() {
         let mut s: std::boxed::Box<FxpState> = unsafe { std::boxed::Box::new(core::mem::zeroed()) };
-        let core = FakeCore::new();
+        let mut core = FakeCore::new();
+        core.set_dynfx(0, 0);
         unsafe {
             s.min[2][1] = 0f32.to_bits();
             s.span[2][1] = 1f32.to_bits();

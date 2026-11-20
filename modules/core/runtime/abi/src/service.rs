@@ -9,13 +9,14 @@
 //! - record kinds of the `register` section (`len`), and their `check`, `apply` and `remove` (the registry walker calls them);
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
-//! - capacity counts (`caps`), the module behind a fault site (`attribute`);
+//! - capacity counts (`caps`), the module behind a fault site (`attribute`), the DSP diagnostics words it owns (`diag`) and the check of its tables (`table_check`);
 //! - `on_loaded` (every row of a module is in the DSP);
 //! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (a `PREPARE`, a `WRITE` and a `DECLARE` pass over a `RecordSink`), and `remove`;
 //! - the boot: `settle`, once, after the services are loaded and before the first module, with the keys of the boot's selection.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
 use core::ffi::c_void;
+use dkrt_sdk::fault::DIAG_WORDS;
 use dkrt_sdk::*;
 
 /// The ABI fingerprint of interfaces B and C between the runtime and a service file (`dk_svc_abi`, header word 0x3c of a `.dks`).
@@ -35,7 +36,8 @@ const fn svc_abi() -> u32 {
         size_of::<ApplyCtx>(),
         size_of::<Claim>(),
         size_of::<RowWrite>(),
-        size_of::<GuardState>(),
+        size_of::<ModuleMachines>(),
+        size_of::<TableFault>(),
         size_of::<DeclItem>(),
         size_of::<Declare>(),
         size_of::<Job>(),
@@ -140,12 +142,26 @@ pub struct RowWrite {
     pub undo: u32,
 }
 
-/// What the guard counted for a machine type (`MODULES` reports it).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// What the MODULES reply says of the machines of one module (the answer of the export `dk_machines_module_info`): the voice rows it owns (bit mask), its machine type
+/// numbers (`nt` of the 8 bytes in `types`), the guard's fault count for those types and whether the guard switched one of them off (0 or 1).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[repr(C)]
-pub struct GuardState {
+pub struct ModuleMachines {
+    pub rows: u32,
+    pub nt: u32,
+    pub types: [u8; 8],
     pub faults: u32,
-    pub disabled: bool,
+    pub guard_off: u32,
+}
+
+/// The first mismatch `Service::table_check` found: the module record index, and two numbers that say which row and what it held (the service's own). The core
+/// logs them as the numbers of a `TABLE_BAD` event and reads no meaning into them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[repr(C)]
+pub struct TableFault {
+    pub module: u32,
+    pub a: u32,
+    pub b: u32,
 }
 
 /// The passes of a module commit (`ModuleCommitCtx::phase`), run over every service in table order.
@@ -582,9 +598,18 @@ pub trait Service<C: CoreApi> {
     unsafe fn cap(core: &C, kind: u8) -> Option<(u32, u32)> {
         None
     }
-    /// The module record behind a fault site and the id the DSP reported there (`fault::SITE_*`).
+    /// The module record behind a fault site and the id the DSP reported there (`fault::SITE_*`), as the DSP reported it: a voice site gives the machine type,
+    /// an effect site the byte offset of the row in the table of the effect chain. The service turns it into its own row.
     unsafe fn attribute(core: &C, site: u32, id: u32) -> Option<usize> {
         None
+    }
+    /// The polled DSP diagnostics block (`DIAG_WORDS` words of `dl_diag`), once for each poll that returned a full block. A service reads the words it owns and logs
+    /// its events (`core.log`); what it has seen already is its own state. The core keeps the heartbeat watch, the raw log of the words and the hang record.
+    unsafe fn diag(core: &C, words: &[u32; DIAG_WORDS]) {}
+    /// The service's tables against the module records: bit `i` of `used` is set when module record `i` is used. 0 when the tables agree; else a number (not 0) and the
+    /// first mismatch in `out`. The core runs it with its own record checks (invariant 3) and logs a `TABLE_BAD`; the contract suite runs it after every step.
+    unsafe fn table_check(core: &C, used: u32, out: &mut TableFault) -> u32 {
+        0
     }
     /// Every row of module `rec` is in the DSP.
     unsafe fn on_loaded(core: &C, rec: usize) {}
@@ -602,8 +627,9 @@ pub trait Service<C: CoreApi> {
     /// on every service that is loaded. A service that keeps state across boots (the machines service: its type numbers) plans and saves it here.
     unsafe fn settle(core: &C, s: &SettleCtx) {}
 
-    /// DSP section: the entries of the tables this service owns (called in list order, after the header is validated).
-    unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {
+    /// DSP section: the entries of the tables this service owns (called in list order, after the header is validated), and the header's counts of them. The service
+    /// adds the bytes of the state blocks its entries need behind the image (`job.state_bytes`, each block rounded to 8): the core adds them to the range it reserves.
+    unsafe fn dsp_check_sections(core: &C, sec: &DspSec, job: &mut Job) -> i32 {
         OK
     }
     /// DSP section: free rows for this service's entries.
@@ -655,6 +681,8 @@ pub struct ServiceRow {
     remove: unsafe extern "C" fn(*const c_void, u8),
     cap: unsafe extern "C" fn(*const c_void, u8, *mut u32) -> bool,
     attribute: unsafe extern "C" fn(*const c_void, u32, u32, *mut usize) -> bool,
+    diag: unsafe extern "C" fn(*const c_void, *const u32),
+    table_check: unsafe extern "C" fn(*const c_void, u32, *mut TableFault) -> u32,
     on_loaded: unsafe extern "C" fn(*const c_void, usize),
     settle: unsafe extern "C" fn(*const c_void, *const SettleCtx),
     teardown_refusal: unsafe extern "C" fn(*const c_void, u8) -> i32,
@@ -662,7 +690,7 @@ pub struct ServiceRow {
     module_begin: unsafe extern "C" fn(*const c_void, usize),
     module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
     tick: unsafe extern "C" fn(*const c_void, u32),
-    dsp_check_sections: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
+    dsp_check_sections: unsafe extern "C" fn(*const c_void, *const DspSec, *mut Job) -> i32,
     dsp_check_rows: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
     dsp_check_types: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
     dsp_admit: unsafe extern "C" fn(*const c_void, *const Job) -> i32,
@@ -736,6 +764,20 @@ mod thunk {
             None => false,
         }
     }
+    /// `words` points at `DIAG_WORDS` words.
+    pub unsafe extern "C" fn diag<C: CoreApi, S: Service<C>>(
+        core: *const c_void,
+        words: *const u32,
+    ) {
+        S::diag(&*(core as *const C), &*(words as *const [u32; DIAG_WORDS]))
+    }
+    pub unsafe extern "C" fn table_check<C: CoreApi, S: Service<C>>(
+        core: *const c_void,
+        used: u32,
+        out: *mut TableFault,
+    ) -> u32 {
+        S::table_check(&*(core as *const C), used, &mut *out)
+    }
     pub unsafe extern "C" fn on_loaded<C: CoreApi, S: Service<C>>(core: *const c_void, rec: usize) {
         S::on_loaded(&*(core as *const C), rec)
     }
@@ -773,8 +815,9 @@ mod thunk {
     pub unsafe extern "C" fn dsp_check_sections<C: CoreApi, S: Service<C>>(
         core: *const c_void,
         sec: *const DspSec,
+        job: *mut Job,
     ) -> i32 {
-        S::dsp_check_sections(&*(core as *const C), &*sec)
+        S::dsp_check_sections(&*(core as *const C), &*sec, &mut *job)
     }
     pub unsafe extern "C" fn dsp_check_rows<C: CoreApi, S: Service<C>>(
         core: *const c_void,
@@ -847,6 +890,8 @@ impl ServiceRow {
             remove: thunk::remove::<C, S>,
             cap: thunk::cap::<C, S>,
             attribute: thunk::attribute::<C, S>,
+            diag: thunk::diag::<C, S>,
+            table_check: thunk::table_check::<C, S>,
             on_loaded: thunk::on_loaded::<C, S>,
             settle: thunk::settle::<C, S>,
             teardown_refusal: thunk::teardown_refusal::<C, S>,
@@ -1075,6 +1120,28 @@ impl ServiceTable {
         }
         None
     }
+    /// `Service::diag` on every row, in table order.
+    #[inline]
+    pub unsafe fn diag(&self, words: &[u32; DIAG_WORDS]) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            (self.row(i).diag)(self.core, words.as_ptr());
+            i += 1;
+        }
+    }
+    /// `Service::table_check` over the rows in table order: the first number that is not 0 (the mismatch is in `out`), else 0.
+    #[inline]
+    pub unsafe fn table_check(&self, used: u32, out: &mut TableFault) -> u32 {
+        let mut i = 0;
+        while i < self.rows.len() {
+            let r = (self.row(i).table_check)(self.core, used, out);
+            if r != 0 {
+                return r;
+            }
+            i += 1;
+        }
+        0
+    }
     #[inline]
     pub unsafe fn on_loaded(&self, rec: usize) {
         let mut i = 0;
@@ -1145,10 +1212,10 @@ impl ServiceTable {
         }
     }
     #[inline]
-    pub unsafe fn dsp_check_sections(&self, sec: &DspSec) -> i32 {
+    pub unsafe fn dsp_check_sections(&self, sec: &DspSec, job: &mut Job) -> i32 {
         let mut i = 0;
         while i < self.rows.len() {
-            let r = (self.row(i).dsp_check_sections)(self.core, sec);
+            let r = (self.row(i).dsp_check_sections)(self.core, sec, job);
             if r != OK {
                 return r;
             }

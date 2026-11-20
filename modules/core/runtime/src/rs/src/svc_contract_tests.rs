@@ -21,13 +21,9 @@ fn plain_values_and_pointers_come_back_as_through_the_real_core() {
         assert_eq!(ic.boot_index(), REAL_CORE.boot_index());
         assert_eq!(ic.legacy_state(), REAL_CORE.legacy_state());
         assert_eq!(ic.current_source(), REAL_CORE.current_source());
-        assert_eq!(ic.dsp_info(), REAL_CORE.dsp_info());
-        assert_eq!(ic.fx_info(), REAL_CORE.fx_info());
         assert_eq!(ic.info(0x1111), REAL_CORE.info(0x1111));
         assert!(ic.info(0).is_null(), "the host image has no info table");
         assert_eq!(ic.module_name(1), REAL_CORE.module_name(1));
-        assert_eq!(ic.guard_faults(0), REAL_CORE.guard_faults(0));
-        assert_eq!(ic.guard_disabled(0), REAL_CORE.guard_disabled(0));
     }
     // a reference to the core's state is the same object, a slice is the same bytes (length and address)
     assert!(core::ptr::eq(ic.dsp() as *const _, REAL_CORE.dsp() as *const _));

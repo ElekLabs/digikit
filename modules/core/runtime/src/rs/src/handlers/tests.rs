@@ -21,6 +21,8 @@ pub(crate) enum Call {
     Attribute { svc: u8, site: u32, id: u32 },
     OnLoaded { svc: u8, rec: usize },
     Tick { svc: u8, phase: u32 },
+    Diag { svc: u8, first: u32 },
+    TableCheck { svc: u8, used: u32 },
 }
 
 static mut LOG: Vec<Call> = Vec::new();
@@ -28,6 +30,8 @@ static mut LOG: Vec<Call> = Vec::new();
 static mut REFUSE: (u8, u32) = (0, 0);
 /// The service whose `apply` fails.
 static mut FAIL_APPLY: (u8, u32) = (0, 0);
+/// The service whose `table_check` reports a mismatch (0: none).
+static mut BAD_TABLE: u8 = 0;
 
 pub(crate) fn log() -> &'static mut Vec<Call> {
     unsafe { &mut *core::ptr::addr_of_mut!(LOG) }
@@ -108,6 +112,19 @@ impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
     unsafe fn tick(_: &C, phase: u32) {
         log().push(Call::Tick { svc: N, phase });
     }
+
+    unsafe fn diag(_: &C, words: &[u32; dkrt_sdk::fault::DIAG_WORDS]) {
+        log().push(Call::Diag { svc: N, first: words[0] });
+    }
+
+    unsafe fn table_check(_: &C, used: u32, out: &mut dkrt_abi::service::TableFault) -> u32 {
+        log().push(Call::TableCheck { svc: N, used });
+        if BAD_TABLE == N {
+            *out = dkrt_abi::service::TableFault { module: N as u32, a: 7, b: used };
+            return 1;
+        }
+        0
+    }
 }
 
 /// Fake service `N` owns record kind `100 + N`, a record of `8 + 4 * N` bytes.
@@ -137,6 +154,7 @@ unsafe fn reset() {
     log().clear();
     REFUSE = (0, 0);
     FAIL_APPLY = (0, 0);
+    BAD_TABLE = 0;
 }
 
 fn rec(svc: u8, i: u8) -> (u32, Vec<u8>) {
@@ -243,6 +261,36 @@ fn attribution_asks_the_services_in_order_until_one_answers() {
             vec![Call::Attribute { svc: 1, site: 2, id: 7 }, Call::Attribute { svc: 2, site: 2, id: 7 }]
         );
         assert_eq!(TWO.attribute(9, 7), None);
+    }
+}
+
+#[test]
+fn the_diagnostics_block_reaches_every_service_in_list_order() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset();
+        let mut words = [0u32; dkrt_sdk::fault::DIAG_WORDS];
+        words[0] = 0xd1a6;
+        TWO.diag(&words);
+        assert_eq!(*log(), vec![Call::Diag { svc: 1, first: 0xd1a6 }, Call::Diag { svc: 2, first: 0xd1a6 }]);
+    }
+}
+
+#[test]
+fn the_table_check_stops_at_the_first_service_that_reports_and_gives_its_numbers() {
+    use dkrt_abi::service::TableFault;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        reset();
+        let mut out = TableFault::default();
+        assert_eq!(TWO.table_check(0b101, &mut out), 0, "tables that agree");
+        assert_eq!(out, TableFault::default());
+        assert_eq!(*log(), vec![Call::TableCheck { svc: 1, used: 5 }, Call::TableCheck { svc: 2, used: 5 }]);
+        log().clear();
+        BAD_TABLE = 1;
+        assert_eq!(TWO.table_check(0b101, &mut out), 1);
+        assert_eq!(out, TableFault { module: 1, a: 7, b: 5 });
+        assert_eq!(*log(), vec![Call::TableCheck { svc: 1, used: 5 }], "the walk ends at the first report");
     }
 }
 
@@ -443,35 +491,29 @@ fn the_runtime_only_exports_answer_from_the_service_file_and_say_nothing_without
             E_NOT_FOUND
         }
     }
-    extern "C" fn guard(ty: u32, out: *mut u8) -> u32 {
-        unsafe { *(out as *mut dkrt_abi::service::GuardState) = dkrt_abi::service::GuardState { faults: ty + 1, disabled: ty == 3 } };
-        (ty < 8) as u32
-    }
-    extern "C" fn owned(owner: u32, out: *mut u8) -> u32 {
-        unsafe { *out = 16 + owner as u8 };
-        1
+    extern "C" fn info(owner: u32, out: *mut u8) -> u32 {
+        let m = dkrt_abi::service::ModuleMachines { rows: 1 << owner, nt: 1, types: [16 + owner as u8, 0, 0, 0, 0, 0, 0, 0], faults: owner + 1, guard_off: (owner == 3) as u32 };
+        unsafe { *(out as *mut dkrt_abi::service::ModuleMachines) = m };
+        (owner < 8) as u32
     }
     unsafe {
         let mut out: DkrtFx = core::mem::zeroed();
         TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
         assert_eq!(fx_entry(0, &mut out), E_NOT_FOUND, "no fx without the service file");
-        assert!(guard_state(0).is_none());
-        assert_eq!(owned_ids(1, &mut [0; 8]), 0);
+        assert!(module_info(1).is_none(), "no machines without the service file");
         {
             let mut t = TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner());
             t.push((dkneeds::keys::name_hash(FX_ROUTES_ENTRY), fx as usize));
-            t.push((dkneeds::keys::name_hash(MACHINES_GUARD_STATE), guard as usize));
-            t.push((dkneeds::keys::name_hash(MACHINES_OWNED_IDS), owned as usize));
+            t.push((dkneeds::keys::name_hash(MACHINES_MODULE_INFO), info as usize));
         }
         assert_eq!(fx_entry(0, &mut out), OK);
         assert_eq!(out.row, 7);
         assert_eq!(fx_entry(1, &mut out), OK);
         assert_eq!(out.row, 9);
         assert_eq!(fx_entry(2, &mut out), E_NOT_FOUND, "past the end");
-        assert_eq!(guard_state(3), Some(dkrt_abi::service::GuardState { faults: 4, disabled: true }));
-        assert!(guard_state(9).is_none(), "a type the service does not have");
-        let mut ids = [0u8; 8];
-        assert_eq!((owned_ids(2, &mut ids), ids[0]), (1, 18));
+        let m = module_info(3).unwrap();
+        assert_eq!((m.rows, m.nt, m.types[0], m.faults, m.guard_off), (8, 1, 19, 4, 1));
+        assert!(module_info(9).is_none(), "an owner the service does not answer for");
         TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }

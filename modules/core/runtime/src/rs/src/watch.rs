@@ -17,12 +17,8 @@ extern "C" {
 /// Words of the fault table.
 const D_FXLAST: usize = 24;
 const D_STEP: usize = 25;
-const D_FXFAULT: usize = 28;
 const D_REC0: usize = 29;
 const D_REC1: usize = 30;
-const D_FXDIS: usize = 31;
-/// The effect table's row size in bytes.
-const FX_ROW_BYTES: u32 = 96;
 /// Words that count up while the DSP runs and so say nothing when they move: the two beats and the dispatch and return counts. The poll logs the diagnostics
 /// again only when another word changes.
 const DIAG_COUNTERS: [usize; 8] = [1, 2, 15, 16, 26, 27, D_REC0, D_REC1];
@@ -56,9 +52,6 @@ struct Watch {
     first_at: u32,
     last: [u32; DIAG_WORDS],
     n: u32,
-    /// The guard's fault count (word 17, 16 bits) and the number of disabled types already logged.
-    faults_seen: u32,
-    disabled_seen: u32,
     /// A full set has been logged (the first poll logs one).
     logged: bool,
     /// The last set logged, for the change test.
@@ -69,9 +62,6 @@ struct Watch {
     nseen: usize,
     /// The breadcrumb (word 14) of the reply that showed the stop.
     stop_crumb: u32,
-    /// Effect faults and the switched-off row already logged (words 28 and 31).
-    fx_faults_seen: u32,
-    fx_disabled_seen: u32,
     /// The hang record: passes left before it is written (0: none pending), and what the replies seen after the stop showed: the module step, the effect `last`
     /// and the voice breadcrumb with a call pending (stage 4). The record of a stopped DSP alternate; the step is in only one of them.
     hang_wait: u32,
@@ -93,16 +83,12 @@ static mut W: Watch = Watch {
     first_at: 0,
     last: [0; DIAG_WORDS],
     n: 0,
-    faults_seen: 0,
-    disabled_seen: 0,
     logged: false,
     logged_words: [0; DIAG_WORDS],
     sampling: 0,
     seen: [[0; DIAG_WORDS]; 4],
     nseen: 0,
     stop_crumb: 0,
-    fx_faults_seen: 0,
-    fx_disabled_seen: 0,
     hang_wait: 0,
     m_step: 0,
     m_fx: 0,
@@ -258,8 +244,7 @@ unsafe fn poll_diag(w: &mut Watch, now: u32) {
     w.n = n as u32;
     w.last = buf;
     if n >= DIAG_WORDS {
-        log_guard(w, &buf);
-        log_fx(w, &buf);
+        services().diag(&buf);
     }
     // the words, raw: the first time, when a word other than a counter changed, and every ten seconds
     if !w.logged || differs(&buf, &w.logged_words, n) || due(now, w.next_log) {
@@ -294,55 +279,6 @@ unsafe fn poll_diag(w: &mut Watch, now: u32) {
             }
             stall_check(w, now, &buf);
         }
-    }
-}
-
-/// Machine types the guard counts for `MODULES` (the run-time types are below 32).
-const GUARD_TYPES: usize = 32;
-static mut GUARD_FAULTS: [u32; GUARD_TYPES] = [0; GUARD_TYPES];
-/// Bit t: the guard switched type t off (seen in the polls since this boot).
-static mut GUARD_OFF: u32 = 0;
-
-/// Faults the guard counted for machine type `t` since the boot, as the polls saw them.
-pub fn guard_faults(t: u32) -> u32 {
-    if (t as usize) < GUARD_TYPES {
-        unsafe { read_volatile(addr_of!(GUARD_FAULTS[t as usize])) }
-    } else {
-        0
-    }
-}
-
-/// Did the guard switch machine type `t` off?
-pub fn guard_disabled(t: u32) -> bool {
-    t < GUARD_TYPES as u32 && unsafe { read_volatile(addr_of!(GUARD_OFF)) } & (1 << t) != 0
-}
-
-/// The guard's words (17 to 23): a new fault is a `MACHINE_FAULT`, a newly disabled type a `MACHINE_DISABLED`. The poll is a second apart, so a burst is one event
-/// whose fault count says how many (the last fault is the one named); the full words also go to the raw `DSP_DIAG` set when they change.
-unsafe fn log_guard(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
-    let faults = buf[17] & 0xffff;
-    let kind = (buf[17] >> 16) & 0xff;
-    let disabled = buf[17] >> 24;
-    if faults != w.faults_seen {
-        // per type, for MODULES: the guard's words name only the type of the last fault, so a burst that spans two types within one poll counts for the last
-        let t = (buf[18] & 0xffff) as usize;
-        if t < GUARD_TYPES {
-            GUARD_FAULTS[t] = GUARD_FAULTS[t].wrapping_add(faults.wrapping_sub(w.faults_seen) & 0xffff);
-        }
-        w.faults_seen = faults;
-        ev(
-            logk::MACHINE_FAULT,
-            logk::F_ERROR,
-            [buf[18], kind | (faults << 8), buf[19], buf[20], buf[21]],
-        );
-    }
-    if disabled != w.disabled_seen {
-        let t = buf[23] as usize;
-        if t < GUARD_TYPES {
-            GUARD_OFF |= 1 << t;
-        }
-        w.disabled_seen = disabled;
-        ev(logk::MACHINE_DISABLED, logk::F_ERROR, [buf[23], disabled, faults, 0, 0]);
     }
 }
 
@@ -400,7 +336,7 @@ unsafe fn write_hang(w: &mut Watch) {
     let (site, stage, id, last, module) = if w.m_fx != 0 {
         let site = (w.m_fx >> 8) & 0xff;
         let off = w.m_fx >> 16;
-        (site, w.m_fx & 0xff, off, w.m_fx, services().attribute(SITE_FX_MASTER, off / FX_ROW_BYTES))
+        (site, w.m_fx & 0xff, off, w.m_fx, services().attribute(site, off))
     } else if w.m_voice != 0 {
         let ty = w.m_voice >> 16;
         (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, services().attribute(SITE_VOICE, ty))
@@ -410,30 +346,6 @@ unsafe fn write_hang(w: &mut Watch) {
     ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
     crate::settings::flush_if_dirty();
     crate::fault::write_hang(&Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
-}
-
-/// The effect guard's words (28 and 31): a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row.
-unsafe fn log_fx(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
-    let faults = buf[D_FXFAULT] & 0xffff;
-    if faults != w.fx_faults_seen {
-        w.fx_faults_seen = faults;
-        let off = (buf[D_FXFAULT] >> 16).wrapping_sub(1);
-        fx_event(logk::FX_FAULT, off / FX_ROW_BYTES, faults);
-    }
-    if buf[D_FXDIS] != w.fx_disabled_seen {
-        w.fx_disabled_seen = buf[D_FXDIS];
-        if buf[D_FXDIS] != 0 {
-            fx_event(logk::FX_DISABLED, (buf[D_FXDIS] - 1) / FX_ROW_BYTES, faults);
-        }
-    }
-}
-
-unsafe fn fx_event(kind: u16, row: u32, faults: u32) {
-    let src = match services().attribute(dkrt_sdk::fault::SITE_FX_MASTER, row) {
-        Some(m) => (m as u16 + 1) << logk::SOURCE_SHIFT,
-        None => 0,
-    };
-    ev(kind, logk::F_ERROR | src, [row, faults, 0, 0, 0]);
 }
 
 /// The loaded modules, one event each (`logk::MOD_LIST`, an error event when the DSP stopped): index, whether it has a tick, 12 bytes of name.

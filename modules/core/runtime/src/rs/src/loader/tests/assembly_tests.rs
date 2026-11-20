@@ -926,6 +926,33 @@ fn an_adapter_import_resolves_only_in_an_image_with_the_adapter() {
     }
 }
 
+/// The tables the machines and the fx service read through `CoreApi::info` are in the info table of every patched image of a device with a DSP, each with its magic word and
+/// the device it is for (the services refuse a table of another device); an image without the adapters has neither, and the services find no rows then (their host tests:
+/// `tests/guard.rs` of the machines service, `without_the_table_of_the_effect_chain_the_service_has_no_rows_and_no_slot` of the fx service).
+#[test]
+fn the_image_info_table_holds_the_dsp_and_effect_tables_the_services_read() {
+    use dkrt_abi::dsp::{FX_INFO_MAGIC, FX_ROW_WORDS, F_DEVICE, F_MAGIC, F_WORDS, INFO_MAGIC, I_DEVICE, I_MAGIC};
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        for set in ["emulator", "device"] {
+            let image = Image::read(*dev, set);
+            let table = |name: &str| image.entries.iter().find(|e| e.1 == name_hash(name) && e.2 == 0).map(|e| e.4.clone());
+            let dsp = table("dyndsp_info").unwrap_or_else(|| panic!("{} {set}: no dyndsp_info", dev.name));
+            assert_eq!((dsp[I_MAGIC], dsp[I_DEVICE]), (INFO_MAGIC, dev.profile.id), "{} {set}: dyndsp_info", dev.name);
+            let fx = table("dynfx_info").unwrap_or_else(|| panic!("{} {set}: no dynfx_info", dev.name));
+            assert_eq!((fx[F_MAGIC], fx[F_DEVICE], fx[F_WORDS]), (FX_INFO_MAGIC, dev.profile.id, FX_ROW_WORDS), "{} {set}: dynfx_info", dev.name);
+            // an image without the adapters: the platform has no entry of that name
+            let bare = Image { entries: Vec::new(), modules: Vec::new() }.platform(*dev, &[]);
+            unsafe {
+                use dkrt_abi::platform::Platform;
+                assert!(bare.info(name_hash("dyndsp_info")).is_null() && bare.info(name_hash("dynfx_info")).is_null());
+                let full = image.platform(*dev, &[]);
+                assert!(!full.info(name_hash("dyndsp_info")).is_null() && !full.info(name_hash("dynfx_info")).is_null());
+            }
+        }
+    }
+}
+
 #[test]
 fn a_c_service_with_the_abi_word_0_is_accepted_and_its_user_loads() {
     let _g = clean();
@@ -1089,10 +1116,10 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
             let table = table_of(&owner);
             let keys = Keys::parse(&table).unwrap();
             let listed: std::collections::BTreeSet<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
-            use crate::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_GUARD_STATE, MACHINES_OWNED_IDS};
+            use crate::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_MODULE_INFO};
             let internal: &[&str] = match service {
                 "fx" => &[FX_ROUTES_ENTRY],
-                "machines" => &[MACHINES_GUARD_STATE, MACHINES_OWNED_IDS],
+                "machines" => &[MACHINES_MODULE_INFO],
                 _ => &[],
             };
             let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().chain(internal.iter().copied()).map(name_hash).collect();

@@ -42,13 +42,12 @@ pub unsafe fn check_declarations() -> u32 {
 /// The C-ABI entry points of the services that the core links into its own tables (interface A: the imports of `sdk.toml` and the events the adapters
 /// call). This is the one place where the core names a service function; the rest of the core calls `Services` or `CoreApi`.
 pub mod exports {
-    use dkrt_abi::service::GuardState;
+    use dkrt_abi::service::ModuleMachines;
 
     /// The exports of the service files that only the runtime calls (`internal` imports of sdk/sdk.toml): the runtime looks them up by name in the loader's
     /// export table and keeps its behaviour when the service file is not loaded.
     pub const FX_ROUTES_ENTRY: &str = "dk_fx_routes_entry";
-    pub const MACHINES_GUARD_STATE: &str = "dk_machines_guard_state";
-    pub const MACHINES_OWNED_IDS: &str = "dk_machines_owned_ids";
+    pub const MACHINES_MODULE_INFO: &str = "dk_machines_module_info";
 
     /// Host tests: a fake export, by name hash, for the function that the table does not hold as a ColdFire address.
     #[cfg(test)]
@@ -78,12 +77,12 @@ pub mod exports {
             None => dkrt_sdk::E_NOT_FOUND,
         }
     }
-    /// The guard's counts of machine type `ty` (`module_cmds`: the module list): the `machines` service file's export; none without the file.
-    pub unsafe fn guard_state(ty: u32) -> Option<GuardState> {
-        let a = find_export(MACHINES_GUARD_STATE)?;
-        let mut g = GuardState { faults: 0, disabled: false };
-        if core::mem::transmute::<usize, unsafe extern "C" fn(u32, *mut u8) -> u32>(a)(ty, &mut g as *mut GuardState as *mut u8) != 0 {
-            Some(g)
+    /// The machines of module record `owner` (`module_cmds`: the module list): the `machines` service file's export; none without the file.
+    pub unsafe fn module_info(owner: u8) -> Option<ModuleMachines> {
+        let a = find_export(MACHINES_MODULE_INFO)?;
+        let mut m = ModuleMachines::default();
+        if core::mem::transmute::<usize, unsafe extern "C" fn(u32, *mut u8) -> u32>(a)(owner as u32, &mut m as *mut ModuleMachines as *mut u8) != 0 {
+            Some(m)
         } else {
             None
         }
@@ -96,13 +95,6 @@ pub mod exports {
         static ROW: dkrt_abi::service::ServiceRow =
             dkrt_abi::service::ServiceRow::of::<dkrt_svc_machines::records::Machines, crate::core_api::RealCore>("machines", &dkrt_sdk::records::KINDS_MACHINES);
         &ROW
-    }
-    /// The machine type numbers of the machine rows module `owner` filled (`module_cmds`: the module list); returns how many.
-    pub fn owned_ids(owner: u8, out: &mut [u8; 8]) -> usize {
-        match find_export(MACHINES_OWNED_IDS) {
-            Some(a) => unsafe { core::mem::transmute::<usize, unsafe extern "C" fn(u32, *mut u8) -> u32>(a)(owner as u32, out.as_mut_ptr()) as usize },
-            None => 0,
-        }
     }
     /// The shapes of the lfo service, for the runtime's own tests of the record path.
     #[cfg(test)]
@@ -120,5 +112,7 @@ pub(crate) mod tests;
 pub(crate) mod lfo_tests;
 #[cfg(test)]
 pub(crate) mod fx_fixture;
+#[cfg(test)]
+pub(crate) mod machines_fixture;
 #[cfg(test)]
 pub(crate) mod dks_decls;
