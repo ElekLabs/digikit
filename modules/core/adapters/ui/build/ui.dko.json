@@ -32,34 +32,6 @@
   },
   {
    "addend": 0,
-   "offset": 0,
-   "section": ".rodata",
-   "symbol": "cf.text.fn.width",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4,
-   "section": ".rodata",
-   "symbol": "cf.view.fn.view_ctor",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 8,
-   "section": ".rodata",
-   "symbol": "cf.window.fn.name_ctor",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 12,
-   "section": ".rodata",
-   "symbol": "cf.window.site.name_cb_vptr_lit",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 30,
    "section": ".text.fn_manager",
    "symbol": ".sec..rodata.typeinfo_dummy",
@@ -102,16 +74,30 @@
   },
   {
    "addend": 0,
-   "offset": 10,
+   "offset": 6,
    "section": ".text.fw_screens",
-   "symbol": ".sec..rodata",
+   "symbol": "cf.text.fn.width",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 20,
+   "offset": 12,
    "section": ".text.fw_screens",
-   "symbol": "memcpy",
+   "symbol": "cf.view.fn.view_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.fw_screens",
+   "symbol": "cf.window.fn.name_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.fw_screens",
+   "symbol": "cf.window.site.name_cb_vptr_lit",
    "type": "cf.32"
   },
   {
@@ -2610,13 +2596,6 @@
   },
   {
    "align": 2,
-   "hex": "00000000000000000000000000000000",
-   "kind": "data",
-   "name": ".rodata",
-   "size": 16
-  },
-  {
-   "align": 2,
    "hex": "202f000c7201206f0004226f0008b28067147202b28067124a80660620bc0000000042804e75208960f8209121690004000460ee",
    "kind": "text",
    "name": ".text.fn_manager",
@@ -2673,10 +2652,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fff048780010487900000000486efff04eb9000000004fef000c4aaefff0660642804e5e4e754aaefff467f44aaefff867ee4aaefffc56c07100448060e4",
+   "hex": "4feffff02ebc00000000203c000000002f400004203c000000002f400008203c000000002f40000c4a97660842804fef00104e754aaf000467f24aaf000867ec4aaf000c56c07100448060e2",
    "kind": "text",
    "name": ".text.fw_screens",
-   "size": 64
+   "size": 76
   },
   {
    "align": 2,
@@ -3610,7 +3589,7 @@
    "size": 72
   }
  ],
- "source_sha256": "00e22f98b757391f229ee18359415547e7c5e56d2e44676f4d82238e608d1fdf",
+ "source_sha256": "e5d7383041efdea9de5b30875e7c518edfd6d8c4af49950debfbaa5d5360554f",
  "symbols": [
   {
    "global": false,
@@ -3730,12 +3709,6 @@
    "global": false,
    "name": ".sec..bss.ui_token",
    "section": ".bss.ui_token",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..rodata",
-   "section": ".rodata",
    "value": 0
   },
   {
@@ -4969,12 +4942,6 @@
    "value": 0
   },
   {
-   "global": true,
-   "name": "memcpy",
-   "section": null,
-   "value": 0
-  },
-  {
    "global": false,
    "name": "mv_draw",
    "section": ".text.mv_draw",
@@ -5309,8 +5276,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3770",
-  "isa_check": "01b5b5dd97155d25a47503a321ddca266c30169bd546180210356aea5b42ebe4",
+  "instructions_redecoded": "3772",
+  "isa_check": "cba78a42a97c4464cca8796043d6564a90774f240ba01754782684bd0a825e9c",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

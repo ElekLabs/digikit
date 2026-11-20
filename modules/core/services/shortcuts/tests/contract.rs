@@ -7,7 +7,7 @@ use dkrt_sdk::records::KINDS_SHORTCUTS;
 use dkrt_svc_shortcuts::bindings::Callback;
 use dkrt_svc_shortcuts::build::{shortcut_add, ShortcutDef};
 use dkrt_svc_shortcuts::records::{state, ShortcutsService};
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module};
+use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::FakeCore;
 use std::sync::Mutex;
 

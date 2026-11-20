@@ -1127,9 +1127,11 @@ static void fwc_invert(void *bitmap, int32_t x0, int32_t y0, int32_t x1, int32_t
    pointers go through volatile objects so that the compiler does not fold the test (a symbol's address is never 0 to it). */
 static int fw_screens(void)
 {
-    void *volatile p[4] = {(void *)dk_fw_text_width, (void *)dk_fw_view_view_ctor,
-                           (void *)dk_fw_window_name_ctor, (void *)&fw_name_cb_vt};
-    return p[0] && p[1] && p[2] && p[3];
+    void *volatile a = (void *)dk_fw_text_width;
+    void *volatile b = (void *)dk_fw_view_view_ctor;
+    void *volatile c = (void *)dk_fw_window_name_ctor;
+    void *volatile d = (void *)&fw_name_cb_vt;
+    return a && b && c && d;
 }
 
 /* The width routine takes the font data and a std::string (a pointer to the one-word COW object). */
