@@ -38,7 +38,7 @@ Done means:
 | --- | --- |
 | **Runtime** | The always-present core defined in section 3.1 |
 | **Service** | A named, versioned interface, such as `samples 1.0`, defined in `sdk/sdk.toml`. It owns record kinds and resources |
-| **Provider** | The `.dks` file that implements a service. All four services (`samples`, `fx`, `machines`, `lfo`) are `.dks` files; items 7, 9 and 10 in section 13 linked their code into the image during migration |
+| **Provider** | The `.dks` file that implements a service. All four services (`samples`, `fx`, `machines`, `lfo`) are `.dks` files |
 | **`.dks`** | A service file for one device and firmware: neutral service code, that device's adapter and a hook table. Uses the `.dkm` format with a role flag and added sections |
 | **Hook table** | Data in a `.dks`: for each hook, the site, a hash of the stock bytes, the tail and the handler. Only a `.dks` may hold one |
 | **Hook installer** | Generic runtime code: checks the stock bytes, writes the jump, flushes the caches. Knows nothing about machines or effects |
