@@ -71,6 +71,15 @@ export interface Firmware {
   boot?: { mainSha256: string; contract: string; symbolProfile: string };
 }
 
+/**
+ * The stock firmware the tools read for a device: the version of `[acceptance] firmware`, else the last `[[firmware]]` (the newest listed).
+ * Its `filename` names the stock .syx.
+ */
+export function stockFirmware(device: Pick<DeviceRecord, 'acceptance' | 'firmware'>): Firmware | undefined {
+  const version = device.acceptance?.firmware;
+  return version ? device.firmware.find((f) => f.version === version) : device.firmware[device.firmware.length - 1];
+}
+
 /** `identity`: `[device]` + `[capabilities]`; `patchable`: also `[patch]`; `runtime`: also `[digikit]`. */
 export type Level = 'identity' | 'patchable' | 'runtime';
 

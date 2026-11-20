@@ -592,7 +592,6 @@
   "packages/workbench-core/src/data/device-profiles.ts": 2,
   "packages/workbench-core/src/firmware/firmware-core.ts": 1,
   "packages/workbench-core/src/host/host.ts": 1,
-  "packages/workbench-core/src/node/stock-image.ts": 8,
   "packages/workbench-core/src/profile/profile-artifact.ts": 1,
   "packages/workbench-core/src/runtime/cards.ts": 4,
   "packages/workbench-core/src/runtime/runtime.ts": 1,
