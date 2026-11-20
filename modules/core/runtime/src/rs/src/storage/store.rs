@@ -89,10 +89,21 @@ pub unsafe fn open_in(scratch: *mut u8, buf: *mut u8, cap: usize) -> Result<Tabl
 /// somebody's data (finding 46): no store. A card too small for the area has no store. Other errors are `open_in`'s (`E_BAD_STORE`, `E_READ`).
 pub unsafe fn open_or_empty_in(scratch: *mut u8, buf: *mut u8, cap: usize) -> Result<Table, i32> {
     match open_in(scratch, buf, cap) {
-        Err(E_NOT_FOUND) if empty_possible() && headers_blank(scratch) => {
-            Ok(Table { h: Hdr::empty(&layout()), copy: 0, agree: true })
-        }
+        Err(e) => match headerless_empty(e, scratch) {
+            Some(h) => Ok(Table { h, copy: 0, agree: true }),
+            None => Err(e),
+        },
         r => r,
+    }
+}
+
+/// The header of the empty store, when the read of the headers failed with `e` for lack of a store header and the card may hold an empty store
+/// (`empty_possible`, both header sectors blank or of another version): the one place of that decision, for `open_or_empty_in` and `seen`.
+unsafe fn headerless_empty(e: i32, scratch: *mut u8) -> Option<Hdr> {
+    if e == E_NOT_FOUND && empty_possible() && headers_blank(scratch) {
+        Some(Hdr::empty(&layout()))
+    } else {
+        None
     }
 }
 
@@ -210,6 +221,7 @@ pub unsafe fn read_file(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
 /// upload wrote a header (`store_writer.rs` calls `figures_stale` when it writes one): a page that read the card on every refresh would cost the UI task
 /// card reads that show up in the CPU load it displays.
 static mut STORE_DIRTY: bool = true;
+static mut STORE_SEEN_CARD: u32 = u32::MAX; // the card state of the figures below
 static mut STORE_SEEN: Option<(u32, u32)> = None; // (used KiB, free KiB) of a usable header; None: no store
 
 /// An upload wrote (or tried to write) a header sector: the figures are stale. Called from the MIDI task.
@@ -238,11 +250,15 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
     if crate::card::state() == CARD_TOO_SMALL {
         return None;
     }
-    if core::ptr::read_volatile(addr_of!(STORE_DIRTY)) {
-        // an SDK write or a SysEx command is inside the store: keep the last figures, the flag stays set for the next refresh
+    // the figures belong to the card state they were read under: a state that changed since (the card check decided later) reads the headers again
+    let card_now = crate::card::state();
+    if core::ptr::read_volatile(addr_of!(STORE_DIRTY)) || card_now != STORE_SEEN_CARD {
+        // an SDK write or a SysEx command is inside the store: keep the last figures (unless they were read under another card state), the flag stays set
+        // for the next refresh
         if !super::lock::try_lock() {
-            return STORE_SEEN;
+            return if card_now == STORE_SEEN_CARD { STORE_SEEN } else { None };
         }
+        STORE_SEEN_CARD = card_now;
         // clear first: a header written while we read leaves the flag set for the next refresh
         core::ptr::write_volatile(addr_of_mut!(STORE_DIRTY), false);
         STORE_SEEN = match store::open_headers(&reader(), &lay, scratch()) {
@@ -250,8 +266,7 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
                 let pick = if store::prefer_b(a.as_ref(), b.as_ref()) { b } else { a };
                 pick.map(|h| (h.used / 2, store::free_sectors(&lay, &h) / 2))
             }
-            Err(E_NOT_FOUND) if empty_possible() && headers_blank(scratch()) => Some((0, store::free_sectors(&lay, &Hdr::empty(&lay)) / 2)),
-            Err(_) => None,
+            Err(e) => headerless_empty(e, scratch()).map(|h| (h.used / 2, store::free_sectors(&lay, &h) / 2)),
         };
         super::lock::unlock();
     }
