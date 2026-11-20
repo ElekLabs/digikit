@@ -3,4 +3,5 @@ schema = "dk.calcase/1"
 id = "pluck"
 module = "digikit/pluck"
 steps = "play-module-machine"
-args = { machine = "digikit/pluck" }
+# the string voice ends after about 13 blocks: press the key again every 8 ms so that it sounds for the whole window
+args = { machine = "digikit/pluck", retrigger_ms = 8 }

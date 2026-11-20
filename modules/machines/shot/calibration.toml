@@ -2,5 +2,7 @@
 schema = "dk.calcase/1"
 id = "shot"
 module = "digikit/shot"
+# the sample machine imports the sample pool, which not every image has: the runtime then refuses the module and the case is skipped with that reason
+needs = ["core/sample-pool"]
 steps = "play-module-machine"
 args = { machine = "digikit/shot" }

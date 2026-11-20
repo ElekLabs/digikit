@@ -126,6 +126,22 @@ export class LogCursor {
 /** `RuntimeEvents.until` ran out of time: the event was not seen. */
 export class EventTimeout extends Error {}
 
+/** The runtime refused or failed to load the module at `index` of the selection: `result` is its load code (E_IMPORT -7: `needs` names the core module the image lacks). */
+export class ModuleLoadRefused extends Error {
+  readonly index: number;
+  readonly result: number;
+  readonly needs: string | undefined;
+  constructor(index: number, result: number, needs?: string) {
+    super(
+      `module ${index} of the selection did not load: result ${result}${needs ? `, the image lacks core/${needs}` : ''}`,
+    );
+    this.name = 'ModuleLoadRefused';
+    this.index = index;
+    this.result = result;
+    this.needs = needs;
+  }
+}
+
 export interface RuntimeEventsOptions {
   /** Real or clock milliseconds between polls, default 50. */
   pollMs?: number;
@@ -201,7 +217,7 @@ export class RuntimeEvents {
   }
 
   async until(
-    kind: LogKindName,
+    kind: LogKindName | LogKindName[],
     match: (e: RuntimeEvent) => boolean = () => true,
     { withinMs = 2000 }: WaitOpts = {},
   ): Promise<RuntimeEvent> {
@@ -210,7 +226,7 @@ export class RuntimeEvents {
     const done = async (ok: boolean) =>
       this.onWait?.({
         kind: 'event',
-        what: kind,
+        what: Array.isArray(kind) ? kind.join('|') : kind,
         clockMs: (await this.clock.now()) - start,
         wallMs: Date.now() - wallStart,
         ok,
@@ -223,7 +239,9 @@ export class RuntimeEvents {
           return hit;
         }
         if ((await this.clock.now()) - start >= withinMs)
-          throw new EventTimeout(`events.until ${kind}: not seen within ${withinMs} ms. Last events:\n${this.seen()}`);
+          throw new EventTimeout(
+            `events.until ${Array.isArray(kind) ? kind.join('|') : kind}: not seen within ${withinMs} ms. Last events:\n${this.seen()}`,
+          );
         await this.clock.pause(this.pollMs);
       }
     } catch (e) {
@@ -244,6 +262,46 @@ export class RuntimeEvents {
       if (e instanceof EventTimeout) return null;
       throw e;
     }
+  }
+
+  /**
+   * After a boot or restart of a selection of `count` content modules: wait on the runtime's own events until every module of the selection has its result: MOD_LOAD
+   * with 0, or with 1 and then MOD_DSP with 0 (the DSP part). A module the runtime refused (a negative result; E_IMPORT also has its MOD_NEEDS, the missing core
+   * module) is `ModuleLoadRefused`. The cursor must be at the start of the boot (`listen({ fromBoot: true })`). Provider files (services) have no index here.
+   */
+  async untilModulesActive(count: number, { withinMs = 120_000 }: WaitOpts = {}): Promise<void> {
+    const E_IMPORT = -7;
+    const result = new Map<number, number>();
+    const dsp = new Set<number>();
+    const needs = new Map<number, string>();
+    const final = (i: number) => result.has(i) && !dsp.has(i);
+    const complete = () => {
+      for (let i = 0; i < count; i++) {
+        if (!final(i)) return false;
+        if (result.get(i) === E_IMPORT && !needs.has(i)) return false;
+      }
+      return true;
+    };
+    await this.until(
+      ['MOD_LOAD', 'MOD_DSP', 'MOD_NEEDS'],
+      (e) => {
+        if (e.fields.provider) return false;
+        const index = Number(e.fields.index);
+        if (index >= count) return false;
+        if (e.kind === 'MOD_LOAD') {
+          const r = Number(e.fields.result);
+          result.set(index, r);
+          if (r === 1) dsp.add(index);
+        } else if (e.kind === 'MOD_DSP') {
+          dsp.delete(index);
+          result.set(index, Number(e.fields.result));
+        } else needs.set(index, String(e.fields.needs));
+        return complete();
+      },
+      { withinMs },
+    );
+    for (let i = 0; i < count; i++)
+      if (result.get(i)! !== 0) throw new ModuleLoadRefused(i, result.get(i)!, needs.get(i));
   }
 
   untilBoot(opts?: WaitOpts) {
@@ -280,11 +338,14 @@ export class RuntimeEvents {
   }
 
   /** Read what is new and return the first matching event; later events stay queued for the next wait. */
-  private async scan(kind: LogKindName, match: (e: RuntimeEvent) => boolean): Promise<RuntimeEvent | null> {
+  private async scan(
+    kind: LogKindName | LogKindName[],
+    match: (e: RuntimeEvent) => boolean,
+  ): Promise<RuntimeEvent | null> {
     for (;;) {
       while (this.queue.length > 0) {
         const e = this.queue.shift()!;
-        if (e.kind === kind && match(e)) return e;
+        if ((Array.isArray(kind) ? kind.includes(e.kind as LogKindName) : e.kind === kind) && match(e)) return e;
       }
       const r = await this.cursor.read();
       if (r.newBoot) {

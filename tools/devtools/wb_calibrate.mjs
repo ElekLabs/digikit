@@ -23,7 +23,6 @@ import { runCalibration } from '../../packages/workbench-core/src/calibration/ru
 import {
   sessionSetup,
   untilBootStable,
-  untilModulesListed,
 } from '../../packages/workbench-core/src/calibration/rigsetup.ts';
 import { sessionStatsSource } from '../../packages/workbench-core/src/calibration/stats.ts';
 import { parseStepFile } from '../../packages/workbench-core/src/calibration/steps.ts';
@@ -154,8 +153,9 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
       await untilBootStable(session, clock, (l) => console.error(`calibrate: ${l}`));
       await session.select([...ids, ...stay].map((id) => library.get(id).path));
       await restartDevice(session, emit, { bootTimeoutMs, loadedTimeoutMs: bootTimeoutMs ? 120_000 : undefined });
-      await untilModulesListed(session, clock, ids);
       await events.listen({ fromBoot: true });
+      // the runtime's own MOD_LOAD and MOD_DSP events say when every module of the selection is in; a refusal throws ModuleLoadRefused
+      await events.untilModulesActive(ids.length + stay.length);
       await refreshNames();
     },
     // content modules: a service has no rows and no types

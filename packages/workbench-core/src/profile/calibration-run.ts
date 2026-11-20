@@ -13,7 +13,7 @@ import {
   type Rig,
   type RigModules,
 } from '../calibration/runner.ts';
-import { sessionSetup, untilBootStable, untilModulesListed } from '../calibration/rigsetup.ts';
+import { sessionSetup, untilBootStable } from '../calibration/rigsetup.ts';
 import { sessionStatsSource } from '../calibration/stats.ts';
 import { resolveRef, type Op } from '../calibration/steps.ts';
 import { runId } from './profile-artifact.ts';
@@ -158,8 +158,11 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         await untilBootStable(session, clock);
         await session.select([...ids, ...stay].map((id) => byId.get(id)!.path));
         await restartDevice(session, () => {}, {});
-        await untilModulesListed(session, clock, ids);
-        if (events) await events.listen({ fromBoot: true });
+        if (events) {
+          await events.listen({ fromBoot: true });
+          // the runtime's own MOD_LOAD and MOD_DSP events say when every module of the selection is in; a refusal throws ModuleLoadRefused
+          await events.untilModulesActive(ids.length + stay.length);
+        }
         await refreshNames();
       },
       // content modules: a service has no rows and no types

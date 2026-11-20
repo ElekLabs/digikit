@@ -1,7 +1,7 @@
 // The calibration runner: plays a profile's cases on a target (an emulator or a device) and captures DSP stats and runtime spans, one `dk.profile/1`
 // per capture. The caller connects and gives the pieces (`Rig`); the runner holds no connection and no module-level state, so `wb profile calibrate run`
 // and the workbench's Profile pane use the same code. Host tests: tests/calibration-runner.test.ts. Format: docs/INSTRUMENTATION.md "Calibration runs".
-import type { Clock, MidiOut, RuntimeEvents } from '@digi/dk-session';
+import { ModuleLoadRefused, type Clock, type MidiOut, type RuntimeEvents } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
 import { buildProfile, type DspRowOut } from '../profile/profile-artifact.ts';
 import { canonicalJson, sha256Hex, STOCK_CASE, type CalCase, type CalProfile } from './calprofile.ts';
@@ -313,7 +313,30 @@ async function runCase(
     }),
   );
   const captures: Capture[] = [];
-  await ensureModules(rig, c.modules, log);
+  try {
+    await ensureModules(rig, c.modules, log);
+  } catch (e) {
+    // the runtime refused the module because the image lacks a core module the case declares it needs: the case cannot run here
+    const lacking = e instanceof ModuleLoadRefused ? e.needs : undefined;
+    if (lacking !== undefined && (c.needs ?? []).some((n) => n.replace(/^core\//, '') === lacking)) {
+      const reason = `the image has no core/${lacking}, which the module needs`;
+      log(`case ${c.id}: skipped, ${reason}`);
+      return { id: c.id, captures: [], skipped: reason };
+    }
+    throw e;
+  }
+  // notes with `retrigger_ms` are pressed again during every wait of the capture, so that a voice that ends by itself sounds for the whole window
+  const keepers = [...setup, ...pre].filter(
+    (o): o is Extract<Op, { op: 'midi.note' }> => o.op === 'midi.note' && o.retrigger_ms !== undefined,
+  );
+  const pause = async (ms: number): Promise<void> => {
+    if (keepers.length === 0) return rig.clock.pause(ms);
+    const every = Math.min(...keepers.map((k) => k.retrigger_ms!));
+    for (let left = ms; left > 0; left -= every) {
+      await rig.clock.pause(Math.min(every, left));
+      for (const k of keepers) await play(k, rig);
+    }
+  };
   try {
     await playAll(setup, rig);
     await playAll(pre, rig);
@@ -323,10 +346,10 @@ async function runCase(
       let reading: StatsReading;
       try {
         await rig.stats.start();
-        await rig.clock.pause(profile.warmup_s * 1000);
+        await pause(profile.warmup_s * 1000);
         const { generation } = await rig.stats.clear();
         if (marked) await playAll(body, rig);
-        else await rig.clock.pause(profile.capture_s * 1000);
+        else await pause(profile.capture_s * 1000);
         if (dsp) {
           // the window ends with the first complete sweep of this clear generation that the mirror publishes after it (about 50 blocks): the runtime logs DSP_SWEEP
           await rig.events!.listen();
@@ -346,6 +369,18 @@ async function runCase(
       }
       const dspOut = dspPart(reading, i.dspUnit);
       if (dsp && !dspOut) throw new Error(`case ${c.id}: no complete DSP sweep after the capture`);
+      if (dspOut && c.modules.length > 0) {
+        const busy = dspOut.rows.filter((x) => x.calls > 0);
+        if (busy.length === 0)
+          throw new Error(
+            `case ${c.id}: capture ${r} counted no calls of any machine or effect row: nothing of the module sounded in the window (a voice that ends by itself needs retrigger_ms on its note)`,
+          );
+        for (const x of busy)
+          if (x.calls < 0.5 * dspOut.header.blocks)
+            log(
+              `case ${c.id}: capture ${r}: row ${x.row} has ${x.calls} calls in ${dspOut.header.blocks} blocks: the voice did not sound the whole window`,
+            );
+      }
       if (c.id === STOCK_CASE && dspOut?.rows.some((x) => x.calls > 0))
         throw new Error(
           `case ${c.id}: the stock case counted module rows (a module is loaded or a module machine plays)`,

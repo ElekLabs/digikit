@@ -11,6 +11,8 @@ export interface CalCase {
   steps: StepRef;
   /** The module ids loaded for the case, and nothing else (default: none). A subset of the profile's `modules`. */
   modules: string[];
+  /** Core modules the case needs in the image (`core/sample-pool`): a target whose image lacks one skips the case, with that reason, when the runtime refuses the module. */
+  needs?: string[];
   /** Played after the profile's `teardown`, also after a failure (a discovered module case gets the profile's `module_teardown`). */
   teardown?: StepRef;
 }
@@ -38,6 +40,8 @@ export interface CalCaseFile {
   id: string;
   module: string;
   steps: StepRef;
+  /** Core modules the case needs in the image (the module's imports from a core module that not every image has). */
+  needs: string[];
 }
 
 const isTable = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -169,12 +173,12 @@ export function parseCalCase(text: string, file: string): CalCaseFile {
   }
   if (doc.schema !== CALCASE_SCHEMA) throw new Error(`${file}: schema must be "${CALCASE_SCHEMA}"`);
   for (const k of Object.keys(doc))
-    if (!['schema', 'id', 'module', 'steps', 'args', 'inline'].includes(k))
+    if (!['schema', 'id', 'module', 'needs', 'steps', 'args', 'inline'].includes(k))
       throw new Error(`${file}: unknown key ${k}`);
   if (typeof doc.id !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(doc.id))
     throw new Error(`${file}: id must be lowercase letters, digits, _ and -`);
   if (typeof doc.module !== 'string' || doc.module === '') throw new Error(`${file}: module is missing`);
-  return { id: doc.id, module: doc.module, steps: ref(file, 'case', doc) };
+  return { id: doc.id, module: doc.module, needs: strings(file, 'needs', doc.needs), steps: ref(file, 'case', doc) };
 }
 
 /** The profile with the discovered module cases added after its own, and their modules in its module list. A profile without `discover` takes none. */
@@ -190,6 +194,7 @@ export function addModuleCases(profile: CalProfile, found: readonly CalCaseFile[
       id: f.id,
       steps: f.steps,
       modules: [f.module],
+      ...(f.needs.length ? { needs: f.needs } : {}),
       ...(profile.module_teardown ? { teardown: profile.module_teardown } : {}),
     });
   }
