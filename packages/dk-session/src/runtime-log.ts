@@ -1,7 +1,7 @@
 // The events of the runtime's log (LOG) in words: the kind and argument names from sdk/sdk.toml (gen_proto.ts), the readable forms of the
 // arguments, the one-line text, and the text of a fault with the events that belong to it. The same rules as `tools/device/dklog.py`
 // (`event_dict`, `text_of`, `crash_text`, `hang_text`), which tests/digikit/test_dklog.py checks; apps/desktop/ui/src/log-follow*.ts follows the log with it.
-import { GUARD_KINDS, LOG_FLAGS, LOG_KIND, LOG_KINDS, LOG_LEVELS } from './gen_proto.ts';
+import { GUARD_KINDS, LOAD_STATUS, LOG_FLAGS, LOG_KIND, LOG_KINDS, LOG_LEVELS } from './gen_proto.ts';
 import type { DkLogEvent } from './dkupload-core.ts';
 import { faultRows, type Fault } from './fault.ts';
 
@@ -91,6 +91,31 @@ const DIAG_DECIMAL = new Set([
 const FX_ROW_BYTES = 96;
 const NONE = 0xffffffff;
 
+/** The `index` of a MOD_LOAD event for a provider file (a service, `.dks`): the words are [PROVIDER_IDX, result, name4, hash, base] (runtime boot.rs `report_provider`). */
+export const PROVIDER_IDX = 0xfffffffe;
+const E_DECL_KIND = -79;
+/** The tags of `Declare` (runtime abi/service.rs) that a header table carries, as the header table's items are named. */
+export const DECL_TAGS: Readonly<Record<number, string>> = {
+  4: 'KINDS',
+  5: 'SLOTS',
+  6: 'HOOKS',
+  7: 'EXPORTS',
+  8: 'RESOURCES',
+};
+
+/**
+ * The declare-check diagnosis of a provider MOD_LOAD event with result E_DECL_KIND: the first item that the service's `init` and the header table
+ * do not both hold. The hash word is the item's first word and the base word its tag, plus 0x100 when only the header table has the item
+ * (loader/mod.rs `decl_diff`): `EXPORTS 946ae751 not declared`. Null for another result or when no item was found (a full collection: tag 0 or 1).
+ */
+export function declDiagnosis(args: readonly number[]): string | null {
+  const base = args[4] ?? 0;
+  const tag = base & 0xff;
+  if (signed(args[1] ?? 0) !== E_DECL_KIND || tag <= 1) return null;
+  const item = `${DECL_TAGS[tag] ?? `tag ${tag}`} ${hex8(args[3] ?? 0)}`;
+  return `${item} ${(base & 0x100) !== 0 ? 'not declared' : 'not in the header'}`;
+}
+
 const hex8 = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
 const hex4 = (n: number) => (n & 0xffff).toString(16).padStart(4, '0');
 const signed = (n: number) => n | 0;
@@ -131,8 +156,26 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
     case 'MOD_LOAD':
     case 'MOD_LIST':
       f = Object.fromEntries(Object.entries(f).filter(([k]) => !k.startsWith('name')));
+      if (name === 'MOD_LOAD' && a[0] === PROVIDER_IDX) {
+        // a provider file: the first four characters of its name, then the service hash and the base word (the declare-check diagnosis for E_DECL_KIND)
+        // the name is 4 characters packed big-endian into the one word a[2] (first character in the top byte, NUL after a shorter name; `asciiOf` unpacks it)
+        f.provider = true;
+        f.name = asciiOf(a[2]!);
+        f.result = signed(a[1]!);
+        f.hash = hex8(a[3]!);
+        f.base = hex8(a[4]!);
+        const why = declDiagnosis(a);
+        if (why) f.decl_item = why;
+        break;
+      }
       f.name = asciiOf(a[2]!, a[3]!, a[4]!);
       if (name === 'MOD_LOAD') f.result = signed(a[1]!);
+      break;
+    case 'SETUP_DONE':
+      f.status = signed(a[4]!);
+      break;
+    case 'MOD_NEEDS':
+      f = { index: a[0]!, needs: asciiOf(a[1]!, a[2]!, a[3]!) };
       break;
     case 'CRASH_MOD':
       f =
@@ -140,7 +183,7 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
           ? { frame_word: hex8(a[1]!), faults: a[2]!, name_tail: asciiOf(a[3]!) }
           : {
               module: a[0] === NONE ? null : a[0]!,
-              slots_entered: a[1]! & 0xffff,
+              phase: a[1]! & 0xffff,
               boot_was_stable: a[1]! >>> 16 !== 0,
               name: asciiOf(a[2]!, a[3]!, a[4]!),
             };
@@ -267,6 +310,9 @@ export function runtimeEvent(ev: DkLogEvent): RuntimeEvent {
   };
 }
 
+/** What the module code was doing at a crash (`dlog::PHASE_*` of the runtime): the low half of the first argument of CRASH_MOD. */
+const CRASH_PHASES: Record<number, string> = { 0: 'no module code', 1: 'init', 2: 'tick', 3: 'fini', 4: 'a callback' };
+
 /** Module record index + 1 -> name, from MOD_LIST events. */
 export function moduleNames(events: DkLogEvent[]): Map<number, string> {
   const out = new Map<number, string>();
@@ -275,28 +321,131 @@ export function moduleNames(events: DkLogEvent[]): Map<number, string> {
   return out;
 }
 
+/** A module of the boot selection that did not load: `name` as MOD_LOAD keeps it (the name part of the module id when the runtime read the file's header, else the file name without `.dkm`; 12 characters at most), the
+ * load `result` (a negative code) and, for E_IMPORT, `needs`: the module its imports need that is not in the image, without the `core/`
+ * prefix (usb-bulk), from the MOD_NEEDS event the runtime logs after it. */
+export interface LoadFailure {
+  name: string;
+  result: number;
+  needs?: string;
+}
+
+const E_IMPORT = -7;
+const E_PLAN_FIT = -78;
+
+/** The modules that failed to load in the last boot of `events` (an ordered log): every MOD_LOAD with a result below 0 after the last BOOT_START. */
+export function loadFailures(events: DkLogEvent[]): LoadFailure[] {
+  let start = 0;
+  events.forEach((e, i) => {
+    if (e.kind === LOG_KIND.BOOT_START) start = i;
+  });
+  const out = new Map<string, LoadFailure>();
+  for (const e of events.slice(start)) {
+    if (e.kind === LOG_KIND.MOD_LOAD) {
+      const result = signed(e.args[1]!);
+      // a provider file has no module index: it is keyed by the first four characters of its name
+      const provider = e.args[0] === PROVIDER_IDX;
+      const name = provider ? asciiOf(e.args[2]!) : asciiOf(e.args[2]!, e.args[3]!, e.args[4]!);
+      const key = provider ? `p:${name}` : String(e.args[0]!);
+      if (result < 0) out.set(key, { name, result });
+      else out.delete(key);
+    } else if (e.kind === LOG_KIND.MOD_NEEDS) {
+      const f = out.get(String(e.args[0]!));
+      if (f && f.result === E_IMPORT) f.needs = asciiOf(e.args[1]!, e.args[2]!, e.args[3]!);
+    }
+  }
+  return [...out.values()];
+}
+
+/** The limits of the provider search (`discover.rs` `TRUNC_*`), logged as a provider event named by its first four characters with E_PLAN_FIT. */
+const SEARCH_LIMITS: Record<string, string> = {
+  '(tab': 'the provider table is full (PROVIDER_MAX files provide for this selection)',
+  '(fil': 'services/ or ports/ holds more files than the search reads',
+  '(nee': 'the selection needs more services than the search remembers',
+};
+
+/** The module name of a failure without its `.dkm`: `usb-fast.dkm` is `usb-fast`. */
+export const failureModule = (f: Pick<LoadFailure, 'name'>): string => f.name.replace(/\.dkm$/, '');
+
+/** Why a module is not loaded, in one line: the missing module for E_IMPORT with a name (`usb-fast not loaded: this firmware has no core/usb-bulk. Flash
+ * firmware from the Firmware page.`), else the loader's own text for the code. The one place of these texts; the apps show it. */
+export function loadFailureText(f: LoadFailure): string {
+  const cut = SEARCH_LIMITS[f.name];
+  if (cut && f.result === E_PLAN_FIT) return `a service or port file may be missing from the search: ${cut}`;
+  const name = failureModule(f);
+  if (f.result === E_IMPORT && f.needs)
+    return `${name} not loaded: this firmware has no core/${f.needs}. Flash firmware from the Firmware page.`;
+  const why = LOAD_STATUS.find(([code]) => code === f.result)?.[2] ?? `error ${f.result}`;
+  return `${name} not loaded: ${why}`;
+}
+
+/** The short form for a badge (`usb-fast not loaded (needs usb-bulk)`); other codes give the long text. */
+export function loadFailureShort(f: LoadFailure): string {
+  return f.result === E_IMPORT && f.needs ? `${failureModule(f)} not loaded (needs ${f.needs})` : loadFailureText(f);
+}
+
 /** The module of an event: its name when known, else `mod#N` (N the record index); '' for the runtime. */
 export const moduleOf = (source: number, names: ReadonlyMap<number, string>): string =>
   source === 0 ? '' : (names.get(source) ?? `mod#${source - 1}`);
 
+/**
+ * Names an address of the running image, `module: function+0xNN` (or `function+0xNN` for the runtime and the firmware), or null when no map
+ * holds it. `ret`: the address is a return address, looked up one instruction earlier. The workbench makes it from the address maps and the
+ * load table (packages/dk-session/src/log-names.ts); without one every address stays hex.
+ */
+export type AddrNamer = (cpu: 'cf' | 'sharc', addr: number, ret?: boolean) => string | null;
+
+/**
+ * A name for an address of a record from an earlier boot (a crash, a fault): code of a module is placed by the load addresses of the boot that
+ * reads the record, so a module name is marked `unverified` (the crash boot may have loaded the modules elsewhere; docs/ADDRMAP.md). The
+ * runtime's and the firmware's names do not move and are not marked.
+ */
+function recordName(resolve: AddrNamer, cpu: 'cf' | 'sharc', addr: number, ret = false): string | null {
+  const n = resolve(cpu, addr, ret);
+  return n && n.includes(': ') ? `${n}, unverified` : n;
+}
+
+/**
+ * The names of the addresses an event carries, by field: the pc of a crash, and where a stopped DSP was. Best effort: whether the DSP's
+ * last word of the fault record is a SHARC PC is not verified [O], so it is named only when a loaded module's DSP map holds it, and it
+ * stays hex otherwise.
+ */
+function addressNames(d: RuntimeEvent, resolve?: AddrNamer): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!resolve) return out;
+  if (d.kind === 'CRASH_FOUND') {
+    const n = recordName(resolve, 'cf', d.args[0]!);
+    if (n) out.pc = n;
+  } else if (d.kind === 'FAULT_FOUND' && (d.args[0]! & 0xff) === 2) {
+    const n = recordName(resolve, 'sharc', d.args[3]!);
+    if (n) out.at = n;
+  }
+  return out;
+}
+
 const fieldText = (v: FieldValue): string => (v === null ? '-' : Array.isArray(v) ? v.join(',') : String(v));
-const pairs = (fields: Record<string, FieldValue>) => Object.entries(fields).map(([k, v]) => `${k}=${fieldText(v)}`);
+const pairs = (fields: Record<string, FieldValue>, named: Record<string, string> = {}) =>
+  Object.entries(fields).map(([k, v]) => `${k}=${fieldText(v)}${named[k] ? ` (${named[k]})` : ''}`);
 
 /** The text of an event for a log row: the kind, the module when a module wrote it, then `name=value` pairs. A module's own message
  * (MOD_LOG) is the module, the message in quotes and the value in hex. */
-export function eventText(d: RuntimeEvent, names: ReadonlyMap<number, string>): string {
+export function eventText(d: RuntimeEvent, names: ReadonlyMap<number, string>, resolve?: AddrNamer): string {
   const who = moduleOf(d.source, names);
   if (d.kind === 'MOD_LOG') {
     return [who || 'runtime', `"${d.fields.msg}"`, `value=0x${hex8(d.args[4]!)}`].join('  ');
   }
-  return [d.kind, who, ...pairs(d.fields)].filter(Boolean).join('  ');
+  return [d.kind, who, ...pairs(d.fields, addressNames(d, resolve))].filter(Boolean).join('  ');
 }
 
 /** The readable line of dklog (`text_of`): sequence, device time, level, module, `!` for an error, kind, pairs. */
-export function eventLine(d: RuntimeEvent, names: ReadonlyMap<number, string> = new Map()): string {
+export function eventLine(
+  d: RuntimeEvent,
+  names: ReadonlyMap<number, string> = new Map(),
+  resolve?: AddrNamer,
+): string {
   const who = moduleOf(d.source, names);
   const mark = d.error ? '!' : ' ';
-  return `${String(d.seq).padStart(6)} ${d.t.toFixed(3).padStart(10)}s ${d.level.padEnd(5)} ${who.padEnd(10)}${mark}${d.kind.padEnd(13)} ${pairs(d.fields).join(' ')}`;
+  return `${String(d.seq).padStart(6)} ${d.t.toFixed(3).padStart(10)}s ${d.level.padEnd(5)} ${who.padEnd(10)}${mark}${d.kind.padEnd(13)} ${pairs(d.fields, addressNames(d, resolve)).join(' ')}`;
 }
 
 /** Device time as the detail of a row shows it: `12.410s`. */
@@ -359,7 +508,12 @@ const hexWords = (words: number[]) => words.map(hex8).join(' ');
  * it (the vector, the registers and the stack of a crash; the stack of a panic; the place of a stopped DSP), and the events before the stop.
  * `events` are the events the log held at the boot that found the fault.
  */
-export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<number, string> = new Map()): string {
+export function faultDetail(
+  f: Fault,
+  events: DkLogEvent[],
+  names: ReadonlyMap<number, string> = new Map(),
+  resolve?: AddrNamer,
+): string {
   const lines = [...faultRows(f), '', 'kept on the card as dk/fault (survives power cycles)'];
   const want = (e: DkLogEvent) =>
     f.kind === 'cpu'
@@ -381,10 +535,15 @@ export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<n
         `vector ${vec} (${VECTORS[vec] ?? '?'}), format ${a[1]! >>> 8}, sr ${hex4(a[2]!)}`,
         `pc ${hex8(a[0]!)}   a7 ${hex8(a[3]!)}   crashed ${(a[4]! / BLOCKS_PER_SECOND).toFixed(1)} s after the boot before started`,
       );
+      const at = resolve && recordName(resolve, 'cf', a[0]!);
+      if (at) lines.push(`in ${at}`);
     } else if (f.kind === 'panic') {
       lines.push(`a7 ${hex8(a[1]!)}; the file and line are not kept, the stack holds the way to it`);
     } else {
-      lines.push(`core step ${coreStep((a[0]! >>> 16) & 0xff)}, module step ${a[2]}, last word ${hex8(a[3]!)}`);
+      const place = addressNames(runtimeEvent(first), resolve).at;
+      lines.push(
+        `core step ${coreStep((a[0]! >>> 16) & 0xff)}, module step ${a[2]}, last word ${hex8(a[3]!)}${place ? ` (${place})` : ''}`,
+      );
     }
     const mod = rest.find((e) => e.kind === LOG_KIND.CRASH_MOD && e.args[0] !== 0x100);
     // the crashed module is named by its CRASH_MOD event: use it for the lines below, but keep the names of the current boot's list
@@ -396,7 +555,7 @@ export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<n
       lines.push(
         m.module === null
           ? `outside any module, '${m.name}'`
-          : `in module '${m.name}' (index ${m.module}); slots entered mask 0x${Number(m.slots_entered).toString(16)}; the boot had ${m.boot_was_stable ? 'already' : 'not yet'} reached its stable period`,
+          : `in module '${m.name}' (index ${m.module}); during ${CRASH_PHASES[Number(m.phase)] ?? `phase ${m.phase}`}; the boot had ${m.boot_was_stable ? 'already' : 'not yet'} reached its stable period`,
       );
     }
     const regs = new Map<string, number>();
@@ -417,6 +576,12 @@ export function faultDetail(f: Fault, events: DkLogEvent[], names: ReadonlyMap<n
       lines.push('stack from a7:');
       for (let i = 0; i < words.length; i += 8)
         lines.push(`  +${(4 * i).toString(16).padStart(3, '0')}  ${hexWords(words.slice(i, i + 8))}`);
+      // a stack word that names code is probably a return address: the call is the instruction before it
+      const code = words.flatMap((w, i) => {
+        const n = w % 2 === 0 && resolve ? recordName(resolve, 'cf', w, true) : null;
+        return n ? [`  +${(4 * i).toString(16).padStart(3, '0')}  ${hex8(w)}  ${n}`] : [];
+      });
+      if (code.length) lines.push('stack words that point into code (return addresses?):', ...code);
     }
     const tail = tailEvents(rest);
     if (tail.length) {

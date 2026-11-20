@@ -17,13 +17,27 @@ above the MmcFs write guard at sector `0x457FFF` (finding 59):
 | --- | --- | --- | --- |
 | DT2 | `0x2DF1000`, after the +Drive | `0x2E1A000`, the card end | 82 MiB |
 | DN2 | `0x800000`, above everything the Data API reaches | `0x2E1A000`, the card end | about 22 GiB |
+| Syntakt | `0x200000` (1 GiB), above the stock sectors | `0x300000` (1.5 GiB), inside a larger card | 512 MiB |
 
-`[card] total_sectors` is the card the firmware accepts (the pSLC 32 GB part, 0x2E1A000 sectors); the area ends with it. A card the runtime finds
-smaller than the area (its last sector does not read) has **no store**: nothing is read or written there, uploads answer `E_NOSTORE`, and the boot goes on
+The area is `[card.store]` `first_sector` .. `end_sector`; the end does not follow the card. On the Digitakt II and Digitone II it is the end of the card the firmware accepts (the pSLC 32 GB part, 0x2E1A000 sectors, which is `[card] total_sectors`, the card the emulator emulates); on the Syntakt it is 0x300000, inside a larger card (finding 154). A card the runtime finds
+smaller than the area (the firmware driver's capacity is below its end) has **no store**: nothing is read or written there, uploads answer `E_NOSTORE`, and the boot goes on
 (`CARD_TOO_SMALL`, a `CARD_CHECK` event). Sector numbers below are relative to `first_sector` unless said otherwise. A device with no `[card.store]` takes no
 `digikit/` files (the builder reports them as skipped).
 
-The area is not a path filesystem: **folders are in the paths.** The runtime's modules are in `modules/`, samples (DN2) in `samples/`.
+The area is not a path filesystem: **folders are in the paths.** The folders and what each holds (words and layout: [taxonomy](taxonomy.md) "Card layout"):
+
+| Folder | Holds |
+| --- | --- |
+| `modules/<kind>/<author>-<name>.dkm` | content modules, grouped by module kind; the file name is the module id with "/" as "-" |
+| `services/<service>.dks` | service files; the stem is the service name |
+| `ports/<device>-<version>.dkport` | port files, several side by side; `<version>` is the firmware version string, the runtime picks the one whose `FW` hash equals the image `fw_id` |
+| `projects/<slot>-<name>.dkp` | project files of the `project` service, slot 000 to 127 (the identity) and the project name ([digikit-project](../plans/digikit-project.md)) |
+| `projects/archive/<name>-<stamp>.dkp` | archived project files of the `project` service, kept for good (a file that no longer belongs to its slot); stamp as 8 hex digits ([digikit-project](digikit-project.md)) |
+| `samples/<folder>/<name>` | samples, for devices with `card = "slots"` only |
+| `data/<module id>/` | reserved for files that a module writes; not enforced |
+| `logs/` | reserved |
+
+The role word in the header decides what a file is; a file in the wrong folder is not found. A module path is at most 8 (`modules/`) + 10 (kind and `/`) + 31 (id) + 4 (`.dkm`) = 53 characters; a selection entry holds at most 55 (`SEL_PATH` 56 with the NUL). The kind comes from the module's records at pack time; if a later version changes it, Transfer moves the file with RENAME.
 
 ## Format
 
@@ -61,7 +75,7 @@ table: entry_count entries of 256 bytes, sorted by (first_sector, path in byte o
 
 Rules: a path is 1 to 159 bytes of printable text (0x20 to 0x7E, no NUL), with no empty, `.` or `..` part; two entries may not have the same path; a path that is a
 file may not also be the folder of another entry (`a` and `a/b`). A **folder entry** (kind 1, size 0) exists only for a folder with nothing in it (made by the
-host with MKDIR; the commit that stores a file or a folder inside it drops it, and a folder whose last file is deleted is gone, since folders with files are implied); a folder that has files is implied by their paths. A file or folder with no data (an empty file, a folder) has `first_sector` 0 and takes no sector; it sorts before every file with data. A file is at
+host with MKDIR; the commit that stores a file or a folder inside it drops it, and a folder whose last file is deleted is gone, since folders with files are implied; a RENAME that moves the last entry out of a folder gives that folder a folder entry instead, so a move never makes a folder go); a folder that has files is implied by their paths. A file or folder with no data (an empty file, a folder) has `first_sector` 0 and takes no sector; it sorts before every file with data. A file is at
 most 4 GiB - 1 bytes; each file starts on a sector boundary and takes `ceil(size / 512)` sectors.
 
 The tail, `store::TAIL` = 35 sectors (header copy B, the settings record's 32, the selection record's 2), is never a file's: `limit` = `sectors - 35` (`store::Layout::limit`, `header_b`), the allocator
@@ -86,11 +100,21 @@ allocates a file's extent in the first gap that holds it (first fit) and, on eve
 free-space figure (`used_sectors`, INFO's free bytes) is the sum of the gaps less the room for the table of one more entry; **a file larger than the largest gap is refused with
 `E_FULL` even when the sum is larger** (the free space is not one piece).
 
+**Read leases.** A reader that streams a file over several tasks (the Digitone II sample pool) leases its extent (`dkrt_store_lease`, `dkrt_sdk::store::lease`) until it is done: replacing or deleting that file and CLEAR answer `E_FILE_IN_USE`, and the extent is kept out of every allocation (the `extra` list of `first_fit` and `commit`), so a running load never reads the bytes of another file. Taking a lease and every commit hold the store lock, so a lease records the committed extent. The table is `DKRT_STORE_LEASES` (24) entries in RAM: a reboot clears every lease, so a lease that was never released (a bug in a reader) blocks replace, delete and CLEAR of that file until the next boot.
+
 ## Commits and power cuts
 
-A commit (the end of an upload, a delete, a clear) streams the old table through two small buffers into a gap, with the entry inserted, replaced or removed, reads the new
+A commit (the end of an upload, a delete, a clear, a rename) streams the old table through two small buffers into a gap, with the entry inserted, replaced or removed, reads the new
 table back and checks its CRC, and then writes header B and header A with `seq + 1`. Nothing in use is overwritten before the headers move, so a cut at any point leaves the old store or
 the new one, never a mix (`dkrt_sdk::store` tests cut a commit after every write). A file's data is written to its extent before the commit; an upload that is cut is a gap that nothing names.
+
+**Pending files and the batch commit** (runtime 0.8.3). A file written by an SDK module with `DK_FILE_DEFER` is read back and hash-checked at close but not named: its entry waits in the runtime's
+pending array (at most 16 files and 16 MiB; RAM only). The pending extents are kept out of every allocation and out of the free-space figure, like the extent of a file being written, and a BEGIN checks its path against the
+pending entries as against the table (a path of a pending file is `E_EXISTS` without REPLACE; a REPLACE or a delete of it drops the pending entry). One commit with `Edit::InsertMany` (up to `MANY_MAX` = 16 entries,
+sorted by first sector then path like the table; each entry replaces a stored entry of its path) names all of them: one table, one read-back, two header writes. A cut at any write of it leaves the old store or the new one with
+all the files (`dkrt_sdk::store` test `a_power_cut_in_a_batch_commit_leaves_the_old_store_or_the_new_one_with_all_files`); a cut before it loses only the pending files, whose extents nothing names, so the space is free again after boot.
+The runtime commits pending files in an I/O job, never in the UI task: before a deferred create that would pass 16 files or 16 MiB (its BEGIN returns the commit's error), 1 s after the owner's last file call, at the end of its job and at its unload. A SysEx MKDIR or RENAME
+commits them first, a CLEAR drops them. They are not listed and cannot be read until committed.
 
 **Both copies agree before space is reused.** After a cut between header B and header A the copies differ: A lags and still names the previous table. That is harmless while nothing is
 overwritten, but the next commit writes a table into free space, which may be exactly the sectors of that old table; if its header B then tears, the lagging A would be the only usable copy and
@@ -149,7 +173,7 @@ zero (no record) on a card the builder made.
   20  4   u32 count           selected modules, 0 to 8
   24  4   u32 stable_blocks    the stable period of this card in DSP blocks; 0 = the runtime's default, 45,000 (30 s)
   28  4   sticky type map, entry 0 (see below)
-  32  448 8 paths of 56 bytes: store paths ("modules/dyn-pluck.dkm"), NUL padded, at most 55 characters, load order
+  32  448 8 paths of 56 bytes: store paths ("modules/digikit/pluck.dkm"), NUL padded, at most 55 characters, load order
   480 28  sticky type map, entries 1 to 7 (4 bytes each)
   508 4   u32 crc32 of bytes 0..508 (IEEE, as the store table)
 ```
@@ -199,7 +223,7 @@ The runtime reads the placement from the layout (`store::Layout::set_a`, `set_b`
 
 The bytes after `used` are not part of the record (a shorter record written over a longer one leaves old bytes there; the crc32 ignores them). A copy is **valid** when its magic, version, `used` (18 to 8192),
 crc32 and entries hold (every entry inside `used`, every key legal, no key twice). A reader takes the valid copy with the higher `seq` (equal: A); no valid copy is an empty record. The shared vectors
-`sdk/vectors/settings-vectors.json` (valid records with their decoded entries and a refused record for each rule, with the first rule it breaks) are checked by the Rust SDK tests, by `patchkit store dump` and by the Python reader.
+`modules/core/runtime/vectors/settings-vectors.json` (valid records with their decoded entries and a refused record for each rule, with the first rule it breaks) are checked by the Rust SDK tests, by `patchkit store dump` and by the Python reader.
 
 **Keys by owner.** A key is `<owner prefix><module id>` or, later, `<module id>/...`. Now: `fx/route/<module id>` (1 byte: 0 master, 1 send; absent, or a route the effect's manifest does not allow: the manifest's default `route`; written by DIGIKIT > FX ROUTES) and `fx/send/<module id>` (16 bytes: the amount 0 to 127 of each track). The
 prefixes and how a reader prints their values are `[[settings.key]]` of `sdk/sdk.toml` (generated). A key of another shape is stored and printed as text or hex. **Reserved, not built:** a run-time module (a `.dkm`) will

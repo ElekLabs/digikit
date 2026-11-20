@@ -12,6 +12,10 @@ ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
 
+[[machine]]
+id = "native"
+dsp = "np"
+
 [[object]]
 path = "build/native-page-cf.dko.json"
 sources = ["src/module.c"]
@@ -21,3 +25,15 @@ place = "cf.expansion"
 path = "build/native-page-dsp.dko.json"
 sources = ["src/dsp/native-page.s"]
 place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 2
+page_rows = 0
+record_bytes = 428
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 2
+page_rows = 1
+record_bytes = 524

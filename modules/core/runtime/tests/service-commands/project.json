@@ -7,9 +7,9 @@
     "runtimeAcceptance": [
       {
         "files": ["service-commands.device.test.ts"],
+        "tags": ["C:transport"],
         "modules": ["test/svc-echo"]
       }
-    ],
-    "mergeTests": ["service-commands.device.test.ts"]
+    ]
   }
 }

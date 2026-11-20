@@ -3,7 +3,18 @@ import { expect, test } from 'vitest';
 import type { DkLogEvent } from '../src/dkupload-core.ts';
 import { LOG_KIND } from '../src/gen_proto.ts';
 import { decodeFault } from '../src/fault.ts';
-import { asciiOf, eventLine, eventText, faultDetail, moduleNames, runtimeEvent } from '../src/runtime-log.ts';
+import {
+  asciiOf,
+  declDiagnosis,
+  eventLine,
+  eventText,
+  faultDetail,
+  loadFailures,
+  loadFailureShort,
+  loadFailureText,
+  moduleNames,
+  runtimeEvent,
+} from '../src/runtime-log.ts';
 
 const word = (s: string) => {
   let n = 0;
@@ -128,4 +139,89 @@ test('safe reason 6 reads as a selection read failure', () => {
   const safe = runtimeEvent(ev(1, 'SAFE', [6, 0, 10], 1));
   expect(safe.fields.reason).toBe('read');
   expect(eventText(safe, new Map())).toBe('SAFE  reason=read  boot_counter=0  record_seq=10');
+});
+
+test('a module that needs a missing module is reported once, with the module it needs', () => {
+  const events = [
+    ev(1, 'BOOT_START'),
+    ev(2, 'MOD_LOAD', [0, 0, word('pluc'), word('k.dk'), word('m')]),
+    ev(3, 'MOD_LOAD', [1, 0xfffffff9, word('usb-'), word('fast'), word('.dkm')], 1),
+    ev(4, 'MOD_NEEDS', [1, word('usb-'), word('bulk'), 0], 1),
+  ];
+  expect(runtimeEvent(events[3]!).fields).toEqual({ index: 1, needs: 'usb-bulk' });
+  const [f, ...rest] = loadFailures(events);
+  expect(rest).toEqual([]);
+  expect(f).toEqual({ name: 'usb-fast.dkm', result: -7, needs: 'usb-bulk' });
+  expect(loadFailureText(f!)).toBe(
+    'usb-fast not loaded: this firmware has no core/usb-bulk. Flash firmware from the Firmware page.',
+  );
+  expect(loadFailureShort(f!)).toBe('usb-fast not loaded (needs usb-bulk)');
+});
+
+test('a limit of the provider search is named by its cause', () => {
+  const events = [
+    ev(1, 'BOOT_START'),
+    ev(2, 'MOD_LOAD', [0xfffffffe, 0xffffffb2, word('(tab'), 1, 0], 1),
+    ev(3, 'MOD_LOAD', [0xfffffffe, 0xffffffb2, word('(fil'), 2, 0], 1),
+    ev(4, 'MOD_LOAD', [0xfffffffe, 0xffffffb2, word('(nee'), 4, 0], 1),
+  ];
+  const texts = loadFailures(events).map(loadFailureText);
+  expect(texts).toHaveLength(3);
+  expect(texts[0]).toMatch(/provider table is full/);
+  expect(texts[1]).toMatch(/holds more files/);
+  expect(texts[2]).toMatch(/needs more services/);
+});
+
+test('only the last boot counts, and other codes keep the loader text', () => {
+  const events = [
+    ev(1, 'BOOT_START'),
+    ev(2, 'MOD_LOAD', [0, 0xfffffff9, word('a.dk'), word('m'), 0], 1),
+    ev(3, 'BOOT_START'),
+    ev(4, 'MOD_LOAD', [0, 0xfffffff7, word('b.dk'), word('m'), 0], 1),
+    ev(5, 'MOD_LOAD', [1, 1, word('c.dk'), word('m'), 0]),
+  ];
+  const fails = loadFailures(events);
+  expect(fails).toEqual([{ name: 'b.dkm', result: -9 }]);
+  expect(loadFailureText(fails[0]!)).toBe('b not loaded: init returned non-zero');
+  expect(loadFailureText({ name: 'x.dkm', result: -7 })).toBe(
+    'x not loaded: an import is unknown, or a provider the module needs is absent',
+  );
+});
+
+const PROVIDER = 0xfffffffe;
+
+test('a provider MOD_LOAD event is decoded by its own layout: [index, result, name4, hash, base]', () => {
+  const ok = runtimeEvent(ev(1, 'MOD_LOAD', [PROVIDER, 1, word('fx.d'), 0x946ae751, 0x47000000])).fields;
+  expect(ok).toMatchObject({ provider: true, name: 'fx.d', result: 1, hash: '946ae751', base: '47000000' });
+  expect(ok).not.toHaveProperty('decl_item');
+  // E_DECL_KIND: the hash word is the item's first word, the base word its tag (+0x100: only the header table has it)
+  const notDeclared = runtimeEvent(ev(2, 'MOD_LOAD', [PROVIDER, 0xffffffb1, word('mach'), 0x946ae751, 7 | 0x100], 1));
+  expect(notDeclared.fields).toMatchObject({ name: 'mach', result: -79, decl_item: 'EXPORTS 946ae751 not declared' });
+  const notInHeader = runtimeEvent(ev(3, 'MOD_LOAD', [PROVIDER, 0xffffffb1, word('mach'), 6, 4]));
+  expect(notInHeader.fields.decl_item).toBe('KINDS 00000006 not in the header');
+  // a full collection has no item; another result carries no diagnosis
+  expect(declDiagnosis([PROVIDER, -79, word('mach'), 0, 1])).toBeNull();
+  expect(declDiagnosis([PROVIDER, -7, word('mach'), 6, 4])).toBeNull();
+  expect(eventText(notDeclared, new Map())).toContain('decl_item=EXPORTS 946ae751 not declared');
+});
+
+test('a module MOD_LOAD event keeps the name in three words', () => {
+  const f = runtimeEvent(ev(1, 'MOD_LOAD', [3, 0, word('usb-'), word('fast'), word('.dkm')])).fields;
+  expect(f).toMatchObject({ name: 'usb-fast.dkm', result: 0 });
+  expect(f).not.toHaveProperty('provider');
+});
+
+test('provider load failures are listed under their own names and do not hide each other or a module', () => {
+  const events = [
+    ev(1, 'BOOT_START'),
+    ev(2, 'MOD_LOAD', [PROVIDER, 0xffffffb1, word('mach'), 6, 4], 1),
+    ev(3, 'MOD_LOAD', [PROVIDER, 0xfffffff9, word('fx.d'), 0, 0], 1),
+    ev(4, 'MOD_LOAD', [PROVIDER, 1, word('lfo.'), 0, 0]),
+    ev(5, 'MOD_LOAD', [0, 0xffffffb3, word('plu'), 0, 0], 1),
+  ];
+  expect(loadFailures(events).map(({ name, result }) => ({ name, result }))).toEqual([
+    { name: 'mach', result: -79 },
+    { name: 'fx.d', result: -7 },
+    { name: 'plu', result: -77 },
+  ]);
 });

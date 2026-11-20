@@ -10,9 +10,8 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// A repository root of its own whose only fixture module is `test/trace-demo` without its trace marks: the lines of the macros are
-/// dropped, `DK_TRACE_INIT(api)` becomes `(void)api` (the parameter is used either way). The module keeps its id (the id feeds the
-/// registry records), so it cannot sit next to the real fixture. `modules`, `devices`, `sdk` and the toolchain are the repository's.
+/// A repository root of its own whose only fixture module is `test/dyn-fx-gain` without its trace marks: the lines of the macros are
+/// dropped. The module keeps its id (the id feeds the registry records), so it cannot sit next to the real fixture. `modules`, `devices`, `sdk` and the toolchain are the repository's.
 fn stripped_root(dir: &Path) {
     use std::os::unix::fs::symlink;
     let real = root();
@@ -21,11 +20,16 @@ fn stripped_root(dir: &Path) {
     }
     std::fs::create_dir_all(dir.join("out")).unwrap();
     symlink(Env::new(&real).tools, dir.join("out/tools")).unwrap();
-    let from = real.join("tests/fixtures/modules/trace-demo");
-    let to = dir.join("tests/fixtures/modules/trace-demo");
-    for rel in ["module.toml", "src/module.c", "src/dsp/trace_demo.s"] {
+    let from = real.join("tests/fixtures/modules/dyn-fx-gain");
+    let to = dir.join("tests/fixtures/modules/dyn-fx-gain");
+    for rel in [
+        "module.toml",
+        "build/gen/module_ids.h",
+        "src/module.c",
+        "src/dsp/dyn_fx_gain.s",
+    ] {
         let text = std::fs::read_to_string(from.join(rel)).unwrap();
-        let text = if rel == "module.toml" {
+        let text = if rel == "module.toml" || rel.ends_with(".h") {
             text
         } else {
             text.lines()
@@ -33,9 +37,8 @@ fn stripped_root(dir: &Path) {
                     !(l.contains("DK_STEP(")
                         || l.contains("DK_TRACE_LOG(")
                         || l.contains("dk_trace.inc")
-                        || l.contains("<dk/trace.h>"))
+                        || l.contains("<dk/core/trace.h>"))
                 })
-                .map(|l| l.replace("DK_TRACE_INIT(api);", "(void)api;"))
                 .collect::<Vec<_>>()
                 .join("\n")
                 + "\n"
@@ -45,12 +48,12 @@ fn stripped_root(dir: &Path) {
     }
 }
 
-/// `patchkit --root ROOT pack test/trace-demo --device dt2 [--trace]`: the file's bytes.
+/// `patchkit --root ROOT pack test/dyn-fx-gain --device dt2 [--trace]`: the file's bytes.
 fn pack(root: &Path, out: &Path, trace: bool) -> Vec<u8> {
     let mut c = Command::new(env!("CARGO_BIN_EXE_patchkit"));
     c.arg("--root")
         .arg(root)
-        .args(["pack", "test/trace-demo", "--device", "dt2", "-o"])
+        .args(["pack", "test/dyn-fx-gain", "--device", "dt2", "-o"])
         .arg(out);
     if trace {
         c.arg("--trace");
@@ -66,10 +69,7 @@ fn pack(root: &Path, out: &Path, trace: bool) -> Vec<u8> {
 
 #[test]
 fn trace_marks_cost_nothing_when_off_and_show_when_on() {
-    if Env::new(&root()).m68k("gcc").is_err() {
-        eprintln!(
-            "SKIP: the m68k-elf toolchain is not installed (uv run python -m tools.patchkit.pk_toolchains m68k)"
-        );
+    if !Env::new(&root()).m68k_or_skip() {
         return;
     }
     let d = std::env::temp_dir().join(format!("pk-trace-test-{}", std::process::id()));

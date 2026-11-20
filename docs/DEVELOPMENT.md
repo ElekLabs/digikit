@@ -21,7 +21,7 @@ site for your device; the repository never includes them.
 | Digitakt II | 1.15C | `Digitakt_II_OS1.15C.syx` | `62d588456e47194bd56dfee9568fb9dd4521c4ff1e8b5427eb461355532e8c6c` |
 | Digitone II | 1.10E | `Digitone_II_OS1.10E.syx` | `9881ee5ca4624be2b833e5eb94e294f2f8425371e6729781baccd1c256cac504` |
 
-Put the files in `firmware/`; the tools look there first (`tools/firmware/config.py`).
+Put the files in `firmware/`, or set `DIGI_FIRMWARE_DIR` to the folder that holds them (`tools/firmware/config.py`).
 `firmware/README.md` lists the images and their SHA-256 values. `DIGI_EMU_SYX`
 (Digitone II) and `DIGI_EMU_SYX_DT2` (Digitakt II) override the paths.
 
@@ -59,19 +59,23 @@ mise run emu:ready -- dn2                     # Digitone II 1.12 (about 2 minute
 mise run emu:ready -- dt2 [--card-image IMG]  # Digitakt II 1.17, optionally with a +Drive image
 ```
 
-The files go to `out/snapshots/<device>-audio-ready-cold-*`. Git ignores them.
+It needs the shared core (`mise run gen:core`). The files go to the `[acceptance] ready_dir` directories of the device files (`devices/*.toml`)
+(`out/snapshots/<device>-audio-ready-cold-*`), where the patchkit harness and the device tests read them. Git ignores them.
 
 ## Desktop emulator
 
 ```sh
-mise run workbench                # build once and run (`mise run workbench -- --build-only` builds only)
-mise run wasm:dksample            # only public/dksample.wasm (the workbench runs it first; 0.3 s when unchanged)
+mise run workbench                # build once and open the app with no firmware loaded (`-- --build-only` builds only)
+mise run workbench -- FILE.syx    # load that firmware at start (else the Emulator page's "Load on start" tick loads the last opened file)
+mise run workbench:inputs         # the UI dist, the wasm files and the packed services, from the Nx cache when unchanged (the workbench runs it first)
+mise run wasm:dkprof              # only public/dkprof.wasm (`wb` addrmap, module and profile commands load it)
 mise run workbench -- --cf-only --plus-drive DIR firmware/Digitakt_II_OS1.17.syx   # a +Drive folder (default: plus_drive/<device>/; --samples is the same option)
 mise run workbench -- --dsp-patch FILE  # overlay a DSP patch (DN2 audio)
-mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio
+mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio (a build without the DSP core)
+mise run workbench -- --no-dsp    # start with the "DSP" tick off: ColdFire only, a peer CPU is replaced by the mailbox responder; the tick turns it on again
 ```
 
-With the DN2 ready inputs present, `mise run workbench` plays DN2 audio. Without them it
+With the ready inputs present, a firmware loaded in `mise run workbench` plays audio. Without them it
 starts the ColdFire-only emulator. The DSP needs about 1.6 CPU seconds per audio second
 ([finding 18](findings/18-dsp-performance.md)), so real time is not reached yet.
 The +Drive comes from `plus_drive/dt2/` or `plus_drive/dn2/` (git ignores both) when it exists, or from `--plus-drive DIR` (`--samples DIR` is the same option): the launcher builds a card image from the folder and caches it by content ([docs/SAMPLES.md](SAMPLES.md)).
@@ -88,14 +92,75 @@ same folder restores in well under a second. It needs the DT2 ready inputs (`mis
 dt2` once: the DSP image and `cold-idle.dsp` come from there). The app remembers the last card
 (`<run dir>/cards/last.json`) and mounts it again when a DT2 starts without `--card-image`, in
 well under a second; the toolbar shows "Samples: NAME (N files)", or "Choose samples to load a
-folder of WAVs" when nothing is cached. A DT2 launch without `SHARC_GEN_DIR` uses the generated
-core its PGO profile was trained on (the launcher prints which core and why), so no environment
-settings are needed. The browser shows the button
+folder of WAVs" when nothing is cached. The app holds no generated core: the launcher builds
+the core library of each device into the shared store (first time only, minutes) and passes it as
+`DIGI_SHARC_CORE_LIB_<DEV>` (`uv run python -m tools.devtools.verify_build cores` does the same by hand).
+To choose the core a library is built from: `SHARC_GEN_DIR_DN2` sets the DN2 core, `SHARC_GEN_DIR_DT2`
+sets the DT2 core, and `SHARC_GEN_DIR` sets one core for both devices (the device variable wins).
+Without any of them the core registered for the DSP image is used (`out/native/gen-index.json`). The browser shows the button
 disabled ("desktop only for now"). Headless: the control socket's `card.load {dir}`,
 `card.status`; `uv run python -m tools.emulator.card_check` checks that trigs 1-3 play a 220 Hz sine, an
 880 Hz sine and noise from three generated files.
 
 **Log panel (desktop app).** The "Log" button in the status bar, or ⌘J (Ctrl+J on other systems), opens a panel with the events of this window: module reloads and builds, firmware loads, card changes, Transfer runs, emulator resets, and guest faults, stalls and DSP halts. Each entry has a time, a source, one line, and for long output (a compiler log) a ▸ button that shows it in full. The panel has a source filter, "Errors only", "Copy" (the entries shown, with details) and "Clear". It keeps the last 500 entries in memory. It opens by itself for a failed reload or build and for a guest fault, stall or DSP halt; other errors add to the badge on the Log button. The Log is a panel docked along the bottom of the window, full width: the page above it gets smaller, nothing is covered. Drag its top edge to change the height (double click resets it; the height is remembered). Metrics stays a small popover above the status bar. The app polls the controller for stalls and halts once a second, so they can show up to a second late.
+
+### workbench-core, the two apps and the command line
+
+`packages/workbench-core` is the code that the site (`apps/web`) and the desktop app (`apps/desktop`) share. The apps import it as `@digi/workbench-core/<path>` with the file extension (`@digi/workbench-core/transfer/app.ts`, `@digi/workbench-core/ui/transfer/TransferPage.tsx`); there is no `@web` alias.
+
+- `src/`: logic and interfaces, no Solid components: `transfer/` and `firmware/` (the `*-core.ts` logic, `TransferEnv` and `FirmwareEnv`, `createTransferApp` and `createFirmwareApp`), `jobs/`, `modules/` (the upload client, needs, fit), `patch/`, `runtime/` (`EmulatorRuntime` and its helpers), `host/` (the `Host` and `EmuRpc` interfaces, `FakeHost`, the MIDI and bulk links over a host group), `storage.ts` (`KeyValue`), `blob-store.ts`, `workers.ts` and `workers-fake.ts`, `wasm-source.ts`, the split-session code and its two workers, `testing/` (the fake flash device) and `node/` (the NodeHost).
+- `ui/`: the Solid pages, components and styles that both apps show the same way (Transfer, Firmware, the panel).
+- `tests/`: the Vitest project `workbench-core` (`pnpm nx:pilot run @digi/workbench-core:test-host`). The tests of the site-only and desktop-only code stay in the apps.
+- What stays in an app is the code that needs the app's platform: the site's WebMIDI, WebUSB, `browserWorkers()` (`apps/web/src/browser-workers.ts`, the only `new Worker`) and Astro pages; the desktop's `TauriHost` (`host/tauri-host.ts`, the only `invoke`), `createNativeRuntime` and its panels.
+- The apps do not import each other, and workbench-core imports no app (oxlint `no-restricted-imports`; `pnpm lint` fails it). Code that both need moves into workbench-core.
+- Nx: workbench-core is its own project. An edit in `src/` or `ui/` selects its own `test-host` and `typecheck`, the site's `check`, `test-host`, `test-wasm` and `build`, and the desktop's `typecheck`, `check:ui`, `test-host` and `build:ui`; no cargo, wasm-build or device target. An edit in `tests/` selects only its own targets.
+
+`createNodeHost(options)` (`src/node/node-host.ts`) is the `Host` for a command line, so a command runs the workbench's code over the same interfaces as the app: `fs` over `node:fs` (the rules of `local.rs`: one level, folders first, no dot files, no path outside the folder), `library` (`out/modules`), `ports.midi` and `ports.bulk` over the `dkmidi` and `dkbulk` bridge processes, `firmware.patchkitWasm` and `sampleWasm` from `apps/web/public`, and `rpc` over the control socket of a running emulator (`packages/control-client`). A command that needs a window or the app's own emulator session (a dialog, `library.build`, `emu.*`, `firmware.prepare`) fails with `NodeHostUnsupported`. `wb` (`tools/devtools/wb.mjs`) builds one: `wb ports` lists the MIDI ports through `host.ports.midi.ports()`, and the samples commands choose their backend from the device registry (`@digi/devices`, `[storage] samples`), as the desktop's Samples backend does. `wb samples put FILE --slot N` puts one WAV into numbered slot N of a device with sample slots and replaces what the slot holds; without `--slot` the lowest free slot is used and an occupied slot is never overwritten; `wb samples rm NAME` clears the slot that `wb samples ls` lists under that name. Test it with temp folders and stand-in bridge programs (`tests/node-host.test.ts`).
+
+`dkbulk descriptors [ID]` checks the USB descriptors Windows needs for WinUSB on a real device, read-only on macOS and Linux: see [usb-fast](../modules/tools/usb-fast/README.md) "Windows descriptor check".
+
+### Host and EmuRpc (desktop UI)
+
+The desktop UI never calls Tauri's `invoke`. `packages/workbench-core/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `createDesktopApps(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The Host types and the fake live in workbench-core; `TauriHost` is the desktop's, and `NodeHost` (above) is the command line's.
+
+Add a command: write the Rust command, then add a method to the group in `host.ts`, its `invoke` line in `tauri-host.ts` and its `leaf(...)` line in `fake-host.ts`. `library.readMaps(device)` returns the address maps (docs/ADDRMAP.md): the ship maps `firmware_prepare` kept for the device's images and the maps `lib_build` writes beside each `.dkm`; `firmware.dkprofWasm()` returns `dkprof.wasm` (`mise run wasm:dkprof`; loader `ui/src/dkprof-env.ts`), which the Log pane uses to name addresses (the emulator's ship map and symbol addresses come from the controller call `runtime.maps`; the load table is read with PEEK of the debug module through `DkSession.peek`, for the emulator and a device). The emulator session commands (`emu_startup`, `emu_step`, `emu_tap`, `emu_stop`, `emu_audio_status`, `emu_stage_syx`, `emu_save_diagnostics`, `emu_card_*`) are in `host.emu` for `createNativeRuntime`.
+
+Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls` (command as `group.method`, arguments, order) and answers from `replies` (a value, or a function of the arguments). A command with no reply fails, except the ones that answer nothing (open, close, send, cancel). Examples: `ui/tests/samples-backend.test.ts`, `card-api.test.ts`, `links.test.ts`. The browser preview (`mise run ui:preview`) still replaces `@tauri-apps/api/core` with `ui/preview/tauri-mock.ts` behind `TauriHost`.
+
+### Target facade
+
+`packages/workbench-core/src/target-ops/` has `TargetOps { target; store: StoreOps; run: RunOps }`: what the UI asks of the selected target, the emulator or a device. `Host` stays the catalogue of platform services (files, dialogs, ports, firmware, `emu.*`); it does not describe a target.
+
+`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). `run` is a stub for now: `unwiredRunOps` makes every operation say why it is not wired. It is filled later, when pause, resume, reset and restart move behind this layer (emulator through `EmulatorRuntime`, device only restart through the protocol).
+
+Tests and the preview use fakes: `fakeStoreOps` and `demoStore` (`target/fake-store.ts`). The first user is the Files page (`packages/workbench-core/ui/files/FilesPage.tsx`), which shows the store read-only; open it in the desktop UI preview with `?page=files`.
+
+### The app object, KeyValue and BlobStore (desktop UI and site)
+
+The Transfer pane, the Firmware page and the target selector keep no module-level state. `createTransferApp(env, { storage, sessions })` (`packages/workbench-core/src/transfer/app.ts`) builds one app from the environment (`TransferEnv`): `app.target` (selected target, its sessions and transports), `app.connection`, `app.jobs`, `app.state` (the Transfer page's signals), `app.backend` and `app.loadLibrary`. `createFirmwareApp(env, transferApp)` (`packages/workbench-core/src/firmware/app.ts`) adds `defaults` (default modules) and `state` (the flash). An entry point builds the apps once and wraps its pages in `<AppProvider app firmware>`; a component takes them with `useTransferApp()` or `useFirmwareApp()` and destructures what it uses. Code that is not a component takes the app (or the part it needs) as an argument.
+
+- Desktop: `createDesktopApps(host)` in `apps/desktop/ui/src/desktop-app.ts`, called by `main.tsx`.
+- Site: `createWebTransferApp()` in `apps/web/src/transfer/web-env.ts` (Transfer) and `createWebFirmwareApp()` in `apps/web/src/firmware/web-env.ts` (Firmware), called by the Astro islands `WebTransfer.tsx` and `WebFirmware.tsx`.
+- An environment needs the app it will belong to (its ports and transports call `app.target`, `app.connection`): its factory takes `app: () => TransferApp`, a function because the app is built from the environment.
+
+What an app is given, so that a test gives something else:
+
+- `storage: KeyValue` (`packages/workbench-core/src/storage.ts`): `get`, `set`, `remove` of small strings. `localStorageKeyValue()` is the browser's (every call guarded); `memoryKeyValue(initial)` is the fake (`.data` shows what was written). `remembered(storage, key, parse)` is a signal kept in it.
+- `sessions: SessionHub` (`transfer/session-core.ts`): `get(key, transport)`, `drop`, `cancel`. `createSessionHub(make)` makes one `DkSession` per target; `createFakeSessions(make)` (`transfer/fake-app.ts`) makes whatever the test returns and records `made`, `dropped` and `cancelled`.
+- `BlobStore` (`packages/workbench-core/src/blob-store.ts`): `get`, `put`, `delete` of bytes. `indexedDbBlobStore(database, objectStore)` is the browser's; `memoryBlobStore()` is the fake. The ready-state cache (`ReadyCache`) and the firmware hand-off (`patch/handoff.ts`) take one.
+
+`createFakeTransferApp({ env, storage, sessions })` (`packages/workbench-core/src/transfer/fake-app.ts`) is the real `createTransferApp` over those fakes and a stub `TransferEnv` that a test overrides in part. Examples: `apps/web/tests/transfer-app.test.ts` (target and session selection, remembered values), `apps/desktop/ui/tests/module-loading.test.ts`, `samples-backend.test.ts`. Only `storage.ts` touches `localStorage`, `blob-store.ts` touches `indexedDB` and `apps/web/src/browser-workers.ts` calls `new Worker` (oxlint `no-restricted-globals`).
+
+### WorkerFactory, WasmSource and the two runtimes
+
+Code that needs a Web Worker takes a `WorkerFactory` (`apps/web/src/workers.ts`): `create(kind)` returns a `WorkerPort` (`postMessage`, `onmessage`, `onerror`, `addEventListener`, `terminate`) for the kind `runtime`, `dsp`, `cf` or `patch`. `browserWorkers()` is the browser's (`apps/web/src/browser-workers.ts`, the only `new Worker` in the apps; oxlint `no-restricted-globals` fails any other); `createFakeWorkers({ runtime: handler })` (`workers-fake.ts`) runs a function of the test instead of a thread: the handler gets each posted message and answers with `worker.reply(data)`; `made` and `posted` show what happened. A worker cannot be given the page's objects, so `patch-worker.ts`, `dsp-worker.ts` and `cf-worker.ts` build what they need from the URL or base in their start message.
+
+Wasm files come from a `WasmSource` (`packages/workbench-core/src/wasm-source.ts`): `bytes(name)` for `patchkit.wasm`, `emulator-core-sharc.wasm` and (desktop only) `dksample.wasm`. The site's is `fetchWasmSource(BASE)` (it also compiles while it downloads); the desktop's is `hostWasmSource(host)` (`desktop-wasm.ts`, over `Host.firmware`); a test gives `memoryWasmSource(files)` and `EMPTY_WASM`. `TransferEnv.wasm` is the Transfer pane's. Where real wasm is not the subject, a test gives a stub of what it does: `PatchKitLike` (`patch/patchkit-core.ts`; `senderKit(wasm, create)` and `createWebFirmwareEnv({ createKit })` take one) and `NeedsLike` (`modules/dkneeds.ts`; `createFakeTransferApp` uses a stub). The tests that need the real wasm stay in `test-wasm` (`*.wasm.test.ts`).
+
+`EmulatorRuntime` (`packages/workbench-core/src/runtime/runtime.ts`) has two implementations that share no code:
+
+- `createNativeRuntime(host, onUpdate)` (`apps/desktop/ui/src/native-runtime.ts`): the controller's session and pump through `Host.emu` and `Host.rpc`; it resolves with `undefined` when `host.emu.inApp()` is false (a plain browser). `Console.tsx` makes it. Test it with `createFakeHost` (`ui/tests/native-runtime.test.ts`).
+- `browserRuntime(onUpdate, { workers, wasm })`: the worker or the two-worker split session; `browserRuntimeDeps()` (`runtime/browser-deps.ts`) makes the browser's `deps`. Test it with fake workers (`apps/web/tests/browser-runtime.test.ts`).
 
 ## Web panel
 
@@ -130,14 +195,20 @@ mise run scenario:all         # every DN2 scenario; fails when a pinned PCM hash
 mise run scenario trig1-taps --wav
 ```
 
-Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md). The most used:
+Test runs print compact output by default; read a failed task with `node tools/nx/failures.mjs <log or project:target>` and use `--verbose` for the full stream ([TESTING.md, "Nx gate"](TESTING.md#nx-gate)). Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
 
 ```sh
 mise run test:changed         # lint, format, types, host tests and Python checks of the affected projects; no builds or devices
 pnpm test:host                # host Vitest projects; no device
 pnpm verify:host              # host lint, format, tests and types
 mise run test                 # the gate: Nx targets of the affected projects
+mise run test:subset -- S:machines  # the device tests of record tags plus gate-smoke and gate-pins; add --run to run them (docs/TESTING.md "Named device subset")
+uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --seconds 3,6   # paired counter runs of two coupled-run binaries: DSP and ColdFire host instructions per audio second, B/A ratios, parity (docs/TESTING.md)
 mise run module:check ID      # one module: conformance and its own tests
+mise run lfo:report -- digikit/lfo_shapes_1   # output report of an LFO shape module on the emulator: fit error per shape against its table, swing, verdict, SVG plots (sdk/templates/lfo-shape/README.md "Output report")
+pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig   # machine and effect conformance of every module on the SHARC-only rig (docs/TESTING.md "The Vitest kit")
+DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig modules/machines/analog/tests/   # verdict, plot.png and wav files for the pinned cases (docs/TESTING.md "Classifying a changed pin")
+node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stereo-fwd-oneshot/note60   # `wb profile report` of one case on the rig: instructions per function and loop (docs/TESTING.md "SHARC-only rig")
 ```
 
 Pins are valid only for the firmware and ready state they were recorded with.
@@ -152,6 +223,7 @@ mise run perf:cov             # fast-tier coverage per configuration
 Method and results: [finding 18](findings/18-dsp-performance.md). Every run tool
 writes `out/runs/<scenario-or-kind>/<UTC stamp>/` (report, audio, logs);
 [docs/INSTRUMENTATION.md](INSTRUMENTATION.md) lists the output and the switches.
+The ColdFire PC probe (`coupled-run --pc-probe`, RPC `pc.probe.set`): [INSTRUMENTATION.md](INSTRUMENTATION.md#pc-probe-coldfire).
 
 ## Analysis tools
 
@@ -162,6 +234,19 @@ gives `func`, `callers`, `callees`, `reach`, `last_def`, `refs`, `trace` and `sq
 Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, and `tools/coldfire/cf.py`
 queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
 All tools are indexed in [docs/TOOLS.md](TOOLS.md).
+
+Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
+Usage of the object compare for moves of runtime code (`patchkit objdiff OLD NEW`): [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move).
+Usage of the register liveness of stock code at a patch site (`tools/coldfire/liveness.py`): [PATCHING.md](PATCHING.md#register-liveness-at-a-hook-site).
+Usage of the port file (`patchkit port build|check`, `patchkit:ports`): [PATCHING.md](PATCHING.md#port-file).
+Services and the port file (no binding step; `patchkit port build|check|stock`): [PATCHING.md](PATCHING.md#services-and-the-port-file). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
+Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
+
+Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).
+Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `modules/core/runtime/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
+Usage of the SDK-surface coverage (`patchkit imports`, `patchkit coverage`, `patchkit:sdk-coverage`): [TESTING.md](TESTING.md#sdk-surface-coverage).
+Usage of the module DSP analysis (`wb module analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
+Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` artifact, `wb profile calibrate`: [Calibration](INSTRUMENTATION.md#calibration-wb-profile-calibrate)): [INSTRUMENTATION.md](INSTRUMENTATION.md#profiles). Calibration runs (`wb profile calibrate run`, the step and profile files of `devices/calibration/`): [INSTRUMENTATION.md](INSTRUMENTATION.md#calibration-runs-wb-profile-calibrate-run).
 
 ### ColdFire UI candidate review
 
@@ -199,11 +284,25 @@ pnpm dev                                # the gallery at /patch: patch in the br
 
 ## Module loop
 
-1. Create the module: `mise run module:new -- KIND AUTHOR/NAME [--dir DIR]` (`KIND` is `machine`, `fx` or `service`). Guide: docs/MODULE-AUTHORING.md.
+1. Create the module: `mise run module:new -- KIND AUTHOR/NAME [--dir DIR]` (`KIND` is `machine`, `fx` or `tool`). Guide: docs/MODULE-AUTHORING.md.
 2. Build it: `mise run module:build -- AUTHOR/NAME [--check]` (`patchkit build`: ColdFire C, assembly and Rust, and SHARC+ with Selache as a library, all in the `patchkit` binary; an object whose sources did not change is skipped). The objects of a content module are build output in the cache `out/cache/dko/<module id>/` (not committed; `core/*` objects stay in their module); `mise run module:pack` and `dk:run` build what is stale themselves, so a module goes from source to `.dkm` in one command. `patchkit dko show FILE` prints what an object holds. `module:check` fails on a stale object.
 3. Check it with the module owner's tests: `mise run module:check -- AUTHOR/NAME [--device dt2|dn2]` (machine modules run the conformance suite, then the module's own tests; it prints the packed size by section per device).
 4. Run it in the emulator: `mise run dk:run -- fx/NAME --emu`. An emulator must already run (`mise run workbench` or `mise run emu:serve`). It builds, packs, uploads, selects the module, restarts the guest and follows the log.
 5. Run it on the device: `mise run dk:run -- fx/NAME --port Digitakt`. The device needs the digikit runtime (version 0.1.0 or newer for the log levels): `mise run patch`, then `mise run patch:preflight` on the image before you flash it.
+
+**A service** (`modules/core/services/NAME`): `mise run module:new -- service NAME` writes the layout of `sdk/templates/service`: the neutral crate
+(`Cargo.toml`, `src/lib.rs`, `records.rs`, `slots.rs`, `tests/records.rs`; add `src/dsp/` when the service has DSP parts) and the service file `dks/` (`module.toml` with
+id `core/services/NAME`, `src/lib.rs` with the `service!` call; add `src/hooks.rs` for hook assembler and `src/fw.rs` for firmware calls). It prints the steps that register it
+(workspace member, `[[service]]` row and `[records.kinds]` in `sdk/sdk.toml`). `mise run module:check -- service/NAME` runs `patchkit service-check modules/core/services/NAME`
+(the layout of both crates, the id and the role; the `[[hook]]` entries equal to the `service!` hooks per device; assembler only in `dks/src/hooks.rs`; firmware names only under `dks/`;
+at most one exported symbol, `dk_module`; no row anchor of `devices/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the record kinds that `Service::declare` makes equal to the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
+`rust-tests`. Example, run in the repository root:
+
+```text
+$ patchkit service-check modules/core/services/lfo modules/core/services/fx
+modules/core/services/lfo: ok
+modules/core/services/fx: ok
+```
 
 Log levels: `mise run dk:log -- --port Digitakt level` prints them, `level debug` sets the default, `level --module NAME=trace` sets one module (`NAME=default` clears it), `follow --level L --module NAME` filters the display. Levels are not stored on the card.
 
@@ -277,6 +376,10 @@ Build times: the Rust runtime 2.3 s, a C object under 1 s. `uv run python -m too
 - Never change section 2 (bootstrap), section 4 (updater) or section 8. patchkit refuses.
 - Recovery is the bootstrap's STARTUP menu (hold FUNC at power-on, then the stock OS over MIDI DIN); it has not been rehearsed.
 - Read `docs/findings/01-container-and-patching.md` before you install anything.
+
+## Agent workflow
+
+Project agents are in `.claude/agents/`: `lane-worker` runs an implementation lane in a named worktree; `coder`, `scout` and `reviewer` override the user-level agents of the same name. `reviewer` is limited to read-only Git by `tools/devtools/restrict_readonly_bash.py`. Every agent returns the report contract of AGENTS.md "Sub-agents and reports" (at most 200 words).
 
 ## Repository layout
 

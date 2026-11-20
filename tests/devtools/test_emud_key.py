@@ -28,7 +28,7 @@ def make(tmp_path: Path, **over: object) -> emud_key.EmudInputs:
         gen_dirs={"gen": gen},
         profdata=prof,
         rustc="rustc 1",
-        flags={"features": "coupled-audio"},
+        flags={"features": "sharc,play"},
     )
     for name, value in over.items():
         setattr(base, name, value)
@@ -50,6 +50,49 @@ def test_key_changes_with_each_input(tmp_path: Path) -> None:
     assert emud_key.key_of(make(tmp_path, flags={"features": "other"})) != base
     assert emud_key.key_of(make(tmp_path, rustc="rustc 2")) != base
     assert emud_key.key_of(make(tmp_path, profdata=None)) != base
+
+
+def test_test_key_ignores_files_of_a_device_without_a_cell(tmp_path: Path) -> None:
+    devices = tmp_path / "devices"
+    devices.mkdir()
+    (devices / "cell.toml").write_text(
+        '[device]\nshort = "c1"\n[acceptance]\nready_dir = "x"\n'
+    )
+    (devices / "nocell.toml").write_text('[device]\nshort = "n1"\n')
+    names = ["devices/cell.toml", "devices/nocell.toml"]
+
+    def key() -> str:
+        return emud_key.test_key_of(make(tmp_path), names, "", tmp_path)
+
+    base = key()
+    (devices / "nocell.toml").write_text('[device]\nshort = "n1"\n# edit\n')
+    assert key() == base
+    (devices / "cell.toml").write_text(
+        '[device]\nshort = "c1"\n[acceptance]\nready_dir = "y"\n'
+    )
+    assert key() != base
+
+
+def test_test_key_of_a_device_ignores_files_of_every_other_device(
+    tmp_path: Path,
+) -> None:
+    devices = tmp_path / "devices"
+    devices.mkdir()
+    for stem, short in (("one", "c1"), ("two", "c2")):
+        (devices / f"{stem}.toml").write_text(
+            f'[device]\nshort = "{short}"\n[acceptance]\nready_dir = "x"\n'
+        )
+    names = ["devices/one.toml", "devices/two.toml"]
+
+    def key(keep: str) -> str:
+        return emud_key.test_key_of(make(tmp_path), names, "", tmp_path, keep=keep)
+
+    base = {short: key(short) for short in ("c1", "c2")}
+    (devices / "two.toml").write_text(
+        '[device]\nshort = "c2"\n[acceptance]\nready_dir = "y"\n'
+    )
+    assert key("c1") == base["c1"]
+    assert key("c2") != base["c2"]
 
 
 def test_key_ignores_file_order(tmp_path: Path) -> None:

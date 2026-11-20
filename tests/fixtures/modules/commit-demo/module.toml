@@ -1,0 +1,47 @@
+[module]
+id = "test/commit-demo"
+version = "0.1.0"
+name = "Commit demo"
+category = "test"
+type = "machine"
+author = "digikit"
+status = "experimental"
+summary = "Test module: a machine with three params (one latched, one with a click action) and an effect, declared by builder calls in init."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The ids stay what the keys hash: `test/commit-demo:cmach` and `test/commit-demo:cfx`. `patchkit gen` writes build/gen/module_ids.h from them.
+[[machine]]
+id = "cmach"
+
+[[fx]]
+id = "cfx"
+
+# The rows init declares, written by `mise run module:check` (the DN2 page row counts as a page row; the DT2 machine keeps its knobs in its row).
+[uses.dt2]
+machine_rows = 1
+param_rows = 3
+page_rows = 0
+record_bytes = 800
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 3
+page_rows = 1
+record_bytes = 896
+
+[[object]]
+path = "build/commit-demo-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/commit-demo-dsp.dko.json"
+sources = ["src/dsp/machine.s", "src/dsp/effect.s"]
+place = "dsp.l2"

@@ -2,12 +2,12 @@
 // Host tests: apps/desktop/ui/tests/memory.test.ts.
 //
 // The data is CAPACITY (limit and used per resource), MODULES (which modules are loaded) and, per module, what its file takes (`needs_of` of
-// packages/dkneeds, through patchkit.wasm: apps/web/src/modules/dkneeds.ts) from the matching file of the local library. What `used` holds beyond
+// packages/dkneeds, through patchkit.wasm: packages/workbench-core/src/modules/dkneeds.ts) from the matching file of the local library. What `used` holds beyond
 // the known modules (the runtime's own, a module that is not in the library) is one "other" segment. Nothing that is only ticked or pending
 // is shown: the bars are what the device holds now.
 
 import { ARENA_HDR } from '@digi/dk-session/gen_proto';
-import type { Caps, Needs } from '../../../web/src/modules/fit.ts';
+import type { Caps, Needs } from '@digi/workbench-core/modules/fit.ts';
 
 // ARENA_HDR (the arena's block header): the `largest` of the ARENA is a payload, while `free` adds up block sizes. DSP_AREA's `largest` is a raw gap.
 
@@ -18,7 +18,7 @@ export type SegmentKind = 'machine' | 'effect' | 'tool' | 'other';
 export interface KnownModule {
   name: string;
   label: string;
-  group: 'Machines' | 'Effects' | 'Tools';
+  group: 'Machines' | 'Effects' | 'Filters' | 'LFO shapes' | 'Tools' | 'Services';
   needs: Needs | null;
 }
 
@@ -73,7 +73,18 @@ export const SPECS: Spec[] = [
   { resource: 'MODULES', label: 'Modules', bytes: false, take: () => 1 },
 ];
 
-const KINDS: Record<KnownModule['group'], SegmentKind> = { Machines: 'machine', Effects: 'effect', Tools: 'tool' };
+const KINDS: Record<KnownModule['group'], SegmentKind> = {
+  Machines: 'machine',
+  Effects: 'effect',
+  Filters: 'tool',
+  'LFO shapes': 'tool',
+  Tools: 'tool',
+  Services: 'tool',
+};
+
+/** Only byte resources name a largest block; a count (rows, slots, modules) has `largest` 0 by contract (abi.toml) and is never split. */
+const isSplit = (bytes: boolean, largest: number, header: number, free: number): boolean =>
+  bytes && largest + header < free;
 
 /** The bars for a device: `caps` is CAPACITY, `loaded` the names MODULES reports (in its order), `library` the local library's modules. */
 export function buildBars(caps: Caps, loaded: string[], library: KnownModule[]): Bar[] {
@@ -103,7 +114,7 @@ export function buildBars(caps: Caps, loaded: string[], library: KnownModule[]):
       segments,
       free,
       largest: Math.max(0, Math.min(c.largest, free)),
-      split: c.largest + (spec.resource === 'ARENA' ? ARENA_HDR : 0) < free,
+      split: isSplit(spec.bytes, c.largest, spec.resource === 'ARENA' ? ARENA_HDR : 0, free),
       over: used > c.limit,
     });
   }
@@ -128,9 +139,34 @@ export const segmentTitle = (bar: Bar, s: Segment): string =>
     ? `Other: ${amountText(bar, s.amount)} (not from a module of your library)`
     : `${s.label}: ${amountText(bar, s.amount)}`;
 
+/** One line of the per-module table under a bar: the module, its type and what it takes of the resource. */
+export interface ModuleRow {
+  id: string;
+  label: string;
+  kind: SegmentKind;
+  /** `259 KiB`, or `1` for a count. */
+  text: string;
+}
+
+/**
+ * The per-module rows of a bar, largest first, `Other` last: the same segments the bar draws, with their amounts in words. They come from the
+ * device's fixed capacity (CAPACITY) and the needs of each loaded module's file (`buildBars`); no other data source.
+ */
+export function moduleRows(bar: Bar): ModuleRow[] {
+  const rows = bar.segments.map((s) => ({
+    id: s.id,
+    label: s.label,
+    kind: s.kind,
+    text: amountText(bar, s.amount),
+    amount: s.amount,
+  }));
+  const named = rows.filter((r) => r.kind !== 'other').sort((a, b) => b.amount - a.amount || a.id.localeCompare(b.id));
+  return [...named, ...rows.filter((r) => r.kind === 'other')].map(({ amount: _amount, ...r }) => r);
+}
+
 /** The free text: the total, and the largest block when memory is split so that it is smaller than the total. */
 export const freeText = (bar: Bar): string =>
-  bar.split
+  bar.bytes && bar.split
     ? `Free: ${amountText(bar, bar.free)}, largest block ${amountText(bar, bar.largest)}`
     : `Free: ${amountText(bar, bar.free)}`;
 
@@ -139,10 +175,36 @@ export const freeTitle = freeText;
 
 /** The line under a bar, if it has something to say: over the limit, or free memory split into smaller blocks. */
 export const noteText = (bar: Bar): string | null =>
-  bar.over ? `Over the limit by ${amountText(bar, bar.used - bar.limit)}` : bar.split ? freeText(bar) : null;
+  bar.over
+    ? `Over the limit by ${amountText(bar, bar.used - bar.limit)}`
+    : bar.bytes && bar.split
+      ? freeText(bar)
+      : null;
 
 /** The width of a part of a bar in percent of its limit, or of `used` when that is above the limit (the segments stay proportional). */
 export const widthPct = (bar: Bar, n: number): number => {
   const span = Math.max(bar.limit, bar.used);
   return span ? (100 * n) / span : 0;
 };
+
+/** A count bar is drawn as one cell per slot when it has at most this many (Machines 8, Parameters 16): slots, not a length. */
+export const MAX_CELLS = 32;
+
+/** One cell of a count bar: the kind of the module that holds the slot (`free` when none), its hover text, and whether it is past the limit. */
+export interface SlotCell {
+  kind: SegmentKind | 'free';
+  title: string;
+  over: boolean;
+}
+
+/** The cells of a count bar, in the order of its segments then the free slots; null for a byte bar or one with too many slots. */
+export function slotCells(bar: Bar): SlotCell[] | null {
+  const span = Math.max(bar.limit, bar.used);
+  if (bar.bytes || span === 0 || span > MAX_CELLS) return null;
+  const cells: SlotCell[] = [];
+  for (const s of bar.segments)
+    for (let i = 0; i < s.amount; i++)
+      cells.push({ kind: s.kind, title: segmentTitle(bar, s), over: cells.length >= bar.limit });
+  while (cells.length < bar.limit) cells.push({ kind: 'free', title: freeTitle(bar), over: false });
+  return cells;
+}

@@ -1,11 +1,12 @@
 // The Samples backend of the preview (replaces ../src/samples-backend.ts): the folder on the computer and the device's sample folders come
-// from sim.ts. Same exports as the real module; an upload is paced by `sim.speed` through the real `uploadFiles` of samples-core.ts.
-import { noteActivity } from '@web/transfer/activity';
-import { asked, noteConnection } from '@web/transfer/connection-state';
+// from sim.ts. Same exports as the real module; an upload is paced by `sim.speed` through the real `uploadFiles` of workbench-core sample-upload.ts.
+import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
+import type { LinkState } from '@digi/workbench-core/transfer/link-core.ts';
+import type { DeviceInfo } from '@digi/workbench-core/transfer/transfer-state.ts';
 import { sourceKind, type Prepared } from '@digi/dk-session/dksample';
 import type { SampleEntry, SamplesBackend } from '@digi/dk-session/samples';
-import { joinPath, type LocalEntry, type Prepare } from '../src/samples-core';
-import { setDeviceInfo } from '@web/transfer/transfer-state';
+import { joinPath } from '@digi/workbench-core/transfer/sample-upload.ts';
+import type { LocalEntry } from '@digi/workbench-core/transfer/samples-core.ts';
 import {
   localFolder,
   localPath,
@@ -14,25 +15,43 @@ import {
   setLocalKinds,
   setSampleEntries,
 } from '../src/samples-state';
-import { SAMPLES_ROOT, control, delay, deviceRead, listLocal, localKindOf, localSizeOf, sampleTree, sim } from './sim';
+import {
+  SAMPLES_ROOT,
+  control,
+  delay,
+  deviceRead,
+  listLocal,
+  localKindOf,
+  localSizeOf,
+  sampleTree,
+  sim,
+  simApp,
+} from './sim';
+
+const setSampleLink = (l: LinkState | undefined): void => void simApp.app!.state.setSampleLink(l);
+const setDeviceInfo = (i: DeviceInfo | undefined): void => void simApp.app!.state.setDeviceInfo(i);
 
 const NAME = 'Digitakt II';
-export function deviceStorage(_device: string): Promise<{ name: string; samples: string }> {
-  return Promise.resolve({ name: NAME, samples: 'stock-rpc' });
-}
 
-export interface OpenedSamples {
-  name: string;
-  runtime: string;
-  samples: string;
-  backend: SamplesBackend;
-  prepare: Prepare;
-}
+// The real type: the mock returns what the desktop backend returns.
+import type { OpenedSamples } from '../src/samples-backend';
+export type { OpenedSamples };
 
 let puts = 0;
+let sent = 0;
 const clean = (folder: string) => folder.replace(/^\/+|\/+$/g, '');
 const backend: SamplesBackend = {
   kind: 'stock-rpc',
+  prepare(name, bytes): Prepared {
+    const kind = sourceKind(bytes, bytes.length);
+    return { name: kind === 'converted' ? name.replace(/\.wav$/i, '') : name, bytes, stored: bytes, kind };
+  },
+  sizeOf(file) {
+    return file.stored.length;
+  },
+  checksAtBulkEnd() {
+    return true;
+  },
   async list(folder = ''): Promise<SampleEntry[]> {
     await deviceRead();
     return [...(sampleTree.get(clean(folder)) ?? [])];
@@ -93,6 +112,8 @@ const backend: SamplesBackend = {
     return sim.skip.split(',').includes(file.name);
   },
   async put(folder, file, onProgress) {
+    if (sim.link === 'fallback' && sent++ === 1)
+      setSampleLink({ state: 'fallback', reason: 'the device did not answer within 2 s' });
     if (sim.putfail && puts++ === 1) throw new Error(`open /tst/${file.name}: the device answered status 0`);
     const total = file.stored.length;
     const step = Math.max(1, Math.round(sim.speed * 1024 * 1024 * 0.1));
@@ -107,7 +128,7 @@ const backend: SamplesBackend = {
     sampleTree.set(f, [...list, { name: file.name, kind: 'file', size: total }]);
   },
   async verify(_folder, file) {
-    await delay(200);
+    await delay(sim.verify);
     const size = file.stored.length;
     return {
       ok: true,
@@ -129,28 +150,55 @@ const backend: SamplesBackend = {
       (sampleTree.get(f) ?? []).filter((e) => e.name !== name),
     );
   },
+  async canRename() {
+    return true;
+  },
+  async rename(folder, name, toFolder, toName) {
+    await delay(150);
+    const [f, t] = [clean(folder), clean(toFolder)];
+    const entry = (sampleTree.get(f) ?? []).find((e) => e.name === name);
+    if (!entry) return;
+    sampleTree.set(
+      f,
+      (sampleTree.get(f) ?? []).filter((e) => e.name !== name),
+    );
+    sampleTree.set(t, [...(sampleTree.get(t) ?? []).filter((e) => e.name !== toName), { ...entry, name: toName }]);
+  },
 };
 
-export async function openDeviceSamples(): Promise<OpenedSamples> {
+export async function openDeviceSamples(_forRun = false): Promise<OpenedSamples> {
+  const { asked, noteConnection } = simApp.app!.connection;
   await asked(deviceRead);
+  if (sim.link !== 'none' && !(sim.link === 'fallback' && sent > 1))
+    setSampleLink(
+      sim.link === 'sysex'
+        ? { state: 'sysex' }
+        : sim.link === 'wrongmode'
+          ? { state: 'sysex', wrongMode: true }
+          : sim.link === 'reason'
+            ? {
+                state: 'sysex',
+                reason: "none of 1 candidate(s) returned this device's nonce",
+              }
+            : { state: 'bulk' },
+    );
   noteConnection({ type: 'answered', device: { id: 'dt2', name: NAME, runtime: '0.5.2' } });
   return {
     name: NAME,
     runtime: '0.9.4',
+    hasRuntime: true,
     samples: 'stock-rpc',
+    apply: 'live',
     backend,
-    prepare: (name, bytes): Prepared => {
-      const kind = sourceKind(bytes, bytes.length);
-      return { name: kind === 'converted' ? name.replace(/\.wav$/i, '') : name, bytes, stored: bytes, kind };
-    },
+    link: 'sysex',
   };
 }
 
 export async function readSamples(): Promise<void> {
   control.counts.deviceRead++;
-  const { name, runtime, samples } = await openDeviceSamples();
+  const { name, runtime, hasRuntime, samples } = await openDeviceSamples();
   setSampleEntries(await backend.list(sampleFolder()));
-  setDeviceInfo({ name, runtime, samples, canMkdir: sim.mkdir, free: (await backend.space()).free });
+  setDeviceInfo({ name, runtime, hasRuntime, samples, canMkdir: sim.mkdir, free: (await backend.space()).free });
 }
 
 // ---- the local folder -------------------------------------------------------------------------------------------------------------
@@ -187,15 +235,19 @@ export async function listLocalNow(): Promise<LocalEntry[] | undefined> {
   return listLocal(localPath());
 }
 
+let localReadGeneration = 0;
 /** Read the open level of the chosen folder and label its files; the same effects as the real `readLocal`. */
 export async function readLocal(): Promise<void> {
+  const generation = ++localReadGeneration;
+  const folder = localFolder();
+  const path = localPath();
   if (!localFolder() || sim.folder === 'none') {
     setLocalEntries(undefined);
     return;
   }
   control.counts.localList++;
   await delay(60);
-  const path = localPath();
+  if (generation !== localReadGeneration || localFolder() !== folder || localPath() !== path) return;
   const entries: LocalEntry[] = listLocal(path);
   setLocalEntries(entries);
   const kinds: Record<string, Prepared['kind']> = {};
@@ -207,3 +259,14 @@ export async function readLocal(): Promise<void> {
     }
   setLocalKinds((k) => ({ ...Object.fromEntries(Object.entries(k).filter(([key]) => key.startsWith('+'))), ...kinds }));
 }
+
+/** The same bag as the real `createSamplesBackend` (src/samples-backend.ts); the preview has no host to ask. */
+export const createSamplesBackend = (_host: unknown, _app?: unknown) => ({
+  openDeviceSamples,
+  readSamples,
+  pickFolder,
+  readLocalFile,
+  listLocalAt,
+  listLocalNow,
+  readLocal,
+});

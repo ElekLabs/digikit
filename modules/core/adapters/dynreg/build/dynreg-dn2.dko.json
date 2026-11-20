@@ -38,10 +38,24 @@
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
    "addend": 6,
    "offset": 106,
    "section": ".text",
    "symbol": "_dr_t_copy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text",
+   "symbol": "dynreg_view_next",
    "type": "cf.32"
   },
   {
@@ -144,6 +158,20 @@
   },
   {
    "addend": 0,
+   "offset": 196,
+   "section": ".rodata",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 200,
+   "section": ".rodata",
+   "symbol": "_dr_f_build",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 204,
    "section": ".rodata",
    "symbol": "_dr_pg_rows",
@@ -174,21 +202,34 @@
  "sections": [
   {
    "align": 4,
-   "hex": "4feffff448d7040c206f0010222f0014226f0018b1c1643c201824000482000000000c82000000086426068200000000048200000000263c000000004c0238000683000000002443246a00384a1267c422c060c020094cd7040c4fef000c4e754ebaff9e254000044ef900000000",
+   "hex": "4feffff448d7040c206f0010222f0014226f0018b1c1643c201824000482000000000c82000000086426068200000000048200000000263c000000004c0238000683000000002443246a00384a1267c422c060c020094cd7040c4fef000c4e754ebaff9e254000044ef9000000004feffff048d703032f2f00144eba0012588f4cd703034fef00104ef900000000202f000423c0000000004e75",
    "kind": "text",
    "name": ".text",
-   "size": 110
+   "size": 154
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss",
+   "size": 16
   },
   {
    "align": 4,
-   "hex": "0000000044594e5200000002000000020000000000000000000000000000000000000000000000080000000000000000000000000000000000000004000000080000002c0000003000000034000000380000003c000000000000000000000000000000000000000000000000000000100000003c0000000800000000000000000000010800000100000001010000010200000014000000180000001c0000002000000024000001030000002c0000010400000034000000380000000800000019000000d5000000000000000000000000000000000000000000000000000000080000000000000004000000080000002c000000307fffffff00000000000000000000000000000000",
+   "hex": "0000000044594e5200000003000000020000000000000000000000000000000000000000000000080000000000000000000000000000000000000004000000080000002c0000003000000034000000380000003c000000000000000000000000000000000000000000000000000000100000003c0000000800000000000000000000010800000100000001010000010200000014000000180000001c0000002000000024000001030000002c0000010400000034000000380000000800000019000000d5000000000000000000000000000000000000000000000000000000080000000000000004000000080000002c000000307fffffff00000000000000000000000000000000000000000000000a0000000100000000000000000000000000000000000000080000000100000002000000040000000500000006000000000000000300000007000000d5000000d700000047000000dd000000ee000000d5",
    "kind": "data",
    "name": ".rodata",
-   "size": 264
+   "size": 352
   }
  ],
- "source_sha256": "a00e1b52955c87143c5df2fcb593287c74de52c6170b4044470ffdf31c9cd7b9",
+ "source_sha256": "e8589e8fe61eaa9dfea52a0d976ea426809e858f3be8d66b3ca3012c392dc39b",
  "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss",
+   "section": ".bss",
+   "value": 0
+  },
   {
    "global": false,
    "name": ".sec..rodata",
@@ -204,6 +245,12 @@
   {
    "global": true,
    "name": "_dr_dyn0",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dr_f_build",
    "section": null,
    "value": 0
   },
@@ -326,14 +373,38 @@
    "name": "dynreg_list_hook",
    "section": ".text",
    "value": 96
+  },
+  {
+   "global": true,
+   "name": "dynreg_view",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dynreg_view_hook",
+   "section": ".text",
+   "value": 110
+  },
+  {
+   "global": true,
+   "name": "dynreg_view_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dynreg_view_store",
+   "section": ".text",
+   "value": 142
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
-  "cflags": "-mcpu=54418 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "30",
-  "isa_check": "cf32a9def9835c2b94b19c2629be31a18dd80094a17d25a12445f7d29e2cfda2",
+  "instructions_redecoded": "41",
+  "isa_check": "deb140326cc814d171d4b61aa6a580c9b94120b828e718f27a9f43426a0cfe8b",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

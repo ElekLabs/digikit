@@ -39,6 +39,8 @@ import sys
 import tempfile
 from collections.abc import Iterable, Mapping
 
+from tools.firmware import device as device_files
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 BUDGETS = ROOT / "tools" / "emulator" / "fast_budgets.json"
 
@@ -428,6 +430,7 @@ def measure(
     device: str, state: str, budget: Budget, seconds: float
 ) -> tuple[float, float, str]:
     """Replay the budget scenario on the current runtime: (interpreted instructions, block entries per audio second, fixture key)."""
+    from tools.devtools import core_store
     from tools.emulator import coupled, digi_env
 
     fixture, key = ensure_fixture(device, state)
@@ -447,6 +450,7 @@ def measure(
         env = {**os.environ}
         # The tier tables are keyed by the stock firmware (as the PGO replay runs do).
         env.update(digi_env.fast_env(env, syx=digi_env.base_firmware(firmware)))
+        env.update(core_store.library_env([device], environ=env))
         try:
             done = subprocess.run(
                 argv, cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -528,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
     rank.add_argument(
         "--prefix", required=True, help="SHARC_PROFILE_PREFIX of the capture"
     )
-    rank.add_argument("--device", required=True, choices=("dn2", "dt2"))
+    rank.add_argument("--device", required=True, choices=device_files.shorts())
     rank.add_argument("--gen", help="generated core directory (default: the device's)")
     rank.add_argument("--min-pct", type=float, default=0.3)
     rank.add_argument("--json", action="store_true")

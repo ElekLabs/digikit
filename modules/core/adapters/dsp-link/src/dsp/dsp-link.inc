@@ -11,7 +11,9 @@
 // record each block, so an acknowledgement written earlier would be erased) and is about to store the record's first word:
 //   in    I4 = the record pointer (live), R1 = the ring toggle value (live), R2 = the record's first word (live),
 //         I6 = the handler's frame: DM(I6 - 3) is the pointer to the receive ring in use, DM(I6 - 2) the record pointer.
-//   free  R10, R11, R13, R14, R15, I2, I3, I5: the epilogue reloads them from the frame right after.
+//   free  R10, R11, R13, R14, R15, I2, I3, I5: the epilogue reloads them from the frame right after (checked in the stock code for the stats fold, which uses R11 and I2:
+//         `R11 = DM(I6 - 21)` and `I2 = DM(I6 - 17)` follow the site at DT2 1.17 0x1c75cd and 0x1c75c5, DN2 1.12 0x1c9e6b and 0x1c9e63; the instruction after the site is
+//         `DM(I4, M5) = R2`, so R2 is the live record word the fold reads and I4 the record pointer).
 //   saved here  R0, R3, R4, R5, R6, and M5, M6, L2, L3 (set to 0, 1, 0, 0 for the routine and put back at the exit: the
 //         firmware restores these per DSP context, so their values here are the context's, not constants, finding 45).
 //         Not touched: R1, R2, I4, I6, I7, I12, the other M registers. No DO loop is open at the site of a hook that itself
@@ -22,10 +24,10 @@
 //   w0  bits 0-15 DL_MAGIC, bits 16-29 idx (chunk number, 0 for the first of a transfer), bits 30-31 win (the window)
 //   w1  bits 0-16 off (destination, in words from the start of the window), bits 17-24 n (payload words),
 //       bit 25 LAST, bit 26 END (stop acknowledging), bits 27-31 xid (transfer id, 1..31)
-// Windows: 0 is _dl_area (DL_AREA_WORDS long); 1 is the voices registry (_dl_vrows, 24 * _dl_vcount words: a row is 24 words), which the digikit
+// Windows: 0 is the slot block `_dl_slots` (words 0 to 15, DK_SLOTS of sdk/dsp/contract/dk_stub.inc) followed by _dl_area (DL_AREA_WORDS - DK_SLOTS words, from word 16; a chunk that starts in the slots must end there; the window is DL_AREA_WORDS long); 1 is the voices registry (_dl_vrows, 24 * _dl_vcount words: a row is 24 words), which the digikit
 // runtime fills one word per transfer so that the render scan never sees a half-written row; 2 is the effect rows of core/fx (_dl_frows, 24 *
 // _dl_fcount words, all rows of the registry `fx`, free rows included), filled the same way (the pc word last). Windows 1 and 2 refuse every write
-// when their registry is not in the image (the externs are 0), window 3 does not exist.
+// when their registry is not in the image (the externs are 0). Window 3 is the stats control (P8d, below): 3 words, `_dl_stctl`.
 //   w2 ... w(n+1)  the payload
 //   w(n+2)  check = s1 XOR s2 over w0 ... w(n+1), where s1 += w and s2 += s1 for each word w (both start at 0)
 // A chunk is taken when xid and magic are right, idx equals the number of chunks taken so far (cum) and the check holds.
@@ -68,12 +70,32 @@
 // DM (`_dv_diag`, `_fx_diag`) and the static `_dk_step`.
 // The block tail also stores this block's record address into the sites' tables (_dv_rec, _fx_rec; [0] this block's, [1] the one before) and, as [2], the address of `_dk_step`.
 // The ColdFire side is dl_diag(out, n) in dsp-link.c.
+//
+// The stats window (P8d, docs/plans/profiling.md 13.1). Window 3 holds three control words, written only by the runtime for the module that owns the
+// span channel: word 0 stats on (bit 0), word 1 the clear generation (the window is zeroed whenever it differs from the last one seen), word 2 the block
+// period in cycles (0: no overrun is counted). After each window 3 write the block tail sets `_dl_stptr`, the window's byte address while stats are on
+// and 0 while they are off, and copies it into the word the dispatch code of each service tests: `_dv_diag` word 31 (the machines) and `_fx_diag` word 7 (the
+// effects). With the word 0 the services' DK_SPAN_BEGIN/END (sdk/dsp/contract/dk_trace.inc) cost three instructions each and nothing else runs.
+// The window `_dk_stats` has 100 words (sdk/include/dk/core/trace.h): a header of 4 words (blocks, largest stock block delta, overruns, the start of the span
+// running: scratch), then 16 rows of 6 words (calls, cycles low, cycles high, largest call, largest block, the sum of the running block: scratch), and 4
+// private words behind it (the spans' register save area). Rows 0 to 7 are the machine rows (the voices registry order, the last one takes the rest),
+// rows 8 to 15 the effect rows. The services add the spans; this tail folds each block: it counts the block, keeps the largest stock block delta (the
+// engine's own measure, in the record's first word, rotated by 16 bits: R2 here) and counts a delta of at least the period as an overrun, then closes the
+// block of every row (the largest block, the sum back to 0).
+// While stats are on and no transfer is being acknowledged, the tail also writes one page of the window per block into the acknowledgement slot
+// (DL_ACK_OFF): a tag word (bits 0-15 DL_STATS_MAGIC, 16-23 the page, 24-31 the generation), then two window words. A page is taken every block (a
+// transfer being acknowledged takes the slot, so that block's page is skipped and the ColdFire drops the sweep: dl_tick, core/runtime link::stats).
 
 #define DL_MAGIC 0xD15C
 #define DL_ACK_MAGIC 0xA5D1
 #define DL_DG_MAGIC 0xD1A6
 #define DL_ACK_OFF 0x60
 #define DL_SHL1C_CFG 0x3E000
+#define DL_STATS_MAGIC 0x57A7
+#define DL_STATS_WORDS 100
+#define DL_STATS_PAGES 50
+#define DL_STATS_ROWS 16
+#define DL_STATS_CTL_WORDS 3
 
 .SECTION/PM seg_pmco;
 .GLOBAL _dl_hook;
@@ -162,8 +184,16 @@ _dl_notend:
     R0 = FEXT R10 BY 30:2;                // the window
     R0 = PASS R0;
     IF NE JUMP _dl_win1;
-    R3 = DL_AREA_WORDS;                   // window 0: the area
+    R3 = DK_SLOTS;                        // window 0, words 0 to 15: the slot block (a chunk must not cross word 16)
+    COMP(R6, R3);
+    IF LT JUMP _dl_w0slots;
+    R3 = DL_AREA_WORDS;                   // window 0 from word 16: the area (word 16 is the first word of _dl_area)
     R4 = _dl_area;
+    R0 = DK_SLOT_BYTES;
+    R4 = R4 - R0;
+    JUMP _dl_wdone;
+_dl_w0slots:
+    R4 = _dl_slots;
     JUMP _dl_wdone;
 _dl_win1:
     R3 = 1;
@@ -178,12 +208,19 @@ _dl_win1:
 _dl_win2:
     R3 = 2;
     COMP(R0, R3);
-    IF NE JUMP _dl_range;                 // window 3 does not exist
+    IF NE JUMP _dl_win3;
     R3 = _dl_fcount;                      // window 2: the effect rows (24 words each, the terminator row excluded)
     R4 = LSHIFT R3 BY 4;
     R3 = LSHIFT R3 BY 3;
     R3 = R3 + R4;                         // count * 24
     R4 = _dl_frows;
+    JUMP _dl_wdone;
+_dl_win3:
+    R3 = 3;
+    COMP(R0, R3);
+    IF NE JUMP _dl_range;
+    R3 = DL_STATS_CTL_WORDS;              // window 3: the stats control words
+    R4 = _dl_stctl;
 _dl_wdone:
     DM(_dl_wbase) = R4;
     R4 = R5 + R6;
@@ -227,6 +264,11 @@ _dl_good:
         R0 = DM(I3, M6);
 _dl_copyl: DM(I2, M6) = R0;
 _dl_copied:
+    R0 = FEXT R10 BY 30:2;                // a write of window 3 sets the stats state
+    R3 = 3;
+    COMP(R0, R3);
+    IF EQ JUMP _dl_stw;
+_dl_cdone:
     R3 = DM(_dl_cum);
     R3 = R3 + 1;
     DM(_dl_cum) = R3;
@@ -267,6 +309,41 @@ _dl_wait: NOP;
 _dl_range:
     R3 = 3;
     DM(_dl_status) = R3;
+    JUMP _dl_ack;
+// Window 3 was written: a new clear generation zeroes the window (and restarts the pages), then the window pointer is set (0 when stats are off) and
+// copied into the words the services test. R10 and R14 (the chunk's words) stay.
+_dl_stw:
+    R3 = DM(_dl_stctl + 4);
+    R0 = DM(_dl_stgen);
+    COMP(R3, R0);
+    IF EQ JUMP _dl_stw1;
+    DM(_dl_stgen) = R3;
+    R0 = 0;
+    DM(_dl_stpage) = R0;
+    I3 = _dk_stats;
+    LCNTR = 52, DO _dl_stclr UNTIL LCE;           // the window and its 4 private words (104 words)
+        DM(I3, M6) = R0;
+_dl_stclr: DM(I3, M6) = R0;
+_dl_stw1:
+    R3 = DM(_dl_stctl);
+    R0 = 1;
+    R3 = R3 AND R0;
+    IF EQ JUMP _dl_stw2;
+    R3 = _dk_stats;
+_dl_stw2:
+    DM(_dl_stptr) = R3;
+    R4 = _dv_diag;                        // 0 when core/dsp-voice is not in the image
+    R4 = PASS R4;
+    IF EQ JUMP _dl_stw3;
+    I3 = R4;
+    DM(31, I3) = R3;
+_dl_stw3:
+    R4 = _fx_diag;                        // 0 when core/fx is not in the image
+    R4 = PASS R4;
+    IF EQ JUMP _dl_cdone;
+    I3 = R4;
+    DM(7, I3) = R3;
+    JUMP _dl_cdone;
 _dl_ack:
     R3 = DM(_dl_xid);
     R3 = PASS R3;
@@ -288,6 +365,70 @@ _dl_ack:
     R4 = R5 OR R4;
     DM(I2, M6) = R4;                      // a1
 _dl_out:
+    R0 = DM(_dl_stptr);                   // the stats window while stats are on, else 0
+    R0 = PASS R0;
+    IF EQ JUMP _dl_nost;
+    // ---- stats: fold the block (R2 = the record's first word, the stock block delta rotated by 16 bits: not touched) ----
+    I3 = R0;
+    R3 = DM(0, I3);
+    R3 = R3 + 1;
+    DM(0, I3) = R3;                       // blocks
+    R3 = LSHIFT R2 BY -16;                // the stock block delta: R2 rotated by 16 bits (the rotate-by-immediate form is not in the core's semantics)
+    R4 = LSHIFT R2 BY 16;
+    R3 = R3 OR R4;
+    R4 = DM(1, I3);
+    R4 = MAX(R3, R4);
+    DM(1, I3) = R4;                       // the largest
+    R4 = DM(_dl_stctl + 8);               // the period
+    R4 = PASS R4;
+    IF EQ JUMP _dl_stnov;
+    COMP(R3, R4);
+    IF LT JUMP _dl_stnov;
+    R4 = DM(2, I3);
+    R4 = R4 + 1;
+    DM(2, I3) = R4;                       // overruns
+_dl_stnov:
+    MODIFY(I3, 4) (NW);                   // row 0 (the header is 4 words)
+    R5 = 0;
+    LCNTR = DL_STATS_ROWS, DO _dl_stfold UNTIL LCE;
+        R3 = DM(5, I3);                   // the sum of the block
+        R4 = DM(4, I3);
+        R4 = MAX(R3, R4);
+        DM(4, I3) = R4;                   // the largest block
+        DM(5, I3) = R5;
+_dl_stfold: MODIFY(I3, 6) (NW);              // the next row (6 words)
+    R3 = DM(_dl_xid);
+    R3 = PASS R3;
+    IF NE JUMP _dl_stadv;                 // a transfer is acknowledged in this slot: no page this block
+    R5 = DM(_dl_stpage);
+    R6 = LSHIFT R5 BY 3;                  // 8 bytes a page
+    R0 = DM(_dl_stptr);
+    R0 = R0 + R6;
+    I3 = R0;
+    R10 = DM(I3, M6);
+    R11 = DM(I3, M6);
+    R3 = LSHIFT R5 BY 16;
+    R4 = DM(_dl_stctl + 4);
+    R4 = LSHIFT R4 BY 24;
+    R3 = R3 OR R4;
+    R4 = DL_STATS_MAGIC;
+    R3 = R3 OR R4;
+    R4 = I4;                              // the record pointer
+    R6 = DL_ACK_OFF;
+    R4 = R4 + R6;
+    I2 = R4;
+    DM(I2, M6) = R3;                      // the tag
+    DM(I2, M6) = R10;
+    DM(I2, M6) = R11;
+_dl_stadv:
+    R5 = DM(_dl_stpage);
+    R5 = R5 + 1;
+    R3 = DL_STATS_PAGES;
+    R4 = 0;
+    COMP(R5, R3);
+    IF GE R5 = PASS R4;
+    DM(_dl_stpage) = R5;
+_dl_nost:
     R3 = I4;                              // the record pointer
     I2 = R3;
     R0 = DM(_dl_beat);
@@ -436,7 +577,16 @@ _dl_nodiag:
 .VAR _dl_svl2 = 0;
 .VAR _dl_svl3 = 0;
 .VAR _dl_beat = 0;
+.VAR _dl_stptr = 0;                        // the stats window's byte address while stats are on, else 0
+.VAR _dl_stgen = -1;                       // the last clear generation seen (-1: none, the first window 3 write clears the window)
+.VAR _dl_stpage = 0;                       // the page the next block sends
+// Window 3: the stats control words (on, clear generation, block period).
+.PKDATA _dl_stctl, 12;
+// The slot block (window 0 words 0 to 15): the hook sites of the image read their dispatch entry here (sdk/dsp/contract/dk_stub.inc). Zero at boot: every site takes the stock path.
+.PKDATA _dl_slots, DK_SLOT_BYTES;
 // The module step (fault table word 25): the static word that core/dyndsp exports as `_dk_step`.
 .VAR _dk_step = 0;
 // The previous block's record address (word 30).
 .VAR _dk_rec = 0;
+// The stats window: 100 words and 4 private words (zeroed by the first window 3 write, never read before it).
+.PKBSS _dk_stats, 416;

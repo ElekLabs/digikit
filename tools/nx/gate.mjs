@@ -3,15 +3,16 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readRuns, report, traceSummary } from './gate-history.mjs';
+import { readRuns, report, retrySummary, traceSummary } from './gate-history.mjs';
 
 const MERGE_TARGETS = [
   'lint',
   'fmt-check',
   'rust-fmt',
+  'rust-clippy',
   'typecheck',
   'test-host',
-  'test',
+  'test-wasm',
   'check',
   'build:ui',
   'check:ui',
@@ -21,6 +22,8 @@ const MERGE_TARGETS = [
   'pack',
   'test-device',
   'test-conformance',
+  'test-conformance-rig',
+  'test-rig',
   'stock',
   'fx',
   'fx-no-aot',
@@ -38,7 +41,7 @@ const MERGE_TARGETS = [
 
 export const TIERS = {
   changed: {
-    targets: ['lint', 'fmt-check', 'rust-fmt', 'typecheck', 'test-host', 'python-checks'],
+    targets: ['lint', 'fmt-check', 'rust-fmt', 'typecheck', 'test-host', 'python-checks', 'objects-check'],
     access: 'rw',
     narrow: false,
   },
@@ -187,6 +190,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
         console.log(traceSummary(traceDir));
       } catch (error) {
         console.log(`gate: no trace summary (${error.message})`);
+      }
+      try {
+        console.log(retrySummary(traceDir));
+      } catch (error) {
+        console.log(`gate: no retry summary (${error.message})`);
       }
     }
     if (result.status !== 0) process.exit(result.status ?? 1);

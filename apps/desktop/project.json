@@ -1,51 +1,95 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "@digi/desktop",
-  "implicitDependencies": ["@digi/web", "@digi/dk-session", "digiemu-desktop", "dkui-host"],
+  "implicitDependencies": ["@digi/workbench-core", "@digi/dk-session", "digiemu-desktop", "dkui-host", "dkprof"],
   "targets": {
     "build:ui": {
       "cache": true,
       "inputs": [
         "default",
-        "^production",
+        {
+          "input": "production",
+          "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
+        },
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/devices/*.toml"
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/calibration.toml"
       ],
       "outputs": ["{projectRoot}/ui/dist"]
+    },
+    "workbench-inputs": {
+      "executor": "nx:noop",
+      "dependsOn": [
+        "build:ui",
+        {
+          "projects": ["@digi/web"],
+          "target": "patchkit-wasm"
+        },
+        {
+          "projects": ["patchkit"],
+          "target": "ports"
+        },
+        {
+          "projects": ["core/services/machines", "core/services/fx", "core/services/lfo", "core/services/samples"],
+          "target": "pack"
+        }
+      ]
     },
     "check:ui": {
       "cache": true,
       "inputs": [
         "default",
-        "^production",
+        {
+          "input": "production",
+          "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
+        },
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/apps/web/tests/fakeflash.mjs",
         "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/apps/web/tests/fakeflash.d.mts"
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/calibration.toml"
       ],
       "outputs": []
-    },
-    "rust-tests": {
-      "executor": "nx:run-commands",
-      "cache": false,
-      "parallelism": false,
-      "options": {
-        "command": "node tools/nx/rust-env.mjs --gen -- cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --target-dir .nx/target/check-desktop-clean",
-        "cwd": "."
-      }
     },
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
+      "description": "Host tests; the Log names tests load the real dkprof.wasm (dkprof:wasm, built on demand, keyed on the Rust crates below).",
+      "dependsOn": [{ "projects": ["dkprof"], "target": "wasm" }],
       "inputs": [
-        "hostTests",
-        "^hostTests",
-        "{workspaceRoot}/devices/**/*.toml",
-        "{workspaceRoot}/modules/*/*/module.toml"
+        "{projectRoot}/ui/**/*",
+        "!{projectRoot}/ui/dist/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/ui/tsconfig.json",
+        "jsToolchain",
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/tsconfig*.json",
+        {
+          "externalDependencies": ["vitest"]
+        },
+        "{workspaceRoot}/packages/workbench-core/src/**/*",
+        "{workspaceRoot}/packages/workbench-core/ui/**/*",
+        "{workspaceRoot}/packages/workbench-core/package.json",
+        "{workspaceRoot}/packages/dk-session/src/**/*",
+        "{workspaceRoot}/packages/dk-session/package.json",
+        "{workspaceRoot}/packages/dkbs/src/**/*",
+        "{workspaceRoot}/packages/dkbs/package.json",
+        "{workspaceRoot}/packages/dkprof/src/**/*",
+        "{workspaceRoot}/packages/dkprof/Cargo.toml",
+        "{workspaceRoot}/packages/dkaddrmap/src/**/*",
+        "{workspaceRoot}/packages/dkaddrmap/Cargo.toml",
+        "{workspaceRoot}/packages/dksharc/src/**/*",
+        "{workspaceRoot}/packages/dksharc/Cargo.toml",
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/calibration.toml",
+        "{workspaceRoot}/modules/*/*/module.toml",
+        "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],
       "options": {
@@ -53,6 +97,16 @@
         "command": "pnpm exec vitest run --config vitest.host.config.ts --project desktop-host",
         "cwd": "."
       }
+    },
+    "typecheck": {
+      "inputs": [
+        "default",
+        {
+          "input": "production",
+          "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
+        },
+        "jsToolchain"
+      ]
     }
   }
 }

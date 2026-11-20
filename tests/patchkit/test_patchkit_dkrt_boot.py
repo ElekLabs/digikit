@@ -71,7 +71,7 @@ def test_the_sdk_record_code_passes_its_own_tests(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     r = subprocess.run([str(exe)], capture_output=True, text=True)
-    # the record, the version 3 store and the settings record (the shared vectors included: the test reads sdk/vectors/settings-vectors.json)
+    # the record, the version 3 store and the settings record (the shared vectors included: the test reads modules/core/runtime/vectors/settings-vectors.json)
     m = re.search(r"test result: ok\. (\d+) passed; 0 failed", r.stdout)
     assert r.returncode == 0 and m and int(m.group(1)) > 0, r.stdout
 
@@ -201,22 +201,20 @@ def test_committed_runtime_objects_are_current():
     if not pk_toolchains.codegen_gcc_ready():
         pytest.skip("Rust-for-ColdFire toolchain not installed")
     front_end.build_module(RUNTIME, check=True)
-    front_end.build_module(ROOT / "tests/fixtures/modules/dyn-fault", check=True)
-    front_end.build_module(ROOT / "tests/fixtures/modules/dyn-fault-late", check=True)
+    front_end.build_module(ROOT / "tests/fixtures/modules/dyn-crash", check=True)
 
 
 def test_the_fault_module_packs_for_both_devices(tmp_path):
     tools = pk_dkrt.Tools()
     for dev in ("dt2", "dn2"):
-        for module in ("test/dyn-fault", "test/dyn-fault-late"):
-            out = tmp_path / f"{dev}.dkm"
-            tools.patchkit_run("pack", module, "--device", dev, "-o", out)
-            assert module in tools.patchkit_run("dkm-info", out)
+        out = tmp_path / f"{dev}.dkm"
+        tools.patchkit_run("pack", "test/dyn-crash", "--device", dev, "-o", out)
+        assert "test/dyn-crash" in tools.patchkit_run("dkm-info", out)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("image", ["dt2-1.17", "dn2-1.12"])
-def test_boot_load_restart_cut_and_safe_mode(image, tmp_path):
+def test_boot_load_restart_and_cut(image, tmp_path):
     if not config.stock(IMAGES[image]).exists():
         pytest.skip(f"{IMAGES[image]} missing")
     proof = pk_dkrt_boot.Proof(image, True, tmp_path, set())

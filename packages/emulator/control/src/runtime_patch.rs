@@ -125,6 +125,14 @@ fn cache_file(root: &Path, stock_sha256: &str, set: &str, key: &str) -> PathBuf 
         .join(format!("{stock_sha256}-{set}-{key}.syx"))
 }
 
+/// The apply options of an image that only the emulator boots: the record as for every patch, no flash container cap.
+fn emulator_options() -> apply::Options {
+    apply::Options {
+        flash_cap: false,
+        ..Default::default()
+    }
+}
+
 /// Patch `stock` with the device's `set` (or take the cached result). The cache is written whole or not at all.
 pub fn prepare(root: &Path, stock: &[u8], set: &str) -> Result<Outcome, String> {
     let e = |x: patchkit::Error| x.to_string();
@@ -157,10 +165,16 @@ pub fn prepare(root: &Path, stock: &[u8], set: &str) -> Result<Outcome, String> 
             .flatten()
             .is_some_and(|r| r.base_sha256 == base_sha256)
     {
-        return patched(syx, modules, true);
+        // the same `id@version` names an apply reports (`plan.modules`), so a cache hit and a build list alike
+        let tags = modules
+            .iter()
+            .map(|i| lib.get(i).map_or_else(|| i.clone(), |m| m.tag()))
+            .collect();
+        return patched(syx, tags, true);
     }
     let reg = Registry::from_dir(&root.join("devices/ports")).map_err(e)?;
-    let out = apply::apply(stock, &reg, &lib, &modules).map_err(e)?;
+    // the image is booted in the emulator and never flashed: the flash container cap does not apply
+    let out = apply::apply_with(stock, &reg, &lib, &modules, emulator_options()).map_err(e)?;
     write_whole(&file, &out.syx)?;
     patched(out.syx, out.plan.modules, false)
 }
@@ -208,8 +222,42 @@ pub fn reapply(
         .map(|m| m.id().to_string())
         .collect();
     Ok(Reapplied {
-        applied: apply::apply(stock, &reg, &lib, ids).map_err(e)?,
+        applied: apply::apply_with(stock, &reg, &lib, ids, emulator_options()).map_err(e)?,
         requirers,
+    })
+}
+
+/// What a host needs to name addresses of the running image: its ship map and the addresses of the symbols the load table is read from.
+#[derive(Debug)]
+pub struct ImageMaps {
+    /// The ship map (`dk-addrmap`, kind `ship`) as JSON text.
+    pub ship: String,
+    /// Symbol name to byte address, for the symbols of the load table that the image has.
+    pub symbols: std::collections::BTreeMap<String, u64>,
+    /// The patch of the modules as they are on disk now gives the running image byte for byte. False after a hot DSP injection or when
+    /// an object changed on disk since the image was made: the map may then name the wrong code.
+    pub matches: bool,
+}
+
+/// The ship map and the load-table symbols of `current` (a patched image): its patch record names the modules, and the same apply as
+/// `dev.reload` makes the plan from `stock` (nothing is cached or written). The map follows the image that runs: after a swap of module
+/// code by `dev.reload` the caller asks again.
+pub fn image_maps(root: &Path, stock: &[u8], current: &[u8]) -> Result<ImageMaps, String> {
+    let e = |x: patchkit::Error| x.to_string();
+    let record = verify::patch_record(current)
+        .map_err(e)?
+        .ok_or("the running image has no patch record")?;
+    let ids: Vec<String> = record
+        .modules
+        .iter()
+        .map(|t| patchkit::live::owner_id(t).to_string())
+        .collect();
+    let re = reapply(root, stock, &ids, &[])?;
+    let plan = &re.applied.plan;
+    Ok(ImageMaps {
+        ship: patchkit::addrmap::ship_map(plan).to_json(),
+        symbols: patchkit::addrmap::load_symbols(plan),
+        matches: re.applied.syx == current,
     })
 }
 
@@ -406,7 +454,7 @@ mod tests {
         // an instruction the ISA excludes is refused with the check's text; the old object stays
         std::fs::write(
             &src,
-            ".SECTION/PM seg_pmco;\n.GLOBAL _f;\n_f:\n    DM(15, I4) = I0;\n    RTS;\n",
+            ".SECTION/PM seg_pmco;\n.GLOBAL _f;\n_f:\n    DM(I4, M5) = L1;\n    RTS;\n",
         )
         .unwrap();
         let err = build_dirs(&root(), &dirs).unwrap_err();
@@ -420,6 +468,44 @@ mod tests {
             text
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_maps_of_a_running_image_name_its_load_table_symbols() {
+        let Some(stock) = stock("Digitakt_II_OS1.17.syx") else {
+            eprintln!("skipped: firmware/Digitakt_II_OS1.17.syx is absent");
+            return;
+        };
+        let (lib, modules) = lib_and_modules();
+        let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+        let image = apply::apply(&stock, &reg, &lib, &modules).unwrap().syx;
+        let maps = image_maps(&root(), &stock, &image).unwrap();
+        assert!(maps.matches, "the apply of the record gives the image back");
+        let ship: serde_json::Value = serde_json::from_str(&maps.ship).unwrap();
+        assert_eq!(ship["kind"], "ship");
+        assert_eq!(ship["key"]["device"], "dt2");
+        assert!(
+            ship["key"]["loader"].is_object(),
+            "the loader header says how to read the table"
+        );
+        // the symbols the loader header asks for are all there, in the runtime's RAM
+        assert!(
+            maps.symbols.len() >= 1 && maps.symbols.contains_key("DKRT_STATE"),
+            "{:?}",
+            maps.symbols
+        );
+        assert!(
+            maps.symbols.values().all(|a| *a >= 0x4000_0000),
+            "{:?}",
+            maps.symbols
+        );
+        // other bytes than the apply makes (an injected change): the maps are still given, marked as not matching
+        let mut other = image.clone();
+        let last = other.len() - 20;
+        other[last] ^= 1;
+        assert!(!image_maps(&root(), &stock, &other).map_or(true, |m| m.matches));
+        // an image with no patch record has no maps
+        assert!(image_maps(&root(), &stock, &stock).is_err());
     }
 
     #[test]
@@ -456,7 +542,7 @@ mod tests {
             Outcome::AlreadyPatched => panic!("stock has no patch record"),
         };
         assert!(!first.cache_hit);
-        assert_eq!(first.modules.len(), 16); // the Digitakt II emulator set: 12 and core/dynfx, core/fx, core/fxpages, core/sample-pool
+        assert_eq!(first.modules.len(), 18); // the Digitakt II emulator set: 12 and core/dynfx, core/fx, core/fxpages, core/sample-pool, core/lfo, core/platform (the runtime requires it)
         assert!(first.cache_file.is_file());
         let record = verify::patch_record(&first.syx).unwrap().unwrap();
         assert_eq!(record.base_sha256, first.base_sha256);

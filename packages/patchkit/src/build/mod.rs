@@ -10,7 +10,8 @@
 //! build output: its objects go to the cache `out/cache/dko/<module id>/<src12>/<object path>`, where `<src12>` is the first 12 digits of the
 //! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file`] names the file.
 //!
-//! An object whose `source_sha256` equals the hash of its sources now is not compiled ("unchanged"). `--check` rebuilds and
+//! An object whose `source_sha256` equals the hash of its sources now, and, for a SHARC+ object, whose `selache_rev` is the pinned one,
+//! is not compiled ("unchanged"). `--check` rebuilds and
 //! compares with the stored object, ignoring the `*_sha256` keys of the toolchain record (they name the local binaries).
 //!
 //! Library entry points for the command line and the desktop app: [`build_module`], [`module_status`], [`link_sources`], and
@@ -147,6 +148,10 @@ pub fn cache_dir(root: &Path) -> PathBuf {
 /// Entries of one object kept in the cache (the newest by modification time; a use touches its entry).
 const KEEP_ENTRIES: usize = 3;
 
+/// An entry used within this time is never evicted: another process (a gate job, another lane that shares `out/`) may have just chosen
+/// it and be about to read it.
+const EVICT_MIN_AGE: std::time::Duration = std::time::Duration::from_secs(3600);
+
 /// The directory of a content module's objects in the cache. A build with defines has its own directory, so objects of different
 /// define sets never share a file.
 fn module_cache_dir(env: &Env, m: &ModuleToml) -> PathBuf {
@@ -169,10 +174,11 @@ fn object_file_at(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml, hash
     }
 }
 
-/// The stored file of the object for the sources now (see [`object_file_at`]); an object whose sources cannot be hashed has the key `unhashed`.
-fn object_file(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> PathBuf {
-    let hash = source_hash(env, moddir, &o.sources).unwrap_or_else(|_| "unhashed".into());
-    object_file_at(env, moddir, m, o, &hash)
+/// The stored file of the object for the sources now (see [`object_file_at`]); an error when the sources cannot be hashed (a missing
+/// source, or the SDK library does not compile).
+fn object_file(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<PathBuf> {
+    let hash = source_hash(env, moddir, &o.sources, m.is_content())?;
+    Ok(object_file_at(env, moddir, m, o, &hash))
 }
 
 /// Mark a cache entry as used now.
@@ -193,7 +199,14 @@ fn evict(dir: &Path, rel: &str) {
         .filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f)))
         .collect();
     entries.sort_by(|a, b| b.0.cmp(&a.0));
-    for (_, f) in entries.into_iter().skip(KEEP_ENTRIES) {
+    let now = std::time::SystemTime::now();
+    for (used, f) in entries.into_iter().skip(KEEP_ENTRIES) {
+        if now
+            .duration_since(used)
+            .is_ok_and(|age| age < EVICT_MIN_AGE)
+        {
+            continue;
+        }
         let _ = std::fs::remove_file(&f);
         // the key directory, when nothing else is in it
         let mut d = f.parent();
@@ -245,7 +258,7 @@ pub fn cf_include_dirs(root: &Path, moddir: &Path) -> Vec<PathBuf> {
 }
 
 /// The `source_sha256` a build of the object would write, computed the same way as the builders do and without compiling.
-fn source_hash(env: &Env, moddir: &Path, sources: &[String]) -> Result<String> {
+fn source_hash(env: &Env, moddir: &Path, sources: &[String], sdk: bool) -> Result<String> {
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
         Kind::Sharc => {
@@ -253,49 +266,58 @@ fn source_hash(env: &Env, moddir: &Path, sources: &[String]) -> Result<String> {
             Ok(sharc::source_hash(&text))
         }
         Kind::Rust => rust::source_sha256(&paths[0]),
-        Kind::Cf => cf::source_digest(env, &paths, &cf_include_dirs(&env.root, moddir)),
+        Kind::Cf => cf::source_digest(env, &paths, &cf_include_dirs(&env.root, moddir), sdk),
     }
 }
 
-fn committed_hash(path: &Path) -> Option<String> {
-    let v: Value = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
-    v.get("source_sha256")?.as_str().map(String::from)
+/// Is the object file `path` current: its `source_sha256` is `want` and, when its toolchain record names a `selache_rev`, that is the
+/// pinned one. Objects without a `selache_rev` (ColdFire, Rust) are judged by the hash alone.
+fn stored_current(path: &Path, want: &str) -> bool {
+    let Some(v) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+    else {
+        return false;
+    };
+    if v.get("source_sha256").and_then(Value::as_str) != Some(want) {
+        return false;
+    }
+    match v.get("toolchain").and_then(|t| t.get("selache_rev")) {
+        Some(r) => r.as_str() == Some(sharc_obj::SELACHE_REV),
+        None => true,
+    }
 }
 
-fn object_unchanged(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> bool {
-    match source_hash(env, moddir, &o.sources) {
-        Ok(want) => {
-            let out = object_file_at(env, moddir, m, o, &want);
-            let same = committed_hash(&out).is_some_and(|h| h == want);
-            if same && m.is_content() {
-                touch(&out);
-            }
-            same
-        }
-        Err(_) => false,
+fn object_unchanged(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<bool> {
+    let want = source_hash(env, moddir, &o.sources, m.is_content())?;
+    let out = object_file_at(env, moddir, m, o, &want);
+    let same = stored_current(&out, &want);
+    if same && m.is_content() {
+        touch(&out);
     }
+    Ok(same)
 }
 
 /// Is the stored object of every object with sources current with its sources? One entry per such object: (its path, unchanged).
 pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
-    Ok(m.object
+    m.object
         .iter()
         .filter(|o| !o.sources.is_empty())
-        .map(|o| (o.path.clone(), object_unchanged(&env, moddir, &m, o)))
-        .collect())
+        .map(|o| Ok((o.path.clone(), object_unchanged(&env, moddir, &m, o)?)))
+        .collect()
 }
 
 /// The stored file of every object of the module that lists sources, for the sources now: (its path, the file). Nothing is built.
 pub fn object_files(root: &Path, moddir: &Path) -> Result<Vec<(String, PathBuf)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
-    Ok(m.object
+    m.object
         .iter()
         .filter(|o| !o.sources.is_empty())
-        .map(|o| (o.path.clone(), object_file(&env, moddir, &m, o)))
-        .collect())
+        .map(|o| Ok((o.path.clone(), object_file(&env, moddir, &m, o)?)))
+        .collect()
 }
 
 /// Canonical JSON: keys sorted (the map of `serde_json::Value` is ordered), one space of indent per level, a newline at the end.
@@ -321,12 +343,27 @@ pub fn comparable(mut v: Value) -> Value {
     v
 }
 
-fn build_object(env: &Env, moddir: &Path, o: &ObjectToml, defines: &[String]) -> Result<Dko> {
+fn build_object(
+    env: &Env,
+    moddir: &Path,
+    o: &ObjectToml,
+    defines: &[String],
+    sdk: bool,
+    module: &str,
+) -> Result<Dko> {
     let paths: Vec<PathBuf> = o.sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(&o.sources) {
         Kind::Sharc => {
             let text = sharc::source_text(&env.root, moddir, &paths, defines)?;
-            sharc::sharc_object(&text)
+            let obj = sharc::sharc_object(&text)?;
+            // The register contract (sdk/dsp/REGISTERS.md): a warning for now, never a failed build. Only content modules are checked
+            // (`sdk` is `is_content()`): a `core/*` module implements the contract (the adapters, the stock-code hooks), so it is not held to it.
+            if sdk {
+                for p in sharc::rule_problems(&obj) {
+                    eprintln!("{}", sharc::rule_warning_line(module, &p));
+                }
+            }
+            Ok(obj)
         }
         k => {
             if !defines.is_empty() {
@@ -342,14 +379,18 @@ fn build_object(env: &Env, moddir: &Path, o: &ObjectToml, defines: &[String]) ->
                 let (proto, sha, toolchain) = rust::object_proto(env, &paths[0])?;
                 cf::dko_from_proto(&proto, sha, toolchain)
             } else {
-                cf::cf_object(env, &paths, &cf_include_dirs(&env.root, moddir))
+                cf::cf_object(env, &paths, &cf_include_dirs(&env.root, moddir), sdk)
             }
         }
     }
 }
 
-/// Write an object file in one step (a rename), so a reader that runs at the same time never sees half a file.
+/// Write an object file in one step (a rename), so a reader that runs at the same time never sees half a file. A file that already has
+/// this text is left alone, so a complete cache entry is never replaced.
 fn write_object(path: &Path, text: &str) -> Result<()> {
+    if std::fs::read_to_string(path).is_ok_and(|t| t == text) {
+        return Ok(());
+    }
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d).map_err(|e| err!("{}: {e}", d.display()))?;
     }
@@ -395,10 +436,10 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
         .iter()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    let want = source_hash(env, moddir, &o.sources)
+    let want = source_hash(env, moddir, &o.sources, m.is_content())
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     let file = object_file_at(env, moddir, m, o, &want);
-    if committed_hash(&file).is_some_and(|h| h == want)
+    if stored_current(&file, &want)
         && let Ok(t) = std::fs::read_to_string(&file)
     {
         if m.is_content() {
@@ -412,7 +453,7 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     } else {
         vec![]
     };
-    let obj = build_object(env, moddir, o, &defines)
+    let obj = build_object(env, moddir, o, &defines, m.is_content(), &m.module.id)
         .map_err(|e| err!("{}: {rel}: build failed: {e}", moddir.display()))?;
     let text = to_text(&obj)?;
     write_object(&file, &text)?;
@@ -434,24 +475,24 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     let m = manifest(moddir)?;
     let mut report = BuildReport::default();
     for o in m.object.iter().filter(|o| !o.sources.is_empty()) {
-        let hash = source_hash(&env, moddir, &o.sources).ok();
+        let hash = source_hash(&env, moddir, &o.sources, m.is_content())?;
         let stored = |h: &str| object_file_at(&env, moddir, &m, o, h);
         if !opts.check
             && opts.defines.is_empty()
             && !opts.force
-            && object_unchanged(&env, moddir, &m, o)
+            && object_unchanged(&env, moddir, &m, o)?
         {
             report.objects.push(ObjectReport {
-                path: stored(hash.as_deref().unwrap_or("unhashed")),
+                path: stored(&hash),
                 status: Status::Unchanged,
                 instructions: None,
             });
             continue;
         }
-        let obj = build_object(&env, moddir, o, &opts.defines)?;
+        let obj = build_object(&env, moddir, o, &opts.defines, m.is_content(), &m.module.id)?;
         let out = match &opts.out {
             Some(d) => d.join(&o.path),
-            None => stored(hash.as_deref().unwrap_or(&obj.source_sha256)),
+            None => stored(&hash),
         };
         let n = obj
             .toolchain
@@ -465,7 +506,12 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
                 Some(v) => comparable(v) == comparable(serde_json::to_value(&obj)?),
                 None => false,
             };
-            if !current {
+            // A cache entry is output, keyed by the hash of its sources: a missing one (another process may have evicted it) is made,
+            // not reported stale. Only a stored object that differs from a fresh build is stale.
+            let missing = !out.exists();
+            if !current && missing && m.is_content() && opts.out.is_none() {
+                write_object(&out, &to_text(&obj)?)?;
+            } else if !current {
                 return Err(err!(
                     "{} is stale: mise run module:build -- {}",
                     out.display(),
@@ -593,8 +639,109 @@ pub fn link_sources(
     include_dirs: &[PathBuf],
 ) -> Result<(cf::Linked, std::collections::BTreeMap<String, u32>)> {
     let env = Env::new(root);
-    let proto = cf::proto_of_sources(&env, sources, include_dirs)?;
+    // no SDK link (`sdk` false): a unit test that needs SDK code (dk_text_*, dk_path_*) must opt in
+    let proto = cf::proto_of_sources(&env, sources, include_dirs, false)?;
     let linked = cf::link(&proto, base, symmap)?;
     let hist = cf::check_isa(&linked)?;
     Ok((linked, hist))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    fn scratch(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("pk-build-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn a_sharc_object_from_another_selache_rev_is_stale() {
+        let dir = scratch("selache-rev");
+        let write = |name: &str, toolchain: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, format!("{{\"source_sha256\": \"abc\"{toolchain}}}")).unwrap();
+            p
+        };
+        let pinned = write(
+            "pinned.json",
+            &format!(
+                ", \"toolchain\": {{\"selache_rev\": \"{}\"}}",
+                sharc_obj::SELACHE_REV
+            ),
+        );
+        let old = write(
+            "old.json",
+            ", \"toolchain\": {\"selache_rev\": \"02d6d785\"}",
+        );
+        let none = write("none.json", "");
+        assert!(stored_current(&pinned, "abc"));
+        assert!(!stored_current(&old, "abc"));
+        assert!(stored_current(&none, "abc"));
+        assert!(!stored_current(&pinned, "other"));
+    }
+
+    #[test]
+    fn a_reader_never_sees_a_partial_object() {
+        let dir = scratch("atomic");
+        let text = "x".repeat(8 << 20);
+        let stop = Arc::new(AtomicBool::new(false));
+        let reader = {
+            let (dir, text, stop) = (dir.clone(), text.clone(), stop.clone());
+            std::thread::spawn(move || {
+                let mut seen = 0;
+                while !stop.load(Ordering::Relaxed) {
+                    for i in 0..20 {
+                        if let Ok(t) = std::fs::read_to_string(dir.join(format!("e{i}/o.json"))) {
+                            assert_eq!(t.len(), text.len(), "partial entry e{i}");
+                            seen += 1;
+                        }
+                    }
+                }
+                seen
+            })
+        };
+        for i in 0..20 {
+            write_object(&dir.join(format!("e{i}/o.json")), &text).unwrap();
+        }
+        stop.store(true, Ordering::Relaxed);
+        reader.join().unwrap();
+        // no temp file is left behind
+        for i in 0..20 {
+            assert_eq!(
+                std::fs::read_dir(dir.join(format!("e{i}")))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn evict_keeps_entries_used_recently() {
+        let dir = scratch("evict");
+        for i in 0..6 {
+            write_object(&dir.join(format!("k{i}/o.json")), "{}").unwrap();
+        }
+        evict(&dir, "o.json");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 6);
+        // the entries beyond the newest three go once they are old
+        let old = std::time::SystemTime::now() - EVICT_MIN_AGE * 2;
+        for i in 0..6 {
+            let f = std::fs::File::options()
+                .append(true)
+                .open(dir.join(format!("k{i}/o.json")))
+                .unwrap();
+            f.set_modified(old + std::time::Duration::from_secs(i))
+                .unwrap();
+        }
+        evict(&dir, "o.json");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), KEEP_ENTRIES);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

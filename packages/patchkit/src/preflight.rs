@@ -78,8 +78,12 @@ impl Outcome {
     }
 }
 
-/// Sections that a patch may change.
-const PATCHABLE: [u32; 2] = [3, 7];
+/// Sections that a patch may change: the device's MAIN OS and, when it has a DSP, its boot stream (`[container]`).
+fn patchable(d: crate::syx::Device) -> Vec<u32> {
+    std::iter::once(d.main_section())
+        .chain(d.dsp_section())
+        .collect()
+}
 
 /// Check `patched` against its base. `stock` returns the bytes of the base file for a known firmware (`None`: not present). `code`:
 /// the DSP code ranges of the patch's plan, for the ISA check (`dspscan::scan`).
@@ -184,12 +188,17 @@ pub fn preflight(
         ));
         return o;
     }
+    let patchable = patchable(fw.device);
+    // the role of a section is the device file's; the ids that every container has keep their names
+    let c = fw.device.container();
     let name = |id: u32| match id {
+        _ if id == c.main => "MAIN OS",
+        _ if Some(id) == c.dsp => "DSP",
+        _ if Some(id) == c.cf2 => "second CPU image",
+        _ if Some(id) == c.fpga => "FPGA bitstream",
         2 => "bootstrap",
-        3 => "MAIN OS",
         4 => "updater",
         5 => "meta",
-        7 => "DSP",
         8 => "boot data",
         _ => "other",
     };
@@ -203,7 +212,7 @@ pub fn preflight(
             p.stored.len(),
             &sha256_hex(&p.stored)[..16]
         );
-        if PATCHABLE.contains(&id) {
+        if patchable.contains(&id) {
             if same {
                 o.ok(format!("section {id} ({}) unchanged: {sizes}", name(id)));
             } else {
@@ -222,6 +231,13 @@ pub fn preflight(
                 "section {id} ({}) identical to the stock base, stored and decoded: {sizes}",
                 name(id)
             ));
+        } else if fw.device.is_repackable(id) && b.data == p.data && b.dest == p.dest {
+            // the stored form is packed by a module that unpacks it; the verify below checks that the patch record names the module and layout
+            o.ok(format!(
+                "section {id} ({}) stored packed, decoded bytes identical to the stock base: {sizes} (stock {} stored)",
+                name(id),
+                b.stored.len()
+            ));
         } else {
             o.fail(format!(
                 "section {id} ({}) DIFFERS from the stock base (never allowed): stored {}/{} bytes equal {}, decoded {}/{} equal {}, dest {:#x}/{:#x}",
@@ -238,12 +254,15 @@ pub fn preflight(
         }
     }
     if changed.is_empty() {
-        o.fail("sections 3 and 7 are both identical to the base: nothing is patched");
+        o.fail("the patchable sections are all identical to the base: nothing is patched");
     } else {
         let s: Vec<String> = changed.iter().map(|i| i.to_string()).collect();
-        let only = if changed == [3] {
+        let main = fw.device.main_section();
+        let only = if changed == [main] && fw.device.dsp_section().is_some() {
             " (MAIN OS only; the DSP section is stock)"
-        } else if changed == [7] {
+        } else if changed == [main] {
+            " (MAIN OS only)"
+        } else if Some(changed[0]) == fw.device.dsp_section() && changed.len() == 1 {
             " (DSP only; MAIN OS is stock)"
         } else {
             ""
@@ -252,7 +271,7 @@ pub fn preflight(
     }
 
     // Container checksum, HMAC, section decode, expansion segments, size limits (verify), without a base.
-    match verify::verify(patched, Some(reg), None) {
+    match verify::verify(patched, Some(reg), Some(&base_bytes)) {
         Ok(rep) => {
             for c in &rep.checks {
                 o.ok(c.clone());
@@ -260,19 +279,36 @@ pub fn preflight(
             match reg.find(&base.syx_sha256) {
                 Some(p) => {
                     let l = &p.limits;
-                    let dsp = fw.section(7).unwrap();
-                    o.ok(format!(
-                        "port {}: container {} of {} bytes, DSP stored {} of {} / decoded {} of {}, MAIN staged {} of {}",
-                        p.id(),
-                        rep.container_bytes,
-                        l.container_max,
-                        dsp.stored.len(),
-                        l.dsp_stored_max,
-                        dsp.data.len(),
-                        l.dsp_depacked_max,
-                        fw.section(3).map(|m| m.data.len()).unwrap_or(0),
-                        l.main_staged_max
-                    ));
+                    // the flash path copies the image into a RAM stage without a size check, so it is refused here
+                    if rep.container_bytes > rep.container_max {
+                        o.fail(format!(
+                            "container is {} bytes, over the {} limit",
+                            rep.container_bytes, l.container_max
+                        ));
+                    }
+                    let main = fw.main().map(|m| m.data.len()).unwrap_or(0);
+                    match fw.dsp() {
+                        Some(dsp) => o.ok(format!(
+                            "port {}: container {} of {} bytes, DSP stored {} of {} / decoded {} of {}, MAIN staged {} of {}",
+                            p.id(),
+                            rep.container_bytes,
+                            l.container_max,
+                            dsp.stored.len(),
+                            l.dsp_stored_max,
+                            dsp.data.len(),
+                            l.dsp_depacked_max,
+                            main,
+                            l.main_staged_max
+                        )),
+                        None => o.ok(format!(
+                            "port {}: container {} of {} bytes, MAIN staged {} of {}",
+                            p.id(),
+                            rep.container_bytes,
+                            l.container_max,
+                            main,
+                            l.main_staged_max
+                        )),
+                    }
                 }
                 None => o.fail(format!(
                     "no port lockfile for the base {} (devices/ports/)",
@@ -286,12 +322,13 @@ pub fn preflight(
         }
         Err(e) => o.fail(format!("verify: {e}")),
     }
-    match fw.section(7) {
-        Some(dsp) => match crate::dspscan::check_section7(&dsp.data, code) {
+    match (fw.device.dsp_section(), fw.dsp()) {
+        (None, _) => o.ok("ISA check: the device has no DSP section"),
+        (Some(_), Some(dsp)) => match crate::dspscan::check_section7(&dsp.data, code) {
             Ok(t) => o.ok(format!("ISA check: {t}")),
             Err(e) => o.fail(format!("ISA check: {e}")),
         },
-        None => o.fail("ISA check: the image has no DSP section (7)"),
+        (Some(_), None) => o.fail("ISA check: the image has no DSP section"),
     }
     o.ok(format!("sha256 patched {}", fw.syx_sha256));
     o.ok(format!("sha256 base    {}", base.syx_sha256));

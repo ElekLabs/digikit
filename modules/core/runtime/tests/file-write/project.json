@@ -1,0 +1,36 @@
+{
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-file-write-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "file-write.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "tags": ["C:storage"],
+        "modules": [
+          "test/file-write",
+          "test/file-write-b"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "file-write-cut.device.test.ts"
+        ],
+        "tags": ["C:layout", "C:storage"],
+        "modules": [
+          "test/file-write"
+        ],
+        "plusdrive": true
+      }
+    ]
+  }
+}

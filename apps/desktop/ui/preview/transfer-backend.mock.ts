@@ -1,10 +1,15 @@
-// The Modules backend of the preview (replaces ../src/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
+// The Modules backend of the preview (replaces packages/workbench-core/src/transfer/transfer-backend.ts): the library and the device come from sim.ts; an install, a delete
 // and a restart emit the same events as dktransfer.ts, paced by `sim.speed`.
-import { moduleFilePath, moduleFilesFolder, type TransferEvent, type TransferView } from '@web/modules/dktransfer';
-import { noteActivity } from '@web/transfer/activity';
-import { asked, noteConnection } from '@web/transfer/connection-state';
+import {
+  moduleFilePath,
+  moduleFilesFolder,
+  type TransferEvent,
+  type TransferView,
+} from '@digi/workbench-core/modules/dktransfer.ts';
+import type { InstallResult } from '@digi/workbench-core/transfer/transfer-backend.ts';
+import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import { PAUSED } from '../src/desktop-env';
-import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, view, control } from './sim';
+import { LIBRARY, delay, deviceFiles, deviceRead, libraryById, pathOf, sim, simApp, view, control } from './sim';
 
 export { PAUSED };
 
@@ -23,21 +28,46 @@ async function pace(bytes: number, emit: (sent: number) => void): Promise<void> 
 }
 
 export const transferBackend = {
-  async list(): Promise<TransferView> {
+  async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
+    showLibrary(await this.listLibrary(device));
     control.counts.deviceRead++;
+    const { asked, noteConnection } = simApp.app!.connection;
     await asked(deviceRead);
     noteConnection({ type: 'answered', device: { id: 'dt2', name: 'Digitakt II', runtime: '0.5.2' } });
     return view();
   },
   async listLibrary(_device: string): Promise<TransferView> {
-    throw new Error('not in the preview');
+    const v = view();
+    return {
+      ...v,
+      runtime: '',
+      free_bytes: 0,
+      loaded: [],
+      capacity: null,
+      card_only: [],
+      modules: v.modules
+        .filter((m) => LIBRARY.some((l) => l.id === m.id))
+        .map((m) => ({ ...m, on_card: 'no', loaded: false, warnings: [] })),
+    };
   },
-  async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
+  async install(modules: string[], onEvent: (e: TransferEvent) => void): Promise<InstallResult> {
     await deviceRead();
     onEvent({ event: 'start', modules, device: 'dt2' });
     for (const id of modules) {
       const m = libraryById(id) ?? LIBRARY[0];
       const path = pathOf(m.id);
+      // the services of the ticked module that are not on the card go first (sim.ts gives pluck two)
+      const row = view().modules.find((r) => r.id === m.id);
+      for (const s of row?.services?.filter((x) => x.state !== 'on device') ?? []) {
+        const sid = s.stem;
+        const spath = `services/${s.stem}.dks`;
+        const size = Math.round(s.size);
+        onEvent({ event: 'upload', kind: 'service', id: sid, path: spath, bytes: size });
+        await pace(size, (sent) =>
+          onEvent({ event: 'progress', kind: 'service', id: sid, path: spath, sent, bytes: size }),
+        );
+        onEvent({ event: 'verify', kind: 'service', id: sid, path: spath, ok: true });
+      }
       onEvent({ event: 'build', id });
       await delay(150);
       onEvent({ event: 'upload', id, path, bytes: m.size });
@@ -46,6 +76,7 @@ export const transferBackend = {
       onEvent({ event: 'verify', id, path, ok: true });
     }
     onEvent({ event: 'done', restarted: false });
+    return { uploaded: [...modules], onCard: [], refused: [] };
   },
   async remove(paths: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
     for (const path of paths) {
@@ -86,8 +117,18 @@ export const transferBackend = {
     await delay(1200);
     onEvent({ event: 'done', loaded: [...deviceFiles.values()].filter((f) => f.loaded).map((f) => f.path) });
   },
+  async refreshServices(): Promise<string[]> {
+    return [];
+  },
   async add(files: { name: string; data: Uint8Array }[]): Promise<string[]> {
     await delay(300);
     return files.map((f) => `Added modules/${f.name}`);
   },
 };
+
+/** The same bag as the real `createTransferBackend` (packages/workbench-core/src/transfer/transfer-backend.ts); the preview reads the library from sim.ts. */
+export const createTransferBackend = (_deps: unknown) => ({
+  transferBackend,
+  loadLibrary: async () => [],
+  installDeps: async () => undefined,
+});

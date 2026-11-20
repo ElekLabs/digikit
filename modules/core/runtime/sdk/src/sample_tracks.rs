@@ -11,7 +11,7 @@ use crate::{
     E_TOO_BIG,
 };
 
-pub const TRACKS: usize = 16;
+pub const TRACKS: usize = crate::sample_pool::ENTRIES;
 pub const PATH: usize = 256;
 /// Selection paths kept per project (store paths are at most 159 bytes; longer ones are not remembered).
 pub const SEL_PATH: usize = 160;
@@ -84,8 +84,9 @@ pub struct Handle {
     pub channels: u32,
 }
 
-/// `dk_strack` of dk/sample_track.h, in this order.
+/// `dk_sample_pool_entry` of dk/sample/pool.h, in this order.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[repr(C)]
 pub struct Strack {
     pub ready: u32,
     pub token: u32,
@@ -96,6 +97,21 @@ pub struct Strack {
     pub base_l: u32,
     pub base_r: u32,
 }
+
+// The layout is `[sample] pool_entry` of sdk/sdk.toml (`gen_sdk.rs`, `sample_pool`): a reorder there fails this build.
+const _: () = {
+    use crate::sample_pool as p;
+    use core::mem::{offset_of, size_of};
+    assert!(size_of::<Strack>() == p::ENTRY_WORDS * 4);
+    assert!(offset_of!(Strack, ready) == p::W_READY * 4);
+    assert!(offset_of!(Strack, token) == p::W_TOKEN * 4);
+    assert!(offset_of!(Strack, frames) == p::W_FRAMES * 4);
+    assert!(offset_of!(Strack, rate) == p::W_RATE * 4);
+    assert!(offset_of!(Strack, channels) == p::W_CHANNELS * 4);
+    assert!(offset_of!(Strack, fmt) == p::W_FMT * 4);
+    assert!(offset_of!(Strack, base_l) == p::W_BASE_L * 4);
+    assert!(offset_of!(Strack, base_r) == p::W_BASE_R * 4);
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Load {
@@ -356,24 +372,42 @@ pub struct Core<const CL: usize, const EN: usize, const PR: usize> {
 
 impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
     pub const fn new() -> Self {
-        let mut proj = [Proj {
-            used: false,
-            slot: NO_SLOT,
-            age: 0,
-            sel: [[SEL0; TRACKS]; CL],
-        }; PR];
-        proj[0].used = true;
+        let mut c = Self::zeroed();
+        c.start();
+        c
+    }
+
+    /// The state with every byte 0 (a static of it is zero-initialised: no bytes in a file): not usable before `start`.
+    pub const fn zeroed() -> Self {
         Self {
             open: [false; CL],
             tracks: [[TRACK0; TRACKS]; CL],
             entries: [ENTRY0; EN],
-            next_req: 1,
-            next_token: 1,
-            proj,
+            next_req: 0,
+            next_token: 0,
+            proj: [Proj {
+                used: false,
+                slot: 0,
+                age: 0,
+                sel: [[SEL0; TRACKS]; CL],
+            }; PR],
             cur: 0,
-            clock: 1,
+            clock: 0,
             drops: 0,
         }
+    }
+
+    /// The few non-zero starting values of a `zeroed` state.
+    pub const fn start(&mut self) {
+        let mut i = 0;
+        while i < PR {
+            self.proj[i].slot = NO_SLOT;
+            i += 1;
+        }
+        self.proj[0].used = true;
+        self.next_req = 1;
+        self.next_token = 1;
+        self.clock = 1;
     }
 
     /// Log a dropped handle: the first 64 drops, then every 64th.

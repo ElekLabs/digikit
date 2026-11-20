@@ -25,7 +25,7 @@
 //  The curve's three numbers live in state words 3, 4 and 5 so the loop does not need three more registers.
 // =====================================================================
 #include "dk_machine.inc"
-#include "dsp/oscillator.inc"
+#include "dsp/osc/oscillator.inc"
 
 .SECTION/PM seg_pmco;
 .GLOBAL _pd_render;
@@ -89,7 +89,7 @@ _pd_booted:
     R1 = 0x3f800000;                      // 1.0
     NOP;
     F0 = F0 + F1;                         // fold gain 1 .. 4
-    R1 = F0;
+    R1 = PASS F0;
     NOP;
     DM(8, I3) = R1;                       // word 7 is the snap flag, word 8 the fold gain
 
@@ -168,7 +168,7 @@ _pd_booted:
     NOP;
     F0 = F0 + F1;
     NOP;
-    R2 = F0;
+    R2 = PASS F0;
     NOP;
     DM(3, I3) = R2;
     R2 = DM(4, I3);
@@ -182,7 +182,7 @@ _pd_booted:
     NOP;
     F0 = F0 + F1;
     NOP;
-    R2 = F0;
+    R2 = PASS F0;
     NOP;
     DM(4, I3) = R2;
     R2 = DM(5, I3);
@@ -196,18 +196,18 @@ _pd_booted:
     NOP;
     F0 = F0 + F1;
     NOP;
-    R2 = F0;
+    R2 = PASS F0;
     NOP;
     DM(5, I3) = R2;
     JUMP _pd_slewed;
 _pd_snap:
-    R2 = F3;
+    R2 = PASS F3;
     NOP;
     DM(3, I3) = R2;                       // s1 straight to the target
-    R2 = F15;
+    R2 = PASS F15;
     NOP;
     DM(4, I3) = R2;                       // s2
-    R2 = F5;
+    R2 = PASS F5;
     NOP;
     DM(5, I3) = R2;                       // b2
 _pd_slewed:
@@ -259,7 +259,7 @@ _pd_slewed:
     F0 = F2 - F1;
     NOP;
     DK_SINE_POLY_STEP(F2, F0, F1, F3, R2, R3);
-    F5 = F2;                              // keep oscillator 1
+    F5 = PASS F2;                         // keep oscillator 1
 
     // ---- oscillator 2 (same warp, phase 2) ----
     R2 = DM(3, I3);
@@ -318,7 +318,7 @@ _pd_slewed:
     NOP;
     F2 = F2 - F0;                        // reflect instead of clipping
     NOP;
-    F3 = F2;                             // the folded signal
+    F3 = PASS F2;                        // the folded signal
     NOP;
     F3 = F3 * F9;                        // level
 
@@ -357,7 +357,5 @@ _pd_note_on:
 .VAR _pd_desc3 = DK_MAX_VOICES;
 .VAR _pd_desc4 = 36;                      // state bytes (9 words: 2 phases, spare, 3 curve numbers, magic, snap flag, fold gain)
 .VAR _pd_desc5 = 8;                       // the two phases are zeroed at note-on (see _pd_note_on)
-.VAR _pd_desc6 = 5300;                    // worst render block (measured by the conformance)
-.VAR _pd_desc7 = 5400;                    // note-on block = note_on + one render block
-.VAR _pd_desc8 = 2;
-.VAR _pd_desc9 = 0;
+.VAR _pd_desc6 = 2;
+.VAR _pd_desc7 = 0;

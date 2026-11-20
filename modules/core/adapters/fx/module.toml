@@ -9,7 +9,7 @@ author = "digikit"
 status = "experimental"
 summary = "Effects adapter of the SHARC engine: effects registered by other modules process the master block in a chain, before the USB pack and the DAC converter, or (Digitakt II, route send) run on a send bus of the 16 tracks and add to the FX return bus; an empty chain plays the stock audio"
 ports = ["dt2-1.17", "dn2-1.12"]
-requires = []
+requires = ["core/dsp-link"]
 conflicts = []
 
 # Test status per firmware; patchkit does not read it.
@@ -25,8 +25,6 @@ sources = ["src/dsp/fx.s"]
 place = "dsp.l2"
 
 [object.externs]
-_fx_table = "fx.rows"
-_fx_master = "dsp.master.value.q31_converter.float_buf"
 _fx_back = "hook.dsp.fx.fn.entry.tail"
 
 # The send route (Digitakt II; docs/findings/62-fx-send-route.md): the hook is the first instruction of the master function, before the master reads the track
@@ -38,9 +36,6 @@ place = "dsp.l2"
 devices = ["dt2"]
 
 [object.externs]
-_fx_table = "fx.rows"
-_fxs_trackbus = "dsp.fx.value.send.track_bus"
-_fxs_return = "dsp.fx.value.send.return_bus"
 _fxs_back = "hook.dsp.fx.fn.send.tail"
 
 # The Digitone II's send route (docs/findings/67-fx-routes-dn2.md): the same hook on its master function, the slot mix of fxsend.s (`FXS_SLOTS`).
@@ -51,12 +46,17 @@ place = "dsp.l2"
 devices = ["dn2"]
 
 [object.externs]
-_fx_table = "fx.rows"
-_fxs_slotbus = "dsp.fx.value.send.slot_bus"
-_fxs_slotmap = "dsp.fx.value.send.slot_map"
-_fxs_fadetab = "dsp.fx.value.send.slot_fade_flags"
-_fxs_return = "dsp.fx.value.send.return_bus"
 _fxs_back = "hook.dsp.fx.fn.send.tail"
+
+# The slots the two stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the fx service fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
+# in core/services/fx/dks/module.toml). Zero takes the stock path.
+[[slot]]
+name = "fx_entry"
+space = "dsp"
+
+[[slot]]
+name = "fx_send"
+space = "dsp"
 
 [[op]]
 op = "hook"
@@ -69,17 +69,10 @@ hook = "dsp.fx.hook.send"
 to = "_fxs_entry"
 devices = ["dt2", "dn2"]
 
-# Effect modules add rows with `[[entry]] registry = "fx"`:
-#
-#     [[entry]]
-#     registry = "fx"
-#     id = "gain"
-#     pc = "_fg_process"        # the process routine's symbol in the module's DSP object
-#     desc = "_fg_desc"         # its dk_fx_desc (<dk/fx.h>)
-#     state = "_fg_state"       # its state block (state_bytes of the desc)
-#
+# An effect is a run-time module (builder calls in init, packed as a .dkm). Its row is filled through core/dsp-link by core/dynfx, the only
+# module that adds patch-time rows (df0 to df2, free until a run-time effect takes them). patchkit refuses an `[[entry]] registry = "fx"` of any other module.
 # The chain runs in module order. The scan ends at the zero row patchkit appends (terminator); at most DK_FX_MAX (4) effects
-# (packages/patchkit/tests/sdkgen.rs checks this number against <dk/fx.h>).
+# (packages/patchkit/tests/sdkgen.rs checks this number against <dk/fx/fx.h>).
 [[registry]]
 name = "fx"
 first = "0"
@@ -87,6 +80,8 @@ max = 4
 limit = "fx_slots"
 region = "dsp.l2"
 terminator = true
+refuse_entries = "an effect is a run-time module (builder calls in init, packed as a .dkm); a row is filled through core/dsp-link by core/dynfx"
+refuse_entries_except = ["core/dynfx"]
 
 # A row is 24 words (the send route's words 18 to 22 are described below the list):
 #   0 pc (0 ends the table, 0xffffffff is a free row that the adapter skips: core/dynfx), 1 desc, 2 state, 3 enabled (1: on), 4 to 11 the

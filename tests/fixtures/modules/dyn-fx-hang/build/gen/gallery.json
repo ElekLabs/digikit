@@ -1,0 +1,26 @@
+{
+  "effects": [
+    {
+      "id": "hang",
+      "knobs": [
+        {
+          "default": 0.5,
+          "display": 0,
+          "max": 1.2699999809265137,
+          "min": 0,
+          "name": "Gain",
+          "short": "GAIN"
+        }
+      ],
+      "mix": 127,
+      "tab": "HNG",
+      "title": "Test FX Hang"
+    }
+  ],
+  "machines": [],
+  "module": "test/dyn-fx-hang",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

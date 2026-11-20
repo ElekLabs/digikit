@@ -3,9 +3,8 @@ import { expect, test } from 'vitest';
 import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { fit, needsOf } from '@digi/regression/runtime/dkm.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { advance, rpc } from '@digi/regression/runtime/fx-live.ts';
-import { tap } from '@digi/regression/runtime/fx-session.ts';
-import { openDigikitMenu } from '@digi/regression/runtime/runtime-menu.ts';
+import { rpc } from '@digi/regression/runtime/fx-live.ts';
+import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
 import { planSymbol, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { packSynth, type SynthSpec } from '@digi/regression/runtime/synth.ts';
 
@@ -27,12 +26,12 @@ function menuSymbol(plan: RuntimePlan, name: string): number {
   return plan.symbols[key]!;
 }
 
-/** The rows of the page for a store (`module_row` of src/menu.c): name without `.dkm` in upper case (12 characters), kind from the needs, memory in K, right aligned to 23 characters. */
+/** The short fixture names leave the kind and memory columns at their usual positions. */
 function pageRow(file: string, n: Record<string, number>): string {
   const total = n.ARENA! + n.DSP_AREA!;
   const size = total < 1024 ? '<1K' : `${Math.ceil(total / 1024)}K`;
   const kind = n.FX_SLOTS ? 'FX' : n.MACHINE_ROWS ? 'MACH' : 'TOOL';
-  const row = path.basename(file, '.dkm').toUpperCase().slice(0, 12).padEnd(13) + kind;
+  const row = path.basename(file, '.dkm').toUpperCase().padEnd(13) + kind;
   return row.padEnd(23 - size.length) + size;
 }
 
@@ -73,18 +72,25 @@ cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit
         return names.map((_, k) => (v >>> (24 - 8 * k)) & 0xff);
       };
       const dialog = async () => [await text('DK_POPUP', 0, 48), await text('DK_POPUP_TEXT', 0, 48)];
-      const press = (key: string, settle = 300) => tap(session, key, settle);
+      const drained = { drained: true } as const;
+      const press = (key: string) => rt.ui.tap(key, { until: drained });
       const presses = async (key: string, n: number) => {
-        for (let i = 0; i < n; i++) await press(key, 200);
+        for (let i = 0; i < n; i++) await press(key);
       };
+      /** YES, ending when the firmware shows its effect: the number of confirm dialogs opened, or the ticked rows. */
+      const yesUntilPopups = (count: number) =>
+        rt.ui.tap('YES', { until: { state: () => peek(at('DK_POPUPS')), done: (n) => n === count, what: 'confirm opened' } });
+      const yesUntilTicked = (want: number[]) =>
+        rt.ui.tap('YES', { until: { state: ticked, done: (v: number[]) => v.join() === want.join(), what: 'ticked rows' } });
       const [first, second, huge] = ['half-a', 'half-b', 'huge'].map((k) => names.indexOf(k)) as [number, number, number];
       const want = names.map((k, i) => pageRow(`${k}.dkm`, needs[i]!));
 
       // SETTINGS > DIGIKIT (the ninth row) > MODULES (the fourth row)
-      await openDigikitMenu(async (name, settle) => press(name, Math.min(settle ?? 300, 800)));
+      await openDigikitMenu(rt);
       await presses('DOWN', 3);
-      await press('YES', 1500);
-      await expect.poll(async () => (await advance(session, 100), await peek(at('DK_LOAD_N'))), { timeout: 60_000, interval: 10 }).toBe(names.length);
+      await rt.ui.tap('YES', {
+        until: { state: () => peek(at('DK_LOAD_N')), done: (n) => n === names.length, withinMs: 60_000, what: 'MODULES rows' },
+      });
       expect({ rows: await rows(), ticked: await ticked() }, 'a row for each file with its name, kind and the memory it takes; nothing is ticked').toEqual({
         rows: want,
         ticked: names.map(() => 0),
@@ -93,19 +99,19 @@ cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit
       // YES on the module larger than the DSP area: refused
       const popups = await peek(at('DK_POPUPS'));
       await presses('DOWN', huge);
-      await press('YES', 700);
+      await yesUntilPopups(popups + 1);
       const hugeWhy = (await fit(cap, [needs[huge]!], true)).each[0];
       expect(
         [await peek(at('DK_POPUPS')), await ticked(), await dialog()],
         'YES on the module larger than the DSP area ticks nothing and opens a confirm with the reason',
       ).toEqual([popups + 1, names.map(() => 0), ['HUGE DOES NOT FIT', hugeWhy.text]]);
-      await press('YES', 500); // the confirm is a notice
+      await press('YES'); // the confirm is a notice
 
       // one half-size module ticked: it fits, and nothing else changes
       await presses('UP', huge);
       await presses('DOWN', first);
-      await press('YES', 500);
       const onlyFirst = names.map((_, i) => Number(i === first));
+      await yesUntilTicked(onlyFirst);
       expect({ ticked: await ticked(), rows: await rows() }, 'one half-size module ticked: it is fine, and nothing else changed').toEqual({
         ticked: onlyFirst,
         rows: want,
@@ -114,20 +120,20 @@ cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit
       // the other half-size module next to it is refused: the mark stays off and the confirm says which resource is short
       await presses('DOWN', second - first);
       const popups2 = await peek(at('DK_POPUPS'));
-      await press('YES', 700);
+      await yesUntilPopups(popups2 + 1);
       const setWhy = (await fit(cap, [needs[first]!, needs[second]!], true)).set;
       expect(
         [await peek(at('DK_POPUPS')), await ticked(), await dialog()],
         'the other half-size module is refused: the mark stays off and the confirm says which resource is short',
       ).toEqual([popups2 + 1, onlyFirst, ['HALF-B DOES NOT FIT', setWhy.text]]);
-      await press('YES', 500);
+      await press('YES');
 
       // untick the first: there is room for the second again
       await presses('UP', second - first);
-      await press('YES', 500);
+      await yesUntilTicked(names.map(() => 0));
       await presses('DOWN', second - first);
       const popups3 = await peek(at('DK_POPUPS'));
-      await press('YES', 500);
+      await yesUntilTicked(names.map((_, i) => Number(i === second)));
       expect(
         [await ticked(), await peek(at('DK_POPUPS'))],
         'unticking the first module makes room: the second can be ticked',

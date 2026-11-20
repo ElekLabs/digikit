@@ -16,7 +16,7 @@
 //! commit, and the headers switch to it (B first, then A, `seq + 1`). Nothing in use is ever overwritten, so a power cut leaves the old store
 //! or the new one. The table is streamed through small buffers: no table is held whole in RAM, so a store holds as many entries as the card has
 //! room for.
-use crate::proto::{E_FULL, E_WRITE};
+use crate::proto::{E_FULL, E_MSG, E_NOFILE, E_PATH, E_WRITE};
 use crate::{E_BAD_STORE, E_NOT_FOUND, E_READ, OK};
 
 pub const MAGIC: u32 = 0x444b_5354; // "DKST"
@@ -41,6 +41,9 @@ pub const SET_SECTORS: u32 = crate::gen_sdk::settings::COPIES * crate::gen_sdk::
 pub const TAIL: u32 = 1 + SET_SECTORS + SEL_SECTORS;
 /// Sectors one card read or write moves at most (the firmware's block read takes 64 KiB).
 pub const MAX_IO_SECTORS: u32 = 128;
+/// Sectors of one file-data write at most: 1022, the largest card command of core/sdhc-large (the eDMA counts 1023 blocks at most). The firmware's block
+/// write splits a transfer into 64 KiB commands itself unless the adapter raises its limit for the buffer, so a larger piece is safe without the adapter.
+pub const MAX_WRITE_SECTORS: u32 = 1022;
 
 /// Where the store is: the first card sector and the number of sectors (`devices/*.toml [card.store]`, per device).
 #[derive(Clone, Copy)]
@@ -84,7 +87,7 @@ impl Layout {
 }
 
 /// The firmware's eMMC block read and write: `(absolute sector, byte count, buffer)`; 0 = ok. Buffer 16-byte aligned, the count a multiple of 512,
-/// at most 0x10000 per call.
+/// at most 0x10000 per read call and `MAX_WRITE_SECTORS` sectors per write call (the firmware splits it in 64 KiB commands, or fewer with core/sdhc-large).
 pub type BlockIo = unsafe extern "C" fn(sector: u32, bytes: u32, buf: *mut u8) -> i32;
 
 /// The card: how the store reads and writes. The runtime's `wr` is its one gated card-write function.
@@ -140,7 +143,11 @@ pub unsafe fn cstr_cmp(a: *const u8, b: *const u8) -> i32 {
 }
 
 /// CRC-32 (IEEE, reflected) before the final inversion; `crc32_of` is the finished value (zlib's).
-pub fn crc32(mut crc: u32, p: *const u8, n: usize) -> u32 {
+///
+/// # Safety
+///
+/// `p` must be valid for reads of `n` bytes.
+pub unsafe fn crc32(mut crc: u32, p: *const u8, n: usize) -> u32 {
     let mut i = 0;
     while i < n {
         crc ^= unsafe { *p.add(i) } as u32;
@@ -154,8 +161,12 @@ pub fn crc32(mut crc: u32, p: *const u8, n: usize) -> u32 {
     crc
 }
 
-pub fn crc32_of(p: *const u8, n: usize) -> u32 {
-    !crc32(0xffff_ffff, p, n)
+/// # Safety
+///
+/// As for `crc32`.
+pub unsafe fn crc32_of(p: *const u8, n: usize) -> u32 {
+    // SAFETY: the caller keeps the contract of `crc32`.
+    !unsafe { crc32(0xffff_ffff, p, n) }
 }
 
 pub const fn sectors_of(bytes: u32) -> u32 {
@@ -187,6 +198,35 @@ pub unsafe fn read_sectors(
     }
     if (io.rd)(lay.first + rel, count * 512, buf) != 0 {
         return E_READ;
+    }
+    OK
+}
+
+/// Read `count` contiguous sectors starting `rel` sectors into the store, in calls of at most `MAX_IO_SECTORS`; `cap` is the size of `buf` in bytes.
+/// Returns the first result that is not `OK`.
+pub unsafe fn read_span(
+    io: &Io,
+    lay: &Layout,
+    rel: u32,
+    count: u32,
+    buf: *mut u8,
+    cap: usize,
+) -> i32 {
+    let mut done = 0;
+    while done < count {
+        let n = core::cmp::min(count - done, MAX_IO_SECTORS);
+        let r = read_sectors(
+            io,
+            lay,
+            rel + done,
+            n,
+            buf.add(done as usize * 512),
+            cap - done as usize * 512,
+        );
+        if r != OK {
+            return r;
+        }
+        done += n;
     }
     OK
 }
@@ -689,21 +729,9 @@ pub unsafe fn snapshot<F: FnMut(&[u8]) -> [u8; 32]>(
             }
             // Bounded reads even when the caller permits a file larger than one
             // firmware block read. Nothing retains a table extent after return.
-            let mut done = 0;
-            while done < sectors {
-                let count = core::cmp::min(sectors - done, MAX_IO_SECTORS);
-                let r = read_sectors(
-                    io,
-                    lay,
-                    entry.first + done,
-                    count,
-                    dst.add(done as usize * 512),
-                    dst_cap - done as usize * 512,
-                );
-                if r != OK {
-                    return Err(r);
-                }
-                done += count;
+            let r = read_span(io, lay, entry.first, sectors, dst, dst_cap);
+            if r != OK {
+                return Err(r);
             }
             if hash(core::slice::from_raw_parts(dst, entry.size as usize)) != entry.sha {
                 return Err(crate::E_SHA);
@@ -721,6 +749,9 @@ pub unsafe fn snapshot<F: FnMut(&[u8]) -> [u8; 32]>(
     }
 }
 
+/// Read leases: extents a reader still reads, kept out of every allocation.
+pub mod lease;
+
 /// Internal bounded metadata enumeration; no public C SDK contract.
 pub mod catalog;
 
@@ -729,7 +760,8 @@ pub mod directory;
 
 // ---- free space -------------------------------------------------------------------------------------------------------------
 
-const FIXED_MAX: usize = 6;
+/// Header A, the table, header B, and the caller's extents: a capacity knob and a file being written, a pending file each (`MANY_MAX`), the leases.
+const FIXED_MAX: usize = 3 + 2 + MANY_MAX + lease::MAX;
 
 /// The extents that are not files: header A, the table, the tail and what the caller says is reserved (a file being uploaded), sorted by start.
 struct Fixed {
@@ -767,6 +799,22 @@ pub unsafe fn gaps<F: FnMut(u32, u32) -> bool>(
     buf: *mut u8,
     cap: usize,
     extra: &[(u32, u32)],
+    f: F,
+) -> i32 {
+    gaps_hook(io, lay, h, buf, cap, extra, |_| true, f)
+}
+
+/// `gaps`, and `on_entry(entry)` is called for every table entry of the same pass, before the entry's extent is used (so a caller that needs both
+/// the entries and the free space reads the table once). `on_entry` returning false ends the pass at once (no further entry, no further gap).
+#[allow(clippy::too_many_arguments)]
+unsafe fn gaps_hook<E: FnMut(*const u8) -> bool, F: FnMut(u32, u32) -> bool>(
+    io: &Io,
+    lay: &Layout,
+    h: &Hdr,
+    buf: *mut u8,
+    cap: usize,
+    extra: &[(u32, u32)],
+    mut on_entry: E,
     mut f: F,
 ) -> i32 {
     let mut fx = Fixed::new();
@@ -783,9 +831,11 @@ pub unsafe fn gaps<F: FnMut(u32, u32) -> bool>(
     let mut cursor = 0u32;
     let mut fi = 0usize;
     let mut stop = false;
+    let mut aborted = false;
     // one used extent at a time: a gap is what lies between the cursor and the extent's start
     let mut take = |start: u32, len: u32, cursor: &mut u32, stop: &mut bool, f: &mut F| {
-        if start > *cursor && !f(*cursor, start - *cursor) {
+        // once `f` said stop it is not asked again (a later fixed extent of the same entry would overwrite the first fit)
+        if !*stop && start > *cursor && !f(*cursor, start - *cursor) {
             *stop = true;
         }
         let end = start.saturating_add(len);
@@ -794,6 +844,10 @@ pub unsafe fn gaps<F: FnMut(u32, u32) -> bool>(
         }
     };
     let r = scan(io, lay, h, buf, cap, |_, e| {
+        if !on_entry(e) {
+            aborted = true;
+            return false;
+        }
         let ent = entry_of(e);
         let len = entry_sectors(&ent);
         if len == 0 {
@@ -806,7 +860,7 @@ pub unsafe fn gaps<F: FnMut(u32, u32) -> bool>(
         take(ent.first, len, &mut cursor, &mut stop, &mut f);
         !stop
     });
-    if r != OK || stop {
+    if r != OK || stop || aborted {
         return r;
     }
     while fi < fx.n && !stop {
@@ -840,6 +894,57 @@ pub unsafe fn first_fit(
     Ok(at)
 }
 
+/// What a BEGIN learns from the free space.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct BeginFit {
+    /// Start of the file's data extent (`first_fit` of `need`); `None`: no gap holds it. 0 when `need` is 0.
+    pub data: Option<u32>,
+    /// Start of the table of the next commit (`first_fit` of `need_table` with the data extent kept out); `None`: no gap holds it.
+    pub table: Option<u32>,
+}
+
+/// One pass over the table for a BEGIN: `on_entry(entry)` sees every entry (the path checks; false ends the pass at once and the fit is
+/// meaningless), and the free space is read once for both extents that `first_fit` would give in two passes: the data extent of `need` sectors
+/// (none when 0) in `extra`, then the table of `need_table` sectors in `extra` plus that data extent. The second answer needs no second pass:
+/// the data extent starts at the start of the first gap that holds it, so it takes the front of that gap and leaves the rest as a gap; every
+/// other gap is as it was. The first gap that holds `need_table` in that view is the first such gap in position order, the rest of the data
+/// gap counting at its new start. The entries are in order of their first sector (the table's rule), so the gaps do not depend on the extents
+/// that are added.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn begin_fit<E: FnMut(*const u8) -> bool>(
+    io: &Io,
+    lay: &Layout,
+    h: &Hdr,
+    buf: *mut u8,
+    cap: usize,
+    extra: &[(u32, u32)],
+    need: u32,
+    need_table: u32,
+    on_entry: E,
+) -> Result<BeginFit, i32> {
+    let mut data: Option<u32> = if need == 0 { Some(0) } else { None };
+    let mut table: Option<u32> = None;
+    let r = gaps_hook(io, lay, h, buf, cap, extra, on_entry, |s, l| {
+        if data.is_none() && l >= need {
+            data = Some(s);
+            if table.is_none() && l - need >= need_table {
+                table = Some(s + need);
+            }
+        } else if table.is_none() && l >= need_table {
+            table = Some(s);
+        }
+        true
+    });
+    if r != OK {
+        return Err(r);
+    }
+    // no data extent: the table is not asked for either (BEGIN fails with E_FULL first)
+    if data.is_none() {
+        table = None;
+    }
+    Ok(BeginFit { data, table })
+}
+
 /// The largest gap in sectors.
 pub unsafe fn largest_gap(
     io: &Io,
@@ -869,11 +974,20 @@ pub unsafe fn largest_gap(
 pub enum Edit {
     /// Add the entry at `*const u8` (256 bytes), or replace the one with its path.
     Insert(*const u8),
+    /// Add `.1` entries (256 bytes each, `.0` points at an array of `.1` entry pointers, at most `MANY_MAX`, in any order), or replace the ones
+    /// with their paths. One table, one read back, two header writes for all of them. The hint of `commit_at` does not apply.
+    InsertMany(*const *const u8, usize),
     /// Remove the entry with this NUL-terminated path.
     Remove(*const u8),
+    /// Rename or move: remove the entry with the NUL-terminated path `.0` and add the entry at `.1` (256 bytes: the same entry with its new
+    /// path), and the folder entry at `.2` when it is not null (the folder `.0` leaves, so that folder stays). From `plan_rename`.
+    Rename(*const u8, *const u8, *const u8),
     /// An empty table.
     Clear,
 }
+
+/// The most entries of one `Edit::InsertMany`.
+pub const MANY_MAX: usize = 16;
 
 /// What a commit did.
 pub struct Committed {
@@ -943,9 +1057,9 @@ impl Out {
     }
 }
 
-/// Write `n` sectors at store sector `rel` (data and tables: `[1, limit)`), at most `MAX_IO_SECTORS` at a time.
+/// Write `n` sectors at store sector `rel` (data and tables: `[1, limit)`), at most `MAX_WRITE_SECTORS` at a time.
 pub unsafe fn write_sectors(io: &Io, lay: &Layout, rel: u32, n: u32, buf: *const u8) -> i32 {
-    if rel < 1 || n == 0 || n > MAX_IO_SECTORS || rel > lay.limit() || n > lay.limit() - rel {
+    if rel < 1 || n == 0 || n > MAX_WRITE_SECTORS || rel > lay.limit() || n > lay.limit() - rel {
         return E_WRITE;
     }
     if (io.wr)(lay.first + rel, n * 512, buf as *mut u8) != 0 {
@@ -988,16 +1102,54 @@ pub unsafe fn commit(
     edit: Edit,
     extra: &[(u32, u32)],
 ) -> Result<Committed, i32> {
-    let need = match edit {
-        Edit::Insert(_) => table_sectors(cur.count + 1),
-        Edit::Remove(_) => table_sectors(cur.count),
-        Edit::Clear => 0,
+    commit_at(
+        io, lay, cur, buf_in, buf_out, cap, scratch, edit, extra, None,
+    )
+}
+
+/// `commit`, with the start of the new table when the caller already knows it: `at` is what `first_fit` of the table of an `Edit::Insert` (`table_sectors(cur.count + 1)`
+/// sectors) returns for `cur` and `extra`, from `begin_fit`. The caller guarantees that `cur`, the table behind it and `extra` are the ones it asked
+/// with; any other edit, or a start that is not inside the store, ignores the hint and looks for the gap.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn commit_at(
+    io: &Io,
+    lay: &Layout,
+    cur: &Hdr,
+    buf_in: *mut u8,
+    buf_out: *mut u8,
+    cap: usize,
+    scratch: *mut u8,
+    edit: Edit,
+    extra: &[(u32, u32)],
+    at: Option<u32>,
+) -> Result<Committed, i32> {
+    // if-chains, not `match`: a match over this many variants becomes a jump table, which is not ColdFire code (the runtime links this crate)
+    let need = if let Edit::InsertMany(_, n) = edit {
+        if n > MANY_MAX {
+            return Err(E_MSG);
+        }
+        table_sectors(cur.count + n as u32)
+    } else if matches!(edit, Edit::Insert(_) | Edit::Rename(..)) {
+        table_sectors(cur.count + 1)
+    } else if matches!(edit, Edit::Remove(_)) {
+        table_sectors(cur.count)
+    } else {
+        0
     };
     let mut start = 1u32;
     if need != 0 {
-        start = match first_fit(io, lay, cur, buf_in, cap, need, extra)? {
+        let hinted = match (edit, at) {
+            (Edit::Insert(_), Some(s)) if s >= 1 && s <= lay.limit() && need <= lay.limit() - s => {
+                Some(s)
+            }
+            _ => None,
+        };
+        start = match hinted {
             Some(s) => s,
-            None => return Err(E_FULL),
+            None => match first_fit(io, lay, cur, buf_in, cap, need, extra)? {
+                Some(s) => s,
+                None => return Err(E_FULL),
+            },
         };
     }
     let mut out = Out {
@@ -1011,13 +1163,60 @@ pub unsafe fn commit(
         start,
     };
     let mut removed: Option<Entry> = None;
-    let mut inserted = false;
+    // the entries the edit adds, in table order: each goes in before the first old entry it sorts before
+    let null = core::ptr::null::<u8>();
+    let mut adds = [null; MANY_MAX];
+    let mut n_adds = 0usize;
+    if let Edit::Insert(ne) = edit {
+        adds[0] = ne;
+        n_adds = 1;
+    } else if let Edit::InsertMany(list, n) = edit {
+        for (i, a) in adds.iter_mut().enumerate().take(n) {
+            *a = *list.add(i);
+        }
+        // insertion sort in table order
+        for i in 1..n {
+            let mut j = i;
+            while j > 0 && before(adds[j], adds[j - 1]) {
+                adds.swap(j, j - 1);
+                j -= 1;
+            }
+        }
+        n_adds = n;
+    } else if let Edit::Rename(_, ne, keep) = edit {
+        if keep.is_null() {
+            adds[0] = ne;
+            n_adds = 1;
+        } else if before(keep, ne) {
+            adds[0] = keep;
+            adds[1] = ne;
+            n_adds = 2;
+        } else {
+            adds[0] = ne;
+            adds[1] = keep;
+            n_adds = 2;
+        }
+    }
+    let mut next = 0usize;
     let mut err = OK;
     if !matches!(edit, Edit::Clear) {
         let r = scan(io, lay, cur, buf_in, cap, |_, e| {
-            match edit {
-                Edit::Insert(ne) => {
-                    // a folder entry is for a folder with nothing in it: it goes when a file or folder is stored inside it
+            if let Edit::Rename(from, ne, _) = edit {
+                if cstr_eq(e, from) {
+                    removed = Some(entry_of(e));
+                    return true;
+                }
+                if *e.add(O_KIND) == KIND_DIR && relation(e, ne) == 2 {
+                    return true;
+                }
+            } else if let Edit::Remove(path) = edit {
+                if cstr_eq(e, path) {
+                    removed = Some(entry_of(e));
+                    return true;
+                }
+            } else {
+                // Insert and InsertMany. A folder entry is for a folder with nothing in it: it goes when a file or folder is stored inside it
+                for &ne in &adds[..n_adds] {
                     if *e.add(O_KIND) == KIND_DIR && relation(e, ne) == 2 {
                         return true;
                     }
@@ -1025,21 +1224,14 @@ pub unsafe fn commit(
                         removed = Some(entry_of(e));
                         return true;
                     }
-                    if !inserted && before(ne, e) {
-                        err = out.put(io, lay, ne);
-                        inserted = true;
-                        if err != OK {
-                            return false;
-                        }
-                    }
                 }
-                Edit::Remove(path) => {
-                    if cstr_eq(e, path) {
-                        removed = Some(entry_of(e));
-                        return true;
-                    }
+            }
+            while next < n_adds && before(adds[next], e) {
+                err = out.put(io, lay, adds[next]);
+                next += 1;
+                if err != OK {
+                    return false;
                 }
-                Edit::Clear => {}
             }
             err = out.put(io, lay, e);
             err == OK
@@ -1051,12 +1243,11 @@ pub unsafe fn commit(
             return Err(err);
         }
     }
-    if let Edit::Insert(ne) = edit {
-        if !inserted {
-            let r = out.put(io, lay, ne);
-            if r != OK {
-                return Err(r);
-            }
+    while next < n_adds {
+        let r = out.put(io, lay, adds[next]);
+        next += 1;
+        if r != OK {
+            return Err(r);
         }
     }
     let r = out.flush(io, lay);
@@ -1094,6 +1285,129 @@ pub unsafe fn commit(
         return Err(E_WRITE);
     }
     Ok(Committed { h, removed })
+}
+
+/// A rename or move checked against a table (`plan_rename`): the entries of `Edit::Rename`.
+pub struct Rename {
+    /// The entry with its new path.
+    pub to: [u8; ENTRY],
+    /// The folder the entry leaves, as a folder entry, when nothing else is in it (`has_keep`).
+    pub keep: [u8; ENTRY],
+    pub has_keep: bool,
+}
+
+impl Rename {
+    /// The edit to commit. The pointers are into `self`: keep it alive until the commit returns.
+    pub fn edit(&self, from: *const u8) -> Edit {
+        Edit::Rename(
+            from,
+            self.to.as_ptr(),
+            if self.has_keep {
+                self.keep.as_ptr()
+            } else {
+                core::ptr::null()
+            },
+        )
+    }
+}
+
+/// Is the path `inner` inside the folder `outer` (both NUL-terminated paths, not entries): `outer`, then '/', then more?
+unsafe fn inside(outer: *const u8, inner: *const u8) -> bool {
+    let mut i = 0;
+    while i < PATH_MAX && *outer.add(i) != 0 {
+        if *inner.add(i) != *outer.add(i) {
+            return false;
+        }
+        i += 1;
+    }
+    i > 0 && *inner.add(i) == b'/'
+}
+
+/// Check a rename or move of the entry `from` to the path `to` (both NUL-terminated) against the table of `h`, and build the entries of the
+/// commit. `from` is a file or a folder with nothing in it (a folder with files would move every file: not done here). `to` is free: no entry
+/// has that path, it is no folder (a folder entry, or implied by an entry inside it), no file is a folder of it, and a folder does not go into
+/// itself. The entry keeps its data, size and sha256, so whatever names a file by its sha256 still finds it. When nothing else is in the folder
+/// that `from` leaves, that folder gets a folder entry, so a move or a rename never makes a folder go (a store of samples keeps its folders, as
+/// a sampler's +Drive does). `Err(E_NOFILE)`: no entry `from`; `Err(E_PATH)`: `to` (or `from`) breaks a rule.
+pub unsafe fn plan_rename(
+    io: &Io,
+    lay: &Layout,
+    h: &Hdr,
+    buf: *mut u8,
+    cap: usize,
+    from: *const u8,
+    to: *const u8,
+) -> Result<Rename, i32> {
+    if path_ok(from, PATH_BYTES).is_none() || path_ok(to, PATH_BYTES).is_none() || cstr_eq(from, to)
+    {
+        return Err(E_PATH);
+    }
+    // the folder `from` is in: its path up to the last '/' (none at the top)
+    let mut parent = [0u8; PATH_BYTES];
+    let mut cut = 0usize;
+    let mut i = 0usize;
+    while i < PATH_MAX && *from.add(i) != 0 {
+        if *from.add(i) == b'/' {
+            cut = i;
+        }
+        i += 1;
+    }
+    i = 0;
+    while i < cut {
+        parent[i] = *from.add(i);
+        i += 1;
+    }
+    let mut found: Option<Entry> = None;
+    let mut conflict = false;
+    let mut others = cut == 0 || inside(parent.as_ptr(), to); // nothing to keep: the top, or `to` stays in that folder
+    let r = scan(io, lay, h, buf, cap, |_, e| {
+        if cstr_eq(e, from) {
+            found = Some(entry_of(e));
+            return true;
+        }
+        let rel = relation(to, e);
+        if rel == 1 || rel == 2 || rel == 3 {
+            conflict = true;
+            return false;
+        }
+        if !others && relation(parent.as_ptr(), e) == 2 {
+            others = true;
+        }
+        true
+    });
+    if r != OK {
+        return Err(r);
+    }
+    if conflict {
+        return Err(E_PATH);
+    }
+    let old = match found {
+        Some(e) => e,
+        None => return Err(E_NOFILE),
+    };
+    // into itself: `to` inside `from` (a folder, or a file that would become one)
+    if inside(from, to) {
+        return Err(E_PATH);
+    }
+    let mut out = Rename {
+        to: [0; ENTRY],
+        keep: [0; ENTRY],
+        has_keep: !others,
+    };
+    encode_entry(to, &old, out.to.as_mut_ptr());
+    if out.has_keep {
+        encode_entry(
+            parent.as_ptr(),
+            &Entry {
+                first: 0,
+                size: 0,
+                kind: KIND_DIR,
+                sha: [0; 32],
+            },
+            out.keep.as_mut_ptr(),
+        );
+    }
+    Ok(out)
 }
 
 // ---- paths ------------------------------------------------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import {
   uploadItems,
   type UploadEvent,
   type Uploads,
-} from '../../../../apps/desktop/ui/src/samples-core.ts';
+} from '../../../../packages/workbench-core/src/transfer/sample-upload.ts';
 
 /** The files under `folder`, with their paths from the top, folders walked. */
 async function files(dev: SamplesBackend, folder: string): Promise<string[]> {
@@ -85,6 +85,7 @@ export async function expectSkipOnUpload(
     list: (f?: string) => (calls.push(`list ${f ?? ''}`), dev.list(f)),
     mkdir: (f: string) => (calls.push(`mkdir ${f}`), dev.mkdir(f)),
     sameOnDevice: dev.sameOnDevice.bind(dev),
+    sizeOf: dev.sizeOf.bind(dev),
   };
   const run = async (wavOf: (name: string) => Uint8Array): Promise<Uploads> => {
     calls.length = 0;

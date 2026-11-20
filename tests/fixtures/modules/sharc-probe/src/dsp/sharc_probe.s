@@ -1,4 +1,4 @@
-// test/sharc-probe: an effect of the FX contract (<dk/fx.h>) that measures RECIPS and RSQRTS on the real core and reports through the module step word.
+// test/sharc-probe: an effect of the FX contract (<dk/fx/fx.h>) that measures RECIPS and RSQRTS on the real core and reports through the module step word.
 //
 // The audio passes unchanged (the block is copied). Each block the routine stores ONE 32-bit word in `DM(_dk_step)`, diagnostic word 25 of the DSP reply
 // (`core/dsp-link`), which the ColdFire reads: the block tail copies it into that block's record, so every word arrives once, at 1500 words a second
@@ -162,15 +162,14 @@ _pr_emit:                                 // one word of the frame goes out
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
-// dk_fx_desc: magic, contract, n_params, state_bytes, max_cycles_block, max_call_depth, stack_bytes.
+// dk_fx_desc: magic, contract, n_params, state_bytes, max_call_depth, stack_bytes.
 .GLOBAL _pr_desc;
 .VAR _pr_desc = DK_FX_MAGIC;
 .VAR _pr_desc1 = DK_FX_V1;
 .VAR _pr_desc2 = 0;
 .VAR _pr_desc3 = 4;
-.VAR _pr_desc4 = 40000;
+.VAR _pr_desc4 = 0;
 .VAR _pr_desc5 = 0;
-.VAR _pr_desc6 = 0;
 // the sequence state: words left in the frame buffer, the next word out, the next frame number, the next record of the run, the next table input, the run
 .VAR _pr_left = 0;
 .VAR _pr_bp = 0;

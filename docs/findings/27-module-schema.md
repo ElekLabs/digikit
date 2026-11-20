@@ -37,7 +37,7 @@ form, SHA-256 and plan.json equal on every port the modules support:
 
 DN2 1.11 and DN2 1.12 + xslice are refused as before (pluck lists no 1.11 port; xslice now says `ports = ["dt2-1.16", "dt2-1.17"]`,
 where it used to fail on a missing type number). `patchkit.wasm` and the command line give byte-identical images for pluck (apps/web
-`patchkit.test.mjs`).
+`patchkit.wasm.test.ts`).
 
 ## The generated frame numbers match the DSP sources **[D]**
 

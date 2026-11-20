@@ -13,11 +13,10 @@ fn opts() -> dkm::Options {
     dkm::Options {
         name: "test/x".into(),
         version: 0x010203,
-        runtime_min: 1,
         trace: false,
         stereo: false,
         gate: false,
-        api_minor: 0,
+        service: None,
     }
 }
 
@@ -32,7 +31,7 @@ fn every_committed_coldfire_object_carries_a_matching_record() {
     for m in lib.modules.iter() {
         for o in m.objects.iter().filter(|o| o.arch == "cf") {
             o.require_isa_checked()
-                .unwrap_or_else(|e| panic!("{}: {}", m.id(), e.0));
+                .unwrap_or_else(|e| panic!("{}: {e}", m.id()));
             n += 1;
             // a changed code byte: refused
             let mut t = o.clone();
@@ -51,13 +50,13 @@ fn every_committed_coldfire_object_carries_a_matching_record() {
     assert!(n >= 20, "only {n} ColdFire objects found");
 }
 
-/// The `size` line of `pack` is the header's own fields: file = header + slots + padding (under 32) + the listed sections.
+/// The `size` line of `pack` is the header's own fields: file = header + padding (under 32) + the listed sections.
 #[test]
 fn pack_size_summary_parts_sum_to_the_file() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    let m = lib.get("test/dyn-fault").unwrap();
+    let m = lib.get("test/dyn-crash").unwrap();
     let o = m.objects.iter().find(|o| o.arch == "cf").unwrap();
     let f = dkm::pack(o, &opts()).unwrap();
     let d = dkm::Dkm::parse(&f).unwrap();
@@ -84,7 +83,7 @@ fn pack_size_summary_parts_sum_to_the_file() {
         + d.imports.len() * dkm::IMPORT_LEN
         + d.register.len()
         + d.dsp.len();
-    let pad = f.len() - dkm::HEADER - d.slots.len() * 8 - listed;
+    let pad = f.len() - dkm::HEADER - listed;
     assert!(pad < 32, "{pad} bytes of padding in {line}");
 }
 
@@ -94,7 +93,7 @@ fn pack_refuses_a_tampered_object() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    let m = lib.get("test/dyn-fault").unwrap();
+    let m = lib.get("test/dyn-crash").unwrap();
     let o = m.objects.iter().find(|o| o.arch == "cf").unwrap();
     assert!(dkm::pack(o, &opts()).is_ok());
     let mut t = o.clone();

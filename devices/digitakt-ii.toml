@@ -15,6 +15,8 @@ name = "Digitakt II"
 short = "dt2"
 # The device byte of the firmware SysEx framing (docs/findings/01).
 syx_id = 0x14
+# Glob of the user manual's extracted pages under out/refs/ (tools/coldfire/atlas.py); optional.
+manual = "Digitakt-2-User-Manual*"
 
 # Identity is the hash. The filename is a hint for error messages only:
 # people rename firmware files, and tools/firmware/config.py resolving one BY NAME is
@@ -23,11 +25,15 @@ syx_id = 0x14
 version = "1.15C"
 sha256 = "62d588456e47194bd56dfee9568fb9dd4521c4ff1e8b5427eb461355532e8c6c"
 filename = "Digitakt_II_OS1.15C.syx"
+# Section 5 (meta) of the container. A modified build keeps it, so it names this release.
+build_stamp = "250910 15:18:30"
 
 [[firmware]]
 version = "1.16"
 sha256 = "278541e466edcd77d6b3e018a91fb90185932d3c7de224dd3e68294dddf3a9ec"
 filename = "Digitakt_II_OS1.16.syx"
+# Section 5 (meta) of the container. A modified build keeps it, so it names this release.
+build_stamp = "260908 14:25:26"
 # This identifies the existing explicit Oracle MAIN diagnostic contract. It
 # does not describe hardware topology; that needs separate evidence.
 main_sha256 = "57bb4dfa8df07d846adc72fdb4fb0d3cd3c5680c524bf498338460207e008e7d"
@@ -48,6 +54,8 @@ dsp = { image = "dt2-1.16", idle_start = 0xb8636d, idle_end = 0xb863df, idle_hea
 version = "1.17"
 sha256 = "26c22f6652625ac2cfd47f7ee970d388ed8b6427dae3563c0a6a2f2d334350d5"
 filename = "Digitakt_II_OS1.17.syx"
+# Section 5 (meta) of the container. A modified build keeps it, so it names this release.
+build_stamp = "260930 10:52:25"
 main_sha256 = "a1e7b657b705eba1a19d81c33c1e11ba9c409816447ad74005d7bbf36da6d964"
 boot_contract = "main-os-oracle-v1"
 symbol_profile = "elektron-rtos-v1"
@@ -61,9 +69,82 @@ port = true
 dsp = { image = "dt2-1.17", idle_start = 0xb8636d, idle_end = 0xb863df, idle_head = 0xb863cf, sample_link = "lp0" }
 
 
+# What this device can do. Every device file has this table; a table that is present must agree with it
+# (`devdata.rs` `validate`, docs/design/device-data.md "Device levels"). dsp: "sharc" | "none"; seal: the container seal
+# ("hmac", key in `SEALS` of packages/patchkit/src/syx.rs); sample_pool: how run-time samples get memory ("stock" borrows the
+# stock sample slots, "ddr" reserves a DDR range, "none"); card: "path-fs" (a folder filesystem on the card: the samples are the
+# firmware's +Drive files), "slots" (card slots only: the samples are files of the digikit store), "none", "unknown".
+# `patchkit gen` reads `card` (samples_in_store of the device profile).
+[capabilities]
+dsp = "sharc"
+seal = "hmac"
+sample_pool = "stock"
+card = "path-fs"
+
+# Container section roles (packages/patchkit/src/firmware.rs, syx.rs `store_for_section`). `readonly` sections are never
+# changed (bootstrap, updater, boot data). The transport id of the framing is `[device] syx_id`.
+[container]
+main = 3
+dsp = 7
+readonly = [2, 4, 8]
+
+# MIDI map the calibration runner and the tests use (packages/dk-session `midi-out.ts`, `@digi/devices` `midi`). Source: Digitakt II manual (OS 1.03A) Appendix B, pp. 104-107; track channels: section 8.4 (default channels 1-8).
+# `track_channels[n]` is the factory MIDI channel (1-16) of track n+1 (SETTINGS > MIDI CONFIG > CHANNELS); a user can change it, so a runner reads or sets it.
+# The device also needs INPUT FROM = USB (or MIDI+USB), RECEIVE NOTES on and RECEIVE CC/NRPN on (SETTINGS > MIDI CONFIG > PORT CONFIG); the menu is the only place to read them.
+# A parameter has `cc` (7-bit, value 0-127) and `nrpn = [msb, lsb]` (14-bit).
+# DT2 has 16 tracks, each audio or MIDI. The manual (section 8.4) states the default channels 1-8 only for tracks 1-8, so only those are listed; a runner reads or sets the channel of a track above 8 in SETTINGS > MIDI CONFIG > CHANNELS. The manual lists `filter_env_depth` and an "Env. Delay" with the same NRPN 1/23 (a manual error); CC 77 is unambiguous.
+[midi]
+track_channels = [1, 2, 3, 4, 5, 6, 7, 8]
+
+[midi.params]
+track_mute = { cc = 94, nrpn = [1, 101] }
+track_level = { cc = 95, nrpn = [1, 100] }
+filter_attack = { cc = 70, nrpn = [1, 16] }
+filter_decay = { cc = 71, nrpn = [1, 17] }
+filter_sustain = { cc = 72, nrpn = [1, 18] }
+filter_release = { cc = 73, nrpn = [1, 19] }
+filter_freq = { cc = 74, nrpn = [1, 20] }
+filter_reso = { cc = 75, nrpn = [1, 21] }
+filter_env_depth = { cc = 77, nrpn = [1, 23] }
+filter_base = { cc = 26, nrpn = [1, 51] }
+filter_width = { cc = 27, nrpn = [1, 52] }
+amp_release = { cc = 83, nrpn = [1, 34] }
+send_delay = { cc = 84, nrpn = [1, 36] }
+send_reverb = { cc = 85, nrpn = [1, 37] }
+send_chorus = { cc = 12, nrpn = [1, 35] }
+
+# The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
+# part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
+# ready_dir (private, firmware-derived, never committed; the one source of the ready directory): rebuilt from the .syx alone with
+# `mise run emu:ready -- dt2` (tools/emulator/ready.py). Files: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp.
+[acceptance]
+firmware = "1.17"
+ready_dir = "out/snapshots/dt2-audio-ready-cold-2026-10-20"
+sample_card = true
+
+# Board facts that only the emulator uses (docs/design/device-data.md). free_running_dtcn: the DMA timer counter channels (DTCN0..3) that run at
+# the bus clock in the emulator. Channel 0 here: it runs by default on this device.
+[emulator]
+free_running_dtcn = [0]
+
+# Address windows that only the firmware and core/* drive: the packer refuses a content module that holds a 32-bit address in one of them
+# (docs/design/module-sdk.md "Modules never touch hardware"; packages/patchkit/src/protect.rs). Each window is [lo, hi), hi exclusive.
+# Evidence: docs/findings/141-syntakt-analog-and-nor-paths.md, "DT2 1.17 and DN2 1.12" **[D]**: the SPI NOR flash controller (DSPI at 0xFC05C000),
+# the GPIO block 0xEC094000-0xEC0940FF (the NOR chip select helper and the other pins the firmware drives), DSPI2 0xEC038000 (SHARC program load
+# and frame link), DSPI1 0xFC03C000 (driven by four firmware functions, role open) and the FlexBus device bytes 0x8C000000-0x8C00000F (the
+# extent beyond them is open: the chip select is not set in MAIN).
+[protect]
+windows = [
+  [0xFC05C000, 0xFC05D000],
+  [0xFC03C000, 0xFC03D000],
+  [0xEC038000, 0xEC039000],
+  [0xEC094000, 0xEC094100],
+  [0x8C000000, 0x8C000010],
+]
+
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
-# constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: a fact it uses as a
-# constant must be the same in every device file, and `patchkit gen` refuses a difference. Register offsets inside a peripheral
+# constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: it reads these facts at
+# run time from the device object `dkrt_dev` (DkrtDevice in modules/core/runtime/abi.toml). Register offsets inside a peripheral
 # are CPU facts (MCF5441x) and stay in the code, named as such.
 [board]
 # The console UART (UART8): the firmware drains it before its own soft reset (finding 36 section 3). The status register is at +4.
@@ -85,12 +166,17 @@ dsp_blocks_per_second = 1500
 [digikit]
 id = 1
 name = "dt2"
+# The tracks of the device: what a module that draws or counts tracks reads through `dk_device_track_count()` (a Syntakt file gives its own number later; absent: 0).
+tracks = 16
 # Run-time modules (ids) that the workbench installs and enables together with the firmware, on a device after its flash and in the emulator
 # after it loads the patched image. Each is ticked by default in the Firmware pane and next to the emulator's firmware file; the user can untick it.
 # The list is data: add an id here (for example digikit/debug) and the workbench offers it. Desktop workbench only; the site does not install modules.
 default_modules = ["digikit/debug", "digikit/remote"]
 # The panel key held at power-on for safe mode: RECORD (a code of [[panel.group]] "transport", tools/patchkit/pk_harness.py BUTTONS).
 safe_key = 19
+# The longest sample path the runtime accepts for a `select` or a SysEx sample transfer, in bytes, relative to the samples root: the device's own
+# path limit (DT2: the +Drive filesystem, DN2: the store path limit 159 less the 8 bytes of the `samples/` prefix).
+sample_path_max = 254
 # core/dsp-link: the reserved DSP area in L2 (window 0; a chunk's offset field is 17 bits, so at most 524288 bytes), and the geometry of
 # the frame tail the link sends through.
 dsp_area_bytes = 524288
@@ -104,13 +190,16 @@ keep_bytes = 0x1000
 # RAM ranges [lo, hi) the PEEK command of the upload protocol may read (docs/design/digikit-upload.md): the firmware's data, then the
 # runtime's own region with the keep range. No peripheral registers; at most 4 ranges.
 peek = [[0x40000000, 0x47e30000], [0x47e8b000, 0x47fe1000]]
+# The profiling clock: DTIM0 DTCN0, bus clock, started before the main OS, read only, never written.
+span_clock = 0xfc07000c
+span_clock_hz = 132000000
 
-# The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime's device.rs.
+# The runtime's per-type limits (docs/design/module-sdk.md 11.5 D8); generated into the runtime constants by `patchkit gen`.
 [limits]
 modules = 8
 machine_rows = 8
 arena_bytes = 524288
-stage_bytes = 65536
+stage_bytes = 131072
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)
 send_slots = 2 # of them effects that run on a send bus (core/fx send route, the send page of the FX key: one knob each; at most the entries of [fx] send_indices)
 param_rows = 16
@@ -151,6 +240,18 @@ sound_off = 0x34
 sound_stride = 0x450
 # The number of s16 parameter words in a Sound object's array (the stock getter's bound; finding 02): the debug log's parameter watch reads them.
 sound_words = 71
+# The array the LFO tick adds its output to, track 1 word 0 (finding 149, "Where the output lands": the smoother's return value plus 0x22; word i at +2 i, track t at +2 * sound_words * t),
+# and the phase accumulator (u32) of LFO 1 of voice slot 0 in the tick's state. The device tests of the LFO read them.
+# The LFO state belongs to a voice slot, not a track: slot s is at lfo_phase + lfo_phase_stride * s. This device has one voice per track (track 1 uses slot 0).
+# The live row holds the bare base for part of every handler run; the DSP transmit frame holds the final values until the next run: lfo_frame is Sound index 25 of voice
+# slot 0 there (frame 0x80005348 + 0xda), slot s at lfo_frame + lfo_frame_stride * s, and lfo_frame_words indices (25 on) are copied after the tick.
+lfo_live = 0x80005b72
+lfo_phase = 0x44e66e78
+lfo_phase_stride = 0x78
+lfo_slots = 16
+lfo_frame = 0x80005422
+lfo_frame_stride = 0x60
+lfo_frame_words = 10
 send_template = 0x44
 send_indices = [69, 70]
 # An index of the array that nothing reads or writes either (Fx[70]; poked in the emulator without any effect, finding 61): core/fxpages keeps a mark there, set when it gave an effect row its defaults
@@ -159,10 +260,46 @@ mark_index = 70
 # The byte offset of the u32 that follows the array's 71 halfwords (the loader and saver copy it between the storage record's +0x98 and the array).
 tail_off = 0x8e
 
+# The firmware's view stack, read by the device tests (finding 71 section 2, finding 03): the UI state that shows which window takes the panel keys. All **[D]** (read from the 1.17 image).
+# `brain_ptr` is the global that the Brain getter tests (the port anchor cf.view.value.brain, checked against devices/ports by tests/regression/host/device-facts.test.ts). The view manager is at brain +
+# `view_manager_off` (the offset of the manager member in Brain, from the getter cf.view.fn.brain.view_manager); its std::list of views has the sentinel node at manager + `list_off` (+0 next, +`list_prev_off`
+# prev; libstdc++ node layout); a node holds the View pointer at `node_view_off` (the shared_ptr stored after the links), and the key dispatcher starts at the last node, the top view.
+# The first u32 of a View is its vtable pointer (see [ui.boot_window]).
+[ui]
+brain_ptr = 0x44f37098
+view_manager_off = 0x40
+list_off = 0x14
+# the next pointer of a list node and of the sentinel (std::list node +0 next): the first (bottom) view is the node that the sentinel's next points to
+list_next_off = 0
+list_prev_off = 4
+node_view_off = 8
+
+# The window that ends this device's boot: after the filesystem check the firmware opens a ConfirmWindow with this title (FILE SYSTEM OK, PRESS Y/N TO CLOSE) that takes every panel key until NO or YES
+# answers it. MainScreenView::vfunc_5 (0x40064644) ends in 0x400110de, which pushes the progress view and queues the "Check filesystem" job only when 0x4001058c is true: the filesystem is mounted
+# (`fs_mounted_ptr` nonzero) and `fs_state_ptr` holds `fs_state_check` or `fs_checked_ptr` holds 0. The job's completion callback 0x40011670 pushes the window and then sets the state to 4 and the
+# checked word to 1 (0x400105aa), so the check is over when that condition is false. A device without this table has no such window. Address facts are guarded by the port anchors (tests/regression/host/device-facts.test.ts).
+[ui.boot_window]
+title = "FILE SYSTEM OK"
+# the stored vtable pointer of MainScreenView (the main screen is reached once the bottom view is this one; overlays sit above it), of ConfirmWindow and of ProgressWindow (the "VERIFYING FILE SYSTEM..." view)
+main_vptr = 0x401f7ac0
+confirm_vptr = 0x4021cd50
+progress_vptr = 0x4021d980
+# a ConfirmWindow's result (0 unanswered, 1 YES, 2 NO) and the data pointer of its COW title string: offsets in the object, read from the constructor 0x4011139a and its key handler
+confirm_result_off = 0x4c
+confirm_title_off = 0x50
+# the filesystem flags that decide the check (above)
+fs_mounted_ptr = 0x44f2bd68
+fs_state_ptr = 0x46f4dcb4
+fs_state_check = 3
+fs_checked_ptr = 0x46f4dce4
+
 # What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.
 [patch]
-container_max = 0x300000
+# The container (the OS image) is staged in RAM by the OS-upgrade receiver: 0x200000 bytes, copied in 101-byte messages with no size check
+# (finding 146 section 4, finding 75), so 20763 messages of 101 bytes = 2,097,063 bytes fit the 2 MiB stage; the writer reads whole NOR pages.
+# 0x1FFE00 is that bound rounded down to a 0x200 page. Above it the receiver overruns RAM; the NOR end 0x80000 + 0x1FFE00 stays below the records at 0x300000/0x380000.
+container_max = 0x1FFE00
 dsp_stored_max = 0x100000
 dsp_depacked_max = 0xfffff
 main_staged_max = 0x3ffc00
@@ -172,6 +309,11 @@ stream_id = 0x0f
 build_floor = "0060"
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`).
 main_dest = 0x40000400
+# Where the bootstrap stages the packed MAIN OS (section 3) before it unpacks it in place to main_dest (finding 01; the stage constant is in five places of section 2, 1.16 and 1.17 / 1.11 and 1.12).
+# patchkit refuses an image whose in-place unpack margin at this stage is below main_margin_min (finding 152). Default of main_margin_min: 8192.
+# Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
+boot_load = 0x80000400
+main_stage = 0x40400000
 dsp_l2_lo = 0x20000000
 dsp_l2_hi = 0x20100000
 
@@ -183,19 +325,84 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # another). Both are the flash-image roots of the rt021 images for now. The two sets are the same
 # today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
+emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool"]
+# Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
+device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/introblank"]
+device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
 # Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
-sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
+sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool"]
 # `emulator` plus core/overdrive (the OVR TYPE device test).
-overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/overdrive"]
+overdrive-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/overdrive"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).
 [input]
 backend = "panel-uart"
+
+# Logical key names: name = the key's id in the firmware's key events (the id at +0xc of the event): the firmware's key index. It equals the panel code on this
+# device (the decoder tables are the identity, finding 58) and differs on the Syntakt (finding 153); it is not the wire code (channel, bit) that `dk_input_key` injects.
+# The names are the keys of the panel as the firmware labels them (tools/patchkit/pk_harness.py BUTTONS; the groups below arrange the same codes). `patchkit gen` writes the
+# C names (`dk_key`, sdk/include/dk/gen/keys.h) and, for each device, the logical name to id map of the profile and of `dkrt_dev`. A name a device lacks maps to 0.
+# Names come from `[keys] order` of sdk/sdk.toml. core/ui needs YES, NO, RIGHT and LEVEL_PUSH (the second YES key, id 49 here) by name.
+[input.keys]
+PAGE_TRIG = 1
+SRC = 2
+FLTR = 3
+AMP = 4
+FX = 5
+MOD = 6
+PRESET = 7
+SETTINGS = 8
+TEMPO = 9
+YES = 10
+UP = 11
+NO = 12
+LEFT = 13
+DOWN = 14
+RIGHT = 15
+TRK = 16
+FUNC = 17
+KEYBOARD = 18
+RECORD = 19
+PLAY = 20
+STOP = 21
+PAGE = 22
+PTN = 23
+SONG = 24
+TRIG1 = 25
+TRIG2 = 26
+TRIG3 = 27
+TRIG4 = 28
+TRIG5 = 29
+TRIG6 = 30
+TRIG7 = 31
+TRIG8 = 32
+TRIG9 = 33
+TRIG10 = 34
+TRIG11 = 35
+TRIG12 = 36
+TRIG13 = 37
+TRIG14 = 38
+TRIG15 = 39
+TRIG16 = 40
+ENC1 = 41
+ENC2 = 42
+ENC3 = 43
+ENC4 = 44
+ENC5 = 45
+ENC6 = 46
+ENC7 = 47
+ENC8 = 48
+LEVEL_PUSH = 49
+
+# The bits of the flags word (+0x10) of a key event, by meaning: set on a press (clear on a release), set while FUNC is held, set on the repeat of a held key, set on a
+# release. Read from the compact menu view's key handler (finding 71: bit 0 moves, bit 4 acts) and the key walker (finding 155) **[D]**.
+[input.key_flags]
+press = 0
+func = 1
+repeat = 3
+release = 4
 
 [panel]
 # The wire carries (channel, bit); the firmware reports a control code.

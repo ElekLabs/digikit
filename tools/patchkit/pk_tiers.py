@@ -8,8 +8,6 @@ counters of `status`, so boot and settling are excluded):
 
   stock         the stock firmware, the sample voice
   voice0        core/dsp-voice, no type registered
-  pluck-idle    the PLUCK module set, PLUCK selected on track 1, no note
-  pluck-ring    the same, TRIG 1 held at the default DECAY
 
 Per configuration: wall seconds per emulated second, DSP worker CPU per audio second, DSP instructions per audio
 second by tier (idle skip, interpreter, fast tier, AOT blocks). `--hist` also sets SHARC_FAST_HIST and
@@ -31,15 +29,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.patchkit import pk_harness as H  # noqa: E402
 
 TRIG1 = H.button("TRIG 1")
-PLUCK_MODS = ["core/dsp-voice", "core/machines", "core/params", "test/patched-pluck"]
-PLUCK_DOWNS = 7
 
-# name -> (modules, DSP_FRAME_POKE, select PLUCK, hold TRIG 1)
-CONFIGS: dict[str, tuple[list[str], str, bool, bool]] = {
-    "stock": ([], "", False, True),
-    "voice0": (["core/dsp-voice"], "", False, True),
-    "pluck-idle": (PLUCK_MODS, "", True, False),
-    "pluck-ring": (PLUCK_MODS, "", True, True),
+# name -> (modules, hold TRIG 1)
+CONFIGS: dict[str, tuple[list[str], bool]] = {
+    "stock": ([], True),
+    "voice0": (["core/dsp-voice"], True),
 }
 
 
@@ -47,23 +41,9 @@ def tiers(emu) -> dict:
     return (emu.status().get("audio") or {}).get("dsp_tiers") or {}
 
 
-def select_pluck(s: H.Session) -> None:
-    s.do_tap(["FUNC", "SRC"])
-    s.run_ms(200)
-    for _ in range(PLUCK_DOWNS):
-        s.do_tap("DOWN")
-        s.run_ms(80)
-    s.do_tap("YES")
-    s.run_ms(300)
-    s.do_tap("YES")
-    s.run_ms(300)
-
-
 def measure(name: str, fw: str, seconds: float, hist: bool, pcm: bool = False) -> dict:
-    mods, poke, pluck, hold = CONFIGS[name]
+    mods, hold = CONFIGS[name]
     env: dict[str, str] = {}
-    if poke:
-        env["DSP_FRAME_POKE"] = poke
     if hist:
         env["SHARC_FAST_HIST"] = "1"
         env["SHARC_FAST_LOG"] = "1"
@@ -74,8 +54,6 @@ def measure(name: str, fw: str, seconds: float, hist: bool, pcm: bool = False) -
     errlog = pathlib.Path(emu._run_dir.name) / "daemon.stderr"  # type: ignore[union-attr]
     s.reset()
     s.run_ms(1500)
-    if pluck:
-        select_pluck(s)
     wav = pathlib.Path(emu._run_dir.name) / "window.wav"  # type: ignore[union-attr]
     if pcm:
         emu.call("pcm.tap", action="capture", path=str(wav))

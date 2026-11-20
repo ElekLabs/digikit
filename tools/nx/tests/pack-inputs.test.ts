@@ -10,6 +10,7 @@ const write = (file: string, text: string) => {
   mkdirSync(dirname(join(root, file)), { recursive: true });
   writeFileSync(join(root, file), text);
 };
+write('tools/patchkit/toolchain/pins.toml', '[include]\ncf = ["sdk/include"]\nsharc = ["sdk/dsp/contract"]\n');
 const file = 'modules/example/module.toml';
 const modules = new Map([
   ['example/module', { file, manifest: {}, objects: [{ sources: ['src/Cargo.toml', '../../shared/dsp.s'] }] }],
@@ -24,6 +25,7 @@ it('includes Cargo path-dependency project sources and exact unowned object sour
   write('library/project.json', '{"name":"helper"}');
   expect(packSourceInputs(root, modules, [file])).toEqual([
     { input: 'production', projects: ['example/module', 'helper'] },
+    '{workspaceRoot}/sdk/include/**/*',
     '{workspaceRoot}/shared/dsp.s',
   ]);
 });
@@ -37,10 +39,19 @@ it('rejects inherited or external Cargo dependency paths instead of omitting the
 
 it('keeps explicit sources outside module and Cargo owners file-level with private headers', () => {
   write('sdk/project.json', '{"name":"sdk"}');
-  const external = new Map([['example/module', { file, objects: [{ sources: ['../../sdk/src/picker.c'] }] }]]);
+  const external = new Map([['example/module', { file, objects: [{ sources: ['../../sdk/src/sample/picker.c'] }] }]]);
   expect(packSourceInputs(root, external, [file])).toEqual([
     { input: 'production', projects: ['example/module'] },
-    '{workspaceRoot}/sdk/src/**/*.{h,hh,hpp,hxx}',
-    '{workspaceRoot}/sdk/src/picker.c',
+    '{workspaceRoot}/sdk/src/**/*',
+    '{workspaceRoot}/sdk/src/sample/**/*.{h,hh,hpp,hxx}',
+    '{workspaceRoot}/sdk/src/sample/picker.c',
+  ]);
+});
+
+it('makes the SDK sources an input of a module with C sources, which link them automatically', () => {
+  const c = new Map([['example/module', { file, objects: [{ sources: ['src/module.c', 'src/dsp/x.s'] }] }]]);
+  expect(packSourceInputs(root, c, [file])).toEqual([
+    { input: 'production', projects: ['example/module'] },
+    '{workspaceRoot}/sdk/src/**/*',
   ]);
 });

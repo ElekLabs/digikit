@@ -1,8 +1,10 @@
 // The inside of the Log drawer: the header (Source, Errors only, Follow, the debug module state, Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
 // its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
-import { invoke } from '@tauri-apps/api/core';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { copyText, filterEntries, formatTime, saveName, saveText, sourceMenu, type Origin } from './log-core';
+import { copyText, filterEntries, formatTime, sourceMenu, type Origin } from './log-core';
+import { saveLog as saveLogEntries } from './log-save';
+import type { Host } from '@digi/workbench-core/host/host.ts';
+import { cardLogView } from './log-cardlog-core';
 import { levelOrigin, levelsOff } from './log-level-core';
 import LogLevelMenu from './LogLevelMenu';
 import type { LogFollow } from './log-follow';
@@ -10,6 +12,7 @@ import type { OriginStatus } from './log-follow-core';
 import { clearLog, followOn, logOpen, logState, setFollowOn, setLogOpen } from './log-state';
 
 export interface LogPanelProps {
+  host: Host;
   follow: LogFollow;
   /** Something is there to follow: the emulator runs, the MIDI port was chosen. */
   emulatorRunning(): boolean;
@@ -71,6 +74,20 @@ export default function LogPanel(props: LogPanelProps) {
       supported: origin ? props.follow.logcfg()[origin] : undefined,
     });
   };
+  // the Card log button acts on the same origin as the Level menu; its state is read with the follower's rounds
+  const card = () => {
+    const origin = levelTarget();
+    return cardLogView(origin ? props.follow.cardlog()[origin] : undefined, levelOff());
+  };
+  const toggleCard = async () => {
+    const origin = levelTarget();
+    if (!origin || card().disabled) return;
+    try {
+      await props.follow.setCardLog(origin, !card().pressed);
+    } catch {
+      flash('Card log failed', 3000);
+    }
+  };
   // the debug module (digikit/debug) is the log: loaded while the origin follows, not loaded when its runtime has no LOG capability
   const debugState = (): boolean | undefined => {
     const origin = levelTarget();
@@ -114,10 +131,7 @@ export default function LogPanel(props: LogPanelProps) {
   };
   const saveLog = async () => {
     try {
-      const bytes = new TextEncoder().encode(saveText(visibleLog(), Date.now()));
-      const where = await invoke<string | null>('log_save', bytes, {
-        headers: { 'x-name': encodeURIComponent(saveName(Date.now())) },
-      });
+      const where = await saveLogEntries(props.host.fs, visibleLog(), Date.now());
       if (where) flash('Saved', 2500);
     } catch {
       flash('Save failed', 3000);
@@ -198,6 +212,20 @@ export default function LogPanel(props: LogPanelProps) {
           {debugState() === false ? 'Debug module: not loaded' : debugState() ? 'Debug module: loaded' : 'Debug module'}{' '}
           <i class="debug-dot" aria-hidden="true" />
         </span>
+        <button
+          type="button"
+          class="tb small"
+          classList={{ on: card().pressed, 'card-warn': card().warn }}
+          aria-pressed={card().pressed}
+          disabled={card().disabled}
+          title={card().title}
+          onClick={() => void toggleCard()}
+        >
+          {card().label}
+          <Show when={card().dot}>
+            <i class="follow-dot" aria-hidden="true" />
+          </Show>
+        </button>
         <LogLevelMenu follow={props.follow} origin={levelTarget} off={levelOff} />
         <button
           type="button"

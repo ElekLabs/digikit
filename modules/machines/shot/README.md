@@ -1,7 +1,7 @@
 # SHOT
 
 digikit/shot: a stereo sample-playback machine for the Digitakt II and the Digitone II, loaded at run time. It plays one entry of its sample pool
-once per note (a one-shot) through the per-module pool of API 1.5 (`<dk/sample_track.h>`): 16 entries, kept per project. The parameter SMP
+once per note (a one-shot) through the per-module pool of API 1.5 (`<dk/sample/pool.h>`): 16 entries, kept per project. The parameter SMP
 picks the entry. The picker adds PCM16 files (mono or stereo) to the pool through the runtime and sets SMP to the chosen entry; SHOT reads the pool.
 
 | Word | Parameter | Knob | Range and default | Meaning |
@@ -30,7 +30,7 @@ The ordinary `DK_PAGE` remains the storage/parameter schema; its fixed knob slot
   YES on an empty or filled slot opens its file browser; YES on a file loads that slot, sets SMP and returns to the control page. Slots retain
   their indexes when cleared. RIGHT on an entry gives CLEAR and INFO; NO goes back one level. The pick writes SMP of the clicked track with
   `param_set` (API 1.6); while TRIG or FUNC is held it writes nothing and the page shows `RELEASE TRIG TO SET SMP`. The chooser is described in
-  `docs/design/ui-rules.md`. `DK_PARAM_ACTION(shot, 0, shot_smp_click)` follows the custom D binding; the test route `test/track-select` fills the
+  `docs/design/ui-rules.md`. `dk_param_on_click(smp, shot_smp_click, 0)` follows the custom D binding; the test route `test/track-select` fills the
   pool in tests.
 - Pitch: MIDI note 60 plays the sample at its own speed; the cursor rate is `srcrate / 48000 * 2^(semitones / 12)` in Q16.16, limited to 1/65536 to 64
   frames per sample. As in the stock one-shot, SMP is read at note-on; START, END, PLAY, PITCH and the note follow every block. A PLAY
@@ -43,7 +43,7 @@ The ordinary `DK_PAGE` remains the storage/parameter schema; its fixed knob slot
 - Stereo: a stereo sample gives distinct L and R through machine contract 1.2 (`out_r`). A mono sample plays centred (`base_r = base_l`). On the
   Digitakt II R goes to the odd voice of the stock voice pair. On the Digitone II L and R are both heard: all pre-pan stages have R twins
   (`docs/design/dn2-stereo.md`, phase 2); the fallback to R = L is only a guard.
-- Lifecycle: `note_on` takes the pool index from the SMP word and copies that entry's `dk_strack` record under the admission and epoch macros; every
+- Lifecycle: `note_on` takes the pool index from the SMP word and copies that entry's `dk_sample_pool_entry` record under the admission and epoch macros; every
   `render` checks the epoch and acquires and releases the entry. A stale token (clear, a new load, a stock reset) or an entry that is not ready gives
   a silent block and `DK_DONE`.
 - Packing: `patchkit pack digikit/shot --device dt2|dn2` carries the pool table in the DSP section (kind 2 record) and declares API 1.5 and machine
@@ -55,7 +55,7 @@ The ordinary `DK_PAGE` remains the storage/parameter schema; its fixed knob slot
 
 ## Sources
 
-- `src/module.c`: the machine, parameters, page and the pool table declarations; `dkm_init`/`fini` resolve the table handle and start the picker;
+- `src/module.c`: the machine, parameters, page and the pool table declarations; `init`/`fini` open the pool handle and start the picker;
   `shot_smp_click` (the SMP click action) opens the pool list with the current entry marked; `smp_pick` sets SMP.
 - `src/pages.c`: the two native pages (draw and event callbacks). The short name and page name are SHT.
 - `src/sample_view.c`, `src/sample_view.h`: the view of one pool slot (info, peak copy and the detail window cache).
@@ -68,7 +68,7 @@ The ordinary `DK_PAGE` remains the storage/parameter schema; its fixed knob slot
 
 
 - `tests/pages.test.ts`: C host test of the pages and the pool view (`tests/pages-host.c`). The SDK widget and region tests live in `sdk/tests` (run by `sdk:test-host`).
-- `tests/test_shot_playback.py`: the DSP on the concrete core through the real adapter, against a float32 model (SMP picks the record).
+- `tests/rig/shot.toml`: the DSP on the SHARC-only rig through the real adapter, against reference tables of a float32 model (SMP picks the record).
 - `tests/shot-dt2.device.test.ts`, `tests/shot-dn2-{pool,audio,supersede}.device.test.ts`: the pool API, the stereo output and an SMP phase on the emulator.
 
 ```sh

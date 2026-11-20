@@ -45,12 +45,15 @@ def test_an_empty_chain_changes_nothing_in_any_context():
 
 
 def test_the_empty_chain_stores_only_in_the_adapters_scratch_words():
-    """The only stores are the three save words of the adapter."""
+    """The only stores are the save words of the adapter (R0, I4, L4) and the two the stub pins (M13, I12)."""
     rig = FxRig([])
     rig.sess.record_stores()
     rig.block(SIGNALS["ramp"], ctx="friendly")
     syms = rig.built.data
-    own = {syms[n] for n in ("_fx_s_r0", "_fx_s_i4", "_fx_s_l4")}
+    own = {
+        syms[n]
+        for n in ("_fx_s_r0", "_fx_s_i4", "_fx_s_l4", "_fx_sv_m13", "_fx_sv_i12")
+    }
     # the core keeps a store to a not yet mapped address at the loader alias (pk_sharc.SW_ALIAS_BASE + address)
     stores = {
         e.address - pk_sharc.SW_ALIAS_BASE
@@ -64,7 +67,9 @@ def test_the_empty_chain_stores_only_in_the_adapters_scratch_words():
 def test_the_empty_chain_costs_a_few_instructions():
     rig = FxRig([])
     b = rig.block(SIGNALS["dc"], ctx="friendly")
-    assert 10 <= b.instructions <= 24, b.instructions
+    assert 10 <= b.instructions <= 30, (
+        b.instructions
+    )  # 27 measured: the stub's slot test and the dispatch entry on top of the quick scan
     print(f"empty chain: {b.instructions} instructions per block on the concrete core")
 
 
@@ -289,7 +294,9 @@ def test_the_cost_of_a_chain_in_instructions():
     print(
         f"one effect: steady {steady}, fade {fade_out}, off {off} instructions per block (the effect itself is 64 samples of 3 instructions)"
     )
-    assert steady < 1200 and fade_out < 1800 and off < 200
+    assert (
+        steady < 1200 and fade_out < 1800 and off < 215
+    )  # off: 206 measured, the stub's slot test included
 
 
 def blend(dry, wet, mix: float, w=None):
@@ -380,20 +387,6 @@ def test_the_cost_of_the_mix_per_active_row():
     assert one < 830 and zero < one and half < one + 420
 
 
-GAIN = ROOT / "tests/fixtures/modules/fx-gain/src/dsp/fx_gain.s"
-
-
-def test_the_fixture_test_fx_gain_halves_the_master_through_the_adapter():
-    rig = FxRig([Row("_fg_process", "_fg_state", desc="_fg_desc")], sources=(GAIN,))
-    rig.block(RAMP)
-    for _ in range(3):
-        b = rig.block(RAMP)
-        assert b.master == tuple(HALF)
-        assert b.ctx_bad == [] and b.regs_bad == []
-    assert rig.symbol_word("_fg_gain") == f2w(0.5)
-    assert rig.block(RAMP).instructions < 860
-
-
 # ---- patchkit: the hook on both devices ------------------------------------------------------------------------------------
 DT2_117 = config.stock("Digitakt_II_OS1.17.syx")
 DN2_112 = config.stock("Digitone_II_OS1.12.syx")
@@ -457,30 +450,25 @@ def test_the_hook_takes_the_first_instruction_of_a_function_between_master_and_p
 
 @needs_images
 @pytest.mark.parametrize("fw", [DT2_117, DN2_112], ids=["dt2-1.17", "dn2-1.12"])
-def test_the_fixture_puts_one_row_in_the_chain_on_both_devices(
+def test_core_dynfx_reserves_three_free_rows_in_the_chain_on_both_devices(
     patchkit, tmp_path: Path, fw
 ):
-    out = tmp_path / "fx-gain.syx"
-    plan_path = tmp_path / "fx-gain.plan.json"
+    out = tmp_path / "dynfx.syx"
+    plan_path = tmp_path / "dynfx.plan.json"
     patchkit(
         "apply",
         "--firmware",
         fw,
         "--modules",
-        "core/fx,test/fx-gain",
+        "core/fx,core/dynfx",
         "-o",
         out,
         "--plan",
         plan_path,
     )
-    plan = json.loads(plan_path.read_text())
-    sym = plan["symbols"]
-    assert sym["core/fx@0.1.0:fx.count"] == 1
+    sym = json.loads(plan_path.read_text())["symbols"]
+    assert sym["core/fx@0.1.0:fx.count"] == 3
     assert sym["core/fx@0.1.0:fx.row_size"] == 96
-    assert (
-        "test/fx-gain@0.1.0:_fg_process" in sym
-        and "test/fx-gain@0.1.0:_fg_state" in sym
-    )
 
 
 @needs_images
@@ -504,15 +492,13 @@ def test_the_dsp_diff_of_the_patched_image_is_the_hook_and_the_placed_code(
     )
     text = pk_dsp_diff.patch_text(DT2_117, out)
     lines = [ln.split() for ln in text.splitlines() if ln.startswith("BYTES")]
-    # the send hook (master function FUN_1c207b) and the master hook (FUN_1c80f2), each at the alias of its first instruction
-    assert [ln[1] for ln in lines[:2]] == [
-        f"{0x28000000 + 2 * 0x1C207B:x}",
-        f"{0x28000000 + 2 * 0x1C80F2:x}",
-    ]
-    assert all(len(ln[2]) == 12 for ln in lines[:2])  # one 48-bit jump each
-    assert all(
-        int(ln[1], 16) >= 0x2001AB7C for ln in lines[2:]
-    )  # the rest is appended L2
+    # core/fx requires core/dsp-link, whose hooks come too. The send hook (master function FUN_1c207b) and the master hook (FUN_1c80f2) are each at the alias of
+    # their first instruction, a 48-bit jump; the rest is appended L2.
+    alias = 0x28000000
+    hooks = {ln[1]: ln[2] for ln in lines if int(ln[1], 16) >= alias}
+    assert all(int(ln[1], 16) >= 0x2001AB7C for ln in lines if int(ln[1], 16) < alias)
+    for site in (0x1C207B, 0x1C80F2):
+        assert len(hooks[f"{0x28000000 + 2 * site:x}"]) == 12
 
 
 def test_a_module_call_leaves_its_site_in_both_reply_records():

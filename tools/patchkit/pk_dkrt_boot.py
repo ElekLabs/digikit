@@ -10,7 +10,6 @@ patched firmware with the image's own DSP code; a restart is the emulator's RCM 
   equiv    a selection loaded at boot plays like the same module patched in: rows, DSP bytes, voice row, machine row, PCM
   restart  select through the mailbox, `dkrt_restart`, the next boot loads it; select nothing, restart, it is gone
   cut      the card states a power cut can leave between the two writes of a selection (and a torn copy)
-  safe     a module that resets the machine in `init`: boots 1 and 2 raise the counter, boot 3 is safe mode; the safe-once flag
   watch    write-watch and flush check over every boot, and the card sectors the runtime wrote
 
 Not covered **[O]**: the safe-mode key (the queue peek is untested on a device and the emulator delivers no key before the main
@@ -110,7 +109,6 @@ STABLE_BLOCKS = 300
 SETTLE_MS = int(
     os.environ.get("DIGIKIT_SETTLE_MS", "1500")
 )  # emulated ms the first UI-loop passes run before a scenario looks (wait_dsp then waits for a module's DSP part)
-E_SAFE_MODE = -44
 E_LOADING = 1
 RT = "core/runtime,core/dynreg,core/dyndsp"
 FREE_TYPE = M.FREE_TYPE
@@ -421,10 +419,55 @@ class BootRig(M.Rig):
         d["reason_name"] = SAFE_NAMES.get(d["reason"], "?")
         return d
 
+    def service_symbol(self, service: str, name: str) -> int:
+        """The address of NAME in the loaded service SERVICE (`services/<service>.dks`): its load address from the device load table (the ship map
+        and symbols of `runtime.maps`, the table's bytes peeked and decoded by `patchkit addr`, docs/ADDRMAP.md) plus the offset in the address map
+        of the packed file (`dist/modules/<device>/<service>.addrmap.json`, written by `nx run core/services/<service>:pack`, as the TypeScript
+        device tests read it: a service loads as packed, the port file resolves its firmware references)."""
+        maps = self.emu.call("runtime.maps")
+        ship = self.work / f"{self.tag}.ship.json"
+        ship.write_text(maps["ship"])
+        pk = self.env.tools.patchkit_run
+        args = ["addr", "--map", ship]
+        snap: list[object] = []
+        for r in json.loads(pk(*args, "--format", "reads")):
+            at, n = int(maps["symbols"][r["symbol"]]), r["len"]
+            data = b"".join(struct.pack(">I", self.w(at + i)) for i in range(0, n, 4))
+            snap += ["--snapshot", f"{r['symbol']}={data[:n].hex()}"]
+        loads = json.loads(pk(*args, *snap, "--format", "loads"))["modules"]
+        hit = [m for m in loads if m["id"].rpartition("/")[2] == service]
+        if not hit:
+            raise Fail(
+                f"{self.tag}: service {service} is not in the load table: {[m['id'] for m in loads]}"
+            )
+        # the offsets are relative to the load address, the base of the load table (as `loadAddress` + `serviceMapEntries` of
+        # tests/regression/runtime/service-symbols.ts). The map is the Nx pack's: it must describe the file on this card.
+        packed = (
+            Path(__file__).resolve().parents[2] / "dist" / "modules" / self.env.device
+        )
+        card_file = self.work / "services" / f"{service}.dks"
+        nx_file = packed / f"{service}.dks"
+        stale = f"stale or missing Nx pack: run `pnpm nx:pilot run core/services/{service}:pack`"
+        if not (card_file.exists() and nx_file.exists()):
+            raise Fail(f"{stale} ({card_file} or {nx_file} is missing)")
+        if (
+            hashlib.sha256(card_file.read_bytes()).digest()
+            != hashlib.sha256(nx_file.read_bytes()).digest()
+        ):
+            raise Fail(f"{stale} ({nx_file} differs from the card's {service}.dks)")
+        mapfile = packed / f"{service}.addrmap.json"
+        if not mapfile.exists():
+            raise Fail(f"{mapfile}: run nx run core/services/{service}:pack")
+        entries = json.loads(mapfile.read_text())["entries"]
+        off = [e["addr"] for e in entries if e["cpu"] == "cf" and e["name"] == name]
+        if not off:
+            raise Fail(f"{name} is not in the address map of the {service} service")
+        return hit[0]["base"] + off[0]
+
     def assign_table(self) -> dict[str, Any]:
         """The boot's machine-type assignment (`DKRT_ASSIGN`, assign.rs): the sticky map and, per machine of the selection, its module's
         selection index, machine key (`hash << 8`) and assigned type (0: none was free)."""
-        base = M.sym(self.plan, "core/runtime", "DKRT_ASSIGN")
+        base = self.service_symbol("machines", "DKRT_ASSIGN")
         w = [self.w(base + 4 * i) for i in range(3 + 8 + 3 * 64)]
         n = w[1]
         return {
@@ -750,7 +793,6 @@ class Proof:
             e.pack("test/dyn-dn2", "m0.dkm")
             e.pack("test/sine", "m1.dkm")
             self.mods = ["modules/m0.dkm", "modules/m1.dkm"]
-        e.pack("test/dyn-fault", "fault.dkm")
         self.run_img = e.build_image(RT, "run")
 
     def rig(
@@ -949,53 +991,6 @@ class Proof:
             )
             self.finish(rig)
 
-    def safe(self) -> None:
-        e = self.env
-        with self.rig(
-            self.run_img, e.card(["modules/fault.dkm"], tag="safe"), "safe"
-        ) as rig:
-            info = rig.boot_info()
-            self.report["safe_boot"] = info
-            self.check(
-                "two boots that never reached the UI loop, the third boots in safe mode",
-                info["safe"] == 1 and info["reason"] == 1 and info["counter"] == 2,
-                f"{info['reason_name']} counter {info['counter']}",
-            )
-            self.check(
-                "safe mode loaded no module",
-                info["loaded"] == 0
-                and info["all_results"][0] == E_SAFE_MODE
-                and all(r[0] == FREE_TYPE for r in rig.voice_rows()),
-                str(info["all_results"][:2]),
-            )
-            rec = current(rig.sel_records())
-            self.check(
-                "the UI loop ran: the counter is back to 0 and the selection is kept",
-                info["ui_reached"] == 1
-                and rec is not None
-                and rec["counter"] == 0
-                and rec["paths"] == ["modules/fault.dkm"],
-                str(rec),
-            )
-            self.finish(rig)
-        # safe once: the record asks for it; the boot that honours it clears the flag
-        with self.rig(
-            self.run_img, e.card(self.mods, flags=1, tag="safe2"), "safe2"
-        ) as rig:
-            info = rig.boot_info()
-            rec = current(rig.sel_records())
-            self.check(
-                "the safe-once flag: safe mode (flag), no module, flag cleared, selection kept",
-                info["safe"] == 1
-                and info["reason"] == 3
-                and info["loaded"] == 0
-                and rec is not None
-                and rec["flags"] == 0
-                and rec["paths"] == self.mods,
-                f"{info['reason_name']} {rec}",
-            )
-            self.finish(rig)
-
     def run(self) -> dict[str, Any]:
         t0 = time.monotonic()
         self.setup()
@@ -1003,7 +998,6 @@ class Proof:
             "equiv": self.equiv,
             "restart": self.restart,
             "cut": self.cut,
-            "safe": self.safe,
         }
         for name, fn in scenarios.items():
             if self.only and name not in self.only:
@@ -1047,7 +1041,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--keep", type=Path)
     ap.add_argument(
-        "--only", default="", help="comma separated: equiv,restart,cut,safe,watch"
+        "--only", default="", help="comma separated: equiv,restart,cut,watch"
     )
     a = ap.parse_args(argv)
     work = a.keep or Path(tempfile.mkdtemp(prefix="pk-dkrt-boot-"))

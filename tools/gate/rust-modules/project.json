@@ -10,6 +10,8 @@
         "{workspaceRoot}/modules/**/module.toml",
         "{workspaceRoot}/modules/**/build/**/*",
         "{workspaceRoot}/modules/**/src/**/*",
+        "!{workspaceRoot}/{packages,modules}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}",
+        "!{workspaceRoot}/{packages,modules}/**/tests/**/*.rs",
         "{workspaceRoot}/modules/**/include/**/*",
         "{workspaceRoot}/tests/fixtures/modules/**/*",
         "{workspaceRoot}/devices/**/*",
@@ -17,7 +19,7 @@
         "{workspaceRoot}/tools/patchkit/toolchain/**/*"
       ],
       "options": {
-        "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p patchkit -p elektron-native-boot --release --locked --offline",
+        "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p patchkit --features record-rules -p elektron-native-boot --release --locked --offline",
         "cwd": "."
       }
     }

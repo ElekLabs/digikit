@@ -5,17 +5,18 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/roundtrip.device.test.ts"],
-        "modules": ["test/dyn-dn2", "test/dyn-params", "test/sine"],
+        "dsp": "sharc",
+        "tags": ["A:core/dynreg", "C:state", "C:types"],
+        "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
       },
       {
         "files": ["tests/equiv.device.test.ts"],
-        "modules": ["test/dyn-dn2", "test/sine"],
-        "compiles": true,
-        "sources": ["tests/fixtures/modules/twin-dn2/**/*"],
+        "dsp": "sharc",
+        "tags": ["A:core/dynreg", "C:dsp", "C:types", "S:machines"],
+        "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
       }
-    ],
-    "mergeTests": ["tests/equiv.device.test.ts"]
+    ]
   }
 }

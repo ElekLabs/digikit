@@ -8,11 +8,15 @@
           "tests/fx-routes-panel.device.test.ts",
           "tests/fx-routes-persist.device.test.ts"
         ],
+        "dsp": "sharc",
+        "tags": ["A:core/fx", "C:state"],
         "modules": [
           "test/dyn-fx-gain",
           "test/dyn-fx-gain-send",
           "test/dyn-fx-gain-sendonly",
-          "test/sine"
+          "test/sine",
+          "core/services/fx",
+          "core/services/machines"
         ],
         "aliases": {
           "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
@@ -22,24 +26,31 @@
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py"
         ],
-        "pythonTools": true,
         "plusdrive": true
       },
       {
-        "files": [
-          "tests/fx-send-dn2.device.test.ts",
-          "tests/fx-send.device.test.ts"
-        ],
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/sine"
-        ],
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fxsend.py"
-        ],
-        "pythonTools": true,
+        "files": ["tests/fx-send.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["A:core/fx"],
+        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
+        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_digikit_fxsend.py"],
         "plusdrive": true
+      },
+      {
+        "files": ["tests/fx-send-dn2.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "tags": ["A:core/fx"],
+        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
+        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_digikit_fxsend.py"],
+        "plusdrive": true
+      },
+      {
+        "files": ["tests/patched-dsp-startup.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["A:core/fx", "C:boot", "C:dsp"],
+        "compiles": true
       }
     ],
     "mergeTests": ["tests/fx-send.device.test.ts"]

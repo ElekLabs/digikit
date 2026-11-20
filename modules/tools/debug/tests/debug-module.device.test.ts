@@ -1,16 +1,16 @@
 import { be32, eventLine, hasCap, moduleNames, runtimeEvent, type DkLogEvent } from '@digi/dk-session';
 import { CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
+import { scheduledTurns } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession, TestRuntime } from '@digi/regression/support.ts';
 import { waitFrames } from '@digi/regression/runtime/debug-kit.ts';
-import { listenEvents } from '@digi/regression/runtime/events.ts';
-import { panel } from '@digi/regression/runtime/panel.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE, installModules, installWithDebug, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { ofKind, readSmallRing, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 const text = (words: number[]) =>
   String.fromCharCode(...words.flatMap((w) => [w >>> 24, (w >>> 16) & 255, (w >>> 8) & 255, w & 255]).filter(Boolean));
@@ -30,7 +30,7 @@ async function expectWithoutDebugModule(runtime: PatchedSession): Promise<void> 
   const ring = await readSmallRing(session, plan);
   const kinds = ring.map((e) => e.kind);
   expect(kinds, 'the boot events are in the small ring').toEqual(
-    expect.arrayContaining([LOG_KIND.BOOT_START, LOG_KIND.UI_FIRST]),
+    expect.arrayContaining([LOG_KIND.BOOT_START, LOG_KIND.UI_FIRST, LOG_KIND.FW_READY]),
   );
   expect(ring.length, 'the ring holds at most 32 events').toBeLessThanOrEqual(32);
   // only error events and boot events are kept: no periodic HEALTH, DSP_DIAG or MOD_LOG
@@ -52,17 +52,13 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   const modules = await dk.modules();
   const probe = modules.find((m) => m.name === 'digikit/probe')!;
   expect(modules.map((m) => m.name)).toEqual(['digikit/debug', 'digikit/probe']);
-  await expect
-    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), {
-      timeout: 60_000,
-      interval: 1000,
-    })
-    .toBe(true);
+  await expectPollEmulated(session, async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), (value) => expect(value).toBe(true), { emulatedMs: 60000, intervalMs: 1000 });
   const log = await dk.readLog();
   const first = (kind: number) => log.find((e) => e.kind === kind);
   expect(first(LOG_KIND.BOOT_START), 'the boot events were handed over').toBeDefined();
   expect(log.filter((e) => e.kind === LOG_KIND.MOD_LOAD)).toHaveLength(2);
   expect(first(LOG_KIND.BOOT_START)!.seq, 'in order').toBeLessThan(first(LOG_KIND.UI_FIRST)!.seq);
+  expect(first(LOG_KIND.FW_READY)!.seq, 'FW_READY is logged with the first UI pass').toBeGreaterThan(first(LOG_KIND.UI_FIRST)!.seq);
   const seqs = log.map((e) => e.seq);
   expect(seqs, 'sequence numbers count up by one').toEqual(seqs.map((_, i) => seqs[0]! + i));
 
@@ -76,7 +72,7 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   modulesLevels[probe.index] = 4;
   expect(await dk.setLogConfig(1, modulesLevels)).toEqual({ level: 1, modules: modulesLevels, debug: true });
   expect(await dk.logConfig()).toEqual({ level: 1, modules: modulesLevels, debug: true });
-  expect((await dk.request(SERVICE_CMD.LOGCFG, Uint8Array.of(2, 1))).status, 'the old debug switch is gone').toBe(-60);
+  expect((await dk.request(SERVICE_CMD.LOGCFG, Uint8Array.of(4, 1))).status, 'the old debug switch is gone').toBe(-60);
 
   // PEEK: the first range of the device file starts at the firmware's data
   const ok = await dk.request(SERVICE_CMD.PEEK, new Uint8Array([...be32(0x40000000), 0, 16]));
@@ -220,14 +216,10 @@ async function expectEarlyModuleLog(runtime: PatchedSession): Promise<void> {
   await installModules(
     dk,
     ['digikit/remote', DEBUG_MODULE].map((id) => ({ id, artifact: moduleArtifact(device, id) })),
+    { device },
   );
   expect((await dk.modules()).map((m) => m.name)).toEqual(['digikit/remote', 'digikit/debug']);
-  await expect
-    .poll(async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), {
-      timeout: 60_000,
-      interval: 1000,
-    })
-    .toBe(true);
+  await expectPollEmulated(session, async () => (await dk.readLog()).some((e) => e.kind === LOG_KIND.UI_FIRST), (value) => expect(value).toBe(true), { emulatedMs: 60000, intervalMs: 1000 });
   const log = await dk.readLog();
   const line = log.find((e) => e.kind === LOG_KIND.MOD_LOG && text(e.args.slice(0, 4)).startsWith('remote registere'));
   expect(line, 'the log line of the module that loaded before the debug module').toBeDefined();
@@ -239,14 +231,14 @@ async function expectEarlyModuleLog(runtime: PatchedSession): Promise<void> {
  * detents on knob A of the main screen change one Sound word of the selected track, and the event has the new value above the old (a positive turn). The index is
  * a position of the Sound array (finding 119), so the test does not name it. The test listens from boot: the debug module logs the baseline by itself right after
  * boot, and in about half of the DT2 runs it was logged before a listen at the newest event read its cursor. */
-async function expectParamChange(runtime: PatchedSession): Promise<void> {
+async function expectParamChange(runtime: TestRuntime): Promise<void> {
   const { session } = runtime;
   await expectRuntimeReady(session);
   await installWithDebug(runtime);
-  const events = await listenEvents(runtime, { fromBoot: true });
-  await events.until(LOG_KIND.PARAM_CHANGE, (e) => (e.args[1]! | 0) === -1, { emulatedMs: 20_000 });
-  await panel(session).burst('ENC A', 10, 4);
-  const change = await events.until(LOG_KIND.PARAM_CHANGE, (e) => (e.args[1]! | 0) !== -1, { emulatedMs: 3000 });
+  const events = await runtime.listen({ fromBoot: true });
+  await events.until('PARAM_CHANGE', (e) => (e.args[1]! | 0) === -1, { withinMs: 20_000 });
+  await scheduledTurns(session, runtime.clock).burst('ENC A', 10, 4);
+  const change = await events.until('PARAM_CHANGE', (e) => (e.args[1]! | 0) !== -1, { withinMs: 3000 });
   const [track, index, old, now] = change.args.map((a) => a | 0);
   expect(track, 'the selected track').toBeGreaterThanOrEqual(0);
   expect(track).toBeLessThan(16);
@@ -256,6 +248,122 @@ async function expectParamChange(runtime: PatchedSession): Promise<void> {
   await session.expectNoFault('PARAM_CHANGE');
 }
 
+/** The card log: op 3 turns it on, events are produced (an info event per ABORT, an error event per DELETE of `..`), the tick writes the ring to the rolling and
+ * the incident file of this boot, and both read back whole: the fixed size, continuous sequence numbers. Op 2 reports it on with at least three writes. */
+async function expectCardLog(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
+  await expectRuntimeReady(session);
+  await installWithDebug(runtime);
+  expect((await dk.cardLog())?.on, 'off by default').toBe(false);
+  expect((await dk.setCardLog(true)).on).toBe(true);
+  await dk.request(CMD.ABORT);
+  await dk.request(CMD.DELETE, Uint8Array.from([0x2e, 0x2e, 0]));
+  let state = await dk.cardLog();
+  // the first write comes 3 s after the setting was saved. The error event opens an incident capture: the incident file at once, the rolling file (no
+  // rolling write yet) in the next slot, the incident file again 10 s after the error event. Writes are 2 s apart (3000 blocks), so 3 writes take
+  // about 12 s of emulated time; the wait is bounded at 40 s.
+  for (let i = 0; i < 20 && (state?.writes ?? 0) < 3; i++) {
+    await waitFrames(runtime, 3000);
+    state = await dk.cardLog();
+  }
+  expect(state?.writes, 'incident, rolling and aftermath writes').toBeGreaterThanOrEqual(3);
+  expect(state).toMatchObject({ on: true, state: 'on' });
+
+  const files = (await dk.readCardLog()).filter((f) => f.file === state!.file);
+  const rolling = files.find((f) => f.kind === 'rolling')!;
+  const incident = files.find((f) => f.kind === 'incident')!;
+  expect(rolling, 'the rolling file of this boot').toBeDefined();
+  expect(incident, 'the incident file of this boot').toBeDefined();
+  for (const file of [rolling, incident]) {
+    expect(file.raw?.length, 'fixed size 64 + 512 * 32').toBe(16448);
+    expect(file.bootSeq, 'boot number').toBeGreaterThanOrEqual(1);
+    const seqs = file.events.map((e) => e.seq);
+    expect(seqs.length).toBeGreaterThan(0);
+    expect(seqs, 'sequence numbers count up by one').toEqual(seqs.map((_, i) => seqs[0]! + i));
+    expect(file.events.some((e) => e.kind === LOG_KIND.UPLOAD)).toBe(true);
+  }
+  await session.expectNoFault('card log');
+}
+
+/** Spans: reset and start, a short wait, then the table has the debug module's own tick row (calls > 0, max <= sum) at the span clock rate (132 MHz, the bus).
+ * After stop the counts stay the same. */
+async function expectProfileSpans(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
+  await expectRuntimeReady(session);
+  await installWithDebug(runtime);
+  const debug = (await dk.modules()).find((m) => m.name === 'digikit/debug')!;
+  await dk.profileState('reset');
+  expect((await dk.profileState('start')).running).toBe(true);
+  await waitFrames(runtime, 600);
+  const running = await dk.profileAll();
+  expect(running.running).toBe(true);
+  expect(running.hz, 'the span clock is the bus clock').toBe(132_000_000);
+  const row = running.spans.find((s) => s.kind === 'module' && s.index === debug.index)!;
+  expect(row.calls, "the debug module's tick ran").toBeGreaterThan(0);
+  expect(BigInt(row.maxTicks), 'max is at most the sum').toBeLessThanOrEqual(row.sumTicks);
+  // the poll slots name their owner: a loaded module record, or the firmware image (a patched-in core module)
+  const records = (await dk.modules()).map((m) => m.index);
+  expect(running.polls, 'one entry per poll slot').toHaveLength(4);
+  const used = running.polls.flatMap((p, slot) => (p ? [{ slot, ...p }] : []));
+  for (const p of used) {
+    expect(p.owner === 'runtime' || records.includes(p.owner), `poll ${p.slot} owner ${p.owner}`).toBe(true);
+    expect(p.fn, `poll ${p.slot} function`).toBeGreaterThan(0);
+  }
+  console.log('poll owners', JSON.stringify(used.map((p) => ({ ...p, fn: p.fn.toString(16) }))));
+
+  expect((await dk.profileState('stop')).running).toBe(false);
+  const first = await dk.profileAll();
+  await waitFrames(runtime, 600);
+  const second = await dk.profileAll();
+  expect(second.running).toBe(false);
+  expect(
+    second.spans.map((s) => [s.calls, s.sumTicks, s.maxTicks]),
+    'stopped: the counts do not change',
+  ).toEqual(first.spans.map((s) => [s.calls, s.sumTicks, s.maxTicks]));
+  await session.expectNoFault('profile spans');
+}
+
+/** The DIGIKIT menu's HEALTH page registers a poll function (`dkrt_poll_add`) while it is open. The menu is patched into the image, so PROFILE_STATE names
+ * the runtime as the owner (0xff) and the function lies in the code the patchkit placed for core/digikit-menu. */
+async function expectPollOwner(runtime: TestRuntime): Promise<void> {
+  const { session, dk } = runtime;
+  await expectRuntimeReady(session);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'debug-poll-owner'), []);
+  await installWithDebug(runtime);
+  expect((await dk.profileAll()).polls.filter(Boolean), 'no poll before the page is open').toEqual([]);
+  // NO leaves any popup, SETTINGS, eight rows down is DIGIKIT, YES opens it, DOWN is HEALTH, YES opens it
+  const { ui } = runtime;
+  const drained = { drained: true } as const;
+  await ui.tap('NO', { until: drained });
+  await ui.wait({ ms: 600, why: 'the popup closes; no state row' });
+  await ui.tap('SETTINGS', { until: drained });
+  await ui.wait({ ms: 800, why: 'the SETTINGS page has no state row' });
+  for (let i = 0; i < 8; i++) await ui.tap('DOWN', { until: drained });
+  await ui.tap('YES', { until: drained });
+  await ui.wait({ ms: 800, why: 'the DIGIKIT page has no state row' });
+  await ui.tap('DOWN', { until: drained });
+  await ui.tap('YES', {
+    until: {
+      state: async () => (await dk.profileAll()).polls.filter(Boolean).length,
+      done: (n) => n > 0,
+      what: 'the HEALTH page registers its poll',
+    },
+  });
+  const polls = (await dk.profileAll()).polls.flatMap((p, slot) => (p ? [{ slot, ...p }] : []));
+  console.log('poll slots', JSON.stringify(polls.map((p) => ({ ...p, fn: p.fn.toString(16) }))));
+  expect(polls.length, 'the HEALTH page registered a poll').toBeGreaterThan(0);
+  const placed = (plan.writes ?? []).filter((w) => w.cpu === 'cf' && w.code !== undefined && w.owner.includes('digikit-menu'));
+  for (const p of polls) {
+    expect(p.owner, 'a patched-in core module belongs to the firmware image').toBe('runtime');
+    const at = placed.find((w) => p.fn >= w.addr && p.fn < w.addr + w.len);
+    expect(at, `poll ${p.slot} function ${p.fn.toString(16)} is in the code placed for core/digikit-menu`).toBeDefined();
+  }
+  await session.expectNoFault('poll owner');
+}
+
+runtimeTests('the HEALTH page poll is owned by the runtime and lies in the menu code', expectPollOwner, { dsp: 'sharc' });
+runtimeTests('the span table counts the debug module tick and holds still when stopped', expectProfileSpans, { dsp: 'sharc' });
+runtimeTests('the card log is written to the store and reads back', expectCardLog, { dsp: 'sharc' });
 runtimeTests(
   'without the debug module the runtime boots, has no log commands and keeps a small ring',
   expectWithoutDebugModule,

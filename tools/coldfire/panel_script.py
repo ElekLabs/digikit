@@ -1,7 +1,7 @@
 """Panel key scripts and probe runs for the arena-safety proofs (finding 25).
 
 A `Script` is a timeline of panel taps, encoder turns, MIDI/USB input and frame dumps, in instructions after the
-firmware is ready. `args()` turns it into `regions_probe` arguments (packages/emulator/boot/examples/regions_probe.rs).
+firmware is ready. `args()` turns it into `regions_probe` arguments (packages/emulator/sharc-peer/examples/regions_probe.rs).
 `SCRIPTS` names the reusable ones; `tools/coldfire/regions.py scenario_args` falls back to them.
 """
 
@@ -262,7 +262,7 @@ def _to_digikit(s: Script) -> Script:
 DG = 60_000_000  # a DIGIKIT row action rebuilds the list; the OLED shows it after about this many instructions
 KEY = 15_000_000  # a cursor move
 RUNTIME_LOG_VALUE = (
-    808 + 24
+    456 + 24
 )  # DKRT_STATE + this: the value of log entry 0 = the address of test/dyn-demo's DYN_COUNTER
 
 

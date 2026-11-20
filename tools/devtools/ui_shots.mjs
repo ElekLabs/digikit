@@ -32,19 +32,53 @@ const port = Number(opt('port', 9611));
 // ---- the scenes ---------------------------------------------------------------------------------------------------------------------
 const WIDE = [1440, 900];
 const MIN = [700, 600];
-/** The Memory panel remembers open or closed in localStorage, which outlives a scene: open it. */
-const openMemory = (p) =>
+/** The right-hand column remembers its tab and whether it is folded in localStorage, which outlives a scene: open it on tab `which`
+ * ('Card', 'Memory' or 'Metrics'). */
+const showTab = (p, which) =>
   p.eval(
-    "(() => { const b = document.querySelector('.memory-panel .card-toggle'); if (b && b.getAttribute('aria-expanded') === 'false') b.click(); })()",
+    `(() => { const f = document.querySelector('.side-fold'); if (f && f.getAttribute('aria-expanded') === 'false') f.click(); setTimeout(() => { for (const t of document.querySelectorAll('.side-tab')) if (t.textContent.trim() === '${which}') t.click(); }, 0); })()`,
   );
-/** The Card panel remembers it too; the panels of the right-hand column: `want` is 'open' or 'closed'. */
-const setPanel = (p, which, want) =>
+const openMemory = (p) => showTab(p, 'Memory');
+/** Fold the column to its rail. */
+const fold = (p) =>
   p.eval(
-    `(() => { const b = document.querySelector('${which === 'memory' ? '.memory-panel' : '.card-panel:not(.memory-panel)'} .card-toggle'); if (b && (b.getAttribute('aria-expanded') === 'true') !== (${want === 'open'})) b.click(); })()`,
+    "(() => { const f = document.querySelector('.side-fold'); if (f && f.getAttribute('aria-expanded') === 'true') f.click(); })()",
   );
+/** Three files uploaded in a row (the fallback scenes switch the link at the second). */
+const upload3 = async (p) => {
+  for (const n of ['kick', 'snare', 'hat']) await p.tick(`^Upload ${n}`);
+  await p.click(/^Upload/);
+  await p.wait(2300);
+};
+/** A slow sample check keeps the same progress element and reveals the hint in both the row and footer. */
+const checkingSample = async (p) => {
+  await p.tick('^Upload kick_punchy');
+  await p.click(/^Upload/);
+  await p.wait(600);
+  const state = await p.eval(`new Promise((resolve) => {
+    const bar = document.querySelectorAll('section.col')[1].querySelector('.up progress');
+    setTimeout(() => resolve({
+      sameBar: !!bar && bar.isConnected && bar.value === bar.max,
+      hints: [...document.querySelectorAll('.phase')].filter((el) => el.textContent === 'Checking…').length,
+      message: document.querySelector('.bar .msg')?.textContent,
+    }), 2600);
+  })`);
+  if (!state.sameBar || state.hints !== 2 || !state.message?.startsWith('Transferring 1 of 1'))
+    throw new Error(`sample check lost its progress bar or hints: ${JSON.stringify(state)}`);
+};
+/** Wait (up to 10 s) until the Transfer page has read the device: no "reading…" or "Connecting…" text and a module row. */
+const modulesReady = async (p) => {
+  for (let i = 0; i < 100; i++) {
+    const ready = await p.eval(
+      '!/reading…|Connecting…/.test(document.body.innerText) && !!document.querySelector(\'input[aria-label^="Install "]\')',
+    );
+    if (ready) return;
+    await p.wait(100);
+  }
+};
 /** Page helpers: `p.eval(js)`, `p.click(text)`, `p.tick(labelRegexSource)`, `p.hover(selector)`, `p.wait(ms)`. */
 const SCENES = [
-  { name: 'modules', q: 'mode=modules', size: WIDE },
+  { name: 'modules', q: 'mode=modules', size: WIDE, steps: modulesReady },
   {
     name: 'modules-select-partial',
     q: 'mode=modules',
@@ -61,7 +95,19 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
+      await modulesReady(p);
       await p.tick('^Install (Pluck|Wavetable)');
+    },
+  },
+  // Sine and Pluck fit together (200 + 259 KiB of the 512 KiB DSP area), so the line above the list ends with the load after the next boot
+  {
+    name: 'modules-fit-load',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.tick('^Install (Sine|Pluck)$');
+      await p.wait(300);
     },
   },
   {
@@ -170,6 +216,8 @@ const SCENES = [
       await p.wait(4000);
     },
   },
+  { name: 'samples-checking', q: 'mode=samples&speed=0.8&verify=4000', size: WIDE, steps: checkingSample },
+  { name: 'samples-narrow-checking', q: 'mode=samples&speed=0.8&verify=4000', size: MIN, steps: checkingSample },
   { name: 'samples-narrow', q: 'mode=samples', size: MIN },
   {
     name: 'samples-narrow-uploading',
@@ -181,6 +229,23 @@ const SCENES = [
       await p.wait(3000);
     },
   },
+  // the link pill after the free space (FAST USB / SYSEX / SYSEX: FALLBACK) and the "via" end of the progress line
+  { name: 'samples-link-bulk', q: 'mode=samples&link=bulk', size: WIDE },
+  { name: 'samples-link-sysex', q: 'mode=samples&link=sysex', size: WIDE },
+  { name: 'samples-link-wrongmode', q: 'mode=samples&link=wrongmode', size: WIDE },
+  { name: 'samples-link-bulk-narrow', q: 'mode=samples&link=bulk', size: MIN },
+  { name: 'samples-link-fallback-narrow', q: 'mode=samples&link=fallback&speed=3', size: MIN, steps: upload3 },
+  {
+    name: 'samples-link-bulk-uploading',
+    q: 'mode=samples&link=bulk&speed=1.2',
+    size: WIDE,
+    steps: async (p) => {
+      await p.tick('^Upload (kick|snare|hat)');
+      await p.click(/^Upload/);
+      await p.wait(2000);
+    },
+  },
+  { name: 'samples-link-fallback', q: 'mode=samples&link=fallback&speed=3', size: WIDE, steps: upload3 },
   { name: 'samples-no-folder', q: 'mode=samples&folder=none', size: WIDE },
 
   // ---- the explorer: selection, navigation, upload of folders, drag and drop (Samples mode) ----
@@ -522,6 +587,8 @@ const SCENES = [
     size: WIDE,
     steps: async (p) => {
       await p.wait(2600);
+      const rows = await p.eval(`document.querySelectorAll('input[aria-label^="Install "]').length`);
+      if (!rows) throw new Error('The local module library is empty while the device waits.');
     },
   },
   {
@@ -577,6 +644,8 @@ const SCENES = [
       await p.wait(4500);
       p.say(`file added on disk: shown after the poll = ${await has('new_file_xyz.wav')} (expect true)`);
       const c2 = JSON.parse(await counts());
+      if (c2.deviceRead !== c1.deviceRead || !(await has('new_file_xyz.wav')))
+        throw new Error('A local file change must refresh local files without reading the device.');
       await p.eval("window.dispatchEvent(new Event('focus'))");
       await p.wait(1500);
       const c3 = JSON.parse(await counts());
@@ -631,13 +700,27 @@ const SCENES = [
   // ---- the Remote page against the Emulator page's faceplate: the same test pattern on the 128 x 64 screen ----
   { name: 'remote-wide', q: 'page=remote', size: WIDE, steps: async (p) => p.wait(800) },
   { name: 'remote-narrow', q: 'page=remote', size: MIN, steps: async (p) => p.wait(800) },
-  // ---- the Card panel of the Emulator page: the folder of the loaded device (preview/card-mock.ts) ----
-  { name: 'card-dn2', q: 'page=emulator&card=dn2', size: WIDE, steps: async (p) => p.wait(700) },
-  { name: 'card-dt2', q: 'page=emulator&card=dt2', size: WIDE, steps: async (p) => p.wait(700) },
+  // ---- the Files page: the demo store (target/fake-store.ts demoStore), and the emulator card-folder strip (preview/card-mock.ts) ----
+  {
+    // the failed module selected: header, load state and the info buttons
+    name: 'files-wide',
+    q: 'page=files',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(500);
+      await p.eval(
+        `(() => { const li = [...document.querySelectorAll('.files-page li')].find((l) => l.querySelector('.nm')?.textContent.trim() === 'chorus.dkm'); li?.click(); return !!li; })()`,
+      );
+      await p.wait(500);
+    },
+  },
+  { name: 'files-narrow', q: 'page=files', size: MIN, steps: async (p) => p.wait(500) },
+  { name: 'card-dn2', q: 'page=files&card=dn2', size: WIDE, steps: async (p) => p.wait(700) },
+  { name: 'card-dt2', q: 'page=files&card=dt2', size: WIDE, steps: async (p) => p.wait(700) },
   {
     // the Digitone II takes the chosen folder at once: no reload notice
     name: 'card-dn2-chosen',
-    q: 'page=emulator&card=dn2',
+    q: 'page=files&card=dn2',
     size: WIDE,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -647,7 +730,7 @@ const SCENES = [
   {
     // the Digitakt II builds its card from the folder: the notice and "Reload now"
     name: 'card-dt2-reload-notice',
-    q: 'page=emulator&card=dt2',
+    q: 'page=files&card=dt2',
     size: WIDE,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -656,7 +739,7 @@ const SCENES = [
   },
   {
     name: 'card-dt2-reloaded',
-    q: 'page=emulator&card=dt2',
+    q: 'page=files&card=dt2',
     size: WIDE,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -665,16 +748,16 @@ const SCENES = [
       await p.wait(700);
     },
   },
-  { name: 'card-dt2-saved-choice', q: 'page=emulator&card=dt2&chosen=1', size: WIDE, steps: async (p) => p.wait(700) },
+  { name: 'card-dt2-saved-choice', q: 'page=files&card=dt2&chosen=1', size: WIDE, steps: async (p) => p.wait(700) },
   {
     name: 'card-dt2-missing-choice',
-    q: 'page=emulator&card=dt2&chosen=1&missing=1',
+    q: 'page=files&card=dt2&chosen=1&missing=1',
     size: WIDE,
     steps: async (p) => p.wait(700),
   },
   {
     name: 'card-dt2-use-default',
-    q: 'page=emulator&card=dt2&chosen=1',
+    q: 'page=files&card=dt2&chosen=1',
     size: WIDE,
     steps: async (p) => {
       await p.click('Use default');
@@ -683,7 +766,7 @@ const SCENES = [
   },
   {
     name: 'card-dt2-reload-notice-narrow',
-    q: 'page=emulator&card=dt2',
+    q: 'page=files&card=dt2',
     size: MIN,
     steps: async (p) => {
       await p.click('Choose folder…');
@@ -694,9 +777,10 @@ const SCENES = [
   {
     // a Digitone II with Pluck and Remote control loaded and one module that is not in the library ("other")
     name: 'memory-dn2',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
+      await openMemory(p);
       await p.wait(700);
       p.say(
         'segment titles: ' +
@@ -706,15 +790,47 @@ const SCENES = [
       );
     },
   },
-  { name: 'memory-dn2-full', q: 'page=emulator&card=dn2&mem=full', size: WIDE, steps: async (p) => p.wait(700) },
-  { name: 'memory-dn2-dsp-full', q: 'page=emulator&card=dn2&mem=dsp', size: WIDE, steps: async (p) => p.wait(700) },
+  {
+    name: 'memory-dn2-full',
+    q: 'page=files&card=dn2&mem=full',
+    size: WIDE,
+    steps: async (p) => {
+      await openMemory(p);
+      await p.wait(700);
+    },
+  },
+  {
+    name: 'memory-dn2-dsp-full',
+    q: 'page=files&card=dn2&mem=dsp',
+    size: WIDE,
+    steps: async (p) => {
+      await openMemory(p);
+      await p.wait(700);
+    },
+  },
   // the Digitakt II has no page rows: no Pages bar
-  { name: 'memory-dt2', q: 'page=emulator&card=dt2&mem=pluck', size: WIDE, steps: async (p) => p.wait(700) },
-  { name: 'memory-empty', q: 'page=emulator&card=dn2&mem=empty', size: WIDE, steps: async (p) => p.wait(700) },
-  { name: 'memory-narrow', q: 'page=emulator&card=dn2&mem=pluck', size: MIN, steps: async (p) => p.wait(700) }, // closed by default at this width
+  {
+    name: 'memory-dt2',
+    q: 'page=files&card=dt2&mem=pluck',
+    size: WIDE,
+    steps: async (p) => {
+      await openMemory(p);
+      await p.wait(700);
+    },
+  },
+  {
+    name: 'memory-empty',
+    q: 'page=files&card=dn2&mem=empty',
+    size: WIDE,
+    steps: async (p) => {
+      await openMemory(p);
+      await p.wait(700);
+    },
+  },
+  { name: 'memory-narrow', q: 'page=files&card=dn2&mem=pluck', size: MIN, steps: async (p) => p.wait(700) }, // closed by default at this width
   {
     name: 'memory-narrow-open',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: MIN,
     steps: async (p) => {
       await p.wait(400);
@@ -744,69 +860,205 @@ const SCENES = [
   },
   {
     name: 'memory-collapsed',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(500);
-      await openMemory(p);
-      await p.eval("document.querySelector('.memory-panel .card-toggle').click()");
+      await fold(p);
       await p.wait(300);
     },
   },
-  // ---- the right-hand column of the Emulator page: the Card panel on top, the Memory panel under it, each collapsible ----
+  // ---- the Profile pane (preview/profile-backend.mock.ts): prof=rec|stopped|nodebug; the graph needs a minute of readings ----
+  {
+    // the emulator while recording: header, a full 60 s graph with the effect loaded at 19 s, the table, the DSP per block
+    name: 'profile-emulator',
+    q: 'page=files&card=dn2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(62000);
+    },
+  },
+  {
+    // a device (the Remote page) after Stop: spans only, the whole-block DSP bar from HEALTH
+    name: 'profile-device',
+    q: 'page=remote&card=dt2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(62000);
+      await p.eval(
+        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop') b.click(); })()",
+      );
+      await p.wait(1500);
+    },
+  },
+  {
+    name: 'profile-nodebug',
+    q: 'page=remote&card=dt2&prof=nodebug',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Profile');
+      await p.wait(800);
+    },
+  },
+  // ---- the Calibration tab (preview/calibration-backend.mock.ts): made-up captures; the files go in through the file inputs ----
+  {
+    // a run on the emulator in progress: the progress line and Stop (cal=slow stretches a capture to 3 s)
+    name: 'profile-calibration-run',
+    q: 'page=emulator&card=dn2&prof=stopped&cal=slow',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(
+        "(() => { const b = document.querySelector('.cal .cal-bar .act.primary'); b.click(); b.scrollIntoView(); })()",
+      );
+      await p.wait(4000);
+    },
+  },
+  {
+    // an emulator run loaded from a file, then a device run through Fit with…: the table with both columns, factor and error, the fit lines
+    name: 'profile-calibration-fit',
+    q: 'page=emulator&card=dn2&prof=stopped',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      const give = (index, side) =>
+        p.eval(`(() => {
+          const cap = (caseId, n, rows) => ({ schema: 'dk.profile/1', run: { id: '${side}-1-' + caseId + n, case_id: caseId, target: 'dn2' },
+            dsp: { unit: '${side === 'emu' ? 'insn' : 'cycles'}', blocks: 400, max_stock_block_delta: 0 },
+            dsp_rows: rows.map(([row, call, block]) => ({ row, kind: 'machine', calls: 400, sum_cycles: block * 300, max_call: call, max_block: block })) });
+          const k = ${side === 'emu' ? 1 : 1.31};
+          const set = { schema: 'dk.calcaptures/1', profile: 'modules', side: '${side}', captures: [
+            cap('stock', 1, []), cap('bd', 1, [[3, Math.round(16400 * k), Math.round(21400 * k)]]),
+            cap('pluck', 1, [[5, Math.round(30200 * k), Math.round(39800 * (k + (${side === 'dev'} ? 0.02 : 0)))]]),
+            cap('tb303', 1, [[7, Math.round(11800 * k), Math.round(15100 * k)]]) ] };
+          const dt = new DataTransfer();
+          dt.items.add(new File([JSON.stringify(set)], '${side}.captures.json', { type: 'application/json' }));
+          const input = document.querySelectorAll('.cal input[type=file]')[${index}];
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+      await give(0, 'emu');
+      await p.wait(400);
+      await give(1, 'dev');
+      await p.wait(800);
+      await p.eval("document.querySelector('.cal').scrollIntoView()");
+      await p.wait(300);
+    },
+  },
+  {
+    // an active calibration loaded on the Calibration tab
+    name: 'profile-calibration-active',
+    q: 'page=emulator&card=dn2&prof=stopped',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(`(() => {
+        const doc = { schema: 'dk.calibration/1', key: { device: 'dn2', device_unit: 'cycles', block_cycles: 666784 },
+          dsp: { factor: { fit: 1.31, budget: 1.34 }, error: { n: 9, mean: 0.002, worst_under: 0.013 } } };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(doc)], 'dk-calibration-dn2.json', { type: 'application/json' }));
+        const input = document.querySelector('.cal-active input[type=file]');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await p.wait(600);
+    },
+  },
+  {
+    // the same calibration, then the Profile tab: the DSP rows with est. cyc/blk and % block
+    name: 'profile-calibration-estimate',
+    q: 'page=emulator&card=dn2&prof=rec',
+    size: [1440, 1100],
+    steps: async (p) => {
+      await p.wait(500);
+      await showTab(p, 'Calibration');
+      await p.wait(1500);
+      await p.eval(`(() => {
+        const doc = { schema: 'dk.calibration/1', key: { device: 'dn2', device_unit: 'cycles', block_cycles: 666784 },
+          dsp: { factor: { fit: 1.31, budget: 1.34 }, error: { n: 9, mean: 0.002, worst_under: 0.013 } } };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(doc)], 'dk-calibration-dn2.json', { type: 'application/json' }));
+        const input = document.querySelector('.cal-active input[type=file]');
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await p.wait(600);
+      await showTab(p, 'Profile');
+      await p.wait(2500);
+      await p.eval("document.querySelector('.dsp-mods')?.scrollIntoView()");
+      await p.wait(300);
+    },
+  },
+  // ---- the right-hand column of the Emulator page: tabs (Card, Memory, Metrics) over one panel; folded, a rail ----
   ...['dn2', 'dt2'].map((dev) => ({
     name: `side-${dev}`,
     q: `page=emulator&card=${dev}&mem=pluck`,
     size: WIDE,
     steps: async (p) => {
       await p.wait(400);
-      await setPanel(p, 'card', 'open');
-      await setPanel(p, 'memory', 'open');
+      await showTab(p, 'Card');
       await p.wait(500);
     },
   })),
   {
-    name: 'side-card-closed',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    name: 'side-memory',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(400);
-      await setPanel(p, 'memory', 'open');
-      await setPanel(p, 'card', 'closed');
+      await showTab(p, 'Memory');
+      await p.wait(500);
+    },
+  },
+  {
+    name: 'side-metrics',
+    q: 'page=files&card=dn2&mem=pluck',
+    size: WIDE,
+    steps: async (p) => {
+      await p.wait(400);
+      await showTab(p, 'Metrics');
+      await p.wait(400);
+    },
+  },
+  // the column stays while the emulator boots; Metrics says it is not running
+  {
+    name: 'side-booting',
+    q: 'page=emulator&boot=loading',
+    size: WIDE,
+    steps: async (p) => {
+      await showTab(p, 'Metrics');
       await p.wait(400);
     },
   },
   {
-    name: 'side-memory-closed',
-    q: 'page=emulator&card=dn2&mem=pluck',
-    size: WIDE,
-    steps: async (p) => {
-      await p.wait(400);
-      await setPanel(p, 'card', 'open');
-      await setPanel(p, 'memory', 'closed');
-      await p.wait(400);
-    },
-  },
-  {
-    // nothing in the column is open: a rail, and the faceplate has the width
+    // the column folded: a rail, and the faceplate has the width
     name: 'side-rail',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: WIDE,
     steps: async (p) => {
       await p.wait(400);
-      await setPanel(p, 'card', 'closed');
-      await setPanel(p, 'memory', 'closed');
+      await fold(p);
       await p.wait(400);
     },
   },
   {
     name: 'side-narrow',
-    q: 'page=emulator&card=dn2&mem=pluck',
+    q: 'page=files&card=dn2&mem=pluck',
     size: MIN,
     steps: async (p) => {
       await p.wait(400);
-      await setPanel(p, 'card', 'open');
-      await setPanel(p, 'memory', 'open');
+      await showTab(p, 'Card');
       await p.wait(400);
     },
   },
@@ -903,7 +1155,7 @@ const SCENES = [
       async (p) => {
         await p.click(/^Level/);
         await p.wait(400);
-        // the module row of freqshift: error; the default row: trace
+        // the module row of chorus: error; the default row: trace
         await p.eval(
           "(() => { const rows = [...document.querySelectorAll('.level-row')]; const pick = (row, name) => [...row.querySelectorAll('button')].find((b) => b.textContent === name)?.click(); pick(rows[0], 'trace'); pick(rows[2], 'error'); })()",
         );
@@ -922,6 +1174,17 @@ const SCENES = [
     ],
     // the debug module is loaded on the device, and on the emulator in the other scene it is not
     ['log-debug-module-loaded', 'page=log&log=both&logspeed=3&logh=640', WIDE, 'device:all', async () => {}],
+    // the Card log button switched on (the fake device has a card log, the emulator's debug module has none)
+    [
+      'log-cardlog-on',
+      'page=log&log=both&logspeed=3&logh=640',
+      WIDE,
+      'device:all',
+      async (p) => {
+        await p.click('Card log');
+        await p.wait(3000);
+      },
+    ],
     ['log-debug-module-not-loaded', 'page=log&log=nodebug&logh=640', WIDE, 'device:all', async () => {}],
     ['log-debug-module-not-loaded-narrow', 'page=log&log=nodebug&logh=640', MIN, 'device:all', async () => {}],
     // Source is All and both origins are followed: the menu does not know which one is meant
@@ -962,16 +1225,16 @@ const SCENES = [
   { name: 'emulator-boot-failed', q: 'page=emulator&boot=failed', size: WIDE },
   { name: 'emulator-faceplate-wide', q: 'page=emulator', size: WIDE },
   { name: 'emulator-faceplate-narrow', q: 'page=emulator', size: MIN },
-  // README shots: the site's modules and its device screens, no preview banner
+  // README shots: the site's modules and its device screens
   {
     name: 'readme-emulator',
-    q: 'page=emulator&card=dn2&frame=device-modules&banner=0',
+    q: 'page=files&card=dn2&frame=device-modules',
     size: WIDE,
     steps: async (p) => p.wait(700),
   },
   {
     name: 'readme-transfer',
-    q: 'mode=modules&lib=site&banner=0',
+    q: 'mode=modules&lib=site',
     size: WIDE,
     steps: async (p) => {
       await p.wait(500);
@@ -983,7 +1246,7 @@ const SCENES = [
   },
   {
     name: 'readme-remote',
-    q: 'page=remote&frame=device-digikit&banner=0',
+    q: 'page=remote&frame=device-digikit',
     size: WIDE,
     steps: async (p) => p.wait(800),
   },
@@ -1125,6 +1388,8 @@ try {
       deviceScaleFactor: scale,
       mobile: false,
     });
+    // each scene starts from the defaults; the tab and fold choices would otherwise carry over from the scene before
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: 'try { localStorage.clear(); } catch {}' });
     await cdp.send('Page.navigate', { url: `${base}?${scene.q}` });
     await sleep(1500);
     let note = '';
@@ -1134,6 +1399,16 @@ try {
     } catch (e) {
       note = ` (step failed: ${e.message})`;
       failed++;
+    }
+    // a page that failed to build shows Vite's error overlay: no picture of it
+    const viteError = await p
+      .eval("document.querySelector('vite-error-overlay')?.shadowRoot?.querySelector('.message')?.textContent ?? ''")
+      .catch(() => '');
+    if (viteError) {
+      console.error(`${scene.name}: the page failed to build: ${viteError.trim()}`);
+      failed++;
+      await closeTab(port, tab);
+      continue;
     }
     // the bar's text, when the scene shows one (a speed is only proof if it reads right)
     const stats = await p.eval("document.querySelector('.bar .stats')?.textContent ?? ''").catch(() => '');
@@ -1147,4 +1422,5 @@ try {
 } finally {
   await chrome.stop();
 }
-process.exit(0);
+// a failed step or a failed page makes the run fail, so readme_shots.mjs does not copy a wrong picture
+process.exit(failed ? 1 : 0);

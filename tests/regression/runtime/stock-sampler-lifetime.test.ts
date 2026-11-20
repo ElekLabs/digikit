@@ -1,15 +1,16 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { DkSession, EmuUsbTransport } from '@digi/dk-session';
+import type { DkSession } from '@digi/dk-session';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import { openSamples } from '@digi/dk-session/samples';
 import { button, repoRoot, type Session } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { withSession } from '../support.ts';
+import { withSession, withWaitApi, type TestRuntime } from '../support.ts';
 import { record } from './artifacts.ts';
-import { memory, panel } from './panel.ts';
-import { pollEmulated } from './waits.ts';
+import { memory } from './memory.ts';
+import { panelKeys } from './flows/panel-keys.ts';
+import { emulatorDk, pollEmulated, expectPollEmulated } from './waits.ts';
 
 // Current DT2 1.17 observations in finding81. All diagnostic accesses are reads.
 const CF = { slotBlock: 0x405b5368, slotRef: 0x405b1368, slotLength: 0x405ba768, blocks: 0x405a0f64 };
@@ -58,14 +59,18 @@ function actionBarTop(data: string | undefined): number | null {
 const ACTION = { unload: 24, replace: 32 };
 
 /** Returns the title of the SAMPLES root menu as observed in this run. */
-async function discovery(session: Session, dk: DkSession): Promise<{ out: string; rootTitle: string }> {
+async function discovery(
+  runtime: Pick<TestRuntime, 'session' | 'ui'>,
+  dk: DkSession,
+): Promise<{ out: string; rootTitle: string }> {
+  const { session } = runtime;
   const root = path.join(repoRoot(), 'out/runs/stock-sampler-lifetime');
   mkdirSync(root, { recursive: true });
   // Discovery evidence is retained even when this test passes.
   const out = mkdtempSync(path.join(root, 'dt2-'));
   const shared: { rootTitle?: string } = {};
   console.info('retained stock sampler discovery:', out);
-  const ui = panel(session);
+  const ui = panelKeys(runtime);
   const { cf, words, dsp } = memory(session);
   async function observe(name: string) {
     const begin = await cf(CF.blocks);
@@ -151,12 +156,12 @@ async function discovery(session: Session, dk: DkSession): Promise<{ out: string
     await session.client.call('pcm.tap', { action: 'capture', path: file });
     try {
       await session.client.inputButton(button('TRIG 1'), true);
-      await expect
-        .poll(
-          async () => ((await session.client.call('pcm.tap', { action: 'report' })) as { samples: number }).samples,
-          { timeout: 60_000, interval: 250 },
-        )
-        .toBeGreaterThanOrEqual(96000);
+      await expectPollEmulated(
+        session,
+        async () => ((await session.client.call('pcm.tap', { action: 'report' })) as { samples: number }).samples,
+        (value) => expect(value).toBeGreaterThanOrEqual(96000),
+        { emulatedMs: 60000, intervalMs: 250 },
+      );
     } finally {
       await session.client.inputButton(button('TRIG 1'), false);
       await session.client.call('pcm.tap', { action: 'capture_stop' });
@@ -289,9 +294,12 @@ async function discovery(session: Session, dk: DkSession): Promise<{ out: string
     };
     const expectedA = Buffer.from(toneWav(330)).subarray(44, 108);
     const expectedB = Buffer.from(toneWav(990)).subarray(44, 108);
-    await expect
-      .poll(async () => (await slotSource())?.head.hex, { timeout: 30_000, interval: 50 })
-      .toBe(expectedA.toString('hex'));
+    await expectPollEmulated(
+      session,
+      async () => (await slotSource())?.head.hex,
+      (value) => expect(value).toBe(expectedA.toString('hex')),
+      { emulatedMs: 30000, intervalMs: 50 },
+    );
     executed.transferredSamplesLoadedIntoProject = true;
     await observe('a-ready');
     await ui.chord('FUNC', 50); // leave assignment browser
@@ -355,9 +363,12 @@ async function discovery(session: Session, dk: DkSession): Promise<{ out: string
       const after100ms = await critical('after-b-additional100ms');
       // Equal-length A and B cannot be distinguished by a ready length alone.
       // Resolve the new slot view independently of any retained old voice pointer.
-      await expect
-        .poll(async () => (await slotSource())?.head.hex, { timeout: 30_000, interval: 50 })
-        .toBe(expectedB.toString('hex'));
+      await expectPollEmulated(
+        session,
+        async () => (await slotSource())?.head.hex,
+        (value) => expect(value).toBe(expectedB.toString('hex')),
+        { emulatedMs: 30000, intervalMs: 50 },
+      );
       const readySlot = await slotSource();
       expect(readySlot).not.toBeNull();
       record(out, 'b-ready-slot', readySlot);
@@ -426,8 +437,13 @@ async function slotState(session: Session, slot: number) {
  * play slot 2, then UNLOAD slot 1 through the stock SAMPLING menu. The block vector shifts only its 0x34-byte
  * records; PCM stays in place.
  */
-async function unloadEarlierWhilePlaying(session: Session, out: string, rootTitle: string): Promise<void> {
-  const ui = panel(session);
+async function unloadEarlierWhilePlaying(
+  runtime: Pick<TestRuntime, 'session' | 'ui'>,
+  out: string,
+  rootTitle: string,
+): Promise<void> {
+  const { session } = runtime;
+  const ui = panelKeys(runtime);
   const { dsp } = memory(session);
   const expectedA = Buffer.from(toneWav(330)).subarray(44, 108).toString('hex');
   const expectedB = Buffer.from(toneWav(990)).subarray(44, 108).toString('hex');
@@ -487,9 +503,12 @@ async function unloadEarlierWhilePlaying(session: Session, out: string, rootTitl
   await ui.tap('YES');
   await shot('slot2-browser-folder'); // a is the first row
   await ui.tap('YES');
-  await expect
-    .poll(async () => (await slotState(session, 2)).pcmHead, { timeout: 30_000, interval: 50 })
-    .toBe(expectedA);
+  await expectPollEmulated(
+    session,
+    async () => (await slotState(session, 2)).pcmHead,
+    (value) => expect(value).toBe(expectedA),
+    { emulatedMs: 30000, intervalMs: 50 },
+  );
   await leaveSamples();
 
   // Play slot 2.
@@ -515,9 +534,12 @@ async function unloadEarlierWhilePlaying(session: Session, out: string, rootTitl
   const slot2Before = await slotState(session, 2);
   const slot1Before = await slotState(session, 1);
   // The voice binds the slot at note start; the earlier note's pointer can still be there for a moment.
-  await expect
-    .poll(async () => (await voice()).readUInt32LE(0), { timeout: 10_000, interval: 50 })
-    .toBe(slot2Before.ptr);
+  await expectPollEmulated(
+    session,
+    async () => (await voice()).readUInt32LE(0),
+    (value) => expect(value).toBe(slot2Before.ptr),
+    { emulatedMs: 10000, intervalMs: 50 },
+  );
   const v0 = await voice();
   expect(v0.readUInt32LE(0), 'voice reads slot 2').toBe(slot2Before.ptr);
   expect(v0[0x1b8], 'voice active').toBe(1);
@@ -568,10 +590,11 @@ const handle = withSession({
 test('stock DT2 slot binding and active ten-second replacement discovery', async () => {
   const session = handle.session;
   await session.client.call('run.mode', { mode: 'free' });
-  const dk = new DkSession(new EmuUsbTransport((method, params) => session.client.call(method, params)));
+  const dk = emulatorDk(session);
+  const runtime = withWaitApi({ session, dk, close: async () => {} });
   try {
-    const { out, rootTitle } = await discovery(session, dk);
-    await unloadEarlierWhilePlaying(session, out, rootTitle);
+    const { out, rootTitle } = await discovery(runtime, dk);
+    await unloadEarlierWhilePlaying(runtime, out, rootTitle);
   } finally {
     dk.cancelPending();
   }

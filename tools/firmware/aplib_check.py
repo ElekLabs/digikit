@@ -3,12 +3,13 @@
 
     uv run python -m tools.firmware.aplib_check [IMAGE ...] [--no-native] [--sections 2,3,7,8]
 
-For each image (dt2-1.17, dn2-1.12) and each packed
+For each acceptance image and each packed
 section, from out/sections/IMAGE/: pack it, read it back with tools/firmware/elz.py, and
 run the same bytes through the bootstrap's own depacker (section 2, found by
 its prologue) on the native ColdFire core (packages/emulator/boot example depack_check,
-built on first use). The bootstrap stages a packed section at 0x40400000 and
-unpacks to 0x40000400, which the example reproduces. Prints stored sizes,
+built on first use). The bootstrap stages a packed section at the device's `[patch] main_stage`
+(0x40400000 on the Digitakt II and Digitone II, 0x40200000 on the Syntakt) and unpacks to 0x40000400, which the example
+reproduces with the stage and the bootstrap's load address (`boot_load`) of the device file. Prints stored sizes,
 the stock size from the .syx, and seconds.
 """
 
@@ -30,21 +31,39 @@ from tools import python_env  # noqa: E402
 from tools.firmware import aplibpack, config, elz  # noqa: E402
 from tools.firmware.container import sections  # noqa: E402
 
-IMAGES = {
-    "dt2-1.17": "Digitakt_II_OS1.17.syx",
-    "dn2-1.12": "Digitone_II_OS1.12.syx",
-}
+IMAGES = config.DEVICE_SYX
+# The depacker check stages a section other than the MAIN OS this far above the output address: no section unpacks to 8 MiB or more, so stream and output never overlap,
+# and the window stays inside the 32 MiB of DDR that depack_check models. (The stage of the MAIN OS is the device's `[patch] main_stage`.)
+SCRATCH_STAGE_OFFSET = 0x800000
 NAMES = {2: "DSP", 3: "MAIN_OS", 7: "BLOB", 8: "SECTION"}
 # The depacker's prologue: lea -20(a7),a7; clr.l d1; movem.l d2-d5/a2,(a7);
 # move.l 28(a7),d4; moveq #1,d3; movea.l 24(a7),a0; movea.l d4,a1; addq.l #8,a0.
 DEPACK_PROLOGUE = bytes.fromhex("4fefffec428148d7043c282f001c7601206f001822445088")
 
 
-def depacker_entry(bootstrap: bytes) -> int:
+def depacker_entry(bootstrap: bytes, base: int = 0x80000400) -> int:
     at = bootstrap.find(DEPACK_PROLOGUE)
     if at < 0 or bootstrap.find(DEPACK_PROLOGUE, at + 1) >= 0:
         raise ValueError("bootstrap depacker prologue not unique")
-    return 0x80000400 + at
+    return base + at
+
+
+def device_numbers(image: str) -> dict:
+    """The numbers of the device file of an image key (`dt2-1.17`) that the check needs: `[patch] main_stage`, `main_dest`, `boot_load` and `[container] main`."""
+    import tomllib
+
+    short = image.split("-")[0]
+    for f in sorted((ROOT / "devices").glob("*.toml")):
+        doc = tomllib.loads(f.read_text())
+        if doc.get("device", {}).get("short") == short:
+            p = doc["patch"]
+            return {
+                "main_stage": p["main_stage"],
+                "main_dest": p["main_dest"],
+                "boot_load": p["boot_load"],
+                "main_section": doc["container"]["main"],
+            }
+    raise ValueError(f"no device file for {image}")
 
 
 def native_binary() -> pathlib.Path:
@@ -78,14 +97,32 @@ def native_binary() -> pathlib.Path:
     return target / "release" / "examples" / "depack_check"
 
 
-def firmware_depack(binary, bootstrap_path, stream: bytes) -> dict:
+def firmware_depack(binary, bootstrap_path, stream: bytes, dev: dict, sid: int) -> dict:
     boot = bootstrap_path.read_bytes()
-    entry = depacker_entry(boot)
+    entry = depacker_entry(boot, dev["boot_load"])
+    # The device's `main_stage` is where the bootstrap stages the MAIN OS (the `[container] main` section). The other sections are unpacked into their
+    # own buffers, which are not device data; for them the check only needs a stage that does not overlap the output (SCRATCH_STAGE_OFFSET above it).
+    stage = (
+        dev["main_stage"]
+        if sid == dev["main_section"]
+        else dev["main_dest"] + SCRATCH_STAGE_OFFSET
+    )
     with tempfile.TemporaryDirectory() as tmp:
         f = pathlib.Path(tmp) / "stream.bin"
         f.write_bytes(stream)
         out = subprocess.run(
-            [str(binary), str(bootstrap_path), str(f), hex(entry)],
+            [
+                str(binary),
+                str(bootstrap_path),
+                str(f),
+                hex(entry),
+                "--stage",
+                hex(stage),
+                "--base",
+                hex(dev["boot_load"]),
+                "--dest",
+                hex(dev["main_dest"]),
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -99,6 +136,7 @@ def check_image(image: str, ids: list[int], binary) -> int:
     stock = {sid: clen for sid, _, clen, _ in table}
     bootstrap = sdir / "section_2_DSP.bin"
     failures = 0
+    dev = device_numbers(image)
     for sid in ids:
         path = sdir / f"section_{sid}_{NAMES[sid]}.bin"
         if not path.exists():
@@ -110,7 +148,7 @@ def check_image(image: str, ids: list[int], binary) -> int:
         ok_py = elz.depack_section(stream) == data
         ok_fw = None
         if binary is not None:
-            fw = firmware_depack(binary, bootstrap, stream)
+            fw = firmware_depack(binary, bootstrap, stream, dev, sid)
             ok_fw = (
                 fw["len"] == len(data)
                 and fw["sha256"] == hashlib.sha256(data).hexdigest()

@@ -2,26 +2,29 @@
 // The screen is the firmware's own Screenshot (stock MidiRpc 0x04), polled; keys and encoders are the commands of digikit/remote (KEY, TURN),
 // which work while digikit/remote is loaded at the device. The page speaks the protocol itself in TypeScript over the target of
 // target.ts: the emulator's USB capture or a MIDI port. No process is started.
-import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
-import LivePanel, { type LivePanelApi } from '@web/components/LivePanel';
-import { panels } from '@web/data/faceplates';
+import { Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
+import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import type { DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import type { DkSession, RemoteState } from '@digi/dk-session';
 import {
   deviceOfPort,
   infoDue,
   isRemoteMissing,
+  keyErrorLine,
   leaveCancels,
+  remoteListed,
   remoteNotice,
   remotePaused,
   remoteRuntime,
   remoteStateWanted,
 } from './remote-core';
 import { windowShown } from './log-follow-core';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
-import TargetSelect from '@web/transfer/TargetSelect';
-import { cancelPending, resetSession, session, target, targetLabel } from '@web/transfer/target';
-import { busy } from '@web/transfer/transfer-state';
-import { failureLine } from '@web/transfer/wait-core';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { sameTarget, targetLabel } from '@digi/workbench-core/transfer/target.ts';
+import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import './remote-page.css';
 
 const SCREEN_MS = { emulator: 250, midi: 400 };
@@ -31,23 +34,46 @@ const HIDDEN_MS = 500;
 // Keys and knobs are LivePanel's (the knobs turn by drag and wheel), so the page has no extra buttons for them.
 const HINT = 'Click keys; drag or scroll knobs. Shift: ×10.';
 
-export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JSX.Element {
+export default function RemotePage(props: {
+  fallbackDevice: DeviceId;
+  emulatorLoaded: boolean;
+  host?: Host;
+}): JSX.Element {
+  const app = useTransferApp();
+  const { asked, noteReply } = app.connection;
+  const { cancelPending, checkRuntime, resetSession, session, target } = app.target;
+  const { busy } = app.state;
   const [state, setState] = createSignal<RemoteState>();
   const [stateError, setStateError] = createSignal<unknown>();
   const [screenError, setScreenError] = createSignal('');
+  // a failed key or turn: it stays until a key succeeds or the target changes (the screen poll does not clear it)
+  const [keyError, setKeyError] = createSignal('');
+  // whether MODULES lists digikit/remote, read when the state request failed (undefined: not read)
+  const [listed, setListed] = createSignal<boolean>();
   // oxlint-disable-next-line solid/reactivity -- the emulator's device is only the first guess; the target's INFO names the device
-  const [device, setDevice] = createSignal<'dt2' | 'dn2'>(props.fallbackDevice);
+  const [device, setDevice] = createSignal<DeviceId>(props.fallbackDevice);
   let live: LivePanelApi | undefined;
   let alive = true;
   const panel = () => panels[device()];
-  const runtime = remoteRuntime(() => session());
-  const notice = () => remoteNotice(state(), stateError());
+  const runtime = remoteRuntime(() => session(), {
+    ok: () => setKeyError(''),
+    failed: (e) => setKeyError(keyErrorLine(e, targetLabel(target()))),
+  });
+  createEffect(
+    on(
+      () => targetLabel(target()),
+      () => setKeyError(''),
+      { defer: true },
+    ),
+  );
+  const notice = () => remoteNotice(state(), stateError(), listed());
+  const noEmulator = () => target().kind === 'emulator' && !props.emulatorLoaded;
 
   /** Screen loop: one Screenshot after the other; an error shows and the loop tries again slowly. */
   const screenLoop = async () => {
     while (alive) {
       // nothing is asked of the device while the window is hidden or a Transfer job uses the session
-      if (!windowShown() || remotePaused(busy())) {
+      if (!windowShown() || remotePaused(busy()) || noEmulator()) {
         await new Promise((r) => setTimeout(r, HIDDEN_MS));
         continue;
       }
@@ -68,15 +94,17 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
   const stateLoop = async () => {
     // set when the device answered E_PROTO: from then on the MODULES list says when digikit/remote is there (no failing request every poll)
     let missing = false;
-    // INFO only names the device (dt2 or dn2) for the faceplate: ask when the target changed, after an error and now and then, not every poll
+    // INFO only names the device for the faceplate: ask when the target changed, after an error and now and then, not every poll
     let infoKey = '';
     let infoAt: number | undefined;
     while (alive) {
-      if (!windowShown() || remotePaused(busy())) {
+      if (!windowShown() || remotePaused(busy()) || noEmulator()) {
         await new Promise((r) => setTimeout(r, HIDDEN_MS));
         continue;
       }
+      const t = target();
       try {
+        await asked(async () => checkRuntime(target()));
         const s = await session();
         const key = targetLabel(target());
         if (infoDue(infoAt, Date.now(), key !== infoKey)) {
@@ -84,19 +112,30 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
           infoKey = key;
           infoAt = Date.now();
           const d = deviceOfPort(info.port);
-          if (d && d !== device()) setDevice(d);
+          if (d && d !== device() && Object.hasOwn(panels, d)) setDevice(d);
         }
         const loaded = missing ? await s.modules().catch(() => undefined) : undefined;
         if (remoteStateWanted(missing, loaded)) {
           setState(await s.remoteState());
           setStateError(undefined);
+          setListed(undefined);
           missing = false;
+          void noteReply(s, () => sameTarget(t, target()));
         }
       } catch (e) {
         missing = isRemoteMissing(e);
         infoAt = undefined;
         setState(undefined);
         setStateError(e);
+        // the module may be loaded without the optional state request: MODULES decides what the notice says
+        if (missing)
+          setListed(
+            remoteListed(
+              await session()
+                .then((s) => s.modules())
+                .catch(() => undefined),
+            ),
+          );
       }
       await new Promise((r) => setTimeout(r, STATE_MS));
     }
@@ -125,41 +164,66 @@ export default function RemotePage(props: { fallbackDevice: 'dt2' | 'dn2' }): JS
         <span class="meta">
           {targetLabel(target())} · {device()}
         </span>
-        <span class="hint" title={HINT}>
-          {HINT}
+        <span class="hints" title={HINT}>
+          <span>
+            <kbd>Click</kbd> keys
+          </span>
+          <span>
+            <kbd>Drag</kbd> or <kbd>Scroll</kbd> knobs
+          </span>
+          <span>
+            <kbd>⇧</kbd> ×10
+          </span>
         </span>
-        <span class="sp" />
-        <TargetSelect onError={setScreenError} />
       </header>
-      <Show when={remotePaused(busy())}>
-        <p class="note" role="status">
-          Paused during the transfer.
-        </p>
+      <Show
+        when={!noEmulator()}
+        fallback={
+          <p class="remote-empty">
+            No firmware is loaded in the emulator. Open one on the Emulator page, or choose a MIDI device as the target.
+          </p>
+        }
+      >
+        <Show when={remotePaused(busy())}>
+          <p class="note" role="status">
+            Paused during the transfer.
+          </p>
+        </Show>
+        <Show when={notice()}>
+          <p class="note" role="status">
+            {notice()}
+          </p>
+        </Show>
+        <Show when={screenError()}>
+          <p class="err" role="alert">
+            {screenError()}
+          </p>
+        </Show>
+        <Show when={keyError()}>
+          <p class="err" role="alert">
+            {keyError()}
+          </p>
+        </Show>
+        {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
+        <div class="remote-row">
+          <main
+            class="stage"
+            aria-label={`${panel().name} front panel`}
+            title={HINT}
+            style={{ '--accent': panel().accent, '--func-legend': panel().func_legend }}
+          >
+            <div class="surface">
+              <LivePanel
+                panel={panel()}
+                runtime={() => runtime}
+                onError={() => {} /* key and turn failures are reported by the runtime above (keyError) */}
+                ref={(api) => (live = api)}
+              />
+            </div>
+          </main>
+          <SidePanels host={props.host} visible session={session} where={() => targetLabel(target())} track={target} />
+        </div>
       </Show>
-      <Show when={notice()}>
-        <p class="note" role="status">
-          {notice()}
-        </p>
-      </Show>
-      <Show when={screenError()}>
-        <p class="err" role="alert">
-          {screenError()}
-        </p>
-      </Show>
-      {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
-      <div class="remote-row">
-        <main
-          class="stage"
-          aria-label={`${panel().name} front panel`}
-          title={HINT}
-          style={{ '--accent': panel().accent, '--func-legend': panel().func_legend }}
-        >
-          <div class="surface">
-            <LivePanel panel={panel()} runtime={() => runtime} onError={setScreenError} ref={(api) => (live = api)} />
-          </div>
-        </main>
-        <SidePanels visible session={session} where={() => targetLabel(target())} track={target} />
-      </div>
     </section>
   );
 }

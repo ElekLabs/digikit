@@ -82,6 +82,9 @@ pub fn build_superblock() -> [u8; SECTOR] {
         (40, 0x20),
         (44, 0x5ee980),
         (48, 0x5ef480),
+        // "checked": the firmware's own writer sets it to 1 after a filesystem check ended well. With state 4 and
+        // checked 1 the boot does not run the check (and shows no "VERIFYING FILE SYSTEM" window).
+        (0x34, 1),
     ] {
         put32(&mut b, at, v)
     }
@@ -364,6 +367,9 @@ mod tests {
     fn structures() {
         let s = build_superblock();
         assert_eq!(u32::from_be_bytes(s[0..4].try_into().unwrap()), 0x656b4653);
+        // verified: state 4, checked 1, so the firmware's boot check does not run
+        assert_eq!(u32::from_be_bytes(s[4..8].try_into().unwrap()), 4);
+        assert_eq!(u32::from_be_bytes(s[0x34..0x38].try_into().unwrap()), 1);
         assert_eq!(
             hashlittle(&s[..0x1fc], 0x31323334),
             u32::from_be_bytes(s[0x1fc..].try_into().unwrap())

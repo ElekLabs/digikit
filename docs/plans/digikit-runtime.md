@@ -420,7 +420,7 @@ New tools approved (Em, 2026-10-19): `sccache`, `cargo-nextest`, a test-impact t
      `verify:full` keeps the whole workspace. rust-tests today 260-600 s.
    - [x] v-slow (merged; 417 s to 136 s CPU, tests_gen 121 s to 15 s): `tests/patchkit/test_pluck.py` sharded or cheapened (about 370 s alone; lever 2b, ceiling about 200 s); the SHARC `tests_gen`
      differential tests only when their crate changed (lever 2a, about 100 s).
-   - [ ] Then, measured: `sccache` across lanes (only if it hits at the lanes' paths); why an emulator edit rebuilds so much (crate split).
+   - [x] Measured 2026-11-14: `sccache` 0.19 does not hit for `sharc-gen`/`sharc-rt`, not even from the same worktree path into a new target dir (0 hits, ~600 s per build), so it is not used. Open: why an emulator edit rebuilds so much (crate split).
    Baseline 2026-10-18: wall 881 s; python-tests 881 s, rust-tests 598 s, check-no-aot 492 s, tier-quick 421 s. Approved tools: `sccache`,
    `cargo-nextest`, a test-impact tool.
 4. [ ] DSP debugging: DSP peek over the DSP link (read-only), a SHARC exception handler writing the faulting PC and status into the reply record,

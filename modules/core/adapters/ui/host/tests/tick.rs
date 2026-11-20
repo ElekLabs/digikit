@@ -11,13 +11,14 @@ extern "C" {
     fn tk_calls(id: c_int) -> c_int;
     fn tk_stop_after(id: c_int, n: u32);
     fn tk_active() -> u32;
+    fn tk_set_owned(owner: usize, id: c_int, ms: u32, now: u32) -> c_int;
+    fn tk_remove_owner(owner: usize) -> u32;
     fn tk_module_open() -> c_int;
     fn tk_module_finish();
     fn tk_module_polls() -> c_int;
     fn tk_module_fills() -> c_int;
     fn tk_module_stop() -> c_int;
     fn tk_module_restart(ms: u32) -> c_int;
-    fn tk_module_has_cap() -> c_int;
 }
 
 const BLOCKS: u32 = 1500;
@@ -187,7 +188,6 @@ fn a_period_over_the_limit_is_cut() {
 fn a_module_screen_redraws_while_a_load_runs_and_stops_its_timer() {
     let _g = session();
     unsafe {
-        assert_eq!(tk_module_has_cap(), 1);
         assert_eq!(tk_module_open(), 0);
         assert_eq!(tick_periods(), [100]);
         let fills = tk_module_fills();
@@ -235,10 +235,32 @@ fn without_the_capability_the_call_does_nothing_and_says_so() {
     let _g = session();
     set_cap(CAP_TICK, false);
     unsafe {
-        assert_eq!(tk_module_has_cap(), 0);
         assert_eq!(tk_module_open(), -1);
         assert!(tick_periods().is_empty());
         advance_ms(500);
         assert_eq!(tk_module_polls(), 0);
+    }
+}
+
+#[test]
+fn the_timers_of_an_owner_go_when_it_unloads_and_the_others_stay() {
+    let _g = session();
+    unsafe {
+        tk_reset();
+        assert_eq!(tk_set_owned(1, 0, 100, 0), 0);
+        assert_eq!(tk_set_owned(2, 1, 100, 0), 0);
+        assert_eq!(tk_set_owned(1, 2, 100, 0), 0);
+        assert_eq!(tk_remove_owner(1), 2);
+        assert_eq!(tk_active(), 1);
+        run_units(1, 150, BLOCKS);
+        assert_eq!((tk_calls(0), tk_calls(1), tk_calls(2)), (0, 1, 0));
+        assert_eq!(tk_remove_owner(1), 0, "nothing left of it");
+        // the slot is free again
+        assert_eq!(tk_set_owned(3, 3, 100, 150), 0);
+        assert_eq!(tk_active(), 2);
+        // changing a timer keeps its owner
+        assert_eq!(tk_set_owned(9, 1, 200, 150), 0);
+        assert_eq!(tk_remove_owner(9), 0);
+        assert_eq!(tk_remove_owner(2), 1);
     }
 }

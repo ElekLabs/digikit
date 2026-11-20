@@ -7,10 +7,12 @@ edition = "2024"
 publish = false
 
 [features]
-# Local-only DN2 coupling: generated DSP code must never be distributed.
-coupled-audio = ["digi-coupled/coupled-audio", "digi-control/coupled-audio"]
-# Both devices' generated cores in one binary (SHARC_GEN_DIR and SHARC_GEN_DIR_2): a firmware of either device boots coupled.
-second-core = ["coupled-audio", "digi-coupled/second-core"]
+# Run-time switchable ColdFire profile (`cf.profile {enable}`); off until asked, so every workbench build has it.
+cf-profile = ["digi-control/cf-profile"]
+# Local-only SHARC+ coupling: generated DSP code must never be distributed.
+sharc = ["digi-coupled/sharc", "digi-control/sharc"]
+# Playback through the default output device.
+play = ["digi-coupled/play", "digi-control/play"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.1", features = [] }
@@ -29,6 +31,7 @@ digi-control = { path = "../../../packages/emulator/control" }
 device-profile = { path = "../../../packages/emulator/device-profile" }
 patchkit = { path = "../../../packages/patchkit" }
 dkmidi = { path = "../../../packages/dkmidi" }
+dkbulk = { path = "../../../packages/dkbulk" }
 
 [dev-dependencies]
 sha2 = "0.10"

@@ -13,8 +13,9 @@ pub const RUST_TARGET_JSON: &[u8] =
     include_bytes!("../../../../tools/patchkit/toolchain/m68k-cf-none-elf-a2.json");
 pub const RUST_TARGET_NAME: &str = "m68k-cf-none-elf-a2.json";
 
-pub const CFLAGS: [&str; 15] = [
+pub const CFLAGS: [&str; 16] = [
     "-mcpu=54418",
+    "-std=c11",
     "-Os",
     "-ffreestanding",
     "-fno-builtin",
@@ -111,6 +112,23 @@ impl Env {
         }
     }
 
+    /// For tests that need the m68k toolchain: true when it is installed. When it is missing this prints `SKIP` and returns
+    /// false, except with `DIGI_REQUIRE_TOOLCHAINS=1` (the Nx gate), where it panics.
+    pub fn m68k_or_skip(&self) -> bool {
+        if self.m68k("gcc").is_ok() {
+            return true;
+        }
+        let install = "uv run python -m tools.patchkit.pk_toolchains m68k";
+        if std::env::var("DIGI_REQUIRE_TOOLCHAINS").as_deref() == Ok("1") {
+            panic!(
+                "the m68k toolchain is missing at {}: run {install}",
+                self.m68k_prefix().display()
+            );
+        }
+        eprintln!("SKIP: the m68k-elf toolchain is not installed ({install})");
+        false
+    }
+
     pub fn libgcc_cf(&self) -> Option<PathBuf> {
         let p = self.m68k_prefix().join("lib").join(LIBGCC_CF_NAME);
         p.exists().then_some(p)
@@ -156,6 +174,16 @@ impl Env {
             env.push((k.into(), v));
         };
         set(&mut env, "PATH", new_path);
+        // libgccjit runs its built-in gcc driver to assemble, and the driver holds the absolute `--with-as` path of
+        // the install. COMPILER_PATH lets it find `as` in the m68k-elf tooldir, so out/tools still works after a move.
+        set(
+            &mut env,
+            "COMPILER_PATH",
+            self.m68k_prefix()
+                .join("m68k-elf/bin")
+                .display()
+                .to_string(),
+        );
         set(
             &mut env,
             "CG_GCCJIT_LIBRARY_PATH",

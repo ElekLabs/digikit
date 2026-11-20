@@ -1,0 +1,124 @@
+# Front-panel drawing for Syntakt, read by packages/workbench-core/src/data/faceplates.ts.
+#
+# Positions are centres in millimetres from the panel's top-left corner,
+# measured from a top-view photo (screws as reference, about 0.5 mm accuracy).
+# Legends are the printed silkscreen.
+# Codes are wire positions of the Syntakt panel (devices/syntakt.toml [panel], finding 70 "Panel sweep"): code = channel * 8 + bit + 1.
+
+[faceplate]
+device = "syntakt.toml"
+width = 215.0
+height = 176.0
+accent = "#d2566c"
+func_legend = "#682e34"
+wordmark = "digikit"
+
+[display]
+bezel = [33.0, 22.1, 107.3, 73.2]
+glass = [39.5, 28.9, 100.6, 62.1]
+wordmark = [39.1, 70.2]
+
+# One row of four pattern-page LEDs (1:4 to 4:4).
+[leds]
+x = [185.7, 191.7, 197.7, 203.8]
+y = [102.3]
+r = 1.5
+# The keyboard LED under the TRK key. Its panel LED index is not known yet (finding 70), so it is never lit.
+extra = [{ x = 20.3, y = 118.0, r = 1.2 }]
+
+[controls]
+screws = [
+  { x = 9.8, y = 4.9 },
+  { x = 100.0, y = 5.2 },
+  { x = 205.1, y = 4.9 },
+  { x = 9.8, y = 170.6 },
+  { x = 100.6, y = 170.9 },
+  { x = 204.8, y = 171.2 },
+]
+# style: jack (connector labels), label, sub (grey), dim, icon (the headphones glyph), updown (a label with a small up/down glyph
+# before it), split (the part before the first "/" in the silk colour, the rest in the accent colour)
+texts = [
+  { text = "headphones", x = 15.6, y = 4.5, style = "icon" },
+  { text = "Left", x = 27.0, y = 4.5, style = "jack" },
+  { text = "Right", x = 42.0, y = 4.5, style = "jack" },
+  { text = "Input L", x = 56.9, y = 4.5, style = "jack" },
+  { text = "Input R", x = 71.9, y = 4.5, style = "jack" },
+  { text = "MIDI In", x = 90.0, y = 4.5, style = "jack" },
+  { text = "MIDI Out", x = 109.9, y = 4.5, style = "jack" },
+  { text = "MIDI Thru", x = 129.9, y = 4.5, style = "jack" },
+  { text = "USB", x = 151.8, y = 4.5, style = "jack" },
+  { text = "DC In", x = 170.9, y = 4.5, style = "jack" },
+  { text = "Power", x = 192.8, y = 4.5, style = "jack" },
+  { text = "Sync A", x = 109.9, y = 7.8, style = "jack" },
+  { text = "Sync B", x = 129.9, y = 7.8, style = "jack" },
+  { text = "Modifier", x = 171.6, y = 96.9, style = "updown" },
+  { text = "Setup", x = 170.0, y = 100.3, style = "label" },
+  { text = "1:4", x = 185.7, y = 99.2, style = "label" },
+  { text = "2:4", x = 191.7, y = 99.2, style = "label" },
+  { text = "3:4", x = 197.7, y = 99.2, style = "label" },
+  { text = "4:4", x = 203.8, y = 99.2, style = "label" },
+  { text = ":······", x = 48.0, y = 147.1, style = "dim" },
+  { text = "Digital/Mute", x = 121.4, y = 147.1, style = "split" },
+  { text = "······:", x = 194.7, y = 147.1, style = "dim" },
+  { text = ":······", x = 48.0, y = 169.7, style = "dim" },
+  { text = "Analog/Mute", x = 79.4, y = 169.7, style = "split" },
+  { text = "······:", x = 110.9, y = 169.7, style = "dim" },
+]
+# encoder: rotation code; push: its push-switch button code. No encoder
+# means a local-only knob (the volume pot is not on the panel link).
+knobs = [
+  { x = 16.2, y = 32.4, r = 7.0, marker = "dot", label = "Main Volume", label_y = 43.1 },
+  { encoder = 9, push = 49, x = 16.2, y = 57.7, r = 7.0, marker = "none", label = "Level/Data", label_y = 68.1, sub = "Sound Browser", sub_style = "accent" },
+  { encoder = 1, push = 45, x = 122.4, y = 32.0, r = 6.5, marker = "none", label = "A", label_y = 43.1 },
+  { encoder = 2, push = 44, x = 147.6, y = 32.0, r = 6.5, marker = "none", label = "B", label_y = 43.1 },
+  { encoder = 3, push = 47, x = 172.9, y = 32.0, r = 6.5, marker = "none", label = "C", label_y = 43.1 },
+  { encoder = 4, push = 46, x = 198.0, y = 32.0, r = 6.5, marker = "none", label = "D", label_y = 43.1 },
+  { encoder = 5, push = 43, x = 122.4, y = 57.5, r = 6.5, marker = "none", label = "E", label_y = 68.1 },
+  { encoder = 6, push = 42, x = 147.6, y = 57.5, r = 6.5, marker = "none", label = "F", label_y = 68.1 },
+  { encoder = 7, push = 41, x = 173.2, y = 57.5, r = 6.5, marker = "none", label = "G", label_y = 68.1 },
+  { encoder = 8, push = 48, x = 198.2, y = 57.5, r = 6.5, marker = "none", label = "H", label_y = 68.1 },
+]
+# sub is the second-function label under the key, always in the accent colour (sub_style is read but not used).
+# icon: perform, settings, samples, tempo, keyboard, record, play, stop, up, down, left, right, unison, arp, noteedit, plus,
+# minus, headphones, sound (three dots), routing (the letters FX).
+keys = [
+  { code = 19, x = 122.1, y = 79.8, w = 11.0, h = 10.7, legend = "TRIG", sub = "Quantize", sub_y = 88.1 },
+  { code = 20, x = 141.0, y = 79.8, w = 11.0, h = 10.7, legend = "SYN", sub = "Machine", sub_y = 88.1 },
+  { code = 22, x = 159.9, y = 79.8, w = 11.0, h = 10.7, legend = "FLTR", sub = "Delay", sub_y = 88.1 },
+  { code = 23, x = 178.8, y = 79.8, w = 11.0, h = 10.7, legend = "AMP", sub = "Reverb", sub_y = 88.1 },
+  { code = 24, x = 197.8, y = 79.8, w = 11.0, h = 10.7, legend = "LFO", sub = "Mixer", sub_y = 88.1 },
+  { code = 17, x = 20.1, y = 90.3, w = 16.9, h = 9.9, legend = "FUNC", style = "func" },
+  { code = 35, x = 45.1, y = 90.3, w = 11.0, h = 10.4, icon = "sound", sub = "Sound", sub_y = 98.5 },
+  { code = 25, x = 60.9, y = 90.3, w = 11.0, h = 10.4, icon = "settings", sub = "Save Proj", sub_y = 98.5 },
+  { code = 26, x = 77.0, y = 90.3, w = 11.0, h = 10.4, icon = "routing", sub = "Routing", sub_y = 98.5 },
+  { code = 27, x = 93.0, y = 90.3, w = 11.0, h = 10.4, icon = "tempo", sub = "Tap Tempo", sub_y = 98.5 },
+  { code = 18, x = 20.1, y = 106.4, w = 16.9, h = 10.4, legend = "TRK", sub = "Keyboard", sub_y = 114.5 },
+  { code = 36, x = 48.0, y = 106.4, w = 16.9, h = 10.4, icon = "record", sub = "Copy", sub_y = 114.5 },
+  { code = 37, x = 69.2, y = 106.4, w = 16.9, h = 10.4, icon = "play", sub = "Clear", sub_y = 114.5 },
+  { code = 38, x = 90.0, y = 106.4, w = 16.9, h = 10.4, icon = "stop", sub = "Paste", sub_y = 114.5 },
+  { code = 39, x = 122.1, y = 98.3, w = 11.0, h = 10.4, legend = "YES", sub = "Save Ptn", sub_y = 106.5 },
+  { code = 28, x = 122.1, y = 114.3, w = 11.0, h = 10.4, legend = "NO", sub = "Reload Ptn", sub_y = 122.5 },
+  { code = 40, x = 153.9, y = 98.3, w = 11.0, h = 10.4, icon = "up", sub = "Rtrg/Oct+", sub_y = 106.5, sub_style = "plain" },
+  { code = 29, x = 137.7, y = 114.3, w = 11.0, h = 10.4, icon = "left", sub = "µTime-", sub_y = 122.5, sub_style = "plain" },
+  { code = 30, x = 153.9, y = 114.3, w = 11.0, h = 10.4, icon = "down", sub = "Rtrg/Oct-", sub_y = 122.5, sub_style = "plain" },
+  { code = 31, x = 169.9, y = 114.3, w = 11.0, h = 10.4, icon = "right", sub = "µTime+", sub_y = 122.5, sub_style = "plain" },
+  { code = 32, x = 194.8, y = 114.3, w = 16.9, h = 10.4, legend = "PAGE", sub = "Fill/Scale", sub_y = 122.5 },
+  { code = 34, x = 20.1, y = 135.8, w = 16.9, h = 10.4, legend = "PTN", sub = "Metronome", sub_y = 143.9 },
+  { code = 33, x = 20.1, y = 158.3, w = 16.9, h = 10.4, legend = "BANK", sub = "Mute Mode", sub_y = 166.4 },
+  { code = 1, x = 48.0, y = 135.7, w = 16.6, h = 16.4, legend = "1", style = "trig" },
+  { code = 2, x = 69.0, y = 135.7, w = 16.6, h = 16.4, legend = "2", style = "trig" },
+  { code = 3, x = 90.0, y = 135.7, w = 16.6, h = 16.4, legend = "3", style = "trig" },
+  { code = 4, x = 110.9, y = 135.7, w = 16.6, h = 16.4, legend = "4", style = "trig" },
+  { code = 5, x = 131.9, y = 135.7, w = 16.6, h = 16.4, legend = "5", style = "trig" },
+  { code = 6, x = 152.9, y = 135.7, w = 16.6, h = 16.4, legend = "6", style = "trig" },
+  { code = 7, x = 173.9, y = 135.7, w = 16.6, h = 16.4, legend = "7", style = "trig" },
+  { code = 8, x = 194.8, y = 135.7, w = 16.6, h = 16.4, legend = "8", style = "trig" },
+  { code = 9, x = 48.0, y = 158.2, w = 16.6, h = 16.4, legend = "9", style = "trig" },
+  { code = 10, x = 69.0, y = 158.2, w = 16.6, h = 16.4, legend = "10", style = "trig" },
+  { code = 11, x = 90.0, y = 158.2, w = 16.6, h = 16.4, legend = "11", style = "trig" },
+  { code = 12, x = 110.9, y = 158.2, w = 16.6, h = 16.4, legend = "12", style = "trig" },
+  { code = 13, x = 131.9, y = 158.2, w = 16.6, h = 16.4, legend = "13", sub = "M1/Retrig", sub_y = 169.8, style = "trig" },
+  { code = 14, x = 152.9, y = 158.2, w = 16.6, h = 16.4, legend = "14", sub = "M2/Velocity", sub_y = 169.8, style = "trig" },
+  { code = 15, x = 173.9, y = 158.2, w = 16.6, h = 16.4, legend = "15", sub = "M3/Mod A", sub_y = 169.8, style = "trig" },
+  { code = 16, x = 194.8, y = 158.2, w = 16.6, h = 16.4, legend = "16", sub = "M4/Mod B", sub_y = 169.8, style = "trig" },
+]

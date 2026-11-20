@@ -1,10 +1,12 @@
 import { expect } from 'vitest';
 import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
-import { CARD_SYMBOLS, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { word } from '@digi/regression/runtime/fx-live.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED, type Geometry, type Want } from '@digi/regression/runtime/synth.ts';
+import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
+import { stateName, statesFor } from '@digi/regression/runtime/load-states.ts';
 
 /** One module of a card in boot order: its file, the name it reports and the result the loader must give. */
 export interface Entry {
@@ -17,10 +19,10 @@ export const SYMBOLS = [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area', 'DKRT_TABLE_B
 export const popcount = (n: number) => n.toString(2).replace(/0/g, '').length;
 const resultOk = (got: number, want: Want) => (want === LOADED ? got === 0 || got === E_LOADING : got === want);
 
-/** Boot a card of ENTRIES (selected in order) and read what the runtime says. */
-export async function bootEntries(rig: CardRig, tag: string, entries: Entry[]) {
+/** Boot a card of ENTRIES (selected in order) and read what the runtime says. `files` are put on the card without being selected (a service file in `services/`). */
+export async function bootEntries(rig: CardRig, tag: string, entries: Entry[], files: { name: string; file: string }[] = []) {
   const rt = await rig.load(tag, {
-    modules: entries.map((e, i) => ({ name: `modules/m${i}.dkm`, file: e.file })),
+    modules: [...entries.map((e, i) => ({ name: `modules/m${i}.dkm`, file: e.file })), ...files],
     selection: entries.map((_, i) => `modules/m${i}.dkm`),
   });
   const info = await bootInfo(rt.session, rig.plan);
@@ -48,6 +50,13 @@ export async function expectBoot(
   expect(info.count, 'the boot saw every selected module').toBe(entries.length);
   entries.forEach((e, i) =>
     expect(resultOk(info.results[i]!, e.want), `${e.name}: result ${info.results[i]}, wanted ${e.want}`).toBe(true),
+  );
+  // the state follows the result: a loaded module is ACTIVE (or DSP_LOADING), a refused one FAILED (the loader's codes) or REFUSED (the plan's)
+  entries.forEach((e, i) =>
+    expect(
+      statesFor(e.want === LOADED ? null : e.want),
+      `${e.name}: state ${stateName(info.states[i]!)} for result ${info.results[i]}`,
+    ).toContain(stateName(info.states[i]!)),
   );
   const loaded = entries.filter((e) => e.want === LOADED).map((e) => e.name);
   expect(
@@ -94,4 +103,4 @@ export async function expectBoot(
 }
 
 /** Core adapters needed by loaded modules that import from them or take rows. */
-export const COUPLED_ROOTS = [...RT, 'core/input', 'core/dynfx', 'core/fxpages'];
+export const COUPLED_ROOTS = rootsOf('coupled');

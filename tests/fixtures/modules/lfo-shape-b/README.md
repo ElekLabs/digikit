@@ -1,0 +1,1 @@
+Second shape of the lfo tests: the code of `test/lfo-shape` with the name STEP and two levels, under another module id (so another `DK_KEY_SHAPE`). With both selected the lfo service gives them the wave numbers 7 and 8.

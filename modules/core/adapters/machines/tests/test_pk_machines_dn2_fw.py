@@ -27,6 +27,16 @@ SRC = (
     / "dn2"
     / "machines.s"
 )
+HOOKS = (
+    ROOT / "modules" / "core" / "services" / "machines" / "dks" / "src" / "hooks-dn2.s"
+)
+TAB = ROOT / "tests" / "fixtures" / "machines-info-dn2.s"
+# the stock tail the port file makes, by hook: what the type maps continue in
+TAILS = {
+    "typemap0": "dk_tail_02e8a3f1",
+    "typemap1": "dk_tail_763365db",
+    "typemap2": "dk_tail_42d651c5",
+}
 ROWSIZE = 64
 FIRST = 5
 ROWS = 0x47EC0000
@@ -67,13 +77,17 @@ PAGES = [
 STUBS = [
     "_mf_t_dispatch",
     "_mf_t_list",
-    "_mf_t_group",
-    "_mf_t_typemap0",
-    "_mf_t_typemap1",
-    "_mf_t_typemap2",
-    ("_mf_ft", 6),
-    ("_mf_rd", 8),
-    ("_mf_ow", 6),
+    "mf_x_g_next",
+    "mf_x_g_taken",
+    "dk_tail_02e8a3f1",
+    "dk_tail_763365db",
+    "dk_tail_42d651c5",
+    "mf_ret_tm0",
+    "mf_ret_tm1",
+    "mf_ret_tm2",
+    "mf_x_ft",
+    "mf_x_rd",
+    "mf_x_ow",
 ]
 
 pytestmark = [
@@ -120,12 +134,13 @@ def unit():
         "_mf_rows": ROWS,
         "_mf_list_stock": STOCK_LIST,
         "_mf_pgrows": PGROWS,
+        # symbols of the info table of the image (not read by these tests)
         "_mf_pgn": 0,
     }
-    sym.update({f"_mf_rc{i}": a for i, a in enumerate(RC)})
+    sym.update({f"mf_rc{i}": a for i, a in enumerate(RC)})
     return pk_cfunit.CfUnit(
         SYX,
-        [SRC, ROOT / "tests/fixtures/native-page-absent.s"],
+        [SRC, HOOKS, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
         STUBS,
         sym,
         [
@@ -167,8 +182,10 @@ def test_group_sends_added_types_to_the_group_one_path(unit):
         mem, [{"routine": "mf_group", "d": {0: t, 1: 5}} for t in range(0, 12)]
     )
     for t, r in enumerate(res):
-        assert r.stub == "_mf_t_group"
-        assert r.d[0] == (0 if FIRST <= t < FIRST + COUNT else t)
+        d0 = 0 if FIRST <= t < FIRST + COUNT else t
+        # the stock test `moveq #3,D1; cmp.l D0,D1; bge.b T`: taken for the types 0 to 3 and for every added type
+        assert r.stub == ("mf_x_g_taken" if d0 <= 3 else "mf_x_g_next")
+        assert r.d[0] == d0
 
 
 @pytest.mark.parametrize(
@@ -193,7 +210,7 @@ def test_type_maps_replace_the_argument_by_clone_of(unit, name, off):
         )
     for t, r in zip(ts, unit.run_cases(mem, cases), strict=True):
         want = ENTRIES[t - FIRST][2] if FIRST <= t < FIRST + COUNT else t
-        assert r.stub == "_mf_t_" + name[3:]
+        assert r.stub == TAILS[name[3:]]
         assert r.stack[off // 4] == want
         if (
             name == "mf_typemap2"
@@ -233,9 +250,9 @@ def test_frame_type_sends_clone_unless_own_dsp(unit):
             want = t if own else clone
         else:
             want = t if t < 128 else t - 256
-        assert r.stub == "_mf_ft"
+        assert r.stub == "mf_x_ft"
         assert r.d[0] & 0xFFFF == want & 0xFFFF
-        assert r.d[1:3] == [5, 6] and r.a[1] == 7
+        assert r.d[1:3] == [5, 6]  # a1 is the stub scratch: the routine ends through it
 
 
 def test_type_reader_maps_except_for_the_identity_callers(unit):
@@ -261,7 +278,7 @@ def test_type_reader_maps_except_for_the_identity_callers(unit):
         mem = tables()
         mem[OBJ + 0xDE] = mem_t
         r = unit.run_cases(mem, [case])[0]
-        assert r.stub == "_mf_rd"
+        assert r.stub == "mf_x_rd"
         assert r.d[0] == w, (mem_t, case["stack"], hex(r.d[0]), hex(w))
         assert r.a[1] == 0x55 and r.stack[:2] == [0x99, case["stack"][1]]
 
@@ -282,7 +299,7 @@ def test_owner_test_maps_d3(unit):
             ],
         )[0]
         want = ENTRIES[t - FIRST][2] if FIRST <= t < FIRST + COUNT else t
-        assert r.stub == "_mf_ow" and r.d[3] == want
+        assert r.stub == "mf_x_ow" and r.d[3] == want
         assert r.d[0] == 11 and r.a[1] == 3
         assert r.stack[0] == 0x4242 and r.stack[1:3] == [1, 2]  # d2 pushed
 
@@ -315,12 +332,13 @@ def unit_pg():
         "_mf_rows": ROWS,
         "_mf_list_stock": STOCK_LIST,
         "_mf_pgrows": PGROWS,
+        # symbols of the info table of the image (not read by these tests)
         "_mf_pgn": len(PAGES),
     }
-    sym.update({f"_mf_rc{i}": a for i, a in enumerate(RC)})
+    sym.update({f"mf_rc{i}": a for i, a in enumerate(RC)})
     return pk_cfunit.CfUnit(
         SYX,
-        [SRC, ROOT / "tests/fixtures/native-page-absent.s"],
+        [SRC, HOOKS, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
         STUBS,
         sym,
         ["mf_typemap0", "mf_typemap1", "mf_typemap2", "mf_reader"],
@@ -337,10 +355,10 @@ def test_page_count(unit_pg):
     for t, r in zip(ts, unit_pg.run_cases(mem, cases), strict=True):
         own = {FIRST: 2, FIRST + 1: 1}.get(t)
         if own:
-            assert r.stub == "rts" and r.d[0] == own
+            assert r.stub == "mf_ret_tm0" and r.d[0] == own
         else:  # no own pages: the clone mapping and the stock code
             want = ENTRIES[t - FIRST][2] if FIRST <= t < FIRST + COUNT else t
-            assert r.stub == "_mf_t_typemap0" and r.stack[1] == want
+            assert r.stub == TAILS["typemap0"] and r.stack[1] == want
 
 
 def test_page_descriptor(unit_pg):
@@ -366,9 +384,13 @@ def test_page_descriptor(unit_pg):
     res = unit_pg.run_cases(mem, cases)
     # in range: the descriptor is the row, returned by an rts with d2 restored from the stack
     for r, k in zip(res[:3], (0, 1, 2), strict=True):
-        assert r.stub == "rts" and r.d[0] == PGROWS + k * PGSIZE and r.d[2] == 0xD2D2
+        assert (
+            r.stub == "mf_ret_tm1"
+            and r.d[0] == PGROWS + k * PGSIZE
+            and r.d[2] == 0xD2D2
+        )
     # out of range (and not own): the stock code answers (MIDI's row for a type above 4, the clone's page otherwise)
-    assert [r.stub for r in res[3:]] == ["_mf_t_typemap1"] * 4
+    assert [r.stub for r in res[3:]] == [TAILS["typemap1"]] * 4
     assert (
         res[3].stack[2] == FIRST and res[4].stack[2] == FIRST
     )  # the own type stays above 4
@@ -437,15 +459,18 @@ def test_slot_to_code(unit_pg):
     for r, w, (t, slot) in zip(res[:9], want, probes, strict=True):
         if w is None:  # Mid Clone has no page: clone_of mapped, a0 kept
             assert (
-                r.stub == "_mf_t_typemap2"
+                r.stub == TAILS["typemap2"]
                 and r.stack[3] == ENTRIES[2][2]
                 and r.a[0] == slot
             )
         else:
-            assert r.stub == "rts" and r.d[0] == w and r.d[2] == 0xD2D2, (t, slot)
+            assert r.stub == "mf_ret_tm2" and r.d[0] == w and r.d[2] == 0xD2D2, (
+                t,
+                slot,
+            )
     for r, slot in zip(res[9:], (0x10, 0x42, 65), strict=True):
         assert (
-            r.stub == "_mf_t_typemap2"
+            r.stub == TAILS["typemap2"]
             and r.a[0] == slot
             and r.stack[3] == FIRST
             and r.d[1] == 0x64
@@ -474,4 +499,4 @@ def test_reader_gives_pages_machines_their_own_type(unit_pg):
                 }
             ],
         )[0]
-        assert r.stub == "_mf_rd" and r.d[0] == want and r.a[1] == 0x55
+        assert r.stub == "mf_x_rd" and r.d[0] == want and r.a[1] == 0x55

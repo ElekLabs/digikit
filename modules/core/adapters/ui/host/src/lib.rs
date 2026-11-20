@@ -1,4 +1,4 @@
-//! Host fake of `<dk/ui.h>`. The `dk_ui_*` functions below keep a model of menus, the view stack,
+//! Host fake of `<dk/platform/ui.h>` and the ui calls of `<dk/gen/imports.h>`. The `dk_ui_*` functions below keep a model of menus, the view stack,
 //! the open dialog and the toasts. `driver` acts like the user on that model.
 //! The model is per thread; `session()` serialises tests, because the C code under test has statics.
 use std::cell::RefCell;
@@ -9,6 +9,7 @@ use std::sync::{Mutex, MutexGuard};
 pub mod driver;
 
 pub const DK_UI_ROW: usize = 24;
+pub const DK_UI_LIST_TEXT: usize = 80;
 pub const DK_UI_TOAST: usize = 32;
 pub const DK_UI_TEXT_PAGE: u32 = 1;
 pub const DK_UI_LIST: u32 = 2;
@@ -42,7 +43,7 @@ pub struct MenuDesc {
     pub title: *const c_char,
     pub flags: u32,
     pub fill: Option<FillFn>,
-    pub ctx: Ctx,
+    pub arg: Ctx,
     pub empty: *const c_char,
     pub panel: Option<extern "C" fn(*mut DkUiMenu, c_int, Ctx)>,
     pub check: Option<extern "C" fn(Ctx, c_int, c_int)>,
@@ -200,7 +201,7 @@ pub(crate) fn refill(id: usize) {
     let Some(d) = desc_of(id) else { return };
     with(|s| s.menus[id].rows.clear());
     if let Some(f) = d.fill {
-        f(handle(id), d.ctx);
+        f(handle(id), d.arg);
     }
 }
 
@@ -225,22 +226,45 @@ pub(crate) fn open_id(id: usize) -> c_int {
 
 fn add(m: *mut DkUiMenu, text: *const c_char, kind: Kind, what: &str) {
     let Some(id) = id_of(m) else { return };
-    let text = row_text(text);
+    let list_text = matches!(kind, Kind::Text)
+        && desc_of(id).is_some_and(|d| d.flags & (DK_UI_LIST | DK_UI_WIDE) != 0);
+    let text = text_cut(
+        text,
+        if list_text {
+            DK_UI_LIST_TEXT
+        } else {
+            DK_UI_ROW
+        } - 1,
+    );
     with(|s| {
         s.log(format!("{what} {text}"));
         s.menus[id].rows.push(Row { text, kind });
     });
 }
 
+/// True when the capability is on (the model only: the real service has no such call).
+pub fn cap_on(cap: c_int) -> bool {
+    with(|s| s.has(cap))
+}
+
+/// The handle of `dk_ui_open`: only a token, as in core/ui.
+static UI_TOKEN: u8 = 0;
+
+/// # Safety
+/// `out` is null or points at a writable pointer.
 #[no_mangle]
-pub extern "C" fn dk_ui_has(cap: c_int) -> c_int {
-    with(|s| s.has(cap)) as c_int
+pub unsafe extern "C" fn dk_ui_open(ctx: *mut c_void, out: *mut *mut c_void) -> i32 {
+    if ctx.is_null() || out.is_null() {
+        return -48;
+    }
+    unsafe { *out = &UI_TOKEN as *const u8 as *mut c_void };
+    0
 }
 
 /// # Safety
 /// `d` is null or points at a valid descriptor.
 #[no_mangle]
-pub unsafe extern "C" fn dk_ui_menu_new(d: *const MenuDesc) -> *mut DkUiMenu {
+pub unsafe extern "C" fn dk_ui_menu_new(_ui: *mut c_void, d: *const MenuDesc) -> *mut DkUiMenu {
     if d.is_null() {
         return std::ptr::null_mut();
     }
@@ -264,14 +288,14 @@ pub unsafe extern "C" fn dk_ui_menu_new(d: *const MenuDesc) -> *mut DkUiMenu {
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_open(m: *mut DkUiMenu) -> c_int {
+pub extern "C" fn dk_ui_menu_open(m: *mut DkUiMenu) -> c_int {
     let Some(id) = id_of(m) else { return -1 };
     with(|s| s.log(format!("open {id}")));
     open_id(id)
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_close(m: *mut DkUiMenu) {
+pub extern "C" fn dk_ui_menu_close(m: *mut DkUiMenu) {
     if let Some(id) = id_of(m) {
         with(|s| {
             s.log(format!("close {id}"));
@@ -281,7 +305,7 @@ pub extern "C" fn dk_ui_close(m: *mut DkUiMenu) {
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_select(m: *mut DkUiMenu, row: c_int) {
+pub extern "C" fn dk_ui_menu_select(m: *mut DkUiMenu, row: c_int) {
     let Some(id) = id_of(m) else { return };
     if row >= 0 {
         with(|s| {
@@ -292,12 +316,12 @@ pub extern "C" fn dk_ui_select(m: *mut DkUiMenu, row: c_int) {
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_is_open(m: *const DkUiMenu) -> c_int {
+pub extern "C" fn dk_ui_menu_is_open(m: *const DkUiMenu) -> c_int {
     id_of(m).is_some_and(|id| with(|s| s.stack.contains(&id))) as c_int
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_refresh(m: *mut DkUiMenu) {
+pub extern "C" fn dk_ui_menu_refresh(m: *mut DkUiMenu) {
     let Some(id) = id_of(m) else { return };
     with(|s| s.log(format!("refresh {id}")));
     refill(id);
@@ -308,7 +332,7 @@ pub extern "C" fn dk_ui_refresh(m: *mut DkUiMenu) {
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_action(
+pub extern "C" fn dk_ui_menu_add_action(
     m: *mut DkUiMenu,
     text: *const c_char,
     f: Option<ActFn>,
@@ -319,32 +343,36 @@ pub extern "C" fn dk_ui_action(
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_submenu(m: *mut DkUiMenu, text: *const c_char, sub: *mut DkUiMenu) {
+pub extern "C" fn dk_ui_menu_add_submenu(
+    m: *mut DkUiMenu,
+    text: *const c_char,
+    sub: *mut DkUiMenu,
+) {
     if let Some(sid) = id_of(sub) {
         add(m, text, Kind::Submenu(sid), "submenu");
     }
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_text(m: *mut DkUiMenu, text: *const c_char) {
+pub extern "C" fn dk_ui_menu_add_text(m: *mut DkUiMenu, text: *const c_char) {
     add(m, text, Kind::Text, "text");
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_toggle(
+pub extern "C" fn dk_ui_menu_add_toggle(
     m: *mut DkUiMenu,
     text: *const c_char,
     value: *mut c_int,
     f: Option<ActFn>,
     ctx: Ctx,
 ) {
-    if dk_ui_has(CAP_TOGGLE) != 0 {
+    if cap_on(CAP_TOGGLE) {
         add(m, text, Kind::Toggle { value, f, ctx }, "toggle");
     }
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_value(
+pub extern "C" fn dk_ui_menu_add_value(
     m: *mut DkUiMenu,
     text: *const c_char,
     value: *mut c_int,
@@ -353,7 +381,7 @@ pub extern "C" fn dk_ui_value(
     f: Option<ActFn>,
     ctx: Ctx,
 ) {
-    if dk_ui_has(CAP_VALUE) != 0 {
+    if cap_on(CAP_VALUE) {
         add(
             m,
             text,
@@ -370,7 +398,7 @@ pub extern "C" fn dk_ui_value(
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_check(list: *mut DkUiMenu, row: c_int, on: c_int) {
+pub extern "C" fn dk_ui_menu_check(list: *mut DkUiMenu, row: c_int, on: c_int) {
     let Some(id) = id_of(list) else { return };
     if row < 0 {
         return;
@@ -386,7 +414,7 @@ pub extern "C" fn dk_ui_check(list: *mut DkUiMenu, row: c_int, on: c_int) {
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_checked(list: *const DkUiMenu, row: c_int) -> c_int {
+pub extern "C" fn dk_ui_menu_checked(list: *const DkUiMenu, row: c_int) -> c_int {
     let Some(id) = id_of(list) else { return 0 };
     with(|s| {
         row >= 0
@@ -400,6 +428,7 @@ pub extern "C" fn dk_ui_checked(list: *const DkUiMenu, row: c_int) -> c_int {
 
 #[no_mangle]
 pub extern "C" fn dk_ui_confirm(
+    _ui: *mut c_void,
     title: *const c_char,
     text: *const c_char,
     done: Option<extern "C" fn(Ctx, c_int)>,
@@ -427,6 +456,7 @@ pub extern "C" fn dk_ui_confirm(
 /// `items` points at `n` valid C strings.
 #[no_mangle]
 pub unsafe extern "C" fn dk_ui_choice(
+    _ui: *mut c_void,
     title: *const c_char,
     items: *const *const c_char,
     n: c_int,
@@ -455,7 +485,7 @@ pub unsafe extern "C" fn dk_ui_choice(
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_toast(text: *const c_char) -> c_int {
+pub extern "C" fn dk_ui_toast(_ui: *mut c_void, text: *const c_char) -> c_int {
     with(|s| {
         if !s.has(CAP_TOAST) {
             return -1;
@@ -468,7 +498,12 @@ pub extern "C" fn dk_ui_toast(text: *const c_char) -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn dk_ui_tick(f: Option<TickFn>, ctx: Ctx, period_ms: u32) -> c_int {
+pub extern "C" fn dk_ui_tick(
+    _ui: *mut c_void,
+    f: Option<TickFn>,
+    ctx: Ctx,
+    period_ms: u32,
+) -> c_int {
     with(|s| {
         let Some(f) = f else { return -1 };
         if !s.has(CAP_TICK) {

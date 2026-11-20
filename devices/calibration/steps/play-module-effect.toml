@@ -1,0 +1,25 @@
+schema = "dk.steps/1"
+name = "play-module-effect"
+description = "Put a run-time effect of a loaded module in the chain, open the sends and hold a note. SETUP sets machine and filter types, not effects: a runner skips the case."
+
+[args]
+track = 1
+key = 60
+velocity = 100
+send = 100
+
+[[step]]
+action = "setup"
+effect = "{effect}"
+
+[[step]]
+action = "midi.cc"
+track = "{track}"
+param = "send_delay"
+value = "{send}"
+
+[[step]]
+action = "midi.note"
+track = "{track}"
+key = "{key}"
+velocity = "{velocity}"

@@ -55,6 +55,27 @@ dynreg_list_hook:
     move.l  %d0,4(%a2)
     jmp     _dr_t_copy + 6
 
+    .include "dk_fw_machine.inc"
+
+| dynreg_view_hook: the entry of the function that builds the machine selection view's item list from the list getter
+| (`cf.machine.fn.view.build(view)`, called once by the view's constructor at boot). The list is cached in the view, so the
+| runtime's reload rebuilds it after it changed the rows (the machines service, `on_loaded`): the hook only remembers the view.
+| The macro keeps every register; the displaced instructions run in the tail.
+    .globl dynreg_view_hook
+dynreg_view_hook:
+    dk_fw_machine_view_build_hook dynreg_view_store, dynreg_view_next
+
+| C: void dynreg_view_store(u32 view).
+dynreg_view_store:
+    move.l  4(%sp),%d0
+    move.l  %d0,dynreg_view
+    rts
+
+    .bss
+    .balign 16                          | a cache line of its own: no code shares the line of a variable the CPU writes
+    .globl dynreg_view
+dynreg_view: .space 16
+
     .section .rodata
     .balign 4
     .globl dynreg_empty
@@ -65,7 +86,7 @@ dynreg_empty:
     .globl dynreg_info
 dynreg_info:
     .long   0x44594e52                  |  0 'DYNR'
-    .long   2                           |  4 version (2: page, unload words from 200)
+    .long   3                           |  4 version (3: builder profile from 260; 2: page, unload from 200)
     .long   DEVICE_ID                   |  8 device ([digikit] id: 2 = dn2)
     .long   _dr_rows                    | 12 machines.rows
     .long   _dr_row_size                | 16 row size
@@ -101,8 +122,8 @@ dynreg_info:
     .long   8                           | 180 knobs per page
     .long   25                          | 184 sound-array slot of knob 0
     .long   0xd5                        | 188 the template of a free reserved parameter row (A Env Decay)
-    .long   0                           | 192 (was the machine-view variable: archived with hot reload, docs/plans/digikit-hot-reload.md)
-    .long   0                           | 196 (was the view builder)
+    .long   dynreg_view                 | 192 (word 48) address of the variable that holds the machine selection view (0 until it exists)
+    .long   _dr_f_build                 | 196 (word 49) the function that builds that view's items: build(view)
     .long   _dr_pg_rows                 | 200 page rows (pages.rows)
     .long   _dr_pg_row_size             | 204 page row size
     .long   _dr_pg_first                | 208 pages.first
@@ -118,3 +139,16 @@ dynreg_info:
     .long   0                           | 248 (was kit_of)
     .long   0                           | 252 (was track_type)
     .long   0                           | 256 (was the track count)
+    | 260: the builder profile (core/runtime commit of a module that declares through builder calls): the device facts the packer
+    | took from the device file's [modules] and [adapter.machine] before builders (clone_of, level default, knob positions of
+    | a machine's words, stock rows by glyph). Generated from devices/*.toml (`patchkit gen`, build/gen/device-{dev}.inc).
+    .long   PROFILE_CLONE_OF   | 260 clone_of: the machine type every run-time machine clones
+    .long   PROFILE_LEVEL      | 264 level code a machine or page carries
+    .long   PROFILE_OWN_DSP    | 268 a machine may render with its own DSP routine
+    .long   PROFILE_TUNE_CODE  | 272 stock tune code on a machine-row device (0: none)
+    .long   PROFILE_TUNE_SLOT  | 276 knob position of the tune code
+    .long   PROFILE_LEVEL_CODE | 280 stock level code on a machine-row device (0: none)
+    .long   PROFILE_LEVEL_KNOB | 284 knob position of the level code
+    .long   PROFILE_SLOT_COUNT | 288 knob positions for words 0.. (count)
+    .long   PROFILE_SLOT_0, PROFILE_SLOT_1, PROFILE_SLOT_2, PROFILE_SLOT_3, PROFILE_SLOT_4, PROFILE_SLOT_5, PROFILE_SLOT_6, PROFILE_SLOT_7   | 292 .. 320 positions
+    .long   PROFILE_TPL_ENCODER, PROFILE_TPL_FADER, PROFILE_TPL_PAN, PROFILE_TPL_ONOFF, PROFILE_TPL_TUNE, PROFILE_TPL_PLAY   | 324 .. 344 stock rows: encoder, fader, pan, onoff, tune, play

@@ -26,7 +26,7 @@ yet, so nothing here is **[V]**), **[O]** open. Pieces: `modules/core/adapters/f
 - `fxp_keylist` replaces the load of the FX key's list: while `fxp_send_count` is not 0 the count is 2 and the list is {12, 36} (rodata), else the stock list and count. The runtime sets the cell when it registers a send effect, before the main screen view is built (like the F4 list),
   so a changed route shows after a restart.
 - `fxp_sound` counts the sound loads (`fxp_nsound`) and gives the loader's registers and result back untouched.
-- `params.fs0` and `fs1` (`[[entry]]`, Digitakt II only): the two knob rows, written by the runtime. `fxpages_info` is version 2: words 39 to 48 are the send cells (`LIMIT_SEND_SLOTS`), the send row, the count cell, the first send parameter code, the Sound indices, the send template, `sound_off`, `sound_stride`
+- `params.fs0` and `fs1` (`[[entry]]`, Digitakt II only): the two knob rows, written by the runtime. `fxpages_info` is version 4 (no firmware address: `patchkit bind` resolves those for the service file): words 39 to 48 are the send cells (`LIMIT_SEND_SLOTS`), the send row, the count cell, the first send parameter code, the Sound indices, the send template, `sound_off`, `sound_stride`
   and the load counter. A version 1 object (the Digitone II's) has none: the runtime sees no cell and routes nothing.
 
 Device facts (`patchkit gen`, refused when inconsistent): `[limits] send_slots` (DT2 2, DN2 1 with no send page, so the image reports 0; at most `[limits.max] send_slots = 2` of `sdk/sdk.toml`), `[fx] track_page 12`, `sound_off 0x34`, `sound_stride 0x450`, `send_template 0x44`, `send_indices [69, 70]`.

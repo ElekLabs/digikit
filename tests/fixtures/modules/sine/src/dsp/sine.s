@@ -1,4 +1,4 @@
-// test/sine: a pitched sine machine of the SDK contract (<dk/machine.h>), one body for both devices. It is the template of a machine module:
+// test/sine: a pitched sine machine of the SDK contract (<dk/machine/machine.h>), one body for both devices. It is the template of a machine module:
 // `note_on` has nothing to do, `render` writes one block and returns DK_OK; after 96,000 samples (2 s) it returns DK_DONE.
 // State per voice (8 bytes, cleared at note-on): word 0 the phase (float, 0 .. 1), word 1 the sample count.
 // pitch (semitones << 8, the tune folded in): f = 440 * 2^((n - 69) / 12). Level: velocity / (127 << 8) * parameter 0 / 0x7f00 * 0.5.
@@ -88,7 +88,7 @@ _sn_note_on:
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
-// dk_machine_desc: magic, contract, n_params, voices, state_bytes, state_clear_bytes, max_cycles_block, max_cycles_note_on, max_call_depth, stack_bytes.
+// dk_machine_desc: magic, contract, n_params, voices, state_bytes, state_clear_bytes, max_call_depth, stack_bytes.
 .GLOBAL _sn_desc;
 .VAR _sn_desc = DK_MAGIC;
 .VAR _sn_desc1 = DK_MACHINE_V1;
@@ -96,7 +96,5 @@ _sn_note_on:
 .VAR _sn_desc3 = DK_MAX_VOICES;
 .VAR _sn_desc4 = 8;
 .VAR _sn_desc5 = 8;
-.VAR _sn_desc6 = 1600;
-.VAR _sn_desc7 = 1700;
-.VAR _sn_desc8 = 2;
-.VAR _sn_desc9 = 0;
+.VAR _sn_desc6 = 2;
+.VAR _sn_desc7 = 0;

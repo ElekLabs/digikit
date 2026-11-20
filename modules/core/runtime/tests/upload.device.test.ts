@@ -14,10 +14,10 @@ import {
 } from '@digi/dk-session';
 import { Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { blob, listing, pokeWord, sha, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
+import { blob, currentRecord, listing, pokeWord, sha, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { options, word } from '@digi/regression/runtime/fx-live.ts';
-import { tap } from '@digi/regression/runtime/fx-session.ts';
+import { options, word, REDRAW } from '@digi/regression/runtime/fx-live.ts';
+import { wordBase } from '@digi/regression/runtime/memory.ts';
 import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
@@ -104,6 +104,9 @@ async function readChecks(rig: CardRig, file: string, data: Buffer): Promise<voi
 
 async function ops(rig: CardRig, quick: boolean): Promise<void> {
   const dk = await rig.pausedBoot(await rig.card({ name: 'ops' }));
+  // The boot counts itself in the selection record (this card has none): the record read here is the boot counter's own (seq 1, counter 1, or seq 2 and
+  // counter 0 when the stable period has already cleared it). The uploads below must leave it alone.
+  const atBoot = currentRecord(await rig.records());
   await rig.applyCap();
   const files: Files = {};
   const info = await dk.info();
@@ -137,11 +140,14 @@ async function ops(rig: CardRig, quick: boolean): Promise<void> {
     await opsFull(rig, files);
     await roundtrip(rig, files);
   }
-  const written = await rig.writes('ops-final');
+  // The uploads never write a selection record: after them the current record has the same paths, flags and (empty) selection as after the boot, and its
+  // sequence number advanced only by the stable-period clear (seq + 1 with the counter back to 0), or not at all.
+  const atEnd = currentRecord(await rig.records());
+  const cleared = atBoot?.counter === 1 && atEnd?.counter === 0 && atEnd.seq === atBoot.seq + 1;
   check(
-    'the upload wrote no selection sector',
-    !written.has(rig.store.selA) && !written.has(rig.store.selB),
-    [...written].map((s) => s.toString(16)).join(' '),
+    'the uploads left the selection record alone (same selection and flags; seq moved only by the counter clear)',
+    atBoot !== null && atEnd !== null && JSON.stringify([atEnd.paths, atEnd.flags]) === JSON.stringify([atBoot.paths, atBoot.flags]) && (atEnd.seq === atBoot.seq || cleared),
+    JSON.stringify([atBoot, atEnd]),
   );
 }
 
@@ -422,6 +428,45 @@ async function folders(rig: CardRig): Promise<void> {
   await dk.delete('tmp/x');
   await verify('DELETE of a folder entry', []);
 
+  // RENAME: a file moves with its sectors and its hash (no data is copied), the folder it leaves stays, and an empty folder renames
+  check('INFO: capability RENAME', hasCap(await dk.info(), 'RENAME'));
+  const move = async (from: string, to: string) => {
+    await dk.rename(from, to);
+    files[to] = files[from]!;
+    delete files[from];
+  };
+  await move('holes/small.bin', 'shifted/small.bin');
+  rows = await verify('RENAME into a new folder (holes keeps f0 and f2: no entry)', []);
+  check(
+    'RENAME keeps the file sectors: the moved file starts where it was',
+    rows['shifted/small.bin'] === small,
+    `${rows['shifted/small.bin']} vs ${small}`,
+  );
+  await move('holes/f0.bin', 'holes/F0 renamed.bin');
+  await verify('RENAME in the same folder', []);
+  await move('holes/f2.bin', 'shifted/f2.bin');
+  await move('holes/F0 renamed.bin', 'shifted/f0.bin');
+  await verify('the folder the last file left stays, as a folder entry', ['holes']);
+  for (const [from, to, want] of [
+    ['shifted/nope', 'shifted/x', -59],
+    ['shifted/f0.bin', 'shifted/f2.bin', -51],
+    ['shifted/f0.bin', 'shifted', -51],
+    ['shifted/f0.bin', 'shifted/f0.bin/x', -51],
+    ['holes', 'holes/in', -51],
+    ['shifted', 'elsewhere', -59],
+    ['shifted/f0.bin', 'a//b', -51],
+  ] as const) {
+    const st = await status(GCMD.RENAME, concat(cstr(from), cstr(to)));
+    check(`RENAME ${JSON.stringify(from)} -> ${JSON.stringify(to)}: refused (${want})`, st === want, String(st));
+  }
+  const oneArg = await status(GCMD.RENAME, cstr('shifted/f0.bin'));
+  check('RENAME with no second path: E_MSG or E_PATH', oneArg === -50 || oneArg === -51, String(oneArg));
+  await verify('refused renames change nothing', ['holes']);
+  await dk.rename('holes', 'empty');
+  await verify('RENAME of an empty folder', ['empty']);
+  await dk.delete('empty');
+  await verify('DELETE of the renamed folder', []);
+
   // LIST paging: many entries, several replies
   for (let i = 0; i < 40; i++) {
     await put(dk, files, `many/s${String(i).padStart(2, '0')}.wav`, blob(1 + i, 100 + i));
@@ -513,7 +558,7 @@ uploadTests(
     // the 4-byte address literal of the code anchor (not word aligned: read as bytes)
     const anchor = portFile(device, FIRMWARE[device]).anchor?.find((a) => a.name === 'cf.midi.site.tx_inflight_lit');
     if (anchor?.addr === undefined) throw new Error('no anchor cf.midi.site.tx_inflight_lit in the port file');
-    const at = anchor.addr & ~3;
+    const at = wordBase(anchor.addr);
     const literal = Buffer.alloc(8);
     literal.writeUInt32BE(await word(session, at), 0);
     literal.writeUInt32BE(await word(session, at + 4), 4);
@@ -604,6 +649,6 @@ uploadTests('upload-screenshot: the MidiRpc Screenshot equals the frame capture'
     );
   };
   await grab('main');
-  await tap(session, 'SETTINGS', 600);
+  await rig.runtime.ui.tap('SETTINGS', { until: { ms: 600, why: REDRAW } });
   await grab('after-settings-key');
 });

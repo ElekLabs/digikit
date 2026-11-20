@@ -4,7 +4,7 @@
     uv run python -m tools.device.dkupload --emu info                       # the running emulator (out/native/run/current.json)
     uv run python -m tools.device.dkupload --emu ls [PREFIX]               # the store's entries (a folder with nothing in it: size 0)
     uv run python -m tools.device.dkupload --emu mkdir samples/drums
-    uv run python -m tools.device.dkupload --emu modules                   # the loaded modules: ranges, contracts, assigned types, guard faults
+    uv run python -m tools.device.dkupload --emu modules                   # the loaded modules: ranges, needed runtime, assigned types, guard faults
     uv run python -m tools.device.dkupload --emu put build/m.dkm modules/m.dkm
     uv run python -m tools.device.dkupload --emu rm modules/m.dkm
     uv run python -m tools.device.dkupload --emu clear
@@ -16,6 +16,7 @@
     uv run python -m tools.device.dkupload --emu remote state              # digikit/remote (docs/plans/remote-control.md): the module state
     uv run python -m tools.device.dkupload --emu remote key 10             # press and release a key (the device file's panel code); --hold S keeps it down
     uv run python -m tools.device.dkupload --emu remote turn 1 -5          # turn encoder 1 by -5 detents
+    uv run --with python-rtmidi python -m tools.device.dkupload --port Digitone cmd 0x2c   # a module command: number, hex body ("01 02"); prints the reply
 
 `put FILE [PATH]` streams FILE (read from disk in chunks, so a large sample is not held in memory) to PATH (default: `modules/<file name>`) in chunks of at most 32 KiB, two requests in flight, and
 checks the file's hash on the device (END reads the staged file back from the card). `--chunk` and `--depth` set the chunk size and the
@@ -53,6 +54,7 @@ from tools.device.dkproto import (
     CMD_MKDIR,
     CMD_MODULES,
     CMD_READ,
+    CMD_RENAME,
     CMD_RESTART,
     CMD_SELECT,
     CMD_SETTINGS,
@@ -398,6 +400,8 @@ class Uploader:
         proto, runtime = struct.unpack_from(">HH", b, 0)
         end = b.index(0, 4)
         port = b[4:end].decode()
+        # the runtime writes the id in a 4-byte field: a name of fewer than 3 characters is followed by more NULs
+        end += max(0, 3 - len(port))
         free, max_chunk, flags = struct.unpack_from(">IIB", b, end + 1)
         # runtime 3 appends two words for the log range of the old runtime; the runtime now sends zeros (the LOG command of the debug module has the range)
         oldest, newest = (
@@ -451,8 +455,8 @@ class Uploader:
 
     def modules(self) -> dict[str, Any]:
         """MODULES (runtime 0.2.0, capability MODULES): the arena and DSP-area figures and the loaded modules, every page. Returns
-        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is `{index, name, version, contracts
-        ((major, minor) of api, machine, fx, service), cf_base, cf_size, dsp_off, dsp_len, rows (voice-row mask), types (assigned machine
+        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is `{index, name, version, needs
+        (the runtime version it needs, packed major << 16 | minor << 8 | patch), cf_base, cf_size, dsp_off, dsp_len, rows (voice-row mask), types (assigned machine
         types), faults (the guard's count for those types), guard_off (the guard switched one of them off)}`."""
         out: dict[str, Any] = {"modules": []}
         start = 0
@@ -472,7 +476,7 @@ class Uploader:
                 idx = b[at]
                 name = b[at + 1 : at + 33].split(b"\0")[0].decode()
                 version = struct.unpack_from(">I", b, at + 33)[0]
-                cts = [(b[at + 37 + 2 * k], b[at + 38 + 2 * k]) for k in range(4)]
+                needs = struct.unpack_from(">I", b, at + 37)[0]
                 cf_base, cf_size, dsp_off, dsp_len, rows = struct.unpack_from(
                     ">IIIII", b, at + 45
                 )
@@ -485,7 +489,7 @@ class Uploader:
                         "index": idx,
                         "name": name,
                         "version": version,
-                        "contracts": cts,
+                        "needs": needs,
                         "cf_base": cf_base,
                         "cf_size": cf_size,
                         "dsp_off": dsp_off,
@@ -569,6 +573,66 @@ class Uploader:
     def restart(self) -> None:
         """RESTART (runtime 4): the reply comes first, then the device soft-resets (as APPLY & RESTART)."""
         self._ok(CMD_RESTART, "restart")
+
+    def reload(self, path: str) -> None:
+        """RELOAD: queue the reload of the loaded module that came from the store path `path` (the new file is already there). Raises `UploadError` with
+        E_NOT_FOUND when no loaded module has that path, E_BUSY while a reload runs, E_STATE while an upload is open. See `reload_state`."""
+        self._ok(dkproto.CMD["RELOAD"], "reload", path.encode() + b"\0")
+
+    def load(self, path: str) -> None:
+        """LOAD (runtime capability LIVE): queue the load of the module file at the store path `path`, which no loaded module came from (the file is already there). The same
+        replies as `reload`, but E_LOADED when a module of that path is loaded. See `load_and_wait`."""
+        self._ok(dkproto.CMD["LOAD"], "load", path.encode() + b"\0")
+
+    def unload(self, path: str) -> None:
+        """UNLOAD (runtime capability LIVE): queue the unload of the loaded module that came from the store path `path` (no replacement; the file stays on the card). The same
+        replies as `reload`. See `unload_and_wait`."""
+        self._ok(dkproto.CMD["UNLOAD"], "unload", path.encode() + b"\0")
+
+    def reload_state(self) -> dict[str, int]:
+        """RELOAD_STATE: the state of the live job, whichever it is (a load, an unload or a reload): `phase` (0 none yet, 1 queued or running, 2 finished), `result` (0 is ok;
+        else the refusal before anything changed, or the failure after the old module was torn down), `step`, `op` (1 load, 2 unload, 3 reload; 0 from a runtime that does not say) and `unloaded` (1: the module was torn down, so it is not loaded
+        unless the result is 0 and the job loaded; 0: it still runs, or a load never had one)."""
+        b = self._ok(dkproto.CMD["RELOAD_STATE"], "reload state")
+        return {
+            "phase": b[0],
+            "result": struct.unpack_from(">i", b, 1)[0],
+            "step": b[5],
+            "unloaded": b[6],
+            "op": b[7] if len(b) > 7 else 0,
+        }
+
+    def _wait_live(
+        self, what: str, step: Callable[[], None], limit: int
+    ) -> tuple[int, bool]:
+        for _ in range(limit):
+            s = self.reload_state()
+            if s["phase"] == 2:
+                return s["result"], bool(s["unloaded"])
+            step()
+        raise TimeoutError(f"the {what} did not end")
+
+    def reload_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`reload`, then ask `reload_state` until the job ends, calling `step()` between the asks (an emulator is stepped there): `(result, unloaded)` as in `reload_state`
+        (result 0 is ok). A job that does not end within `limit` asks raises `TimeoutError`."""
+        self.reload(path)
+        return self._wait_live(f"reload of {path}", step, limit)
+
+    def load_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`load`, then wait as `reload_and_wait` does: result 0 means the module is loaded."""
+        self.load(path)
+        return self._wait_live(f"load of {path}", step, limit)
+
+    def unload_and_wait(
+        self, path: str, step: Callable[[], None], limit: int = 2000
+    ) -> tuple[int, bool]:
+        """`unload`, then wait as `reload_and_wait` does: result 0 (with `unloaded`) means the module is not loaded any more."""
+        self.unload(path)
+        return self._wait_live(f"unload of {path}", step, limit)
 
     # -- digikit/remote (docs/plans/remote-control.md): the commands of a run-time service module, `dkproto.SERVICE_CMD`
     def remote_state(self) -> dict[str, int]:
@@ -721,6 +785,11 @@ class Uploader:
         """MKDIR (runtime 0.3.0, capability FOLDERS): make a folder. Ok when it exists; E_PATH when the path is a file or inside one."""
         self._ok(CMD_MKDIR, "mkdir", path.encode() + b"\0")
 
+    def rename(self, src: str, dst: str) -> None:
+        """RENAME (runtime 0.5.7, capability RENAME): rename or move a file or an empty folder. The data and its hash stay; the folder it
+        leaves stays. E_NOFILE: no such entry; E_PATH: the new path is taken, inside a file, inside the entry itself, or breaks the rules."""
+        self._ok(CMD_RENAME, "rename", src.encode() + b"\0" + dst.encode() + b"\0")
+
     def clear(self) -> None:
         self._ok(CMD_CLEAR, "clear", struct.pack(">I", CLEAR_MAGIC))
 
@@ -809,10 +878,10 @@ def modules_lines(m: dict[str, Any]) -> list[str]:
         f"arena free {m['arena_free']} (largest {m['arena_largest']}), dsp area free {m['dsp_free']} (largest {m['dsp_largest']}), {m['total']} module(s)"
     ]
     for x in m["modules"]:
-        cts = " ".join(f"{a}.{b}" for a, b in x["contracts"])
+        n = x["needs"]
         v = x["version"]
         out.append(
-            f"{x['index']}  {x['name']}  v{v >> 16}.{v >> 8 & 255}.{v & 255}  contracts {cts}  "
+            f"{x['index']}  {x['name']}  v{v >> 16}.{v >> 8 & 255}.{v & 255}  needs {n >> 16}.{n >> 8 & 255}.{n & 255}  "
             f"cf {x['cf_base']:#x}+{x['cf_size']:#x}  dsp {x['dsp_off']:#x}+{x['dsp_len']:#x}  rows {x['rows']:#x}  "
             f"types {','.join(map(str, x['types'])) or '-'}  faults {x['faults']}{'  GUARD OFF' if x['guard_off'] else ''}"
         )
@@ -845,6 +914,19 @@ def hex_lines(data: bytes, base: int = 0) -> list[str]:
         row = data[i : i + 16]
         txt = "".join(chr(c) if 32 <= c < 127 else "." for c in row)
         out.append(f"{base + i:08x}  {row.hex(' '):<47}  {txt}")
+    return out
+
+
+def reply_lines(status: int, body: bytes) -> list[str]:
+    """The `cmd` subcommand's output: the status, the body as hex lines with offsets, and (body length a multiple of 4) its big-endian u32 words
+    in hex and signed decimal."""
+    out = [f"status: {STATUS.get(status, status)}", f"body: {len(body)} bytes"]
+    out += hex_lines(body)
+    if body and len(body) % 4 == 0:
+        for i in range(0, len(body), 4):
+            (u,) = struct.unpack_from(">I", body, i)
+            (s,) = struct.unpack_from(">i", body, i)
+            out.append(f"word {i // 4}: {u:#010x}  {s}")
     return out
 
 
@@ -892,6 +974,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("prefix", nargs="?")
     p = sub.add_parser("mkdir", help="make a folder in the store")
     p.add_argument("path")
+    p = sub.add_parser(
+        "mv", help="rename or move a file or an empty folder in the store"
+    )
+    p.add_argument("src")
+    p.add_argument("dst")
     sub.add_parser("modules")
     p = sub.add_parser("put")
     p.add_argument("file", type=Path)
@@ -939,6 +1026,13 @@ def main(argv: list[str] | None = None) -> int:
         "-o", "--output", type=Path, help="write the bytes here (default: a hex dump)"
     )
     p = sub.add_parser(
+        "cmd", help="send one request (a module command) and print the reply"
+    )
+    p.add_argument("number", help="the command number, decimal or 0x-hex")
+    p.add_argument(
+        "hexbody", nargs="?", default="", help='the body as hex, e.g. "01 02"'
+    )
+    p = sub.add_parser(
         "remote", help="digikit/remote: state, key, turn, release (needs the module)"
     )
     rsub = p.add_subparsers(dest="rcmd", required=True)
@@ -983,6 +1077,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{path}\t{size}\t{sha}")
         elif args.cmd == "mkdir":
             up.mkdir(args.path)
+        elif args.cmd == "mv":
+            up.rename(args.src, args.dst)
         elif args.cmd == "modules":
             for line in modules_lines(up.modules()):
                 print(line)
@@ -1030,6 +1126,22 @@ def main(argv: list[str] | None = None) -> int:
             up.rm(args.path)
         elif args.cmd == "clear":
             up.clear()
+        elif args.cmd == "cmd":
+            try:
+                number = int(args.number, 0)
+                body = bytes.fromhex(args.hexbody)
+            except ValueError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 2
+            try:
+                status, rb = up.request(number, body)
+            except TimeoutError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+            for line in reply_lines(status, rb):
+                print(line)
+            if status != 0:
+                return 1
         elif args.cmd == "remote":
             if args.rcmd == "state":
                 print(up.remote_state())

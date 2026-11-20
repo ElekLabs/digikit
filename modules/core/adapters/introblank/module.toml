@@ -10,12 +10,13 @@ status = "experimental"
 summary = "Optional: replaces the Elektron intro with black until a boot screen module takes over, and ends it early when none does"
 requires = ["core/runtime"]
 conflicts = []
-ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12"]
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.11" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "untested"
 
 # The stock intro task calls one setup function with one of five scene tables (`{callback, count}` entries and a 0 terminator). A hook before the
 # setup function's load of that argument writes the adapter's own table over the argument on the stack, so every boot runs one black scene

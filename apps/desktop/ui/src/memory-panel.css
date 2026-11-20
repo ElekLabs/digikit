@@ -1,4 +1,4 @@
-/* The Memory panel (MemoryPanel.tsx): the Card panel's frame (card-panel.css) with the bars of its own. Tokens from the site (apps/web/src/styles/site.css). */
+/* The Memory panel (MemoryPanel.tsx): the Card panel's frame (card-panel.css) with the bars of its own. Tokens from the site (packages/workbench-core/ui/styles/site.css). */
 .memory-panel .mem-bar {
   display: flex;
   flex-direction: column;
@@ -46,20 +46,53 @@
   min-width: 0;
   background: transparent;
 }
-/* a segment is coloured by its module's type */
+/* A count with few slots (Machines, Parameters, Pages, Modules): one cell per slot, lit like the device's trig keys. */
+.memory-panel .cells {
+  display: flex;
+  gap: 3px;
+  height: 10px;
+}
+.memory-panel .cell {
+  flex: 1 1 0;
+  min-width: 3px;
+  border-radius: 2px;
+  background: var(--panel-3, #23262b);
+}
+.memory-panel .cell.over {
+  outline: 1px solid var(--bad, #e5736b);
+}
+/* No runtime: the usual rows, greyed and empty. */
+.memory-panel .skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0.45;
+}
+.memory-panel .skeleton .bar .seg,
+.memory-panel .skeleton .bar .seg.free {
+  background: transparent;
+}
+/* a segment or cell is coloured by its module's type */
 .memory-panel .seg.machine,
+.memory-panel .cell.machine,
 .memory-panel .swatch.machine {
   background: var(--amber, #f3b52c);
 }
+.memory-panel .cell.machine {
+  box-shadow: 0 0 6px rgba(243, 181, 44, 0.35);
+}
 .memory-panel .seg.effect,
+.memory-panel .cell.effect,
 .memory-panel .swatch.effect {
   background: var(--teal, #6fc7d1);
 }
 .memory-panel .seg.tool,
+.memory-panel .cell.tool,
 .memory-panel .swatch.tool {
   background: var(--ok, #74d49d);
 }
 .memory-panel .seg.other,
+.memory-panel .cell.other,
 .memory-panel .swatch.other {
   background: var(--ink-3, #868b94);
 }
@@ -82,4 +115,31 @@
   width: 9px;
   height: 9px;
   border-radius: 3px;
+}
+/* The per-module rows under a bar: swatch, module, amount. */
+.memory-panel .mem-mods {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  color: var(--ink-2, #b3b7be);
+}
+.memory-panel .mem-mods li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.memory-panel .mem-mods .name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memory-panel .mem-mods .amount {
+  font-family: var(--font-mono);
+  color: var(--ink-3, #868b94);
 }

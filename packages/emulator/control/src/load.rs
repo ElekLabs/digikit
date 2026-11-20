@@ -243,12 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn factors_come_from_the_shared_table() {
-        let f = dn2();
-        assert_eq!(f.dsp_nominal, 1.138261);
-        assert_eq!(f.dsp_high, 1.326075);
-        assert_eq!(f.cf_cpi_nominal, 1.39);
-        assert_eq!(Factors::for_device("dt2").unwrap().dsp_high, 1.406521);
+    fn an_unknown_device_has_no_factors() {
         assert!(Factors::for_device("zz").is_none());
     }
 

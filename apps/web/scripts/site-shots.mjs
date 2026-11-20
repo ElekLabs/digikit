@@ -1,6 +1,7 @@
 // Captures the device screens used by the site and the README: boots DT2 in the coupled emulator with the shipped
 // modules on the card, opens the DIGIKIT menu and the MODULES list, and copies both images into public/images.
 // --list prints the module list and does not start the emulator.
+import { SITE_DEVICES } from '../src/data/site-devices.mjs';
 import { readFileSync, readdirSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +20,7 @@ for (const kind of ['machines', 'fx', 'tools']) {
     if (!e.isDirectory() || !existsSync(file)) continue;
     const manifest = parse(readFileSync(file, 'utf8'));
     const dir = `modules/${kind}/${e.name}`;
-    if (!isShipped(manifest, dir) || !shippedDevices(manifest).includes('dt2')) continue;
+    if (!isShipped(manifest, dir) || !shippedDevices(manifest, SITE_DEVICES).includes('dt2')) continue;
     ids.push(manifest.module.id);
   }
 }

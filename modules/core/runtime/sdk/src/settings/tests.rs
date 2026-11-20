@@ -257,7 +257,7 @@ impl Parser<'_> {
 }
 
 fn vectors() -> Value {
-    let text = include_str!("../../../../../../sdk/vectors/settings-vectors.json");
+    let text = include_str!("../../../vectors/settings-vectors.json");
     Parser {
         b: text.as_bytes(),
         at: 0,
@@ -552,7 +552,7 @@ fn both_copies_damaged_is_an_empty_record() {
     }
     let (r, a) = load_now();
     let r = r.unwrap();
-    assert_eq!((r.copy, r.damaged), (NONE, 2));
+    assert_eq!((r.copy, r.damaged, r.seq), (NONE, 2, 0));
     assert_eq!(entries(&a).len(), 0);
 }
 

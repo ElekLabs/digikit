@@ -2,13 +2,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Sample, prepareUpload, type Prepared } from '@digi/dk-session/dksample';
 import { openSamples } from '@digi/dk-session/samples';
-import { repoRoot } from '@digi/test-support';
+import { repoRoot, scheduledTurns } from '@digi/test-support';
 import { expect } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { installWithDebug } from '@digi/regression/runtime/install.ts';
-import { memory, panel } from '@digi/regression/runtime/panel.ts';
+import { memory } from '@digi/regression/runtime/memory.ts';
+import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { RATE, selectDynamicMachine, trackApi, trackRecord, wav } from './shot-support.ts';
 
 // Shared setup of the DN2 SHOT device tests (shot-dn2-pool, shot-dn2-audio, shot-dn2-supersede): install, plan, the fixture
@@ -54,6 +56,7 @@ const SPECS: Record<string, () => [Uint8Array, number]> = {
   t: () => [wav(5, [440, 660]), 2], // the long tone and the throughput load
   l: () => [wav(4, [220, 330]), 2], // the load that is superseded
   y: () => [wav(1.2, [600, 900]), 2], // the file that supersedes it
+  q: () => [wav(10, [440, 660]), 2], // a long load (375 pages, about 2 s of emulated time): the lease test replaces and deletes it while it runs
 };
 
 export type Dn2 = Awaited<ReturnType<typeof setup>>;
@@ -65,7 +68,8 @@ async function setup(runtime: Parameters<Parameters<typeof runtimeTests>[1]>[0],
   // The daemon answers every peek on the emulation thread; a tight poll loop starves the guest (stall faults), so polls are 60 ms apart.
   const settle = (track: number, timeoutMs = 120_000, each?: Parameters<typeof api.settle>[2]) => api.settle(track, timeoutMs, each, 60);
   const mem = memory(session);
-  const ui = panel(session);
+  const ui = panelKeys(runtime);
+  const turns = scheduledTurns(session, runtime.clock);
   const log: Record<string, unknown> = {};
   const failures: string[] = [];
   /** Run one phase; a failure is recorded and the next phase runs. */
@@ -94,7 +98,6 @@ async function setup(runtime: Parameters<Parameters<typeof runtimeTests>[1]>[0],
   expect((await dk.modules()).map((m) => m.name)).toEqual(expect.arrayContaining(['digikit/shot', 'test/track-select', ...extraModules]));
   log.stage = 'plan';
   const plan = await prepareRuntimePlan(session, artifacts, [
-    'RECORDS',
     '_dv_params',
     '_sp_boot_status',
     '_sp_status',
@@ -133,7 +136,9 @@ async function setup(runtime: Parameters<Parameters<typeof runtimeTests>[1]>[0],
     const st = (await session.client.call('status')) as { elapsed: number; dsp_frames: number };
     return { elapsed: st.elapsed, dspFrames: st.dsp_frames };
   };
-  const rec = (track: number) => trackRecord(session, sym('RECORDS'), track);
+  // The track table lives in the samples service (a `.bss` of samples.dks): its address is the load address plus the map offset.
+  const recordsAt = await serviceSymbol({ session }, plan, 'samples', 'DKRT_SMP_RECORDS');
+  const rec = (track: number) => trackRecord(session, recordsAt, track);
   /** `length` bytes of DDR at the physical address, in 64 KiB reads. */
   async function ddr(phys: number, length: number): Promise<Buffer> {
     const parts: Buffer[] = [];
@@ -195,7 +200,7 @@ async function setup(runtime: Parameters<Parameters<typeof runtimeTests>[1]>[0],
     await expectNoNewFault('the end');
     expect(failures, `phase failures:\n${failures.join('\n')}`).toEqual([]);
   }
-  return { runtime, session, dk, artifacts, api, settle, mem, ui, log, phase, sym, dspWords, pool, link, clocks, rec, ddr, fixtures, file, expectNoNewFault, finish };
+  return { runtime, session, dk, artifacts, api, settle, mem, ui, turns, log, phase, sym, dspWords, pool, link, clocks, rec, ddr, fixtures, file, expectNoNewFault, finish };
 }
 
 /** One DN2 SHOT test file: boot, install, upload `uploads`, run `body` (which calls `c.phase`), then the end checks and the measurement record. */

@@ -12,10 +12,11 @@ listed under "Voices".
 | Block | 32 samples at 48 kHz, 1500 blocks per second | same |
 | Instructions per block (1 GHz assumed) | about 666,000 | same |
 | Stock DSP busy per block (measured) | about 211,000 | about 335,000 |
-| Free per block | about 450,000 | about 330,000 |
+| Free per block (headroom: the block at 85 percent, projected with the high cycle factor, minus the stock busy count; `patchkit budget`) | 194,244 | 92,796 |
+| Per voice of 16 (`voice_block`) | 12,140 | 5,799 |
 | Reference cost | pluck: about 900 per ringing voice per block; adapter and guard about 700 of that | similar |
 
-Plan a machine for 16 voices at once: 16 x your `max_cycles_block` must fit with room for the other modules.
+Plan a machine for 16 voices at once: 16 x its per-voice cost (`dsp_cost_voice`, the worst steady block `module:check` measures and writes into `[uses.<device>]`) must fit with room for the other modules and the effects. The broker checks `max(machine costs) x voices + sum(effect costs) <= headroom` for the whole selection.
 
 ## Voices
 
@@ -27,9 +28,9 @@ Plan a machine for 16 voices at once: 16 x your `max_cycles_block` must fit with
 
 ## Parameters
 
-- The DSP receives one parameter word for each knob in `param_slots` (devices/*.toml): `[1, 2, 4, 5, 6]` (5 words) on the Digitakt
+- The DSP receives one parameter word for each knob in `param_slots` (devices/*.toml): `[1, 2, 4, 5, 6, 7]` (6 words, B C E F G H) on the Digitakt
   II, `[1, 2, 4, 5, 6, 0, 3, 7]` (8 words) on the Digitone II. Words 0 to 4 sit on the same knob letters B C E F G on both
-  devices; the Digitone II adds A, D and H. A knob outside the list can be shown and stored, but does not reach `params`. See docs/MODULE-AUTHORING.md, sections 5.3 and 5.7.
+  devices; word 5 is H on the Digitakt II, and the Digitone II adds A, D and H for words 5 to 7. A knob outside the list can be shown and stored, but does not reach `params`. See docs/MODULE-AUTHORING.md, sections 5.3 and 5.7.
 - Words are 0 .. 0x7f00 (UI 0 .. 127), smoothed on the ColdFire before they are sent; the DSP sees them once per block.
 
 ## Memory
@@ -49,7 +50,7 @@ The runtime refuses a module that does not fit, with its own code (docs/findings
 | | Digitakt II | Digitone II | Refusal |
 | --- | --- | --- | --- |
 | modules at once (selection) | 8 | 8 | SELECT of a ninth: `E_SEL_COUNT` |
-| module file | 64 KiB | 64 KiB | `E_TOO_BIG` |
+| module file | 128 KiB | 128 KiB | `E_TOO_BIG` |
 | ColdFire memory (image + bss, all modules) | 512 KiB | 512 KiB | `E_NOMEM` |
 | DSP area (all modules; 64-byte granules, 60 bytes unusable) | 512 KiB | 320 KiB | `E_DSP_NOSPACE` |
 | machine types, voice rows | 8 | 8 | a ninth machine `E_TYPE_RANGE`, a ninth voice `E_DSP_ROWS` |
@@ -82,7 +83,7 @@ the pages from `core/fxpages`, which the Digitone II image needs in its module l
 - **Instruction budget of the conformance suite.** `module:check` allows each effect `pk_conform.fx_budget()` instructions in the worst block: the
   headroom of the tighter device divided by the 3 slots (about 31,000 today, set by the Digitone II), plus 900 for the `core/fx` adapter
   (`FX_ADAPTER_MAX`). The number follows the measured stock load, so read it from the report (`-rA`) and not from this file.
-  Size `max_cycles_block` in your `dk_fx_desc` below it.
+  `module:check` measures the effect's worst call and writes it as `dsp_cost_fx`; the broker sums the effects of a selection against the headroom.
 - **Digitone II.** Its stock DSP load is higher, so the free time per block is smaller (see "Time and budget"); the effect hook costs the
   emulator about x2.4 DSP CPU there (finding 55). A send effect there gets the sum of the voice slots of the track as its send input (finding 67).
 - Send amounts, MIX and routes are framework-owned (docs/MODULE-AUTHORING.md, section 7.2).

@@ -1,88 +1,81 @@
 # The module contract: version numbers, log kinds and the SysEx protocol numbers. `patchkit gen` writes
 # modules/core/runtime/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
-# packages/dkupload/src/gen_proto.rs, packages/dk-session/src/gen_proto.ts, sdk/asm/dk_machine.inc, sdk/asm/dk_fx.inc,
-# sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h and api.h from this file (`patchkit gen --check` fails when they are stale).
+# packages/dkupload/src/gen_proto.rs, packages/dk-session/src/gen_proto.ts, sdk/dsp/contract/dk_machine.inc, sdk/dsp/contract/dk_fx.inc,
+# sdk/dsp/contract/dk_sample_pool.inc, modules/core/services/<service>/dks/src/gen_exports.rs (a service file's export list and pure builder wrappers), sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
+# and sample.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from this file (`patchkit gen --check` fails when they are stale).
 
-[runtime]           # the digikit runtime release (semantic version; packed major<<16 | minor<<8 | patch)
-version = "0.5.6"   # 0.x: MINOR may break (contract major, store format, SysEx protocol), PATCH = features and fixes
+[runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
+table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
+version = "0.10.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+# The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
+# `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
+# 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
+# the load fails with E_CONTRACT. There is no other version number: the machine and effect contract structs of this file change only with a MINOR.
 
-[contract]          # [major, minor] per contract (docs/design/module-sdk.md 11.5 D3). The runtime refuses a module that declares a
-                    # contract (major != 0) when its major differs from the runtime's or its minor is above the runtime's. Major 0 = not implemented.
-                    # An appended Api function is a minor bump; a changed or removed one is a major bump.
-api = [1, 9]        # the ColdFire Api table (every module, `raw` included); minor 9: settings_client/get/put/remove (module settings), intro_take (boot animation); minor 1: `log_lv` appended; minor 2: `register_cmds` appended; minor 3: sample bank API appended; minor 4: read-only listing; minor 5: stereo sample pool (per module, 16 entries); minor 6: sample_pool_path/param_get/param_set/sample_pool_set; minor 7: sample_pool_peaks; minor 8: job_post/job_cancel (background jobs)
-machine = [1, 6]    # minor 1: source track; 2: stereo; 3: executable parameter latches; 4: opt-in native callback page v1; 5: two replacement callback pages v2; 6: note gate appended to voice_in (DK_MACHINE_GATE); voice states start zeroed after a load
-fx = [1, 0]         # run-time effects (sdk/include/dk/gen/fx.h, DSP section version 4 of a .dkm); 0.4.0; effect pages (register kind 4) 0.5.0
-service = [1, 0]
-
-# The table a .dkm module gets in dkm_init (`patchkit gen` writes the Rust `Api` in gen_sdk.rs and sdk/include/dk/gen/api.h from it). Fields are only
-# appended, each is 4 bytes; a new field is a minor bump of `[contract] api` and gets `since` = that minor. `type` is `u32`, `addr` (the
-# address of a helper: usize in Rust, `<name>_addr` in C) or a function signature `<ret> (<type> <name>, ...)` with the types u8 u16 u32
-# i8 i16 i32 bool void char float, pointers, `const` and the names of [api.types].
-[api]
-fields = [
-    { name = "version", type = "u32", doc = "Version of the `Api` table layout (`API_VERSION`)." },
-    { name = "size", type = "u32", doc = "`size_of::<Api>()` in the runtime that built it." },
-    { name = "device", type = "u32", doc = "The device's `[digikit] id`." },
-    { name = "runtime", type = "u32", doc = "The runtime version, packed major << 16 | minor << 8 | patch." },
-    { name = "import", type = "u32 (const u8 *name)", doc = "Address of a firmware function or runtime helper by name (NUL-terminated); 0 when the image has none." },
-    { name = "alloc", type = "u8 *(u32 size)", doc = "16-byte aligned block from the module arena (zero is not guaranteed); null when full." },
-    { name = "free", type = "void (u8 *p)", doc = "Give back a block of `alloc`." },
-    { name = "store_read", type = "i32 (const u8 *path, u8 *dst, u32 cap)", doc = "Read a store file into `dst` (at most `cap` bytes); returns the file size, or a negative code." },
-    { name = "log", type = "void (const u8 *msg, u32 value)", doc = "Append `msg` (NUL-terminated, 24 bytes kept) and `value` to the runtime's log ring." },
-    { name = "memcpy", type = "addr", doc = "Address of the runtime's memcpy." },
-    { name = "memset", type = "addr", doc = "Address of the runtime's memset." },
-    { name = "memcmp", type = "addr", doc = "Address of the runtime's memcmp." },
-    { name = "muldi3", type = "addr", doc = "Address of the runtime's __muldi3." },
-    { name = "udivdi3", type = "addr", doc = "Address of the runtime's __udivdi3." },
-    { name = "umoddi3", type = "addr", doc = "Address of the runtime's __umoddi3." },
-    { name = "log_lv", type = "void (u32 level, const u8 *msg, u32 value)", doc = "Like `log`, with a level: 0 error, 1 warn, 2 info, 3 debug, 4 trace (above 4: 4).", since = 1 },
-    { name = "register_cmds", type = "i32 (u32 first, u32 count, service_cmd handler)", doc = "Register the SysEx commands `first .. first + count` with `handler` (docs/design/module-sdk.md, \"Service commands\"). The range must lie inside one of the ranges sdk/sdk.toml `[protocol.ranges]` reserves and overlap no registered one; else it returns `proto::E_CMD_RANGE`. Call it from `init`; the range is released when the module's `fini` has run. Returns 0.", since = 2 },
-    { name = "sample_bank", type = "i32 (u32 local_id)", doc = "In init, resolve the module-owned sample bank to a positive opaque handle, or a negative DK_SAMPLE_E_* error.", since = 3 },
-    { name = "sample_load", type = "i32 (u32 handle, const u8 *path)", doc = "Queue one load from a NUL-terminated device sample path using a handle resolved in init. May be called from init or a service callback; copies the path without file IO. Returns 0 or a negative DK_SAMPLE_E_* error. The bank is retained once delivery starts.", since = 3 },
-    { name = "sample_status", type = "i32 (u32 handle)", doc = "Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error.", since = 3 },
-    { name = "files_client", type = "i32 ()", doc = "Init-only: acquire this module's listing client; positive handle or negative error. Retired before teardown/failed-init free.", since = 4 },
-    { name = "files_list", type = "i32 (u32 client, u32 root, const u8 *path, file_event notify, u8 *context)", doc = "Copy a canonical root-relative directory request; positive ticket or negative error. Supersedes prior results. Optional deferred UI-task notify/context remain module-owned until retirement quiesces. No I/O here.", since = 4 },
-    { name = "files_poll", type = "i32 (u32 client, u32 ticket, u8 *out, u32 capacity)", doc = "No I/O: 0 pending, 1 copied 304-byte dk_file_entry, 2 end, negative error. Validate output/capacity before consumption; output unchanged unless 1. Stored metadata is not content validation or a lease.", since = 4 },
-    { name = "files_cancel", type = "i32 (u32 client, u32 ticket)", doc = "Invalidate matching request/results/queued notification without waiting for active work or callback. Does not free the module-owned client.", since = 4 },
-    { name = "sample_tracks", type = "i32 (u32 local_id)", doc = "In init, resolve the module's 16-entry sample pool table (DK_SAMPLE_TRACKS) to a positive opaque handle, or a negative DK_SAMPLE_E_* error. A module that also declares a bank gets DK_SAMPLE_E_CONTRACT.", since = 5 },
-    { name = "sample_pool_add", type = "i32 (u32 handle, const u8 *path)", doc = "Add a stereo-capable sample file to the module's 16-entry pool (copies the path, no file IO here; the load runs later). Returns the pool index 0..15: the first free entry, or the entry that already holds this path (a file added twice is one entry; one with a sticky error is selected again). Indexes are stable: clearing an entry leaves a hole and never moves another. DK_SAMPLE_E_POOL when all 16 are in use (-16); DK_SAMPLE_E_SEL_PATH for an empty or too long path; no sample backing in the image: DK_SAMPLE_E_CONTRACT.", since = 5 },
-    { name = "sample_pool_clear", type = "i32 (u32 handle, u32 index)", doc = "Close the entry's generation (its notes end), drop its reference and set it UNUSED, a hole in the pool. Returns 0 or a negative DK_SAMPLE_E_* error (index >= 16: DK_SAMPLE_E_CONTRACT).", since = 5 },
-    { name = "sample_pool_status", type = "i32 (u32 handle, u32 index)", doc = "Return DK_SAMPLE_UNUSED, QUEUED, LOADING, READY or a negative DK_SAMPLE_E_* error; an error is sticky until the entry is added again or cleared.", since = 5 },
-    { name = "sample_pool_info", type = "i32 (u32 handle, u32 index, u8 *out)", doc = "Copy a 16-byte dk_sample_info (frames, rate, channels, token; <dk/sample_track.h>) of a READY entry; otherwise a negative error and `out` is untouched.", since = 5 },
-    { name = "sample_pool_path", type = "i32 (u32 handle, u32 index, u8 *buf, u32 cap)", doc = "Copy the root-relative path (as a DK_FILES_SAMPLES listing row gives it, NUL-terminated) of the entry into `buf` and return its length without the NUL. Works in every state except UNUSED (E_NOT_FOUND), so a sticky error still names its file. `cap` too small (length + 1 does not fit): DK_SAMPLE_E_SEL_PATH and `buf` is untouched.", since = 6 },
-    { name = "param_get", type = "i32 (u32 track, u32 word)", doc = "Raw value (unit * 256, as DK_PARAM min/max/default) of parameter word `word` of the calling module on `track` (0 to 15). UI task only, and only in the flow of a click: from the DK_PARAM_ACTION callback until the page gets its next key or turn (so a list the callback opened may call it), else DK_PARAM_E_STATE. `word` counts the module's DK_PARAM rows in declaration order; a word the module does not own or a track above 15 is DK_PARAM_E_ARG. The value is the one the page shows.", since = 6 },
-    { name = "param_set", type = "i32 (u32 track, u32 word, i32 raw)", doc = "Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn: clamped to the row range, stored in the sound, observers notified. UI task only, in the same click flow as param_get. Returns 0, DK_PARAM_E_STATE (outside the flow), DK_PARAM_E_ARG (word or track) or DK_PARAM_E_HELD (a mode key such as TRIG or FUNC is held: nothing is written, so a click never records a p-lock).", since = 6 },
-    { name = "sample_pool_set", type = "i32 (u32 handle, u32 index, const u8 *path)", doc = "Load a sample file into pool entry `index` (0..15), replacing what was there: the old file is released, the new one queues like sample_pool_add (copies the path, no file IO here). Other indexes never move. A file already held by another entry is shared, not loaded twice. Returns 0; DK_SAMPLE_E_CONTRACT for an index above 15 or no sample backing in the image; DK_SAMPLE_E_SEL_PATH for an empty or too long path.", since = 6 },
-    { name = "sample_pool_peaks", type = "i32 (u32 handle, u32 index, u32 token, u8 *out, u32 capacity)", doc = "Copy bounded PCM16 min/max overview pairs of a READY pool entry matching token. Returns bin count (1..512), negative error otherwise; capacity is bytes, output unchanged on refusal. Each bin spans ceil(frames/512) frames, combines channels and includes zero. No file IO or PCM scan. UI task only. See dk/sample_track.h.", since = 7 },
-    { name = "job_post", type = "i32 (job_step step, job_done done, u8 *ctx)", doc = "Run `step(ctx)` on the background worker until it returns 0 or a negative error (DK_JOB_MORE: call again; <dk/job.h>). `done(ctx, status)` is called once in the UI task with the final status, or DK_JOB_E_CANCELLED. Returns a job id > 0, or a negative error (E_BUSY when 8 jobs are queued, E_CONTRACT for a null step).", since = 8 },
-    { name = "job_cancel", type = "i32 (u32 id)", doc = "Cancel a job of this module: a queued job never runs and a running one stops after its current step; `done` gets DK_JOB_E_CANCELLED. Returns 0, or E_NOT_FOUND for an unknown id.", since = 8 },
-    { name = "sample_pool_peaks_window", type = "i32 (u32 handle, u32 index, u32 token, u32 first, u32 frames, u32 columns, u8 *out, u32 capacity)", doc = "Min/max of `columns` equal parts of the frames [first, first + frames) of a READY pool entry matching token, computed in the background. Returns `columns` when ready (out holds int16 min, max pairs; capacity is bytes, at least columns * 4; columns is 1..DK_SAMPLE_WINDOW_MAX), 0 while it is computed, or a negative error. Another request replaces a pending one. Poll from the draw callback. UI task only. See dk/sample_track.h.", since = 8 },
-    { name = "settings_client", type = "i32 ()", doc = "Init-only: acquire this module's settings handle; positive handle, or a negative error outside `dkm_init`. The same module always gets the same handle.", since = 9 },
-    { name = "settings_get", type = "i32 (u32 client, const char *key, void *out, u32 cap)", doc = "Read the value of `key` (NUL-terminated, own key space) into `out` (`cap` bytes): returns its length (0 is valid), E_SET_NOKEY when there is none, E_SET_VALUE when `cap` is too small (nothing is written), E_SET_KEY for a stale handle or a bad key, E_SET_OFF when the settings store is off. In `dkm_init` and in the UI task.", since = 9 },
-    { name = "settings_put", type = "i32 (u32 client, const char *key, const void *value, u32 len)", doc = "Set `key` to the `len` bytes (0 to 1024) at `value`; the card is written 2 s after the last change. Returns 0, E_SET_KEY (stale handle or bad key), E_SET_VALUE, E_SET_FULL or E_SET_OFF. The runtime stores the key as `<module name>/<key>`; the module name and the key together are at most 47 characters. UI task only, not a service command handler.", since = 9 },
-    { name = "settings_remove", type = "i32 (u32 client, const char *key)", doc = "Remove `key`: returns 0 (also when it was not there), E_SET_KEY (stale handle or bad key) or E_SET_OFF. UI task only, not a service command handler.", since = 9 },
-    { name = "intro_take", type = "i32 (intro_frame frame, intro_done done, void *ctx, u32 ticks)", doc = "Init-only: replace the stock boot animation. `frame(tick, ctx)` returns the 1024-byte native bitmap of tick 0 .. ticks-1 (30 ticks a second), or NULL to end the animation (the last frame stays); it runs on the intro task, must not block and must not call any dk_api function. `done(ctx)` (may be NULL) runs once in the UI task at the first UI pass: free the buffer there. `ticks` is 1 to 300. Returns 0, E_NOT_FOUND outside `dkm_init`, E_CONTRACT (no frame, bad ticks), E_BUSY (taken already) or E_BOOT_ONLY (the intro is over). See dk/intro.h.", since = 9 },
+# The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
+# sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
+# The logical keys (`dk_key`, <dk/gen/keys.h>): the order is the ABI. A module is built with the number of a name, so the list only grows at the end: never
+# remove, rename or reorder a name. A device file maps a name to its panel code (`[input.keys]` of devices/*.toml) and may use only the names listed here;
+# `patchkit gen` numbers the names from 1 in this order (0 is DK_KEY_NONE). At most 63 names.
+[keys]
+order = [
+    "PAGE_TRIG", "SRC", "FLTR", "AMP", "FX", "MOD", "PRESET", "SETTINGS",
+    "TEMPO", "YES", "UP", "NO", "LEFT", "DOWN", "RIGHT", "TRK",
+    "FUNC", "KEYBOARD", "RECORD", "PLAY", "STOP", "PAGE", "PTN", "SONG",
+    "TRIG1", "TRIG2", "TRIG3", "TRIG4", "TRIG5", "TRIG6", "TRIG7", "TRIG8",
+    "TRIG9", "TRIG10", "TRIG11", "TRIG12", "TRIG13", "TRIG14", "TRIG15", "TRIG16",
+    "ENC1", "ENC2", "ENC3", "ENC4", "ENC5", "ENC6", "ENC7", "ENC8",
+    "LEVEL_PUSH",
 ]
 
-# Function types by name. As a parameter or field a name is a nullable pointer to the function (`Option<ServiceCmd>` in Rust, `dk_service_cmd *` in C).
-[api.types]
-# A service command handler (`Api.register_cmds`). It runs in the firmware's MIDI task: short, no waiting. `body` is the request body
-# (`len` bytes, at most 160); the reply body goes to `out` (at most 879 bytes). Returns the number of reply bytes (0 or more: status ok), or a
-# negative status (a `proto::E_*` code or its own: sent as the reply's status with no body).
-service_cmd = "i32 (u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)"
-file_event = "void (u32 client, u32 request, i32 state, u8 *context)"
-# A background job step (`Api.job_post`). It runs in the worker task: it computes on its own memory and calls no dk_api function.
-# Returns DK_JOB_MORE (1) to be called again, 0 when finished, or a negative error.
-job_step = "i32 (u8 *ctx)"
+[handle]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
+services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
+contexts = ["init", "ui", "io-step", "any", "isr"]
+
+# The callback types of the service imports (docs/plans/sdk.md section 10, Naming). The key ends in `_fn`; the C type is `dk_<key>` (the generated
+# imports header writes the typedef) and the Rust type `<Key>Fn`. A user-data pointer is `arg`; `ctx` is only the module context.
+[handle.callbacks]
+# A host command handler (`dk_host_register`), in the firmware's MIDI task: short, no waiting. `body` is the request body (`len` bytes, at most 160); the reply body goes to
+# `out` (at most 879 bytes). Returns the number of reply bytes (0 or more: status ok), or a negative status (sent as the reply's status with no body).
+host_cmd_fn = "i32 (u32 cmd, u32 seq, const void *body, u32 len, void *out)"
+# The deferred notification of a listing request (`dk_files_list`), in the UI task: a coalesced readiness hint; poll `request`.
+files_event_fn = "void (u32 client, u32 request, i32 state, void *arg)"
+# A background job step (`dk_job_post`), in the worker task: it computes on its own memory and calls no import. Returns DK_JOB_MORE (1) to be called again, 0 when finished, or a negative error.
+job_step_fn = "i32 (void *arg)"
 # The end of a background job, in the UI task, once. `status` is the last step's result, or DK_JOB_E_CANCELLED.
-job_done = "void (u8 *ctx, i32 status)"
-# One frame of a boot animation (`Api.intro_take`), on the intro task: the 1024-byte native bitmap of `tick`, or NULL to end the animation. No dk_api calls.
-intro_frame = "const u8 *(u32 tick, void *ctx)"
+job_done_fn = "void (void *arg, i32 status)"
+# One frame of a boot animation (`dk_intro_take`), on the intro task: the 1024-byte native bitmap of `tick`, or NULL to end the animation. No import calls.
+intro_frame_fn = "const u8 *(u32 tick, void *arg)"
 # The end of a boot animation, in the UI task, once, at the first UI pass.
-intro_done = "void (void *ctx)"
+intro_done_fn = "void (void *arg)"
+# A step of an I/O job (`dk_io_post`), in the runtime's I/O task: it may block and call dk_files_*. Returns DK_IO_MORE (1), DK_IO_WAIT (2), 0 or a negative error.
+io_step_fn = "i32 (void *arg)"
+# The end of an I/O job, in the UI task, once. `status` is the last step's result, or DK_IO_E_CANCELLED.
+io_done_fn = "void (void *arg, i32 status)"
+# One function for the runtime's helper task (`dk_helper_run`): it computes on its own memory, calls no import and does not wait.
+helper_fn = "void (void *arg)"
+# A menu row action or change (`dk_ui_menu_add_action`, `dk_ui_menu_add_toggle`, `dk_ui_menu_add_value`), in the UI task: `arg` is the pointer the row was added with, `value` the
+# value the row was added with (an action) or the new value.
+ui_action_fn = "void (void *arg, i32 value)"
+# The end of a YES/NO dialog (`dk_ui_confirm`), in the UI task, after the dialog closed: `yes` is 1 for YES, 0 for NO.
+ui_confirm_fn = "void (void *arg, i32 yes)"
+# The end of a choice dialog (`dk_ui_choice`), in the UI task, after the dialog closed: the index of the chosen item.
+ui_choice_fn = "void (void *arg, i32 index)"
+# A UI-task timer (`dk_ui_tick`): short, it runs between key events and must not wait.
+ui_tick_fn = "void (void *arg)"
+# The action of a module's SETTINGS row (`dk_ui_settings_row`), in the UI task, when the user presses YES on the row.
+ui_settings_open_fn = "void (void *arg)"
+# The click of a machine parameter's knob (`dk_param_on_click`), in the UI task, when the knob is clicked on the machine's page (release without a turn): `track` is the track of the page.
+# Replaces `void FN(uint32_t track)` of DK_PARAM_ACTION; `arg` is the pointer given to `dk_param_on_click`.
+param_click_fn = "void (void *arg, u32 track)"
+# The draw callback of a canvas page (`dk_page_canvas`), in the UI task: `frame` is a `const dk_page_frame *` (<dk/page/page.h>), valid for this call only. Replaces `void DRAW(const dk_page_frame *)`.
+page_draw_fn = "void (void *arg, const dk_page_frame *frame)"
+# The event callback of a canvas page (`dk_page_canvas`), in the UI task: `event` is a `const dk_page_event *` (<dk/page/page.h>), valid for this call only. Replaces `void EVENT(const dk_page_event *)`.
+page_event_fn = "void (void *arg, const dk_page_event *event)"
 
 # The machine contract's numbers (sdk/include/dk/gen/machine.h is the generated C view; it includes the generated sdk/include/dk/gen/machine_consts.h).
-# `patchkit gen` writes sdk/asm/dk_machine.inc and sdk/include/dk/gen/machine_consts.h from this table: the constants, then the byte and word offsets of the fields (all 4 bytes).
+# `patchkit gen` writes sdk/dsp/contract/dk_machine.inc and sdk/include/dk/gen/machine_consts.h from this table: the constants, then the byte and word offsets of the fields (all 4 bytes).
 [machine]
 consts = [
     { name = "DK_MACHINE_V1", value = 1, doc = "Contract version." },
@@ -104,18 +97,17 @@ consts = [
 voice_in = ["pitch", "velocity", "block", "out", "track", "out_r", "gate"]           # struct dk_voice_in, DK_IN_*
 desc = [
     "magic", "contract", "n_params", "voices", "state_bytes",
-    "state_clear_bytes", "max_cycles_block", "max_cycles_note_on", "max_call_depth", "stack_bytes",
+    "state_clear_bytes", "max_call_depth", "stack_bytes",
 ]                                                          # struct dk_machine_desc, DK_DESC_*
 
 # The typed C view that `patchkit gen` writes sdk/include/dk/gen/machine.h from: `"<type> <name> // doc"` per field (4 bytes each; the names must equal
 # `voice_in` and `desc` above, in order) and `"<ret> <name>(<args>) // doc"` per entry point. Types: u32 i32 float, pointers, `const`.
 [machine.c]
 intro = '''The numbers are in sdk/sdk.toml [machine], from which `patchkit gen` writes sdk/include/dk/gen/machine_consts.h (included here) and
-   sdk/asm/dk_machine.inc for assembly. Each constant is documented in the consts header.'''
+   sdk/dsp/contract/dk_machine.inc for assembly. Each constant is documented in the consts header.'''
 desc_doc = "One per module in read-only data, found by the manifest's symbol. No function pointers: the manifest names the entry symbols."
 rules = '''Entry points (symbols named in the manifest). SHARC+ assembly, v1: the adapter enters with `I13 = return address;
-   JUMP (M13, I12)` and the module returns with `JUMP (M13, I13)`. Arguments R4 = state, R8 = in, R12 = params; result R0.
-   May clobber R0-R15, I0-I5, M1-M4, B3; must keep I6-I15, M0, M5-M15, L0-L7, MODE1.'''
+   JUMP (M13, I12)` and the module returns with `JUMP (M13, I13)`. Arguments R4 = state, R8 = in, R12 = params; result R0.'''
 voice_in = [
     "i32 pitch // semitones << 8 (MIDI note 60 = 60 << 8), the device's tune added",
     "i32 velocity // 0 .. 127 << 8",
@@ -132,8 +124,6 @@ desc = [
     "u32 voices // 1 .. DK_MAX_VOICES the module supports",
     "u32 state_bytes // per voice, a multiple of 4; a voice's state is zeroed when its track first plays a note after the module loads (contract 1.6), then only state_clear_bytes at each note-on",
     "u32 state_clear_bytes // leading bytes zeroed at note-on, <= state_bytes",
-    "u32 max_cycles_block // worst-case instructions of one render call",
-    "u32 max_cycles_note_on // the same for the note-on block (note_on + render)",
     "u32 max_call_depth // nested CALLs the module uses",
     "u32 stack_bytes // data stack the module uses",
 ]
@@ -142,8 +132,32 @@ fns = [
     "i32 render(void *state, const dk_voice_in *in, const i32 *params) // Once per block while the voice runs, including the note-on block after note_on. Writes DK_BLOCK floats to in->out. params: DK_MAX_PARAMS words; DK_PARAM_LATCHED words retain the effective clamped note_on value, all other words are live. Returns dk_status.",
 ]
 
+# The register contract of module DSP code, machine and FX entry points alike, in one table. `patchkit gen` writes the rule comments of
+# sdk/include/dk/gen/machine.h and fx.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from it. Entries are names, ranges (`R0-R15`)
+# or groups: MR = MRF, MRB, MSF, MSB; ASTAT = ASTATX, ASTATY; STKY = STKYX, STKYY; LCNTR also covers the loop registers CURLCNTR and LADDR.
+# clobber: free to use. keep: save before the first write, restore before every return (I6 is the frame pointer; B6 goes with it).
+# stack: the stack pointer I7; it changes only through balanced pushes and pops (post-modify with M6 or M7, or MODIFY by a constant), holds its
+# entry value at every return and is never loaded with another address. never_write: the stock interrupt code addresses through I6 and I7 with
+# L6 = L7 = 0, takes M5, M6, M7 and M13 as constants, and a write to B7 also moves I7; so none of these may be written, not even with a save and
+# restore. entry: the entry address arrives in I12 (it may be overwritten: both adapters restore it, the machine adapter from the stock frame, the
+# fx adapter from its own copy); the return address arrives in I13 (keep: the module returns with `JUMP (M13, I13)`).
+# The check is `dksharc::rules`, run by `patchkit build` for content modules; it only warns for now.
+[dsp.registers]
+clobber     = ["R0-R15","I0-I5","I12","M1-M4","B3","MR","PX","ASTAT","STKY","LCNTR","USTAT1","USTAT2","USTAT3","USTAT4","PX1","PX2","BFFWRP","BFF_HI","BFF_LO"]
+keep        = ["I6","I8-I11","I14","I15","M0","M8-M12","M14","M15","B0-B2","B4-B6","B8-B15","L0-L5","L8-L15","S0-S15","MODE1","MODE2"]
+stack       = ["I7","PCSTK","PCSTKP"]
+never_write = ["B7","L6","L7","M5","M6","M7","M13","IMASK","IMASKP","IRPTL","MMASK","TPERIOD","TCOUNT","FLAGS"]
+entry       = { entry = "I12", return = "I13" }
+
+# The slots of the hook stubs (docs/plans/runtime-and-services.md R12-8): `words` 32-bit words, zero at boot, at the start of window 0 of core/dsp-link (`_dl_slots`). A hook site of the
+# image reads its slot; zero takes the stock path, else the word is the pc of a service's dispatch code. The order is the slot index. `patchkit gen` writes sdk/dsp/contract/dk_stub.inc
+# (DK_SLOT_*: byte offsets) from it; the file is part of the service ABI hash. A `[[slot]] space = "dsp"` of an image adapter and a `[[fill]]` of a service name an entry.
+[dsp.slots]
+words = 16
+names = ["voice_render", "voice_unpack", "fx_entry", "fx_send"]
+
 # The FX contract's numbers (sdk/include/dk/gen/fx.h is the generated C view; it includes the generated sdk/include/dk/gen/fx_consts.h).
-# `patchkit gen` writes sdk/asm/dk_fx.inc and sdk/include/dk/gen/fx_consts.h from this table. Do not include it together with dk_machine.inc (DK_BLOCK and DK_LEVEL_BOUND_BITS are in both).
+# `patchkit gen` writes sdk/dsp/contract/dk_fx.inc and sdk/include/dk/gen/fx_consts.h from this table. Do not include it together with dk_machine.inc (DK_BLOCK and DK_LEVEL_BOUND_BITS are in both).
 [fx]
 consts = [
     { name = "DK_FX_V1", value = 1, doc = "Contract version." },
@@ -157,20 +171,19 @@ consts = [
 ]
 fx_in = ["in", "out", "block"]                             # struct dk_fx_in, DK_FX_IN_*
 desc = [
-    "magic", "contract", "n_params", "state_bytes", "max_cycles_block", "max_call_depth", "stack_bytes",
+    "magic", "contract", "n_params", "state_bytes", "max_call_depth", "stack_bytes",
 ]                                                          # struct dk_fx_desc, DK_FX_DESC_*
 
 # The typed C view of sdk/include/dk/gen/fx.h (as [machine.c]).
 [fx.c]
 intro = '''An effect processes the final stereo block of the device (the master, before the USB pack and the DAC converter).
-   The numbers are in sdk/sdk.toml [fx], from which `patchkit gen` writes sdk/include/dk/gen/fx_consts.h (included here) and sdk/asm/dk_fx.inc for assembly.
+   The numbers are in sdk/sdk.toml [fx], from which `patchkit gen` writes sdk/include/dk/gen/fx_consts.h (included here) and sdk/dsp/contract/dk_fx.inc for assembly.
    Do not include dk_fx.inc and dk_machine.inc in one assembly file (DK_BLOCK and DK_LEVEL_BOUND_BITS are in both).'''
 desc_doc = '''One per module in read-only data, found by the module's registry row (patched in) or its DK_FX record (run-time, DSP section version 4
    of the .dkm). The row holds DK_FX_MAX_PARAMS parameter words, p0 to p7: word i of `params` is p_i, all 0 unless the row says otherwise (a run-time
    effect's record gives defaults). The adapter passes the words as they are; n_params says how many the effect reads. No function pointers.'''
 rules = '''Entry point. SHARC+ assembly, v1: the adapter enters with `I13 = return address; JUMP (M13, I12)` and the module returns with
-   `JUMP (M13, I13)`. Arguments R4 = state, R8 = in (dk_fx_in), R12 = params; result R0. Register rules as dk_machine.h:
-   may clobber R0-R15, I0-I5, M1-M4, B3; must keep I6-I15, M0, M5-M15, L0-L7, MODE1.'''
+   `JUMP (M13, I13)`. Arguments R4 = state, R8 = in (dk_fx_in), R12 = params; result R0.'''
 fx_in = [
     "const float *in // the block before this effect, DK_FX_BLOCK floats, read only",
     "float *out // process writes DK_FX_BLOCK floats here (adapter scratch)",
@@ -181,7 +194,6 @@ desc = [
     "u32 contract // DK_FX_V1",
     "u32 n_params // 0 .. DK_FX_MAX_PARAMS",
     "u32 state_bytes // one instance, a multiple of 4; zeroed when the effect switches on",
-    "u32 max_cycles_block // worst-case instructions of one process call",
     "u32 max_call_depth // nested CALLs the module uses",
     "u32 stack_bytes // data stack the module uses",
 ]
@@ -189,251 +201,37 @@ fns = [
     "i32 process(void *state, const dk_fx_in *in, const i32 *params) // Block entry point. params: DK_FX_MAX_PARAMS words. Returns dk_fx_status; a negative number is a fault: the block plays dry. Entered as note_on of dk_machine.h.",
 ]
 
-# Descriptor records: what a module declares with the DK_* macros of <dk/fx.h> and <dk/machine.h>. The macros place them in the
-# `.dk.desc` section of the module's ColdFire object. `patchkit` reads them when it loads the module and lowers them to the register
-# records of the .dkm or to the registry rows of a patched-in module; they never reach the device. `patchkit gen` writes
-# sdk/include/dk/gen/desc.h from this table.
-# Fields are 4 bytes (big-endian) or char arrays whose length is a multiple of 4: text is printable ASCII, NUL-padded.
-[desc]
-section = ".dk.desc"
+# Page constants. `patchkit gen` writes `consts` to the public sdk/include/dk/gen/page_consts.h: the knob glyphs, the display of an effect
+# parameter and the routes of an effect, which builders pass to dk_param_glyph, dk_page_add_fx_param and dk_fx_routes. `knobs` is
+# DK_PAGE_KNOBS, the encoders on a page: the array length of the register records (`patchkit::register::KNOBS`) and a runtime limit.
+[page]
+knobs = 8
 consts = [
-    { name = "DK_DESC_SAMPLE_BANK", value = 6, doc = "Record kind of dk_desc_sample_bank." },
-    { name = "DK_DESC_SAMPLE_TRACKS", value = 7, doc = "Record kind of dk_desc_sample_tracks." },
-    { name = "DK_DESC_FX", value = 1, doc = "Record kind of dk_desc_fx." },
-    { name = "DK_DESC_MACHINE", value = 2, doc = "Record kind of dk_desc_machine." },
-    { name = "DK_DESC_PARAM", value = 3, doc = "Record kind of dk_desc_param." },
-    { name = "DK_DESC_PAGE", value = 4, doc = "Record kind of dk_desc_page." },
-    { name = "DK_DESC_FX_PARAM", value = 5, doc = "Record kind of dk_desc_fx_param." },
-    { name = "DK_DESC_PARAM_ACTION", value = 8, doc = "Record kind of dk_desc_param_action." },
-    { name = "DK_DESC_PARAM_GLYPH", value = 9, doc = "Record kind of dk_desc_param_glyph." },
-    { name = "DK_DESC_PARAM_LATCHED", value = 10, doc = "Record kind of dk_desc_param_latched (machine contract 1.3)." },
-    { name = "DK_DESC_NATIVE_PAGE", value = 11, doc = "Record kind of dk_desc_native_page (machine contract 1.4)." },
-    { name = "DK_DESC_NATIVE_PAGE_V2", value = 12, doc = "Record kind of dk_desc_native_page_v2 (machine contract 1.5)." },
     { name = "DK_GLYPH_ENCODER", value = 0, doc = "Glyph (the dk_glyph values): a plain encoder knob, values 0 .. 127 (the default)." },
     { name = "DK_GLYPH_FADER", value = 1, doc = "Glyph: a fader, values 0 .. 127." },
     { name = "DK_GLYPH_PAN", value = 2, doc = "Glyph: a pan knob, values 0 .. 127 (centre 64, shows L/R)." },
     { name = "DK_GLYPH_ONOFF", value = 3, doc = "Glyph: an on/off switch, values 0 .. 1." },
     { name = "DK_GLYPH_TUNE", value = 4, doc = "Glyph: a tune knob, values 4 .. 124 (centre 64, one unit = one semitone)." },
     { name = "DK_GLYPH_PLAY", value = 5, doc = "Glyph: a play-mode knob, values 0 .. 3 (REV, REV.L, FWD.L, FWD on the Digitakt II; the Digitone II shows 0 .. 3)." },
-    { name = "DK_PAGE_KNOBS", value = 8, doc = "Encoders on a page." },
-    { name = "DK_POS_AUTO", value = 255, doc = "The knob takes the lowest free position." },
     { name = "DK_PERCENT", value = 1, doc = "A knob shown as 0 .. 127 (the default)." },
     { name = "DK_BIPOLAR", value = 2, doc = "A knob shown as -64 .. +63." },
     { name = "DK_ROUTE_MASTER", value = 1, doc = "The effect runs on the master block." },
     { name = "DK_ROUTE_SEND", value = 2, doc = "The effect runs on a send bus (one amount per track)." },
 ]
 
-[[desc.record]]
-name = "dk_desc_sample_bank"
-kind = "DK_DESC_SAMPLE_BANK"
-doc = "One module-owned DSP BSS sample bank and initialized zero descriptor. At most one per module."
-fields = [
-    "u32 kind // DK_DESC_SAMPLE_BANK",
-    "u32 size // sizeof(dk_desc_sample_bank)",
-    "u32 local_id // module-local numeric id",
-    "char bank[32] // module DSP BSS symbol",
-    "char descriptor[32] // module DSP initialized data symbol, four zero words",
-    "u32 capacity_frames // mono float frames, 1 .. 8192",
-]
-
-[[desc.record]]
-name = "dk_desc_sample_tracks"
-kind = "DK_DESC_SAMPLE_TRACKS"
-doc = "Per-track stereo sample table (API 1.5): 16 initially zero dk_strack records and one control set per track. At most one per module; not with a sample bank."
-fields = [
-    "u32 kind // DK_DESC_SAMPLE_TRACKS",
-    "u32 size // sizeof(dk_desc_sample_tracks)",
-    "u32 local_id // module-local numeric id",
-    "char records[32] // module DSP data symbol: 16 dk_strack records, 8 words each, zero",
-    "char control[32] // module DSP data symbol: 16 control sets of 4 words (closed, count, fault, reserved), zero",
-]
-
-[[desc.record]]
-name = "dk_desc_fx"
-kind = "DK_DESC_FX"
-doc = "One effect. The process routine and its dk_fx_desc are symbols of the module's SHARC+ object."
-fields = [
-    "u32 kind // DK_DESC_FX",
-    "u32 size // sizeof(dk_desc_fx)",
-    "char id[16] // the effect id, unique in the module with the machine ids; saved kits keep module id + effect id",
-    "char process[32] // the SHARC+ symbol of the process routine",
-    "char desc[32] // the SHARC+ symbol of the dk_fx_desc",
-    "u32 mix // 0 .. 127, the MIX knob default",
-    "u32 route // DK_ROUTE_MASTER or DK_ROUTE_SEND; 0 = DK_ROUTE_MASTER",
-    "u32 routes // the routes the user may choose, a mask; 0 = the default for `route`",
-]
-
-[[desc.record]]
-name = "dk_desc_fx_param"
-kind = "DK_DESC_FX_PARAM"
-doc = "One parameter word of an effect. Word i is p_i of the effect's row; the effect reads it as a float."
-fields = [
-    "u32 kind // DK_DESC_FX_PARAM",
-    "u32 size // sizeof(dk_desc_fx_param)",
-    "char fx[16] // the id of the effect",
-    "u32 word // 0 .. 6, the parameter word; the words of an effect have no gaps",
-    "u32 display // DK_PERCENT or DK_BIPOLAR; 0 = DK_PERCENT",
-    "float min // the value at the lowest knob position",
-    "float max // the value at the highest knob position",
-    "float def // the default, from min to max",
-    "char name[24] // 1 to 23 characters, shown while the knob turns",
-    "char short_name[8] // 1 to 6 characters, under the knob",
-]
-
-[[desc.record]]
-name = "dk_desc_machine"
-kind = "DK_DESC_MACHINE"
-doc = "One machine. The render and note-on routines and the dk_machine_desc are symbols of the module's SHARC+ object."
-fields = [
-    "u32 kind // DK_DESC_MACHINE",
-    "u32 size // sizeof(dk_desc_machine)",
-    "char id[16] // the machine id, unique in the module with the effect ids",
-    "char name[24] // 1 to 23 characters, the machine's name in the menu",
-    "char short_name[24] // 1 to 23 characters, the short name",
-    "char render[32] // the SHARC+ symbol of the render routine",
-    "char note_on[32] // the SHARC+ symbol of the note-on routine",
-    "char desc[32] // the SHARC+ symbol of the dk_machine_desc",
-    "u32 stereo // 0 mono, 1 stereo (contract 1.2); must agree with DK_MACHINE_STEREO in the dk_machine_desc",
-]
-
-[[desc.record]]
-name = "dk_desc_param"
-kind = "DK_DESC_PARAM"
-doc = "One parameter of a machine. Values are knob units times 256 (0x7f00 = 127.0)."
-fields = [
-    "u32 kind // DK_DESC_PARAM",
-    "u32 size // sizeof(dk_desc_param)",
-    "char machine[16] // the id of the machine",
-    "char id[24] // the parameter id, unique in the module",
-    "u32 word // 0 .. 7, the place in the params array of the machine; the words of a machine have no gaps",
-    "i32 min // the lowest value, raw",
-    "i32 max // the highest value, raw",
-    "i32 def // the default, raw",
-    "char name[32] // 1 to 31 characters, shown while the knob turns",
-    "char short_name[16] // 1 to 15 characters, under the knob",
-]
-
-[[desc.record]]
-name = "dk_desc_param_action"
-kind = "DK_DESC_PARAM_ACTION"
-doc = "A click on the knob of one parameter word of a machine calls a function of the module (docs/design/machine-page-click.md). At most one per parameter."
-fields = [
-    "u32 kind // DK_DESC_PARAM_ACTION",
-    "u32 size // sizeof(dk_desc_param_action)",
-    "char machine[16] // the id of the machine",
-    "u32 word // 0 .. 7, the parameter word of the machine whose knob is clicked; the machine declares it with DK_PARAM",
-    "char fn[32] // the ColdFire symbol of the callback, `void fn(u32 track)`: a global function of the module, called in the UI task",
-]
-
-[[desc.record]]
-name = "dk_desc_param_glyph"
-kind = "DK_DESC_PARAM_GLYPH"
-doc = "The look of one parameter word of a machine: its glyph (a dk_glyph value) selects the stock row whose knob picture, value text and step behaviour the parameter copies. At most one per parameter; without it the glyph is DK_GLYPH_ENCODER. Glyphs on effect parameters are not supported yet."
-fields = [
-    "u32 kind // DK_DESC_PARAM_GLYPH",
-    "u32 size // sizeof(dk_desc_param_glyph)",
-    "char owner[16] // the id of the machine (an effect id is refused for now)",
-    "u32 word // 0 .. 7, the parameter word of the machine; the machine declares it with DK_PARAM",
-    "u32 glyph // DK_GLYPH_ENCODER .. DK_GLYPH_PLAY",
-]
-
-[[desc.record]]
-name = "dk_desc_param_latched"
-kind = "DK_DESC_PARAM_LATCHED"
-doc = "Snapshot one machine parameter at actual note_on, after effective values and clamping. Render sees that value until the next note_on; undeclared words remain live. At most one declaration per parameter. Requires machine contract 1.3."
-fields = [
-    "u32 kind // DK_DESC_PARAM_LATCHED",
-    "u32 size // sizeof(dk_desc_param_latched)",
-    "char owner[16] // the declared machine id",
-    "u32 word // the declared machine parameter word, 0 .. 7",
-]
-
-[[desc.record]]
-name = "dk_desc_page_knob"
-doc = "One encoder of a page. An unused entry is all zero."
-fields = [
-    "u32 used // 1 when the encoder is set, else 0",
-    "u32 word // the parameter word of the machine or the effect that the encoder sets",
-    "u32 position // 0 .. 7, the encoder on the page, or DK_POS_AUTO",
-]
-
-[[desc.record]]
-name = "dk_desc_page"
-kind = "DK_DESC_PAGE"
-doc = "A page of encoders for a machine or an effect."
-fields = [
-    "u32 kind // DK_DESC_PAGE",
-    "u32 size // sizeof(dk_desc_page)",
-    "char owner[16] // the id of the machine or the effect",
-    "char name[24] // 1 to 23 characters; for an effect, 1 to 3: the tab of the FX page",
-    "char title[24] // 1 to 23 characters, the page title",
-    "dk_desc_page_knob knob[DK_PAGE_KNOBS] // the encoders, from entry 0, without gaps",
-]
-
-[[desc.record]]
-name = "dk_desc_native_binding"
-doc = "One encoder of an opt-in native page: kind 1 PARAM names an existing parameter word; kind 2 LOCAL names a UI-local control id; kind 0 is unused."
-fields = [
-    "u32 kind // 0 unused, 1 PARAM, 2 LOCAL",
-    "u32 value // parameter word or local control id",
-    "u32 position // encoder 0 .. 7",
-]
-
-[[desc.record]]
-name = "dk_desc_native_page"
-kind = "DK_DESC_NATIVE_PAGE"
-doc = "One additional native page, after a machine's ordinary page zero. Version 1 has a bounded draw callback and an event callback for LOCAL controls only; PARAM controls use the native parameter edit path."
-fields = [
-    "u32 kind // DK_DESC_NATIVE_PAGE",
-    "u32 size // sizeof(dk_desc_native_page)",
-    "u32 version // 1",
-    "char owner[16] // declared machine id",
-    "char title[24] // 1 to 23 printable characters",
-    "char draw[32] // ColdFire draw callback symbol",
-    "char event[32] // ColdFire LOCAL event callback symbol",
-    "dk_desc_native_binding binding[DK_PAGE_KNOBS] // contiguous used entries, unique positions",
-]
-
-[[desc.record]]
-name = "dk_desc_native_page_v2"
-kind = "DK_DESC_NATIVE_PAGE_V2"
-doc = "One of exactly two replacement native pages, indexes zero and one, of a machine. Uses the shared callback frame/event v1 ABI; cannot mix with append-only native page v1."
-fields = [
-    "u32 kind // DK_DESC_NATIVE_PAGE_V2",
-    "u32 size // sizeof(dk_desc_native_page_v2)",
-    "u32 version // 2",
-    "char owner[16] // declared machine id",
-    "char title[24] // 1 to 23 printable characters",
-    "char draw[32] // ColdFire draw callback symbol",
-    "char event[32] // ColdFire LOCAL event callback symbol",
-    "u32 page // replacement page index 0 or 1; both are required",
-    "u32 flags // 0, DK_PAGE_STOCK_OVERLAY (1, page zero only) or DK_PAGE_WIDE_CANVAS (2, page one only, 107x53 canvas); the two flags are mutually exclusive",
-    "dk_desc_native_binding binding[DK_PAGE_KNOBS] // contiguous used entries, unique positions",
-]
-
-# The names a module may import. The runtime's table (modules/core/runtime/src/rs/src/lib.rs `IMPORTS`) holds those without `requires`, in this
-# order; those with `requires` are symbols of another module that the runtime links by name (`optional` in its module.toml). `kind` `helper`: a
-# compiler helper that gcc calls by itself, or a call whose prototype is in another header (<dk/ui.h>), so none in <dk/gen/api.h>; `fw`: a firmware
-# function. `requires`: the module whose absence makes the address 0 (the import is then not found). `absent`: with `requires`, the runtime hands
-# out a stub instead of 0 and the module loads: the stub returns this value ("0", "-1") or nothing ("void"), and the signature must agree.
-[[import]]
-name = "fw_block_read"
-sig = "i32 (u32 sector, u32 bytes, u8 *buf)"
-doc = "The firmware's eMMC block read; 0 = ok."
-kind = "fw"
-
-[[import]]
-name = "fw_alloc"
-sig = "u8 *(u32 size)"
-doc = "The firmware's operator new (the 32 MiB buddy allocator)."
-kind = "fw"
-
-[[import]]
-name = "fw_free"
-sig = "void (u8 *p)"
-doc = "The firmware's free, paired with fw_alloc."
-kind = "fw"
-
+# The names a module may import. The service imports (`service`, `since` and `context` set) are the SDK of the entry point `dk_module` (docs/plans/sdk.md
+# section 5.1). The runtime's table (modules/core/runtime/src/rs/src/lib.rs `IMPORTS`) holds the imports without `requires`, in this order; those with `requires`
+# are symbols of another module that the runtime links by name (`optional` in its module.toml). `kind` `helper`: a compiler helper that gcc calls by itself, or a
+# call whose prototype is in another header (<dk/platform/ui.h>), so none in <dk/gen/imports.h>. `requires`: the module whose absence makes the address 0 (the
+# import is then not found). `absent`: with `requires`, the runtime hands out a stub instead of 0 and the module loads: the stub returns this value ("0", "-1"),
+# the status DK_E_MISSING ("missing") or nothing ("void"), and the signature must agree.
+# `provided = true`: the import is a function of a service file (`.dks`), not of the runtime's table; the file exports it, and its export list is these imports in this
+# order (the header table sorts them by name hash). `wrapper = "<module>"`: with `provided`, the function is written by hand in that module of the service's `dks/src`
+# (`fw`, `builder`, `glue`: it converts a callback, takes the click state or a client handle). Without `wrapper` the function is a pure wrapper: `patchkit gen` writes
+# it to `modules/core/services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
+# calls `build::add_machine`) and a callback argument is an error. If the service crate's function has another name, or the call is not a plain forward, use `wrapper`.
+# `internal = true`: with `provided` and `wrapper`, an export that only the runtime calls, by name, through the loader's export table (`handlers::exports`): it is in the file's export
+# list and `gen_exports.rs`, and in no header, document or import table of a module. It is a plain `extern "C"` function with no core argument (the file reaches the core through `ImportCore`).
 [[import]]
 name = "memcpy"
 sig = "u8 *(u8 *d, const u8 *s, u32 n)"
@@ -468,207 +266,1175 @@ doc = "The runtime's unsigned 64-bit remainder."
 kind = "helper"
 
 [[import]]
-name = "input_key"
-sig = "i32 (u32 code, u32 down)"
-doc = "Press or release a panel key."
-requires = "core/input"
-
-[[import]]
-name = "input_turn"
-sig = "i32 (u32 encoder, i32 delta)"
-doc = "Turn an encoder by `delta`."
-requires = "core/input"
-
-[[import]]
-name = "dk_ui_has"
-sig = "i32 (i32 cap)"
-doc = "1 when this device has the UI capability `cap` (DK_UI_CAP_*), else 0. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "0"
-
-[[import]]
 name = "dk_ui_menu_new"
-sig = "u8 *(const u8 *desc)"
-doc = "Make a menu from a dk_ui_menu_desc; 0 when out of memory. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "0"
-
-[[import]]
-name = "dk_ui_open"
-sig = "i32 (u8 *menu)"
-doc = "Fill and show a menu on top of the current view; -1 when it cannot. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "-1"
-
-[[import]]
-name = "dk_ui_close"
-sig = "void (u8 *menu)"
-doc = "Close a menu. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_select"
-sig = "void (u8 *menu, i32 row)"
-doc = "Put the cursor of a menu or list on a row (clamped); call before dk_ui_open to start on the current choice. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_is_open"
-sig = "i32 (const u8 *menu)"
-doc = "1 when the menu is open. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "0"
-
-[[import]]
-name = "dk_ui_refresh"
-sig = "void (u8 *menu)"
-doc = "Fill an open menu again. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_action"
-sig = "void (u8 *menu, const char *text, u8 *run, u8 *ctx, i32 arg)"
-doc = "Add a row that runs `fn(ctx, arg)` on YES. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_submenu"
-sig = "void (u8 *menu, const char *text, u8 *sub)"
-doc = "Add a row that opens another menu. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_text"
-sig = "void (u8 *menu, const char *text)"
-doc = "Add a row of text without an action. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_toggle"
-sig = "void (u8 *menu, const char *text, i32 *value, u8 *changed, u8 *ctx)"
-doc = "Add an ON/OFF row. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_value"
-sig = "void (u8 *menu, const char *text, i32 *value, i32 min, i32 max, u8 *changed, u8 *ctx)"
-doc = "Add a number row changed by the encoder. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_check"
-sig = "void (u8 *list, i32 row, i32 on)"
-doc = "Set the check mark of a list row. See <dk/ui.h>."
-kind = "helper"
-requires = "core/ui"
-absent = "void"
-
-[[import]]
-name = "dk_ui_checked"
-sig = "i32 (const u8 *list, i32 row)"
-doc = "1 when the list row is checked. See <dk/ui.h>."
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "dk_ui_menu *(dk_ui *ui, const void *desc)"
+doc = "Make a menu from a `dk_ui_menu_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype); NULL when out of memory. Menus are never freed."
 kind = "helper"
 requires = "core/ui"
 absent = "0"
 
 [[import]]
 name = "dk_ui_confirm"
-sig = "i32 (const char *title, const char *text, u8 *done, u8 *ctx)"
-doc = "A YES/NO dialog; -1 when it cannot be shown. See <dk/ui.h>."
-kind = "helper"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_ui *ui, const char *title, const char *text, ui_confirm_fn done, void *arg)"
+doc = "A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory)."
 requires = "core/ui"
 absent = "-1"
 
 [[import]]
 name = "dk_ui_choice"
-sig = "i32 (const char *title, u8 *items, i32 n, u8 *done, u8 *ctx)"
-doc = "A choice of n items; -1 when it cannot be shown. See <dk/ui.h>."
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_ui *ui, const char *title, const void *items, i32 n, ui_choice_fn done, void *arg)"
+doc = "A choice of `n` items (`items` is a `const char *const *`, declared in <dk/platform/ui.h>, which also has the typed prototype): `done(arg, index)` runs after the dialog closed; NO closes it without calling `done`. 0 when shown, a negative code when not."
 kind = "helper"
 requires = "core/ui"
 absent = "-1"
 
 [[import]]
 name = "dk_ui_toast"
-sig = "i32 (const char *text)"
-doc = "A short message on the main screen; -1 when it cannot be shown. See <dk/ui.h>."
-kind = "helper"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_ui *ui, const char *text)"
+doc = "A short message on the main screen that goes away by itself. 0 when shown, a negative code when not."
 requires = "core/ui"
 absent = "-1"
 
 [[import]]
 name = "dk_ui_tick"
-sig = "i32 (u8 *cb, u8 *ctx, u32 period_ms)"
-doc = "Call `cb(ctx)` about every `period_ms` in the UI task (period 0 removes it); 0 when set, -1 when it cannot be (no core/ui, table full). See <dk/ui.h>."
-kind = "helper"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_ui *ui, ui_tick_fn fn, void *arg, u32 period_ms)"
+doc = "Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>."
 requires = "core/ui"
 absent = "-1"
 
 [[import]]
-name = "dl_set_tick_cb"
-sig = "void (u8 *cb)"
-doc = "Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short: a plain C function, no allocation, no logging. Clear it in `fini`. Without core/dsp-link the call does nothing."
-requires = "core/dsp-link"
+name = "dk_ui_settings_row"
+service = "ui"
+since = "0.10.5"
+context = "init"
+sig = "i32 (dk_ui *ui, const char *text, ui_settings_open_fn open, void *arg)"
+doc = "Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>."
+requires = "core/ui"
+absent = "-1"
+
+[[import]]
+name = "dk_ui_view_open"
+service = "ui"
+since = "0.10.5"
+context = "ui"
+sig = "dk_ui_view *(dk_ui *ui, const void *desc)"
+doc = "Open a screen the module draws from a `dk_ui_view_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype); NULL when the desc is wrong or the pool is full. Closed for the module when it unloads."
+kind = "helper"
+requires = "core/ui"
+absent = "0"
+
+[[import]]
+name = "dk_ui_view_close"
+service = "ui"
+since = "0.10.5"
+context = "ui"
+sig = "void (dk_ui_view *view)"
+doc = "Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing."
+requires = "core/ui"
 absent = "void"
 
 [[import]]
-name = "dkrt_blocks"
-sig = "u32 ()"
-doc = "The 1500 Hz block clock, for a module that wants to measure time."
+name = "dk_ui_text_input"
+service = "ui"
+since = "0.10.5"
+context = "ui"
+sig = "i32 (dk_ui *ui, const void *desc)"
+doc = "Open the stock naming screen from a `dk_ui_text_input_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype): `done(arg, text)` runs on YES only. 0 when shown, a negative code when not (DK_E_CONTRACT: the desc is wrong)."
+kind = "helper"
+requires = "core/ui"
+absent = "-1"
+
+# ---- The service imports (docs/plans/sdk.md section 5.1) -----------------------------------------------------------------
+# `service`: runtime, samples, machines, fx, ui, input, usb_bulk, dsp_link, sdhc_large. `since`: the runtime version that added the import ("0.7.0"); `patchkit pack` writes the newest `since` among the imports
+# a module links as the runtime version it needs. `context`: where the call may run. `init`: only inside the
+# module's `init`. `ui`: the UI task, which includes init, fini, tick, menu and the callbacks that run there. `io-step`: only inside an I/O step.
+# `any`: any task, never an interrupt. `isr`: also from an interrupt handler. A handle type (`dk_module_ctx`, `dk_settings`, ...) is opaque: the runtime or
+# the provider module gives it out in `init`. The prototypes of the imports that have `service` and no `kind` are written into
+# sdk/include/dk/gen/imports.h. An import with `requires` binds to a stub when its provider is not in the image: `absent = "missing"` makes
+# the stub return DK_E_MISSING.
 
 [[import]]
-name = "dkrt_log_sink_set"
-sig = "void (u8 *sink, u8 *tick)"
-doc = "Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked (short, no waiting, no logging). `dk_log_ev` is 32 bytes: `u32 seq` (0 here), `u32 time` (block counter), `u16 kind`, `u16 flags`, `u32 a[5]`. At the call the sink gets the events of the runtime's small ring (the boot and the errors so far), oldest first. `tick` (0: none) is `void tick(void)`, called once per pass of the UI task with this module as the source, outside the interrupt mask: it keeps the module off slot 0, which only one module can hold. The runtime clears a sink or a tick that points into a module's memory after its `fini`. Used by digikit/debug."
+name = "dk_alloc"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void *(u32 size)"
+doc = "A 16-byte aligned block from the module arena (zero is not guaranteed); null when it is full."
 
 [[import]]
-name = "dkrt_log_ev"
+name = "dk_free"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void (void *p)"
+doc = "Give back a block of dk_alloc."
+
+[[import]]
+name = "dk_log"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void (u32 level, const char *msg, u32 value)"
+doc = "Append `msg` (NUL-terminated, 24 bytes kept) and `value` to the runtime's log ring at `level` (0 error, 1 warn, 2 info, 3 debug, 4 trace; above 4 is 4). See <dk/core/log.h>."
+
+[[import]]
+name = "dk_log_event"
+service = "runtime"
+since = "0.7.0"
+context = "any"
 sig = "void (u32 kind, u32 flags, const u32 *a)"
-doc = "Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` holds one. For a module that logs a kind of its own."
+doc = "Log one event as the runtime's own call does (the sink and the small ring see it): `kind` and `flags` as in `dk_log_ev`, `a` five words. The source is the module that is running unless `flags` names another."
 
 [[import]]
-name = "dkrt_peek_range"
+name = "dk_sink_set"
+service = "runtime"
+since = "0.7.1"
+context = "any"
+sig = "i32 (u32 channel, u8 *sink)"
+doc = "Set (or, with 0, clear) the sink of a runtime channel for the calling module: DK_SINK_LOG (0) gets `void sink(const dk_log_ev *e)` for every event the runtime logs, DK_SINK_SPAN (1) gets `void sink(const dk_span *s)`, an (owner, cycles) record. A sink runs in the producer's task with interrupts masked: short, no waiting, no logging. A channel has one owner; the runtime clears it after the owner's fini. Returns 0, DK_E_RANGE (no such channel), DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the channel). See <dk/core/sink.h>."
+
+[[import]]
+name = "dk_span_sink_set"
+service = "runtime"
+since = "0.8.1"
+context = "any"
+sig = "i32 (u8 *emit, u8 *clock)"
+doc = "Take the span channel like `dk_sink_set(DK_SINK_SPAN, emit)` and also store the clock the runtime reads for the spans: `u32 clock(void)`, a free-running counter that wraps. The runtime reads the clock before and after a call it measures and passes the difference to `emit` as the cycles of the span. (0, 0) clears both. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the channel). With no sink or no clock the runtime reads no clock. See <dk/core/sink.h>."
+
+[[import]]
+name = "dk_time_blocks"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "u32 ()"
+doc = "The 1500 Hz block clock (wraps), for a module that wants to measure time; 0 when the image has no counter. See <dk/core/time.h>."
+
+[[import]]
+name = "dk_fw_alloc"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void *(u32 size)"
+doc = "The firmware's operator new (the 32 MiB buddy allocator): a block of `size` bytes, or NULL. Give it back with dk_fw_free; the module arena (dk_alloc) is small."
+
+[[import]]
+name = "dk_fw_free"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void (void *p)"
+doc = "The firmware's free, paired with dk_fw_alloc."
+
+[[import]]
+name = "dk_fw_block_read"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "i32 (u32 sector, u32 bytes, void *buf)"
+doc = "The firmware's eMMC block read: `bytes` (a multiple of 512) from `sector` into `buf`; 0 = ok. Reads the whole card, not only the store."
+
+[[import]]
+name = "dk_files_read"
+service = "runtime"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_files *files, const char *path, void *buf, u32 cap)"
+doc = "Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`."
+
+[[import]]
+name = "dk_host_register"
+service = "runtime"
+since = "0.7.0"
+context = "init"
+sig = "i32 (u32 first, u32 count, host_cmd_fn fn)"
+doc = "Register the SysEx commands `first .. first + count` with `fn`. The range must lie inside one of the ranges sdk/sdk.toml [protocol.ranges] reserves and overlap no registered one; else it returns DK_E_CMD_RANGE. The range is released with the module. Returns 0. See <dk/platform/host.h>."
+
+[[import]]
+name = "dk_module_ctx_device"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "u32 (dk_module_ctx *ctx)"
+doc = "The device's `[digikit] id` (DT2 or DN2); 0 for a pointer that is not a context."
+
+[[import]]
+name = "dk_module_ctx_runtime_version"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "u32 (dk_module_ctx *ctx)"
+doc = "The runtime version, packed major << 16 | minor << 8 | patch; 0 for a pointer that is not a context."
+
+[[import]]
+name = "dk_settings_open"
+service = "runtime"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_settings **out)"
+doc = "Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then."
+
+[[import]]
+name = "dk_settings_get"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_settings *s, const char *key, void *out, u32 cap)"
+doc = "Read the value of `key` (NUL-terminated, own key space) into `out` (`cap` bytes): returns its length (0 is valid), DK_E_SET_NOKEY when there is none, DK_E_SET_VALUE when `cap` is too small (nothing is written), DK_E_SET_KEY for a bad handle or key, DK_E_SET_OFF when the settings store is off."
+
+[[import]]
+name = "dk_settings_put"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_settings *s, const char *key, const void *value, u32 len)"
+doc = "Set `key` to the `len` bytes (0 to 1024) at `value`; the card is written 2 s after the last change. Returns 0, DK_E_SET_KEY, DK_E_SET_VALUE, DK_E_SET_FULL or DK_E_SET_OFF. Not from a host command handler."
+
+[[import]]
+name = "dk_settings_remove"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_settings *s, const char *key)"
+doc = "Remove `key`: returns 0 (also when it was not there), DK_E_SET_KEY or DK_E_SET_OFF. Not from a host command handler."
+
+[[import]]
+name = "dk_files_open"
+service = "runtime"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_files **out)"
+doc = "Open this module's listing client: `*out` is the handle, the result 0. A negative result outside init or when the client table is full; `*out` is untouched then."
+
+[[import]]
+name = "dk_files_list"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_files *f, u32 root, const char *path, files_event_fn notify, void *arg)"
+doc = "Copy a canonical root-relative directory request; positive ticket or negative error. Supersedes prior results. The optional deferred UI-task notify and its context stay module-owned. No I/O here."
+
+[[import]]
+name = "dk_files_poll"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_files *f, u32 ticket, void *out, u32 capacity)"
+doc = "No I/O: 0 pending, 1 copied 304-byte dk_file_entry, 2 end, negative error. The output is unchanged unless 1. A listing that is not polled for 10 s is released and its next poll returns E_LOST."
+
+[[import]]
+name = "dk_files_cancel"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_files *f, u32 ticket)"
+doc = "Invalidate the matching request, its results and its queued notification without waiting for active work or a callback."
+
+[[import]]
+name = "dk_files_create"
+service = "runtime"
+since = "0.7.0"
+context = "io-step"
+sig = "i32 (dk_files *f, u32 root, const char *path, u32 size, const void *hash4, u32 flags)"
+doc = "Open the one write session for the file `path` of `size` bytes under `root` (DK_FILES_STORE or DK_FILES_SAMPLES). `hash4`: NULL, or the expected file hash; dk_files_close then checks it. `flags`: 0, DK_FILE_REPLACE (1) or DK_FILE_DEFER (2, a deferred file: dk_files_close checks it but names it in the store only at dk_files_commit or the runtime's own commit). Returns a handle > 0 owned by this module, or a negative status (DK_E_BUSY: try again; DK_E_EXISTS, DK_E_FILE_IN_USE, DK_E_PATH, DK_E_FULL, DK_E_NOSTORE, DK_E_INUSE, DK_E_WRITE; DK_E_CONTEXT outside an I/O step). See <dk/platform/files.h>."
+
+[[import]]
+name = "dk_files_write"
+service = "runtime"
+since = "0.7.0"
+context = "io-step"
+sig = "i32 (dk_files *f, i32 h, u32 offset, const void *buf, u32 len)"
+doc = "Write `len` bytes at `offset`, the next byte of the file. `buf` is 16-byte aligned; `len` a multiple of 512 except for the last piece (the tail sector is padded with zeros). Returns 0 or DK_E_STATE, DK_E_OFFSET, DK_E_LENGTH, DK_E_WRITE, DK_E_CONTRACT (unaligned buf), DK_E_BUSY (nothing was written: call again)."
+
+[[import]]
+name = "dk_files_close"
+service = "runtime"
+since = "0.7.0"
+context = "io-step"
+sig = "i32 (dk_files *f, i32 h, void *hash_out)"
+doc = "End the file. All `size` bytes must have been written (DK_E_LENGTH) and match `hash4` when it was given (DK_E_HASH); the table is committed (power-cut safe), or, for a DK_FILE_DEFER file, the file becomes pending (see dk_files_commit; a dk_files_create with DK_FILE_DEFER that would pass DK_FILE_PENDING_MAX files or 16 MiB commits them first). `hash_out` (4 bytes, may be NULL) gets the file hash of the bytes written. The session is closed whatever the result, except for DK_E_BUSY (try again)."
+
+[[import]]
+name = "dk_files_abort"
+service = "runtime"
+since = "0.7.0"
+context = "io-step"
+sig = "i32 (dk_files *f, i32 h)"
+doc = "Drop the session and the partial file. Returns 0 or DK_E_STATE."
+
+[[import]]
+name = "dk_files_delete"
+service = "runtime"
+since = "0.7.0"
+context = "io-step"
+sig = "i32 (dk_files *f, u32 root, const char *path)"
+doc = "Remove a file or folder entry. Returns 0, DK_E_NOFILE, DK_E_FILE_IN_USE (a reader still reads it: try again later), DK_E_BUSY or a path or store status."
+
+[[import]]
+name = "dk_files_commit"
+service = "runtime"
+since = "0.8.3"
+context = "io-step"
+sig = "i32 (dk_files *f)"
+doc = "Name all pending files of this module (closed with DK_FILE_DEFER) in the store in one table commit (power-cut safe). Returns 0 or a negative status (DK_E_BUSY: try again; DK_E_FILE_IN_USE, DK_E_FULL, DK_E_WRITE). The files stay pending after an error, and a pending file whose replaced file a reader still reads stays pending too (returns 0, the pending count says so; DK_E_FILE_IN_USE when none could commit). The runtime also commits them 1 s after the module's last file call, when its job ends or the module is unloaded. DK_E_CONTEXT outside an I/O step. See <dk/platform/files.h>."
+
+[[import]]
+name = "dk_files_pending"
+service = "runtime"
+since = "0.8.3"
+context = "io-step"
+sig = "i32 (dk_files *f)"
+doc = "The number of pending files of this module (closed with DK_FILE_DEFER, not yet named in the store). Always 0 for the DT2 samples root: its files are named at dk_files_close. DK_E_CONTEXT outside an I/O step."
+
+[[import]]
+name = "dk_io_post"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "i32 (io_step_fn step, io_done_fn done, void *arg)"
+doc = "Run `step(arg)` on the runtime's I/O task (<dk/platform/io.h>). The step may block and call dk_files_create, dk_files_write, dk_files_close, dk_files_abort and dk_files_delete. It returns DK_IO_MORE (run again), DK_IO_WAIT (sleep until dk_io_wake), 0 (done) or a negative error. `done(arg, status)` runs once in the UI task. Returns a job id > 0, DK_E_CONTRACT (no step) or DK_E_BUSY (8 jobs)."
+
+[[import]]
+name = "dk_io_cancel"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "i32 (i32 id)"
+doc = "Cancel a job of this module: a queued job never runs, a running one stops after its step returns; `done` gets DK_IO_E_CANCELLED. Returns 0 or DK_E_NOT_FOUND."
+
+[[import]]
+name = "dk_io_wake"
+service = "runtime"
+since = "0.7.0"
+context = "isr"
+sig = "void (i32 id)"
+doc = "Wake a job whose step returned DK_IO_WAIT. Callable from an interrupt handler, an adapter or any task. Unknown ids are ignored."
+
+[[import]]
+name = "dk_helper_run"
+service = "runtime"
+since = "0.8.3"
+context = "io-step"
+sig = "i32 (helper_fn work, void *arg)"
+doc = "Run `work(arg)` on the runtime's helper task (priority 3, 4 KiB stack) while the I/O step does something that blocks, such as dk_files_write; collect it with dk_helper_wait in the same step. `work` is pure compute: it calls no import, does not wait and keeps to the 4 KiB stack. One run at a time: DK_E_BUSY while a run (this module's, or the runtime's own close read-back hash, which never overlaps a step's own calls) is not collected; the caller then does the work itself. DK_E_NOT_FOUND: the kernel gave no task (same). DK_E_CONTRACT: no function. DK_E_CONTEXT outside an I/O step. A run the step leaves uncollected is collected when the step returns. See <dk/platform/io.h>."
+
+[[import]]
+name = "dk_helper_wait"
+service = "runtime"
+since = "0.8.3"
+context = "io-step"
+sig = "i32 ()"
+doc = "Wait until the run started by dk_helper_run has finished (the I/O task sleeps). Returns 0, DK_E_STATE when this module has no run, or DK_E_CONTEXT outside an I/O step. See <dk/platform/io.h>."
+
+[[import]]
+name = "dk_job_post"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (job_step_fn step, job_done_fn done, void *arg)"
+doc = "Run `step(arg)` on the background worker until it returns 0 or a negative error (DK_JOB_MORE: call again; <dk/platform/job.h>). `done(arg, status)` is called once in the UI task. Returns a job id > 0, DK_E_BUSY (8 jobs are queued) or DK_E_CONTRACT (no step)."
+
+[[import]]
+name = "dk_job_cancel"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (u32 id)"
+doc = "Cancel a job of this module: a queued job never runs and a running one stops after its current step; `done` gets DK_JOB_E_CANCELLED. Returns 0, or DK_E_NOT_FOUND for an unknown id."
+
+[[import]]
+name = "dk_hash32_init"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void (void *state)"
+doc = "Start the file hash (the Elektron +Drive content hash, <dk/platform/hash32.h>) in the caller's 28-byte `dk_hash32`."
+
+[[import]]
+name = "dk_hash32_update"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void (void *state, const void *p, u32 n)"
+doc = "Feed `n` bytes."
+
+[[import]]
+name = "dk_hash32_finish"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "u32 (void *state)"
+doc = "The file hash `hash|1`: the value the store keeps (4 bytes big-endian in a table slot). The state is spent."
+
+[[import]]
+name = "dk_intro_take"
+service = "runtime"
+since = "0.7.0"
+context = "init"
+sig = "i32 (intro_frame_fn frame, intro_done_fn done, void *arg, u32 ticks)"
+doc = "Replace the stock boot animation. `frame(tick, arg)` returns the 1024-byte native bitmap of tick 0 .. ticks-1 (30 ticks a second), or NULL to end the animation; it runs on the intro task, must not block and must not call any import. `done(arg)` (may be NULL) runs once in the UI task at the first UI pass. `ticks` is 1 to 300. Returns 0, DK_E_NOT_FOUND outside init, DK_E_CONTRACT, DK_E_BUSY (taken already) or DK_E_BOOT_ONLY. See <dk/platform/intro.h>."
+
+[[import]]
+name = "dk_param_get"
+service = "machines"
+provided = true
+wrapper = "fw"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (u32 track, u32 word)"
+doc = "Raw value (unit * 256) of parameter word `word` of the calling module on `track` (0 to 15). Only in the flow of a click (from a DK_PARAM_ACTION callback until the page gets its next key or turn), else DK_PARAM_E_STATE. See <dk/platform/param.h>."
+
+[[import]]
+name = "dk_param_set"
+service = "machines"
+provided = true
+wrapper = "fw"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (u32 track, u32 word, i32 raw)"
+doc = "Set parameter word `word` of the calling module on `track` to `raw` (unit * 256) with the stock setter of a knob turn. Same click flow as dk_param_get. Returns 0, DK_PARAM_E_STATE, DK_PARAM_E_ARG or DK_PARAM_E_HELD."
+
+[[import]]
+name = "dk_machines_module_info"
+service = "machines"
+provided = true
+internal = true
+wrapper = "rt"
+since = "0.8.3"
+context = "ui"
+sig = "u32 (u32 owner, u8 *out)"
+doc = "The runtime's: what the MODULES reply says of the machines of module record `owner` (1 ..) as a `ModuleMachines` into `out`: the voice rows it owns (mask), its machine type numbers (the machine rows, then the voice rows' types, 8 at most), the guard's faults for them and whether the guard switched one off; 1 when the machines service answers."
+
+[[import]]
+name = "dk_module_ctx_add_machine"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "dk_machine *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
+doc = "Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[machine]]` list of module.toml, which is the row of its key in the keys table. `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad index) a placeholder, and the error is reported when `init` returns."
+
+[[import]]
+name = "dk_module_ctx_add_fx"
+service = "fx"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "dk_fx *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
+doc = "Declare an effect of this module: `index` is its DK_FX_ID_<ID>: the position of the id in the `[[fx]]` list of module.toml, which is the row of its id in the keys table. `name` the long name, `short_name` the short one. The DSP entry is `_<id>_process`. Returns the builder handle (a placeholder on an error, reported at commit)."
+
+[[import]]
+name = "dk_record_add"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 kind, const void *bytes, u32 len)"
+doc = "Declare one record of a generic kind (`[records.kinds]` `generic = true`; a service of the runtime owns the kind). `len` is the record's length less its 8-byte header; the bytes are copied. A kind that is unknown or not generic, or a wrong length, returns DK_E_FORMAT, a full collection DK_E_DECL_FULL; the owning service checks the record at the commit."
+
+[[import]]
+name = "dk_service_declare_kind"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 kind, u32 len, const void *handler)"
+doc = "A service module declares a record kind it owns: `len` is the whole record with its 8-byte header, `handler` the function that handles the records. The runtime compares every dk_service_declare_* call of `init` with the header table (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES entries) at the commit: a difference refuses the module with DK_E_DECL_KIND. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_slot"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 slot, u32 flags, const void *entry)"
+doc = "A service module declares a plug-in point (slot) it takes, with the function that fills it. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_hook"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 site, const void *entry)"
+doc = "A service module declares a hook site it takes, with the function that runs there. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_export"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 name_hash, const void *entry)"
+doc = "A service module declares a function it offers to other modules: `name_hash` is the FNV-1a 32 hash of its name. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_service_declare_resource"
+service = "runtime"
+since = "0.8.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, u32 resource, u32 limit)"
+doc = "A service module declares a resource it adds, with its limit. See dk_service_declare_kind. Returns 0, or DK_E_DECL_FULL."
+
+[[import]]
+name = "dk_machine_add_page"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "dk_page *(dk_machine *m, const char *name, const char *short_name)"
+doc = "Add a page to the machine, after the pages already added: `name` is its title, `short_name` its tab label on a device that keeps knobs in page rows. Returns the page handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_fx_add_page"
+service = "fx"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "dk_page *(dk_fx *fx, const char *name, const char *short_name)"
+doc = "Add the effect's page: `name` is its title, `short_name` its tab label (3 characters at most). Returns the page handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_page_add_param"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 def)"
+doc = "Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_page_add_fx_param"
+service = "fx"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 kind, float min, float max, float def)"
+doc = "Add an effect parameter on the next knob of the page. `kind` is DK_PERCENT or DK_BIPOLAR (the display); `min`, `max` and `def` are in the parameter's unit. Returns the parameter handle (a placeholder on an error)."
+
+[[import]]
+name = "dk_param_range"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_param *prm, u32 min, u32 max)"
+doc = "Set the range of a machine parameter (default 0 to 127)."
+
+[[import]]
+name = "dk_param_glyph"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_param *prm, u32 glyph)"
+doc = "Set the glyph of a machine parameter (DK_GLYPH_*); its range must fit the glyph, or the commit refuses the module."
+
+[[import]]
+name = "dk_param_latched"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_param *prm)"
+doc = "Latch the parameter at note_on (machine contract 1.3)."
+
+[[import]]
+name = "dk_param_on_click"
+service = "machines"
+provided = true
+wrapper = "builder"
+since = "0.7.0"
+context = "init"
+sig = "void (dk_param *prm, param_click_fn fn, void *arg)"
+doc = "Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page."
+
+[[import]]
+name = "dk_page_canvas"
+service = "machines"
+provided = true
+wrapper = "builder"
+since = "0.7.0"
+context = "init"
+sig = "void (dk_page *p, u32 flags, page_draw_fn draw, page_event_fn event, void *arg)"
+doc = "Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`."
+
+[[import]]
+name = "dk_page_bind"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_page *p, dk_param *prm, u32 slot)"
+doc = "On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7)."
+
+[[import]]
+name = "dk_page_bind_local"
+service = "machines"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_page *p, u32 local, u32 slot)"
+doc = "On a canvas page, bind the page's local control number `local` to the encoder `slot` (0 to 7); its turns arrive in the event callback."
+
+[[import]]
+name = "dk_fx_routes"
+service = "fx"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_fx *fx, u32 allowed, u32 def)"
+doc = "Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or both) and the default one."
+
+[[import]]
+name = "dk_fx_mix"
+service = "fx"
+provided = true
+since = "0.7.0"
+context = "init"
+sig = "void (dk_fx *fx, u32 def)"
+doc = "Set the default of the effect's MIX knob, 0 to 127 (127 when this is not called)."
+
+[[import]]
+name = "dk_fx_routes_entry"
+service = "fx"
+provided = true
+internal = true
+wrapper = "rt"
+since = "0.8.3"
+context = "ui"
+sig = "i32 (u32 index, u8 *out)"
+doc = "The runtime's: the `index`th loaded effect that has a page (row order) as a `DkrtFx` into `out` for DIGIKIT > FX ROUTES: 0, or DK_E_NOT_FOUND past the end."
+
+[[import]]
+name = "dk_sample_pool_open"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_sample_pool **out)"
+doc = "Open the module's 16-entry sample pool table (its lowest DK_SAMPLE_TRACKS id): `*out` is the handle, the result 0. A negative DK_E_* result when the module has none or this is not init; `*out` is untouched then."
+
+[[import]]
+name = "dk_sample_pool_add"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, const char *path)"
+doc = "Add a stereo-capable sample file to the pool (copies the path, no file IO here). Returns the pool index 0..15: the first free entry, or the entry that already holds this path. DK_E_POOL when all 16 are in use; DK_E_SEL_PATH for an empty or too long path. See <dk/sample/pool.h>."
+
+[[import]]
+name = "dk_sample_pool_clear"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index)"
+doc = "Close the entry's generation, drop its reference and set it UNUSED, a hole in the pool. Returns 0 or a negative error."
+
+[[import]]
+name = "dk_sample_pool_status"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index)"
+doc = "DK_SAMPLE_UNUSED, QUEUED, LOADING, READY, or a negative error; an error is sticky until the entry is added again or cleared."
+
+[[import]]
+name = "dk_sample_pool_info"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index, void *out)"
+doc = "Copy a 16-byte dk_sample_info (frames, rate, channels, token) of a READY entry; otherwise a negative error and `out` is untouched."
+
+[[import]]
+name = "dk_sample_pool_path"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index, char *buf, u32 cap)"
+doc = "Copy the root-relative path of the entry into `buf` and return its length without the NUL. `cap` too small: DK_E_SEL_PATH and `buf` is untouched."
+
+[[import]]
+name = "dk_sample_pool_set"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index, const char *path)"
+doc = "Load a sample file into pool entry `index` (0..15), replacing what was there. Other indexes never move. Returns 0 or a negative error."
+
+[[import]]
+name = "dk_sample_pool_peaks"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index, u32 token, void *out, u32 capacity)"
+doc = "Copy bounded PCM16 min/max overview pairs of a READY pool entry matching token. Returns the bin count (1..512), or a negative error; capacity is bytes, the output is unchanged on refusal."
+
+[[import]]
+name = "dk_sample_pool_peaks_window"
+service = "samples"
+provided = true
+wrapper = "glue"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_sample_pool *p, u32 index, u32 token, u32 first, u32 frames, u32 columns, void *out, u32 capacity)"
+doc = "Min/max of `columns` equal parts of the frames [first, first + frames) of a READY pool entry matching token, computed in the background. Returns `columns` when ready, 0 while it is computed, or a negative error. Poll from the draw callback."
+
+[[import]]
+name = "dk_ui_open"
+service = "ui"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_ui **out)"
+doc = "Open the UI service: `*out` is the handle, the result 0. Without core/ui the result is DK_E_MISSING and `*out` is untouched."
+requires = "core/ui"
+absent = "missing"
+
+[[import]]
+name = "dk_ui_menu_open"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_ui_menu *m)"
+doc = "Fill and show a menu on top of the current view; negative when it cannot be."
+requires = "core/ui"
+absent = "missing"
+
+[[import]]
+name = "dk_ui_menu_close"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m)"
+doc = "Close a menu."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_select"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m, i32 row)"
+doc = "Put the cursor of a menu or list on a row (clamped); call before dk_ui_menu_open to start on the current choice."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_refresh"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m)"
+doc = "Fill an open menu again."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_is_open"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (const dk_ui_menu *m)"
+doc = "1 when the menu is open."
+requires = "core/ui"
+absent = "0"
+
+[[import]]
+name = "dk_ui_menu_add_text"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m, const char *text)"
+doc = "Add a row of text without an action."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_add_action"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m, const char *text, ui_action_fn run, void *arg, i32 value)"
+doc = "Add a row that runs `run(arg, value)` on YES."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_add_submenu"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m, const char *text, dk_ui_menu *sub)"
+doc = "Add a row that opens another menu."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_add_toggle"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m, const char *text, i32 *value, ui_action_fn changed, void *arg)"
+doc = "Add an ON/OFF row."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_add_value"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *m, const char *text, i32 *value, i32 min, i32 max, ui_action_fn changed, void *arg)"
+doc = "Add a number row changed by the encoder."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_check"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "void (dk_ui_menu *list, i32 row, i32 on)"
+doc = "Set the check mark of a list row."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_menu_checked"
+service = "ui"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (const dk_ui_menu *list, i32 row)"
+doc = "1 when the list row is checked."
+requires = "core/ui"
+absent = "0"
+
+[[import]]
+name = "dk_input_open"
+service = "input"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_input **out)"
+doc = "Open the panel input service: `*out` is the handle, the result 0. Without core/input the result is DK_E_MISSING and `*out` is untouched."
+requires = "core/input"
+absent = "missing"
+
+[[import]]
+name = "dk_input_key"
+service = "input"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_input *inp, u32 code, u32 down)"
+doc = "Press or release a panel key. See <dk/platform/input.h>."
+requires = "core/input"
+absent = "missing"
+
+[[import]]
+name = "dk_input_turn"
+service = "input"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_input *inp, u32 encoder, i32 delta)"
+doc = "Turn an encoder by `delta`."
+requires = "core/input"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_open"
+service = "usb_bulk"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_usb_bulk **out)"
+doc = "Open the USB bulk service: `*out` is the handle, the result 0. Without core/usb-bulk the result is DK_E_MISSING and `*out` is untouched. See <dk/platform/usb_bulk.h>."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_enable"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, i32 io_id)"
+doc = "Add the vendor bulk interface (interface 2, EP2 OUT and IN, 512-byte packets) to the USB MIDI configuration, as usb_bulk_enable did. `io_id` is the I/O job that the service wakes when a receive buffer is full. Call it until it returns 0. Another job gets DK_E_BUSY (one owner)."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_disable"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, i32 io_id)"
+doc = "The job that called dk_usb_bulk_enable goes away (call it in fini): the service stops waking it and another job may enable the interface. 0, or DK_E_STATE for another job."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_take"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, void **buf, u32 *len)"
+doc = "The next full receive buffer, in arrival order: 1 and `*buf`, `*len` set (the buffer is yours until dk_usb_bulk_release), or 0 when none is full. Never blocks."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_release"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, void *buf)"
+doc = "Give a buffer from dk_usb_bulk_take back: it is queued for the next transfer. 0, or DK_E_STATE for a pointer that is not a taken buffer."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_send"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, const void *buf, u32 len)"
+doc = "Send `len` bytes (1 to 16384) to the host on EP2 IN. The bytes are copied. 0, DK_E_BUSY when both send slots are in flight (the job is woken when one completes), DK_E_AGAIN when nothing is in flight and the engine refused, or another status."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_state"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "u32 (dk_usb_bulk *ub)"
+doc = "State word: bit 0 enabled, bit 1 connected (the host configured interface 2), bit 2 wrong mode (the active USB port has no bulk route: not USB MIDI mode, and not USB AUDIO/MIDI with core/usb-bulk-audio; read live), bit 3 never set (take-over removed), bit 6 out only (USB AUDIO/MIDI with core/usb-bulk-audio is the active port: bulk OUT only, dk_usb_bulk_send returns E_STATE; read live), bits 8..15 receive buffers full, bits 16..23 send slots in flight. 0 without core/usb-bulk."
+requires = "core/usb-bulk"
+absent = "0"
+
+[[import]]
+name = "dk_usb_bulk_takeover"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub)"
+doc = "Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists; the bulk OUT interface works in USB AUDIO/MIDI without it). Kept so that the import table does not change."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_giveback"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub)"
+doc = "Removed: always returns DK_USB_BULK_E_STATE (the USB take-over no longer exists). Kept so that the import table does not change."
+requires = "core/usb-bulk"
+absent = "missing"
+
+[[import]]
+name = "dk_usb_bulk_ring"
+service = "usb_bulk"
+since = "0.7.0"
+context = "any"
+sig = "i32 (dk_usb_bulk *ub, i32 set)"
+doc = "The receive ring of the service. `set` 0 or 1 sets the run-time ring switch (bit 1 of the usb-fast switch mask; default 1: a ring of up to 60 slots of 16 KiB, queued to the controller by the interrupt while the job writes the card; 0: the old 8 slots); a negative `set` only reads. The switch is read when the buffers are allocated (the next take-over or enable) and at every queueing. Returns the result word read with the DK_USB_BULK_RING_* macros of <dk/platform/usb_bulk.h>: the switch in bit 0, bit 1 always set (the service has the ring) and, in bits 8..15, the receive window in frames of 64 KiB that the live buffers take before the controller NAKs (0: none live, or the old window of 2). 0 without core/usb-bulk or when the adapter has no ring: the old behaviour."
+requires = "core/usb-bulk"
+absent = "0"
+
+[[import]]
+name = "dk_dsp_link_open"
+service = "dsp_link"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_dsp_link **out)"
+doc = "Open the DSP link service: `*out` is the handle, the result 0. Without core/dsp-link the result is DK_E_MISSING and `*out` is untouched."
+requires = "core/dsp-link"
+absent = "missing"
+
+[[import]]
+name = "dk_dsp_link_set_tick"
+service = "dsp_link"
+since = "0.7.0"
+context = "ui"
+sig = "i32 (dk_dsp_link *dl, u8 *cb)"
+doc = "Set the one per-block callback of core/dsp-link (0: off): `void cb(const volatile u16 *rec)`, called every block in the block interrupt with the copy of the previous DSP reply record. Keep it short; clear it in fini. See <dk/platform/dsp_link.h>."
+requires = "core/dsp-link"
+absent = "missing"
+
+[[import]]
+name = "dk_sdhc_large_open"
+service = "sdhc_large"
+since = "0.7.0"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, dk_sdhc_large **out)"
+doc = "Open the large card command service: `*out` is the handle, the result 0. Without core/sdhc-large the result is DK_E_MISSING and `*out` is untouched; `dk_sdhc_large_ctl` then returns 0, so a caller can go on without it."
+requires = "core/sdhc-large"
+absent = "missing"
+
+[[import]]
+name = "dk_sdhc_large_ctl"
+service = "sdhc_large"
+since = "0.7.0"
+context = "any"
+sig = "u32 (dk_sdhc_large *sl, u32 key, u32 val)"
+doc = "core/sdhc-large: the firmware's eMMC block write and read run a transfer as one card command of up to 1022 blocks (511 KiB) instead of 64 KiB pieces when its buffer lies inside the range the runtime sets, is 16-byte aligned and its length is a multiple of 512, while the switch is on. Key 0 is the switch (val 0 off, 1 on, another value changes nothing; returns the old value; RAM only, 1 at every boot). Key 1 reads a counter (val 0 calls of the firmware's block write, 1 of them with the raised limit, 2 calls of the block read, 3 of them with the raised limit; a transfer that the firmware splits counts one call per piece). Other keys return 0. 0 without the module. See <dk/platform/sdhc_large.h>."
+requires = "core/sdhc-large"
+absent = "0"
+
+[[import]]
+name = "dk_debug_peek"
+service = "runtime"
+since = "0.7.0"
+context = "any"
 sig = "u32 (u32 i, u32 *out)"
-doc = "The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK."
+doc = "The RAM ranges `[lo, hi)` of the device file's `[digikit] peek`: returns how many there are, and for `i` below that writes `lo, hi` to `out[0..2]`. For a module that implements PEEK. See <dk/platform/debug.h>."
 
 [[import]]
-name = "dkrt_track_type"
+name = "dk_debug_span_clock"
+service = "runtime"
+since = "0.8.1"
+context = "any"
+sig = "u32 (u32 *out_hz)"
+doc = "The profiling clock of the device file (`[digikit] span_clock`): returns the address of a read-only 32-bit free-running counter (0 when the device has none) and, when `out_hz` is not null and there is a clock, writes its frequency in Hz to `*out_hz`. The counter is never written. See <dk/platform/debug.h>."
+
+[[import]]
+name = "dk_debug_poll"
+service = "runtime"
+since = "0.8.2"
+context = "any"
+sig = "u32 (u32 slot, u32 *out_fn)"
+doc = "The poll function in slot 0 to 3 of `dkrt_poll_add` and its owner: returns 0 for an empty slot (or a slot past 3), 1 + the record index of the module whose loaded code holds the function, or 0xff for a function outside every module (the firmware image: the patched-in core modules). Writes the function's address to `*out_fn` when `out_fn` is not null and the slot is used. For a profiler that names the rows of the poll spans."
+
+[[import]]
+name = "dk_dsp_stats_ctl"
+service = "runtime"
+since = "0.10.2"
+context = "any"
+sig = "i32 (u32 on, u32 clear)"
+doc = "Control the DSP stats window (P8d): `on` 1 starts and 0 stops the counters and the stream of snapshots; `clear` is the clear generation, and the DSP clears its counters when it changes. Only the module that owns the span channel (`dk_span_sink_set`) may call it. Returns 0, DK_E_CONTEXT (no module code is running) or DK_E_BUSY (another module owns the span channel, or none does). See <dk/core/trace.h>."
+
+[[import]]
+name = "dk_dsp_stats_read"
+service = "runtime"
+since = "0.10.2"
+context = "any"
+sig = "u32 (u32 *out, u32 max)"
+doc = "Copy the newest complete DSP stats sweep to `out` and return its sweep number, which grows with each sweep, or 0 when no sweep of the current clear generation is complete. At most `max` words of 103 are copied: the window of 100 words (4 header words, then 16 rows of 6; zeros when there is no sweep), then the counters of the link's mirror (sweeps published, sweeps ended by a gap, records ignored), which are valid either way. See <dk/core/trace.h>."
+
+# Test-only (`test = true`): an import of the test-only service `svc-test`, which a `.dks` provider (tests/fixtures/modules/svc-test) exports. It is in no
+# public header, doc or template and not in the runtime's table (no `requires`): a module that calls it resolves it at load from the provider's EXPORTS.
+[[import]]
+name = "dk_svctest_ping"
+service = "svc-test"
+since = "0.8.2"
+context = "any"
+sig = "i32 ()"
+doc = "Test only: returns 42 from the svc-test provider."
+test = true
+provided = true
+
+[[import]]
+name = "dk_svctest_hits"
+service = "svc-test"
+since = "0.8.2"
+context = "any"
+sig = "u32 ()"
+doc = "Test only: how often the provider's hook ran (the last step of the firmware's SETTINGS list rebuild)."
+test = true
+provided = true
+
+[[import]]
+name = "dk_debug_track_type"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
 sig = "i32 (u32 track)"
 doc = "The machine type of track 0 to 15 of the active kit, read from the firmware (read-only); -1 for a track the firmware has no type for, -2 when there is no project yet."
 
 [[import]]
-name = "dkrt_selected_params"
+name = "dk_debug_selected_params"
+service = "runtime"
+since = "0.7.0"
+context = "ui"
 sig = "i32 (i16 *out, u32 n)"
-doc = "The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out` (words past the device's count are 0) and returns the track, 0 to 15. Returns -2 when there is no project yet and -3 when the track has no Sound record (a kit is loading): `out` is not written then. The index of a word is the mirror index of the firmware's parameter table, not a parameter code. Used by digikit/debug."
+doc = "The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written)."
 
-# The entry points of a .dkm (docs/design/digikit-dkm.md); `api` is the dk_api table. At least one must exist.
-[dkm]
-init = { sig = "i32 (const api *api)", doc = "Runs once after the copy, relocation and cache flush. Returns 0 = ok; the module is unloaded otherwise." }
-fini = { sig = "void (const api *api)", doc = "Runs when the module is unloaded." }
-menu = { doc = "Optional: the module's settings. Runs when the user opens the module's SETTINGS... in the DIGIKIT menu, and adds the rows of a menu (core/ui must be in the image)." }
-slot = { sig = "void (const api *api)", doc = "Slots: function pointers the firmware hooks call. A module binds one by exporting dkm_slot_<n>. Slot 0 runs once per pass of the UI task's event loop (about 120 Hz).", count = 8 }
+[[import]]
+name = "dk_debug_setup"
+service = "runtime"
+since = "0.10.4"
+context = "ui"
+sig = "i32 (u32 op, u32 track, u32 ty)"
+doc = "Set the machine type (`op` 1) or the filter type (`op` 2) of `track` 0 to 15 of the active kit through the firmware's own kit commit, the call a chooser commit makes (calibration setup; never a raw write of the Sound byte). Only for the debug module's SETUP command, from the UI task. A machine type must be a stock one (below the device's `stock_types`) or a run-time type of a loaded module; a filter type a stock one, 0 to 5. Returns 0 when the firmware reports the new type afterwards, DK_E_RANGE (op, track or type not offered), or DK_E_STATE: no project yet, the commit is not in the image, or the firmware kept the old type (the machine permit refused it on that track, the project's settings mode makes the setter skip the write, or the read-back differs). See <dk/platform/debug.h>."
+
+[[import]]
+name = "dk_device_track_count"
+service = "runtime"
+since = "0.10.5"
+context = "any"
+sig = "u32 ()"
+doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when the device file gives none. A module that draws or counts tracks takes the number from here and holds no literal."
+
+[[import]]
+name = "dk_shortcut_add"
+service = "shortcuts"
+provided = true
+since = "0.10.5"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"
+doc = "Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>."
+
+[[import]]
+name = "dk_selected_track"
+service = "runtime"
+since = "0.10.5"
+context = "ui"
+sig = "i32 ()"
+doc = "The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet."
+
+[[import]]
+name = "dk_debug_log_sink_set"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "void (u8 *sink, u8 *tick)"
+doc = "Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none)."
+
+[[import]]
+name = "dk_debug_speed_flags"
+service = "runtime"
+since = "0.7.0"
+context = "any"
+sig = "u32 (u32 clear, u32 set)"
+doc = "The run-time switches of the speed levers: one RAM word, both bits set at boot, never saved. Clears the bits of `clear`, then sets the bits of `set` (other bits are ignored; both 0 only reads) and returns the new word. Bit 0: hash once (the store's received bytes are not hashed, the card read-back is the only hash); bit 2: the read-back hash overlaps the next card read. The other two switches of the usb-fast STATUS 'S' mask live in their adapters (bit 1 `dk_usb_bulk_ring`, bit 3 `dk_sdhc_large_ctl`), not in this word. See <dk/platform/debug.h>."
 
 [log]
 f_error = 1        # flags bit 0: error (kept even when debug is off)
+f_keep = 16        # flags bit 4: notable (kept in the small ring even when debug is off, whatever the level and kind): a producer sets it on an event that a test or a late debug module is to find
 level_shift = 1     # flags bits 1-3: level 0 error, 1 warn, 2 info, 3 debug, 4 trace
 level_mask = 7
 source_shift = 8    # flags bits 8-15: source module (0 = runtime, n = module table index + 1)
@@ -694,7 +1460,7 @@ args = ["runtime", "device", "stable_blocks", "record_seq", "boot_counter"]
 [[log.kind]]
 id = 2
 name = "CARD_CHECK"
-args = ["state", "first_nonblank", "hash", "read_errors", "-"]
+args = ["state", "first_nonblank", "hash", "read_errors", "sectors"]
 
 [[log.kind]]
 id = 3
@@ -706,6 +1472,12 @@ id = 4
 name = "BOOT_RECORD"
 args = ["seq", "copy", "boot_counter", "selected", "flags"]
 
+# a module file was loaded (the CF part; result 1: the DSP part follows) or refused (a negative result, error level): the selection index, the result and the file name
+# (12 characters in three words). A provider file (a service, `.dks`) has the index 0xfffffffe and other words: [0xfffffffe, result, name4, hash, base], the first four
+# characters of the file name, the service hash and the base address of the loaded file (0 when it did not load). For the result
+# E_DECL_KIND the last two words are the declare-check diagnosis: `hash` is the first word of the first item that the service's `init` and the header table do not both hold
+# (the item's hash or id), `base` its tag (4 KINDS, 5 SLOTS, 6 HOOKS, 7 EXPORTS, 8 RESOURCES) plus 0x100 when only the header table has the item (init did not declare it);
+# tag 1 with hash 0: a difference without a single item (a full collection). dk-session `declDiagnosis` reads them: `EXPORTS 946ae751 not declared`.
 [[log.kind]]
 id = 5
 name = "MOD_LOAD"
@@ -789,12 +1561,12 @@ args = ["-", "-", "-", "-", "-"]
 [[log.kind]]
 id = 21
 name = "MOD_LIST"
-args = ["index", "slots", "name0", "name1", "name2"]
+args = ["index", "tick", "name0", "name1", "name2"]
 
 [[log.kind]]
 id = 22
 name = "CRASH_MOD"
-args = ["module", "entered_stable", "name0", "name1", "name2"]
+args = ["module", "phase_stable", "name0", "name1", "name2"]
 
 [[log.kind]]
 id = 23
@@ -837,7 +1609,9 @@ id = 30
 name = "MACHINE_TYPE_ASSIGNED"
 args = ["hash", "type", "sticky", "rule", "-"]
 
-# the map of remembered numbers was full and an entry of a module that is not loaded in this boot was dropped
+# the map of remembered numbers was full and an entry of a module that is not loaded in this boot was dropped (error event). The machines service also logs it, with `arg 3` (`why`),
+# when a number it holds for an absent module has no voice row and so reads as a gap row (the stock sound) instead of MISSING: 1 a real load took the row, 2 no voice row is free,
+# 3 the DSP did not take the write in 3 passes in a row, 4 the DSP loader stayed busy for 1800 passes in a row. The map's own event has `why` 0 (the argument is not set).
 [[log.kind]]
 id = 31
 name = "MACHINE_TYPE_EVICTED"
@@ -912,6 +1686,104 @@ id = 42
 name = "PARAM_CHANGE"
 args = ["track", "index", "old", "new", "-"]
 
+# a module of the boot selection did not load because a module it imports from is not in the image (right after its MOD_LOAD with result E_IMPORT, error level):
+# the selection index and the name of the missing module without the `core/` prefix (usb-bulk), 12 characters in three words. Also in DkrtBootInfo.needs.
+[[log.kind]]
+id = 43
+name = "MOD_NEEDS"
+args = ["index", "name0", "name1", "name2", "-"]
+
+# a module was committed (its builder calls checked and its rows written; info level, kept at boot): the selection index (0xffffffff: not a boot load),
+# `rows` = machine_rows | param_rows << 8 | page_rows << 16 (the rows the module's own declarations use: what `module:check` writes to `[uses]`), the RAM address and the byte
+# size of the module's committed record block (the `register` section format of docs/design/digikit-registry.md, header and records, big-endian; it stays in the module's
+# arena share while the module is loaded).
+[[log.kind]]
+id = 44
+name = "MODULE_COMMIT"
+args = ["index", "rows", "records_addr", "records_size", "-"]
+
+# a machine of a module of api major 3 declared latched parameters (info level, once per such machine, right before its module's MODULE_COMMIT): the selection index
+# (0xffffffff: not a boot load), the machine's ordinal in the module and its latch mask (bit w: the machine's parameter word w, its w-th parameter, is latched at note-on).
+# The record block has no latched flag; `commit_records` reads the masks from these events.
+[[log.kind]]
+id = 45
+name = "MODULE_LATCH"
+args = ["index", "machine", "latched", "-", "-"]
+
+# one event of the DSP link queue (info level; an error is at warn level; none is kept in the small ring): `what` 1 submit (owner, id, kind | steps << 8, bytes), 2 start
+# (owner, id), 3 done (owner, id), 4 error (owner, id, link error code, step), 5 resend of a live word (slot, version, attempt), 6 live word taken (slot, version, window, word).
+# The owner is 0 loader, 1 tracks, 2 core, 0xff a live word (its id is 0x8000 | slot).
+[[log.kind]]
+id = 46
+name = "DSP_LINK"
+args = ["what", "a", "b", "c", "d"]
+
+# the firmware is ready for a host (info level, kept in the small ring; once per boot): logged by the first pass of the firmware's UI loop, which runs only after the boot intro
+# has ended, so the stock MidiRpc service answers from here on. A host waits on it instead of probing: `blocks` is the block counter of that pass.
+[[log.kind]]
+id = 47
+name = "FW_READY"
+args = ["blocks", "-", "-", "-", "-"]
+
+# the ColdFire mirror of the DSP stats window published a complete sweep (info level, not kept in the small ring; logged only while the counters run, once per sweep,
+# about every 50 blocks): `sweep` is the sweep number PROFILE_DSP reports, `generation` the clear generation (an 8-bit counter) the sweep belongs to, `blocks` the block count of the
+# sweep's header. The source is the module that owns the span channel (the debug module). A host waits on it instead of polling PROFILE_DSP.
+[[log.kind]]
+id = 48
+name = "DSP_SWEEP"
+args = ["sweep", "generation", "blocks", "-", "-"]
+
+# a SETUP request of the debug module was performed in the UI task (info level): the op (1 machine, 2 filter), the track, the requested type, the request's seq
+# (the reply of SETUP) and the status: 0; DK_E_RANGE a type no chooser offers; DK_E_STATE the firmware kept the old type (permit refused, settings mode skips the write,
+# read-back differs) or there is no project; DK_E_AGAIN the module was unloaded with the request queued (it never ran).
+[[log.kind]]
+id = 49
+name = "SETUP_DONE"
+args = ["op", "track", "type", "seq", "status"]
+
+# a shortcut was not enabled because an earlier module (the first owner keeps it) binds the same two logical keys (warn level): the module's record index + 1 of the disabled
+# shortcut, the record index + 1 of the owner that keeps the binding, the two logical keys (`dk_key`).
+[[log.kind]]
+id = 52
+name = "SHORTCUT_CLASH"
+args = ["module", "owner", "key0", "key1", "-"]
+
+# a shortcut was added disabled because a key of it has no panel code on this device (warn level; it never keeps its key pair from another module's binding): the module's record
+# index + 1 and the two logical keys (`dk_key`).
+[[log.kind]]
+id = 53
+name = "SHORTCUT_INACTIVE"
+args = ["module", "key0", "key1", "-", "-"]
+
+# core/ui, module screens (docs/plans/track-manager.md): a module's full-screen view or overlay was pushed on the firmware's view stack (after the release of the key
+# that asked for it, when a key callback did), and when it left the stack. `owner` is the module's core/ui handle (its record index + 1: what `dk_ui_open` returns;
+# a core module has no context, its handle is the token of `dk_ui_core_handle`), `flags` the DK_UI_VIEW_* flags of the desc (1: overlay), `slot` the pool slot.
+[[log.kind]]
+id = 54
+name = "VIEW_OPENED"
+args = ["owner", "flags", "slot", "-", "-"]
+
+[[log.kind]]
+id = 55
+name = "VIEW_CLOSED"
+args = ["owner", "slot", "-", "-", "-"]
+
+# the stock naming screen opened for a module by dk_ui_text_input was pushed (after the key release when a key callback asked), and its YES was pressed (`done` is about to be called):
+# `owner` as above, `max_len` the length of the desc.
+[[log.kind]]
+id = 56
+name = "TEXT_INPUT_OPENED"
+args = ["owner", "max_len", "-", "-", "-"]
+
+[[log.kind]]
+id = 57
+name = "TEXT_INPUT_DONE"
+args = ["owner", "-", "-", "-", "-"]
+
+[spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
+phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
+polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
+
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
 
@@ -927,6 +1799,11 @@ INFO = 0x01
 LIST = 0x02
 MODULES = 0x03      # the loaded modules with their ranges, types and faults
 CAPACITY = 0x04     # per resource: the limit, what is used and the largest free piece (kinds in [capacity.kinds])
+LOADS = 0x05        # what this boot's selection did, for a host without the debug module: u8 version (2), u8 n, then per module (56 bytes) i32 result (OK, a negative E_*, or LOADING), u8 state ([load.state]), 3 zero bytes, u32 detail[2] (what the plan refused on, by result: E_PLAN_KIND the kind, E_PLAN_OWNER the kind, slot or hook site, E_PLAN_KEY the kind and the key, E_PLAN_FIT the capacity kind and 0; else 0), needs[12] (with E_IMPORT: the missing module, e.g. usb-bulk) and name[28] (file name), NUL padded. Version 1 had 44 bytes per module without state, pad and detail
+RELOAD = 0x06       # queue the reload of a loaded content module: body = the store path it loaded from (NUL terminated; the new file is already there); status 0 (queued), E_BUSY (a reload is queued or running), E_STATE (an upload is open or a store write is in flight), E_RELOAD_RETAINED (the DSP loader holds a module it could not release: restart the device), E_NOT_FOUND (no loaded content module came from that path), E_FORMAT (the path is the file of a service), E_MSG (no path, or one that does not fit)
+RELOAD_STATE = 0x07 # the live job (a reload, a load or an unload; the one job the runtime has): reply u8 phase (0 none yet, 1 queued or running, 2 finished), i32 result (0, or the refusal before anything changed: E_SAFE_MODE, E_STATE, E_CARD_BUSY, E_RELOAD_*, E_NOT_FOUND, the load checks and the plan's codes; or the failure after the old module was torn down: the load status of the new file, E_DSP_XFER when its DSP part stalled and was cancelled), u8 step (0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done), u8 unloaded (1: the old module was torn down, so it is not loaded unless the result is 0 and the job loaded; 0: it still runs, or a load never had one), u8 op (1 load, 2 unload, 3 reload: which job this is; a reply of 7 bytes, from a runtime before LIVE, has no op)
+LOAD = 0x08        # queue the load of a content module that is not loaded: body, status and errors as RELOAD, except E_LOADED (a module of that name is loaded; E_NOT_FOUND does not occur) and E_SEL_COUNT (no selection index is free); the file is on the card already. The job is the same as RELOAD's: its progress is RELOAD_STATE (steps check, load, DSP part, done; `unloaded` is 0)
+UNLOAD = 0x09      # queue the unload of a loaded content module (no replacement): body, status and errors as RELOAD (the file need not exist or be the same: only the path names the module). The progress is RELOAD_STATE (steps check, quiesce, unload, done); a result of 0 with `unloaded` 1 means the module is not loaded any more
 BEGIN = 0x10
 DATA = 0x11
 END = 0x12
@@ -936,25 +1813,67 @@ ABORT = 0x15
 READ = 0x16         # a byte range of a store file: path, u32 offset, u32 length (at most 768); reply: u32 file size, the bytes
 VERIFY = 0x17       # re-read a store file from the card and hash it: path; reply: sha256[32]
 MKDIR = 0x18        # make a folder (a folder entry with nothing in it): path; ok when it exists
+RENAME = 0x1a       # rename or move a file or an empty folder: from path NUL, to path NUL; the data and its hash stay, the folder it leaves stays
 SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit-store.md, "The settings record"): u32 offset, u16 length (at most 768); reply: u8 copy (0 A, 1 B), u32 seq, u32 used, the bytes
 FAULT = 0x23        # dev: make the runtime fail on purpose to test the fault path; body byte 0 = 1: a Rust panic (a bounds check)
 SELECT = 0x30
 RESTART = 0x31
 
-[protocol.ranges]   # command numbers a run-time module may register with Api.register_cmds (a request number is 6 bits: bit 6 of the command byte marks a reply)
+[protocol.ranges]   # command numbers a run-time module may register with dk_host_register (a request number is 6 bits: bit 6 of the command byte marks a reply)
+# 0x0b-0x0f are reserved for the commands of test fixtures and are never built-in commands (the built-in numbers are in [protocol.commands]); 0x0a is the debug module's SETUP; `ui_views_test` is the first fixture.
+ui_views_test = [0x0f, 0x0f]   # test/ui-views: its report (rows, views, text input); with a body byte 1 it closes its overlay
 remote = [0x38, 0x3d]   # digikit/remote: key and turn of the panel (docs/plans/remote-control.md)
 remote_state = [0x3e, 0x3f]   # digikit/remote: the state
 probe = [0x32, 0x35]   # digikit/probe: collector status, raw reads, reset (docs/plans/debug-mode-and-probes.md)
 debug = [0x20, 0x22]   # digikit/debug: LOG, PEEK, LOGCFG (docs/findings/46-digikit-debug.md)
+debug_profile = [0x1e, 0x1f]   # digikit/debug: PROFILE_STATE, PROFILE_READ
+debug_profile_dsp = [0x1b, 0x1b]   # digikit/debug: PROFILE_DSP
+debug_setup = [0x0a, 0x0a]   # digikit/debug: SETUP (calibration setup: a track's machine or filter type)
+file_write_test = [0x24, 0x27]   # test/file-write: start an I/O job that writes a file, its status, wake it, a file call outside an I/O step
+usb_fast = [0x36, 0x37]   # usb-fast: SET_NONCE (the host proves which USB device is on its MIDI port, docs/plans/usb-fast.md section 5)
+file_write_test_b = [0x28, 0x2b]   # test/file-write-b: the same commands for a second module
+usb_echo_test = [0x2c, 0x2f]   # test/usb-echo: its status, hold, reenable, disable
+entry_demo_test = [0x1c, 0x1d]   # test/entry-demo: its report (what init and tick saw), and a settings write that tick runs
 
-[protocol.service]  # the commands of run-time service modules, by name; each lies in a range above (a module registers them with Api.register_cmds)
+[protocol.service]  # the commands of run-time service modules, by name; each lies in a range above (a module registers them with dk_host_register)
 REMOTE_KEY = 0x38      # digikit/remote: code (u8), down (u8)
 REMOTE_TURN = 0x39     # encoder (u8), delta (s8); the reply body is the delta taken (s8, at most 30 either way)
 REMOTE_RELEASE = 0x3a  # release every key the module holds
 LOG = 0x20             # digikit/debug: body u32 from_seq; reply u32 oldest, u32 newest, u8 n, then n events of 32 bytes
 PEEK = 0x21            # digikit/debug: body u32 addr, u16 len (1 to 512, inside the device file's `[digikit] peek` ranges); reply u32 addr, u16 len, the bytes
-LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded)
+LOGCFG = 0x22          # digikit/debug: body u8 op (0 get, 1 set: u8 default, 8 module levels); reply u8 default, 8 module levels, u8 debug_on (1 while loaded); op 2 = card log get (no more body), op 3 = card log set (body: u8 op=3, u8 on); reply for op 2 and op 3 (16 bytes): u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes (this boot), i32 last_status, u32 ms_since_write (0xffffffff = none yet); a debug module without the card log replies to op 2 with an error status
+PROFILE_STATE = 0x1e   # digikit/debug: profiling start and stop, and its state
+PROFILE_READ = 0x1f    # digikit/debug: read the span records
+PROFILE_DSP = 0x1b     # digikit/debug: the DSP stats window: body u8 op (0 get, 1 start, 2 stop, 3 clear); reply (big-endian) u8 version (1), u8 flags (bit 0 stats on, bit 1 a sweep follows), u8 clear generation, u8 rows (16), u32 sweep number, u32 sweeps, u32 gaps, u32 ignored, then when bit 1 is set the 100 words of the window (4 header words: blocks, largest stock block delta, overruns, spare; 16 rows of 6 words: calls, cycles low, cycles high, largest call, largest block, spare)
+SETUP = 0x0a           # digikit/debug: body u8 op (1 machine type, 2 filter type), u8 track (0 to 15), u8 type; reply u8 seq (the request is queued: the UI task performs it, and the log event SETUP_DONE with this seq reports the result); E_BUSY while one is queued; E_STATE until the module's track watch has its baseline (the project is loaded and scanned)
+USB_FAST_NONCE = 0x36  # usb-fast: body nonce[8]; the module keeps it and returns it in the INFO reply of the bulk link; reply empty
 REMOTE_STATE = 0x3e    # reply: enabled (u8, always 1 while the module is loaded), state format (u8), turn limit (u8)
+
+[protocol.bulk]     # the bulk link: a vendor interface 2 (class 0xFF) on EP2 OUT/IN, no SysEx framing, big-endian (docs/plans/usb-fast.md section 5)
+# request: magic[4] | cmd u8 | seq u8 | flags u16 | len u32 | body[len];  reply: magic[4] | cmd|reply_flag u8 | seq u8 | status i16 | len u32 | body[len]
+magic = "DKB1"
+reply_flag = 0x40   # set in the command byte of a reply
+header = 12         # bytes of a request header and of a reply header
+data_max = 65536    # bytes of one DATA request (offset u32 + up to this many data bytes, a multiple of 512 except the last)
+align = 512         # DATA offsets and lengths are multiples of this, except the last piece
+vid = 0x1935        # USB vendor id of Elektron
+class = 0xFF        # interface class of the bulk interface
+packet = 512        # the bulk packet size (high speed). An OUT transfer whose length is a multiple of this is followed by a zero-length OUT transfer (ZLP): the device RX buffers (16 KiB multi-page dTDs) complete only when full or on a short packet. The device keeps ZLT on for EP2 IN: after a reply that is a multiple of this the host receives a zero-length IN transfer, which means "no bytes", never end or error
+nonce_len = 8       # bytes of the nonce of the identity handshake: SET_NONCE over SysEx, then INFO returns it (body: version u8, flags u8, reserved u16, data_max u32, align u32, nonce[8])
+frame_slack = 64    # a frame whose body length exceeds data_max + 4 + this is a protocol error: fatal, the link is closed, no resync
+
+[protocol.bulk.flags]     # bits of the `flags` u16 of a request header (BEGIN)
+REPLACE = 0x0001    # the destination may exist: the device replaces it atomically at END (DN2: the store's replace commit; DT2: temp file, then rename); a failed or aborted upload keeps the old file. Clear: an existing file gives E_EXISTS
+DEFER = 0x0002      # the device creates the file with DK_FILE_DEFER (runtime 0.8.3): END verifies it, but the file is only pending until a table commit names it (COMMIT, the runtime's 1 s idle commit, or a limit of 16 files or 16 MiB); an old device ignores the flag and commits at END
+
+[protocol.bulk.commands]  # never reuse or renumber (additive only)
+INFO = 0x01         # reply body: version u8, flags u8, u16 reserved, u32 data_max, u32 align, nonce[8] (20 bytes)
+BEGIN = 0x02        # body: root u32, path (NUL-terminated), size u32, expected hash 4 bytes (all zero: none)
+DATA = 0x03         # body: offset u32, then the bytes; the next offset only
+END = 0x04          # reply body: the device's hash|1 of the file (4 bytes, big-endian), then pending u16 and reserved u16 (8 bytes). `pending`: files verified but not yet named in the store; 0 means everything sent so far is committed. An old device sends the 4 bytes only: read that as committed
+ABORT = 0x05        # drop the open file
+COMMIT = 0x07       # name all pending files in one table commit; no body; reply body: pending u16, reserved u16 (0 pending on success). An old device answers E_PROTO: read that as nothing to commit
+VERIFY = 0x06       # reserved, not implemented by usb-fast: the reply is E_PROTO (the host verifies over SysEx: DN2 VERIFY, DT2 file info; both are device-CPU bound with tiny replies)
 
 [protocol.status]   # reply status codes of the upload commands (0 = ok); never renumber
 E_MSG = { code = -50, text = "body too short or malformed" }
@@ -968,7 +1887,7 @@ E_WRITE = { code = -57, text = "the firmware's block write failed" }
 E_READ = { code = -58, text = "the firmware's block read failed" }
 E_NOFILE = { code = -59, text = "that path is not in the store" }
 E_PROTO = { code = -60, text = "unknown protocol version, command or option" }
-E_NOSTORE = { code = -61, text = "the store header is unreadable (CLEAR still works)" }
+E_NOSTORE = { code = -61, text = "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)" }
 E_INUSE = { code = -62, text = "the card's store area is not ours and not blank" }
 E_PEEK = { code = -63, text = "PEEK range not allowed, or length 0 or over 512" }
 E_CMD_RANGE = { code = -64, text = "command range not reserved, taken, or empty" }
@@ -977,6 +1896,8 @@ E_SET_FULL = { code = -67, text = "the settings area is full" }
 E_SET_NOKEY = { code = -68, text = "no such settings key (or no settings record)" }
 E_SET_VALUE = { code = -69, text = "a settings value is too long, or the buffer is too small" }
 E_SET_OFF = { code = -70, text = "settings store off: an older store reaches its area, or no store" }
+E_FILE_IN_USE = { code = -71, text = "a sample is still loading from that file: wait and try again" }
+E_AGAIN = { code = -72, text = "usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry" }
 
 [protocol.caps]     # INFO capability bits (bit numbers of the `caps` word)
 LOG = 0
@@ -988,26 +1909,90 @@ MODULES = 5
 CAPACITY = 6
 READ = 7
 VERIFY = 8
-SERVICE_CMDS = 9    # modules register commands (Api.register_cmds)
+SERVICE_CMDS = 9    # modules register commands (dk_host_register)
 FOLDERS = 10        # LIST takes a prefix, MKDIR, CAPACITY kind STORE
 SETTINGS = 11       # the SETTINGS command (read the settings record), CAPACITY kind SETTINGS
 FILEHASH = 12       # store format 4: the 32-byte hash of BEGIN, END, LIST and VERIFY is the content hash (4 bytes, big-endian, then 28 zeros), not a SHA-256
+RENAME = 13         # the RENAME command (rename or move one store entry)
+READBACK = 14       # END (and the SDK file_close) read the written file back from the card and compare its content hash with the running hash and BEGIN's before the commit: a host may skip its VERIFY after a successful END
+LOADS = 15          # the LOADS command (the result of each module of the boot selection, and the missing module of an E_IMPORT)
+SVC_ABI = 16        # the INFO reply ends with `svc_abi`: u32, the ABI fingerprint of interfaces B and C (`dkrt_abi::SVC_ABI`) a service file (.dks) must carry in header word H_SVC_ABI
+RELOAD = 17         # the RELOAD and RELOAD_STATE commands (a content module is reloaded without a boot)
+FW_ID = 18          # the INFO reply ends with `fw_id` after `svc_abi`: 8 bytes, the first 8 bytes of the SHA-256 of the stock firmware the image was patched from (the `FW` item of its port file); set when the image has the `fw_id` entry
+LIVE = 19           # the LOAD and UNLOAD commands (a content module is loaded or unloaded without a boot); RELOAD_STATE reports them too
 
-[capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused
-MODULES = 1         # module records; used: loaded; largest: 0
-SELECTION = 2       # paths of the selection record; used: paths this boot loaded
-ARENA = 3           # ColdFire arena bytes; used: taken (headers included); largest: the largest free block's payload
-STAGE = 4           # the staging buffer: the largest .dkm file; used: 0
-DSP_AREA = 5        # DSP run-time area bytes; used: taken, alignment gaps counted as free; largest: the largest free range
-MACHINE_ROWS = 6    # run-time machine types (registry machine rows) in use
-VOICE_ROWS = 7      # DSP voice rows in use
-PARAM_ROWS = 8      # parameter rows core/dynreg reserves, in use
-PAGE_ROWS = 9       # page rows core/dynreg reserves (Digitone II), in use
-FX_SLOTS = 10       # effects in the chain: the device's limit (`[limits] fx_slots`); used: run-time effects claimed (the effect rows of core/dynfx); largest: 0
-MAP_ENTRIES = 11    # sticky machine-type map entries in use
-STORE = 12          # the module and sample store, in KiB (a store can be 22 GiB); used: KiB taken; largest: 0 (BEGIN says E_FULL with the free bytes)
-SETTINGS = 13       # the settings record, in bytes: limit: the area of one copy (`[settings]`); used: the record's bytes (header and entries); largest: 0
-SEND_SLOTS = 14     # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
+[capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
+                   # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code); every kind is in CAP_KINDS
+MODULES = { id = 1, fit = true, label = "module records" }   # module records; used: loaded; largest: 0
+SELECTION = { id = 2, fit = true, label = "selection paths" }   # paths of the selection record; used: paths this boot loaded
+ARENA = { id = 3, fit = true, label = "CPU memory" }   # ColdFire arena bytes; used: taken (headers included); largest: the largest free block's payload
+STAGE = { id = 4, fit = true, label = "file" }   # the staging buffer: the largest .dkm file; used: 0
+DSP_AREA = { id = 5, fit = true, label = "DSP memory" }   # DSP run-time area bytes; used: taken, alignment gaps counted as free; largest: the largest free range
+MACHINE_ROWS = { id = 6, ceiling = "machine_rows", fit = true, label = "machine rows" }   # run-time machine types (registry machine rows) in use
+VOICE_ROWS = { id = 7, ceiling = "machine_rows", fit = true, label = "voice rows" }   # DSP voice rows in use
+PARAM_ROWS = { id = 8, ceiling = "param_rows", fit = true, label = "parameter rows" }   # parameter rows core/dynreg reserves, in use
+PAGE_ROWS = { id = 9, ceiling = "page_rows", fit = true, label = "page rows" }   # page rows core/dynreg reserves (Digitone II), in use
+FX_SLOTS = { id = 10, ceiling = "fx_slots", fit = true, label = "effect slots" }   # effects in the chain: the device's limit (`[limits] fx_slots`); used: run-time effects claimed (the effect rows of core/dynfx); largest: 0
+MAP_ENTRIES = { id = 11, ceiling = "map_entries" }   # sticky machine-type map entries in use
+STORE = { id = 12 }   # the module and sample store, in KiB (a store can be 22 GiB); used: KiB taken; largest: 0 (BEGIN says E_FULL with the free bytes)
+SETTINGS = { id = 13 }   # the settings record, in bytes: limit: the area of one copy (`[settings]`); used: the record's bytes (header and entries); largest: 0
+SEND_SLOTS = { id = 14, ceiling = "send_slots" }   # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
+DSP_COST = { id = 15, fit = true, label = "DSP load" }   # DSP instructions per block: limit: the headroom of the device (the generated profile: the stock firmware's load and the safety margin taken out of the block); used: the load of the loaded modules, `max(per-voice machine cost) * DSP_VOICES + sum(effect costs)`; largest: the largest per-voice machine cost loaded (the state of that maximum)
+DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machine cost counts for (the generated profile); used and largest: 0; a fit reads the limit, it is not short of it
+
+# The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
+# voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before
+# effect pages, and the removal runs the other way round). `rust` is the full path of the type that implements `Service`: the type of a service crate linked into
+# the runtime (`dkrt_svc_NAME::records::Type`, `modules/core/services/NAME`).
+# `patchkit gen` writes the static table of these rows (modules/core/runtime/src/rs/src/gen_services.rs); a new service is a row here, its crate
+# and its `[records.kinds]`.
+[[service]]
+name = "samples"
+
+[[service]]
+name = "machines"
+
+[[service]]
+name = "fx"
+
+[[service]]
+name = "lfo"
+
+[[service]]
+name = "shortcuts"
+
+# A `[[service]]` without `rust` is provided by a `.dks` provider (a module with `role = "service"`), not by a runtime row: it is in no generated table.
+# `test = true`: a test-only service; it and its `[[import]]` rows (also `test = true`) are left out of the public SDK headers, docs and templates.
+[[service]]
+name = "svc-test"
+test = true
+
+# The record kinds of the `register` section of a `.dkm` (docs/plans/runtime-and-services.md R7): one table for the runtime, dkneeds and patchkit
+# (`patchkit gen` writes `records::KINDS` and one `KIND_<NAME>` and `LEN_<NAME>` per kind into gen_sdk.rs and packages/dkneeds/src/gen_limits.rs).
+# `len` is the whole record, the 8-byte header (kind, length) included. `service` is the in-crate service that owns the kind: it checks, applies and
+# removes the records. A number is never reused. A kind is added here and in its service only; the registry, the collector, the loader, dkneeds and
+# patchkit do not name it. `generic = true`: a module emits the record with `dk_record_add(ctx, kind, bytes, len)` (the typed kinds have their builders); the
+# owning service checks it at the commit.
+[records.kinds]
+PARAM = { id = 1, len = 0x50, service = "machines" }
+MACHINE = { id = 2, len = 0x6c, service = "machines" }
+PAGE = { id = 3, len = 0x60, service = "machines" }
+EFFECT = { id = 4, len = 0x1a4, service = "fx" }
+ACTION = { id = 5, len = 0x10, service = "machines" }
+NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
+NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
+SHORTCUT = { id = 9, len = 68, service = "shortcuts" }   # id (16 bytes, NUL padded), label (24), two logical keys (`dk_key`), `on` and `off` as image offsets (0: none), `arg` as given (the builder `dk_shortcut_add` writes it)
+LFO_SHAPE = { id = 8, len = 80, service = "lfo", generic = true }   # u32 key (`DK_KEY_<ID>`: not 0), 4 characters of name (space to tilde), 32 samples of i16 (big-endian)
+
+# The resources a module counts in its `uses` (R7, the header table of a `.dkm`): one id each. `capacity` names the [capacity.kinds] entry the
+# runtime reports for it.
+[records.resources]
+MACHINE_ROWS = { id = 1, capacity = "MACHINE_ROWS" }
+PARAM_ROWS = { id = 2, capacity = "PARAM_ROWS" }
+PAGE_ROWS = { id = 3, capacity = "PAGE_ROWS" }
+RECORD_BYTES = { id = 4 }     # arena bytes of the record block `init` commits
+DSP_COST_VOICE = { id = 5, capacity = "DSP_COST" }   # DSP instructions per block of one voice of a machine: the worst steady block `module:check` measured (docs/plans/sdk.md section 9)
+DSP_COST_FX = { id = 6, capacity = "DSP_COST" }   # DSP instructions per block of the effects of a module (their worst process calls, summed)
 
 [limits.max]        # contract maxima (capacity plan, docs/plans/capacity-isolation.md): a device's `[limits]` value in devices/*.toml may not exceed them
                     # (`patchkit gen` refuses it). Names are the keys of `[limits]` and, for dsp_area_bytes, of `[digikit]`.
@@ -1019,22 +2004,131 @@ dsp_area_bytes = 524288  # the 17-bit word offset of a core/dsp-link chunk reach
 param_rows = 16     # parameter rows core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 page_rows = 8       # page rows core/dynreg reserves (Digitone II)
 machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
-stage_bytes = 65536  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
+stage_bytes = 131072  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
 
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
-                    # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: SLOTS ([dkm.slot] count),
-                    # MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
-dkm_header = 160    # 0xa0: the header of a `.dkm` with no tables (a module with a `dkm_menu` has 4 bytes more); `dkneeds::HEADER`
+                    # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
+dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, the keys table pair at 0x90/0x94, then the tables follow); `dkneeds::HEADER`
+# The header table of a `.dkm` (spec: packages/dkneeds/src/keys.rs; patchkit writes it, the runtime, the boot planner, dkneeds and the host tools read it). The header
+# pair at 0x90 and 0x94 is `table_off` and `table_size` (bytes from the start of the file; `table_off` is a multiple of 4). A versioned, tagged table, big-endian:
+#   +0  u32 magic "DKTB" (`table_magic`)   +4  u16 version (`table_version`)   +6  u16 n_entries
+#   then, in ascending tag order, each tag at most once: u16 tag, u16 count, u32 payload_bytes, the payload.
+# Tags: 1 NEEDS (service name hash, minimum version, hard or optional), 2 USES (resource id, count; ids in [records.resources]), 3 KEYS (record kind, n, keys: the
+# machine keys, effect ids and the keys of a service's kind), 4 KINDS (kind, length, handler entry: a service module's kinds), 5 SLOTS, 6 HOOKS, 7 EXPORTS, 8 RESOURCES,
+# and, in a version 2 table only: 9 PROVIDES (service name hash, version: the services the module provides), 10 BIND (site hash, address, stock length, trampoline offset,
+# then the stock bytes padded to 4, at most 64: the firmware sites a service binds), 11 FW (the firmware identity), and, in a version 3 table only (the port file): 12 FWNAMES
+# (hash, address, exit number, kind, flags), 13 SITES (hook hash, address, displaced length, kind, flags, check value). In a version 2 or 3 table a SLOTS item has 12 bytes (slot id, flags, entry).
+# A module that needs and keeps nothing has the 8-byte head. A file with no table, or another magic, is the format of runtime 0.7: E_CONTRACT.
 dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
 max_relocs = 4096   # ColdFire relocations
 max_imports = 32    # imports of the DSP section
-max_cf_imports = 64  # imports of the ColdFire import table (a different table from the DSP section's)
+max_cf_imports = 128  # imports of the ColdFire import table (a different table from the DSP section's); machines.dks used 63 of 64 before its builder calls moved in
 max_state_voices = 64  # voice states of one voice record
 max_state_bytes = 16777216  # bytes of one voice state (1 << 24, the loader's most: the DSP area)
 granule = 64        # the DSP area's placement granule
 dsp_slack = 8       # bytes the DSP range may start before its alignment
 arena_hdr = 16      # the arena's block header
+table_magic = 1145787458  # 0x444b5442 "DKTB": the first word of the header table of a `.dkm` (packages/dkneeds/src/keys.rs); another word is a file of the 0.7 format
+table_version = 3   # the newest version of the header table a reader accepts (1 to 3; a writer uses 2 for a table with PROVIDES, BIND or FW and 3 for the port file's FWNAMES and SITES; a change is a MINOR of the runtime)
+provider_max = 8    # provider slots of the boot plan (the services that provide; separate from the module records, SEL_MAX)
+install_sites = 48  # hook sites installed at once over all providers (the installer's table: machines 21 + fx 9 and room)
+slots_max = 16      # `[[slot]]` entries of one module (patchkit refuses more)
+info_max = 64       # entries of the image's one table `dkrt_info_table`: every `[[info]]` and `[[slot]]` of all adapters (patchkit refuses more; the core reads at most this many)
+collect_bytes = 1618  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the generic records and the declarations of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)
+
+# The layout of the `.dkm` file and of its DSP section: byte offsets (big endian words), entry sizes and magics that the packer (packages/patchkit
+# dkm.rs, dkmdsp.rs), the reader of the DSP container (packages/dksharc dkds.rs), dkneeds and the runtime (loader.rs, dsp, services) share. `patchkit gen`
+# writes them as `u32` constants of `dkneeds` (packages/dkneeds/src/gen_limits.rs); nothing else spells these numbers.
+[format]
+consts = [
+    # The `.dkm` header (`dkm_header` of [limits.format] bytes).
+    { name = "MAGIC", value = 1145785670, doc = "Magic of a `.dkm`, \"DKMF\" (0x444b4d46)." },
+    { name = "FORMAT", value = 1, doc = "The only `.dkm` format." },
+    { name = "NONE", value = 4294967295, doc = "The header's entry offset of a missing `init`, `fini`, `menu` or `tick`." },
+    { name = "NAME_LEN", value = 32, doc = "Bytes of the module name in the header (H_NAME)." },
+    { name = "CF_RELOC_LEN", value = 8, doc = "Bytes of an entry of the ColdFire relocation table." },
+    { name = "CF_RELOC_OFFSET", value = 0, doc = "ColdFire relocation word: the image offset of the field." },
+    { name = "CF_RELOC_KIND", value = 4, doc = "ColdFire relocation word: kind (0 base-relative, 1 << 24 | import index)." },
+    { name = "CF_IMPORT_LEN", value = 32, doc = "Bytes of an entry of the ColdFire import table." },
+    { name = "H_MAGIC", value = 0, doc = "Header word: MAGIC." },
+    { name = "H_FORMAT", value = 4, doc = "Header word: FORMAT." },
+    { name = "H_SIZE", value = 8, doc = "Header word: file size." },
+    { name = "H_HDRSIZE", value = 12, doc = "Header word: header size (`dkm_header`)." },
+    { name = "H_SHA", value = 16, doc = "Header: 32 bytes of sha256 over the file with these bytes zero." },
+    { name = "H_RUNTIME", value = 48, doc = "Header word: the runtime version the module needs (bit 31: built with DK_TRACE)." },
+    { name = "H_VERSION", value = 52, doc = "Header word: the module's version." },
+    { name = "H_ROLE", value = 56, doc = "Header word: the role (0 module, 1 service)." },
+    { name = "H_SVC_ABI", value = 60, doc = "Header word: the ABI fingerprint of a service file (`dk_svc_abi`, the `dkrt-abi` boundary hash); 0 for a module and for a file that uses neither interface B nor C." },
+    { name = "H_NAME", value = 64, doc = "Header: the module name, NAME_LEN bytes." },
+    { name = "H_IMAGE_OFF", value = 96, doc = "Header word: ColdFire image offset." },
+    { name = "H_IMAGE_SIZE", value = 100, doc = "Header word: ColdFire image size." },
+    { name = "H_BSS", value = 104, doc = "Header word: bss bytes." },
+    { name = "H_ALIGN", value = 108, doc = "Header word: placement alignment." },
+    { name = "H_RELOC_OFF", value = 112, doc = "Header word: relocation table offset." },
+    { name = "H_RELOC_N", value = 116, doc = "Header word: relocation count." },
+    { name = "H_IMPORT_OFF", value = 120, doc = "Header word: ColdFire import table offset." },
+    { name = "H_IMPORT_N", value = 124, doc = "Header word: ColdFire import count." },
+    { name = "H_INIT", value = 128, doc = "Header word: `init` image offset." },
+    { name = "H_FINI", value = 132, doc = "Header word: `fini` image offset." },
+    { name = "H_MENU", value = 136, doc = "Header word: `menu` image offset." },
+    { name = "H_TICK", value = 140, doc = "Header word: `tick` image offset." },
+    { name = "H_REG_OFF", value = 144, doc = "Header word: the header table (`table_off`)." },
+    { name = "H_REG_SIZE", value = 148, doc = "Header word: the header table's size (`table_size`)." },
+    { name = "H_DSP_OFF", value = 152, doc = "Header word: DSP section offset." },
+    { name = "H_DSP_SIZE", value = 156, doc = "Header word: DSP section size." },
+    # The DSP section (`dsp_header` of [limits.format] bytes).
+    { name = "DSP_MAGIC", value = 1145783379, doc = "Magic of the DSP section, \"DKDS\" (0x444b4453)." },
+    { name = "DSP_V1", value = 1, doc = "DSP section version 1: voices of VOICE_V1 bytes." },
+    { name = "DSP_V2", value = 2, doc = "Version 2: voices of VOICE_V2 bytes." },
+    { name = "DSP_V3", value = 3, doc = "Version 3: voices of VOICE_V3 bytes, note_on and state." },
+    { name = "DSP_V4", value = 4, doc = "Version 4: adds effect records of FX_LEN bytes." },
+    { name = "DSP_V5", value = 5, doc = "Version 5: adds the track sample table record." },
+    { name = "DSP_H_MAGIC", value = 0, doc = "DSP header word: magic." },
+    { name = "DSP_H_VERSION", value = 4, doc = "DSP header word: version." },
+    { name = "DSP_H_DEVICE", value = 8, doc = "DSP header word: device (1 dt2, 2 dn2)." },
+    { name = "DSP_H_IMAGE_SIZE", value = 12, doc = "DSP header word: image bytes." },
+    { name = "DSP_H_BSS", value = 16, doc = "DSP header word: bss bytes." },
+    { name = "DSP_H_ALIGN", value = 20, doc = "DSP header word: placement alignment." },
+    { name = "DSP_H_IMAGE_OFF", value = 24, doc = "DSP header word: image offset." },
+    { name = "DSP_H_RELOC_OFF", value = 28, doc = "DSP header word: relocation table offset." },
+    { name = "DSP_H_RELOC_N", value = 32, doc = "DSP header word: relocation count." },
+    { name = "DSP_H_IMPORT_OFF", value = 36, doc = "DSP header word: import table offset." },
+    { name = "DSP_H_IMPORT_N", value = 40, doc = "DSP header word: import count." },
+    { name = "DSP_H_VOICE_OFF", value = 44, doc = "DSP header word: voice table offset." },
+    { name = "DSP_H_VOICE_N", value = 48, doc = "DSP header word: voice count." },
+    { name = "DSP_H_FX_OFF", value = 52, doc = "DSP header word: effect record offset (version 4 and up)." },
+    { name = "DSP_H_FX_N", value = 56, doc = "DSP header word: effect record count (version 4 and up)." },
+    { name = "DSP_H_BANK_OFF", value = 60, doc = "DSP header word: the track sample table record offset (version 5)." },
+    { name = "RELOC_LEN", value = 8, doc = "Bytes of a DSP relocation." },
+    { name = "RELOC_OFFSET", value = 0, doc = "DSP relocation word: the image byte offset of the 48-bit instruction." },
+    { name = "RELOC_WORD", value = 4, doc = "DSP relocation word: kind << 28 | class << 24 | import index." },
+    { name = "DSP_IMPORT_LEN", value = 32, doc = "Bytes of a DSP import (a 28-byte name, then the address word at +28)." },
+    { name = "DSP_IMPORT_ADDR", value = 28, doc = "Offset of the address word of a DSP import." },
+    { name = "VOICE_V1", value = 16, doc = "Bytes of a voice of version 1: type, entry, 2 reserved." },
+    { name = "VOICE_V2", value = 48, doc = "Bytes of a voice of version 2: type, entry, 8 knob ranges, 2 reserved." },
+    { name = "VOICE_V3", value = 64, doc = "Bytes of a voice of version 3 and up." },
+    { name = "VOICE_TYPE", value = 0, doc = "Voice word: the machine key or type." },
+    { name = "VOICE_ENTRY", value = 4, doc = "Voice word: the entry (version 3: render) as an image byte offset." },
+    { name = "VOICE_V2_RANGES", value = 8, doc = "Voice of version 2: the 8 knob ranges (min | max << 16)." },
+    { name = "VOICE_NOTE_ON", value = 8, doc = "Version 3 voice word: the note_on entry (0: none)." },
+    { name = "VOICE_STATE_BYTES", value = 12, doc = "Version 3 voice word: state bytes per voice." },
+    { name = "VOICE_CLEAR_BYTES", value = 16, doc = "Version 3 voice word: bytes zeroed at note-on." },
+    { name = "VOICE_V3_RANGES", value = 20, doc = "Version 3 voice: the 8 knob ranges." },
+    { name = "VOICE_VOICES", value = 52, doc = "Version 3 voice word: the number of voice states." },
+    { name = "VOICE_LATCH", value = 56, doc = "Version 3 voice word: the parameter latch mask." },
+    { name = "VOICE_V3_RESERVED", value = 60, doc = "Version 3 voice word: reserved, 0." },
+    { name = "FX_LEN", value = 64, doc = "Bytes of an effect record (version 4 and up)." },
+    { name = "FX_PROCESS", value = 0, doc = "Effect record word: the process entry as an image byte offset." },
+    { name = "FX_DESC", value = 4, doc = "Effect record word: the image offset of its `dk_fx_desc`." },
+    { name = "FX_STATE", value = 8, doc = "Effect record word: state bytes (from the desc)." },
+    { name = "FX_NPARAMS", value = 12, doc = "Effect record word: parameter count (from the desc)." },
+    { name = "FX_FLAGS", value = 16, doc = "Effect record word: the routes (FXF_*)." },
+    { name = "FX_PARAMS", value = 20, doc = "Effect record: the words p0 to p7 of the row." },
+    { name = "FXF_SEND", value = 1, doc = "Effect flags: the effect may run on a send bus." },
+    { name = "FXF_NOMASTER", value = 2, doc = "Effect flags: it may not run on the master chain." },
+    { name = "FXF_DEFAULT_SEND", value = 4, doc = "Effect flags: its default route is the send bus." },
+]
 
 # The settings store (docs/design/digikit-store.md, "The settings record"): one record in two copies in the store range, next to the selection
 # record. `sectors` is the size of ONE copy; the runtime keeps the record in RAM and writes the copy that is not current. The area is part of the
@@ -1063,17 +2157,18 @@ E_READ = { code = -3, text = "the firmware's block read failed" }
 E_SHA = { code = -4, text = "store file hash or .dkm sha256 does not match" }
 E_FORMAT = { code = -5, text = "bad magic, version, bounds or alignment of the .dkm" }
 E_RUNTIME = { code = -6, text = "the module needs a newer runtime" }  # reserved
-E_IMPORT = { code = -7, text = "an import name is not in the runtime's table" }
+E_IMPORT = { code = -7, text = "an import is unknown, or a provider the module needs is absent" }
 E_NOMEM = { code = -8, text = "arena full" }
 E_INIT = { code = -9, text = "init returned non-zero" }
 E_LOADED = { code = -10, text = "a module of that name is loaded" }
-E_SLOT = { code = -11, text = "a slot it binds is taken" }
-E_BUSY = { code = -12, text = "a task is still inside the module" }
+E_BUSY = { code = -12, text = "a task is still inside the module, or the store is in use (try again)" }
 E_TOO_BIG = { code = -13, text = "larger than the staging buffer" }
 E_TABLE_FULL = { code = -14, text = "no free module record" }
 E_LOST = { code = -15, text = "the sample backing was lost and the reload failed" }
 E_POOL = { code = -16, text = "the sample pool is full" }
 E_CHANGED = { code = -17, text = "the sample file differs from the selection snapshot" }
+E_EXISTS = { code = -18, text = "the file exists already (dk_files_create does not overwrite)" }
+E_CONTEXT = { code = -19, text = "the call is not allowed in this context (dk_files_* writes run in an I/O step)" }
 E_NO_REGISTRY = { code = -20, text = "register records, but the image has no registry" }
 E_REG_DEVICE = { code = -21, text = "the records are for another device" }
 E_TYPE_RANGE = { code = -22, text = "machine type outside the range, or bad clone_of" }
@@ -1081,6 +2176,16 @@ E_TYPE_USED = { code = -23, text = "the type number is in use" }
 E_PARAM_FULL = { code = -24, text = "no free reserved parameter row" }
 E_PAGE_FULL = { code = -25, text = "no free reserved page row (Digitone II)" }
 E_TYPE_IN_USE = { code = -26, text = "reserved (hot reload is archived); never returned" }
+E_DECL_ID = { code = -27, text = "a builder call names a machine or effect id that the keys table of the header lacks" }
+E_DECL_USES = { code = -28, text = "init declared more machine, param or page rows than the [uses] counts of the header say" }
+E_FX_ID_DUP = { code = -29, text = "reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned" }
+E_DECL_FULL = { code = -74, text = "init made more builder calls than the record limit allows" }
+E_PLAN_KIND = { code = -75, text = "the boot plan refused the module: a record kind of its header table has no owning service" }
+E_PLAN_OWNER = { code = -76, text = "the boot plan refused the module: another module owns the kind, slot or hook site it takes" }
+E_PLAN_KEY = { code = -77, text = "the boot plan refused the module: another module of the selection has the same key for a kind" }
+E_PLAN_FIT = { code = -78, text = "the boot plan refused the module: its uses do not fit what the earlier modules of the selection left" }
+E_DECL_KIND = { code = -79, text = "a service declared a record kind that the header table does not carry, or with another length" }
+E_HOOK_STOCK = { code = -82, text = "a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init" }
 E_NO_DSP = { code = -30, text = "DSP code in the file, no DSP loader in the image" }
 E_DSP_FORMAT = { code = -31, text = "the DSP section is malformed" }
 E_DSP_IMPORT = { code = -32, text = "a DSP symbol is not exported by the image" }
@@ -1094,8 +2199,34 @@ E_SEL_COUNT = { code = -41, text = "more selection paths than the record holds" 
 E_SEL_WRITE = { code = -42, text = "the firmware's block write failed" }
 E_CARD_BUSY = { code = -43, text = "a card transfer is in flight" }
 E_SAFE_MODE = { code = -44, text = "this boot is in safe mode: no module was loaded" }
-E_BOOT_ONLY = { code = -45, text = "the module set is fixed after the boot hook" }
+E_BOOT_ONLY = { code = -45, text = "the module set is fixed after the boot hook (a reload of a loaded module is the only later load)" }
 E_RANGE = { code = -46, text = "a card write outside the store range" }
 E_CARD_RO = { code = -47, text = "the card's store area is not ours and not blank" }
-E_CONTRACT = { code = -48, text = "the module was built for another SDK contract" }
+E_CONTRACT = { code = -48, text = "the module needs another runtime version than this one (another major or minor, or a higher patch)" }
 E_TABLE = { code = -49, text = "the runtime's tables failed their check" }
+E_MISSING = { code = -73, text = "the service is not in the image (the module that provides it is not loaded)" }
+E_SVC_ABI = { code = -81, text = "a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint)" }
+E_RELOAD_PLAYING = { code = -83, text = "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)" }
+E_RELOAD_MENUS = { code = -84, text = "reload refused: the module built menus of its own" }
+E_RELOAD_ROUTED = { code = -85, text = "reload refused: a service cannot give back the module's state now" }
+E_RELOAD_RETAINED = { code = -87, text = "reload refused: the DSP loader holds a module it could not release; restart the device" }
+E_RELOAD_KEYS = { code = -86, text = "reload refused: the new file lacks a key of the file it replaces" }
+
+[load.state]        # the state of a module of the boot selection (LOADS v2, `DkrtBootInfo.states`); never renumber
+SELECTED = { code = 0, text = "in the selection, not planned yet" }
+PLANNED = { code = 1, text = "the boot plan accepted it; it has not started" }
+REFUSED = { code = 2, text = "the boot plan refused it before any of its code ran; the result code says why" }
+INIT = { code = 3, text = "its code is loading and `init` is running" }
+DSP_LOADING = { code = 4, text = "its ColdFire part is live and its DSP part is still going" }
+ACTIVE = { code = 5, text = "loaded; its DSP part, if any, is in place" }
+FAILED = { code = 6, text = "loading failed after the plan accepted it; the result code says why" }
+SKIPPED = { code = 7, text = "not loaded on purpose: this boot is in safe mode" }
+UNLOADED = { code = 8, text = "taken down at run time by an unload (it can be loaded again)" }
+
+[sample]            # the sample pool contract (<dk/sample/pool.h>, dsp/sample/pool.inc); `patchkit gen` writes sdk/include/dk/gen/sample.h and sdk/dsp/contract/dk_sample_pool.inc (DK_SAMPLE_POOL_*) from it
+peak_bins = 512     # bins of sample_pool_peaks
+window_max = 128    # most columns of sample_pool_peaks_window
+pool_entries = 16   # entries of one pool (DK_SAMPLE_POOL_ENTRIES)
+pool_entry = ["ready", "token", "frames", "rate", "channels", "fmt", "base_l", "base_r"]   # the 32-bit words of dk_sample_pool_entry
+pool_ctl = ["closed", "count", "fault"]   # the words of one control set
+pool_ctl_words = 4  # words reserved for one control set

@@ -8,8 +8,8 @@ cpu = "cf"
 devices = ["dt2", "dn2"]
 rule = { kind = "cf_params_t1" }
 mark = "D"
-users = ["core/params"]
-doc = "the parameter table (60-byte rows), by the signature of its reader"
+users = ["core/params", "core/services/lfo"]
+doc = "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes."
 
 [[data]]
 name = "cf.param.data.descriptor_table.master_sidechain_filter"
@@ -17,15 +17,18 @@ was = ["cf.param.data.master_sidechain_filter", "cf.param.master_sidechain_filte
 cpu = "cf"
 rule = { kind = "cf_words", words = ["*", 0x42, 0x0, 0x7f00, 0x5000, 0x0, 0x75ffff, 0x116, "*", 0x0, "*", "*", "*", "*", "*"] }
 mark = "D"
+devices = ["dt2", "dn2"]
 doc = "The descriptor row (60 bytes) of that parameter: mirror index 66, range 0..0x7f00, default 0x5000."
 
 [[fn]]
 name = "cf.param.fn.set_value"
 cpu = "cf"
 sig = "u32 (const u8 *obj, u32 code, i32 raw, u32 track, u32 notify, u32 record, u32 redraw)"
-rule = { kind = "cf_func", hash = "89d965df70565c490efde3016d66a843", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "89d965df70565c490efde3016d66a843", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "89d965df70565c490efde3016d66a843", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "88d9b1f3648a5f06762e48e5f2470ea7", offset = 0x0, len = 4, mark = "O" }
 mark = "D"
-users = ["core/runtime"]
+users = ["core/runtime", "core/services/machines"]
 doc = "The absolute parameter setter the stock page uses after a turn and the sample list uses after a pick: (obj, code, raw, track, 1, 1, 1). Clamps raw to the row range, stores it in the sound, notifies the project and the observers. obj is the parameter object of the page (view vtable 0xc4 (view, code, track)). DT2 0x4003b570, DN2 0x40037326."
 
 [[fn]]

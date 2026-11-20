@@ -3,8 +3,9 @@
 
 ``coupled-run`` (packages/emulator/coupled/src/bin/coupled_run.rs) restores the DN2 ready
 session and plays a scenario of panel events, reporting the PCM hash and RMS.
-The binary is built into the prod generated-core target dir
-(tools/emulator/native_target.py), so it reuses the compiled ``sharc-gen``.
+The binary holds no generated core: it loads the core library of the firmware's device from the core store
+(tools/devtools/core_store.py), and ``run_env`` provides ``DIGI_SHARC_CORE_LIB_<DEV>``. It is built into the
+no-core target dir of tools/emulator/native_target.py.
 
     uv run python -m tools.emulator.coupled build
     uv run python -m tools.emulator.coupled scenario NAME [NAME ...] [--wav] [--out JSON] [-- EXTRA...]
@@ -40,11 +41,12 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
-from tools.devtools import render_cache  # noqa: E402
+from tools.devtools import core_store, render_cache  # noqa: E402
 from tools.emulator import digi_env, native_pgo, native_target  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 
 TOOLCHAIN = digi_env.TOOLCHAIN
-DEFAULT_FEATURES = "coupled-audio"
+DEFAULT_FEATURES = "sharc,play"
 FEATURES = os.environ.get("DIGI_COUPLED_FEATURES", DEFAULT_FEATURES)
 BINARY_NAME = "coupled-run"
 BISECT_DIR = ROOT / "out" / "native" / "bisect"
@@ -169,11 +171,11 @@ def scenario_results(report: dict) -> list[dict]:
 def generated(
     device: str = "dn2", image: pathlib.Path | str | None = None
 ) -> pathlib.Path:
-    """The generated core of a device: SHARC_GEN_DIR, else the one registered
+    """The generated core of a device: SHARC_GEN_DIR_<DEVICE>, else SHARC_GEN_DIR, else the one registered
     for its packed DSP image (IMAGE, else the device's ready-input default)."""
     if image is None:
         image = digi_env.ready_inputs(device=device)["DSP image"]
-    gen = digi_env.generated_dir(image=image)
+    gen = digi_env.generated_dir(image=image, device=device)
     if not gen.is_dir():
         raise SystemExit(f"coupled: generated core dir is missing: {gen}")
     return gen
@@ -201,29 +203,31 @@ def feature_variant(features: str | None = None) -> str:
 
 
 def pgo_dir(gen, device):
-    """The target dir of the PGO coupled-run: the same one `native_pgo coupled-build` uses."""
-    return native_target.target_dir(gen, "pgo-cr-" + device)
+    """The target dir of the PGO coupled-run: the same one `native_pgo coupled-build` uses (a host holds no generated core:
+    the no-core dir, GEN is unused)."""
+    return native_target.target_dir("", "pgo-cr-" + device)
 
 
 def pgo_profile(device, gen):
     """The usable profile, state and message. Only the default feature set gets a profile."""
-    if feature_variant() or os.environ.get("SHARC_GEN_DIR_2"):
+    if feature_variant():
         return None, "off", ""
     return native_pgo.profile_for_tests(device, gen)
 
 
 def binary_path(device: str = "dn2", image=None, pgo: bool = False) -> pathlib.Path:
-    gen = generated(device, image)
-    if pgo and pgo_profile(device, gen)[0]:
-        found = (
-            pgo_dir(gen, device)
-            / digi_env.TRIPLE
-            / "release"
-            / digi_env.exe_name(BINARY_NAME)
-        )
-        if found.is_file():
-            return found
-    target = native_target.target_dir(gen, feature_variant())
+    if pgo:
+        gen = generated(device, image)
+        if pgo_profile(device, gen)[0]:
+            found = (
+                pgo_dir(gen, device)
+                / digi_env.TRIPLE
+                / "release"
+                / digi_env.exe_name(BINARY_NAME)
+            )
+            if found.is_file():
+                return found
+    target = native_target.target_dir("", feature_variant())
     return target / "release" / digi_env.exe_name(BINARY_NAME)
 
 
@@ -232,9 +236,11 @@ def cargo(args: list[str]) -> list[str]:
 
 
 def build(device: str = "dn2", image=None, pgo: bool = False) -> pathlib.Path:
-    gen = generated(device, image)
-    digi_env.check_generated(gen)
+    """Build coupled-run: the binary does not depend on the generated core of DEVICE (a plain build uses the no-core
+    target dir; the PGO build is keyed by the core its profile was trained on)."""
     if pgo:
+        gen = generated(device, image)
+        digi_env.check_generated(gen)
         profile, state, message = pgo_profile(device, gen)
         native_pgo.report_profile(device, state, message, applied=False)
         if profile:
@@ -246,8 +252,9 @@ def build(device: str = "dn2", image=None, pgo: bool = False) -> pathlib.Path:
                 gen,
                 pgo_target / "build.log",
             )
-    target = native_target.target_dir(gen, feature_variant())
-    env = {**digi_env.rust_env(), "SHARC_GEN_DIR": str(gen)}
+    target = native_target.target_dir("", feature_variant())
+    env = digi_env.rust_env()
+    env.pop("SHARC_GEN_DIR", None)
     command = cargo(
         [
             "build", "--release", "--locked",
@@ -284,8 +291,17 @@ def ensure_binary(
 def run_env(
     overrides: dict[str, str] | None = None, *, syx: pathlib.Path | None = None
 ) -> dict[str, str]:
-    env = {**os.environ, **(overrides or {})}
+    device = digi_env.device_for_syx(syx or digi_env.firmware(os.environ)) or "dn2"
+    # The core of a device reads the lists with the suffix of its device: names given without it (in the overrides or
+    # the environment) are renamed for DEVICE (`digi_env.slot_env`), so a DT2 run never reads DN2's lists.
+    env = digi_env.slot_env(device, {**os.environ, **(overrides or {})})
     env.update(digi_env.fast_env(env, syx=syx))
+    # The binary holds no DSP core: the library of the firmware's device comes from the core store (an explicit
+    # DIGI_SHARC_CORE_LIB_<DEV> wins).
+    try:
+        env.update(core_store.library_env([device], environ=env))
+    except core_store.CoreStoreError as exc:
+        raise SystemExit(f"coupled: {exc}") from exc
     return env
 
 
@@ -710,8 +726,17 @@ def run_parallel(binary: pathlib.Path, args) -> int:
 
 
 def binary_identity(binary: pathlib.Path, device: str) -> dict[str, str]:
-    """Names a built binary by its bytes. The path is not part of it: each lane has its own."""
-    return {"device": device, "sha256": render_cache.file_digest(binary)}
+    """Names a built binary by its bytes and the core library it loads. The path is not part of it: each lane has its own.
+    The core is an explicit `DIGI_SHARC_CORE_LIB_<DEV>` (its content hash), else the stored library of the current inputs
+    (its key), else `none`: this never builds a library (the run step does). The Nx hash of the gate targets sees a core
+    change through tools/nx/coupled-inputs.mjs, not through this file."""
+    var = core_store.CORE_LIB_VAR.format(device.upper())
+    if os.environ.get(var):
+        core = "file:" + render_cache.file_digest(os.environ[var])[:16]
+    else:
+        library = core_store.restored_library(device)
+        core = library.parent.name if library else "none"
+    return {"device": device, "sha256": render_cache.file_digest(binary), "core": core}
 
 
 def cmd_build(args) -> int:
@@ -867,7 +892,9 @@ def cmd_test_quick(args) -> int:
     gen = generated()
     digi_env.check_generated(gen)
     nogen = native_target.target_dir("")
-    prod = native_target.target_dir(gen, feature_variant())
+    prod = native_target.target_dir(
+        gen, feature_variant()
+    )  # the unit tests of sharc-peer run on the linked core
     base_env = digi_env.rust_env()
     base_env.pop("SHARC_GEN_DIR", None)
     steps = [
@@ -884,11 +911,18 @@ def cmd_test_quick(args) -> int:
              "--lib", "--target-dir", str(nogen)],
         ),
         (
-            "packages/emulator/coupled",
+            "packages/emulator/sharc-peer",
             {**base_env, "SHARC_GEN_DIR": str(gen)},
+            ["--manifest-path", "packages/emulator/sharc-peer/Cargo.toml",
+             "--features", "host",
+             "--lib", "--target-dir", str(prod)],
+        ),
+        (
+            "packages/emulator/coupled",
+            base_env,
             ["--manifest-path", "packages/emulator/coupled/Cargo.toml",
              "--features", FEATURES, "--lib", "--bins",
-             "--target-dir", str(prod)],
+             "--target-dir", str(nogen)],
         ),
     ]  # fmt: skip
     for label, env, tail in steps:
@@ -900,22 +934,28 @@ def cmd_test_quick(args) -> int:
     return 0
 
 
+def core_library_env() -> dict[str, str]:
+    """The DN2 core library from the store (the gate tests restore the DN2 ready session)."""
+    try:
+        return core_store.library_env(["dn2"])
+    except core_store.CoreStoreError as exc:
+        raise SystemExit(f"coupled: {exc}") from exc
+
+
 def cmd_gates(args) -> int:
     """The ignored coupled gate tests (coupled_ready_exactness: restores the ready
     session, 100M instructions). Needs the private DN2 ready inputs."""
-    gen = generated()
-    digi_env.check_generated(gen)
     env = {
         **digi_env.rust_env(),
-        "SHARC_GEN_DIR": str(gen),
+        **core_library_env(),
         "DIGI_COUPLED_FIXTURES": str(digi_env.READY),
         "DIGI_COUPLED_SYX": str(digi_env.firmware()),
     }
     command = cargo(
         [
             "test", "--release", "-p", "digi-coupled",
-            "--features", "coupled-audio", "--lib",
-            "--target-dir", str(native_target.target_dir(gen)), "--locked",
+            "--features", "sharc,play", "--lib",
+            "--target-dir", str(native_target.target_dir("")), "--locked",
             "gate_tests", "--", "--ignored", *args.extra,
         ]
     )  # fmt: skip
@@ -956,7 +996,7 @@ def parser() -> argparse.ArgumentParser:
         )
 
     p = add("build", cmd_build, "build coupled-run")
-    p.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    p.add_argument("--device", choices=device_files.dsp_shorts(), default="dn2")
     p.add_argument(
         "--id-out",
         type=pathlib.Path,
@@ -965,7 +1005,7 @@ def parser() -> argparse.ArgumentParser:
     p = add("scenario", cmd_scenario, "run named scenarios")
     p.add_argument("names", nargs="*", metavar="NAME")
     p.add_argument("--all", action="store_true", help="run every scenario of the file")
-    p.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    p.add_argument("--device", choices=device_files.dsp_shorts(), default="dn2")
     p.add_argument(
         "--check-generated",
         action="store_true",

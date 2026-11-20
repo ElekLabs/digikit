@@ -7,7 +7,8 @@
 //!                    [--hold N]
 //!                    --steps STEP,STEP,... | --steps @FILE
 //!   --base        the stock firmware SYX was made from, for an image with no digikit
-//!                 patch record (`Emulator::new_patched`); a stock image needs none
+//!                 patch record (`Emulator::new_patched`); a stock image needs none, and
+//!                 nor does a build that keeps its release's build stamp (section 5)
 //!   --state       resume a state written by --save-state (skips the boot)
 //!   --save-state  after the boot (or the resume), before the steps, write the
 //!                 state: the next run starts there in a moment
@@ -17,7 +18,8 @@
 //!                 interrupt then runs, 1500 a second, and with it the engine's
 //!                 tick and the sequencer. Off by default. Not with --state.
 //!   --max         give up the boot after this many (default 2,000,000,000)
-//!   --watch       PCs to count; any execution stops the run as a fault
+//!   --watch       PCs to count; any execution stops the run as a fault. --watch,
+//!                 --count and --regs-at take a comma list and can be repeated
 //!   --count       PCs to count only (reported with the watched ones)
 //!   --regs-at     PCs at which to record D0-D7, A0-A7 and the four longwords at A7,
 //!                 each time they run
@@ -47,7 +49,16 @@
 //!   tap:CODE             press, hold --hold, release, run --hold again
 //!   turn:ENC:DETENTS     turn an encoder (1-based), negative for down
 //!   frame:NAME           write the screen to OUT/NAME.pbm (128x64)
+//!   leds                 report the panel LED values (UART8 `b9 idx val` records, up to
+//!                        64 indices; `b5 idx r g b` records as `rgb`) as hex
 //!   peek:ADDR:LEN        read guest memory: reported as hex
+//!   peer                 report the mailbox peer (a device with `[emulator] peer`): bytes taken from
+//!                        the image stream, each image's length and SHA-256, doorbell edges, IRQ4 delivered
+//!   peerpeek:ADDR:LEN    read the peer CPU's own SDRAM (0x40000000..) or SRAM (0x80000000..) once it runs
+//!                        (the shared window is MAIN's 0x10000000: use `peek`)
+//!   pcmreset             forget the PCM captured so far
+//!   wav:PATH             write the PCM captured since the start (or `pcmreset`) as a 48 kHz stereo float WAV and report its
+//!                        frames, RMS and peak (a device with `[emulator.peer_audio]`)
 //!   touched              every 1 MiB RAM page the guest touched that nothing had
 //!                        mapped beforehand, with its first touch (PC, kind, address)
 //!   poke:ADDR:HEX        write guest memory
@@ -163,6 +174,8 @@ struct Run {
     icount: u64,
     /// The watched PCs (a fault when one runs); the counted ones are not.
     faults: Vec<u32>,
+    /// Interleaved stereo PCM (48 kHz) the emulator produced since the last `pcmreset` (a device with `[emulator.peer_audio]`).
+    pcm: Vec<f32>,
 }
 
 impl Run {
@@ -172,6 +185,7 @@ impl Run {
         while self.icount < target {
             let budget = (target - self.icount).min(u64::from(CHUNK)) as u32;
             let snapshot = self.emulator.step_chunk(budget.max(1));
+            self.pcm.extend(self.emulator.take_pcm());
             if let Some(frame) = snapshot.frame {
                 self.frame = Some(frame);
             }
@@ -226,18 +240,26 @@ fn main() -> ExitCode {
         .and_then(|n| number(&n))
         .unwrap_or(10_000_000);
     let out = PathBuf::from(flag("--out").unwrap_or_else(|| ".".into()));
-    let pcs = |name: &str| -> Vec<u32> {
-        flag(name)
-            .map(|list| {
-                list.split(',')
-                    .filter_map(|pc| number(pc).map(|v| v as u32))
-                    .collect()
-            })
-            .unwrap_or_default()
+    // Every use of a PC-list flag counts: `--watch A --watch B` is `--watch A,B`.
+    let pcs = |name: &str| -> Result<Vec<u32>, String> {
+        let mut out = Vec::new();
+        for (i, _) in args.iter().enumerate().filter(|(_, a)| *a == name) {
+            let list = args
+                .get(i + 1)
+                .ok_or(format!("{name} needs a comma list"))?;
+            for pc in list.split(',') {
+                let pc = number(pc)
+                    .and_then(|v| u32::try_from(v).ok())
+                    .ok_or(format!("{name}: {pc:?} is not a 32-bit number"))?;
+                out.push(pc);
+            }
+        }
+        Ok(out)
     };
-    let watch = pcs("--watch");
-    let counted = pcs("--count");
-    let regs_at = pcs("--regs-at");
+    let (watch, counted, regs_at) = match (pcs("--watch"), pcs("--count"), pcs("--regs-at")) {
+        (Ok(w), Ok(c), Ok(r)) => (w, c, r),
+        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => return usage(&e),
+    };
     let call_at = flag("--call-at").and_then(|n| number(&n)).map(|n| n as u32);
     let call_fn = flag("--call-fn").and_then(|n| number(&n)).map(|n| n as u32);
     // --call-buf stack (the default): the bytes go on the guest's stack
@@ -245,7 +267,10 @@ fn main() -> ExitCode {
         None | Some("stack") => Some(GuestCall::STACK),
         Some(n) => number(n).map(|n| n as u32),
     };
-    let call_args = pcs("--call-args");
+    let call_args = match pcs("--call-args") {
+        Ok(v) => v,
+        Err(e) => return usage(&e),
+    };
     let captures: Vec<(u32, usize, usize)> = flag("--capture")
         .map(|list| {
             list.split(',')
@@ -339,6 +364,7 @@ fn main() -> ExitCode {
         frame: None,
         icount: 0,
         faults: watch.clone(),
+        pcm: Vec::new(),
     };
 
     // The start: a saved state, or a boot from reset to the main UI and past it.
@@ -446,6 +472,48 @@ fn main() -> ExitCode {
                     fs::write(&path, pbm(frame)).map_err(|e| format!("{}: {e}", path.display()))?;
                     results
                         .push(json!({"frame": path.display().to_string(), "icount": run.icount}));
+                    Ok(())
+                }
+                "leds" => {
+                    let (revision, hex, rgb) = run.emulator.current_leds();
+                    results.push(json!({"leds": hex, "rgb": rgb, "revision": revision, "icount": run.icount}));
+                    Ok(())
+                }
+                "peer" => {
+                    let report = run.emulator.peer_report().ok_or("no peer on this board")?;
+                    results.push(json!({"peer": report, "icount": run.icount, "position": run.emulator.diagnostics().at}));
+                    Ok(())
+                }
+                "peerpeek" => {
+                    let addr = parts.get(1).and_then(|p| number(p)).ok_or_else(bad)? as u32;
+                    let len = parts.get(2).and_then(|p| number(p)).ok_or_else(bad)? as usize;
+                    let bytes = run
+                        .emulator
+                        .peer_private(addr, len)
+                        .ok_or("peer CPU not running or address outside its SDRAM/SRAM")?;
+                    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                    results.push(
+                        json!({"peerpeek": format!("{addr:#010x}"), "hex": hex, "icount": run.icount}),
+                    );
+                    Ok(())
+                }
+                "pcmreset" => {
+                    run.pcm.clear();
+                    Ok(())
+                }
+                "wav" => {
+                    let path = PathBuf::from(parts.get(1).ok_or_else(bad)?);
+                    let mut writer = elektron_native_boot::wav::WavWriter::create(&path, 48_000, 2)
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    writer
+                        .write(&run.pcm)
+                        .map_err(|e| format!("{}: {e}", path.display()))?;
+                    let n = run.pcm.len().max(1) as f64;
+                    let rms =
+                        (run.pcm.iter().map(|s| f64::from(*s).powi(2)).sum::<f64>() / n).sqrt();
+                    let peak = run.pcm.iter().fold(0f32, |m, s| m.max(s.abs()));
+                    results.push(json!({"wav": path.display().to_string(), "frames": run.pcm.len() / 2,
+                        "seconds": run.pcm.len() as f64 / 96_000.0, "rms": rms, "peak": peak, "icount": run.icount}));
                     Ok(())
                 }
                 "touched" => {
@@ -558,6 +626,7 @@ fn main() -> ExitCode {
             "fault": fault, "boot": boot, "results": results, "watched": hits,
             "regs": regs, "regs_dropped": regs_dropped, "captures": captured,
             "icount": run.icount, "wall_seconds": started.elapsed().as_secs_f64(),
+            "position": run.emulator.diagnostics().at,
         })
     );
     ExitCode::from(if fault.is_some() { 1 } else { 0 })

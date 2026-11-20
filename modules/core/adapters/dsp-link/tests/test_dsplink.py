@@ -86,7 +86,7 @@ def test_constants_agree_between_the_two_sides():
     ):
         assert define(c, name) == want == define(s, name)
     # the area of each device: the DL_AREA_BYTES define, the .PKBSS literal and the word count agree, and the 17-bit offset reaches it
-    for dev in pk_device.digikit_devices():
+    for dev in pk_device.dsp_devices():
         d = gen_inc(dev)
         area = pk_device.load(dev)["digikit"]["dsp_area_bytes"]
         assert define(d, "DL_AREA_BYTES") == area
@@ -271,17 +271,31 @@ def test_dl_send_checks_its_arguments(machine, built):
     lk = link_of(built, r[0])
     assert (
         lk["state"] == 4
-        and lk["dst"] == 0x10
+        and lk["dst"] == 0x10 + 16  # window 0 starts with the 16 slot words
         and lk["nwords"] == 16
         and lk["buf"] == src
     )
+    # the slot block lies directly below the area: window 0 words 0 to 15; a write stays inside it
+    ok_slots = run(
+        machine,
+        built,
+        {src: bytes(8)},
+        [call(built, "dl_send", [AREA - 64 + 56, src, 8])],
+    )
+    assert ok_slots[0].d0 == 0
     bad = [
+        [AREA - 68, src, 4],  # below the slot block
+        [AREA - 64 + 60, src, 8],  # leaves the slot block into the area
         [AREA + 1, src, 64],  # unaligned destination
         [AREA, src, 63],  # length not a multiple of 4
         [AREA, src, 0],
         [AREA - 4, src, 64],  # before the area
-        [AREA + 0x80000, src, 4],  # after it
-        [AREA + 0x7FFFC, src, 8],  # runs over its end
+        [
+            AREA + 0x7FFC0,
+            src,
+            4,
+        ],  # after it: the last 64 bytes of the 512 KiB are the slot block's place in window 0
+        [AREA + 0x7FFBC, src, 8],  # runs over its end
         [AREA, 0, 64],
     ]
     res = run(machine, built, {}, [call(built, "dl_send", a) for a in bad])
@@ -290,7 +304,7 @@ def test_dl_send_checks_its_arguments(machine, built):
         machine,
         built,
         {src: bytes(4)},
-        [call(built, "dl_send", [AREA + 0x7FFFC, src, 4])],
+        [call(built, "dl_send", [AREA + 0x7FFBC, src, 4])],
     )
     assert last[0].d0 == 0
 
@@ -328,7 +342,13 @@ def test_first_tick_writes_a_chunk_the_dsp_can_check(machine, built):
         (w[1] >> 26) & 1,
         w[1] >> 27,
     )
-    assert (off, n, last, end, xid) == (8, 171, 0, 0, 1)
+    assert (off, n, last, end, xid) == (
+        24,
+        171,
+        0,
+        0,
+        1,
+    )  # word 16 is the area start (the slot block is words 0-15), plus 8 words
     assert w[0] >> 30 == 0  # window 0
     assert w[2 : 2 + n] == words[:171]
     assert w[2 + n] == check_word(w[: 2 + n])
@@ -336,7 +356,7 @@ def test_first_tick_writes_a_chunk_the_dsp_can_check(machine, built):
     w1 = tail_words(r[2].reads[1], 0x402, 174)
     assert w1[0] == MAGIC | (1 << 16)
     off1, n1, last1 = w1[1] & 0x1FFFF, (w1[1] >> 17) & 0xFF, (w1[1] >> 25) & 1
-    assert (off1, n1, last1) == (8 + 171, nwords - 171, 1)
+    assert (off1, n1, last1) == (24 + 171, nwords - 171, 1)
     assert w1[2 : 2 + n1] == words[171:]
     assert w1[2 + n1] == check_word(w1[: 2 + n1])
     # halfwords of the queue outside the tail are untouched (the stock driver writes the command halfwords there)
@@ -473,7 +493,7 @@ def test_window_transfers_carry_the_window_and_refuse_bad_arguments(machine, bui
     assert (w[1] & 0x1FFFF, (w[1] >> 17) & 0xFF, (w[1] >> 25) & 1) == (5, 2, 1)
     bad = [
         [0, 0, src, 8],  # window 0 is dl_send's
-        [3, 0, src, 8],  # no window 3
+        [4, 0, src, 8],  # no window 4 (3 is the stats control)
         [1, 0, src, 0],
         [1, 0, src, 6],
         [1, 0x20000, src, 4],
@@ -599,7 +619,7 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
         {stub: code, seen: bytes(4)},
         [
             tick,  # no callback: nothing stored
-            call(built, "dl_set_tick_cb", [stub]),
+            call(built, "dk_dsp_link_set_tick", [0, stub]),
             tick,  # the callback sees the record
             call(
                 built, "dl_tick_cb_drop", [stub + 0x100, stub + 0x200]
@@ -607,7 +627,7 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
             call(
                 built, "dl_tick_cb_drop", [stub, stub + 4]
             ),  # the callback's first byte is in range: dropped
-            call(built, "dl_set_tick_cb", [stub]),
+            call(built, "dk_dsp_link_set_tick", [0, stub]),
             call(
                 built, "dl_tick_cb_drop", [stub - 0x100, stub]
             ),  # [lo, hi): the end is excluded
@@ -622,9 +642,49 @@ def test_tick_callback_gets_the_reply_record_and_can_be_cleared(machine, built):
         built,
         {stub: code, seen: bytes(4)},
         [
-            call(built, "dl_set_tick_cb", [stub]),
+            call(built, "dk_dsp_link_set_tick", [0, stub]),
             call(built, "dl_tick_cb_drop", [stub, stub + 4]),
             tick,
         ],
     )
     assert r[2].reads[0] == bytes(4)
+
+
+@needs_gcc
+def test_stats_pages_in_the_acknowledgement_slot_go_to_the_runtime_feed(machine, built):
+    stub, seen, rec = DATA + 0x7000, DATA + 0x7100, DATA + 0x8000
+    # the feed stores its three arguments (tag, a, b) at seen, seen + 4, seen + 8
+    code = struct.pack(
+        ">HHHIHHHIHHHIH",
+        *(0x202F, 4, 0x23C0, seen),
+        *(0x202F, 8, 0x23C0, seen + 4),
+        *(0x202F, 12, 0x23C0, seen + 8),
+        0x4E75,
+    )
+    tag, a, b = 0x57A7 | 3 << 16 | 9 << 24, 0x11223344, 0x55667788
+
+    def record(words):  # the slot at +0x60: three words, the low half first
+        slot = b"".join(struct.pack(">HH", w & 0xFFFF, w >> 16) for w in words)
+        return bytes(0x60) + slot
+
+    tick = call(built, "dl_tick", [0x802, 0, 0xABC, rec], [(seen, 12)])
+    r = run(
+        machine,
+        built,
+        {stub: code, seen: bytes(12), rec: record([tag, a, b])},
+        [
+            tick,  # no feed: nothing stored
+            call(built, "dl_stats_hook", [stub]),
+            tick,  # a page: the feed gets it
+        ],
+    )
+    assert r[0].reads[0] == bytes(12)
+    assert struct.unpack(">3I", r[2].reads[0]) == (tag, a, b)
+    # an acknowledgement (magic 0xA5D1) in the slot is not a page
+    r = run(
+        machine,
+        built,
+        {stub: code, seen: bytes(12), rec: record([0xA5D1 | 5 << 16, 0, 0])},
+        [call(built, "dl_stats_hook", [stub]), tick],
+    )
+    assert r[1].reads[0] == bytes(12)

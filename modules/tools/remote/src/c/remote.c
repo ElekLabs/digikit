@@ -19,8 +19,13 @@
  * 2 turn), the key code or encoder, and the delta taken (a key: 1 down, 0 up). The firmware applies a turn at its next tick, so the event says "accepted
  * by the decoder", not "applied". */
 
-#include <dk/api.h>
-#include <dk/ui.h>
+#include <dk/core/module.h>
+#include <dk/core/log.h>
+#include <dk/core/text.h>
+#include <dk/core/time.h>
+#include <dk/platform/host.h>
+#include <dk/platform/input.h>
+#include <dk/platform/ui.h>
 
 typedef uint32_t u32;
 typedef uint8_t u8;
@@ -44,7 +49,7 @@ static void taken(u32 what, u32 control, int delta)
     a[1] = control;
     a[2] = (u32)delta;
     a[3] = a[4] = 0u;
-    dkrt_log_ev(K_INPUT_TAKEN, LOG_DEBUG_FLAGS, a);
+    dk_log_event(K_INPUT_TAKEN, LOG_DEBUG_FLAGS, a);
 }
 
 static u8 held[16]; /* a bit per key code 0..127 */
@@ -54,6 +59,7 @@ static u32 stamp[MAX_ENC];
 static u8 last_what;
 static int last_a, last_b, last_r;
 static dk_ui_menu *settings_menu;
+static dk_input *input; /* core/input, opened in init */
 
 static void last_is(u8 what, int a, int b, int r)
 {
@@ -73,14 +79,14 @@ static int32_t key(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
         return E_MSG;
     if (body[0] > 127u)
         return E_MSG;
-    r = input_key(body[0], body[1]);
+    r = dk_input_key(input, body[0], body[1]);
     last_is(1, body[0], body[1], r);
     if (r == 0) {
         taken(1u, body[0], body[1]);
         if (body[1])
             held[body[0] >> 3] |= (u8)(1u << (body[0] & 7u));
         else
-            held[body[0] >> 3] &= (u8)~(1u << (body[0] & 7u));
+            held[body[0] >> 3] &= (u8) ~(1u << (body[0] & 7u));
     }
     return r;
 }
@@ -96,7 +102,7 @@ static int32_t turn(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     enc = body[0];
     if (enc < 1u || enc > MAX_ENC)
         return E_MSG;
-    now = dkrt_blocks();
+    now = dk_time_blocks();
     steps = (now - stamp[enc - 1u]) / PACE_BLOCKS;
     if (steps > 0u) {
         int p = pending[enc - 1u];
@@ -120,7 +126,7 @@ static int32_t turn(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
         out[0] = 0;
         return 1;
     }
-    r = input_turn(enc, take);
+    r = dk_input_turn(input, enc, take);
     last_is(2, (int)enc, take, r);
     if (r != 0)
         return r;
@@ -137,9 +143,9 @@ static int release_all(void)
     int worst = 0;
     for (c = 0; c < 128u; c++) {
         if (held[c >> 3] & (1u << (c & 7u))) {
-            int r = input_key(c, 0);
+            int r = dk_input_key(input, c, 0);
             if (r == 0)
-                held[c >> 3] &= (u8)~(1u << (c & 7u));
+                held[c >> 3] &= (u8) ~(1u << (c & 7u));
             else
                 worst = r;
         }
@@ -158,20 +164,21 @@ static int32_t release(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     return release_all();
 }
 
-static int32_t state(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
+static int32_t state(u32 cmd, u32 seq, const void *body, u32 len, void *out)
 {
+    u8 *reply = out;
     (void)cmd;
     (void)seq;
     (void)body;
     (void)len;
-    out[0] = 1;
-    out[1] = 1;
-    out[2] = TURN_LIMIT;
+    reply[0] = 1;
+    reply[1] = 1;
+    reply[2] = TURN_LIMIT;
     return 3;
 }
 
 /* One handler for the range 0x38 to 0x3a, so that the module uses two of the runtime's registration slots, not four. */
-static int32_t panel(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
+static int32_t panel(u32 cmd, u32 seq, const void *body, u32 len, void *out)
 {
     if (cmd == 0x38u)
         return key(cmd, seq, body, len, out);
@@ -180,13 +187,16 @@ static int32_t panel(u32 cmd, u32 seq, const u8 *body, u32 len, u8 *out)
     return release(cmd, seq, body, len, out);
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    int a = api->register_cmds(0x38, 3, panel);
-    int d = api->register_cmds(0x3e, 1, state);
+    int32_t a, d, r = dk_input_open(ctx, &input);
+    if (r != DK_OK)
+        return r;
+    a = dk_host_register(0x38, 3, panel);
+    d = dk_host_register(0x3e, 1, state);
     /* STATE is optional: another module may hold 0x3e (the test fixture track-select does), and KEY, TURN and RELEASE work without it. */
-    api->log((const u8 *)"remote registered", (u32)(a | d));
-    return a ? -1 : 0;
+    dk_log(DK_LOG_INFO, "remote registered", (u32)(a | d));
+    return a ? a : DK_OK;
 }
 
 /* ---- settings ------------------------------------------------------------------------------------------------------------ */
@@ -199,24 +209,6 @@ static int held_count(void)
     return n;
 }
 
-/* Appends the decimal text of v at s[n]; returns the new length. */
-static int put_num(char *s, int n, int v)
-{
-    char tmp[12];
-    int k = 0;
-    if (v < 0) {
-        s[n++] = '-';
-        v = -v;
-    }
-    do {
-        tmp[k++] = (char)('0' + v % 10);
-        v /= 10;
-    } while (v);
-    while (k)
-        s[n++] = tmp[--k];
-    return n;
-}
-
 static int put_str(char *s, int n, const char *t)
 {
     while (*t)
@@ -224,47 +216,47 @@ static int put_str(char *s, int n, const char *t)
     return n;
 }
 
-static void do_release(void *ctx, int arg)
+static void do_release(void *arg, int32_t value)
 {
-    (void)ctx;
     (void)arg;
+    (void)value;
     release_all();
     if (settings_menu)
-        dk_ui_refresh(settings_menu);
+        dk_ui_menu_refresh(settings_menu);
 }
 
-static void fill(dk_ui_menu *m, void *ctx)
+static void menu(dk_module_ctx *ctx, dk_ui_menu *m)
 {
     char t[DK_UI_ROW];
     int n;
     (void)ctx;
     settings_menu = m;
     n = put_str(t, 0, "KEYS HELD ");
-    n = put_num(t, n, held_count());
+    n += (int)dk_text_itoa(t + n, held_count());
     t[n] = 0;
-    dk_ui_text(m, t);
+    dk_ui_menu_add_text(m, t);
     if (last_what == 0) {
-        dk_ui_text(m, "LAST: NONE");
+        dk_ui_menu_add_text(m, "LAST: NONE");
     } else if (last_what == 3) {
         n = put_str(t, 0, "LAST: RELEASE");
         t[n] = 0;
-        dk_ui_text(m, t);
+        dk_ui_menu_add_text(m, t);
     } else {
         n = put_str(t, 0, last_what == 1 ? "LAST: KEY " : "LAST: TURN ");
-        n = put_num(t, n, last_a);
+        n += (int)dk_text_itoa(t + n, last_a);
         t[n++] = last_what == 1 ? (last_b ? 'D' : 'U') : ' ';
         if (last_what == 2)
-            n = put_num(t, n, last_b);
+            n += (int)dk_text_itoa(t + n, last_b);
         t[n] = 0;
-        dk_ui_text(m, t);
+        dk_ui_menu_add_text(m, t);
     }
     if (last_what && last_r) {
         n = put_str(t, 0, "ERROR ");
-        n = put_num(t, n, last_r);
+        n += (int)dk_text_itoa(t + n, last_r);
         t[n] = 0;
-        dk_ui_text(m, t);
+        dk_ui_menu_add_text(m, t);
     }
-    dk_ui_action(m, "RELEASE ALL KEYS", do_release, 0, 0);
+    dk_ui_menu_add_action(m, "RELEASE ALL KEYS", do_release, 0, 0);
 }
 
-DK_MENU(fill)
+const dk_module_def dk_module = {.init = init, .menu = menu};

@@ -1,10 +1,11 @@
 // The one launcher for Nx (`pnpm nx:pilot`): one CPU budget, one shared lock, one priority.
 // Nx has no per-kind limits, so the per-target counts (Vitest workers, emulators, cargo jobs)
 // come from this budget and reach the targets through environment variables.
-import { spawnSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { createWriteStream, mkdirSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { budget, workCores } from './resources.mjs';
+import { MODE_CORES, budget, workCores } from './resources.mjs';
+import { NxCompactor } from './failures.mjs';
 
 export function runsTasks(args) {
   const first = args[0];
@@ -60,6 +61,20 @@ export function usesRemote(args, env) {
   );
 }
 
+// Task runs print compact output: one line per task and the first failure block of each failed task
+// (tools/nx/failures.mjs); the full output goes to out/runs/nx/<stamp>.log. `--verbose` or DIGI_NX_VERBOSE=1
+// keeps Nx's own output, as does any other `--output-style` or NX_DEFAULT_OUTPUT_STYLE.
+export function compactArgs(args, env) {
+  const verbose = args.includes('--verbose') || (env.DIGI_NX_VERBOSE && env.DIGI_NX_VERBOSE !== '0');
+  const style = args.find((arg) => arg.startsWith('--output-style'));
+  if (!runsTasks(args) || verbose || env.NX_DEFAULT_OUTPUT_STYLE) return undefined;
+  if (style && style !== '--output-style=static-failures-only') return undefined;
+  if (style) return args;
+  const split = args.indexOf('--');
+  const at = split < 0 ? args.length : split;
+  return [...args.slice(0, at), '--output-style=static-failures-only', ...args.slice(at)];
+}
+
 function main() {
   const args = process.argv.slice(2);
   const cwd = process.cwd();
@@ -104,12 +119,46 @@ function main() {
         ...command,
       ];
     console.error(
-      `nx: budget ${b.budget}: ${env.NX_PARALLEL} Nx tasks, ${b.workers} vitest workers, ${b.tasks} emulators, ${b.jobs} script jobs, ${b.budget} cargo jobs${remote ? ', remote' : ''}`,
+      `nx: budget ${b.budget}: ${env.NX_PARALLEL} Nx tasks, ${b.workers} vitest workers, ${b.tasks} emulators (at most ${Math.floor(b.budget / MODE_CORES.sharc)} coupled), ${b.jobs} script jobs, ${b.budget} cargo jobs${remote ? ', remote' : ''}`,
     );
   }
-  const result = spawnSync(command[0], command.slice(1), { stdio: 'inherit', env });
-  if (result.error) throw result.error;
-  process.exit(result.status ?? 1);
+  const compact = compactArgs(args, process.env);
+  if (!compact) {
+    const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env });
+    child.on('error', (error) => {
+      throw error;
+    });
+    child.on('close', (status) => process.exit(status ?? 1));
+    return;
+  }
+  // The same command with the quiet style; the output is read through the filter and kept whole in the log.
+  const at = command.length - args.length;
+  const full = [...command.slice(0, at), ...compact];
+  const dir = `${cwd}/out/runs/nx`;
+  mkdirSync(dir, { recursive: true });
+  const logPath = `${dir}/${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}.log`;
+  const log = createWriteStream(logPath);
+  const started = Date.now();
+  const filter = new NxCompactor({
+    print: (line) => console.log(line),
+    logPath,
+    elapsed: () => (Date.now() - started) / 1000,
+  });
+  const child = spawn(full[0], full.slice(1), { stdio: ['inherit', 'pipe', 'pipe'], env });
+  for (const stream of [child.stdout, child.stderr]) {
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk) => {
+      log.write(chunk);
+      filter.push(chunk);
+    });
+  }
+  child.on('error', (error) => {
+    throw error;
+  });
+  child.on('close', (status) => {
+    filter.end(status ?? 1);
+    log.end(() => process.exit(status ?? 1));
+  });
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();

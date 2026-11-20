@@ -35,6 +35,7 @@ import sys
 from tools import python_env
 from tools.coldfire import arena_safety, panel_script
 from tools.device.dkproto import SETTINGS_SECTORS
+from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GOLDEN = ROOT / "tests" / "golden" / "digikit_menu_frames.json"
@@ -58,6 +59,11 @@ REGRESS_SCRIPTS = [
     "save_project", "save_quick", "load_project", "new_project", "manage_delete", "manage_rename", "format_pool",
     "os_update", "check_filesystem", "pattern_temp",
 ]  # fmt: skip
+
+
+def _has_path_fs(image: str) -> bool:
+    """True when the device of `image` has a folder filesystem on its card (the stock `check_filesystem` script runs there)."""
+    return device_files.by_image(image).capabilities.get("card") == "path-fs"
 
 
 def sh(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -110,7 +116,7 @@ def make_card(image: str) -> pathlib.Path:
         forge(good, device=other)
     )
     (folder / "digikit" / "modules" / "future.dkm").write_bytes(
-        forge(good, api_major=99)
+        forge(good, runtime_major=99)
     )
     (folder / "digikit" / "readme.txt").write_bytes(b"readme")
     img = CARDS / f"{dev}.img"
@@ -123,21 +129,22 @@ def make_card(image: str) -> pathlib.Path:
 
 
 def forge(
-    good: bytes, device: int | None = None, api_major: int | None = None
+    good: bytes, device: int | None = None, runtime_major: int | None = None
 ) -> bytes:
-    """A copy of a good `.dkm` with a header field changed and the file sha256 made right again: register records for another
-    device (an empty `DKRG` record, 16 bytes appended) or another `api` contract major. The menu reads only these header fields."""
+    """A copy of a good `.dkm` with a header field changed and the file sha256 made right again: the DSP section for another
+    device or another runtime major in the version the module needs. The menu reads only these header fields."""
     import hashlib
     import struct
 
     b = bytearray(good)
     if device is not None:
+        # a DSP section of its own (64 zero bytes, appended) with the device word at offset 8: the menu reads only that word
         b += b"\0" * (-len(b) % 16)
-        struct.pack_into(">I", b, 0x90, len(b))
-        struct.pack_into(">I", b, 0x94, 16)
-        b += struct.pack(">4sIII", b"DKRG", 1, device, 0)
-    if api_major is not None:
-        b[0x38] = api_major
+        struct.pack_into(">II", b, 0x98, len(b), 64)
+        b += b"\0" * 64
+        struct.pack_into(">I", b, struct.unpack_from(">I", b, 0x98)[0] + 8, device)
+    if runtime_major is not None:
+        b[0x31] = runtime_major
     struct.pack_into(">I", b, 0x08, len(b))
     b[0x10:0x30] = bytes(32)
     b[0x10:0x30] = hashlib.sha256(bytes(b)).digest()
@@ -707,9 +714,7 @@ def main(argv=None) -> int:
     if a.stack_stock:
         env = stack_env(image)
         names = [
-            n
-            for n in REGRESS_SCRIPTS
-            if n != "check_filesystem" or image.startswith("dt2")
+            n for n in REGRESS_SCRIPTS if n != "check_filesystem" or _has_path_fs(image)
         ]
         with ThreadPoolExecutor(max_workers=a.jobs) as pool:
             runs = list(
@@ -735,9 +740,7 @@ def main(argv=None) -> int:
         # the stock SETTINGS scripts of finding 25 (project, system and format menus, saves): the same card, stock image
         # against patched image; every dumped frame and the card sectors the firmware wrote must be equal
         names = [
-            n
-            for n in REGRESS_SCRIPTS
-            if n != "check_filesystem" or image.startswith("dt2")
+            n for n in REGRESS_SCRIPTS if n != "check_filesystem" or _has_path_fs(image)
         ]
         stock = arena_safety.suite(
             image, names, OUT / image / "regress-stock", card, a.jobs, False

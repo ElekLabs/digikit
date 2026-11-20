@@ -5,9 +5,9 @@ import { promisify } from 'node:util';
 import zlib from 'node:zlib';
 import { DkError, fileHashHex } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
-import { repoRoot, type Device, type Session } from '@digi/test-support';
+import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
-import { advance, rpc, word } from './fx-live.ts';
+import { rpc, word } from './fx-live.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
@@ -136,6 +136,8 @@ export interface CardOptions extends Partial<Omit<SelRecord, 'paths'>> {
   name?: string;
   /** Modules of the store: `name` is the store path (`modules/a.dkm`), `file` the .dkm. */
   modules?: { name: string; file: string }[];
+  /** Files of the DT2 +Drive path filesystem (`name` is the path below the root, e.g. `Samples/a.bin`; `file` the bytes). */
+  drive?: { name: string; file: string }[];
   /** Verified DT2 firmware (.syx) that seeds the boot project; omit for none. */
   syx?: string;
   /** Selected store paths, written to both copies. Undefined or null: no record. */
@@ -161,6 +163,10 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
     for (const m of o.modules ?? []) {
       fs.mkdirSync(path.dirname(path.join(seed, 'digikit', m.name)), { recursive: true });
       fs.copyFileSync(m.file, path.join(seed, 'digikit', m.name));
+    }
+    for (const f of o.drive ?? []) {
+      fs.mkdirSync(path.dirname(path.join(seed, f.name)), { recursive: true });
+      fs.copyFileSync(f.file, path.join(seed, f.name));
     }
     await exec(
       plusdriveBinary(),
@@ -297,15 +303,33 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
   const base = planSymbol(plan, 'DKRT_BOOT') + 4 * BI_FIELDS.length;
   const tail = await Promise.all(Array.from({ length: SEL_MAX + 2 }, (_, i) => word(session, base + 4 * i)));
   const allResults = tail.slice(0, SEL_MAX).map((v) => v | 0);
+  // after `needs` (SEL_MAX * NEEDS_LEN bytes at offset 80 of DkrtBootInfo, modules/core/runtime/abi.toml): `states[SEL_MAX]` (bytes), `detail[SEL_MAX][2]`
+  const statesAt = planSymbol(plan, 'DKRT_BOOT') + BI_STATES_AT;
+  const stateWords = await Promise.all([0, 1].map((i) => word(session, statesAt + 4 * i)));
+  const states = Array.from({ length: SEL_MAX }, (_, i) => (stateWords[i >> 2]! >>> (24 - 8 * (i & 3))) & 255);
+  const detailWords = await Promise.all(
+    Array.from({ length: SEL_MAX * 2 }, (_, i) => word(session, statesAt + 8 + 4 * i)),
+  );
+  const detail = Array.from(
+    { length: SEL_MAX },
+    (_, i) => [detailWords[2 * i]!, detailWords[2 * i + 1]!] as [number, number],
+  );
   return {
     ...d,
     results: allResults.slice(0, d.count),
     allResults,
+    /** The state of each selected module (`[load.state]`: `STATE_NAME[n]`). */
+    states: states.slice(0, d.count),
+    /** What the plan refused each module on (`DkrtBootInfo.detail`). */
+    detail: detail.slice(0, d.count),
     dspWait: tail[SEL_MAX]!,
     stable: tail[SEL_MAX + 1]!,
     reasonName: SAFE_NAMES[d.reason] ?? '?',
   };
 }
+
+/** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, dsp_wait, stable and `needs`; asserted by `abi.toml`'s layout check). */
+const BI_STATES_AT = 176;
 
 /**
  * `bootInfo` once no selected module is still LOADING (1): the DSP part of a module follows its ColdFire part over the first UI-loop
@@ -315,7 +339,7 @@ export async function bootInfoLoaded(session: Session, plan: RuntimePlan, ms = 5
   for (let i = 0; i < ms / 100; i++) {
     const info = await bootInfo(session, plan);
     if (!info.results.includes(1)) return info;
-    await advance(session, 100);
+    await waitClock(emulatorClock(session), 100);
   }
   return bootInfo(session, plan);
 }
@@ -350,7 +374,7 @@ export async function postRaw(session: Session, plan: RuntimePlan, cmd: number, 
   const seq0 = await word(session, mb + MB_SEQ);
   await pokeWord(session, mb + MB_CMD, cmd);
   for (let i = 0; i < 200; i++) {
-    await advance(session, 20);
+    await waitClock(emulatorClock(session), 20);
     if ((await word(session, mb + MB_CMD)) === 0 && (await word(session, mb + MB_SEQ)) !== seq0) break;
   }
   return (await word(session, mb + MB_RESULT)) | 0;

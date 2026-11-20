@@ -2,16 +2,36 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  firmwareDir as stockFirmwareDir,
+  STOCK_SYX,
+  stockImage as stockImageOf,
+} from '@digi/workbench-core/node/stock-image.ts';
+import { parse as parseToml } from 'smol-toml';
 import { resolveTiers } from './emulator-config.ts';
 
 export type Device = 'dt2' | 'dn2';
 
-// (device, version) -> base .syx and ready dir; same table as FIRMWARE in tools/patchkit/pk_harness.py.
+// (device, version) -> base .syx and ready dir. The ready dirs are `[acceptance] ready_dir` of the device files,
+// like FIRMWARE in tools/patchkit/pk_harness.py.
 // Override the ready dir with DIGI_PK_READY_<DEV>_<VER> (version without the dot).
-const FIRMWARE: Record<string, { syx: string; ready: string }> = {
-  'dt2 1.17': { syx: 'Digitakt_II_OS1.17.syx', ready: 'out/ready-pk-dt2-117' },
-  'dn2 1.12': { syx: 'Digitone_II_OS1.12.syx', ready: 'out/ready-fix-dn2-112' },
-};
+function firmwareTable(): Record<string, { syx: string; ready: string }> {
+  // `[acceptance] ready_dir` of each device file
+  const dir = path.join(repoRoot(), 'devices');
+  const readyDirs = new Map<string, string>();
+  for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.toml'))) {
+    const t = parseToml(fs.readFileSync(path.join(dir, name), 'utf8')) as {
+      device?: { short?: string };
+      acceptance?: { ready_dir?: string };
+    };
+    if (t.device?.short && t.acceptance?.ready_dir) readyDirs.set(t.device.short, t.acceptance.ready_dir);
+  }
+  const ready = (device: Device) => readyDirs.get(device) ?? '';
+  return {
+    'dt2 1.17': { syx: STOCK_SYX.dt2, ready: ready('dt2') },
+    'dn2 1.12': { syx: STOCK_SYX.dn2, ready: ready('dn2') },
+  };
+}
 
 export interface ReadyInputs {
   syx: string;
@@ -31,14 +51,40 @@ export function repoRoot(): string {
   }
 }
 
+/** `DIGI_SHARC_CORE_LIB_<DEV>`: the core library a daemon of this device loads (`verify_build daemons|cores` writes it to
+ * dist/daemons.json beside `DIGI_EMUD_<DEV>`). The environment wins over the file, so a
+ * variable set by hand (another library) overrides `dist/daemons.json`. A daemon has no static core: with neither, it
+ * stops with a message that names the variable and `verify_build cores`. */
+export function coreLibEnv(device: Device, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const key = `DIGI_SHARC_CORE_LIB_${device.toUpperCase()}`;
+  if (env[key]) return {};
+  const file = path.join(repoRoot(), 'dist/daemons.json');
+  try {
+    const value = (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key];
+    return value ? { [key]: value } : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The stock images: $DIGI_FIRMWARE_DIR (relative to the repository root), else firmware/ (the rule of `@digi/workbench-core/node/stock-image.ts`, which `wb transfer` shares). */
+export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
+  return stockFirmwareDir(repoRoot(), env);
+}
+
+/** The stock .syx of a device on its analysis version (the file `wb transfer install` binds services to). */
+export function stockImage(device: Device, env: NodeJS.ProcessEnv = process.env): string {
+  return stockImageOf(device, repoRoot(), env);
+}
+
 /** The .syx and ready-input files of a device and firmware version; throws when one is missing. */
 export function resolveInputs(device: Device, firmware: string): ReadyInputs {
   const root = repoRoot();
-  const spec = FIRMWARE[`${device} ${firmware}`];
+  const spec = firmwareTable()[`${device} ${firmware}`];
   let syx: string;
   let readyDir: string;
   if (spec) {
-    syx = path.join(root, 'firmware', spec.syx);
+    syx = path.join(firmwareDir(), spec.syx);
     const env = process.env[`DIGI_PK_READY_${device.toUpperCase()}_${firmware.replace('.', '')}`];
     readyDir = env ?? path.join(root, spec.ready);
   } else {
@@ -55,7 +101,7 @@ export function resolveInputs(device: Device, firmware: string): ReadyInputs {
     if (!fs.existsSync(f)) {
       throw new Error(
         `${f} is missing; build the ready dir with ` +
-          `\`uv run python -m tools.emulator.ready ${device} --syx ${path.basename(syx)} --out ${readyDir} --force\``,
+          `\`uv run python -m tools.emulator.ready ${device} --syx ${syx} --out ${readyDir} --force\``,
       );
     }
   }
@@ -94,12 +140,18 @@ export function validateRuntimeInputs(inputs: ReadyInputs): void {
 }
 
 /** Match the coupled launcher's verified fast-tier defaults for the actual stock bytes (rules: emulator-config.ts).
+ * DEVICE is the device of the firmware: its core reads the lists with its suffix (DT2 `_2`, DN2 none).
  * Explicit values (including empty strings) win; DIGI_EMU_FAST=0 suppresses defaults.
  * The daemon inherits process.env, so disabled defaults do not erase explicit settings. */
-export function coupledEnv(syx: string, environ: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function coupledEnv(
+  syx: string,
+  device: Device,
+  environ: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
   if (environ.DIGI_EMU_FAST === '0') return {};
   const digest = createHash('sha256').update(fs.readFileSync(syx)).digest('hex');
   const config = JSON.parse(fs.readFileSync(path.join(repoRoot(), 'config/emulator.json'), 'utf8'));
-  const res = resolveTiers({ context: 'tests', digest, environ, config });
+  // A core library reads the region lists of its device: the DT2 core `_2` names (`GenCore::env_suffix`).
+  const res = resolveTiers({ context: 'tests', digest, environ, config, slot: device === 'dt2' ? '_2' : '' });
   return { ...res.explicit, ...res.add };
 }

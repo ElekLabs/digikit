@@ -277,7 +277,7 @@ REGENERATE_HINT = (
     "--coverage out/native/opt/drive3m.cov --entries out/native/opt/drive3e.entries "
     "--transitions out/native/opt/drive3b.trans --out out/native/opt/gen-final && "
     "SHARC_GEN_DIR=$PWD/out/native/opt/gen-final CARGO_TARGET_DIR=out/native/opt/target-final "
-    "cargo build --release --manifest-path packages/emulator/sharc/Cargo.toml"
+    "cargo build --release --features c-abi --manifest-path packages/emulator/sharc/Cargo.toml"
 )
 # Set to 1 to load a stale library anyway (with a warning), e.g. to time an
 # old build.

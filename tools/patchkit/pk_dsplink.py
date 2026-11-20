@@ -37,6 +37,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import hook_ab, pk_device  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
@@ -66,7 +67,7 @@ L_WIN = 64
 DL_IDLE, DL_BUSY, DL_DONE, DL_ERROR, DL_START = 0, 1, 2, 3, 4
 AREA_WORDS = {
     d: pk_device.load(d)["digikit"]["dsp_area_bytes"] // 4
-    for d in pk_device.digikit_devices()
+    for d in pk_device.dsp_devices()
 }  # DL_AREA_WORDS
 FRAME = 88_000  # ColdFire instructions per DSP block (132 M / 1500)
 TRIG1 = 25
@@ -482,7 +483,7 @@ def main(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("proof", "frame"):
         p = sub.add_parser(name)
-        p.add_argument("--device", choices=["dt2", "dn2"], default="dt2")
+        p.add_argument("--device", choices=device_files.shorts(), default="dt2")
         p.add_argument("--fw")
         if name == "proof":
             p.add_argument("--sizes", default="4096,65536")

@@ -25,24 +25,33 @@ from collections.abc import Callable
 
 from tools.emulator import emulator_config
 from tools.firmware import config
+from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-# The DN2 ready-inputs directory: ready_dir in tools/emulator/ready_inputs.json (shared
-# with the JS tools), overridden by DIGI_EMU_READY_DIR.
-_READY_JSON = json.loads(
-    (ROOT / "tools" / "emulator" / "ready_inputs.json").read_text()
-)
-READY = ROOT / (os.environ.get("DIGI_EMU_READY_DIR") or _READY_JSON["ready_dir"])
-# The ready directory of the other devices (`ready_dirs` in the same file),
+# The ready-inputs directory of each device: `[acceptance] ready_dir` of its device file (the one source;
+# tools/patchkit/pk_harness.py, packages/test-support/src/inputs.ts and tools/nx/device-inputs.mjs read the
+# same key). The DN2 one is overridden by DIGI_EMU_READY_DIR.
+# The raw repo-relative ready directories, without env overrides.
+READY_JSON_DIRS: dict[str, str] = {
+    d.short: d.acceptance["ready_dir"]
+    for d in device_files.load_all()
+    if d.acceptance.get("ready_dir")
+}
+READY = ROOT / (os.environ.get("DIGI_EMU_READY_DIR") or READY_JSON_DIRS["dn2"])
+# The ready directory of the other devices,
 # overridden per device by DIGI_EMU_READY_DIR_<DEVICE> (DIGI_EMU_READY_DIR_DT2).
 READY_DIRS = {
     "dn2": READY,
     **{
         k: ROOT / (os.environ.get(f"DIGI_EMU_READY_DIR_{k.upper()}") or v)
-        for k, v in _READY_JSON.get("ready_dirs", {}).items()
+        for k, v in READY_JSON_DIRS.items()
+        if k != "dn2"
     },
 }
 DEFAULT_GENERATED = ROOT / "out" / "native" / "dn2-audio" / "gen"
+# The firmware-free core from `mise run gen:core`. Interpreter-only builds (the
+# ready helpers, aot_gen cycle 0) use it so they do not need a per-device core.
+SHARED_GENERATED = ROOT / "out" / "native" / "shared-core" / "gen"
 DEFAULT_SYX = config.stock("Digitone_II_OS1.12.syx")
 FAST_TABLE = ROOT / "config" / "emulator.json"
 TOOLCHAIN: str = tomllib.loads((ROOT / "mise.toml").read_text())["tools"]["rust"]
@@ -87,12 +96,17 @@ def exe_name(name: str) -> str:
 
 
 def generated_dir(
-    environ: Environ | None = None, image: pathlib.Path | str | None = None
+    environ: Environ | None = None,
+    image: pathlib.Path | str | None = None,
+    device: str | None = None,
 ) -> pathlib.Path:
-    """The generated core to build against: SHARC_GEN_DIR, else the one
-    registered for IMAGE (a packed DSP image), else the DN2 prod default."""
+    """The generated core to build against: SHARC_GEN_DIR_<DEVICE> (when DEVICE
+    is given), else SHARC_GEN_DIR, else the one registered for IMAGE (a packed
+    DSP image), else the DN2 prod default."""
     environ = os.environ if environ is None else environ
-    configured = environ.get("SHARC_GEN_DIR")
+    configured = (
+        device and environ.get(f"SHARC_GEN_DIR_{device.upper()}")
+    ) or environ.get("SHARC_GEN_DIR")
     if configured:
         # Relative to the repo root (mise runs tasks there); build scripts run in their crate dir.
         path = pathlib.Path(configured)
@@ -321,11 +335,15 @@ def tier_config() -> dict[str, object]:
 def resolve_tiers(
     context: str | None,
     syx: pathlib.Path,
-    slot: str = "",
+    slot: str | None = None,
     environ: Environ | None = None,
     **options: bool,
 ) -> emulator_config.Resolution:
-    """`emulator_config.resolve` for a firmware file and the current config file."""
+    """`emulator_config.resolve` for a firmware file and the current config file. SLOT is the suffix of the region list
+    names (`SLOT_SUFFIX`); None takes the one of the firmware's device, because a core library reads the lists of its
+    device (`GenCore::env_suffix`: DN2 none, DT2 `_2`)."""
+    if slot is None:
+        slot = SLOT_SUFFIX.get(device_for_syx(pathlib.Path(syx)) or "dn2", "")
     return emulator_config.resolve(
         context,
         _syx_digest(str(syx)),
@@ -349,20 +367,20 @@ def fast_env(
     """
     environ = os.environ if environ is None else environ
     syx = firmware(environ) if syx is None else syx
-    res = resolve_tiers(context, syx, "", environ)
+    res = resolve_tiers(context, syx, None, environ)
     return {} if res.off else {**res.explicit, **res.add}
 
 
-# Engine slots of a two-core build. Slot 1 (SHARC_GEN_DIR, unsuffixed region lists) is always the DN2 core and
-# slot 2 (SHARC_GEN_DIR_2, `_2` lists) always the DT2 core, whichever firmware boots. The region lists are
-# addresses in one device's DSP image and each engine instance reads the list of its own slot.
+# Engine slots. The region lists are addresses in one device's DSP image, and the core of a device reads the lists
+# named with its suffix (`GenCore::env_suffix`): DN2 `SHARC_FAST_REGIONS`, DT2 `SHARC_FAST_REGIONS_2`, in a host that
+# runs one device and in a host that runs both.
 SLOT_DEVICES = ("dn2", "dt2")
 SLOT_SUFFIX = {"dn2": "", "dt2": "_2"}
 SLOT_LISTS = ("SHARC_FAST_REGIONS", "SHARC_FAST_FALLBACK_REGIONS", "SHARC_BLOCKTRANS")
 
 
 def slot_env(device: str, env: dict[str, str]) -> dict[str, str]:
-    """ENV (a device's `fast_env`) with its region lists renamed for the device's engine slot of a two-core build."""
+    """ENV with its region lists renamed for the engine slot of DEVICE (names that are already suffixed stay)."""
     suffix = SLOT_SUFFIX[device]
     return {
         (key + suffix if key in SLOT_LISTS else key): value

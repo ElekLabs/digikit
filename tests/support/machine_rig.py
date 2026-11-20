@@ -1,11 +1,11 @@
 """A rig for any machine module: its DSP routine on the concrete SHARC+ core, through core/dsp-voice, block by block as the engine calls it.
 
     rig = MachineRig("<author/name>", "dt2")
-    rig.set_params({"pluck_decay": 0x7F00})       # parameter words by manifest id
+    rig.set_params({"decay": 0x7F00}      )       # parameter words by manifest id
     rig.set_note(60, vel=100); rig.trigger()
     b = rig.block()                                 # b.samples (32 floats), b.instructions, b.returned, b.context_bad
 
-The rig is plain Python (no numpy, no pytest): it also runs under PyPy (tests/modules/test_machine_conformance.py).
+The rig is plain Python (no numpy, no pytest): it also runs under PyPy (the adapter tests).
 The rig reads the module's manifest (tools/patchkit/pk_conform.py): DSP sources of the device, entry symbol, machine type and
 parameters with their frame slots. It assembles the wrapper and the module, places the data symbols of both (`.PKDATA`, `.PKBSS`,
 `.VAR`) in free L2, and keeps the core's memory from block to block (tools/patchkit/pk_sharc.py CallSession), so a delay line or a
@@ -32,8 +32,12 @@ from tools.patchkit import pk_conform, pk_sharc
 ROOT = pk_conform.ROOT
 _DSP = ROOT / "modules/core/adapters/dsp-voice/src/dsp"
 WRAPPER = {  # the adapter's sources of a device, assembled as separate objects that see each other's data symbols
-    "dt2": (_DSP / "dsp-voice.s",),
-    "dn2": (_DSP / "dsp-voice-dn2.s", _DSP / "dsp-voice-dn2-stereo.s"),
+    "dt2": (_DSP / "dsp-voice.s", dv.DISPATCH),
+    "dn2": (
+        _DSP / "dsp-voice-dn2.s",
+        _DSP / "dsp-voice-dn2-stereo.s",
+        ROOT / "modules/core/services/machines/dks/dsp/dispatch-dn2.s",
+    ),
 }
 CODE_BASE = 0xB90000
 CODE_END = dv.STOCK_BP  # code must end below the stand-ins at STOCK_BP / RETURN_SW
@@ -141,6 +145,9 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_fw_unpack": dv.UNPACK_BP,
         "_dv_table": dv.TABLE,
     }
+    fixed["_dl_slots"] = (
+        dv.SLOTS
+    )  # the slot block of core/dsp-link, read by the stubs of core/dsp-voice
     if device == "dn2":
         fixed.update(
             {n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)}
@@ -161,6 +168,11 @@ def build(module: str, device: str) -> _Built:
 _BUILT: dict[tuple[object, ...], _Built] = {}
 
 
+def _module_dir(source: Path) -> Path:
+    """The module around a source file: the nearest folder with a module.toml."""
+    return next(p for p in source.parents if (p / "module.toml").is_file())
+
+
 def build_spec(sp: pk_conform.MachineSpec) -> _Built:
     """`build` for a spec the caller made (a fixture source of a module: `dataclasses.replace(spec, sources=..., entry=..., note_on=..., desc=...)`)."""
     key = (sp.module, sp.device, sp.sources, sp.entry, sp.note_on, sp.desc, sp.params)
@@ -172,7 +184,7 @@ def build_spec(sp: pk_conform.MachineSpec) -> _Built:
 def _build(sp: pk_conform.MachineSpec) -> _Built:
     module, device = sp.module, sp.device
     nwrap = len(WRAPPER[device])
-    objs = [_assemble(w, w.parents[2]) for w in WRAPPER[device]]
+    objs = [_assemble(w, _module_dir(w)) for w in WRAPPER[device]]
     objs += [_assemble(Path(s), sp.moddir) for s in sp.sources]
     # data symbols: one 4-byte aligned run per section, in L2 above the stand-ins
     addr = DATA_BASE
@@ -198,8 +210,8 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
         at = data[sp.desc]
         for a0, raw, _bss in inits:
             if a0 <= at < a0 + len(raw):
-                desc = struct.unpack("<10I", raw[at - a0 : at - a0 + 40])
-        if len(desc) != 10 or desc[0] != 0x444B4D41:
+                desc = struct.unpack("<8I", raw[at - a0 : at - a0 + 32])
+        if len(desc) != 8 or desc[0] != 0x444B4D41:
             raise pk_conform.ConformError(f"{module}: {sp.desc} is no dk_machine_desc")
         stride = (desc[4] + 7) & ~7
         clear = desc[5]
@@ -294,6 +306,12 @@ class MachineRig:
                 poke(nw(dv.TABLE) + k, 0)
             poke(nw(dv.TABLE), self.spec.machine_type)
             poke(nw(dv.TABLE) + 1, b.symbols[self.spec.entry])
+            # what the machines service installs: the stubs jump to the dispatch entries through the slots
+            for k in range(dv.SLOT_WORDS):
+                poke(nw(dv.SLOTS) + k, 0)
+            poke(nw(dv.SLOTS), b.symbols["_dv_run"])
+            if self.device == "dt2":
+                poke(nw(dv.SLOTS) + 1, b.symbols["_dv_unpack_run"])
             for p in self.spec.params:  # words 2 to 9: the declared range of knob j (min | max << 16; none for a stock knob)
                 if not p.stock and 0 <= p.lo <= p.hi <= 0xFFFF:
                     poke(nw(dv.TABLE) + 2 + p.knob, p.lo | p.hi << 16)
@@ -535,7 +553,7 @@ class MachineRig:
 
     # -- the write set -----------------------------------------------------------------------------------------------------
     def _allowed(self, out_addr: int) -> list[tuple[int, int, str]]:
-        """The DM a routine of the module may store to in a call of the current voice (docs/design/module-sdk.md 11.5 D6, <dk/machine.h>):
+        """The DM a routine of the module may store to in a call of the current voice (docs/design/module-sdk.md 11.5 D6, <dk/machine/machine.h>):
         the output block, the voice's own state block (base + stride * track, `state_bytes`), its data stack and its own data and bss (shared by all voices) (`stack_bytes` bytes below the device's actual module-entry I7). A routine without a description (the raw form) has no state; it gets DEFAULT_STACK_BYTES of stack."""
         b = self.built
         out = [(out_addr, 4 * 32, "output block")]
@@ -561,7 +579,7 @@ class MachineRig:
             )
         out += [(a, n, "module data") for a, n in b.module_data]  # shared by all voices
         frame = ADAPTER_FRAME_WORDS[self.device]
-        stack = b.desc[9] if b.desc else DEFAULT_STACK_BYTES
+        stack = b.desc[7] if b.desc else DEFAULT_STACK_BYTES
         out.append((dv.STACK - 4 * frame - stack, stack, "module stack"))
         return out
 

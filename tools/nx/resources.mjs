@@ -3,11 +3,13 @@
 import { spawnSync } from 'node:child_process';
 import { availableParallelism, cpus, totalmem } from 'node:os';
 
-// Cores per emulator for the ceiling: most device tests run zero DSP (ColdFire only, about 1 core). A coupled run takes about 2;
-// the idle-core admission (ADMIT_IDLE_CORES plus the reserve) stops new emulators while coupled runs load the machine.
-export const EMULATOR_CORES = 1;
-// A new emulator is admitted when this many cores are idle, plus the reserve.
-export const ADMIT_IDLE_CORES = 2;
+// Cores of one emulator by DSP mode (the records' `dsp`, device-tests.mjs `taskMode`): a zero-DSP run is the ColdFire thread plus host work, about 1 core;
+// a coupled run adds the SHARC thread and the audio path, about 3 cores (measured on a 16-core M3 Max).
+export const MODE_CORES = { zero: 1, sharc: 3 };
+// Cores per emulator for the ceiling of emulators: the cheapest mode. The core budget (budget().budget, summed over the
+// running tasks by emu-slot.mjs) is what keeps coupled runs from filling every slot.
+export const EMULATOR_CORES = MODE_CORES.zero;
+// A new emulator is admitted when its own cores plus the reserve are idle (emu-slot.mjs).
 // The idle check compares two CPU samples this far apart.
 export const SAMPLE_MS = 1000;
 // After an admission the next decision waits this long, so it sees the load of the new emulator.
@@ -89,4 +91,12 @@ export function budget(work, override) {
   // twice as many tasks as the emulator ceiling and the other task kinds (Rust, lint, gate targets) are not starved.
   const nxTasks = 2 * tasks;
   return { budget: b, tasks, nxTasks, workers, threads, jobs };
+}
+
+// Dry computation: how many tasks start at once on `cores` cores with `slots` slots, from `sharc` coupled and `zero`
+// zero-DSP tasks. Coupled tasks are served first (emu-slot.mjs priority), so they take their cores before the zero ones.
+export function startAtOnce({ sharc = 0, zero = 0 }, cores, slots) {
+  const coupled = Math.min(sharc, Math.floor(cores / MODE_CORES.sharc), slots);
+  const lean = Math.min(zero, cores - coupled * MODE_CORES.sharc, slots - coupled);
+  return { sharc: coupled, zero: lean };
 }

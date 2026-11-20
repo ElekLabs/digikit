@@ -8,9 +8,17 @@
     ".": "./src/index.ts",
     "./gen_proto": "./src/gen_proto.ts",
     "./dksample": "./src/dksample.ts",
+    "./dkprof": "./src/dkprof.ts",
+    "./log-names": "./src/log-names.ts",
     "./rpcfiles": "./src/rpcfiles.ts",
+    "./rpcdata": "./src/rpcdata.ts",
+    "./backup-file": "./src/backup-file.ts",
     "./process-transport": "./src/process-transport.ts",
-    "./samples": "./src/samples.ts"
+    "./samples": "./src/samples.ts",
+    "./gen_bulk": "./src/gen_bulk.ts",
+    "./bulk": "./src/bulk.ts",
+    "./bulk-select": "./src/bulk-select.ts",
+    "./bulk-fake": "./src/bulk-fake.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

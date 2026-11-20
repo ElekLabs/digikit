@@ -1,0 +1,34 @@
+[module]
+id = "test/svc-test"
+# The version the file provides (PROVIDES): on the scale of the imports' `since` (0.8.2 of dk_svctest_ping in sdk/sdk.toml), so a need of that import is met.
+version = "0.8.2"
+name = "Test service provider"
+category = "test"
+role = "service"
+service = "svc-test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: a service provider (.dks) of the test-only service svc-test; it exports dk_svctest_ping and dk_svctest_hits and counts the runs of its hook"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The hook it takes: a test-only hook on the site of the last step of the SETTINGS list rebuild (devices/fw/menu.toml; stock on an image without core/digikit-menu, which
+# hooks the same site). The port file lists it; the entry is the routine of src/cf/hook.s, which calls the C function and runs the tail. `init` repeats the hook with
+# dk_service_declare_hook.
+[[hook]]
+name = "cf.menu.hook.settings_list.test"
+entry = "svc_test_hook"
+
+# C, built by `patchkit build`. Packed as a .dks (`patchkit pack test/svc-test -o svc-test.dks`).
+[[object]]
+path = "build/svc-test.dko.json"
+sources = ["src/c/svc_test.c", "src/cf/hook.s"]
+place = "cf.expansion"
+
+[object.externs]
+svc_test_t_tail = "hook.cf.menu.hook.settings_list.test.tail"

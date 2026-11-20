@@ -39,7 +39,7 @@ def flag(rig):
 
 
 def run(rig, select=0):
-    rig.set_params({"sine_level": select * 256})
+    rig.set_params({"level": select * 256})
     rig.set_note(60, 100)
     rig.trigger()
     even = rig.block("friendly")
@@ -74,7 +74,7 @@ def test_the_guard_checks_r_and_zeroes_both_blocks(select):
 
 def test_a_mono_machine_is_unchanged_the_odd_voice_copies_l():
     rig = MachineRig("test/sine", "dt2")
-    rig.set_params({"sine_level": 0x7F00})
+    rig.set_params({"level": 0x7F00})
     rig.set_note(60, 100)
     rig.trigger()
     rig.block("friendly")
@@ -98,7 +98,7 @@ def test_the_status_bit_is_not_confused_with_the_voice_end():
 def test_a_flag_left_by_an_even_voice_whose_odd_voice_did_not_run_does_not_leak():
     """The engine runs the odd voice after the even one; a rig that skips it must not see the guard scan a stale odd buffer."""
     rig = stereo_rig()
-    rig.set_params({"sine_level": 0})
+    rig.set_params({"level": 0})
     rig.set_note(60, 100)
     rig.trigger()
     rig.block("friendly")
@@ -122,7 +122,7 @@ def test_a_stereo_machine_sets_the_stock_pair_gate_a_mono_machine_leaves_it():
     assert gate_word(rig) == 1, "every block, a stale 0 cannot stay"
 
     mono = MachineRig("test/sine", "dt2")
-    mono.set_params({"sine_level": 0x7F00})
+    mono.set_params({"level": 0x7F00})
     mono.set_note(60, 100)
     mono.trigger()
     mono.block("friendly")

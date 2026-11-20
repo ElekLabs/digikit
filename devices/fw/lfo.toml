@@ -1,0 +1,360 @@
+# The LFO tick and its second reader (docs/findings/149-lfo-waveforms.md): the sites that make a wave value above RAND a table shape, DT2 1.17 and DN2 1.12.
+# Each site is the six bytes `moveq 6,Dn; cmp.l D3,Dn; beq|bne` that compare the clamped wave with 6. An image stub (core/lfo, `op = "stub"`, `when`) runs the moveq, the compare
+# and the stock branch as stock and looks at its slot only on the outcome "clamped wave is 6" (RAND, or an extended value that was clamped to 6); an empty slot continues the
+# stock path of that outcome, so the image is stock without the lfo service. The lfo service fills the slots and its routine tests the raw wave byte again.
+# `regs.clobbers` lists the registers the routine leaves changed, `dk_lfo_eval` included (it writes d0, d1, a0, a1 and the flags and saves d2; the routines of the `call` sites save and restore a0 and a1, and d1 where it is live); patchkit refuses a `when` stub whose scratch register is not in it.
+# The `regs` of each hook were found from the stock bytes with `uv run python -m tools.coldfire.liveness PORT SITE` (docs/findings/149-lfo-waveforms.md, "Registers"): the
+# scratch register of the stub is dead where the "clamped wave is 6" outcome continues (and where the routine continues for an extended wave); the flags are dead there too.
+
+[[site]]
+name = "cf.lfo.site.tick_call"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x1e6, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x2c0, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x40139804, DN2 0x40137cc6: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; beq` before the wave function table call (D3 is the wave clamped to 0..6; the beq goes to the RAND code)."
+
+[[site]]
+name = "cf.lfo.site.tick_slew"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x24e, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x318, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013986c, DN2 0x40137d1e: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; bne` before the slew code of RAND (the bne skips it)."
+
+[[site]]
+name = "cf.lfo.site.tick_start"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x160, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x23a, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013977e, DN2 0x40137c40: the LFO tick: `moveq 6,Dn; cmp.l D3,Dn; beq` that gives RAND a start phase of 0 at a trigger (the beq goes to the clear)."
+
+[[site]]
+name = "cf.lfo.site.read_call"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x208, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x208, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x401394dc, DN2 0x401378c4: the second reader of the LFO tables (the look-ahead of FUN_401392d4 on DT2, FUN_401376bc on DN2): the compare of D3 with 6 before the function table call."
+
+[[site]]
+name = "cf.lfo.site.read_slew"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x276, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x276, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013954a, DN2 0x40137932: the second reader: the compare of D3 with 6 before the slew code."
+
+[[site]]
+name = "cf.lfo.site.read_start"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x17a, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x17a, len = 6 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013944e, DN2 0x40137836: the second reader: the compare of D3 with 6 that gives RAND a start phase of 0."
+
+[[site]]
+name = "cf.lfo.site.tick_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x214, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x2e6, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x40139832, DN2 0x40137cec: the RAND code of the LFO tick (the target of the beq at `tick_call`)."
+
+[[site]]
+name = "cf.lfo.site.tick_done"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x280, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x34c, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013989e, DN2 0x40137d52: the LFO tick after the wave function call: the result is in d0 (DN2: the store of d0)."
+
+[[site]]
+name = "cf.lfo.site.tick_start_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "b121ea94a360f3ab5670cbda5f32a501", offset = 0x17c, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "de34999302c8ac3ccee8402fc8c461a3", offset = 0x256, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013979a, DN2 0x40137c5c: the LFO tick: the clear of the start phase for RAND (the target of the beq at `tick_start`)."
+
+[[site]]
+name = "cf.lfo.site.read_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x23e, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x23e, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x40139512, DN2 0x401378fa: the RAND code of the second reader (the target of the beq at `read_call`)."
+
+[[site]]
+name = "cf.lfo.site.read_done"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x2a6, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x2a6, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013957a, DN2 0x40137962: the second reader after the function call (the target of the bne at `read_slew`)."
+
+[[site]]
+name = "cf.lfo.site.read_start_rand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "21e1bf77112e0e09a5971262fa313b11", offset = 0x196, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "a3022e7dc43dac9d8d8f088a59d71a5d", offset = 0x196, len = 2 }
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "DT2 0x4013946a, DN2 0x40137852: the second reader: the clear of the start phase for RAND (the target of the beq at `read_start`)."
+
+[[hook]]
+name = "cf.lfo.hook.tick_call"
+site = "cf.lfo.site.tick_call"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_rand", "cf.lfo.site.tick_done"]
+regs = { in = ["d1", "d2", "d3", "a3"], clobbers = ["d0", "d2", "ccr"] }   # scratch of the stub: d0
+devices = ["dt2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (interrupt context). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DT2 0x40139804: `moveq 6,D7; cmp.l D3,D7; beq 0x40139832`. Dead at the RAND code (0x40139832): D0 and the flags (strict); at the code after the call (0x4013989e): D2, D3, D5, D7 and the flags, D1 is live (the stock call path keeps it in its frame, the routine saves it); A0 and A1 are not proven dead there (strict), so the routine saves them too. The block is A3 (wave byte at 2(a3))."
+
+[[hook]]
+name = "cf.lfo.hook.tick_call"
+site = "cf.lfo.site.tick_call"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_rand", "cf.lfo.site.tick_done"]
+regs = { in = ["d2", "d3", "a4"], clobbers = ["d0", "d1", "d2", "ccr"] }   # scratch of the stub: d0
+devices = ["dn2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (interrupt context). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DN2 0x40137cc6: `moveq 6,D0; cmp.l D3,D0; beq 0x40137cec`. Dead at the RAND code (0x40137cec): D0 and the flags; at the code after the call (0x40137d52): D1, D2 and the flags (the DN2 stock call path keeps no register in its frame, so the routine saves no D1); A0 and A1 are not proven dead there (strict), so the routine saves them. The block is A4 (wave byte at 0x4c(a4))."
+
+[[hook]]
+name = "cf.lfo.hook.tick_slew"
+site = "cf.lfo.site.tick_slew"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_done"]
+regs = { in = ["d3", "a3"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dt2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (interrupt context). exit.1 skips the slew code; the end of the site is the slew code. DT2 0x4013986c: `moveq 6,D2; cmp.l D3,D2; bne 0x4013989e`. Dead where the stock fall-through (the slew code, 0x40139872) continues: D0, D2, D3, D5, D7, A0, A1 and N Z V C; at 0x4013989e: D2, D3, D5, D7 and the flags. D0 (the table result) and D1 are live."
+
+[[hook]]
+name = "cf.lfo.hook.tick_slew"
+site = "cf.lfo.site.tick_slew"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_done"]
+regs = { in = ["d3", "a4"], clobbers = ["d1", "ccr"] }   # scratch of the stub: d1
+devices = ["dn2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (interrupt context). exit.1 skips the slew code; the end of the site is the slew code. DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne 0x40137d52`. Dead where the stock fall-through (the slew code, 0x40137d24) continues: D0, D1, D2, A0, A1 and N Z V C; at 0x40137d52: D1, D2 and the flags. D0 (the table result) is live."
+
+[[hook]]
+name = "cf.lfo.hook.tick_start"
+site = "cf.lfo.site.tick_start"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_start_rand"]
+regs = { in = ["d3", "a3"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dt2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (interrupt context). exit.1 is the clear; the end of the site is the SPH-based phase. DT2 0x4013977e: `moveq 6,D0; cmp.l D3,D0; beq 0x4013979a`. Dead at the clear (0x4013979a): D1, D2, D7 and N Z V C; at the SPH phase code (0x40139784): D0, D1, D2, D7 and N Z V C."
+
+[[hook]]
+name = "cf.lfo.hook.tick_start"
+site = "cf.lfo.site.tick_start"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.tick_start_rand"]
+regs = { in = ["d3", "a4"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dn2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (interrupt context). exit.1 is the clear; the end of the site is the SPH-based phase. DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq 0x40137c5c`. Dead at the clear (0x40137c5c): D1, D2, D7 and N Z V C; at the SPH phase code (0x40137c46): D0, D1, D2, D7 and N Z V C."
+
+[[hook]]
+name = "cf.lfo.hook.read_call"
+site = "cf.lfo.site.read_call"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_rand", "cf.lfo.site.read_done"]
+regs = { in = ["d1", "d2", "d3", "a4"], clobbers = ["d0", "d2", "ccr"] }   # scratch of the stub: d0
+devices = ["dt2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader of the LFO tables, the compare of D3 with 6 before the call of the wave function table (interrupt context; d7 is live). exit.1 is the RAND code, exit.2 the code after the call. DT2 0x401394dc: `moveq 6,D0; cmp.l D3,D0; beq 0x40139512`. Dead at the RAND code (0x40139512): D0 and the flags; at the code after the call (0x4013957a): D2, D3, A6 and the flags, D1 and D0 are live. The stock fall-through needs the upper bits of D0 clear (`move.b #0x32,D0b` after the moveq): the routine sets D0 itself. The block is A4 (wave byte at 0x2a(a4))."
+
+[[hook]]
+name = "cf.lfo.hook.read_call"
+site = "cf.lfo.site.read_call"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_rand", "cf.lfo.site.read_done"]
+regs = { in = ["d1", "d2", "d3", "a4"], clobbers = ["d0", "d2", "ccr"] }   # scratch of the stub: d0
+devices = ["dn2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader of the LFO tables, the compare of D3 with 6 before the call of the wave function table (interrupt context; d7 is live). exit.1 is the RAND code, exit.2 the code after the call. DN2 0x401378c4: `moveq 6,D0; cmp.l D3,D0; beq 0x401378fa`. Dead at the RAND code (0x401378fa): D0 and the flags; at the code after the call (0x40137962): D2, D3, A6 and the flags, D1 and D0 are live. The stock fall-through needs the upper bits of D0 clear (`move.b #0x32,D0b` after the moveq): the routine sets D0 itself. The block is A4 (wave byte at 0x2a(a4))."
+
+[[hook]]
+name = "cf.lfo.hook.read_slew"
+site = "cf.lfo.site.read_slew"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_done"]
+regs = { in = ["d3", "a4"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dt2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader, the compare of D3 with 6 before the slew code (interrupt context). exit.1 skips the slew code. DT2 0x4013954a: `moveq 6,D2; cmp.l D3,D2; bne 0x4013957a`. Dead where the stock fall-through (0x40139550) continues: D0, D2, D3, A1, A6 and N Z V C; at 0x4013957a: D2, D3, A6 and the flags."
+
+[[hook]]
+name = "cf.lfo.hook.read_slew"
+site = "cf.lfo.site.read_slew"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_done"]
+regs = { in = ["d3", "a4"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dn2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader, the compare of D3 with 6 before the slew code (interrupt context). exit.1 skips the slew code. DN2 0x40137932: `moveq 6,D2; cmp.l D3,D2; bne 0x40137962`. Dead where the stock fall-through (0x40137938) continues: D0, D2, D3, A1, A6 and N Z V C; at 0x40137962: D2, D3, A6 and the flags."
+
+[[hook]]
+name = "cf.lfo.hook.read_start"
+site = "cf.lfo.site.read_start"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_start_rand"]
+regs = { in = ["d3", "a4"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dt2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DT2 0x4013944e: `moveq 6,D2; cmp.l D3,D2; beq 0x4013946a`. Dead at the clear (0x4013946a): D2, D6 and N Z V C; at the SPH phase code (0x40139454): D0, D2, D6 and N Z V C."
+
+[[hook]]
+name = "cf.lfo.hook.read_start"
+site = "cf.lfo.site.read_start"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.lfo.site.read_start_rand"]
+regs = { in = ["d3", "a4"], clobbers = ["d2", "ccr"] }   # scratch of the stub: d2
+devices = ["dn2"]
+mark = "D"
+users = ["core/lfo", "core/services/lfo"]
+doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq 0x40137852`. Dead at the clear (0x40137852): D2, D6 and N Z V C; at the SPH phase code (0x4013783c): D0, D2, D6 and N Z V C."
+
+# ---- The MOD page: the sites of the UI task hooks of the lfo service (docs/findings/149-lfo-waveforms.md, "The panel hooks"). They are `.dks` hooks (listed in the port file), not interrupt stubs.
+# The name formatters are outside the functions that the Ghidra database of the image keeps (`catalog declare` finds no containing function), so each site is a `cf_words` signature of the stock
+# words from the function entry. A wildcard `"*"` is a whole 32-bit word: the one after `pea table` covers the low half of the name table's address (DN2 1.11 has other table addresses) and the opcode
+# half `0x486e` of the next instruction (`pea -0x1c(A6)`), which the DT2 word 0x3ffc486e shows. The high half of the address stays in the word before it: it tells the
+# four-character formatter (0x401f....) from the three-character one (0x401d....). The other name formatters differ in the size of the frame and the length of their tables.
+
+[[site]]
+name = "cf.lfo.site.wave_name"
+cpu = "cf"
+rule.dt2 = { kind = "cf_words", as = "code", words = [0x4e56ffe4, 0x70062f03, 0x2f02242e, 0x0008e082, 0x262e000c, 0xb0826536, 0x4878001c, 0x48794021, 0x3ffc486e, 0xffe44eb9], offset = 0, len = 6 }
+rule.dn2 = { kind = "cf_words", as = "code", words = [0x4e56ffe4, 0x70062f03, 0x2f02242e, 0x0008e082, 0x262e000c, 0xb0826536, 0x4878001c, 0x4879401f, "*", 0xffe44eb9], offset = 0, len = 6 }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "DT2 0x400e1b68, DN2 0x400e3610: the entry of the wave name formatter `fmt(int value, char *buf)` (the four-character names of the seven stock waves; DN2 also has `wave_name3`): `link.w A6,-0x1c; moveq 6,D0` (6 bytes), then `value >> 8` against 6 (unsigned) and the sprintf of the name table, or of \"ERR\"."
+
+[[site]]
+name = "cf.lfo.site.wave_name3"
+cpu = "cf"
+rule.dn2 = { kind = "cf_words", as = "code", words = [0x4e56ffe4, 0x70062f03, 0x2f02242e, 0x0008e082, 0x262e000c, 0xb0826536, 0x4878001c, 0x4879401d, "*", 0xffe44eb9], offset = 0, len = 6 }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "DN2 0x4000766c: the entry of the second wave name formatter of the Digitone II, the three-character names (TRI SIN SQR SAW EXP RMP RND): `link.w A6,-0x1c; moveq 6,D0` (6 bytes)."
+
+[[hook]]
+name = "cf.lfo.hook.wave_name"
+site = "cf.lfo.site.wave_name"
+cpu = "cf"
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }   # d1, a0 and a1 are saved around the call
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The wave name formatter of the MOD page (UI task): `fmt(int value, char *buf)`, 4(SP) = value (wave << 8), 8(SP) = buf. For a value of 7 to 14 with a loaded shape the hook writes the shape's name and returns its length; otherwise it runs the displaced `link.w A6,-0x1c; moveq 6,D0` and continues at the end of the site. At the entry the flags are dead (strict liveness) and D0 is written by the displaced moveq."
+
+[[hook]]
+name = "cf.lfo.hook.wave_name3"
+site = "cf.lfo.site.wave_name3"
+cpu = "cf"
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }   # d1, a0 and a1 are saved around the call
+devices = ["dn2"]
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The three-character wave name formatter of the Digitone II (UI task): as `wave_name`, with the first three characters of the shape's name."
+
+# ---- The graph of the MOD page (docs/findings/149-lfo-waveforms.md, "Graph"): the cell FUN_4010c5ee (DT2) / FUN_4010df62 (DN2) of LfoPageView, one call site each. The function is in the
+# Ghidra database; both images hash alike (h_strict), and so do DT2 1.16 and DN2 1.11 and 1.10E.
+
+[[site]]
+name = "cf.lfo.site.graph_vec"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "200c6ac9ca95aed9ace6308aa35abfee", offset = 0x24e, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "200c6ac9ca95aed9ace6308aa35abfee", offset = 0x24e, len = 6 }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "DT2 0x4010c83c, DN2 0x4010e1b0: the vector pick of the LFO page's cell: `addi.l #TABLE,D6` (D6 = 12 * the clamped wave) before `move.l D6,-(SP); jsr (A5)`. TABLE is the RAM table of seven tile vectors (DT2 0x44d2e37c, DN2 0x44508b68)."
+
+[[hook]]
+name = "cf.lfo.hook.graph_vec"
+site = "cf.lfo.site.graph_vec"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = ["d5", "d6", "a6"], clobbers = ["d6", "ccr"] }   # the shape path sets D6 and clears the flags like the stock addi; every other path runs the displaced addi in the tail
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The cell of the LFO page (UI task): for a wave 7 to 14 with a published shape graph D6 becomes the service's vector of four tiles and the byte at -0x11(A6) the unipolar mark; otherwise the tail runs the displaced `addi.l #TABLE,D6`. The wave is 0x18(A6). The vtable word of the tiles is read from the stock vector (the tail's displaced `addi` gives TABLE; TABLE + D6 is the vector, its first word the first Bitmap's vtable). Strict liveness: only the flags are dead; D0, D1, A0 and A1 are saved."
+
+# ---- The WAVE rows of the parameter table (docs/findings/149-lfo-waveforms.md, "Direct readers of the parameter table"): the rows of the parameters 79, 89 and 99, the WAVE of the three LFOs.
+# The lfo service writes the maximum word of each row (+0xc) in the RAM copy of the table that `core/params` makes, so the encoder stops at the highest loaded shape. A signature of the
+# row's words from its owner: the mirror index (+4), the minimum 0, the maximum 0x600 (RND), the default, the flag 0, the CC half (a wildcard: the CC and the NRPN halves differ between
+# the devices), the slot (+0x1c) and wildcards for the owner, name, template and formatter words (the addresses of each firmware).
+
+[[data]]
+name = "cf.lfo.data.wave_row.1"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_words", words = ["*", 0x5, 0x0, 0x600, 0x100, 0x0, "*", 0xae, "*", "*", "*", "*", "*", "*", "*"] }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79): mirror index 5, range 0..0x600, default 0x100, slot 0xae."
+
+[[data]]
+name = "cf.lfo.data.wave_row.2"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_words", words = ["*", 0xd, 0x0, 0x600, 0x0, 0x0, "*", 0xb6, "*", "*", "*", "*", "*", "*", "*"] }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The descriptor row of the WAVE parameter of LFO 2 (code 89): mirror index 0xd, range 0..0x600, default 0, slot 0xb6."
+
+[[data]]
+name = "cf.lfo.data.wave_row.3"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_words", words = ["*", 0x15, 0x0, 0x600, 0x0, 0x0, "*", 0xbe, "*", "*", "*", "*", "*", "*", "*"] }
+mark = "D"
+users = ["core/services/lfo"]
+doc = "The descriptor row of the WAVE parameter of LFO 3 (code 99): mirror index 0x15, range 0..0x600, default 0, slot 0xbe."

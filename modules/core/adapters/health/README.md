@@ -13,3 +13,14 @@ on a device.
 The runtime's `dkrt_health` (C ABI) combines these with its own arena and DSP area; the DIGIKIT menu shows them. Results and costs:
 [docs/findings/41-digikit-health.md](../../../../docs/findings/41-digikit-health.md). Proof:
 `uv run python -m tools.coldfire.digikit_health_proof run`.
+
+Without a DSP (no block interrupt, `cf.link.hook.block_isr` and `cf.link.site.reply_copy_lit` are `optional_anchors`) the block
+hook is not installed: no window closes, `blocks`, `windows` and the DSP figures stay 0, and the idle counter and the heap walk still work.
+
+## CPU REL without a DSP (open)
+
+The load windows are closed by the DSP block interrupt hook (1500 blocks, one second). A device without a DSP has no such hook, so `CPU REL` stays `--` (the Syntakt). The design, not built:
+a window clock chosen by capability. The device file has `[digikit] span_clock` and `span_clock_hz` (the Syntakt: DTCN2, 132 MHz); the runtime (which has the profile) would hand `now` to
+a new `health_tick(now, hz)` of this module before it reads `health_read`, and the module would close a window when `hz` ticks have passed. The HEALTH page asks about twice a second,
+and only while it is open, so a window is not exactly a second: the idle count must be normalised to a rate (iterations per second of the clock) before it is compared with the best
+window. That changes the `HealthRaw` layout and the runtime-to-module interface; it needs no new firmware hook. Estimated at more than the hour that this was given.

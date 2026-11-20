@@ -28,6 +28,11 @@ SEND = (
 SEND_DN2 = (
     ROOT / "modules/core/adapters/fx/src/dsp/fxsend-dn2.s"
 )  # the same with the slot mix (Digitone II)
+DISPATCH = {  # the dispatch code of the fx service for a device: the master chain and the send route
+    "dt2": ROOT / "modules/core/services/fx/dks/dsp/fx-dt2.s",
+    "dn2": ROOT / "modules/core/services/fx/dks/dsp/fx-dn2.s",
+}
+FIXED_OBJECTS = 3  # the adapter's stub, the send stub and the dispatch object
 EFFECTS = ROOT / "tests/support/fx_effects.s"
 CODE_BASE = 0xB90000
 DATA_BASE = 0x200A0000
@@ -154,7 +159,7 @@ def _assemble(path: Path) -> pk_sharc.SharcObject:
     """A DSP source the way tools/patchkit/pk_sharc.py reads it: `#include` from the module's directories, the SDK
     and the source's directory (a source outside a module: the SDK and its directory)."""
     mods = [p for p in path.parents if (p / "module.toml").exists()]
-    sdk = [ROOT / "sdk" / "asm", ROOT / "sdk"]
+    sdk = [ROOT / "sdk" / "dsp" / "contract", ROOT / "sdk"]
     dirs = [*(pk_sharc.sharc_include_dirs(mods[0]) if mods else sdk), path.parent]
     return pk_sharc.assemble(pk_sharc.expand_includes(path.read_text(), dirs))
 
@@ -168,7 +173,9 @@ def build(sources: tuple[Path, ...] = (EFFECTS,), device: str = "dt2") -> _Built
 
 def _build(sources: tuple[Path, ...], device: str) -> _Built:
     send = SEND_DN2 if device == "dn2" else SEND
-    objs = [_assemble(ADAPTER), _assemble(send)] + [_assemble(Path(s)) for s in sources]
+    objs = [_assemble(ADAPTER), _assemble(send), _assemble(DISPATCH[device])] + [
+        _assemble(Path(s)) for s in sources
+    ]
     addr = DATA_BASE
     data: dict[str, int] = {}
     inits: list[tuple[int, bytes, bool]] = []
@@ -188,7 +195,7 @@ def _build(sources: tuple[Path, ...], device: str) -> _Built:
         inits.append((addr, bytes(AUTO_STATE_BYTES), True))
         own[-1].append((addr, AUTO_STATE_BYTES))
         addr += AUTO_STATE_BYTES
-    # the module step word (`DK_STEP`, sdk/asm/dk_trace.inc); core/dyndsp exports it on the device
+    # the module step word (`DK_STEP`, sdk/dsp/contract/dk_trace.inc); core/dyndsp exports it on the device
     data["_dk_step"] = addr
     inits.append((addr, bytes(4), True))
     own[-1].append((addr, 4))
@@ -196,6 +203,7 @@ def _build(sources: tuple[Path, ...], device: str) -> _Built:
     if addr > DATA_END:
         raise RuntimeError(f"data symbols need {addr - DATA_BASE:#x} bytes of L2")
     externs = {
+        "_dl_slots": dv.SLOTS,
         "_fx_table": TABLE,
         "_fx_master": MASTER,
         "_fx_back": dv.STOCK_BP,
@@ -219,10 +227,16 @@ def _build(sources: tuple[Path, ...], device: str) -> _Built:
     ext = {**externs, **syms}
     linked = [pk_sharc.link(o, b, ext) for o, b in zip(objs, bases, strict=True)]
     code = tuple(
-        (b, b + len(o.section) // 2) for o, b in zip(objs[2:], bases[2:], strict=True)
+        (b, b + len(o.section) // 2)
+        for o, b in zip(objs[FIXED_OBJECTS:], bases[FIXED_OBJECTS:], strict=True)
     )
     return _Built(
-        linked, data, inits, syms, code, tuple(r for rs in own[2:] for r in rs)
+        linked,
+        data,
+        inits,
+        syms,
+        code,
+        tuple(r for rs in own[FIXED_OBJECTS:] for r in rs),
     )
 
 
@@ -288,6 +302,11 @@ class FxRig:
                 )
             for j, p in enumerate(r.params):
                 poke(base + P0 + j, p & 0xFFFFFFFF)
+        # what the fx service installs: the stubs of core/fx jump to the dispatch entries through the slots (DK_SLOT_FX_ENTRY, DK_SLOT_FX_SEND)
+        for k in range(dv.SLOT_WORDS):
+            poke(nw(dv.SLOTS) + k, 0)
+        poke(nw(dv.SLOTS) + 2, b.symbols["_fx_dispatch"])
+        poke(nw(dv.SLOTS) + 3, b.symbols["_fxs_dispatch"])
         if self.record_stores:
             self.sess.record_stores()
 
@@ -421,7 +440,7 @@ class FxRig:
         )
 
     # -- the module's view ------------------------------------------------------------------------------------------------
-    def desc_words(self, sym: str, n: int = 7) -> tuple[int, ...]:
+    def desc_words(self, sym: str, n: int = 6) -> tuple[int, ...]:
         """The words of a `dk_fx_desc` data symbol as built (before any call)."""
         at = self.built.data[sym]
         for a0, raw, _bss in self.built.inits:
@@ -435,7 +454,7 @@ class FxRig:
         return tuple(w2f(self.sess.peek(at + k) or 0) for k in range(64))
 
     def allowed(self, stack_bytes: int) -> list[tuple[int, int, str]]:
-        """The DM that the module's code may store to in a call (docs/design/module-sdk.md 11.5 D6, <dk/fx.h>): the output block, its own data
+        """The DM that the module's code may store to in a call (docs/design/module-sdk.md 11.5 D6, <dk/fx/fx.h>): the output block, its own data
         and bss (its state included) and `stack_bytes` of data stack below I7 (the adapter does not lower I7 before the call)."""
         out = [(self.built.data["_fx_scratch"], 4 * 64, "output block")]
         out += [(a, n, "module data") for a, n in self.built.module_data]

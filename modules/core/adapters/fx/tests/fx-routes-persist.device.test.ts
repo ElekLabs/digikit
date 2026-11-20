@@ -1,61 +1,35 @@
-import { execFile } from 'node:child_process';
 import path from 'node:path';
-import { promisify } from 'node:util';
-import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { button, repoRoot } from '@digi/test-support';
+import { button, stepWithProgress } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
-import { advance, analysisJson, bounded, frames, pickSine, rpc, word } from '@digi/regression/runtime/fx-live.ts';
+import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
+import { compare, bounded, frames, pickSine, rpc, runToFrame, word, REDRAW, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { SEND, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
-import { inspectFxBoot, withPausedFxProtocol, tap } from '@digi/regression/runtime/fx-session.ts';
+import { inspectFxBoot, withPausedFxProtocol } from '@digi/regression/runtime/fx-session.ts';
 import { MASTER, routeUi, SEND_ROUTE } from '@digi/regression/runtime/fx-routes-ui.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
-import { patchkitBinary } from '@digi/regression/runtime/patchkit.ts';
+import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
-const exec = promisify(execFile);
-const root = repoRoot();
 const routeKey = `fx/route/${SEND}`;
 
-interface PcmMetrics {
-  identical: boolean;
-  rms_base: number;
-  rms_db: number | null;
-  max_err_ulps: number;
-  shift: number | null;
-}
-
 async function compareRoutePcm(base: string, sample: string, gain: number, artifacts: string, tag: string) {
-  const metrics = await analysisJson<PcmMetrics>(
-    'tools.patchkit.hook_ab',
-    ['compare', base, sample, '--gain', String(gain), '--align-onset', '--json'],
-    artifacts,
-    `pcm-${tag}`,
-  );
-  expect(metrics.rms_base).toBeGreaterThan(0);
-  expect(metrics.shift).not.toBeNull();
-  // Separate boots may move the onset by up to four 64-sample DSP sub-blocks.
-  expect(Math.abs(metrics.shift!)).toBeLessThanOrEqual(256);
-  expect(metrics.max_err_ulps).toBeLessThanOrEqual(2);
-  expect(metrics.rms_db).not.toBeNull();
-  expect(Math.abs(metrics.rms_db! - 20 * Math.log10(gain))).toBeLessThan(0.001);
-  if (gain === 1) expect(metrics.identical).toBe(true);
+  // Separate boots may move the onset by up to four 64-sample DSP sub-blocks (128 frames).
+  await compare(base, sample, gain, artifacts, tag, gain === 1);
 }
 
 /** Native store reader observes the card after guest writes; no settings encoding in this test. */
-async function storedRoute(runtime: PatchedSession, artifacts: string, tag: string) {
+async function storedRoute(runtime: TestRuntime, artifacts: string, tag: string) {
   const base = runtime.session.cardPath;
   if (!base) throw new Error('route persistence needs the loaded base card');
-  const binary = patchkitBinary();
   const overlay = path.join(artifacts, `${tag}.overlay.bin`);
   await rpc(runtime.session, 'card.overlay', { path: overlay });
-  const dumped = await exec(
-    binary,
+  const dumped = await patchkit(
     ['store', 'dump', base, '--device', runtime.session.options.device, '--overlay', overlay, '--json'],
-    { cwd: root, timeout: 30_000 },
+    { timeout: 30_000 },
   );
   const dump = JSON.parse(dumped.stdout) as {
     settings: { active: 'A' | 'B' | null; copies: { entries: { key: string; value: string }[] }[] };
@@ -81,14 +55,14 @@ for (const device of DEVICES) {
 
     test('menu YES persists both route directions and restarts into the matching audio and FX pages', async () => {
       const { fixture, plan, artifacts, slots, rememberEpoch } = context;
-      const inspect = async (runtime: PatchedSession, tag: string, effect: boolean, afterEpoch?: number) => {
+      const inspect = async (runtime: TestRuntime, tag: string, effect: boolean, afterEpoch?: number) => {
         const state = await inspectFxBoot(runtime, plan, effect ? [SINE, SEND] : [SINE], artifacts, tag, undefined, {
           afterEpoch,
         });
         rememberEpoch(state.epoch);
         return state;
       };
-      const capture = async (runtime: PatchedSession, tag: string) => {
+      const capture = async (runtime: TestRuntime, tag: string) => {
         const { session } = runtime;
         await rpc(session, 'run.mode', { mode: 'paused' });
         await rpc(session, 'pcm.tap', { action: 'start' });
@@ -98,24 +72,25 @@ for (const device of DEVICES) {
         if (device === 'dt2') {
           let selected = -1;
           for (const position of [hint, hint + 1, hint - 1, hint + 2, hint + 3]) {
-            await pickSine(session, position);
+            await pickSine(runtime, position);
             // Legacy DT2 selected-track type observation (finding 02).
             selected = ((await word(session, context.profile.track_type_word)) >>> 8) & 0xff;
             if (selected === sine!.types[0]) break;
           }
           expect(selected, 'the selected DT2 machine is the runtime sine').toBe(sine!.types[0]);
-        } else await pickSine(session, hint);
-        await tap(session, 'NO', 300);
+        } else await pickSine(runtime, hint);
+        await runtime.ui.tap('NO', { until: { ms: 300, why: REDRAW } });
         const current = await frames(session);
         const trigger = Math.max(triggerFrame(device), current + 300);
         record(artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
         const file = path.join(artifacts, `${tag}.wav`);
         try {
-          await bounded(() => session.client.runUntil({ frames: trigger, timeout_wall_s: 30 }));
-          await bounded(() => session.client.step(44_000, { timeout_wall_s: 30 }));
+          await runToFrame(session, trigger);
+          // 44,000 ColdFire instructions (half a DSP block of 88,000), not frames: places the TRIG press inside the block so that separate boots compare onsets; no firmware state replaces it
+          await stepWithProgress(session.client, 44_000);
           await rpc(session, 'pcm.tap', { action: 'capture', path: file });
           await bounded(() => session.client.inputButton(button('TRIG 1'), true));
-          await bounded(() => session.client.runUntil({ frames: trigger + 1500, timeout_wall_s: 30 }));
+          await runToFrame(session, trigger + 1500);
         } finally {
           try {
             await rpc(session, 'pcm.tap', { action: 'capture_stop' });
@@ -123,25 +98,25 @@ for (const device of DEVICES) {
             await bounded(() => session.client.inputButton(button('TRIG 1'), false));
           }
         }
-        await advance(session, 50);
+        await runtime.ui.wait({ ms: 50, why: SETTLE });
         await bounded(() => session.expectNoFault(`FX routes ${tag}`));
         return file;
       };
-      const expectRoute = async (runtime: PatchedSession, send: boolean) => {
+      const expectRoute = async (runtime: TestRuntime, send: boolean) => {
         const ui = routeUi(runtime, plan, artifacts, slots);
         expect(await ui.routes(1)).toEqual([send ? 1 : 0]);
         expect(await ui.countCell()).toBe(send ? 2 : 0);
         expect((await ui.sendUsed())!.used).toBe(send ? 1 : 0);
       };
-      const pages = async (runtime: PatchedSession, tag: string, send: boolean) => {
+      const pages = async (runtime: TestRuntime, tag: string, send: boolean) => {
         const ui = routeUi(runtime, plan, artifacts, slots);
-        await tap(runtime.session, 'FX', 400);
+        await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
         const first = await ui.shot(`${tag}-fx1`);
-        await tap(runtime.session, 'FX', 400);
+        await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
         const second = await ui.shot(`${tag}-fx2`);
         if (send) expect(second).not.toBe(first);
       };
-      const apply = async (runtime: PatchedSession, tag: 'apply' | 'back', send: boolean) => {
+      const apply = async (runtime: TestRuntime, tag: 'apply' | 'back', send: boolean) => {
         const { session } = runtime;
         const ui = routeUi(runtime, plan, artifacts, slots);
         await ui.toModules();
@@ -151,7 +126,7 @@ for (const device of DEVICES) {
         await ui.pick(send ? 0 : 1);
         expect((await ui.pending())[0]).toBe(send ? SEND_ROUTE : MASTER);
         const applies = await ui.applies();
-        await tap(session, 'NO', 700);
+        await runtime.ui.tap('NO', { until: { ms: 700, why: REDRAW } });
         await ui.shot(`${tag}-question`);
         expect(await ui.popup()).toEqual(['APPLY & RESTART?', '1 CHANGE']);
         expect(await ui.applies()).toBe(applies);
@@ -160,14 +135,14 @@ for (const device of DEVICES) {
         expect(typeof before).toBe('number');
         rememberEpoch(before);
         session.client.drainEvents();
-        await tap(session, 'YES', 300);
+        await runtime.ui.tap('YES', { until: { ms: 300, why: REDRAW } });
         expect(await ui.applies()).toBe(applies + 1);
         expect(await word(session, planSymbol(plan, 'DK_FXR_SET'))).toBe(0);
         expect(await word(session, planSymbol(plan, 'DK_FXR_FLUSH'))).toBe(0);
         runtime.dk.cancelPending();
         await rpc(session, 'run.mode', { mode: 'free' });
-        const dk = new DkSession(new EmuUsbTransport((method, params) => session.client.call(method, params)));
-        const reboot = { session, dk, close: runtime.close };
+        const dk = emulatorDk(session);
+        const reboot = withWaitApi({ session, dk, close: runtime.close });
         try {
           await expectRuntimeUi(session, plan, artifacts, { afterEpoch: Number(before) });
           await bounded(() => session.client.guardSet(context.baseline(tag).guard));
@@ -182,7 +157,7 @@ for (const device of DEVICES) {
             await afterUi.toModules();
             expect((await afterUi.pending())[0]).toBe(MASTER);
             const popups = await afterUi.popups();
-            await tap(session, 'NO', 400);
+            await runtime.ui.tap('NO', { until: { ms: 400, why: REDRAW } });
             expect(await afterUi.popups()).toBe(popups);
           }
           return file;

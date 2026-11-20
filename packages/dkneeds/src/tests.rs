@@ -8,9 +8,12 @@ fn put(b: &mut [u8], at: usize, v: u32) {
     b[at..at + 4].copy_from_slice(&v.to_be_bytes());
 }
 
-/// A file with this image, bss, register table and DSP section (both may be empty), laid out like the packer's: header, register table, DSP
-/// section, image. The tables the loader reads (relocations, imports, slots) are empty.
+/// A file with this image, bss, keys table and DSP section (both may be empty), laid out like the packer's: header, keys table, DSP
+/// section, image. The tables the loader reads (relocations, imports) are empty.
 fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
+    // a file always has a header table: with none given, the table of a module that needs and keeps nothing
+    let none = register(&[]);
+    let reg = if reg.is_empty() { &none[..] } else { reg };
     let reg_off = HEADER as usize;
     let dsp_off = (reg_off + reg.len()).div_ceil(16) * 16;
     let image_off = (dsp_off + dsp.len()).div_ceil(16) * 16;
@@ -24,7 +27,7 @@ fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     put(&mut f, H_IMAGE_SIZE as usize, image);
     put(&mut f, H_BSS as usize, bss);
     put(&mut f, H_ALIGN as usize, 4);
-    for at in [H_RELOC_OFF, H_IMPORT_OFF, H_SLOT_OFF] {
+    for at in [H_RELOC_OFF, H_IMPORT_OFF] {
         put(&mut f, at as usize, HEADER);
     }
     put(&mut f, H_REG_OFF as usize, reg_off as u32);
@@ -36,29 +39,19 @@ fn dkm(image: u32, bss: u32, reg: &[u8], dsp: &[u8]) -> Vec<u8> {
     f
 }
 
-/// A register table with these kinds in order.
+use crate::{KIND_MACHINE, KIND_PAGE, KIND_PARAM};
+
+/// A header table whose row counts are those of these kinds (one machine key per machine row).
 fn register(kinds: &[u32]) -> Vec<u8> {
-    let mut t = vec![0u8; REG_HEADER as usize];
-    put(&mut t, 0, REG_MAGIC);
-    put(&mut t, 4, 1);
-    put(&mut t, 12, kinds.len() as u32);
-    for &k in kinds {
-        let len = if k == KIND_PARAM {
-            LEN_PARAM
-        } else if k == KIND_MACHINE {
-            LEN_MACHINE
-        } else if k == KIND_EFFECT {
-            LEN_EFFECT
-        } else if k == KIND_ACTION {
-            LEN_ACTION
-        } else {
-            LEN_PAGE
-        } as usize;
-        let at = t.len();
-        t.resize(at + len, 0);
-        put(&mut t, at, k);
-        put(&mut t, at + 4, len as u32);
-    }
+    let n = |k: u32| kinds.iter().filter(|&&x| x == k).count();
+    let machines: Vec<u32> = (0..n(KIND_MACHINE) as u32).map(|i| 0x100 + i).collect();
+    let rows = (
+        n(KIND_MACHINE) as u32,
+        n(KIND_PARAM) as u32,
+        n(KIND_PAGE) as u32,
+    );
+    let mut t = vec![0u8; keys::keys_size(rows, 0, machines.len(), 0)];
+    keys::write_keys(rows, 0, &machines, &[], &mut t).unwrap();
     t
 }
 
@@ -125,30 +118,84 @@ fn a_coldfire_only_module_takes_an_arena_block() {
 }
 
 #[test]
-fn register_records_are_counted_by_kind() {
-    let reg = register(&[KIND_PARAM, KIND_PARAM, KIND_MACHINE, KIND_PAGE, KIND_PARAM]);
-    let n = of(&dkm(4, 0, &reg, &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (3, 1, 1));
-    // an effect's page takes no row of its own
-    let reg = register(&[KIND_EFFECT, KIND_PARAM]);
-    let n = of(&dkm(4, 0, &reg, &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (1, 0, 0));
-    // a click action takes no row either
-    let reg = register(&[KIND_PARAM, KIND_ACTION]);
-    let n = of(&dkm(4, 0, &reg, &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (1, 0, 0));
-    // an empty table (a header only) counts nothing
-    let n = of(&dkm(4, 0, &register(&[]), &[])).unwrap();
-    assert_eq!((n.param_rows, n.machine_rows, n.page_rows), (0, 0, 0));
-    // the most records
-    let n = of(&dkm(
-        4,
-        0,
-        &register(&[KIND_PARAM; MAX_RECORDS as usize]),
-        &[],
-    ))
-    .unwrap();
-    assert_eq!(n.param_rows, MAX_RECORDS);
+fn the_rows_come_from_the_keys_table() {
+    let t = {
+        let mut t = [0u8; 256];
+        let size = keys::write_keys((2, 9, 3), 0x1b0, &[0x11, 0x22], &[0x33], &mut t).unwrap();
+        t[..size].to_vec()
+    };
+    let n = of(&dkm(4, 0, &t, &[])).unwrap();
+    assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (2, 9, 3));
+    // the record block is one more arena block: 0x1b0 payload bytes and the header
+    let plain = of(&dkm(4, 0, &[], &[])).unwrap().arena;
+    assert_eq!(n.arena, plain + arena_block(0x1b0).unwrap());
+    // a module with no machine and no effect has the head only
+    assert_eq!(of(&dkm(4, 0, &[], &[])).unwrap().machine_rows, 0);
+    // a file without a table (the format of runtime 0.7 with no machine) is refused
+    let mut old = dkm(4, 0, &[], &[]);
+    put(&mut old, H_REG_SIZE as usize, 0);
+    assert_eq!(of(&old), Err(Error::Register));
+    // a table whose size is not the counts' size, is refused
+    assert_eq!(of(&dkm(4, 0, &t[..t.len() - 4], &[])), Err(Error::Register));
+}
+
+#[test]
+fn the_dsp_cost_comes_from_the_uses_of_the_keys_table() {
+    let uses = [
+        keys::Use {
+            resource: crate::RES_DSP_COST_VOICE,
+            count: 6239,
+        },
+        keys::Use {
+            resource: crate::RES_DSP_COST_FX,
+            count: 5282,
+        },
+    ];
+    let table = keys::Table {
+        uses: &uses,
+        ..Default::default()
+    };
+    let mut t = vec![0u8; keys::table_size(&table)];
+    keys::write_table(&table, &mut t).unwrap();
+    let n = of(&dkm(4, 0, &t, &[])).unwrap();
+    assert_eq!((n.dsp_cost_voice, n.dsp_cost_fx), (6239, 5282));
+    // a module that lists none has no cost
+    let n = of(&dkm(4, 0, &[], &[])).unwrap();
+    assert_eq!((n.dsp_cost_voice, n.dsp_cost_fx), (0, 0));
+}
+
+#[test]
+fn the_menu_reader_accepts_a_version_2_table() {
+    let uses = [keys::Use {
+        resource: crate::RES_MACHINE_ROWS,
+        count: 3,
+    }];
+    let stock = [1u8, 2, 3];
+    let table = keys::Table {
+        uses: &uses,
+        slots: &[keys::Slot {
+            id: 1,
+            flags: 0,
+            entry: 0x40,
+        }],
+        provides: &[keys::Pair { a: 5, b: 1 }],
+        bind: &[keys::Bind {
+            site: 6,
+            addr: 0x1000,
+            tramp: 0x20,
+            stock: &stock,
+        }],
+        ..Default::default()
+    };
+    let mut t = vec![0u8; keys::table_size(&table)];
+    keys::write_table(&table, &mut t).unwrap();
+    assert_eq!(t[5], 2);
+    assert_eq!(of(&dkm(4, 0, &t, &[])).unwrap().machine_rows, 3);
+    // version 3 is the port file's, and is read the same way; another version is refused
+    t[5] = 3;
+    assert_eq!(of(&dkm(4, 0, &t, &[])).unwrap().machine_rows, 3);
+    t[5] = 4;
+    assert_eq!(of(&dkm(4, 0, &t, &[])), Err(Error::Register));
 }
 
 #[test]
@@ -259,13 +306,16 @@ fn the_fields_have_the_capacity_names() {
         param_rows: 8,
         page_rows: 9,
         fx_slots: 10,
+        dsp_cost_voice: 11,
+        dsp_cost_fx: 12,
     };
     let f = n.fields();
     assert_eq!(f[0], ("ARENA", 2));
     assert_eq!(f[8], ("FX_SLOTS", 10));
+    assert_eq!((f[9], f[10]), (("DSP_COST_VOICE", 11), ("DSP_COST_FX", 12)));
     assert_eq!(
         f.iter().map(|x| x.1).sum::<u32>(),
-        2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10
+        2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12
     );
 }
 
@@ -330,7 +380,6 @@ fn absurd_sizes_and_counts_are_refused_without_a_panic() {
     assert_eq!(of(&edit(H_RELOC_N as usize, 4097)), Err(Error::Sizes));
     assert_eq!(of(&edit(H_RELOC_N as usize, u32::MAX)), Err(Error::Sizes));
     assert_eq!(of(&edit(H_IMPORT_N as usize, 65)), Err(Error::Sizes));
-    assert_eq!(of(&edit(H_SLOT_N as usize, 9)), Err(Error::Sizes));
     assert_eq!(
         of(&edit(H_IMAGE_OFF as usize, u32::MAX - 15)),
         Err(Error::Sizes)
@@ -344,22 +393,14 @@ fn absurd_sizes_and_counts_are_refused_without_a_panic() {
         of(&edit(H_DSP_SIZE as usize, good.len() as u32)),
         Err(Error::Sizes)
     );
-    // register table
-    assert_eq!(of(&edit(reg_off, 0)), Err(Error::Register));
-    assert_eq!(of(&edit(reg_off + 4, 2)), Err(Error::Register));
+    // keys table
+    assert_eq!(of(&edit(reg_off, 0)), Err(Error::Register)); // no magic: the table of runtime 0.7
     assert_eq!(
-        of(&edit(reg_off + 12, MAX_RECORDS + 1)),
+        of(&edit(reg_off + keys::HEAD + 4, u32::MAX)),
         Err(Error::Register)
-    );
-    assert_eq!(of(&edit(reg_off + 12, u32::MAX)), Err(Error::Register));
-    assert_eq!(of(&edit(reg_off + 12, 1)), Err(Error::Register)); // the table is longer than one record
-    assert_eq!(of(&edit(reg_off + 12, 3)), Err(Error::Register)); // and shorter than three
-    assert_eq!(of(&edit(reg_off + 16, 9)), Err(Error::Register)); // a kind that does not exist
-    assert_eq!(of(&edit(reg_off + 20, LEN_PARAM + 4)), Err(Error::Register)); // a length that is not the kind's
-    assert_eq!(of(&edit(reg_off + 20, 0)), Err(Error::Register));
-    assert_eq!(of(&edit(reg_off + 20, u32::MAX)), Err(Error::Register));
-    assert_eq!(of(&edit(H_REG_SIZE as usize, 12)), Err(Error::Register)); // too short for its header
-                                                                          // DSP section
+    ); // the first entry is longer than the table
+    assert_eq!(of(&edit(H_REG_SIZE as usize, 8)), Err(Error::Register)); // too short for its head
+                                                                         // DSP section
     let d = |at: usize, v: u32| edit(dsp_off + at, v);
     assert_eq!(of(&d(0, 0)), Err(Error::Dsp));
     assert_eq!(of(&d(4, 0)), Err(Error::Dsp));
@@ -503,35 +544,39 @@ fn the_reads_stay_in_the_tables_the_loader_reads() {
 }
 
 #[test]
-fn sample_bank_v5_counts_owned_bss_and_rejects_bad_records() {
-    let mut dsp = dsp_section_v4(16, 32, &[8]);
-    let bank_off = DSP_HEADER as usize + FX_LEN as usize;
-    dsp.splice(bank_off..bank_off, [0u8; 32]);
+fn sample_track_record_v5_needs_kind_2_zero_blocks_and_no_overlap() {
+    let mut dsp = dsp_section_v4(768, 0, &[8]);
+    let record_off = DSP_HEADER as usize + FX_LEN as usize;
+    dsp.splice(record_off..record_off, [0u8; 32]);
     put(&mut dsp, 4, 5);
-    put(&mut dsp, 0x18, bank_off as u32 + 32);
-    put(&mut dsp, 0x3c, bank_off as u32);
-    for (i, w) in [1u32, 7, 16, 8, 0, 0, 0, 0].iter().enumerate() {
-        dsp[bank_off + i * 4..bank_off + i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+    put(&mut dsp, 0x18, record_off as u32 + 32);
+    put(&mut dsp, 0x3c, record_off as u32);
+    for (i, w) in [2u32, 7, 0, 512, 0, 0, 0, 0].iter().enumerate() {
+        dsp[record_off + i * 4..record_off + i * 4 + 4].copy_from_slice(&w.to_le_bytes());
     }
-    let n = of(&dkm(4, 0, &[], &dsp)).unwrap();
-    assert_eq!((n.fx_slots, n.dsp_area), (1, 64));
+    assert_eq!(of(&dkm(4, 0, &[], &dsp)).unwrap().fx_slots, 1);
     for (word, value) in [
-        (0, 2u32),
-        (2, 0),
-        (2, u32::MAX - 3),
-        (3, 0),
-        (3, 9),
-        (4, 4),
-        (5, 1),
+        (0, 1u32),
+        (0, 3),
+        (2, 2),
+        (2, 520),
+        (3, 4),
+        (3, 520),
+        (4, 1),
+        (7, 1),
     ] {
         let mut bad = dsp.clone();
-        bad[bank_off + word * 4..bank_off + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
-        assert_eq!(of(&dkm(4, 0, &[], &bad)), Err(Error::Dsp));
+        bad[record_off + word * 4..record_off + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
+        assert_eq!(
+            of(&dkm(4, 0, &[], &bad)),
+            Err(Error::Dsp),
+            "word {word}: {value}"
+        );
     }
     let mut bad = dsp.clone();
     put(&mut bad, 0x3c, DSP_HEADER);
     assert_eq!(of(&dkm(4, 0, &[], &bad)), Err(Error::Dsp));
-    let image_off = bank_off + 32;
+    let image_off = record_off + 32;
     dsp[image_off] = 1;
     assert_eq!(of(&dkm(4, 0, &[], &dsp)), Err(Error::Dsp));
 }

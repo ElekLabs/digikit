@@ -1,7 +1,9 @@
 //! Status codes, request bodies and reply parsers.
 
 use crate::codec::*;
-use crate::gen_proto::{CAP_LOG, CAP_LOGCFG, CAP_PEEK, CAP_RESTART, CAP_SELECT};
+use crate::gen_proto::{
+    CAP_FW_ID, CAP_LOG, CAP_LOGCFG, CAP_PEEK, CAP_RESTART, CAP_SELECT, CAP_SVC_ABI,
+};
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,7 +94,7 @@ impl Status {
             Status::NoFile => "that path is not in the store",
             Status::Proto => "unknown protocol version or command",
             Status::NoStore => {
-                "the device has no module store, or its header is unreadable (CLEAR still works)"
+                "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)"
             }
             Status::Unknown(_) => "unknown status code",
         }
@@ -168,6 +170,10 @@ pub struct Info {
     pub caps: Option<u32>,
     /// The id of the flashed image, when the reply carries it (runtime 0.5.2 and later; all zero when patchkit stamped none).
     pub image_id: Option<[u8; 8]>,
+    /// The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), when the reply carries it.
+    pub svc_abi: Option<u32>,
+    /// The firmware identity of the image (`CAP_FW_ID`): the first 8 bytes of the SHA-256 of the stock firmware, which names the port file; after `svc_abi`.
+    pub fw_id: Option<[u8; 8]>,
 }
 impl Info {
     /// The packed runtime version: the 32-bit field when present, else the 16-bit one.
@@ -258,6 +264,8 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
     let protocol = c.u16()?;
     let runtime_version = c.u16()?;
     let port = c.cstr()?;
+    // the runtime writes the id in a 4-byte field: a name of fewer than 3 characters is followed by more NULs
+    c.take(3usize.saturating_sub(port.len()).min(c.0.len()))?;
     let free_bytes = c.u32()?;
     let max_chunk = c.u32()?;
     let flags = c.u8()?;
@@ -277,6 +285,17 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
     } else {
         None
     };
+    let svc_abi =
+        if image_id.is_some() && caps.is_some_and(|c| c & CAP_SVC_ABI != 0) && c.0.len() >= 4 {
+            Some(c.u32()?)
+        } else {
+            None
+        };
+    let fw_id = if svc_abi.is_some() && caps.is_some_and(|c| c & CAP_FW_ID != 0) && c.0.len() >= 8 {
+        Some(c.take(8)?.try_into().expect("8 bytes"))
+    } else {
+        None
+    };
     Ok(Info {
         protocol,
         runtime_version,
@@ -289,6 +308,8 @@ pub fn parse_info(body: &[u8]) -> Result<Info, Error> {
         runtime32,
         caps,
         image_id,
+        svc_abi,
+        fw_id,
     })
 }
 
@@ -421,6 +442,21 @@ mod tests {
         assert_eq!((i.log_oldest, i.runtime32, i.caps), (None, None, None));
     }
 
+    #[test]
+    fn info_with_a_short_device_id_keeps_its_fields() {
+        // a 2-character id in the runtime's 4-byte field: two NULs, then free_bytes
+        let mut b = vec![0, 1, 0, 3];
+        b.extend(b"xy\0\0");
+        b.extend(1024u32.to_be_bytes());
+        b.extend(32768u32.to_be_bytes());
+        b.push(0);
+        let i = parse_info(&b).unwrap();
+        assert_eq!(
+            (i.port.as_str(), i.free_bytes, i.max_chunk),
+            ("xy", 1024, 32768)
+        );
+    }
+
     fn info_body(runtime: u16, tail: &[u8]) -> Vec<u8> {
         let mut b = vec![0, 1];
         b.extend(runtime.to_be_bytes());
@@ -459,6 +495,64 @@ mod tests {
         let with_id = parse_info(&info_body(0, &tail)).unwrap();
         assert_eq!(with_id.image_id, Some([1, 2, 3, 4, 5, 6, 7, 8]));
         assert_eq!(with_id.caps, new.caps);
+        assert_eq!(with_id.svc_abi, None);
+    }
+
+    #[test]
+    fn the_service_abi_is_read_after_the_image_id_when_the_capability_is_set() {
+        let tail = |caps: u32, abi: &[u8]| {
+            let mut t = 5u32.to_be_bytes().to_vec();
+            t.extend(9u32.to_be_bytes());
+            t.extend(0x0005_0000u32.to_be_bytes());
+            t.extend(caps.to_be_bytes());
+            t.extend([1, 2, 3, 4, 5, 6, 7, 8]);
+            t.extend(abi);
+            t
+        };
+        let abi = 0xdead_beefu32.to_be_bytes();
+        let on = parse_info(&info_body(0, &tail(CAP_SVC_ABI, &abi))).unwrap();
+        assert_eq!(on.svc_abi, Some(0xdead_beef));
+        // without the capability, or without the bytes, there is none
+        assert_eq!(
+            parse_info(&info_body(0, &tail(0, &abi))).unwrap().svc_abi,
+            None
+        );
+        assert_eq!(
+            parse_info(&info_body(0, &tail(CAP_SVC_ABI, &[])))
+                .unwrap()
+                .svc_abi,
+            None
+        );
+    }
+
+    #[test]
+    fn the_firmware_identity_follows_the_service_abi_when_its_capability_is_set() {
+        let tail = |caps: u32, fw: &[u8]| {
+            let mut t = 5u32.to_be_bytes().to_vec();
+            t.extend(9u32.to_be_bytes());
+            t.extend(0x0005_0000u32.to_be_bytes());
+            t.extend(caps.to_be_bytes());
+            t.extend([1, 2, 3, 4, 5, 6, 7, 8]);
+            t.extend(0xdead_beefu32.to_be_bytes());
+            t.extend(fw);
+            t
+        };
+        let fw = [0xd1, 0x5e, 0xa5, 0xe0, 1, 2, 3, 4];
+        let on = parse_info(&info_body(0, &tail(CAP_SVC_ABI | CAP_FW_ID, &fw))).unwrap();
+        assert_eq!(on.fw_id, Some(fw));
+        // without the capability, or without the bytes, there is none
+        assert_eq!(
+            parse_info(&info_body(0, &tail(CAP_SVC_ABI, &fw)))
+                .unwrap()
+                .fw_id,
+            None
+        );
+        assert_eq!(
+            parse_info(&info_body(0, &tail(CAP_SVC_ABI | CAP_FW_ID, &[])))
+                .unwrap()
+                .fw_id,
+            None
+        );
     }
 
     #[test]

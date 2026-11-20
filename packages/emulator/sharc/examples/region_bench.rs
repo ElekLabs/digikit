@@ -202,7 +202,7 @@ fn configure(e: &mut Engine, clock_base: u64) {
 }
 
 pub(crate) fn open(image: &[u8], state: &[u8], clock_base: u64) -> Engine {
-    let mut e = Engine::from_image(image).expect("image blob");
+    let mut e = Engine::from_image(image, &sharc_gen::CORE).expect("image blob");
     // Import first: the options act on the imported state (as dn2_replay).
     e.import(state).expect("state blob");
     configure(&mut e, clock_base);
@@ -562,7 +562,7 @@ fn fast_bench(args: &[String]) {
                 .unwrap_or_else(|| panic!("no block at {pc:X}"));
             let light = Light::save(&e.s);
             let mut fe = FastEngine::new(Box::<sharc_fast_cl::ClBackend>::default(), &[pc]);
-            if sharc_native::fast::blocktrans_roots().contains(&pc) {
+            if sharc_native::fast::blocktrans_roots(&sharc_gen::CORE).contains(&pc) {
                 // SHARC_BLOCKTRANS names PC: a block-translator cluster root.
                 fe = fe.with_clusters(&[pc]);
             }

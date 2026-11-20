@@ -10,11 +10,10 @@ status = "experimental"
 summary = "The sample backing behind the runtime's per-track samples (dkrt_pool.h, version 1): DT2 borrows the stock sample pool; DN2 owns a DDR range and streams samples into it over LP0"
 ports = ["dt2-1.17", "dn2-1.12"]
 requires = ["core/runtime"]
-conflicts = ["core/dsp-lp0-proof"]
 
 [targets]
-"dt2-1.17" = "untested"
-"dn2-1.12" = "untested"
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
 
 # One adapter, one object per device (docs/design/sample-api-1.5.md 2.3 and recommendation 9). Both export the same symbols of
 # src/dkrt_pool.h: dkpool_version, dkpool_load, dkpool_release, dkpool_check, dkpool_free_frames and dkpool_tick, and the optional dkpool_cancel. The runtime lists them as
@@ -25,13 +24,12 @@ conflicts = ["core/dsp-lp0-proof"]
 #
 # DN2 (src/cf/dn2, src/dsp/dn2; docs/design/dn2-sample-pool.md): an allocator over [adapter.sample_pool] ddr_base and ddr_bytes of
 # devices/digitone-ii.toml (4 KiB pages, first fit, identity sharing, released blocks cached, no reset, so no dkrt_pool_lost), and the LP0 page
-# transport of core/dsp-lp0-proof made permanent: the ColdFire reads the store file in ranges (dkrt_store_stat, dkrt_store_read), sends 4 KiB pages with
+# transport of the earlier private proof made permanent: the ColdFire reads the store file in ranges (dkrt_store_stat, dkrt_store_read), sends 4 KiB pages with
 # its own bounded LP0 sender from a job on the stock SampleLoader worker task (design section 2), and the DSP copies each page into DDR in the LP0 callback and acknowledges it in a 16-byte extension of the reply record.
 # The extension needs the wire 16 bytes longer (0xabc to 0xacc), a boot-only change that the proof proved in the emulator; moving the
 # acknowledgement into the dsp-link diagnostic record is a decision for before any hardware step (design section 7).
 # core/dsp-link must be in a DN2 image with this module: its block tail has the one claim on dsp.link.site.block_tail and calls `_sp_tail` of
 # the DSP object (an optional import of dsp-link), and `_sp_back` below is the end of that tail.
-# core/dsp-lp0-proof claims the same sites (it is the private diagnostic of the same transport): the two never go into one image.
 # The shared logic that does not touch the firmware is src/cf/pool_core.h (the DT2 stock slot model), pool_nw32.h (address helpers),
 # pool_alloc.h (the DN2 allocator) and pool_wire.h (page tag, acknowledgement and the page state machine); tests/patchkit/test_sample_pool_*.py
 # compile them on the host.
@@ -54,6 +52,8 @@ devices = ["dt2"]
 
 [object.externs]
 sp_dsp_pool_base = "dsp.voice.value.sample.pool_base"
+sp_slot_pool_done = "slot.pool_done"
+sp_slot_pool_lost = "slot.pool_lost"
 
 # The stock reply copy (LP0, DN2 1.12), the stock short sleep and the SampleLoader worker's getter and queue. The pages go out through our own
 # sender (src/cf/dn2/send.c): the stock sender is not used.
@@ -66,6 +66,8 @@ devices = ["dn2"]
 [object.externs]
 sp_stock_copy = "cf.link.fn.reply_copy"
 sp_stock_sleep = "cf.rtos.fn.sleep_us"
+sp_slot_pool_done = "slot.pool_done"
+sp_slot_pool_lost = "slot.pool_lost"
 
 [[object]]
 path = "build/sample-pool-dsp-dn2.dko.json"
@@ -128,3 +130,16 @@ devices = ["dn2"]
 [[claim]]
 resource = "dsp.cache.rr4"
 devices = ["dn2"]
+
+# The data table of this adapter (the calls of dkrt_pool.h) and the two pointer slots of its events, exported to the image's info table (`dkrt_info_table`): the samples
+# service file finds the table by the hash of its name (`CoreApi::info`) and fills the slots with its routines. See src/cf/pool_events.h.
+[[info]]
+name = "sample_pool_info"
+symbol = "sample_pool_info"
+devices = ["dt2", "dn2"]
+
+[[slot]]
+name = "pool_done"
+
+[[slot]]
+name = "pool_lost"

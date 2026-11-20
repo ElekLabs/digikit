@@ -5,7 +5,7 @@ import pytest
 
 from tools.patchkit import pk_device
 
-DEVICES = pk_device.digikit_devices()
+DEVICES = pk_device.dsp_devices()
 
 
 @pytest.mark.parametrize("dev", DEVICES)

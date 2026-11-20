@@ -706,7 +706,7 @@ impl ClBackend {
 
 /// # Safety
 /// `words` points to `n` words; `err` to `cap` writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sharc_fast_compile(
     words: *const u32,
     n: usize,
@@ -734,7 +734,7 @@ pub unsafe extern "C" fn sharc_fast_compile(
 /// # Safety
 /// `h` came from `sharc_fast_compile`; `ctx` is a context buffer and `st` the
 /// engine state the kernel was lowered for.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sharc_fast_run2(
     h: *mut std::ffi::c_void,
     ctx: *mut u8,
@@ -746,7 +746,7 @@ pub unsafe extern "C" fn sharc_fast_run2(
 
 /// # Safety
 /// `h` came from `sharc_fast_compile` and is not used again.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sharc_fast_free(h: *mut std::ffi::c_void) {
     drop(unsafe { Box::from_raw(h as *mut Box<dyn CompiledKernel>) });
 }

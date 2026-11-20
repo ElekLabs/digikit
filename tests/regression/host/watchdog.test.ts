@@ -53,7 +53,7 @@ test('a free-running session without progress is closed after the limit', async 
   await vi.advanceTimersByTimeAsync(20_000);
   expect(close).toHaveBeenCalledTimes(1);
   expect(clientClose).toHaveBeenCalledTimes(1);
-  expect(lines.join('\n')).toMatch(/no emulated progress for \d+ s \(frames 7, mainloop 9, icount 5, boot undefined\)/);
+  expect(lines.join('\n')).toMatch(/no emulated progress for \d+ s \(frames 7, mainloop 9, icount 5, job undefined\)/);
   expect(dog.tripped).toMatch(/no emulated progress/);
 });
 
@@ -68,10 +68,15 @@ test('a status call that never answers counts as no progress', async () => {
 test('a cold load moves only the instruction counts: that is progress, also when the count drops', async () => {
   const { session, close } = fake((n) => ({
     mode: 'free',
-    job: null,
+    job: {
+      kind: 'boot',
+      phase: 'booting',
+      icount: n % 7 === 0 ? 1 : n * 1000,
+      progress: 0.5,
+      wall_seconds: n,
+    },
     dsp_frames: 0,
     cf: { mainloop_hits: 0, icount: 100 },
-    boot: { icount: n % 7 === 0 ? 1 : n * 1000 },
   }));
   const dog = startNoProgressWatchdog(session, options);
   await vi.advanceTimersByTimeAsync(300_000);
@@ -98,13 +103,12 @@ test('the second connection is used when the session has one', async () => {
   expect(second).toHaveBeenCalled();
 });
 
-test('a paused session with a boot inside firmware.load is not idle', async () => {
+test('a paused session with a firmware.load job is not idle', async () => {
   const { session, close } = fake(() => ({
     mode: 'paused',
-    job: null,
+    job: { kind: 'firmware.load', wall_seconds: 1 },
     dsp_frames: 5,
     cf: { mainloop_hits: 5, icount: 1 },
-    boot: { icount: 0 },
   }));
   startNoProgressWatchdog(session, options);
   await vi.advanceTimersByTimeAsync(80_000);
@@ -115,7 +119,6 @@ test('a firmware that spins after its boot (instruction count rises, nothing els
   const { session, close } = fake((n) => ({
     mode: 'free',
     job: null,
-    boot: null,
     dsp_frames: 7,
     cf: { mainloop_hits: 9, icount: n * 1_000_000 },
     audio: { frames: 7 },
@@ -129,7 +132,7 @@ test('a firmware that spins after its boot (instruction count rises, nothing els
 test('the same rising instruction count is progress while a job runs', async () => {
   const { session, close } = fake((n) => ({
     mode: 'free',
-    job: { kind: 'load' },
+    job: { kind: 'step', wall_seconds: 1 },
     dsp_frames: 7,
     cf: { mainloop_hits: 9, icount: n * 1_000_000 },
   }));

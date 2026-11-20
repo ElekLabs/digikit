@@ -7,8 +7,8 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Reserves the DSP side of run-time machines: free voice rows and the table of DSP addresses the digikit runtime uses (emulator only)"
-requires = ["core/runtime", "core/dsp-link", "core/dsp-voice"]
+summary = "Reserves the DSP side of run-time machines: free voice rows and the table of DSP addresses the digikit runtime uses"
+requires = ["core/runtime", "core/dsp-link", "core/dsp-voice", "core/fx"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
 
@@ -31,7 +31,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 [[gen]]
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID", "DYN_TYPES", "DL_AREA_BYTES"]
+uses = ["DEVICE_ID", "DYN_TYPES", "DL_AREA_BYTES", "DL_SLOT_BYTES"]
 
 [[object]]
 path = "build/dyndsp-dt2.dko.json"
@@ -47,6 +47,19 @@ _dd_vcount = "voices.count"
 _dd_exp2 = "_dv_exp2"
 _dd_frame_hw = "_dv_frame_hw"
 _dd_frame_sw = "_dv_frame_sw"
+# the table of a run-time DSP object's imports also holds the firmware addresses that core/dsp-voice's dispatch code uses (the anchors of its own object)
+_dv_table = "voices.rows"
+_fw_type_cache = "dsp.voice.value.type_cache"
+_fw_render_next = "dsp.voice.site.render_entry.next"
+_fw_frame = "dsp.voice.value.frame_base"
+_fw_param_rec = "dsp.voice.value.param_record_base"
+_fw_release_latch = "dsp.voice.value.release_latch"
+_fw_unpack = "dsp.voice.fn.track_unpack"
+# and those of the dispatch code of the fx service
+_fx_table = "fx.rows"
+_fx_master = "dsp.master.value.q31_converter.float_buf"
+_fxs_trackbus = "dsp.fx.value.send.track_bus"
+_fxs_return = "dsp.fx.value.send.return_bus"
 
 [[object]]
 path = "build/dyndsp-dn2.dko.json"
@@ -62,6 +75,16 @@ _dd_vcount = "voices.count"
 _dd_exp2 = "_dv_exp2"
 _dd_frame_hw = "_dv_frame_hw"
 _dd_frame_sw = "_dv_frame_sw"
+# the table of a run-time DSP object's imports also holds the firmware addresses that the dispatch code of core/dsp-voice uses
+_dv_table = "voices.rows"
+_fw_frame = "dsp.voice.value.frame_base"
+# and those of the dispatch code of the fx service
+_fx_table = "fx.rows"
+_fx_master = "dsp.master.value.q31_converter.float_buf"
+_fxs_slotbus = "dsp.fx.value.send.slot_bus"
+_fxs_slotmap = "dsp.fx.value.send.slot_map"
+_fxs_fadetab = "dsp.fx.value.send.slot_fade_flags"
+_fxs_return = "dsp.fx.value.send.return_bus"
 
 [[entry]]
 registry = "voices"
@@ -110,3 +133,16 @@ registry = "voices"
 id = "dv7"
 type = 0xffffffff
 pc = 0
+
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the services find it by the hash of its name (`CoreApi::info`), the machines service for
+# its voice rows and the fx service for the bounds of an effect's state. The runtime also links it directly (it owns the area).
+[[info]]
+name = "dyndsp_info"
+devices = ["dt2", "dn2"]
+
+# The capacity limits this adapter reserves, as `cap_<kind>` entries of the image's info table (docs/PATCHING.md): each points at the u32 word of the table that holds the limit, so the planner knows the limit before any service file is loaded.
+[[info]]
+name = "cap_voice_rows"
+symbol = "dyndsp_info + 28"
+devices = ["dt2", "dn2"]
+

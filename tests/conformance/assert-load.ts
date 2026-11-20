@@ -1,3 +1,4 @@
+import { emulatorClock, moduleStorePathOf, waitClock, type Device } from '@digi/test-support';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileHashHex, type DkLogEvent } from '@digi/dk-session';
@@ -5,9 +6,10 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { DEBUG_MODULE, installWithDebug } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
-import { pollEmulated, waitEmulated } from '@digi/regression/runtime/waits.ts';
+import { neededServices, portFile, servicePath } from '@digi/regression/runtime/service-files.ts';
+import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import type { RuntimeModule } from './manifests.ts';
 
 /** Real USB upload, persisted bytes, selected reboot, registration and fault acceptance.
@@ -19,10 +21,14 @@ export async function expectModuleLoad(
 ): Promise<void> {
   const { session, dk } = runtime;
   const bytes = fs.readFileSync(artifact);
-  const storePath = `modules/${module.id.split('/')[1]}.dkm`;
+  const storePath = moduleStorePathOf(module.id, bytes);
+  const debugPath = moduleStorePath(session.options.device as Device, DEBUG_MODULE);
   // The debug module is loaded next to every module (the cell reads its LOG); for the debug module itself, once.
   const names = [...new Set([DEBUG_MODULE, module.id])];
-  const paths = [...new Set(['modules/debug.dkm', storePath])].sort();
+  // the service files the module needs (services/<name>.dks) go on the card with it
+  const services = neededServices([artifact]).map((s) => servicePath(s.service));
+  // a service on the card brings the port file of the device's firmware
+  const paths = [...new Set([debugPath, storePath, ...services, ...(services.length ? [portFile(session.options.device as Device).name] : [])])].sort();
   const hash = fileHashHex(bytes);
   const artifacts = path.join(liveArtifacts(session, 'module-load'), module.id.split('/')[1]!);
   fs.mkdirSync(artifacts, { recursive: true });
@@ -46,7 +52,7 @@ export async function expectModuleLoad(
     size: bytes.length,
     hash,
   });
-  expect(entries.map((entry) => entry.path).sort(), 'the store holds the two module files (any order)').toEqual(paths);
+  expect(entries.map((entry) => entry.path).sort(), 'the store holds the module files and the service files they need (any order)').toEqual(paths);
   expect(await dk.verifyFile(storePath, bytes), 'module bytes survive reboot').toBe(true);
 
   try {
@@ -76,9 +82,7 @@ export async function expectModuleLoad(
     }
     const loaded = (await dk.modules()).find((entry) => entry.name === module.id)!;
     expect(loaded.version, 'loader reports the prepared module version').toBe(bytes.readUInt32BE(0x34));
-    const contracts = Array.from({ length: 4 }, (_, index) => [bytes[0x38 + 2 * index], bytes[0x39 + 2 * index]]);
-    expect(loaded.contracts, 'loader reports the prepared SDK contracts').toEqual(contracts);
-    expect(loaded.contracts[module.contract]![0], 'intended module contract is active').toBeGreaterThan(0);
+    expect(loaded.needs, 'loader reports the runtime version the prepared module needs').toBe(bytes.readUInt32BE(0x30) & 0x7fffffff);
     if (module.dsp) {
       expect(loaded.dsp_len, 'module DSP image was allocated').toBeGreaterThan(0);
       if (module.type === 'machine') {
@@ -92,7 +96,7 @@ export async function expectModuleLoad(
     // CF-only registration is already complete; UI and fault acceptance below still apply.
     if (module.dsp) {
       expect((await session.status()).dsp, 'DSP conformance remains coupled').toBe('sharc');
-      await waitEmulated(session, 2000);
+      await waitClock(emulatorClock(session), 2000); // DSP registrations run on the coupled DSP: no observable end
     } else {
       const status = await session.status();
       expect(status.dsp, 'CF-only conformance retains the zero SSI peer').toBe('zero');

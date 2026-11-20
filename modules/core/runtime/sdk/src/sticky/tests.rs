@@ -2,8 +2,11 @@
 //! Machine keys and map entries are `hash24 << 8` (| type for an entry), as in a `.dkm` and in the selection record.
 extern crate std;
 use super::*;
-use crate::sel::Record;
+use crate::sel::{Record, MAP_N};
 use std::vec::Vec;
+
+/// The run-time machine types of the devices that have a DSP: 16 to 23.
+const R: Range = Range { lo: 16, hi: 23 };
 
 // Hashes of the machines the scenario used; any distinct 24-bit values do.
 const NAN: u32 = 0x00aa_0001;
@@ -31,9 +34,11 @@ fn boot(card_map: [u32; MAP_N], hashes: &[u32]) -> Boot {
         keys[i] = key(*h);
     }
     let mut ty = [0u32; MAX_KEYS];
-    let mut map = clean(&card_map);
+    let mut map = [0u32; MAP_N];
+    clean(R, &card_map, &mut map);
     let mut events = Vec::new();
     let dirty = assign(
+        R,
         &card_map,
         &mut map,
         &keys,
@@ -226,17 +231,10 @@ fn a_pinned_key_is_left_alone_and_takes_no_number() {
     let mut ty = [9u32; MAX_KEYS];
     let mut map = [0; MAP_N];
     let mut n_events = 0;
-    let dirty = assign(&[0; MAP_N], &mut map, &keys, &mut ty, 2, &mut |_| {
+    let dirty = assign(R, &[0; MAP_N], &mut map, &keys, &mut ty, 2, &mut |_| {
         n_events += 1
     });
     assert_eq!((ty[0], ty[1], dirty, n_events), (0, 16, 1, 1));
-}
-
-#[test]
-fn a_repeated_key_takes_a_fresh_number_and_is_not_recorded() {
-    let b = boot([0; MAP_N], &[NAN, NAN]);
-    assert_eq!(b.ty, [16, 17]);
-    assert_eq!(b.map, map_of(&[entry(NAN, 16)]));
 }
 
 #[test]
@@ -249,15 +247,66 @@ fn clean_drops_entries_that_cannot_be_right() {
         entry(0, 18),      // no hash
         entry(0x77, 23),
     ]);
-    assert_eq!(
-        clean(&m),
-        map_of(&[entry(NAN, 16), 0, 0, 0, 0, entry(0x77, 23)])
-    );
+    let mut out = [0; MAP_N];
+    clean(R, &m, &mut out);
+    assert_eq!(out, map_of(&[entry(NAN, 16), 0, 0, 0, 0, entry(0x77, 23)]));
 }
 
 #[test]
 fn lowest_free_skips_taken_numbers_and_gives_0_when_none_is_left() {
-    assert_eq!(lowest_free(0), 16);
-    assert_eq!(lowest_free(0b0000_0111), 19);
-    assert_eq!(lowest_free(0xff), 0);
+    assert_eq!(lowest_free(R, 0), 16);
+    assert_eq!(lowest_free(R, 0b0000_0111), 19);
+    assert_eq!(lowest_free(R, 0xff), 0);
+}
+
+#[test]
+fn another_range_and_a_shorter_map_assign_inside_their_own_bounds() {
+    // numbers 40..=42 and a map of two entries: the third key finds no free number and evicts the lowest entry of a key that is not in the boot
+    let r = Range { lo: 40, hi: 42 };
+    let (a, b, c, d) = (0x11u32, 0x22, 0x33, 0x44);
+    let card = [entry(a, 40), entry(b, 41)];
+    let mut map = [0u32; 2];
+    clean(r, &card, &mut map);
+    assert_eq!(map, card);
+    let keys = [key(c), key(d), key(b)];
+    let mut ty = [0u32; 3];
+    let mut events = Vec::new();
+    let dirty = assign(r, &card, &mut map, &keys, &mut ty, 3, &mut |e: &Event| {
+        events.push(*e)
+    });
+    // c: 42 is free of the map; d: none is free, `a` (not in the boot) is evicted and its 40 is taken; b keeps 41
+    assert_eq!(ty, [42, 40, 41]);
+    assert_eq!(map, [entry(d, 40), entry(b, 41)]);
+    assert_eq!(dirty, 1);
+    assert!(events
+        .iter()
+        .any(|e| e.kind == logk::MACHINE_TYPE_EVICTED && e.args[0] == a));
+    // a number of the profile's range is outside this one
+    let mut m = [0u32; 2];
+    clean(r, &[entry(a, 16), entry(b, 42)], &mut m);
+    assert_eq!(m, [0, entry(b, 42)]);
+}
+
+/// A repeated key is the planner's to refuse. In a release build `assign` gives the repeat no number and leaves the map as the first key made it, so a
+/// saved number cannot move because of a duplicate.
+#[cfg(not(debug_assertions))]
+#[test]
+fn a_repeated_key_gets_no_number_and_changes_nothing_in_a_release_build() {
+    let b = boot(map_of(&[entry(NAN, 20)]), &[SINE, NAN, SINE]);
+    assert_eq!(b.ty, [16, 20, 0]);
+    assert_eq!(b.map[..2], [entry(NAN, 20), entry(SINE, 16)]);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "assign takes unique keys")]
+fn a_repeated_key_trips_the_debug_assertion() {
+    boot(map_of(&[]), &[SINE, SINE]);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "at most 32 numbers")]
+fn a_range_of_more_than_32_numbers_trips_the_debug_assertion() {
+    Range { lo: 1, hi: 40 }.bit(2);
 }

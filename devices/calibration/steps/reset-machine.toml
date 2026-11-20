@@ -1,0 +1,11 @@
+schema = "dk.steps/1"
+name = "reset-machine"
+description = "Put the stock machine (type 0, valid in every boot) on the track: the teardown of a module case, so that a module that unloads leaves no type of its own in the kit. `track` is the case's own track."
+
+[args]
+track = 1
+
+[[step]]
+action = "setup"
+track = "{track}"
+machine = 0

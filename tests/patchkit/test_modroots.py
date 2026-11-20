@@ -27,8 +27,8 @@ def test_ids_are_unique_and_every_manifest_is_found() -> None:
 
 
 def test_fixture_ids_stay_test_slash_name() -> None:
-    d = modroots.module_dir("test/patched-pluck")
-    assert d == ROOT / "tests" / "fixtures" / "modules" / "patched-pluck"
+    d = modroots.module_dir("test/registry-demo")
+    assert d == ROOT / "tests" / "fixtures" / "modules" / "registry-demo"
     assert modroots.module_dir("test/sine") == ROOT / "tests/fixtures/modules/sine"
 
 
@@ -37,8 +37,8 @@ def test_module_id_of_a_path() -> None:
         modroots.module_id("tests/fixtures/modules/sine/src/dsp/sine.s") == "test/sine"
     )
     assert (
-        modroots.module_id(ROOT / "tests/fixtures/modules/patched-pluck/module.toml")
-        == "test/patched-pluck"
+        modroots.module_id(ROOT / "tests/fixtures/modules/registry-demo/module.toml")
+        == "test/registry-demo"
     )
     assert modroots.module_id("tools/patchkit/modroots.py") is None
 
@@ -50,6 +50,17 @@ def test_a_duplicate_id_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("PATCHKIT_MODULES", str(tmp_path))
     with pytest.raises(SystemExit, match="duplicate module id test/sine"):
         modroots.manifests()
+
+
+def test_an_extra_root_inside_a_repository_root_is_not_scanned_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inside = ROOT / "modules" / "lfo"
+    assert modroots.covered(inside)
+    assert not modroots.covered(ROOT / "tools")
+    monkeypatch.setenv("PATCHKIT_MODULES", str(inside))
+    assert modroots.roots() == [ROOT / r for r in modroots.REPO_ROOTS]
+    modroots.manifests()  # no duplicate id
 
 
 def test_an_extra_root_adds_modules(

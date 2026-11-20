@@ -422,7 +422,7 @@ class Pipeline:
             RUSTFLAGS="--remap-path-prefix=%s=/sharc-gen" % gen,
         )
         cmd = [str(self.tc / "bin" / "cargo"), "rustc", "--release", "--offline",
-               "--locked", "--lib"]  # fmt: skip
+               "--locked", "--lib", "--features", "c-abi"]  # fmt: skip
         ext = ".dylib" if platform.system() == "Darwin" else ".so"
         if ext == ".dylib":
             cmd += ["--", "-Clink-arg=-Wl,-install_name,@rpath/libsharc_native.dylib"]
@@ -658,13 +658,13 @@ class Pipeline:
                 RUSTFLAGS="--remap-path-prefix=%s=/sharc-gen --remap-path-prefix=%s=/src"
                 % (gen, ROOT),
             )
-            cmd2 = [str(self.tc / "bin" / "cargo"), "build", "--manifest-path", str(ROOT / "packages/emulator/boot/Cargo.toml"),
+            cmd2 = [str(self.tc / "bin" / "cargo"), "build", "--manifest-path", str(ROOT / "packages/emulator/wasm-core/Cargo.toml"),
                     "--locked", "--offline", "--release", "--lib", "--target", "wasm32-unknown-unknown",
                     "--features", "sharc"]  # fmt: skip
             self.run("build-wasm", cmd2, env=env)
             wasm = (
                 self.out
-                / "wasm-target/wasm32-unknown-unknown/release/elektron_native_boot.wasm"
+                / "wasm-target/wasm32-unknown-unknown/release/digi_wasm_core.wasm"
             )
             manifest["wasm"] = {"path": str(wasm), "sha256": sha256_file(wasm)}
         gate, hashes, ok = self.gate(lib)

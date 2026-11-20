@@ -1,4 +1,4 @@
-"""digikit/probe: the collector's logic on the host. The module's own C file is compiled with a fake api, a fake `dl_set_tick_cb` and fake reply records,
+"""digikit/probe: the collector's logic on the host. The module's own C file is compiled with fake imports (`dk_dsp_link_*`, `dk_host_register`, `dk_log`) and fake reply records,
 and driven through the callback and the three commands. It checks which records add a word, the ring and its overruns, and the frame check of STATUS
 (frames, sequence errors for a dropped frame, checksum errors for a dropped or repeated word, the start inside a frame). No firmware, no emulator."""
 
@@ -18,23 +18,21 @@ HARNESS = r"""
 #include "probe.c"
 
 static void (*the_cb)(const volatile u16 *);
-static int32_t (*the_cmd)(u32, u32, const u8 *, u32, u8 *);
-void dl_set_tick_cb(uint8_t *cb) { the_cb = (void (*)(const volatile u16 *))cb; }
-static u8 *f_alloc(u32 n) { return (u8 *)calloc(1, n); }
-static void f_free(u8 *p) { free(p); }
-static void f_log(const u8 *m, u32 v) { (void)m; (void)v; }
-static int32_t f_reg(u32 first, u32 count, dk_service_cmd *h) { the_cmd = h; printf("reg %u %u\n", first, count); return 0; }
+static int32_t (*the_cmd)(u32, u32, const void *, u32, void *);
+static int token;
+int32_t dk_dsp_link_open(dk_module_ctx *ctx, dk_dsp_link **out) { (void)ctx; *out = (dk_dsp_link *)&token; return 0; }
+int32_t dk_dsp_link_set_tick(dk_dsp_link *dl, uint8_t *cb) { (void)dl; the_cb = (void (*)(const volatile u16 *))cb; return 0; }
+void dk_log(u32 level, const char *m, u32 v) { (void)level; (void)m; (void)v; }
+int32_t dk_host_register(u32 first, u32 count, dk_host_cmd_fn *h) { the_cmd = (int32_t (*)(u32, u32, const void *, u32, void *))h; printf("reg %u %u\n", first, count); return 0; }
 
 static void setw(u16 *rec, u32 j, u32 v) { u32 h = DIAG_OFF(j) / 2u; rec[h] = (u16)v; rec[h + 1] = (u16)(v >> 16); }
 
 int main(void)
 {
-    dk_api api;
+    dk_module_ctx *ctx = (dk_module_ctx *)&token;
     char line[4096];
     static u16 rec[0x800];
-    memset(&api, 0, sizeof api);
-    api.alloc = f_alloc; api.free = f_free; api.log = f_log; api.register_cmds = f_reg;
-    printf("init %d\n", dkm_init(&api));
+    printf("init %d\n", dk_module.init(ctx));
     while (fgets(line, sizeof line, stdin)) {
         unsigned a, b, c, d, e;
         char hex[2048];
@@ -52,7 +50,7 @@ int main(void)
             for (i = 0; r > 0 && i < (u32)r; i++) printf("%02x", out[i]);
             printf("\n");
         } else if (!strncmp(line, "fini", 4)) {
-            dkm_fini(&api);
+            dk_module.fini(ctx);
             printf("fini %d\n", the_cb == NULL);
         }
     }

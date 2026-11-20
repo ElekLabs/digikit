@@ -9,6 +9,8 @@
 
 /* Result of a call that worked. The error codes are negative (`E_*` of sdk/sdk.toml [load.status]). */
 #define DKRT_OK 0
+/* dkrt_phase: module code runs in its `init`. */
+#define DKRT_PHASE_INIT 1
 /* The boot-time load of a module with DSP code answers LOADING: its ColdFire part is live, the DSP part follows over the first UI-loop passes. The final result is in DkrtBootInfo.results. A module whose DSP part is still going has state MOD_LOADING in dkrt_module. */
 #define DKRT_LOADING 1
 /* DkrtStatus.state: nothing is being sent. */
@@ -21,8 +23,34 @@
 #define DKRT_MOD_LOADED 0
 /* DkrtModule.state: its DSP part is still being sent. */
 #define DKRT_MOD_LOADING 1
-/* Room for the entries a caller of dkrt_capacity gives (the runtime has 14 kinds; new kinds are appended). */
-#define DKRT_CAP_MAX 16
+/* dkrt_live op: load the content module of a store file that is not loaded. */
+#define DKRT_LIVE_LOAD 1
+/* dkrt_live op: unload the loaded content module that came from a store path. */
+#define DKRT_LIVE_UNLOAD 2
+/* dkrt_live op: replace the loaded content module that came from a store path by the file now at that path. */
+#define DKRT_LIVE_RELOAD 3
+/* Room for the entries a caller of dkrt_capacity gives (the runtime has 16 kinds; new kinds are appended). */
+#define DKRT_CAP_MAX 20
+/* The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it). */
+#define DKRT_ARENA_BYTES 524288
+/* The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml). */
+#define DKRT_STAGE_BYTES 131072
+/* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
+#define DKRT_MACHINE_ROWS 8
+/* The logical keys of a device: DkrtDevice.key_codes has this many entries, indexed by the key's number (dk_key of sdk/include/dk/gen/keys.h; entry 0 is DK_KEY_NONE). `patchkit gen` refuses more key names. */
+#define DKRT_DEV_KEYS 64
+/* DkrtDevice.magic: DKDV. */
+#define DKRT_DEV_MAGIC 0x444b4456u
+/* DkrtDevice.version. */
+#define DKRT_DEV_VERSION 1
+/* DkrtDevice.caps: the device has the DSP (a SHARC+ that the digikit link drives). Clear: no DSP area, no machine rows, no DSP figures. */
+#define DKRT_DEV_HAS_DSP 1
+/* DkrtDevice.caps: the device file has a module store ([card.store]). Clear: every store call answers not found and the card is never written. */
+#define DKRT_DEV_HAS_STORE 2
+/* DkrtDevice.caps: the card is on an eSDHC controller whose present-state register the runtime may read (DkrtDevice.esdhc_base). Clear: the card is never busy. */
+#define DKRT_DEV_HAS_SDHC 4
+/* DkrtDevice.caps: DkrtDevice.safe_key is the firmware key index held at power-on for safe mode. Clear: no key starts safe mode. */
+#define DKRT_DEV_HAS_SAFE_KEY 8
 /* DkrtHealth.magic, "HLTH". */
 #define DKRT_HEALTH_MAGIC 0x484c5448u
 /* DkrtHealth.flags: the image has core/health. */
@@ -39,8 +67,12 @@
 #define DKRT_HEALTH_HEAP_BAD 32
 /* DkrtHealth.flags: the store figures are valid (a store header was read; a card without a store has none). */
 #define DKRT_HEALTH_STORE 64
+/* DkrtHealth.flags: the device has no DSP (DEV_HAS_DSP clear): the DSP figures and the DSP area are 0 and dsp_period is 0. */
+#define DKRT_HEALTH_NO_DSP 128
 /* Bytes of one path of the selection, with the NUL: a store path has at most SEL_PATH - 1 characters. */
 #define DKRT_SEL_PATH 56
+/* Bytes of DkrtBootInfo.needs per selected module: the name of the missing module, 12 characters at most, NUL padded (with 12 there is no NUL). */
+#define DKRT_NEEDS_LEN 12
 /* DkrtBootInfo.reason: this boot is not in safe mode. */
 #define DKRT_SAFE_NONE 0
 /* DkrtBootInfo.reason: two boots in a row did not reach the UI loop. */
@@ -71,10 +103,12 @@
 #define DKRT_CARD_FOREIGN 3
 /* DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, so it never writes the card. */
 #define DKRT_CARD_UNREADABLE 4
-/* DkrtDiag.card_state: the card is smaller than the store area (its last sector cannot be read): there is no store. */
+/* DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store. */
 #define DKRT_CARD_TOO_SMALL 5
 /* DkrtDiag.magic, "DIAG". */
 #define DKRT_DIAG_MAGIC 0x44494147u
+/* Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter). */
+#define DKRT_STORE_LEASES 24
 /* Entries of a dkrt_scan and rows of a dkrt_fit. */
 #define DKRT_SCAN_MAX 32
 /* DkrtScan.flags: the file's header does not refuse this runtime or device (a file that is not a .dkm or cannot be read passes: the runtime names the reason at boot). */
@@ -105,17 +139,18 @@
 #define DKRT_E_SHA (-4)                  /* store file hash or .dkm sha256 does not match */
 #define DKRT_E_FORMAT (-5)               /* bad magic, version, bounds or alignment of the .dkm */
 #define DKRT_E_RUNTIME (-6)              /* the module needs a newer runtime */
-#define DKRT_E_IMPORT (-7)               /* an import name is not in the runtime's table */
+#define DKRT_E_IMPORT (-7)               /* an import is unknown, or a provider the module needs is absent */
 #define DKRT_E_NOMEM (-8)                /* arena full */
 #define DKRT_E_INIT (-9)                 /* init returned non-zero */
 #define DKRT_E_LOADED (-10)              /* a module of that name is loaded */
-#define DKRT_E_SLOT (-11)                /* a slot it binds is taken */
-#define DKRT_E_BUSY (-12)                /* a task is still inside the module */
+#define DKRT_E_BUSY (-12)                /* a task is still inside the module, or the store is in use (try again) */
 #define DKRT_E_TOO_BIG (-13)             /* larger than the staging buffer */
 #define DKRT_E_TABLE_FULL (-14)          /* no free module record */
 #define DKRT_E_LOST (-15)                /* the sample backing was lost and the reload failed */
 #define DKRT_E_POOL (-16)                /* the sample pool is full */
 #define DKRT_E_CHANGED (-17)             /* the sample file differs from the selection snapshot */
+#define DKRT_E_EXISTS (-18)              /* the file exists already (dk_files_create does not overwrite) */
+#define DKRT_E_CONTEXT (-19)             /* the call is not allowed in this context (dk_files_* writes run in an I/O step) */
 #define DKRT_E_NO_REGISTRY (-20)         /* register records, but the image has no registry */
 #define DKRT_E_REG_DEVICE (-21)          /* the records are for another device */
 #define DKRT_E_TYPE_RANGE (-22)          /* machine type outside the range, or bad clone_of */
@@ -123,6 +158,9 @@
 #define DKRT_E_PARAM_FULL (-24)          /* no free reserved parameter row */
 #define DKRT_E_PAGE_FULL (-25)           /* no free reserved page row (Digitone II) */
 #define DKRT_E_TYPE_IN_USE (-26)         /* reserved (hot reload is archived); never returned */
+#define DKRT_E_DECL_ID (-27)             /* a builder call names a machine or effect id that the keys table of the header lacks */
+#define DKRT_E_DECL_USES (-28)           /* init declared more machine, param or page rows than the [uses] counts of the header say */
+#define DKRT_E_FX_ID_DUP (-29)           /* reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned */
 #define DKRT_E_NO_DSP (-30)              /* DSP code in the file, no DSP loader in the image */
 #define DKRT_E_DSP_FORMAT (-31)          /* the DSP section is malformed */
 #define DKRT_E_DSP_IMPORT (-32)          /* a DSP symbol is not exported by the image */
@@ -136,11 +174,36 @@
 #define DKRT_E_SEL_WRITE (-42)           /* the firmware's block write failed */
 #define DKRT_E_CARD_BUSY (-43)           /* a card transfer is in flight */
 #define DKRT_E_SAFE_MODE (-44)           /* this boot is in safe mode: no module was loaded */
-#define DKRT_E_BOOT_ONLY (-45)           /* the module set is fixed after the boot hook */
+#define DKRT_E_BOOT_ONLY (-45)           /* the module set is fixed after the boot hook (a reload of a loaded module is the only later load) */
 #define DKRT_E_RANGE (-46)               /* a card write outside the store range */
 #define DKRT_E_CARD_RO (-47)             /* the card's store area is not ours and not blank */
-#define DKRT_E_CONTRACT (-48)            /* the module was built for another SDK contract */
+#define DKRT_E_CONTRACT (-48)            /* the module needs another runtime version than this one (another major or minor, or a higher patch) */
 #define DKRT_E_TABLE (-49)               /* the runtime's tables failed their check */
+#define DKRT_E_MISSING (-73)             /* the service is not in the image (the module that provides it is not loaded) */
+#define DKRT_E_DECL_FULL (-74)           /* init made more builder calls than the record limit allows */
+#define DKRT_E_PLAN_KIND (-75)           /* the boot plan refused the module: a record kind of its header table has no owning service */
+#define DKRT_E_PLAN_OWNER (-76)          /* the boot plan refused the module: another module owns the kind, slot or hook site it takes */
+#define DKRT_E_PLAN_KEY (-77)            /* the boot plan refused the module: another module of the selection has the same key for a kind */
+#define DKRT_E_PLAN_FIT (-78)            /* the boot plan refused the module: its uses do not fit what the earlier modules of the selection left */
+#define DKRT_E_DECL_KIND (-79)           /* a service declared a record kind that the header table does not carry, or with another length */
+#define DKRT_E_SVC_ABI (-81)             /* a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint) */
+#define DKRT_E_HOOK_STOCK (-82)          /* a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init */
+#define DKRT_E_RELOAD_PLAYING (-83)      /* reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read) */
+#define DKRT_E_RELOAD_MENUS (-84)        /* reload refused: the module built menus of its own */
+#define DKRT_E_RELOAD_ROUTED (-85)       /* reload refused: a service cannot give back the module's state now */
+#define DKRT_E_RELOAD_KEYS (-86)         /* reload refused: the new file lacks a key of the file it replaces */
+#define DKRT_E_RELOAD_RETAINED (-87)     /* reload refused: the DSP loader holds a module it could not release; restart the device */
+
+/* Module states (DkrtBootInfo.states), from [load.state] of sdk/sdk.toml. */
+#define DKRT_STATE_SELECTED 0            /* in the selection, not planned yet */
+#define DKRT_STATE_PLANNED 1             /* the boot plan accepted it; it has not started */
+#define DKRT_STATE_REFUSED 2             /* the boot plan refused it before any of its code ran; the result code says why */
+#define DKRT_STATE_INIT 3                /* its code is loading and `init` is running */
+#define DKRT_STATE_DSP_LOADING 4         /* its ColdFire part is live and its DSP part is still going */
+#define DKRT_STATE_ACTIVE 5              /* loaded; its DSP part, if any, is in place */
+#define DKRT_STATE_FAILED 6              /* loading failed after the plan accepted it; the result code says why */
+#define DKRT_STATE_SKIPPED 7             /* not loaded on purpose: this boot is in safe mode */
+#define DKRT_STATE_UNLOADED 8            /* taken down at run time by an unload (it can be loaded again) */
 
 /* CAPACITY kinds (DkrtCap.kind), from [capacity.kinds] of sdk/sdk.toml. */
 #define DKRT_CAPK_MODULES 1
@@ -157,6 +220,8 @@
 #define DKRT_CAPK_STORE 12
 #define DKRT_CAPK_SETTINGS 13
 #define DKRT_CAPK_SEND_SLOTS 14
+#define DKRT_CAPK_DSP_COST 15
+#define DKRT_CAPK_DSP_VOICES 16
 
 /* dkrt_status result. The caller owns the memory; the layout only grows at the end. */
 typedef struct DkrtStatus {
@@ -171,7 +236,7 @@ typedef struct DkrtStatus {
     uint32_t ticks;                              /* UI-loop passes seen */
     int32_t last_result;                         /* result of the last load */
     uint32_t loads;
-    uint32_t slot_calls;
+    uint32_t tick_calls;                         /* calls of module ticks */
     uint32_t state;                              /* STATE_IDLE or STATE_LOADING (a module's DSP code is being sent) */
     uint32_t dsp_size;                           /* bytes of the DSP area (0: the image has none) */
     uint32_t dsp_free;                           /* bytes of it free */
@@ -186,10 +251,35 @@ typedef struct DkrtCap {
     uint32_t largest;
 } DkrtCap;
 
-/* dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
+/* The per-device data object `dkrt_dev` (the device files' facts, written by `patchkit gen` as the `gas-dkdv` kind of core/runtime's module.toml and placed in cf.expansion with the runtime). The runtime and the services read their facts from it; nothing in them names a device. The layout only grows at the end. */
+typedef struct DkrtDevice {
+    uint32_t magic;                              /* DEV_MAGIC */
+    uint32_t version;                            /* DEV_VERSION */
+    uint32_t size;                               /* the bytes of this struct */
+    uint32_t caps;                               /* DEV_HAS_* bits */
+    uint32_t console_uart_base;                  /* [board] console_uart_base: the UART of the console (drained before a soft reset) */
+    uint32_t ddr_uncached_alias;                 /* [board] ddr_uncached_alias: the uncached view of DDR (the soft reset clears its first word through it) */
+    uint32_t ddr_cached_base;                    /* [board] ddr_cached_base */
+    uint32_t ddr_bytes;                          /* [board] ddr_bytes */
+    uint32_t esdhc_base;                         /* [board] esdhc_base (0 without DEV_HAS_SDHC) */
+    uint32_t safe_key;                           /* [digikit] safe_key: a firmware key index (0 without DEV_HAS_SAFE_KEY) */
+    uint32_t keep_base;                          /* [digikit] keep_base: RAM a soft reset is assumed to keep (the crash record) */
+    uint32_t keep_bytes;                         /* [digikit] keep_bytes */
+    uint32_t dsp_block_cycles;                   /* [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP) */
+    uint32_t dyn_type_first;                     /* core/machines types.toml dynamic_first */
+    uint32_t dyn_types;                          /* run-time machine types (0 without DEV_HAS_DSP) */
+    uint32_t tracks;                             /* [digikit] tracks: the tracks of the device (0: not given) */
+    uint32_t key_codes[DKRT_DEV_KEYS];           /* [input.keys]: the id of each logical key in the firmware's key events, indexed by the key's number (0: the device has no such key) */
+    uint32_t key_flag_press;                     /* [input.key_flags] press: the bit of the key event's flags word set on a press */
+    uint32_t key_flag_func;                      /* [input.key_flags] func: the bit set while FUNC is held */
+    uint32_t key_flag_repeat;                    /* [input.key_flags] repeat: the bit of a repeating key */
+    uint32_t key_flag_release;                   /* [input.key_flags] release: the bit set on a release */
+} DkrtDevice;
+
+/* dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000). */
 typedef struct DkrtHealth {
     uint32_t magic;                              /* HEALTH_MAGIC */
-    uint32_t version;                            /* 3 */
+    uint32_t version;                            /* 4 */
     uint32_t flags;                              /* HEALTH_* */
     uint32_t blocks;                             /* DSP blocks seen since boot (1500 per second) */
     uint32_t windows;                            /* windows (one second each) closed */
@@ -215,9 +305,11 @@ typedef struct DkrtHealth {
     uint32_t store_total;                        /* the module store (HEALTH_STORE), in KiB: the store may use in all (header, tables and files) */
     uint32_t store_used;                         /* KiB the current header says are used */
     uint32_t store_free;                         /* KiB a new file may still take in all (the room for the table's next entry kept back; not one contiguous piece) */
+    uint32_t card_sectors;                       /* the card's capacity in 512-byte sectors as the firmware's eMMC driver reports it; 0xFFFFFFFF while the driver is not ready */
+    uint32_t card_state;                         /* the card check's state (DKRT_CARD.state): 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small */
 } DkrtHealth;
 
-/* A store file for the DIGIKIT menu (dkrt_store_list): its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes. */
+/* A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes. */
 typedef struct DkrtStoreEntry {
     uint8_t path[64];
     uint32_t first;
@@ -231,17 +323,26 @@ typedef struct DkrtStoreFile {
     uint8_t sha[32];
 } DkrtStoreFile;
 
+/* dkrt_live_state result: the live job (a load, an unload or a reload; the runtime has one). The same words as the RELOAD_STATE command. */
+typedef struct DkrtLive {
+    uint32_t phase;                              /* 0 no job yet, 1 queued or running, 2 finished */
+    int32_t result;                              /* 0, or the refusal or failure (E_* of sdk/sdk.toml); valid when phase is 2 */
+    uint32_t step;                               /* 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done */
+    uint32_t unloaded;                           /* 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0 */
+    uint32_t op;                                 /* LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet) */
+} DkrtLive;
+
 /* dkrt_module result: one loaded module. */
 typedef struct DkrtModule {
     uint8_t name[32];
     uint32_t version;
     uint32_t base;
     uint32_t size;
-    uint32_t slots;                              /* bit n = slot n bound */
     uint8_t path[64];                            /* store path the module was loaded from (NUL-terminated, at most 63 bytes kept), for example modules/dyn-demo.dkm */
     uint32_t state;                              /* MOD_LOADED or MOD_LOADING */
     uint32_t dsp_size;                           /* bytes of the module's range in the DSP area (0: none) */
-    uint32_t menu;                               /* address of the module's dkm_menu(dk_ui_menu *, void *) settings entry point (0: none) */
+    uint32_t menu;                               /* address of the module's settings entry point (0: none): menu(dk_module_ctx *ctx, dk_ui_menu *menu) */
+    uint32_t ctx;                                /* the module's dk_module_ctx, the first argument of its init, fini, tick and menu */
 } DkrtModule;
 
 /* dkrt_fx result: one effect with a page (FX routing, finding 62 to 65). Routes are bit masks: 1 master, 2 send. */
@@ -277,6 +378,11 @@ typedef struct DkrtBootInfo {
     int32_t results[DKRT_SEL_MAX];               /* OK, a negative code, or LOADING (the CF part is live, the DSP part is still going) per selected module, in selection order */
     uint32_t dsp_wait;                           /* reserved (0): the boot does not wait for DSP code */
     uint32_t stable;                             /* 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot */
+    uint8_t needs[DKRT_SEL_MAX][DKRT_NEEDS_LEN]; /* per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise */
+    uint8_t states[DKRT_SEL_MAX];                /* per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED */
+    uint32_t detail[DKRT_SEL_MAX][2];            /* per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise */
+    uint32_t unloads;                            /* modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes */
+    uint32_t reloads;                            /* reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes */
 } DkrtBootInfo;
 
 /* dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end. */
@@ -324,6 +430,8 @@ typedef struct DkrtScan {
     uint32_t need_param_rows;
     uint32_t need_page_rows;
     uint32_t need_fx_slots;
+    uint32_t need_dsp_cost_voice;                /* the module's DSP cost of one voice, instructions per block (header table, USES; 0: none) */
+    uint32_t need_dsp_cost_fx;                   /* the module's DSP cost of its effects, instructions per block (0: none) */
 } DkrtScan;
 
 /* The fit verdict of one DkrtScan entry. wont is 1 when the module does not fit next to the ticked ones; then short_* is the first short resource (a CAPK_* kind, what the module needs and what is free) and the texts say it. mem is the memory the module takes (arena and DSP area) as text. */
@@ -356,7 +464,7 @@ _Static_assert(offsetof(DkrtStatus, modules) == 28, "DkrtStatus.modules");
 _Static_assert(offsetof(DkrtStatus, ticks) == 32, "DkrtStatus.ticks");
 _Static_assert(offsetof(DkrtStatus, last_result) == 36, "DkrtStatus.last_result");
 _Static_assert(offsetof(DkrtStatus, loads) == 40, "DkrtStatus.loads");
-_Static_assert(offsetof(DkrtStatus, slot_calls) == 44, "DkrtStatus.slot_calls");
+_Static_assert(offsetof(DkrtStatus, tick_calls) == 44, "DkrtStatus.tick_calls");
 _Static_assert(offsetof(DkrtStatus, state) == 48, "DkrtStatus.state");
 _Static_assert(offsetof(DkrtStatus, dsp_size) == 52, "DkrtStatus.dsp_size");
 _Static_assert(offsetof(DkrtStatus, dsp_free) == 56, "DkrtStatus.dsp_free");
@@ -366,7 +474,29 @@ _Static_assert(offsetof(DkrtCap, kind) == 0, "DkrtCap.kind");
 _Static_assert(offsetof(DkrtCap, limit) == 4, "DkrtCap.limit");
 _Static_assert(offsetof(DkrtCap, used) == 8, "DkrtCap.used");
 _Static_assert(offsetof(DkrtCap, largest) == 12, "DkrtCap.largest");
-_Static_assert(sizeof(DkrtHealth) == 108, "DkrtHealth size");
+_Static_assert(sizeof(DkrtDevice) == 336, "DkrtDevice size");
+_Static_assert(offsetof(DkrtDevice, magic) == 0, "DkrtDevice.magic");
+_Static_assert(offsetof(DkrtDevice, version) == 4, "DkrtDevice.version");
+_Static_assert(offsetof(DkrtDevice, size) == 8, "DkrtDevice.size");
+_Static_assert(offsetof(DkrtDevice, caps) == 12, "DkrtDevice.caps");
+_Static_assert(offsetof(DkrtDevice, console_uart_base) == 16, "DkrtDevice.console_uart_base");
+_Static_assert(offsetof(DkrtDevice, ddr_uncached_alias) == 20, "DkrtDevice.ddr_uncached_alias");
+_Static_assert(offsetof(DkrtDevice, ddr_cached_base) == 24, "DkrtDevice.ddr_cached_base");
+_Static_assert(offsetof(DkrtDevice, ddr_bytes) == 28, "DkrtDevice.ddr_bytes");
+_Static_assert(offsetof(DkrtDevice, esdhc_base) == 32, "DkrtDevice.esdhc_base");
+_Static_assert(offsetof(DkrtDevice, safe_key) == 36, "DkrtDevice.safe_key");
+_Static_assert(offsetof(DkrtDevice, keep_base) == 40, "DkrtDevice.keep_base");
+_Static_assert(offsetof(DkrtDevice, keep_bytes) == 44, "DkrtDevice.keep_bytes");
+_Static_assert(offsetof(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevice.dsp_block_cycles");
+_Static_assert(offsetof(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
+_Static_assert(offsetof(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
+_Static_assert(offsetof(DkrtDevice, tracks) == 60, "DkrtDevice.tracks");
+_Static_assert(offsetof(DkrtDevice, key_codes) == 64, "DkrtDevice.key_codes");
+_Static_assert(offsetof(DkrtDevice, key_flag_press) == 320, "DkrtDevice.key_flag_press");
+_Static_assert(offsetof(DkrtDevice, key_flag_func) == 324, "DkrtDevice.key_flag_func");
+_Static_assert(offsetof(DkrtDevice, key_flag_repeat) == 328, "DkrtDevice.key_flag_repeat");
+_Static_assert(offsetof(DkrtDevice, key_flag_release) == 332, "DkrtDevice.key_flag_release");
+_Static_assert(sizeof(DkrtHealth) == 116, "DkrtHealth size");
 _Static_assert(offsetof(DkrtHealth, magic) == 0, "DkrtHealth.magic");
 _Static_assert(offsetof(DkrtHealth, version) == 4, "DkrtHealth.version");
 _Static_assert(offsetof(DkrtHealth, flags) == 8, "DkrtHealth.flags");
@@ -394,6 +524,8 @@ _Static_assert(offsetof(DkrtHealth, dsp_area_largest) == 92, "DkrtHealth.dsp_are
 _Static_assert(offsetof(DkrtHealth, store_total) == 96, "DkrtHealth.store_total");
 _Static_assert(offsetof(DkrtHealth, store_used) == 100, "DkrtHealth.store_used");
 _Static_assert(offsetof(DkrtHealth, store_free) == 104, "DkrtHealth.store_free");
+_Static_assert(offsetof(DkrtHealth, card_sectors) == 108, "DkrtHealth.card_sectors");
+_Static_assert(offsetof(DkrtHealth, card_state) == 112, "DkrtHealth.card_state");
 _Static_assert(sizeof(DkrtStoreEntry) == 72, "DkrtStoreEntry size");
 _Static_assert(offsetof(DkrtStoreEntry, path) == 0, "DkrtStoreEntry.path");
 _Static_assert(offsetof(DkrtStoreEntry, first) == 64, "DkrtStoreEntry.first");
@@ -402,16 +534,22 @@ _Static_assert(sizeof(DkrtStoreFile) == 40, "DkrtStoreFile size");
 _Static_assert(offsetof(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
 _Static_assert(offsetof(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
 _Static_assert(offsetof(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
+_Static_assert(sizeof(DkrtLive) == 20, "DkrtLive size");
+_Static_assert(offsetof(DkrtLive, phase) == 0, "DkrtLive.phase");
+_Static_assert(offsetof(DkrtLive, result) == 4, "DkrtLive.result");
+_Static_assert(offsetof(DkrtLive, step) == 8, "DkrtLive.step");
+_Static_assert(offsetof(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
+_Static_assert(offsetof(DkrtLive, op) == 16, "DkrtLive.op");
 _Static_assert(sizeof(DkrtModule) == 124, "DkrtModule size");
 _Static_assert(offsetof(DkrtModule, name) == 0, "DkrtModule.name");
 _Static_assert(offsetof(DkrtModule, version) == 32, "DkrtModule.version");
 _Static_assert(offsetof(DkrtModule, base) == 36, "DkrtModule.base");
 _Static_assert(offsetof(DkrtModule, size) == 40, "DkrtModule.size");
-_Static_assert(offsetof(DkrtModule, slots) == 44, "DkrtModule.slots");
-_Static_assert(offsetof(DkrtModule, path) == 48, "DkrtModule.path");
-_Static_assert(offsetof(DkrtModule, state) == 112, "DkrtModule.state");
-_Static_assert(offsetof(DkrtModule, dsp_size) == 116, "DkrtModule.dsp_size");
-_Static_assert(offsetof(DkrtModule, menu) == 120, "DkrtModule.menu");
+_Static_assert(offsetof(DkrtModule, path) == 44, "DkrtModule.path");
+_Static_assert(offsetof(DkrtModule, state) == 108, "DkrtModule.state");
+_Static_assert(offsetof(DkrtModule, dsp_size) == 112, "DkrtModule.dsp_size");
+_Static_assert(offsetof(DkrtModule, menu) == 116, "DkrtModule.menu");
+_Static_assert(offsetof(DkrtModule, ctx) == 120, "DkrtModule.ctx");
 _Static_assert(sizeof(DkrtFx) == 60, "DkrtFx size");
 _Static_assert(offsetof(DkrtFx, row) == 0, "DkrtFx.row");
 _Static_assert(offsetof(DkrtFx, allowed) == 4, "DkrtFx.allowed");
@@ -424,7 +562,7 @@ _Static_assert(sizeof(DkrtSelection) == 456, "DkrtSelection size");
 _Static_assert(offsetof(DkrtSelection, count) == 0, "DkrtSelection.count");
 _Static_assert(offsetof(DkrtSelection, flags) == 4, "DkrtSelection.flags");
 _Static_assert(offsetof(DkrtSelection, paths) == 8, "DkrtSelection.paths");
-_Static_assert(sizeof(DkrtBootInfo) == 80, "DkrtBootInfo size");
+_Static_assert(sizeof(DkrtBootInfo) == 256, "DkrtBootInfo size");
 _Static_assert(offsetof(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 _Static_assert(offsetof(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 _Static_assert(offsetof(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -438,6 +576,11 @@ _Static_assert(offsetof(DkrtBootInfo, ui_reached) == 36, "DkrtBootInfo.ui_reache
 _Static_assert(offsetof(DkrtBootInfo, results) == 40, "DkrtBootInfo.results");
 _Static_assert(offsetof(DkrtBootInfo, dsp_wait) == 72, "DkrtBootInfo.dsp_wait");
 _Static_assert(offsetof(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
+_Static_assert(offsetof(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
+_Static_assert(offsetof(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
+_Static_assert(offsetof(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
+_Static_assert(offsetof(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
+_Static_assert(offsetof(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
 _Static_assert(sizeof(DkrtDiag) == 172, "DkrtDiag size");
 _Static_assert(offsetof(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 _Static_assert(offsetof(DkrtDiag, version) == 4, "DkrtDiag.version");
@@ -461,7 +604,7 @@ _Static_assert(offsetof(DkrtDiag, fault_rows) == 72, "DkrtDiag.fault_rows");
 _Static_assert(offsetof(DkrtDiag, fault_text) == 76, "DkrtDiag.fault_text");
 _Static_assert(sizeof(DkrtModuleHeader) == 4, "DkrtModuleHeader size");
 _Static_assert(offsetof(DkrtModuleHeader, version) == 0, "DkrtModuleHeader.version");
-_Static_assert(sizeof(DkrtScan) == 116, "DkrtScan size");
+_Static_assert(sizeof(DkrtScan) == 124, "DkrtScan size");
 _Static_assert(offsetof(DkrtScan, path) == 0, "DkrtScan.path");
 _Static_assert(offsetof(DkrtScan, first) == 64, "DkrtScan.first");
 _Static_assert(offsetof(DkrtScan, size) == 68, "DkrtScan.size");
@@ -476,6 +619,8 @@ _Static_assert(offsetof(DkrtScan, need_voice_rows) == 100, "DkrtScan.need_voice_
 _Static_assert(offsetof(DkrtScan, need_param_rows) == 104, "DkrtScan.need_param_rows");
 _Static_assert(offsetof(DkrtScan, need_page_rows) == 108, "DkrtScan.need_page_rows");
 _Static_assert(offsetof(DkrtScan, need_fx_slots) == 112, "DkrtScan.need_fx_slots");
+_Static_assert(offsetof(DkrtScan, need_dsp_cost_voice) == 116, "DkrtScan.need_dsp_cost_voice");
+_Static_assert(offsetof(DkrtScan, need_dsp_cost_fx) == 120, "DkrtScan.need_dsp_cost_fx");
 _Static_assert(sizeof(DkrtFitRow) == 96, "DkrtFitRow size");
 _Static_assert(offsetof(DkrtFitRow, wont) == 0, "DkrtFitRow.wont");
 _Static_assert(offsetof(DkrtFitRow, short_kind) == 4, "DkrtFitRow.short_kind");
@@ -497,6 +642,12 @@ void dkrt_status(DkrtStatus *out);
 /* Load the module at store path (NUL-terminated). Only at boot: after it, E_BOOT_ONLY. */
 int32_t dkrt_load(const uint8_t *path);
 
+/* Queue a live job: op is LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD, path the store path (NUL-terminated, at most 63 bytes; the file of a load or a reload is on the card already). The job runs from the UI loop, one step a pass; dkrt_live_state says where it is. OK (queued), E_BUSY (a job is queued or running), E_MSG (no path, one that does not fit, or an unknown op), E_RELOAD_RETAINED, E_FORMAT (the path is the file of a service), E_NOT_FOUND (unload and reload: no loaded content module came from that path), E_LOADED (load: a module of that path is loaded). */
+int32_t dkrt_live(uint32_t op, const uint8_t *path);
+
+/* Fill out: the phase, result and step of the live job and whether the module was torn down. */
+void dkrt_live_state(DkrtLive *out);
+
 /* The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end. */
 int32_t dkrt_module(uint32_t index, DkrtModule *out);
 
@@ -512,26 +663,47 @@ uint32_t dkrt_capacity(DkrtCap *out, uint32_t max);
 /* DSP blocks since boot (a 1500 Hz clock); 0 without core/health. */
 uint32_t dkrt_blocks(void);
 
-/* Register (or, with 0, remove) a function that the UI loop calls once per pass, in the UI task. One caller only. */
-void dkrt_poll_set(uintptr_t f);
-
 /* The card check, the debug log, the DSP watch and the crash record (finding 46). */
 void dkrt_diag(DkrtDiag *out);
 
-/* The files of the module store whose path starts with prefix (NUL-terminated), sorted by path, at most max into out: the count, or a negative code (E_NOT_FOUND: no store). */
-int32_t dkrt_store_list(const uint8_t *prefix, DkrtStoreEntry *out, uint32_t max);
-
-/* Add a function that the UI loop calls once per pass, in the UI task, next to the one of dkrt_poll_set (room for 4). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick. */
+/* Add a function that the UI loop calls once per pass, in the UI task (room for 4: the DIGIKIT menu's HEALTH page and core/ui's dk_ui_tick). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick. */
 int32_t dkrt_poll_add(uintptr_t f);
 
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
 void dkrt_poll_remove(uintptr_t f);
 
+/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. */
+int32_t dkrt_unload_observer_add(uintptr_t f);
+
+/* Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table. */
+void dkrt_unload_observer_remove(uintptr_t f);
+
+/* What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init`. UI task. */
+uint32_t dkrt_phase(void);
+
+/* The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded content module (a service file has a context too, but its record is never given out: the observers are for content modules). */
+int32_t dkrt_ctx_owner(uintptr_t ctx);
+
+/* A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect. */
+void dkrt_menu_built(uintptr_t code, uintptr_t data);
+
+/* Undo one dkrt_menu_built for the same addresses: the module record whose loaded range holds `code`, else `data`, owns one menu less (it stops at 0; a load into the record starts it at 0). The DIGIKIT menu holds a module while the module's SETTINGS page is open (dkrt_menu_built with the module's `menu` function: the page's rows point into the module's code) and releases it when the page is left, so a module is not unloaded or reloaded while its page is open. */
+void dkrt_menu_release(uintptr_t code, uintptr_t data);
+
 /* Look a store file up by path (NUL-terminated) and fill out: OK, E_NOT_FOUND (no store, no such file, a folder), or a card error. It reads the store headers and scans the table through the runtime's staging buffer, so call it only at the start of a load, not while a staged module read is in progress. A file of size 0 is found. */
 int32_t dkrt_store_stat(const uint8_t *path, DkrtStoreFile *out);
 
+/* dkrt_store_stat that also leases the file's sectors for the caller until dkrt_store_unlease: the lease is taken in the same store-lock hold that finds the file, so out is the committed file. While the lease lives, an upload (SysEx or SDK) that would replace or delete the file, or CLEAR the store, is refused with E_FILE_IN_USE, and no new file is given its sectors. Returns the lease id (> 0), E_NOT_FOUND (no store, no such file, a folder), E_NOMEM (the table is full: fail the load, do not wait) or E_BUSY (the store stayed in use for about 3 s). Any task may call it (it does not use the staging buffer). Release the lease when the load ends, whatever its result. */
+int32_t dkrt_store_lease(const uint8_t *path, DkrtStoreFile *out);
+
+/* End a lease of dkrt_store_lease. Any task, never waits; an id that is not live is ignored. */
+void dkrt_store_unlease(int32_t id);
+
 /* Read count sectors of the file f, starting at its sector `sector`, into dst (512 bytes per sector). dst must be 16-byte aligned (E_CONTRACT otherwise). count is 1 to 128 and the range lies inside the file, rounded up to whole sectors (E_RANGE otherwise). No sha check, no staging buffer: the caller owns dst. OK or E_READ. */
 int32_t dkrt_store_read(const DkrtStoreFile *f, uint32_t sector, uint32_t count, uint8_t *dst);
+
+/* Wake the I/O job `id` (api->io_wake for an adapter): the job's next step runs, or, when it has not yet reached its DK_IO_WAIT, that wait does not sleep. Unknown ids are ignored. Safe in an interrupt handler. core/usb-bulk calls it when a receive buffer is full. */
+void dkrt_io_wake(int32_t id);
 
 /* The header fields of the .dkm that starts at store sector first (DkrtScan.first) into out: OK, E_FORMAT when the file is not a .dkm, or E_READ / E_NOT_FOUND when its first sector cannot be read. The runtime does the card read itself. */
 int32_t dkrt_module_header(uint32_t first, DkrtModuleHeader *out);
@@ -544,6 +716,9 @@ int32_t dkrt_selection_set(const DkrtSelection *sel);
 
 /* This boot: safe mode and why, the modules selected and each one's result. */
 void dkrt_boot_info(DkrtBootInfo *out);
+
+/* The file name of the module that holds selection index `index` of this boot (the part of its store path after the last `/`, NUL padded, at most 27 bytes; `out` has 28): the same names as the LOADS command. A live load keeps the index of its file or takes a free one, so this is the current name of the index, not the saved selection's. OK, or E_NOT_FOUND for an index at or past the selection size (the runtime's SEL_MAX). */
+int32_t dkrt_boot_name(uint32_t index, uint8_t *out);
 
 /* Write pending settings, then soft reset. Returns only when it refuses (E_CARD_BUSY, ...). */
 int32_t dkrt_restart(void);
@@ -563,19 +738,19 @@ uint32_t dkrt_scan_reads(void);
 /* Which modules fit. The ticked set loads at the next boot into an empty runtime: start from the limits (nothing used) and take in the ticked entries (ticked[i] != 0) in list order; a ticked one that does not fit is flagged and not taken. Then each unticked entry is checked against what the ticked ones leave. An entry without SCAN_COMPAT or without SCAN_NEEDS has no verdict (wont 0). n is at most SCAN_MAX. OK. */
 int32_t dkrt_fit(const DkrtScan *entries, uint32_t n, const uint8_t *ticked, DkrtFitOut *out);
 
-/* Adapter to runtime: the load `req` of dkpool_load finished. result is OK (the handle `out` is filled), E_POOL, E_READ or E_FORMAT. Only from dkpool_tick. */
-void dkrt_pool_done(uint32_t req, int32_t result);
-
 /* Adapter to runtime: queue a job on the background worker (owner 0). step is the address of i32 step(u8 *ctx), run in the worker task: it returns 1 to be called again, 0 when finished, or a negative error. done is the address of void done(u8 *ctx, i32 status) (or 0), called once in the UI task with the final status, or -80 after a cancel. Returns a job id > 0, E_BUSY when the queue is full or E_CONTRACT for a null step. */
 int32_t dkrt_job_post(uintptr_t step, uintptr_t done, uint8_t *ctx);
 
 /* Adapter to runtime: cancel the job id of dkrt_job_post. A queued job gets done with -80 at the next tick; a running one stops after its current step. OK or E_NOT_FOUND. */
 int32_t dkrt_job_cancel(uint32_t id);
 
-/* Adapter to runtime: the backing was lost (a stock reset), every handle is invalid. Only from dkpool_tick. */
-void dkrt_pool_lost(void);
+/* Adapter to runtime: the run-time switches of the speed levers, one word (bit 0 hash once, bit 2 read-back hash overlap; both set at boot; bits 1 and 3 of the usb-fast switch mask live in the usb-bulk and sdhc-large adapters). A module sets bits through the SDK speed_flags. */
+uint32_t dkrt_speed_flags(void);
 
-/* Adapter to runtime: the current project slot changed. The runtime never reads the byte. */
-void dkrt_project_changed(uint32_t slot);
+/* Adapter to runtime: run void f(u8 *ctx) (the address) on the runtime's helper task (priority 3, 4 KiB stack, no firmware calls, no waiting) while the caller does something that blocks. One run at a time: collect it with dkrt_aux_wait. Returns 0, E_BUSY (a run is not collected; the caller does the work itself) or E_NOT_FOUND (no task). */
+int32_t dkrt_aux_run(uintptr_t f, uint8_t *ctx);
+
+/* Adapter to runtime: wait until the run started by dkrt_aux_run has finished. Returns 0, or E_STATE when none was started. */
+int32_t dkrt_aux_wait(void);
 
 #endif /* DKRT_H */

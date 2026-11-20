@@ -1,17 +1,19 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import { openSamples } from '@digi/dk-session/samples';
-import { button, repoRoot } from '@digi/test-support';
+import { button, repoRoot, scheduledTurns, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession, TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { installWithDebug } from '@digi/regression/runtime/install.ts';
-import { memory, panel } from '@digi/regression/runtime/panel.ts';
+import { memory } from '@digi/regression/runtime/memory.ts';
+import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { expectedWindow, setSmp, trackApi as sharedTrackApi } from './shot-support.ts';
+import { emulatedClockMs, expectPollEmulated, pollEmulated } from '@digi/regression/runtime/waits.ts';
 
 // End to end, DT2 1.17: the device-neutral runtime (API 1.5 sample pool), core/sample-pool (the borrowed stock pool), machine contract 1.2
 // and digikit/shot playing a stereo sample that a fixture module added to the pool by path (docs/design/sample-api-1.5.md).
@@ -153,8 +155,9 @@ function expectSplitPair(name: string, c: Capture, from: number, to: number, lef
 // ---- the device ----------------------------------------------------------------------------------------------------------------
 
 /** The panel path of sample-playback.test.ts: the sole dynamic machine, row 7 of the DT2 machine list, on the selected track (TRIG 1). */
-async function selectDynamicMachine({ session }: Pick<PatchedSession, 'session'>, artifacts: string): Promise<string> {
-  const ui = panel(session);
+async function selectDynamicMachine(runtime: Pick<TestRuntime, "session" | "ui">, artifacts: string): Promise<string> {
+  const { session } = runtime;
+  const ui = panelKeys(runtime);
   await ui.tap('NO');
   await session.client.inputButton(button('FUNC'), true);
   try {
@@ -173,7 +176,7 @@ async function selectDynamicMachine({ session }: Pick<PatchedSession, 'session'>
   return page.sha256 ?? '';
 }
 
-function trackApi({ dk }: PatchedSession) {
+function trackApi({ dk, session }: PatchedSession) {
   /** `sample_pool_add` through test/track-select: the pool index, or a negative error code. */
   async function add(file: string) {
     const reply = await dk.request(0x3e, Buffer.concat([Buffer.from([HANDLE, 0x61]), Buffer.from(file)]));
@@ -203,27 +206,36 @@ function trackApi({ dk }: PatchedSession) {
     };
   }
   /** Poll until the track reaches a terminal state (ready or an error); every distinct observation is kept. */
-  async function settle(timeoutMs = 90_000, index = TRACK) {
+  async function settle(emulatedMs = 90_000, index = TRACK) {
     const seen: { t: number; state: number; token: number }[] = [];
-    const t0 = Date.now();
-    for (;;) {
-      const s = await status(index);
-      if (!seen.length || seen.at(-1)!.state !== s.state || seen.at(-1)!.token !== s.token)
-        seen.push({ t: Date.now() - t0, state: s.state, token: s.token });
-      if (s.state === 3 || s.state < 0) return { ...s, seen, ms: Date.now() - t0 };
-      if (Date.now() - t0 > timeoutMs) throw new Error(`pool entry ${index} did not settle: ${JSON.stringify(seen)}`);
-      await delay(50);
-    }
+    const t0 = emulatedClockMs(await session.status());
+    let ms = 0;
+    const s = await pollEmulated(
+      session,
+      async () => {
+        const s = await status(index);
+        ms = emulatedClockMs(await session.status()) - t0;
+        if (!seen.length || seen.at(-1)!.state !== s.state || seen.at(-1)!.token !== s.token)
+          seen.push({ t: ms, state: s.state, token: s.token });
+        return s;
+      },
+      (s) => s.state === 3 || s.state < 0,
+      { emulatedMs, message: () => `pool entry ${index} did not settle: ${JSON.stringify(seen)}`, intervalMs: 50 },
+    );
+    return { ...s, seen, ms };
   }
   return { add, clear, select, status, settle };
 }
+
+/** The PCM clock of a capture (stereo frames since it began), with the session it reads. */
+type PcmClock = (() => Promise<number>) & { session: Session };
 
 /** A note on TRIG 1 held while `during` runs; returns the captured PCM. The clock counts stereo frames since the capture began
  * (pcm.tap reports floats, two per frame). */
 async function captureNote(
   { session }: Pick<PatchedSession, 'session'>,
   file: string,
-  during: (clock: () => Promise<number>) => Promise<void>,
+  during: (clock: PcmClock) => Promise<void>,
 ): Promise<Capture> {
   const tapReport = async () =>
     (await session.client.call('pcm.tap', { action: 'report' })) as { samples: number; window_rms: number[] };
@@ -231,19 +243,14 @@ async function captureNote(
   await session.client.call('pcm.tap', { action: 'start' });
   await session.client.call('pcm.tap', { action: 'capture', path: file });
   const base = await floats();
-  const clock = async () => Math.floor(((await floats()) - base) / 2);
+  const clock: PcmClock = Object.assign(async () => Math.floor(((await floats()) - base) / 2), { session });
   let pressedAt = 0;
   try {
     // A one-shot keeps sounding after the key is released: wait until the output has been silent for 0.3 s, then press.
-    await expect
-      .poll(
-        async () => {
+    await expectPollEmulated(session, async () => {
           const windows = (await tapReport()).window_rms;
           return windows.length >= 3 && windows.slice(-3).every((v) => v < 1e-4);
-        },
-        { timeout: 40_000, interval: 200 },
-      )
-      .toBe(true);
+        }, (value) => expect(value).toBe(true), { emulatedMs: 40000, intervalMs: 200 });
     pressedAt = await clock();
     await session.client.inputButton(button('TRIG 1'), true);
     try {
@@ -261,8 +268,11 @@ async function captureNote(
   return { ...capture, pressedAt };
 }
 
-async function until(clock: () => Promise<number>, frames: number, timeoutMs = 120_000): Promise<void> {
-  await expect.poll(clock, { timeout: timeoutMs, interval: 100 }).toBeGreaterThanOrEqual(frames);
+async function until(clock: PcmClock, frames: number, emulatedMs = 120_000): Promise<void> {
+  await expectPollEmulated(clock.session, clock, (value) => expect(value).toBeGreaterThanOrEqual(frames), {
+    emulatedMs,
+    intervalMs: 100,
+  });
 }
 
 // ---- the test ------------------------------------------------------------------------------------------------------------------
@@ -385,38 +395,44 @@ runtimeTests(
       let resetAt = 0;
       const trace: { t: number; state: number; token: number }[] = [];
       // Reset-phase timeline: every poll peeks the track's DSP record (ready, token) and control word (CLOSED) at the table addresses the runtime
-      // keeps (`RECORDS`, `CONTROL` of client 0), next to the runtime status and the capture clock.
-      const tablePlan = await prepareRuntimePlan(session, artifacts, ['RECORDS', 'CONTROL', '_dv_params']);
+      // keeps (`DKRT_SMP_RECORDS`, `DKRT_SMP_CONTROL` of client 0, in the samples service), next to the runtime status and the capture clock.
+      const tablePlan = await prepareRuntimePlan(session, artifacts, ['_dv_params']);
       const tableMem = memory(session);
-      const tableBase = async (name: string) => (await tableMem.cf(planSymbol(tablePlan, name))) + (name === 'RECORDS' ? 32 : 16) * TRACK;
+      const tableBase = async (name: 'DKRT_SMP_RECORDS' | 'DKRT_SMP_CONTROL') =>
+        (await tableMem.cf(await serviceSymbol({ session }, tablePlan, 'samples', name))) +
+        (name === 'DKRT_SMP_RECORDS' ? 32 : 16) * TRACK;
       const dspWords = async (addr: number, n: number) => {
         const peek = await tableMem.dsp(addr, n * 4);
         const b = Buffer.from(peek.hex, 'hex');
         return peek.unknown ? [] : Array.from({ length: n }, (_, i) => b.readUInt32LE(i * 4));
       };
-      const recAddr = await tableBase('RECORDS');
-      const ctlAddr = await tableBase('CONTROL');
+      const recAddr = await tableBase('DKRT_SMP_RECORDS');
+      const ctlAddr = await tableBase('DKRT_SMP_CONTROL');
       const timeline: { ms: number; frame: number; state: number; ready?: number; token?: number; closed?: number }[] = [];
       log.tableAddresses = { recAddr, ctlAddr, now: [await dspWords(recAddr, 2), await dspWords(ctlAddr, 1)] };
       const noteReset = await captureNote(runtime, path.join(artifacts, 'reset.wav'), async (clock) => {
         resetAt = (await clock()) + RATE / 2;
         await until(clock, resetAt);
-        const t0 = Date.now();
+        const t0 = emulatedClockMs(await session.status());
         const reply = await dk.request(0x3a, Buffer.from([1]));
         expect(reply.status, 'stock-pool reload command').toBe(0);
         // The wipe comes about 1.5 s after the call; the track must leave the old binding, then be ready again.
-        for (;;) {
-          const s = await api.status();
-          const [rec, ctl] = [await dspWords(recAddr, 2), await dspWords(ctlAddr, 1)];
-          const last = timeline.at(-1);
-          if (!last || last.state !== s.state || last.ready !== rec[0] || last.token !== rec[1] || last.closed !== ctl[0])
-            timeline.push({ ms: Date.now() - t0, frame: (await clock()) - resetAt, state: s.state, ready: rec[0], token: rec[1], closed: ctl[0] });
-          if (!trace.length || trace.at(-1)!.state !== s.state || trace.at(-1)!.token !== s.token)
-            trace.push({ t: Date.now() - t0, state: s.state, token: s.token });
-          if (s.state === 3 && s.token !== before.token) break;
-          if (Date.now() - t0 > 120_000) throw new Error(`track did not reload: ${JSON.stringify(trace)}`);
-          await delay(50);
-        }
+        await pollEmulated(
+          session,
+          async () => {
+            const s = await api.status();
+            const [rec, ctl] = [await dspWords(recAddr, 2), await dspWords(ctlAddr, 1)];
+            const last = timeline.at(-1);
+            const ms = emulatedClockMs(await session.status()) - t0;
+            if (!last || last.state !== s.state || last.ready !== rec[0] || last.token !== rec[1] || last.closed !== ctl[0])
+              timeline.push({ ms, frame: (await clock()) - resetAt, state: s.state, ready: rec[0], token: rec[1], closed: ctl[0] });
+            if (!trace.length || trace.at(-1)!.state !== s.state || trace.at(-1)!.token !== s.token)
+              trace.push({ t: ms, state: s.state, token: s.token });
+            return s;
+          },
+          (s) => s.state === 3 && s.token !== before.token,
+          { emulatedMs: 120_000, message: () => `track did not reload: ${JSON.stringify(trace)}`, intervalMs: 50 },
+        );
         await until(clock, (await clock()) + RATE);
       });
       log.reset = { before, trace, frames: noteReset.l.length };
@@ -490,7 +506,6 @@ runtimeTests(
       // bursts. The read-back is word 4 (PITCH) of `_dv_params`, the parameter words that core/dsp-voice builds every block and passes to SHOT
       // as R12 (the words SHOT actually reads). The buffer is rewritten only while a voice renders, so TRIG 1 is held during the turn.
       const PITCH_OCTAVE = 0x6000;
-      const ui = panel(session);
       const mem = memory(session);
       const paramsPlan = tablePlan;
       const pitchAddress = planSymbol(paramsPlan, '_dv_params') + 4 * 4; // a byte-alias address; one little-endian word per parameter
@@ -502,10 +517,10 @@ runtimeTests(
       const pageNow = (await session.client.framebufferGet({ hash: true, data: false })).sha256;
       log.pitchPage = { srcPageHash, pageNow, same: pageNow === srcPageHash };
       await session.client.inputButton(button('TRIG 1'), true);
-      let turned: Awaited<ReturnType<typeof ui.turnTo>>;
+      let turned: Awaited<ReturnType<ReturnType<typeof scheduledTurns>['turnTo']>>;
       try {
-        await expect.poll(readPitch, { timeout: 10_000, interval: 100 }).toBe(0x4000);
-        turned = await ui.turnTo('ENC A', readPitch, PITCH_OCTAVE);
+        await expectPollEmulated(session, readPitch, (value) => expect(value).toBe(0x4000), { emulatedMs: 10000, intervalMs: 100 });
+        turned = await scheduledTurns(session, runtime.clock).turnTo('ENC A', readPitch, PITCH_OCTAVE);
       } finally {
         await session.client.inputButton(button('TRIG 1'), false);
       }

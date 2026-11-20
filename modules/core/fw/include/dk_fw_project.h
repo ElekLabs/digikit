@@ -16,5 +16,7 @@ uint32_t dk_fw_project_settings(uint32_t project) __asm__("cf.project.fn.setting
 uint32_t dk_fw_project_singleton(void) __asm__("cf.project.fn.singleton");
 /* `int f(Kit *, int track)`: the machine type of a track of a kit, -1 when the track does not exist. core/runtime uses it for the machine-change watch. */
 int32_t dk_fw_project_track_type(uint32_t kit, int32_t track) __asm__("cf.project.fn.track_type");
+/* Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147. */
+uint32_t dk_fw_project_transport_state(void) __asm__("cf.project.fn.transport_state");
 
 #endif

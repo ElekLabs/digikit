@@ -2,13 +2,14 @@
 
 pub mod board;
 mod host_state;
+pub mod peer_cpu;
 pub mod state;
 pub mod time;
 pub mod timer_state;
 
 pub use board::{
     Board, BoardWriteError, CompletionEvent, CompletionPolicy, DTCN0, MIDI_TX_CHAN, MIDI_TX_SOURCE,
-    MIDI_TX_VECTOR, MIDI_UDR, SemaphoreAddresses,
+    MIDI_TX_VECTOR, MIDI_UDR, SemaphoreAddresses, UsbPhyEvent,
 };
 pub use state::{MachineState, StateError};
 pub use time::{DeviceDtimError, DevicePitError, Time, TimeError, TimerPolicy};

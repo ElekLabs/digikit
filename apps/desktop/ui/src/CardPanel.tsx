@@ -1,40 +1,28 @@
-// The Card panel of the Emulator page: the host folder of the loaded device's card (`plus_drive/<device>/` or the folder the user chose for
-// the device). The module store is mirrored to it (kept up to date by the emulator itself about 2 s after the guest's last card write;
-// one way, card to folder) and the card of a load is built from it. It shows the device and the folder, the module files with their
-// sizes, the time of the last sync, "Choose folder...", "Use default", "Show in Finder" and "Sync now". A device whose card is built
-// from the folder (the Digitakt II) takes a new folder at the next load: the panel says so and offers "Reload now". The emulator does the
-// work and keeps the choice per device (`card.folder`, `card.folder_set`, `card.sync` through `emu_call`); this panel only asks.
-import { invoke } from '@tauri-apps/api/core';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
-import { errorLine, formatBytes } from '@web/modules/backend';
-import { panels } from '@web/data/faceplates';
-import {
-  canUseDefault,
-  fileGroups,
-  fileRows,
-  folderNotice,
-  nameInGroup,
-  pickStart,
-  shortFolder,
-  statusText,
-  type CardFolder,
-  type OverlayReset,
-} from './card-core';
+// The card-folder strip of the Files page (emulator only): the host folder of the loaded device's card (`plus_drive/<device>/` or the folder
+// the user chose for the device). The module store is mirrored to it (kept up to date by the emulator itself about 2 s after the guest's last
+// card write; one way, card to folder) and the card of a load is built from it. It shows the device and the folder, the time of the last
+// sync, "Choose folder...", "Use default", "Show in Finder", "Sync now" and "Reset card changes". A device whose card is built
+// from the folder (the Digitakt II) takes a new folder at the next load: the strip says so and offers "Reload now". The emulator does the
+// work and keeps the choice per device (`card.folder`, `card.folder_set`, `card.sync` through `emu_call`); this strip only asks.
+import { Show, createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import { errorLine } from '@digi/workbench-core/modules/backend.ts';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { canUseDefault, folderNotice, shortFolder, statusText, type CardFolder } from './card-core';
+import { cardApi } from './card-api';
 import { cardRefresh } from './card-state';
 import { cardEntry, failureEntry, overlayResetEntry } from './log-core';
 import { logInput } from './log-state';
-import { cardOpen as open, setCardOpen } from './panel-open';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import './card-panel.css';
 
 const POLL_MS = 2000;
-const call = <T,>(method: string, params: Record<string, unknown> = {}) =>
-  invoke<T>('emu_call', { method, params, session: null });
 /** The device's name as the faceplate gives it. */
 const deviceName = (id: string | undefined) =>
-  id && id in panels ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
+  id && Object.hasOwn(panels, id) ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
 
 /** `reload`: start the loaded firmware again (the Restart button's path), which builds the card from the folder in use. */
-export default function CardPanel(props: { visible: boolean; reload?: () => Promise<void> }): JSX.Element {
+export default function CardPanel(props: { host: Host; reload?: () => Promise<void> }): JSX.Element {
+  const api = cardApi(props.host);
   const [card, setCard] = createSignal<CardFolder>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
@@ -46,7 +34,7 @@ export default function CardPanel(props: { visible: boolean; reload?: () => Prom
     if (reading) return;
     reading = true;
     try {
-      setCard(await call<CardFolder>('card.folder'));
+      setCard(await api.folder());
       setError('');
     } catch (e) {
       setError(errorLine(e));
@@ -55,24 +43,20 @@ export default function CardPanel(props: { visible: boolean; reload?: () => Prom
     }
     setNow(Date.now());
   };
-  // Only a change of whether the panel is on screen and open counts, not each change of what `visible` reads (the Console's `status` changes
-  // once per display frame): a memo passes on a change of its value only.
-  const active = createMemo(() => props.visible && open());
-  // read when the panel is shown and opened, when a Transfer job ended, and on a light poll while it is visible
+  // read when the strip is mounted, when a Transfer job ended, and on a light poll while it is mounted
   createEffect(() => {
     cardRefresh();
-    if (active()) untrack(() => void refresh());
+    untrack(() => void refresh());
   });
   const timer = window.setInterval(() => {
-    if (active() && !busy()) void refresh();
+    if (!busy()) void refresh();
   }, POLL_MS);
   onCleanup(() => window.clearInterval(timer));
 
-  const toggle = () => setCardOpen(!open());
   const sync = async () => {
     setBusy(true);
     try {
-      const next = await call<CardFolder>('card.sync');
+      const next = await api.sync();
       setCard(next);
       setError('');
       logInput(cardEntry('synced', next));
@@ -103,28 +87,24 @@ export default function CardPanel(props: { visible: boolean; reload?: () => Prom
     }
   };
   const choose = () =>
-    change('folder chosen', async () => {
+    change('folder chosen', () => {
       const c = card();
-      const dir = await invoke<string | null>('local_pick_folder', {
-        start: c ? pickStart(c) : null,
-        title: `Choose the folder of the ${deviceName(c?.device)} card`,
-      });
-      return dir ? call<CardFolder>('card.folder_set', { dir }) : undefined;
+      return api.choose(c, `Choose the folder of the ${deviceName(c?.device)} card`);
     });
-  const useDefault = () => change('default folder', () => call<CardFolder>('card.folder_set', {}));
+  const useDefault = () => change('default folder', () => api.useDefault());
   const reloadNow = () =>
     change('card reloaded', async () => {
       await props.reload?.();
-      return call<CardFolder>('card.folder');
+      return api.folder();
     });
   /** Set the saved card changes aside (never deleted), then start the firmware again on the card without them. */
   const resetOverlay = async () => {
     setBusy(true);
     try {
-      const r = await call<OverlayReset>('card.reset_overlay');
+      const r = await api.resetOverlay();
       logInput(overlayResetEntry(r));
       if (r.set_aside) await props.reload?.();
-      setCard(await call<CardFolder>('card.folder'));
+      setCard(await api.folder());
       setError('');
     } catch (e) {
       setError(errorLine(e));
@@ -136,124 +116,74 @@ export default function CardPanel(props: { visible: boolean; reload?: () => Prom
   };
   const openFolder = async () => {
     try {
-      await invoke('card_open_folder');
+      await api.openFolder();
     } catch (e) {
       setError(errorLine(e));
     }
   };
 
   return (
-    <aside class="card-panel" classList={{ closed: !open() }} aria-label="Card" hidden={!props.visible}>
-      <button
-        type="button"
-        class="card-toggle"
-        aria-expanded={open()}
-        title={open() ? 'Collapse the Card panel' : 'Show the Card panel'}
-        onClick={toggle}
-      >
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            d={open() ? 'M6 3L11 8L6 13' : 'M10 3L5 8L10 13'}
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <strong>Card</strong>
-      </button>
-      <Show when={open()}>
-        <div class="card-body">
-          <Show when={card()?.device}>
-            <h3 class="device">{deviceName(card()!.device)}</h3>
-          </Show>
-          <p class="folder" title={card()?.folder ?? ''}>
-            {card()?.folder ? shortFolder(card()!.folder) : 'No folder'}
-          </p>
-          <div class="acts">
-            <button type="button" class="act small" disabled={!card()?.device || busy()} onClick={() => void choose()}>
-              Choose folder…
+    <section class="card-mirror" aria-label="Emulator card folder">
+      <div class="where">
+        <Show when={card()?.device}>
+          <strong class="device">{deviceName(card()!.device)}</strong>
+        </Show>
+        <span class="folder" title={card()?.folder ?? ''}>
+          {card()?.folder ? shortFolder(card()!.folder) : 'No folder'}
+        </span>
+      </div>
+      <p class="hint">The emulator copies its card store to this folder about 2 s after each write.</p>
+      <div class="body">
+        <div class="acts">
+          <button type="button" class="act small" disabled={!card()?.device || busy()} onClick={() => void choose()}>
+            Choose folder…
+          </button>
+          <Show when={card() && canUseDefault(card()!)}>
+            <button type="button" class="act small" disabled={busy()} onClick={() => void useDefault()}>
+              Use default
             </button>
-            <Show when={card() && canUseDefault(card()!)}>
-              <button type="button" class="act small" disabled={busy()} onClick={() => void useDefault()}>
-                Use default
+          </Show>
+          <button type="button" class="act small" disabled={!card()?.folder} onClick={() => void openFolder()}>
+            Show in Finder
+          </button>
+          <button type="button" class="act small" disabled={!card()?.continuous || busy()} onClick={() => void sync()}>
+            {busy() ? 'Working…' : 'Sync now'}
+          </button>
+          <button
+            type="button"
+            class="act small"
+            disabled={!card()?.overlay || busy()}
+            title={
+              card()?.overlay
+                ? 'Set the saved card changes aside and reload the firmware without them'
+                : 'The card has no saved changes'
+            }
+            onClick={() => void resetOverlay()}
+          >
+            Reset card changes
+          </button>
+        </div>
+        <Show when={card() && folderNotice(card()!)}>
+          <div class="notice" role="status">
+            <p>{folderNotice(card()!)}</p>
+            <Show when={card()?.reload_needed && props.reload}>
+              <button type="button" class="act small" disabled={busy()} onClick={() => void reloadNow()}>
+                Reload now
               </button>
             </Show>
-            <button type="button" class="act small" disabled={!card()?.folder} onClick={() => void openFolder()}>
-              Show in Finder
-            </button>
-            <button
-              type="button"
-              class="act small"
-              disabled={!card()?.continuous || busy()}
-              onClick={() => void sync()}
-            >
-              {busy() ? 'Working…' : 'Sync now'}
-            </button>
-            <button
-              type="button"
-              class="act small"
-              disabled={!card()?.overlay || busy()}
-              title={
-                card()?.overlay
-                  ? 'Set the saved card changes aside and reload the firmware without them'
-                  : 'The card has no saved changes'
-              }
-              onClick={() => void resetOverlay()}
-            >
-              Reset card changes
-            </button>
           </div>
-          <Show when={card() && folderNotice(card()!)}>
-            <div class="notice" role="status">
-              <p>{folderNotice(card()!)}</p>
-              <Show when={card()?.reload_needed && props.reload}>
-                <button type="button" class="act small" disabled={busy()} onClick={() => void reloadNow()}>
-                  Reload now
-                </button>
-              </Show>
-            </div>
-          </Show>
-          <Show
-            when={card() && fileRows(card()!).length}
-            fallback={<p class="empty">{card()?.continuous ? 'No files in the folder.' : ''}</p>}
-          >
-            <For each={fileGroups(card()!)}>
-              {(g) => (
-                <div class="group">
-                  <Show when={g.folder}>
-                    <h4 title={`${g.files.length} file${g.files.length === 1 ? '' : 's'}`}>
-                      <span>{g.folder}/</span>
-                      <span class="size">{formatBytes(g.bytes)}</span>
-                    </h4>
-                  </Show>
-                  <ul class="files">
-                    <For each={g.files}>
-                      {(f) => (
-                        <li title={`${f.path}\nhash ${f.hash}`}>
-                          <span class="name">{nameInGroup(f.path, g.folder)}</span>
-                          <span class="size">{formatBytes(f.bytes)}</span>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </div>
-              )}
-            </For>
-          </Show>
-          <Show when={card()}>
-            <p class="status" classList={{ bad: !!card()?.error }}>
-              {statusText(card()!, now())}
-            </p>
-          </Show>
-          <Show when={error()}>
-            <p class="err" role="alert">
-              {error()}
-            </p>
-          </Show>
-        </div>
-      </Show>
-    </aside>
+        </Show>
+        <Show when={card()}>
+          <p class="status" classList={{ bad: !!card()?.error }}>
+            {statusText(card()!, now())}
+          </p>
+        </Show>
+        <Show when={error()}>
+          <p class="err" role="alert">
+            {error()}
+          </p>
+        </Show>
+      </div>
+    </section>
   );
 }

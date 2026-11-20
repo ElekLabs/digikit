@@ -1,8 +1,9 @@
 import type { Device } from '@digi/test-support';
 import { withPreparedFxSession, type PreparedFxSessionOptions } from './fx-session.ts';
-import { FX, GAIN, RT as RUNTIME_ROOTS, SEND, SINE } from './fixtures.ts';
+import { FX, GAIN, SEND, SINE } from './fixtures.ts';
+import { rootsOf } from './image-roots.ts';
 
-const RT = [...RUNTIME_ROOTS, 'core/dynfx'];
+const RT = rootsOf('rt-dynfx');
 export const SENDONLY = 'test/dyn-fx-gain-sendonly';
 export const SEND3 = `${SEND}-3`;
 
@@ -24,13 +25,10 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
       inventory: config.image === 'routes' ? [SINE, GAIN, SEND, SENDONLY, SEND3] : [SINE, FX, `${FX}-2`, `${FX}-3`],
       symbols: [
         'DKRT_BOOT',
-        'DKRT_ASSIGN',
         'fx.rows',
         '_dl_area',
         ...(config.image === 'track' || config.image === 'track-base' ? ['dynreg_info'] : []),
-        ...(config.image === 'track'
-          ? ['fxpages_info', 'fxp_send_row', 'fxp_send_count', 'fxp_nload', 'DKRT_FXS']
-          : []),
+        ...(config.image === 'track' ? ['fxpages_info'] : []),
         ...(config.image === 'routes'
           ? [
               'DK_FXR_PEND',
@@ -44,8 +42,6 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
               'DK_PANEL_N',
               'DK_ROUTE_N',
               'DK_ROUTE_ITEM',
-              'fxp_send_count',
-              'DKRT_FXS',
               'fxpages_info',
             ]
           : []),

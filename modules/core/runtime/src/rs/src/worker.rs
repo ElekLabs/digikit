@@ -5,22 +5,25 @@
 //! is called exactly once in the UI task with the final status, or `JOB_E_CANCELLED` after a cancel. A module that is being
 //! unloaded gets no `done` (see `retire`).
 //!
-//! Task rules: `step` runs in the worker task. It computes on its own memory and calls no `dk_api` function. `done` runs in the
+//! Task rules: `step` runs in the worker task. It computes on its own memory and calls no import. `done` runs in the
 //! UI task and may call the API.
 //!
 //! The stock worker is shared with the stock sample loads, so one job is in flight at a time and the worker runs steps of
 //! it only for `BUDGET_BLOCKS` per submit. Then the job goes to the end of the queue (round robin). Without the block clock
 //! the worker runs exactly one step per submit.
 //!
-//! Values `JOB_MORE` and `JOB_E_CANCELLED` must match sdk/include/dk/job.h.
+//! Values `JOB_MORE` and `JOB_E_CANCELLED` must match sdk/include/dk/platform/job.h.
+use crate::PLATFORM;
 use core::ffi::c_void;
+#[cfg(not(test))]
+use dkrt_abi::platform::SamplePool;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use core::sync::atomic::{compiler_fence, Ordering};
-use dkrt_sdk::api::{JobDone, JobStep};
+use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 use dkrt_sdk::*;
 
 pub const JOB_MORE: i32 = 1;
-pub const JOB_E_CANCELLED: i32 = -80;
+pub use dkrt_abi::core_api::JOB_E_CANCELLED;
 
 /// The DT2 sample pool can have 16 requests queued at once (SP_REQS), plus module jobs.
 const JOBS: usize = 24;
@@ -36,8 +39,8 @@ struct Job {
     id: u32,
     /// Source index of the posting module (record index + 1); 0: the runtime or an adapter.
     owner: u8,
-    step: Option<JobStep>,
-    done: Option<JobDone>,
+    step: Option<JobStepFn>,
+    done: Option<JobDoneFn>,
     ctx: *mut u8,
     state: u8,
     cancelled: bool,
@@ -71,7 +74,7 @@ const FLIGHT_NONE: u32 = 0;
 const FLIGHT_RUN: u32 = 1;
 const FLIGHT_END: u32 = 2;
 static mut FLIGHT_STATE: u32 = FLIGHT_NONE;
-static mut FLIGHT_STEP: Option<JobStep> = None;
+static mut FLIGHT_STEP: Option<JobStepFn> = None;
 static mut FLIGHT_CTX: *mut u8 = core::ptr::null_mut();
 static mut FLIGHT_IDX: usize = 0;
 static mut FLIGHT_CANCEL: u32 = 0;
@@ -116,10 +119,7 @@ unsafe fn run_flight() {
             if result != JOB_MORE || read_volatile(addr_of!(FLIGHT_CANCEL)) != 0 {
                 break;
             }
-            let spent = match (start, crate::fw_blocks()) {
-                (Some(a), Some(b)) => b.wrapping_sub(a) >= BUDGET_BLOCKS,
-                _ => true,
-            };
+            let spent = dkrt_abi::platform::blocks_since(&PLATFORM, start).map_or(true, |d| d >= BUDGET_BLOCKS);
             if spent {
                 break;
             }
@@ -134,7 +134,7 @@ unsafe fn run_flight() {
 /// call: the worker may run the job before the call returns.
 #[cfg(not(test))]
 unsafe fn submit() -> bool {
-    let worker = dkfw::samples::worker_get();
+    let worker = PLATFORM.worker();
     if worker == 0 {
         return false;
     }
@@ -150,7 +150,7 @@ unsafe fn submit() -> bool {
     }
     compiler_fence(Ordering::SeqCst);
     write_volatile(addr_of_mut!(FLIGHT_STATE), FLIGHT_RUN);
-    dkfw::samples::worker_queue(
+    PLATFORM.worker_queue(
         worker,
         b"DkJob\0".as_ptr(),
         addr_of_mut!(FN) as *mut c_void,
@@ -183,7 +183,7 @@ unsafe fn deliver(job: Job, status: i32) {
     }
     if let Some(done) = job.done {
         if job.owner != 0 {
-            let prev = crate::dlog::enter_module(job.owner as usize - 1);
+            let prev = crate::dlog::enter_module(job.owner as usize - 1, crate::dlog::PHASE_CALLBACK);
             done(job.ctx, status);
             crate::dlog::leave_module(prev);
         } else {
@@ -200,7 +200,7 @@ fn next_seq() -> u32 {
 }
 
 /// Add a job. Returns its id (> 0), `E_CONTRACT` for a null step, `E_BUSY` when all entries are in use.
-pub unsafe fn post(owner: u8, step: Option<JobStep>, done: Option<JobDone>, ctx: *mut u8) -> i32 {
+pub unsafe fn post(owner: u8, step: Option<JobStepFn>, done: Option<JobDoneFn>, ctx: *mut u8) -> i32 {
     if step.is_none() {
         return E_CONTRACT;
     }
@@ -231,14 +231,14 @@ pub unsafe fn post(owner: u8, step: Option<JobStep>, done: Option<JobDone>, ctx:
     })
 }
 
-/// Adapter entry (owner 0): queue a job on the background worker. `step` and `done` are function addresses (`JobStep`, `JobDone`);
+/// Adapter entry (owner 0): queue a job on the background worker. `step` and `done` are function addresses (`JobStepFn`, `JobDoneFn`);
 /// `done` may be 0. Returns a job id > 0, `E_CONTRACT` for a null step, `E_BUSY` when the queue is full. Task context: UI task.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_job_post(step: usize, done: usize, ctx: *mut u8) -> i32 {
     post(
         0,
-        core::mem::transmute::<usize, Option<JobStep>>(step),
-        core::mem::transmute::<usize, Option<JobDone>>(done),
+        core::mem::transmute::<usize, Option<JobStepFn>>(step),
+        core::mem::transmute::<usize, Option<JobDoneFn>>(done),
         ctx,
     )
 }
@@ -379,10 +379,6 @@ pub unsafe fn tick() {
     }
 }
 
-/// Host tests of other files share the one queue: they hold this lock.
-#[cfg(test)]
-pub(crate) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 /// Host test helper: empty the queue and the flight.
 #[cfg(test)]
 pub(crate) unsafe fn test_reset() {
@@ -407,7 +403,7 @@ pub(crate) unsafe fn test_pump() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::TEST_LOCK as LOCK;
+    use crate::test_lock::LOCK;
 
     struct Script {
         tag: u32,

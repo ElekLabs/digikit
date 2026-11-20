@@ -57,7 +57,7 @@ Backlog for patchkit itself (the rest lives in the plans named above):
   failure it prints UPGRADE ABORTED and writes nothing [V]. That the menu comes up with a broken MAIN OS is [O].
 - The bootstrap's receive and flash-write path has no size limit. NOR flash is 16 MiB; the container is written at
   flash offset 0x80000 and record sectors (tagged fields, serial number) start at 0x380000, so the container must
-  stay at or under 0x300000 bytes (finding 01, spike 0.2). DDR is 128 MiB [C] (finding 08, spike 0.3).
+  stay at or under 0x1FFE00 bytes (finding 146). DDR is 128 MiB [C] (finding 08, spike 0.3).
 - ColdFire space today: `flash_cave` only (DT2 1.16 2,108 B, DN2 1.11 2,136 B). `cave_b` is cleared at reset.
   `tools/cavefind.py` is lost (only its .pyc remains).
 - SHARC space: L2 past the loader looks free (about 900 KB DT2, 490 KB DN2), weak evidence. `dsp_patch.py` can only
@@ -261,7 +261,7 @@ Spec (decided 2026-10-13):
   `tools/patchkit/port_resolve.py` (rules -> port lockfile). `tools/patchkit/patchkit.py` wraps the Rust CLI for mise.
 - **Codec.** Untouched sections keep their stored bytes verbatim; changed sections are packed with an aPLib packer
   ported from `tools/firmware/aplibpack.py` that produces the **same bytes** as the Python packer (test on all 16 stock
-  sections). Hard limits from the port (`container_max` 0x300000, section 7 stored <= 0x100000 and depacked <=
+  sections). Hard limits from the port (`container_max` 0x1FFE00 for images built for flashing only, not for emulator images; section 7 stored <= 0x100000 and depacked <=
   0xfffff, MAIN staged image <= 0x3ffc00); sections 2, 4, 8 can never change. Every output is re-decoded and
   checked (checksum, HMAC, packet checksums, limits, record).
 - **Port lockfile** `devices/ports/<short>-<version>.toml`:
@@ -401,7 +401,7 @@ Details, evidence and the DSP binding contract: `docs/findings/02-machines-and-p
 Built: `a1cf1df^:native/patchkit/src/machines.rs` (the generator, removed in a1cf1df; 4 unit tests, `a1cf1df^:native/patchkit/tests/machines.rs` with 6 integration tests on the
 real ports and images), `[[machine]]` in the manifest, `modules/core/machines` (24 ColdFire anchor rules of the new kind
 `cf_func`, one DSP rule), `tests/fixtures/modules/xslice`, `tests/fixtures/modules/machine-clone`, `c4d86e4e:tools/patchkit/pk_machine_rules.py`,
-`tools/patchkit/pk_proof_machines.py`, `tools/emulator/card_overlay.py` and the daemon method `card.overlay`; harness steps `expect_mem`
+`tools/emulator/card_overlay.py` and the daemon method `card.overlay`; harness steps `expect_mem`
 and `expect_dsp`; two new matrix cells.
 
 - DT2 1.17 and 1.16 (same proof, same results): XSLICE is selectable (type 7), its SRC page shows the CFADE knob, the type reaches the DSP (TX frame word,
@@ -482,8 +482,8 @@ Emulator only; nothing flashed; one agent.
   before for `core/machines` + `test/xslice` + `test/machine-clone` on 1.16 and 1.17); 31 DN2 anchors by function hash
   (`c4d86e4e:tools/patchkit/pk_machine_rules_dn2.py`, 1.11 and 1.12 resolve). The parameter-page layer needs no table growth for a clone: three
   per-type table functions get the type mapped to `clone_of` on entry, and the type reader (41 callers) returns the clone's
-  original except for the identity code. `test/dn2-clone` (type 5) passes `tools/patchkit/pk_proof_machines_dn2.py` (select, pages,
-  PCM bit-identical to FM TONE, parameters, save/load, load on stock, control, sequencer) and the harness smoke tour.
+  original except for the identity code. `test/dn2-clone` (type 5) passes the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`) and the harness smoke tour (select, pages,
+  PCM bit-identical to FM TONE, parameters, save/load, load on stock, control, sequencer).
   Manifest additions: `own_dsp` (the DSP is told the machine's own type), `devices` on `[[machine]]`; a `register` row may
   name `machines.<id>.type`.
 - **DN2 voice hook**: the Digitone II engine is a stage pipeline over 16 voice slots with a 32-float 48 kHz buffer per slot;
@@ -593,7 +593,7 @@ Content modules use `[[entry]]` only.
       generator path keeps working until 3b.3.
 - [x] 3b.2 Frameworks rewritten as modules against this spec; routines unit-tested on the ColdFire call harness with
       hand-built tables (lane b), then content modules migrated to `[[entry]]`. Done 2026-10-14 (lane `b`); results below.
-- [x] 3b.3 Integration: every proof passes on the module version (pk_proof_machines DT2 1.16/1.17, pk_proof_pluck
+- [x] 3b.3 Integration: every proof passes on the module version (the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`) on DT2, pk_proof_pluck
       DT2 1.16/1.17, DN2 machine and voice proofs, smoke matrix, wasm = CLI); then delete `machines.rs`,
       `machines/dn2.rs`, `params.rs` and the old manifest keys. Done 2026-10-14 (lane b `a1cf1df`, merged): all seven
       proofs PASS, the smoke matrix passes 13 of 13 cells (DT2 1.17 and 1.16, DN2 1.12), verify passes. patchkit
@@ -651,7 +651,7 @@ errors, multi-site writes, registry rows/symbols/strings, canonical order, entry
 hook on ColdFire and SHARC, non-boundary, re-encoded PC-relative instructions, device filters, explain, plan.json),
 `tests/patchkit/test_pk_prims.py` and `tests/fixtures/modules/registry-demo` (DT2 1.17, 1.16 anchor resolves too): boots to ready on the
 ColdFire core, the hooked stock setter `Kit::vfunc_12` is called three times and behaves as stock while the hook counts,
-the registry rows and the copied section read back, and `apps/web/tests/patchkit.test.mjs` (wasm = CLI, plan.json
+the registry rows and the copied section read back, and `apps/web/tests/patchkit.wasm.test.ts` (wasm = CLI, plan.json
 included). The old `[[machine]]`/`[[param]]`/`[[table]]`/`register` path is untouched; its tests still pass.
 
 Manifest syntax (all expressions are strings or integers; symbols are `[A-Za-z_.][A-Za-z0-9_.]*`):

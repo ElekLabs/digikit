@@ -30,8 +30,8 @@ Zero-DSP mode retains the existing SSI/DMA clock with zero samples, including pa
 snapshot restores and reset reconstruction; it executes no SHARC engine. Its patched snapshots use a separate
 `-zero.snap` identity, so earlier CF-only snapshots cannot silently remove that timing.
 Startup flags are shared by both servers (`packages/emulator/control/src/cli.rs`): `--control`, `--no-control`, `--paused`,
-`--run-dir DIR`, `--card-image FILE` (with `--card-folder DIR`: the +Drive folder the image was built from; the firmware's changes are exported to it on exit; `--no-card-sync` turns the export off), `--device-folders` (one card folder per device, below), `--mirror-dir DIR` (the folder of the first loaded device), `--scenario NAME_OR_FILE`, `--report PATH`, `--no-audio` and the coupled-audio
-flags. `--scenario` needs a coupled-audio build.
+`--run-dir DIR`, `--card-image FILE` (with `--card-folder DIR`: the +Drive folder the image was built from; the firmware's changes are exported to it on exit; `--no-card-sync` turns the export off), `--device-folders` (one card folder per device, below), `--mirror-dir DIR` (the folder of the first loaded device), `--scenario NAME_OR_FILE`, `--report PATH`, `--no-audio` and the sharc,play
+flags. `--scenario` needs a sharc build.
 
 ## Command line
 
@@ -40,7 +40,7 @@ flags. `--scenario` needs a coupled-audio build.
 | Subcommand | Does |
 |---|---|
 | `status` | Print the `status` result |
-| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]` (`load` also `--card`) |
+| `load SYX` / `inject SYX` | `firmware.load`; options `--base-sha256`, `--start auto\|snapshot\|cold`, `--dsp-patch`, `--runtime [--patch-set NAME]`, `--dsp on\|off` (starts over; see below) (`load` also `--card`) |
 | `restart` | Back to the ready state of the running firmware |
 | `step N` | Run N guest instructions |
 | `tap CODE [--hold N] [--at-instr N]` | Press and release a key (default hold 40000000 instructions) |
@@ -57,7 +57,7 @@ Global options: `--socket PATH` (default: discover), `--run-dir DIR` (where to l
 ## Methods
 
 Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports an incomplete method list (it omits
-`mem.cf.peek`, `mem.cf.poke`, `mem.cf.write`, `dev.reload`, `card.*` and `watchdog.config`); use this table.
+`mem.cf.peek`, `mem.cf.poke`, `mem.cf.write`, `dev.reload`, `runtime.maps`, `card.*` and `watchdog.config`); use this table.
 
 | Method | Wrapper | CLI |
 |---|---|---|
@@ -77,9 +77,12 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `mem.cf.peek`, `mem.cf.poke` | `peek32`, `poke32` | `call` |
 | `mem.cf.write {addr, hex}` | | `call` |
 | `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` | | `call`; `mise run dk:dev` |
-| `card.overlay`, `card.export`, `card.load`, `card.status`, `card.cancel`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
+| `runtime.maps {modules_dir?}` | | `call`; the workbench Log |
+| `card.overlay`, `card.export`, `card.load`, `card.status`, `card.folder`, `card.sync`, `card.reset_overlay` | | `call` |
+| `job.cancel` | | `call` |
 | `midi.in`, `midi.out` | `midi_in`, `midi_out` | `call` |
 | `midi.usb.in`, `midi.usb.out` | `usb_in`, `usb_out` | `call` |
+| `usb.bulk.in {bytes \| file, period?, connect?, zlp?}`, `usb.bulk.out {file?}`, `usb.ctrl {setup, setup_addr, call, send}`, `usb.phy {vbus?, run?}` | | `call` |
 | `flash.status`, `flash.read {offset, length}` | | `call`; `patchkit flash --emulator` |
 | `watchdog.config` | `watchdog` | `call` |
 | `cpu.exceptions` | `cpu_exceptions` | `call` |
@@ -88,12 +91,29 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 | `state.digest {arch?}` | `state_digest` | `call` |
 | `state.save {path}`, `state.load {path}` | `state_save`, `state_load` | `call` |
 | `pcm.tap` (`start`, `report`, `capture`, `capture_stop`) | `pcm_start`, `pcm_report` | `call` |
-| `cf.profile` | | `call`; only with the `cf-profile` feature |
+| `cf.profile {enable?}` | | `call`; only with the `cf-profile` feature (the workbench daemons have it) |
+| `sharc.profile {enable?}` | | `call`; only with the `sharc-profile` feature |
 | `dsp.peek` | `dsp_peek` | `call` |
 | `dsp.patch` | `patch` | `call` |
 | `guard.set`, `guard.report`, `guard.clear` | | `call` |
+| `pc.probe.set`, `pc.probe.report`, `pc.probe.clear` | `pcProbeSet`, `pcProbeReport`, `pcProbeClear` (control-client) | `call` |
 | `events.subscribe` | `events`, `subscribe`, `drain_events` | `events` |
 | `quit` | `quit` | `quit` |
+
+`cf.profile`: host time and PC samples of the ColdFire execution paths. The recording is off until asked: `{enable: true}` starts it and clears the counters, `{enable: false}` stops and clears, without `enable` the call reads the counters since the start (all zero while it was never started). While off, the emulator does no timing and no sampling. The read has `restarts`: how many times a new runtime (firmware load, restart) re-armed this profile since the last `enable` call of `cf.profile`. The count is per profile. The new runtime counts from zero, so a count above 0 means the counters cover only the time since the last reload. A daemon built without the feature answers "built without cf-profile".
+
+`sharc.profile`: DSP execution counts as raw counters of the profile artifact `dk.profile/1` ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)). `{enable: true}` starts counting and clears the counts; `{enable: false}` stops and clears; without `enable` the call reads the counts since the start (an error says so when the counting is off). The answer: `clock` (`emu.sharc.insn`, unit `insn`, the sampling text), `blocks` (DSP blocks since the start), `icount` and `idle_skipped` (instructions executed and replayed by the idle skip since the start), `counted` (`fast`, `block`, `interpreted`: instructions each source counted), `engine_tiers` (the engine's own tier totals since the DSP worker started, not since the profile started: `fast`, `block` without the fast tier's, `interpreted`, `idle_skipped`, `traps`; all zero means the DSP ran nothing, a non-zero `traps` with a zero `counted` means it trapped) and `raw`, a list of `{cpu: "sharc", addr, count, series: "pc"}` sorted by software PC. Two sources are added by PC: the dispatch profile of the fast and block tiers (a dispatch is credited whole to its entry PC, so a count at an entry PC covers the region that starts there) and the interpreter's per-PC counts (each instruction at its own PC). [O] `icount` and `idle_skipped` are engine totals; in the first DN2 run they did not reconcile with the sum of `counted` (a dispatch may be counted in two sources, and a chained dispatch is not counted), so read the per-PC counts as a ranking and per-block estimate, not as an exact total. It reads no EMUCLK or TCOUNT. The read has its own `restarts`: how many times a new runtime with a DSP session re-armed this profile after a firmware reload since the last `enable` call of `sharc.profile`. A daemon built without the feature answers "built without sharc-profile"; it implies the features `sharc` and `play` (a DSP and its audio output): `cargo build --release -p digi-control --bin digi-emud --features sharc-profile`.
+
+`job.cancel`: cancel the long job that runs: a cold boot (`firmware.load`, `restart`, a soft-reset boot), a card load, or `step`/`run_until`.
+Answers `{cancelled: kind|null}`; the cancelled call answers error 10 `cancelled`. After a cancelled `firmware.load {replace: true}` no firmware is loaded.
+
+`status.job` is `null` or `{kind: "boot"|"card"|"step"|"run_until"|"firmware.load", wall_seconds, phase?, progress?, icount?}`.
+`progress` (0..1) is an estimate. A cold boot has `phase` "starting the DSP" with `progress: null` (a changed DSP section runs its cold start first), then "booting" with an estimated `progress`. `icount` restarts at 0 when a soft reset reboots the job. `status.boot` is gone.
+
+`firmware.load {replace: true, dsp?}` chooses the DSP of the session it starts (the workbench's "DSP" tick): `dsp: false` boots ColdFire
+only (no DSP audio session; a device with a second CPU that runs a program gets the mailbox responder instead, so there is no peer audio and
+the UI is fast), `dsp: true` the DSP session when its inputs are set and the peer program. The choice is kept for the loads after it
+(`status.dsp_enabled`); `--no-dsp` on `digi-emud` and the app is the choice before the first load (`status.dsp_flag` tells a webview).
 
 `firmware.load {syx, runtime?, patch_set?, ...}`: with `runtime: true` the controller patches the stock image in-process with the
 device's patch set (`patch_set`, default `emulator`; the roots are in `devices/*.toml` `[patch_sets]`, the modules they require are added)
@@ -113,6 +133,12 @@ exact stock firmware (desktop only), else none; an image of another device never
 
 `mem.cf.write {addr, hex}` writes a byte range (any alignment, hex text) of SDRAM in one call, with one decode-cache invalidation for the range: code
 written this way runs as new code. Unmapped pages are mapped zeroed. Like `mem.cf.poke` it is a host write, not part of the replay record.
+
+`runtime.maps {modules_dir?}` answers what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`. `ship` is the
+ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` (the ones the image has) to byte addresses: the memory a host reads
+with `mem.cf.peek` and passes to `dkprof` (`loadTable`) to get the load table. The map is made from the running image's patch record and the stock image, as `dev.reload`
+makes its plan, so it follows a module swap: ask again after a `dev.reload`. The answer is kept for the image's SHA-256. `matches` is false when the modules on disk give other bytes
+than the running image (a hot DSP injection, or an object changed since): the names may then be wrong. An image with no patch record, or no stock image in `firmware/`, is an error.
 
 `dev.reload {modules_dir?, swap_modules?, auto_no?, build?}` brings the running session to the module objects as they are on disk now. Without
 `build` it never builds. With `build: true` (the workbench button sets it) it first builds the stale objects of the session's modules in
@@ -181,9 +207,12 @@ the same digest. It is the oracle for a change to those paths: boot paused to a 
 compare the digests of a daemon built before the change with one built after.
 
 `--dsp zero --cf-snapshot FILE` (on `digi-emud` and the app) starts without a DSP: SSI paced, the DSPI2 peer
-answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` is `"zero"`,
-`"sharc"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
+answers zeros, the ColdFire state restored from the snapshot (about 2.2x real time). `status.dsp` names the device's second
+processor as it runs: `"sharc"`, `"peer"` (a peer CPU runs its program), `"responder"` (the mailbox stand-in for a peer CPU),
+`"zero"` or `"none"`. `run_until {frames|audio_s}` is refused (no DSP session); `elapsed`, `icount` and `step`
 work. No PCM is produced.
+
+`pc.probe.set {task_ptr?, keep?, probes: [{pc, label?, words?, stack?, frame?}]}` (or `{file, name?}`: the spec is a JSON file on the daemon's host, or its member `name`) sets the ColdFire PC probe; `pc.probe.report` returns the counts per (task, IPL) and the first hits per PC; `pc.probe.clear` forgets the hits. The spec is kept and armed in every runtime installed later, so set it before `firmware.load` or `restart`. A runtime that a cold boot worker builds and snapshots never sees it. Spec, report and the R12 checks: [INSTRUMENTATION.md](INSTRUMENTATION.md#pc-probe-coldfire).
 
 `guard.set {protect: [{lo, hi, label}], allow_pc: [{lo, hi}]}` arms write-range guards (addresses are integers or
 `"0x..."` strings, `hi` exclusive; an empty `protect` disarms). A ColdFire store (8, 16 or 32 bit) that overlaps a
@@ -213,6 +242,21 @@ resolved (known: DT2 1.16 and 1.17, DN2 1.11 and 1.12). While the next call is n
 (the audio interrupt), the batched fast path and the analytic idle skip run as they do with no input queued, up to the instruction at
 which the call is handed over (they ran one instruction at a time with any USB input queued, 135 ns an instruction; finding 43, "Upload speed"). The
 instruction at which each call is handed over, and the guest state, are the same (`state.digest {"arch": true}` equal at every checked point).
+
+`usb.bulk.in {bytes | file, period?, connect?}` is the host side of the vendor bulk endpoint of `core/usb-bulk` (EP2 OUT; the controller is not modelled). The host's
+512-byte packets fill the dTDs the guest has queued on EP2 OUT (through each dTD's page array: page 0 pointer with its start offset, then the pages); a dTD completes when its count is used up or a packet shorter than 512 bytes, a zero-length one too, ends the transfer, and a partly filled dTD stays active. One dTD per delivery `period` instructions apart (default 49,500, one 16 KiB high-speed transfer), by reading
+the head of the endpoint's dTD list in the controller SRAM (queue head 0x80000100, list pointers +0x30 and +0x34), writing the bytes into the dTD's buffer, completing
+the dTD as the firmware's own loop does (the remaining count, the unlink) and calling its free callback (+0x38) and completion callback (+0x24) at interrupt level.
+With no dTD primed, or EP2 receive off (ENDPTCTRL2), the host is NAKed (`bulk_naks`) and the message waits one period. A message of a multiple of 512 bytes is followed by a zero-length packet, as a host sends it; `zlp: false` leaves the transfer open, and `{zlp: true}` with no bytes sends only that packet (the host's duty: without it the dTD never completes). `connect` is
+the address of the adapter's connect callback (`usb_bulk_connect`, from the patch plan), called first, ahead of everything queued (a bus reset does not wait): the bus reset after the enumeration is not modelled. The queue,
+the interrupt and the pacing are those of `midi.usb.in`, so the two interleave. `usb.bulk.out {file?}` returns (and clears) what the guest queued on EP2 IN, as hex, seen where
+the firmware's queue function (`FUN_40005a86`, queue index 6) gets the dTD; the dTD is completed one period later. Both start the capture; The IN data is read through the dTD's page array; with zero-length termination on (QH caps bit 29 clear) a transfer of a multiple of 512 bytes counts one zero-length packet (`bulk_out_zlps`). The counters
+`bulk_in_bytes`, `bulk_out_bytes`, `bulk_out_pending`, `bulk_naks` and `bulk_out_zlps` are in the `status` of `usb.bulk.out`. `usb_sys_error` in the same status is null, or the reason text after a modelled controller system error (a dTD whose page pointer the USB bus master cannot reach, or that breaks a prime rule); all USB traffic stops after it, as on hardware.
+
+`usb.ctrl {setup, setup_addr, call, send}` sends one control request to the firmware's EP0 handling (the controller's setup path is not modelled). `setup` is the 8-byte SETUP packet in wire order (16 hex digits: bmRequestType, bRequest, wValueL, wValueH, wIndexL, wIndexH, wLengthL, wLengthH). The 8 bytes are written to the guest address `setup_addr` (the firmware global the USB interrupt handler fills), then the guest function `call` (the setup handler, no arguments: the stock dispatcher or a module's hooked handler) runs at interrupt level, ahead of other queued USB input. The call returns when the handler has returned (the emulator runs meanwhile, at most 200 M instructions; else bad params). Each entry to `send` (the guest's EP0 send function `ep0_send(len, ptr)`: length at (4,SP), pointer at (8,SP)) is recorded with `min(len, 0x1000)` bytes read from `ptr`, and the function runs on unchanged. Result: `{"sends": [{"len": <u32>, "bytes": "<hex>"}, ...], "stalled": <bool>}`. `sends` lists each entry to `send` in order, each with `len` (the length the guest asked for) and `bytes` (hex, cut at 0x1000 bytes); it is empty when `send` was not entered. `stalled` is true if a 32-bit write set a stall bit of ENDPTCTRL0 (0xfc0b01c0; TXS bit 16 or RXS bit 0) during the call; the stall bits are cleared before the setup bytes are written, as a SETUP does on the hardware. The capture of `send` is armed only during the call; on an error the queued call is dropped. Example: `{"method": "usb.ctrl", "params": {"setup": "8006000100001200", "setup_addr": 1073741824, "call": 1073742000, "send": 1073743000}}` becomes `{"sends": [{"len": 18, "bytes": "12010002..."}], "stalled": false}`.
+
+`usb.phy {vbus?, run?}` sets VBUS present (OTGSC.BSV reads 1; absent by default, as the model has no host on the wire) when `vbus` is given, sets or clears USBCMD.RS as a write when `run` is given (the event log sees it), and returns (and clears) what the guest did at the USB controller's PHY interface since the last call, oldest first, and the PHY register file as hex (256 bytes): `{"w": [reg, value]}` a write through ULPI_VIEWPORT (RM 24.3.4.12), `{"r": [reg, value]}` a read, `{"rs": 0 | 1}` a change of USBCMD.RS, `{"rst": 1}` a write of USBCMD.RST. That write completes at once (RST reads 0) and clears RS (an `rs` event comes first if RS was set); USBSTS (SRI = 1), USBINTR, DEVICEADDR, ENDPTPRIME, ENDPTSTAT, ENDPTCOMPLETE and ENDPTCTRL1 to 3 take their RM reset values; all other registers stay as written. The registers answer byte, word and long accesses alike from the 32-bit value (big-endian lanes). The viewport completes a run at once (RUN clears; a read puts the register in ULPI_DATRD) and always shows ULPI_SS set; the PHY registers are plain storage and no PHY behaviour is modelled. At most 4096 events are kept between two calls.
+
 The DIN input (`midi.in`) still keeps the one-instruction loop while bytes are queued.
 
 `flash.status` and `flash.read`: the OS UPGRADE of the firmware writes its container to the flash. The emulator takes over MAIN OS's sector erase and page program
@@ -221,7 +265,7 @@ for the container area `0x80000..0x380000` (any other flash write runs the firmw
 soft reset after such a write the controller boots the container the guest wrote (`flash.booted` event, or `flash.invalid` when it does not read back as a
 firmware) instead of the image it had loaded. `patchkit flash STOCK.syx --emulator SOCKET` drives it (finding 75).
 
-`pcm.tap` needs the coupled-audio build and a DSP session. `capture` and `capture_stop` have no wrapper.
+`pcm.tap` needs the sharc build and a DSP session. `capture` and `capture_stop` have no wrapper.
 
 ## CPU load (`status.load`)
 
@@ -241,7 +285,7 @@ restored or replaced runtime resets it). On the device in the emulator, the runt
 (its EMUCLK ticks once per instruction), so compare it with `model_pct`, not `real_pct`. The real values are estimates from the public manuals' cycle tables and our instruction counts, not measurements. The
 factors are one file, `devices/cycle-factors.json` (cited findings inside; `tools/patchkit/pk_dsp_budget.py` reads the
 same numbers). Each closed window is blended 50/50 into the shown value; a restored or replaced runtime clears it.
-`dsp` is `null` without a DSP session (`status.dsp` is `"zero"` or `"none"`). The desktop panel gets the same object as
+`dsp` is `null` without a DSP session (`status.dsp` is not `"sharc"`). The desktop panel gets the same object as
 `load` in its audio status. The browser (wasm) build has no controller and shows no meter.
 
 ## Events
@@ -259,7 +303,7 @@ same numbers). Each closed window is blended 50/50 into the shown value; a resto
 | -32602 | bad params | 7 | DSP halted |
 | 1 | no firmware | 8 | I/O |
 | 2 | stale session | 9 | timeout |
-| 3 | busy | | |
+| 3 | busy | 10 | cancelled |
 
 `card.folder`, `card.folder_set` and `card.sync`: the module store as a folder. **The folder belongs to the device, not to the process.** With
 `--device-folders` (the launcher passes it; the desktop app keeps the user's choices in its app data folder, `card-folders.json`) every load
@@ -315,7 +359,7 @@ emu.close()
 ```
 
 `Emu.spawn(*args)` starts a private daemon (binary from `DIGI_EMUD`) and quits it on exit;
-`Emu.spawn_coupled(syx, ready_dir)` adds the coupled-audio flags.
+`Emu.spawn_coupled(syx, ready_dir)` adds the sharc flags.
 
 ## Not implemented
 

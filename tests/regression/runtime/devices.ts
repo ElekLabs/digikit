@@ -45,6 +45,21 @@ export function daemonKey(binary: string): string | undefined {
   return at >= 0 && parts.length === at + 4 ? parts[at + 2] : undefined;
 }
 
+/**
+ * `<git dir>/snap-cache/<daemon key>/<device>`: the boot snapshots of one daemon build, shared by every worktree (the daemon's
+ * `DIGI_SNAPSHOT_DIR`). It sits next to the `emud-cache` of BINARY. `DIGI_SNAP_STORE` replaces `<git dir>/snap-cache` (tests only).
+ * A custom binary has no build key: undefined.
+ */
+export function snapshotStore(binary: string, device: Device): string | undefined {
+  const key = daemonKey(binary);
+  if (!key) return undefined;
+  const override = process.env.DIGI_SNAP_STORE;
+  if (override) return path.join(override, key, device);
+  const parts = path.resolve(binary).split(path.sep);
+  const at = parts.lastIndexOf('emud-cache');
+  return path.join(parts.slice(0, at).join(path.sep) || path.sep, 'snap-cache', key, device);
+}
+
 /** Card dirs kept in the card cache (newest by mtime). */
 const CARDS_KEEP = 32;
 /** A card dir touched within this time is never evicted: another worker may have loaded it. */
@@ -75,8 +90,8 @@ function sessionBase(device: Device): string | undefined {
 
 /** One run dir per device and vitest worker process at a time, so no two daemons share it. Dirs are reused
  * across processes (a pid lock file marks a dir as claimed). With a daemon from the shared build store the dirs sit below the daemon's
- * build key (`dist/session-cache/<key12>/<device>-<n>`), and so does the booted-snapshot store they share
- * (`<key12>/snapshots/<device>`, see run-claim.ts): snapshots carry no version, so a new daemon build must not load those of an older one.
+ * build key (`dist/session-cache/<key12>/<device>-<n>`). The booted-snapshot store they use is the one of the daemon build in the git dir
+ * (`snapshotStore`, see run-claim.ts): snapshots carry no version, so a new daemon build must not load those of an older one.
  * Used by `liveOptions` (not wiped). */
 export function cachedRunDir(device: Device): { dir: string; snapshotDir: string } {
   const known = claimedRunDirs.get(device);
@@ -85,6 +100,7 @@ export function cachedRunDir(device: Device): { dir: string; snapshotDir: string
     sessionBase(device) ?? path.join(repoRoot(), 'dist/session-cache'),
     device,
     false,
+    snapshotStore(daemonBinary(device), device),
   );
   const claim = { dir, snapshotDir };
   claimedRunDirs.set(device, claim);
@@ -99,7 +115,7 @@ export function cachedRunDir(device: Device): { dir: string; snapshotDir: string
 export function claimRunDir(device: Device): RunDirClaim | undefined {
   const base = sessionBase(device);
   if (!base) return undefined;
-  const claim = claimDir(base, device, true);
+  const claim = claimDir(base, device, true, snapshotStore(daemonBinary(device), device));
   pruneKeyDirs(path.dirname(base));
   evictCards();
   return claim;
@@ -114,6 +130,9 @@ export function daemonBinary(device: Device): string {
   if (fs.existsSync(file)) {
     const value = (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key];
     if (value) return value;
+    throw new Error(
+      `${key} unset and dist/daemons.json has no ${key} (no ${device} firmware or ready inputs when the daemons were built): run mise run emu:ready -- ${device}, then pnpm nx:pilot run digi-control:daemons`,
+    );
   }
   throw new Error(`${key} unset and dist/daemons.json missing: run pnpm nx:pilot run digi-control:daemons`);
 }

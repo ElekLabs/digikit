@@ -5,7 +5,9 @@
 name = "cf.string.fn.shared_ptr.make"
 was = ["cf.menu.fn.make_sp", "cf.string.fn.make_sp"]
 cpu = "cf"
-rule = { kind = "cf_func", hash = "e427a70e2c95815987c648e84eba4737", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "e427a70e2c95815987c648e84eba4737", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "e427a70e2c95815987c648e84eba4737", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "0ca97fb9199a43bcfb8784b79cd5d24a", offset = 0x0, len = 4, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "The firmware's `shared_ptr<View>` constructor: `out` in a0, (parent, view) on the stack. core/digikit-menu calls it through its dk_make_sp shim."
@@ -17,6 +19,7 @@ cpu = "cf"
 sig = "void (shared_ptr *dst, shared_ptr *src)"
 rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x40, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "Moves a `shared_ptr` from `src` to `dst`. core/digikit-menu uses it when it pushes a popup view."
 
@@ -25,7 +28,9 @@ name = "cf.string.fn.shared_ptr.release"
 was = ["cf.menu.fn.sp_release", "cf.string.fn.sp_release"]
 cpu = "cf"
 sig = "void (u32 *ctl)"
-rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x58, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x58, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x58, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "6160202d919e6585ec40c9aed1372118", offset = 0x80, len = 4, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "Releases a `shared_ptr` count holder given its control-block word. core/digikit-menu calls it on its temporaries after it pushes a view."

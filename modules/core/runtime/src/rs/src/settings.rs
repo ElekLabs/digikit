@@ -6,10 +6,10 @@
 //! record needs. A power cut in the write leaves the current copy valid. Unloaded modules keep their entries (nothing is removed but by `remove`).
 //!
 //! Callers: the UI task (the menu, `core/fxpages`) and the mailbox test commands. Not for interrupts or the MIDI task: the record is one buffer.
-//! The C ABI for core modules is `dkrt_settings_get`, `dkrt_settings_put`, `dkrt_settings_remove` and `dkrt_settings_flush` below.
-//! A `.dkm` module uses the API table (`settings_client`, `settings_get`, `settings_put`, `settings_remove`, api 1.9, `module_*` below): the runtime
-//! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `settings_put` and `settings_remove`
-//! must be called from the UI task (a menu, slot 0, `dkm_init`), not from a service command handler (MIDI task) or an interrupt.
+//! The C ABI for core modules is `dkrt_settings_put` and `dkrt_settings_flush` (the menu's).
+//! A `.dkm` module uses `dk_settings_open`, `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` (`module_*` below): the runtime
+//! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `dk_settings_put` and `dk_settings_remove`
+//! must be called from the UI task (a menu, `tick`, `init`), not from a host command handler (MIDI task) or an interrupt.
 use crate::{block_read, block_write, card, dlog};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::proto::*;
@@ -123,7 +123,19 @@ pub unsafe fn load() {
     // An older store (written before the settings area, with header B 32 sectors further on) may have a table or a file where the settings copies
     // and header B are now: `store::open` checks that nothing reaches into the tail (and so does every later open, before a commit). No store header
     // at all is a card with no files; a header that does not read or reaches into the tail turns the settings store off: nothing is read or written.
-    if let Err(e) = crate::store::open() {
+    let opened = if crate::store_writer::acquire() {
+        let r = crate::store::open();
+        crate::store_writer::unlock();
+        r.map(|_| ())
+    } else {
+        Err(E_BUSY)
+    };
+    if let Err(e) = opened {
+        if e == E_BUSY {
+            // the store was in use (an SDK write on the I/O task) for the whole wait: not a damaged store. Nothing is decided; the next call of `ensure` loads again.
+            s.loaded = 0;
+            return;
+        }
         if e != E_NOT_FOUND {
             set::init(&mut area()[..], 0);
             s.copy = set::NONE;
@@ -140,14 +152,7 @@ pub unsafe fn load() {
             s.card_seq = l.seq;
             s.damaged = l.damaged;
             let n = count_entries();
-            // state: 0 none valid, 1 a copy loaded, 2 a copy is damaged and the other one was taken
-            let state = if l.copy == set::NONE {
-                0
-            } else if l.damaged != 0 {
-                2
-            } else {
-                1
-            };
+            let state = load_state(l.copy, l.damaged);
             let e = if l.damaged != 0 { logk::F_ERROR } else { dlog::INFO };
             dlog::ev(logk::SETTINGS_LOAD, e, [state, l.copy, l.seq, l.used, n]);
         }
@@ -262,8 +267,7 @@ pub unsafe fn flush() -> i32 {
     if s.off != 0 {
         return E_SET_OFF;
     }
-    let target = if s.copy == 0 { 1 } else { 0 };
-    let seq = s.card_seq.wrapping_add(1);
+    let (target, seq) = next_write(s.copy, s.card_seq);
     set::seal(&mut area()[..], seq);
     let r = set::write(&io(), &crate::store::layout(), target, area());
     s.last_result = r;
@@ -298,9 +302,31 @@ pub unsafe fn tick() {
         return;
     }
     let (now, delay) = clock();
-    if now.wrapping_sub(s.changed) >= delay || s.passes.wrapping_sub(s.changed_pass) >= DEAD_PASSES {
+    if write_due(now, s.changed, delay, s.passes, s.changed_pass) {
         flush();
     }
+}
+
+/// The `SETTINGS_LOAD` state of what the boot found: 0 no valid copy, 1 a copy loaded, 2 a copy is damaged and the other one was taken.
+fn load_state(copy: u32, damaged: u32) -> u32 {
+    if copy == set::NONE {
+        0
+    } else if damaged != 0 {
+        2
+    } else {
+        1
+    }
+}
+
+/// The copy and the `seq` of the next write: the copy that is not current (A when none is), with the card's `seq` + 1.
+fn next_write(copy: u32, card_seq: u32) -> (u32, u32) {
+    (if copy == 0 { 1 } else { 0 }, card_seq.wrapping_add(1))
+}
+
+/// Is the record due: quiet for `delay` (in the clock's unit), or the UI loop ran `DEAD_PASSES` passes since the last change (a block counter that
+/// does not move)?
+fn write_due(now: u32, changed: u32, delay: u32, passes: u32, changed_pass: u32) -> bool {
+    now.wrapping_sub(changed) >= delay || passes.wrapping_sub(changed_pass) >= DEAD_PASSES
 }
 
 unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
@@ -309,14 +335,6 @@ unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
         n += 1;
     }
     core::slice::from_raw_parts(key, n)
-}
-
-/// `dkrt_settings_get(key, buf, cap)`: the value of `key` (NUL-terminated) into `buf` (`cap` bytes): its length, or `E_SET_NOKEY`, `E_SET_KEY`,
-/// `E_SET_VALUE` (`cap` too small). UI task.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_settings_get(key: *const u8, buf: *mut u8, cap: u32) -> i32 {
-    crate::init_once();
-    get(key_of(key), core::slice::from_raw_parts_mut(buf, cap as usize))
 }
 
 /// `dkrt_settings_put(key, value, len)`: set `key` (NUL-terminated) to the `len` bytes at `value`: 0, or `E_SET_KEY`, `E_SET_VALUE`, `E_SET_FULL`.
@@ -330,17 +348,10 @@ pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len
     put(key_of(key), core::slice::from_raw_parts(value, len as usize))
 }
 
-/// `dkrt_settings_remove(key)`: remove `key` (NUL-terminated): 0 (also when it was not there), or `E_SET_KEY`. UI task.
-#[no_mangle]
-pub unsafe extern "C" fn dkrt_settings_remove(key: *const u8) -> i32 {
-    crate::init_once();
-    remove(key_of(key))
-}
-
 // ---- the API of a .dkm module (api 1.9) --------------------------------------------------------------------------------------
 
-/// `settings_client`: the module's handle, only inside its `dkm_init` (the check of `files_client`). The handle is the module's record index + 1: the
-/// same module gets the same handle every time. `E_NOT_FOUND` outside `dkm_init`.
+/// `dk_settings_open`: the module's handle, only inside its `init` (the check of `dk_files_open`). The handle is the module's record index + 1: the
+/// same module gets the same handle every time. `E_NOT_FOUND` outside `init`.
 pub unsafe fn module_client() -> i32 {
     let source = dlog::current_source();
     if source == 0 {
@@ -354,7 +365,7 @@ pub unsafe fn module_client() -> i32 {
 }
 
 /// The stored key `<module name>/<key>` for `client` and the NUL-terminated `key`: the module name comes from the handle's record, never from the
-/// caller. A handle that is 0, past the table or of a record that is not loaded (and not inside its `dkm_init`) is stale: `E_SET_KEY`, the settings
+/// caller. A handle that is 0, past the table or of a record that is not loaded (and not inside its `init`) is stale: `E_SET_KEY`, the settings
 /// argument error, as for a key that breaks the rules. The prefix stops mistakes, not hostile code: modules are native code with no memory protection.
 unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY_MAX]) -> Result<usize, i32> {
     if client == 0 || client as usize > crate::MAX_MODULES || key.is_null() {
@@ -372,7 +383,7 @@ unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY
 }
 
 /// `settings_get`: the length of the value (0 is valid), `E_SET_NOKEY`, `E_SET_VALUE` (`cap` too small: nothing is written), `E_SET_KEY` (bad handle or
-/// key), `E_SET_OFF`. In `dkm_init` and in the UI task.
+/// key), `E_SET_OFF`. In `init` and in the UI task.
 pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
@@ -467,4 +478,47 @@ pub unsafe fn mailbox(cmd: u32, arg: *mut u8) -> i32 {
     }
     let out = core::slice::from_raw_parts_mut(arg, 96);
     get(&k[..kl], out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_load_state_says_none_loaded_or_damaged() {
+        assert_eq!(load_state(set::NONE, 0), 0, "no valid copy, nothing damaged");
+        assert_eq!(load_state(set::NONE, 2), 0, "both copies damaged: still no record");
+        assert_eq!(load_state(0, 0), 1);
+        assert_eq!(load_state(1, 0), 1);
+        assert_eq!(load_state(0, 1), 2, "A taken, B damaged");
+        assert_eq!(load_state(1, 1), 2, "B taken, A damaged");
+    }
+
+    #[test]
+    fn the_next_write_goes_to_the_other_copy_with_the_next_seq() {
+        assert_eq!(next_write(0, 4), (1, 5));
+        assert_eq!(next_write(1, 9), (0, 10));
+        assert_eq!(next_write(set::NONE, 0), (0, 1), "no valid copy: A, seq 1");
+        assert_eq!(next_write(1, u32::MAX), (0, 0), "the seq wraps");
+    }
+
+    #[test]
+    fn a_change_is_written_once_it_has_been_quiet_for_the_delay() {
+        let (changed, delay) = (1000u32, 3000u32);
+        assert!(!write_due(changed, changed, delay, 5, 5), "right after the change");
+        assert!(!write_due(changed + delay - 1, changed, delay, 5, 5));
+        assert!(write_due(changed + delay, changed, delay, 5, 5));
+        // the clock wraps between the change and now
+        let near_end = u32::MAX - 100;
+        assert!(!write_due(near_end.wrapping_add(delay - 1), near_end, delay, 5, 5));
+        assert!(write_due(near_end.wrapping_add(delay), near_end, delay, 5, 5));
+    }
+
+    #[test]
+    fn a_block_counter_that_does_not_move_is_taken_for_dead_after_many_passes() {
+        let (changed, delay) = (7u32, 3000u32);
+        assert!(!write_due(changed, changed, delay, DEAD_PASSES - 1, 0));
+        assert!(write_due(changed, changed, delay, DEAD_PASSES, 0));
+        assert!(!write_due(changed, changed, delay, 10 + DEAD_PASSES - 1, 10));
+    }
 }

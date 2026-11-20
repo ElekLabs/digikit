@@ -1061,10 +1061,11 @@ payloads load (rest of `0x80xxxxxx` is FILL/zero scratch), LE float32:
   is a **folded quarter-wave cosine**, `value(k) ~= cos(min(k,256-k)*pi/256)` --
   the classic single-table sin/cos generator. Read at `FUN_1c71ec` via two DAG
   pointers 128 words apart: `I5 = 0x8055c440` (`0x1c724f`, value 1.0) and
-  `I5 = 0x8055c640` (`0x1c7247`/`0x1c7263`, the fold-point, value 0.0). Table2
-  (idx 256+) is another exponential-shaped curve with a discontinuity past the
-  DT2 payload boundary (DN2 1.11 loads far more here); read at `0x1c6c16`
-  (`I4 = 0x8055c874`) inside a large routine `~0x1c6156..0x1c71e7`.
+  `I5 = 0x8055c640` (`0x1c7247`/`0x1c7263`, the fold-point, value 0.0). Past
+  index 256 the block holds small index tables, among them a 7-entry table at
+  `0x8055c874`, `{0,0,1,2,3,4,0}`, read at `0x1c6c16` (`I4 = 0x8055c874`,
+  bound 7 at `0x1c6c10`) inside a large routine `~0x1c6156..0x1c71e7`. It is not
+  an exponential curve table ([finding 148](148-filter-machines.md)).
 - **Boot-time relocation hypothesis (INFERENCE):** if the tables are copied into
   internal SHARC memory at boot (`0x1c1686 -> 0x1c7442`), the real per-frame
   synthesis reads *internal* addresses and would never appear in an `0x80xxxxxx`
@@ -2050,7 +2051,7 @@ after the last call -- is five literal-count loops (32, 32, 32, 16, 16) each
 immediately followed by a register-counted loop, and that tail is where it
 touches **both halves of the cosine pair** (`0x8055c440` at `0x1c70a5`/`0x1c70b3`,
 `0x8055c640` at `0x1c70b6`/`0x1c70b9`), the 32-float table (`0x8045c3c0` at
-`0x1c6c22`), and three point-reads into the exponential tail at `0x8055c840`,
+`0x1c6c22`), and three point-reads of small index tables at `0x8055c840`,
 `0x8055c858`, `0x8055c874`.
 
 It does **not** touch the 1024-float pair, the 829-float table, stage 5's table,
@@ -2390,8 +2391,8 @@ that changes the conclusion. Re-read from the bytes:
 ```
 
 All three sites follow this shape, with base literals `0x8055c840`,
-`0x8055c858`, `0x8055c874` -- **exactly** the three "point-reads into the
-exponential tail" already recorded independently for this function, which is a
+`0x8055c858`, `0x8055c874` -- **exactly** the three "point-reads"
+already recorded independently for this function, which is a
 strong cross-check that this is the real fetch.
 
 So `0x254d98` is **an argument passed to the callee**, not the source of the
@@ -3350,9 +3351,11 @@ record contract": all four store a Q31 step at words 0x6a/0x6b.
 **`FUN_1c71ec` [C][V].** Out-of-line blocks of `FUN_1c642a`, entered by jumps
 at `0x1c7053`, `0x1c6f07`, `0x1c6eef`, `0x1c6ed9` and table `0x8055c874`;
 every exit jumps back. The first block lerps 128-entry cosine/sine tables
-`0x8055c440`/`0x8055c640` (equal-power curves **[D]**). Table `0x8055c874`
-picks one stage per slot type: 1 `0x1cdbb2`, 2 `0x1cd286`, 3 `0x1cc79e`,
-4 and 6 `0x1cbf07`, 5 `0x1ccd96`. Gated passes then run `0x1cb3d8`
+`0x8055c440`/`0x8055c640` (equal-power curves **[D]**). The 7-entry table
+`0x8055c874`, `{0,0,1,2,3,4,0}` (bound 7), is indexed in `FUN_1c642a`; the stages
+`0x1cd286`, `0x1cc79e`, `0x1cbf07` (twice) and `0x1ccd96` are consecutive stages
+of `FUN_1c71ec`, and `0x1cdbb2` is called from `FUN_1c642a`. They are not five
+filter types. Gated passes then run `0x1cb3d8`
 (saturator **[D]**), `0x1cdecb` (sample-and-hold rate reduction **[D]**) and
 `0x1ccbd8` (low-pass plus DC blocker **[D]**). `0x1cbf07` reads four taps
 off `I1 = DM(I4+16)` and each sample writes `DM(I1+M4) = fclip(x + g*taps,
@@ -3626,11 +3629,9 @@ finds one more writer and two more readers of `DM(0x252d3c)` (lane A2,
 2026-09-25, `tools/sharc_dev/sharc.py`'s `writers()`/`readers()`).** A store at
 `0x1cdc23` (`DM(I3, M6) = R11`, I3 = the passed-in `0x252d3c` pointer)
 inside `FUN_1cdbb2` (`0x1cdbb2`-`0x1cdcab`, an IIR/all-pole recursion not
-otherwise characterized here) -- reached only dynamically, through
-`FUN_1c642a`'s own out-of-line dispatch `FUN_1c71ec` and two nested jump
-tables (`0x8055c840` -> `0x8055c858` -> `0x8055c874`, whose index 1 selects
-`FUN_1cdbb2` -- see "`FUN_1c71ec` [C][V]" above), for whatever per-track
-"slot type" selects that stage. `img.callers()` reports none for
+otherwise characterized here) -- called once, from `FUN_1c642a` at `0x1c6ead`
+(see "`FUN_1c71ec` [C][V]" above), for whatever machine type reaches that
+stage. `img.callers()` reports none for
 `FUN_1cdbb2` (an indirect-call gap, per this repo's CLAUDE.md, not evidence
 of dead code). Every capture this project has (idle and play) reads every
 track's own machine-type/selector fields as 0 (see the "ColdFire captures"

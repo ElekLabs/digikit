@@ -9,16 +9,14 @@ import { describe, expect, test } from 'vitest';
 import { withSession } from '../support.ts';
 import { moduleArtifact } from './install.ts';
 import { liveProtocol } from './protocol.ts';
+import { linkedRuntimeNeed, runtimeVersion } from './upload-kit.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
+import { optInPatchkit } from './patchkit.ts';
+import { expectPollEmulated } from './waits.ts';
 
 const root = repoRoot();
 
-/** `size_of::<Api>()`: every field of the `[api]` table in sdk/sdk.toml is one 4-byte word. */
-function apiTableSize(): number {
-  const toml = fs.readFileSync(path.join(root, 'sdk/sdk.toml'), 'utf8');
-  const block = toml.slice(toml.indexOf('[api]\nfields = ['), toml.indexOf('\n]\n', toml.indexOf('[api]\nfields = [')));
-  return 4 * (block.match(/^\s*\{ name = /gm) ?? []).length;
-}
+const DEVICE_ID = { dt2: 1, dn2: 2 } as const; // [digikit] id of devices/*.toml
 const exec = promisify(execFile);
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const profiles = [
@@ -60,7 +58,7 @@ function decode(bytes: Buffer) {
 
 for (const profile of profiles) {
   const enabled = Boolean(profile.binary);
-  describe.skipIf(!enabled)(`${profile.device} public files API1.4`, () => {
+  describe.skipIf(!enabled)(`${profile.device} public files API`, () => {
     const runDir = path.join(root, 'out/runs/files-api', profile.device, randomUUID());
     let plan: RuntimePlan | undefined;
     let artifact: string | undefined;
@@ -69,7 +67,7 @@ for (const profile of profiles) {
         binary: profile.binary,
         patched: profile.patched,
         plan: profile.plan,
-        patchkit: process.env.DIGI_PATCHKIT_BIN,
+        patchkit: optInPatchkit(),
         ...(profile.device === 'dt2' ? { card: profile.card } : {}),
       })) {
         if (!value || !path.isAbsolute(value) || !fs.existsSync(value))
@@ -80,9 +78,13 @@ for (const profile of profiles) {
         throw new Error('prepared listing patch/plan SHA mismatch');
       artifact = moduleArtifact(profile.device, 'test/files-proof');
       const dkm = fs.readFileSync(artifact);
-      if (dkm.readUInt32BE(0x8c) !== 0) throw new Error('files-proof must use no slots; callbacks work without slot0');
-      if (dkm[0x38] !== 1 || dkm[0x39] !== 4 || dkm.readUInt32BE(0x30) !== 0x504)
-        throw new Error('prepare files-proof with API1.4/runtime0.5.4 patchkit');
+      if (dkm.readUInt32BE(0xa4) !== 0xffffffff)
+        throw new Error('files-proof must define no tick; callbacks work without one');
+      const need = linkedRuntimeNeed(dkm);
+      if ((dkm.readUInt32BE(0x30) & 0x7fffffff) !== need)
+        throw new Error(
+          `prepare files-proof with the current patchkit (entry point dk_module, needs runtime ${need.toString(16)})`,
+        );
       fs.mkdirSync(runDir, { recursive: true });
     }
     const handle = withSession({
@@ -93,7 +95,7 @@ for (const profile of profiles) {
       dsp: 'sharc',
       restart: false,
     });
-    test('lists both roots with typed metadata, owned rows and deferred cancellation without slot0', async () => {
+    test('lists both roots with typed metadata, owned rows and deferred cancellation without a tick', async () => {
       const session = handle.session;
       const save = (name: string, value: unknown) =>
         fs.writeFileSync(path.join(runDir, name), JSON.stringify(value, null, 2));
@@ -103,7 +105,7 @@ for (const profile of profiles) {
         // This proof applies no patch and builds nothing. Both SYX/plan and DKM
         // must already exist; also reject stale local runtime/dependency objects.
         const checked = await exec(
-          process.env.DIGI_PATCHKIT_BIN!,
+          optInPatchkit()!,
           [
             '--root',
             root,
@@ -151,7 +153,12 @@ for (const profile of profiles) {
           clearTimeout(timer);
         }
         await session.client.call('run.mode', { mode: 'free' });
-        await expect.poll(async () => (await session.status()).cf.ready, { timeout: 30000 }).toBe(true);
+        await expectPollEmulated(
+          session,
+          async () => (await session.status()).cf.ready,
+          (value) => expect(value).toBe(true),
+          { emulatedMs: 30000 },
+        );
         protocol = liveProtocol(session);
         const fixture = fs.readFileSync(artifact!);
         await protocol.put('modules/files-proof.dkm', fixture);
@@ -161,9 +168,12 @@ for (const profile of profiles) {
         protocol.cancelPending();
         protocol = liveProtocol(session);
         await protocol.waitForBoot();
-        await expect
-          .poll(async () => (await protocol!.modules()).map((m) => m.name), { timeout: 30000 })
-          .toContain('test/files-proof');
+        await expectPollEmulated(
+          session,
+          async () => (await protocol!.modules()).map((m) => m.name),
+          (value) => expect(value).toContain('test/files-proof'),
+          { emulatedMs: 30000 },
+        );
         const request = async (cmd: number, body = Buffer.alloc(0)) => {
           const reply = await protocol!.request(cmd, body);
           expect(reply.status, `public fixture command0x${cmd.toString(16)}`).toBe(0);
@@ -207,15 +217,15 @@ for (const profile of profiles) {
         };
         const collected = async (rootId: number, directory: string) => {
           const ticket = await begin(rootId, directory);
-          await expect
-            .poll(
-              async () => {
-                const s = await status();
-                return s.ticket === ticket ? s.terminal : 0;
-              },
-              { timeout: 45000, interval: 50 },
-            )
-            .toBe(2);
+          await expectPollEmulated(
+            session,
+            async () => {
+              const s = await status();
+              return s.ticket === ticket ? s.terminal : 0;
+            },
+            (value) => expect(value).toBe(2),
+            { emulatedMs: 45000, intervalMs: 50 },
+          );
           const entries = await rows(ticket);
           save(`listing-${rootId}-${directory.replaceAll('/', '_') || 'root'}-${ticket}.json`, {
             ticket,
@@ -226,11 +236,11 @@ for (const profile of profiles) {
         };
         const caps = await request(0x3d);
         expect([caps.readUInt32BE(0), caps.readUInt32BE(4), caps.readUInt32BE(8)]).toEqual([
-          apiTableSize(),
-          0x504,
+          DEVICE_ID[profile.device],
+          runtimeVersion(),
           304,
         ]);
-        expect(caps.readInt32BE(12), 'client acquisition outside init fails').toBeLessThan(0);
+        expect(caps.readInt32BE(12), 'dk_files_open outside init fails').toBeLessThan(0);
         if (profile.device === 'dn2') {
           phase = 'empty virtual samples root';
           expect((await collected(1, '')).entries).toHaveLength(0);
@@ -295,15 +305,15 @@ for (const profile of profiles) {
         ).toBe(samples.entries[0]!.raw);
         phase = 'capacity validation preserves ready row';
         const manual = await begin(2, 'files-proof-store', 5); // notification hint, no auto-poll
-        await expect
-          .poll(
-            async () => {
-              const s = await status();
-              return s.ticket === manual ? s.hint : 0;
-            },
-            { timeout: 45000 },
-          )
-          .toBe(1);
+        await expectPollEmulated(
+          session,
+          async () => {
+            const s = await status();
+            return s.ticket === manual ? s.hint : 0;
+          },
+          (value) => expect(value).toBe(1),
+          { emulatedMs: 45000 },
+        );
         expect(await poll(manual, true)).toMatchObject({ rc: -5, untouched: 1 });
         expect(await poll(manual)).toMatchObject({ rc: 1, entry: store.entries[0]!.entry });
         phase = 'supersede and cancel identities';
@@ -315,15 +325,15 @@ for (const profile of profiles) {
         expect(await poll(current)).toMatchObject({ rc: -1, untouched: 1 });
         phase = 'reentrant callback cancel';
         const canceled = await begin(2, 'files-proof-store', 3);
-        await expect
-          .poll(
-            async () => {
-              const s = await status();
-              return s.ticket === canceled ? s.terminal : 0;
-            },
-            { timeout: 45000 },
-          )
-          .toBe(-1);
+        await expectPollEmulated(
+          session,
+          async () => {
+            const s = await status();
+            return s.ticket === canceled ? s.terminal : 0;
+          },
+          (value) => expect(value).toBe(-1),
+          { emulatedMs: 45000 },
+        );
         expect(await poll(canceled)).toMatchObject({ rc: -1, untouched: 1 });
         expect((await rows(canceled)).map((row) => row.entry)).toEqual([store.entries[0]!.entry]);
         expect((await status()).callbacks).toBeGreaterThan(0);

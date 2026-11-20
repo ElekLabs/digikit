@@ -1,0 +1,12 @@
+schema = "dk.steps/1"
+name = "release-notes"
+description = "Release the key on the tracks (the teardown of a case: no note holds into the next one)."
+
+[args]
+tracks = "all"
+key = 60
+
+[[step]]
+action = "midi.note_off"
+track = "{tracks}"
+key = "{key}"

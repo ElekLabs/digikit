@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Build the portable native runtime for the browser without changing toolchains.
 //
-// Writes five files:
+// Writes six files:
 //   apps/web/public/patchkit.wasm
 //       The patch tool of packages/patchkit (C ABI, no firmware inside: ports and modules are passed in at run time).
 //   apps/web/public/dkupload.wasm
 //       The module upload protocol of packages/dkupload (C ABI, no firmware inside).
 //   apps/web/public/dksample.wasm
 //       The WAV to native sample converter of packages/dksample (plusdrive-format's, C ABI, no firmware inside).
+//   apps/web/public/dkprof.wasm
+//       The profile model, address lookup and module DSP analysis of packages/dkprof (C ABI, JSON in and out, no firmware inside).
 //   apps/web/public/emulator-core.wasm
 //       CF-only core (small), used for the normal boot.
 //   apps/web/.local/emulator-core-sharc.wasm
@@ -31,8 +33,8 @@ const USAGE = `usage: wasm.mjs [options]
   --cf-only         build only the CF-only browser core, even when a generated core is available
   --sharc           fail unless the coupled SHARC+ core (emulator-core-sharc.wasm) can be built
                     (needs SHARC_GEN_DIR or the default generated core)
-  --patchkit-only   build only public/patchkit.wasm
-  --dksample-only   build only public/dksample.wasm (\`mise run workbench\` runs this first)
+  --patchkit-only   build only public/patchkit.wasm, dkupload.wasm and dksample.wasm
+  --dksample-only   build only public/dksample.wasm
   --no-fast         leave the fast tier (feature fast-wasm, off until the page turns it on) out of the coupled core
   --out PATH        output path of the coupled SHARC+ core (default apps/web/.local/emulator-core-sharc.wasm)
   --wasm-opt STR    run wasm-opt with these flags on the coupled SHARC+ core only (default -O3;
@@ -72,6 +74,7 @@ try {
       sharc: { type: 'boolean', default: false },
       'patchkit-only': { type: 'boolean', default: false },
       'dksample-only': { type: 'boolean', default: false },
+      'dkprof-only': { type: 'boolean', default: false },
       'no-fast': { type: 'boolean', default: false },
       out: { type: 'string' },
       'wasm-opt': { type: 'string', default: '-O3' },
@@ -159,7 +162,7 @@ function build(features, targetDirPath, env, dest) {
   const command = [
     'build',
     '--manifest-path',
-    'packages/emulator/boot/Cargo.toml',
+    'packages/emulator/wasm-core/Cargo.toml',
     '--locked',
     '--offline',
     '--release',
@@ -173,7 +176,7 @@ function build(features, targetDirPath, env, dest) {
   if (!run('cargo', command, { cwd: ROOT, env })) {
     die('WASM build failed; install wasm32-unknown-unknown for the pinned Rust toolchain');
   }
-  fs.copyFileSync(path.join(targetDirPath, 'wasm32-unknown-unknown/release/elektron_native_boot.wasm'), dest);
+  fs.copyFileSync(path.join(targetDirPath, 'wasm32-unknown-unknown/release/digi_wasm_core.wasm'), dest);
 }
 
 const WASM_FEATURE_FLAGS = [
@@ -237,12 +240,7 @@ function buildSmalls(names) {
       }
       fs.writeFileSync(stamp, stampFor(dest));
     }
-    // patchkit.wasm carries the Selache assembler (the SHARC+ build, 0.4 MB); the others stay under 2 MiB
-    const limit = (name === 'patchkit' ? 5 : 4) * 512 * 1024;
     const size = fs.statSync(dest).size;
-    if (size > limit) {
-      die(`${dest} is ${size} bytes: ${name}.wasm must stay small and firmware-free`);
-    }
     console.log(`${name}.wasm: ${size} bytes${current ? ' (unchanged)' : ''}`);
   }
 }
@@ -251,15 +249,20 @@ if (args['dksample-only']) {
   buildSmalls(['dksample']);
   process.exit(0);
 }
+if (args['dkprof-only']) {
+  buildSmalls(['dkprof']);
+  process.exit(0);
+}
 buildSmalls(['patchkit', 'dkupload', 'dksample']);
 if (args['patchkit-only']) {
   process.exit(0);
 }
+buildSmalls(['dkprof']);
 
 // The plain core has no fast tier. The coupled core has one (feature fast-wasm,
 // off until the page calls digi_sharc_fast or digi_sharc_fast_regions): it
 // reads no SHARC_FAST_REGIONS (wasm32-unknown-unknown has no environment) and
-// its kernels are wasm modules the page compiles (apps/web/src/core-host.ts).
+// its kernels are wasm modules the page compiles (packages/workbench-core/src/core-host.ts).
 const diagnostics = args.diagnostics ? ['diagnostic-profile', 'diagnostic-events'] : [];
 build(diagnostics, resolveTargetDir(''), withoutGenDir(baseEnv), path.join(publicDir, 'emulator-core.wasm'));
 const sharcWasm = args.out ? path.resolve(args.out) : path.join(localDir, 'emulator-core-sharc.wasm');

@@ -7,20 +7,20 @@
           "knobs": [
             null,
             {
-              "param": "bd_bend",
+              "param": "bend",
               "slot": 26
             },
             {
-              "param": "bd_index",
+              "param": "fm_index",
               "slot": 27
             },
             null,
             {
-              "param": "bd_ratio",
+              "param": "ratio",
               "slot": 29
             },
             {
-              "param": "bd_noise",
+              "param": "noise",
               "slot": 30
             }
           ],
@@ -28,8 +28,8 @@
           "name": "Bass Drum",
           "own_dsp": true,
           "page": {
-            "name": "BASS DRUM",
-            "title": "Bass Drum"
+            "name": "BD",
+            "title": "BASS DRUM"
           },
           "position": null,
           "short": "BD",
@@ -43,20 +43,20 @@
               "stock": 202
             },
             {
-              "param": "bd_bend",
+              "param": "bend",
               "slot": 1
             },
             {
-              "param": "bd_index",
+              "param": "fm_index",
               "slot": 2
             },
             null,
             {
-              "param": "bd_ratio",
+              "param": "ratio",
               "slot": 4
             },
             {
-              "param": "bd_noise",
+              "param": "noise",
               "slot": 5
             },
             null,
@@ -84,7 +84,7 @@
     "dn2": [
       {
         "default": 16384,
-        "id": "bd_bend",
+        "id": "bend",
         "max": 32512,
         "min": 0,
         "name": "Bend",
@@ -94,7 +94,7 @@
       },
       {
         "default": 8192,
-        "id": "bd_index",
+        "id": "fm_index",
         "max": 32512,
         "min": 0,
         "name": "FM Index",
@@ -104,7 +104,7 @@
       },
       {
         "default": 0,
-        "id": "bd_ratio",
+        "id": "ratio",
         "max": 32512,
         "min": 0,
         "name": "Ratio",
@@ -114,7 +114,7 @@
       },
       {
         "default": 0,
-        "id": "bd_noise",
+        "id": "noise",
         "max": 32512,
         "min": 0,
         "name": "Noise",
@@ -126,7 +126,7 @@
     "dt2": [
       {
         "default": 16384,
-        "id": "bd_bend",
+        "id": "bend",
         "max": 32512,
         "min": 0,
         "name": "Bend",
@@ -136,7 +136,7 @@
       },
       {
         "default": 8192,
-        "id": "bd_index",
+        "id": "fm_index",
         "max": 32512,
         "min": 0,
         "name": "FM Index",
@@ -146,7 +146,7 @@
       },
       {
         "default": 0,
-        "id": "bd_ratio",
+        "id": "ratio",
         "max": 32512,
         "min": 0,
         "name": "Ratio",
@@ -156,7 +156,7 @@
       },
       {
         "default": 0,
-        "id": "bd_noise",
+        "id": "noise",
         "max": 32512,
         "min": 0,
         "name": "Noise",

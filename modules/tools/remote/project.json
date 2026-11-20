@@ -5,11 +5,10 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/remote-input.device.test.ts"],
+        "tags": ["M:digikit/remote"],
         "modules": [],
-        "sources": ["tools/control/digi_client.py"],
-        "pythonTools": "client"
+        "sources": ["tools/control/digi_client.py"]
       }
-    ],
-    "mergeTests": ["tests/remote-input.device.test.ts"]
+    ]
   }
 }

@@ -4,16 +4,21 @@
 //! reporter, ran; or the runtime stopped with an error, e.g.
 //! `UnsupportedGuestPc`), or it reached **no UI** within the budget (a hang).
 //!
-//! usage: boot_gate SYX [--base SHA256] [--watch PC[,PC...]] [--max INSTRUCTIONS]
+//! usage: boot_gate SYX [--base SHA256] [--watch PC[,PC...]]... [--max INSTRUCTIONS]
 //!                  [--after N] [--frame OUT.pbm]
 //!   --base   the stock firmware SYX was made from, for an image with no digikit
-//!            patch record (`Emulator::new_patched`); a stock image needs none
+//!            patch record (`Emulator::new_patched`); a stock image needs none, and
+//!            nor does a build that keeps its release's build stamp (section 5)
 //!   --watch  PCs to watch; any execution of one is a fault (e.g. a firmware's
-//!            fault reporter). Hex with 0x, or decimal.
+//!            fault reporter). Hex with 0x, or decimal. Repeat the flag or give
+//!            a comma list; a value that is not a PC is a usage error.
 //!   --max    instructions to give up after (default 2,000,000,000)
 //!   --after  instructions to keep running after the main UI (default
 //!            100,000,000), so a fault just after boot is still caught
 //!   --frame  write the last screen as a 128x64 PBM
+//! An image with a DNFW area and no digikit patch record may run outside MAIN only
+//! in the area's CODE chunks; a PC anywhere else is a fault (`UnsupportedGuestPc`).
+//! `exec_ranges` in the report says which rule applied.
 //! Prints one JSON line; the exit status is 0 booted, 1 fault, 2 no UI, 3 usage.
 //! A watched PC's first execution is reported with its registers.
 
@@ -48,7 +53,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     let Some(syx_path) = args.first() else {
         eprintln!(
-            "usage: boot_gate SYX [--base SHA256] [--watch PC,...] [--max N] [--after N] [--frame OUT.pbm]"
+            "usage: boot_gate SYX [--base SHA256] [--watch PC,...]... [--max N] [--after N] [--frame OUT.pbm]"
         );
         return ExitCode::from(3);
     };
@@ -58,13 +63,23 @@ fn main() -> ExitCode {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
-    let watch: Vec<u32> = flag("--watch")
-        .map(|list| {
-            list.split(',')
-                .filter_map(|pc| number(pc).map(|v| v as u32))
-                .collect()
-        })
-        .unwrap_or_default();
+    // Every --watch counts: `--watch A --watch B` watches both, as `--watch A,B` does.
+    let mut watch: Vec<u32> = Vec::new();
+    for (i, _) in args.iter().enumerate().filter(|(_, a)| *a == "--watch") {
+        let Some(list) = args.get(i + 1) else {
+            eprintln!("--watch needs a PC list");
+            return ExitCode::from(3);
+        };
+        for pc in list.split(',') {
+            match number(pc).and_then(|v| u32::try_from(v).ok()) {
+                Some(pc) => watch.push(pc),
+                None => {
+                    eprintln!("--watch: {pc:?} is not a 32-bit PC");
+                    return ExitCode::from(3);
+                }
+            }
+        }
+    }
     let max = flag("--max")
         .and_then(|n| number(&n))
         .unwrap_or(2_000_000_000);
@@ -147,6 +162,15 @@ fn main() -> ExitCode {
             })
         })
         .collect();
+    // Where the PC could run outside MAIN: "ram" (the board's RAM window), or the
+    // CODE ranges of the image's DNFW area.
+    let exec_ranges = match emulator.exec_ranges() {
+        None => serde_json::json!("ram"),
+        Some(ranges) => ranges
+            .iter()
+            .map(|(start, end)| format!("{start:#010x}..{end:#010x}"))
+            .collect(),
+    };
     println!(
         "{}",
         serde_json::json!({
@@ -154,6 +178,7 @@ fn main() -> ExitCode {
             "device": s.device, "version": s.version, "base": base,
             "icount": s.icount, "main_ui_at": ui_at, "phase": s.phase,
             "error": s.error, "pc": format!("{:#010x}", s.pc), "watched": hits,
+            "exec_ranges": exec_ranges,
             "wall_seconds": started.elapsed().as_secs_f64(),
         })
     );

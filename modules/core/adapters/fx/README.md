@@ -3,14 +3,13 @@
 **Category:** core  **Devices:** Digitakt II 1.17; Digitone II 1.12 (the send route: both)  **Status:** experimental (emulator only)
 
 A framework module: it lets other modules process the final stereo block of the device with their own DSP routine (the FX contract,
-`<dk/fx.h>`). On its own it changes nothing: a patched image with an empty chain plays exactly the stock audio.
+`<dk/fx/fx.h>`). On its own it changes nothing: a patched image with an empty chain plays exactly the stock audio.
 
 - What changes on the device: the first instruction of a function the DSP calls once per block after the master mix and before the USB pack (finding 55:
   Digitakt II `FUN_1c80f2`, Digitone II `FUN_1c244d`) is replaced by a jump into this module. The effect runs before the USB pack and the DAC converter, so it is in the USB main output and in the
   DAC. The track buses (per-track USB outputs) are not touched.
 - The chain: up to four effects, rows of the registry `fx` (module order). A row is 24 words: pc, desc, state, enabled, the eight parameter words p0 to p7
-  (`DK_FX_MAX_PARAMS`), then the adapter's own words (see `module.toml`). Patched-in effect modules add a row with `[[entry]] registry = "fx"`
-  (`pc`, `desc`, `state`). A row with pc `0xffffffff` is free and skipped: `core/dynfx` reserves such rows for effects that the digikit runtime loads at run time
+  (`DK_FX_MAX_PARAMS`), then the adapter's own words (see `module.toml`). An effect is a run-time module: no module adds a row with `[[entry]] registry = "fx"` (patchkit refuses it, except for `core/dynfx`). A row with pc `0xffffffff` is free and skipped: `core/dynfx` reserves such rows for effects that the digikit runtime loads at run time
   (a `.dkm` with a DSP section of version 4; `docs/design/digikit-dkm.md`); the runtime fills one through window 2 of `core/dsp-link`, the pc word last.
 - The send route (Digitakt II finding 62; Digitone II finding 67): a row with route 1 (word 18) does not process the master. A second hook, the first instruction of the master function (`FUN_1c207b`, before the master mixes the
   FX return), builds a send bus: the sum over the 16 tracks of the track's bus times its gain, gain = (amount byte / 127) squared, ramped over the block like the stock sends. The effect processes that bus (the same
@@ -23,4 +22,4 @@ A framework module: it lets other modules process the final stereo block of the 
   dry block bit for bit. The effect page of a run-time effect sets it (`core/fxpages`, finding 61).
 - Empty chain: 16 instructions per block with no row, 21 with one free row, 31 with three free rows (a quick scan of at most four rows, about 5 instructions per free row); one effect adds
   4 to the bookkeeping of its row (steady 760 at mix 1.0, 1159 at another mix, 622 at mix 0, off 195 instructions per block).
-- Tests: `tests/test_fx.py` (the adapter on the concrete core), `tests/test_fx_send.py` (the send route), `tests/support/fx_rig.py`.
+- Tests: `tests/test_fx.py` (the adapter on the concrete core), `tests/fx-send.rig.test.ts` and `tests/fx-send-dn2.rig.test.ts` (the send route on the SHARC rig; `tests/test_fx_send.py` keeps the firmware-image checks), `tests/support/fx_rig.py`.

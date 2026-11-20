@@ -13,12 +13,12 @@
 //   * the pan loop of the engine (the hook `_gs_slot` inside the gain loop) feeds plane B from R for a stamped slot; the stock instructions run for every other slot.
 //
 // Slot of a call: the voice buffer R8 is entry v of the table of voice buffers (frame word -24 of the engine's frame); the twins take it from there.
-// Registers of a retargeted call (the C calling convention of sdk/dsp/call.inc): R0, R1, R2, I4, I12 and the flags are scratch for a wrapper; R4, R8, R12
+// Registers of a retargeted call (the C calling convention of sdk/dsp/contract/call.inc): R0, R1, R2, I4, I12 and the flags are scratch for a wrapper; R4, R8, R12
 // and the stack arguments reach the stock function unchanged. The wrappers need M5 = 0, M6 = 1, M7 = -1, M14 = 1 as the engine holds them.
 //
 // R0-R2 are read nowhere by the stock callees as arguments (they are caller-saved in the convention); a wrapper does not restore the caller-saved registers
 // after a stereo call.
-#include "dsp/call.inc"
+#include "dsp/contract/call.inc"
 #include "adapter-dn2.inc"
 #include "dk_machine.inc"
 
@@ -849,7 +849,7 @@ _gs_mono:
     JUMP _gs_pan_cont;
 
 // ---- the adapter's post-step (CALL from _dv_contract after the guard of L), plain subroutine: R is checked and scaled, the slot stamped ----
-// In: _dv_c + 4 = the slot v, _dv_c + 48 = the status bit DK_STEREO of the module's return (0: mono), _dv_in + DK_IN_BLOCK. May clobber R0-R15, I0-I5.
+// In: _dv_c + 4 = the slot v, _dv_c + 48 = the status bit DK_STEREO of the module's return (0: mono), _dv_in + DK_IN_BLOCK. Register rules: sdk/dsp/REGISTERS.md.
 // A bad R block (not finite, over 8.0 in magnitude) or a slot over the cap stays unstamped: the slot plays R = L for the block.
 .GLOBAL _gs_post;
 _gs_post:

@@ -23,6 +23,8 @@
         "{workspaceRoot}/packages/test-support/**/*",
         "{workspaceRoot}/packages/control-client/**/*",
         "{workspaceRoot}/packages/dk-session/**/*",
+        "!{workspaceRoot}/{packages,modules}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}",
+        "!{workspaceRoot}/{packages,modules}/**/tests/**/*.rs",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/**/*",
         "jsToolchain",
@@ -32,11 +34,13 @@
         { "env": "DIGI_NO_PROGRESS_MS" },
         { "env": "DIGI_PK_READY_DT2_117" },
         { "env": "SHARC_FAST_REGIONS" },
+        { "env": "SHARC_FAST_REGIONS_2" },
         { "env": "SHARC_BLOCKTRANS" },
+        { "env": "SHARC_BLOCKTRANS_2" },
         { "env": "SHARC_FAST_FALLBACK_REGIONS" },
+        { "env": "SHARC_FAST_FALLBACK_REGIONS_2" },
         { "env": "SHARC_FAST_AUTO" },
         { "env": "SHARC_GEN_DIR" },
-        { "env": "SHARC_GEN_DIR_2" },
         { "env": "UPDATE_GOLDENS" }
       ],
       "options": { "command": "node tools/devtools/emu-slot.mjs -- env REGRESSION_JOBS=${DIGI_JOBS:-4} pnpm --filter @digi/regression test:stock", "cwd": "." }

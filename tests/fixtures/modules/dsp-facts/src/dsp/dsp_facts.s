@@ -1,4 +1,4 @@
-// test/dsp-facts: an effect of the FX contract (<dk/fx.h>) that measures the SHARC+ core it runs on and reports through the module step word.
+// test/dsp-facts: an effect of the FX contract (<dk/fx/fx.h>) that measures the SHARC+ core it runs on and reports through the module step word.
 //
 // The audio passes unchanged (the block is copied). Each block the routine stores ONE 32-bit word in `DM(_dk_step)`, diagnostic word 25 of the DSP reply
 // (`core/dsp-link`), which the ColdFire collector keeps (modules/tools/probe). The words form frames exactly as in test/sharc-probe: a header (0xB0, payload
@@ -104,15 +104,14 @@ _fc_emit:                                 // one word of the frame goes out
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
-// dk_fx_desc: magic, contract, n_params, state_bytes, max_cycles_block, max_call_depth, stack_bytes.
+// dk_fx_desc: magic, contract, n_params, state_bytes, max_call_depth, stack_bytes.
 .GLOBAL _fc_desc;
 .VAR _fc_desc = DK_FX_MAGIC;
 .VAR _fc_desc1 = DK_FX_V1;
 .VAR _fc_desc2 = 0;
 .VAR _fc_desc3 = FC_STATE_BYTES;
-.VAR _fc_desc4 = 120000;
+.VAR _fc_desc4 = 0;
 .VAR _fc_desc5 = 0;
-.VAR _fc_desc6 = 0;
 // the call stamps, the stream state, the saved flags, the statistics of the item that runs
 .VAR _fc_prev1 = 0;
 .VAR _fc_prev2 = 0;

@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use coldfire::{Bus, BusError, Cpu, InterruptPolicy};
 use machine::{Board, SemaphoreAddresses, Time};
+use periph::peer::PeerIrq;
 use serde::Serialize;
 
 use crate::guard::WriteGuards;
@@ -20,6 +21,7 @@ pub(crate) const UART8_UDR: u32 = 0xec07_000c;
 pub(crate) const TX35_VECTOR: u8 = 155;
 pub(crate) const INTC1_BASE: u32 = 0xfc04_c000;
 pub(crate) const DSPI0_SR: u32 = 0xfc05_c02c;
+pub(crate) const DSPI1_SR: u32 = 0xfc03_c02c;
 pub(crate) const DSPI2_SR: u32 = 0xec03_802c;
 pub(crate) const ESDHC_CMDARG: u32 = 0xfc0c_c008;
 pub(crate) const ESDHC_XFERTYP: u32 = 0xfc0c_c00c;
@@ -102,20 +104,36 @@ pub(crate) fn hex(bytes: &str) -> Vec<u8> {
 
 pub(crate) fn data_mask(sig: &[u8], wild: Option<usize>) -> Vec<bool> {
     let mut mask = vec![false; sig.len()];
-    let mut at = 0;
-    while at + 4 <= sig.len() {
+    for at in 0..sig.len().saturating_sub(3) {
         let value = u32::from_be_bytes(sig[at..at + 4].try_into().unwrap());
         if (MAIN_LOAD..0x4800_0000).contains(&value) {
             mask[at..at + 4].fill(true);
-            at += 4;
-        } else {
-            at += 1;
         }
     }
     if let Some(i) = wild {
         mask[i] = true;
     }
     mask
+}
+
+/// `task_create`: loads its stack-passed arguments first. Unique on every MAIN image of the registry.
+const TASK_CREATE_SIG: &[u8] = &[0x20, 0x2f, 0x00, 0x0c, 0x72, 0xfc, 0xc2, 0xaf];
+/// The UART8 initializer: saves d2, sets d2 = 15, then addresses the UART and GPIO blocks.
+const UART_INIT_SIG: &[u8] = &[
+    0x2f, 0x02, 0x74, 0x0f, 0x41, 0xf9, 0xec, 0x09, 0x40, 0x4b, 0x12, 0x10, 0x20, 0x2f, 0x00, 0x08,
+    0x43, 0xf9, 0xec, 0x07, 0x00, 0x00, 0x42, 0xb9,
+];
+
+/// Address of `task_create` in a MAIN image.
+pub(crate) fn resolve_task_create(image: &[u8]) -> Result<u32, String> {
+    unique(image, TASK_CREATE_SIG, &data_mask(TASK_CREATE_SIG, None))
+        .map_err(|e| format!("task_create: {e}"))
+}
+
+/// Address of the UART8 initializer in a MAIN image.
+pub(crate) fn resolve_uart_init(image: &[u8]) -> Result<u32, String> {
+    unique(image, UART_INIT_SIG, &data_mask(UART_INIT_SIG, None))
+        .map_err(|e| format!("uart8_init: {e}"))
 }
 
 pub(crate) fn resolve_sd_semaphores(image: &[u8]) -> Result<(u32, SemaphoreAddresses), String> {
@@ -168,6 +186,50 @@ pub(crate) fn resolve_fs_worker(image: &[u8]) -> Result<(u32, u32, u32, u32), St
     Ok((entry, completion, success, done))
 }
 
+/// RAM words that decide whether MainScreenView starts the filesystem check: mounted flag, superblock state, checked word.
+/// The check starts only when mounted != 0 and (state == 3 or checked == 0); a successful check leaves state 4 and checked 1.
+pub(crate) const FS_STATE_DONE: u32 = 4;
+
+/// Resolves the three words from the predicate that starts the check (`mounted && (state == 3 || checked == 0)`): a function that calls
+/// the state getter, compares with 3, then calls the checked getter. Each getter tests the mounted flag and loads its word.
+/// Returns `(mounted, state, checked)`.
+pub(crate) fn resolve_fs_check_flags(image: &[u8]) -> Result<(u32, u32, u32), String> {
+    let sig = hex("4eb9000000007203b280670e4eb9000000004a8057c044804e7570014e75");
+    let mut mask = vec![false; sig.len()];
+    mask[2..6].fill(true);
+    mask[14..18].fill(true);
+    let predicate = unique(image, &sig, &mask).map_err(|e| format!("fs check predicate: {e}"))?;
+    let word = |addr: u32, len: usize| -> Result<&[u8], String> {
+        let off = addr.checked_sub(MAIN_LOAD).ok_or("fs check below MAIN")? as usize;
+        image
+            .get(off..off + len)
+            .ok_or("fs check outside MAIN".to_owned())
+    };
+    let be = |bytes: &[u8]| u32::from_be_bytes(bytes.try_into().expect("four bytes"));
+    let head = word(predicate, 18)?;
+    let (state_getter, checked_getter) = (be(&head[2..6]), be(&head[14..18]));
+    // getter: ... tst.l (mounted).l at +0x16 (4ab9), move.l (word).l,D2 at +0x2c (2439)
+    let getter = |addr: u32| -> Result<(u32, u32), String> {
+        let body = word(addr, 0x32)?;
+        if body[0x16..0x18] != [0x4a, 0xb9] || body[0x2c..0x2e] != [0x24, 0x39] {
+            return Err(format!(
+                "fs flag getter {addr:#010x} has an unexpected shape"
+            ));
+        }
+        Ok((be(&body[0x18..0x1c]), be(&body[0x2e..0x32])))
+    };
+    let (mounted, state) = getter(state_getter)?;
+    let (mounted_again, checked) = getter(checked_getter)?;
+    let in_ram = |a: u32| (0x4000_0000..0x4800_0000).contains(&a) && a & 3 == 0;
+    if mounted != mounted_again
+        || ![mounted, state, checked].into_iter().all(in_ram)
+        || state == checked
+    {
+        return Err("fs check flag operands invalid".into());
+    }
+    Ok((mounted, state, checked))
+}
+
 pub(crate) fn digest(bytes: &[u8]) -> String {
     let mut sha = Sha256::new();
     sha.update(bytes);
@@ -216,20 +278,7 @@ pub(crate) fn unique_signature_data(
     signature: &[u8],
     wildcard: Option<usize>,
 ) -> Option<u32> {
-    let mut masked = vec![false; signature.len()];
-    let mut at = 0;
-    while at + 4 <= signature.len() {
-        let value = u32::from_be_bytes(signature[at..at + 4].try_into().expect("abs32"));
-        if (MAIN_LOAD..0x4800_0000).contains(&value) {
-            masked[at..at + 4].fill(true);
-            at += 4;
-        } else {
-            at += 1;
-        }
-    }
-    if let Some(index) = wildcard {
-        masked[index] = true;
-    }
+    let masked = data_mask(signature, wildcard);
     let matches: Vec<_> = image
         .windows(signature.len())
         .enumerate()
@@ -426,9 +475,14 @@ pub(crate) fn readiness_contract_ready(
     last_complete: Option<u64>,
     frame: Option<&Frame>,
     success: Option<bool>,
+    fs_not_needed: bool,
 ) -> bool {
     match contract {
         device_profile::ReadinessContract::MainPanelV1 => true,
+        // the check never ran and its flags say it is not needed (a verified superblock): the main panel is enough
+        device_profile::ReadinessContract::MainPanelFsCheckV1 if starts == 0 && fs_not_needed => {
+            true
+        }
         device_profile::ReadinessContract::MainPanelFsCheckV1 => {
             starts > 0
                 && starts == completions
@@ -742,6 +796,10 @@ impl<const TRACE: bool> Bus for LoggingBus<TRACE> {
     fn read8(&mut self, addr: u32) -> Result<u8, BusError> {
         #[cfg(feature = "cf-mix")]
         crate::cfmix::data_ref(addr, false);
+        if !self.guards.is_empty() {
+            self.guards
+                .note_load(self.current_pc, addr, 1, self.current_icount);
+        }
         let r = self.board.read8(addr);
         if !TRACE && (r.is_ok() || !self.zero_page_mmio) {
             // zero_page() is false and log() a no-op: the board's result.
@@ -753,6 +811,10 @@ impl<const TRACE: bool> Bus for LoggingBus<TRACE> {
     fn read16(&mut self, addr: u32) -> Result<u16, BusError> {
         #[cfg(feature = "cf-mix")]
         crate::cfmix::data_ref(addr, false);
+        if !self.guards.is_empty() {
+            self.guards
+                .note_load(self.current_pc, addr, 2, self.current_icount);
+        }
         let r = self.board.read16(addr);
         if !TRACE && (r.is_ok() || !self.zero_page_mmio) {
             // zero_page() is false and log() a no-op: the board's result.
@@ -764,6 +826,10 @@ impl<const TRACE: bool> Bus for LoggingBus<TRACE> {
     fn read32(&mut self, addr: u32) -> Result<u32, BusError> {
         #[cfg(feature = "cf-mix")]
         crate::cfmix::data_ref(addr, false);
+        if !self.guards.is_empty() {
+            self.guards
+                .note_load(self.current_pc, addr, 4, self.current_icount);
+        }
         let r = self.board.read32(addr);
         if !TRACE && (r.is_ok() || !self.zero_page_mmio) {
             // zero_page() is false and log() a no-op: the board's result.
@@ -1029,6 +1095,100 @@ pub(crate) fn service_timers<const TRACE: bool>(
         delivery_counts,
         delivery_dropped,
     ))
+}
+
+/// EPORT interrupt enable register (EPIER); IRQ4 is bit 4.
+const EPORT_EPIER: u32 = 0xfc09_0003;
+const PEER_IRQ4_VECTOR: u16 = 68;
+const PEER_EDMA29_VECTOR: u16 = 149;
+
+/// The mailbox peer's due interrupt (`periph::peer`), delivered like a hardware source: ICR level above the CPU IPL, source unmasked in
+/// IMR, IRQ4 enabled in EPIER, handler installed. The hello block goes into the window just before. -> whether it was delivered; when
+/// it is not deliverable yet it stays queued.
+pub(crate) fn service_peer<const TRACE: bool>(
+    bus: &mut LoggingBus<TRACE>,
+    cpu: &mut Cpu,
+    now: u64,
+) -> Result<bool, String> {
+    let due: Vec<PeerIrq> = bus
+        .board
+        .peer()
+        .map(|peer| peer.due_list(now).collect())
+        .unwrap_or_default();
+    for irq in due {
+        if offer_peer_irq(bus, cpu, irq)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn offer_peer_irq<const TRACE: bool>(
+    bus: &mut LoggingBus<TRACE>,
+    cpu: &mut Cpu,
+    irq: PeerIrq,
+) -> Result<bool, String> {
+    let vector = match irq {
+        PeerIrq::Eport4 => PEER_IRQ4_VECTOR,
+        PeerIrq::Edma29 => PEER_EDMA29_VECTOR,
+        PeerIrq::Frame => bus.board.peer().map_or(174, |peer| peer.frame_vector),
+    };
+    let Some(level) = bus
+        .board
+        .time()
+        .and_then(|time| time.interrupt_level(vector))
+    else {
+        return Ok(false);
+    };
+    if ((cpu.sr >> 8) & 7) >= u16::from(level) {
+        return Ok(false);
+    }
+    if irq == PeerIrq::Eport4
+        && bus
+            .board
+            .read8(EPORT_EPIER)
+            .map_err(|_| "PeerEportUnavailable".to_string())?
+            & 0x10
+            == 0
+    {
+        return Ok(false);
+    }
+    let handler = bus
+        .board
+        .read32(cpu.ctrl.vbr.wrapping_add(4 * u32::from(vector)))
+        .map_err(|_| "PeerVectorUnavailable".to_string())?;
+    if handler == 0 || handler >= 0x4800_0000 {
+        return Ok(false);
+    }
+    let stack = if cpu.sr & 0x2000 == 0 && cpu.ctrl.cacr & 0x20 != 0 {
+        cpu.other_a7
+    } else {
+        cpu.a[7]
+    };
+    let frame = (stack & !3).wrapping_sub(8);
+    if !bus.board.can_write_ram_range(frame, 4)
+        || !bus.board.can_write_ram_range(frame.wrapping_add(4), 4)
+    {
+        return Err(format!("PeerInterruptFrameUnavailable({frame:#010x})"));
+    }
+    if let Some(hello) = bus.board.peer().and_then(|peer| peer.window_before(irq)) {
+        bus.board.peer_window_store(0, &hello);
+    }
+    match cpu.take_interrupt(
+        &mut bus.board,
+        vector as u8,
+        Some(level),
+        InterruptPolicy::Oracle,
+    ) {
+        Ok(true) => {
+            if let Some(peer) = bus.board.peer_mut() {
+                peer.delivered(irq);
+            }
+            Ok(true)
+        }
+        Ok(false) => Ok(false),
+        Err(stop) => Err(format!("PeerDeliveryPoisoned({stop:?})")),
+    }
 }
 
 // Exact Python unicorn-reference-final:emu/edma.py completion boundary: channel 35 is offered only

@@ -1,5 +1,5 @@
 import type { Bar, KnownModule } from '../src/memory-core.ts';
-import type { Caps } from '../../../web/src/modules/fit.ts';
+import type { Caps } from '@digi/workbench-core/modules/fit.ts';
 // The Memory panel's model (apps/desktop/ui/src/memory-core.ts): one bar per resource the device limits, a segment per loaded module coloured by its
 // type, "other" for the rest of what is used, and the texts.
 import assert from 'node:assert/strict';
@@ -10,7 +10,9 @@ import {
   freeTitle,
   noteText,
   kibText,
+  moduleRows,
   segmentTitle,
+  slotCells,
   SPECS,
   usedText,
   widthPct,
@@ -192,6 +194,22 @@ test('the largest free block is named only when it is smaller than the free tota
   assert.equal(capped.largest, 100);
 });
 
+test('a count never names a largest block: its runtime largest is 0 by contract', () => {
+  const bars = buildBars(
+    { MODULES: { limit: 8, used: 0, largest: 0 }, MACHINE_ROWS: { limit: 8, used: 2, largest: 0 } },
+    [],
+    library,
+  );
+  const modules = by(bars, 'MODULES');
+  assert.equal(modules.split, false);
+  assert.equal(freeTitle(modules), 'Free: 8');
+  assert.equal(noteText(modules), null);
+  const machines = by(bars, 'MACHINE_ROWS');
+  assert.equal(machines.split, false);
+  assert.equal(freeTitle(machines), 'Free: 6');
+  assert.equal(noteText(machines), null);
+});
+
 test('the texts: KiB for bytes, counts for rows, the module name and amount on hover', () => {
   const bars = buildBars(dn2, loaded, library);
   const dsp = by(bars, 'DSP_AREA');
@@ -212,4 +230,55 @@ test('the texts: KiB for bytes, counts for rows, the module name and amount on h
   assert.equal(amountText({ bytes: false }, 7), '7');
   assert.equal(widthPct(dsp, 256 * KiB), 50);
   assert.equal(widthPct({ limit: 0 } as Bar, 5), 0);
+});
+
+test('a count bar is one cell per slot, coloured by the module that holds it; byte bars and long counts stay bars', () => {
+  const bars = buildBars(dn2, loaded, library);
+  const modules = slotCells(by(bars, 'MODULES'))!;
+  assert.equal(modules.length, 8);
+  assert.deepEqual(
+    modules.map((c) => c.kind),
+    ['machine', 'effect', 'tool', 'free', 'free', 'free', 'free', 'free'],
+  );
+  assert.equal(modules[0]!.title, 'sine: 1');
+  assert.equal(modules[7]!.title, freeTitle(by(bars, 'MODULES')));
+  assert.equal(slotCells(by(bars, 'PARAM_ROWS'))!.length, 16);
+  assert.ok(slotCells(by(bars, 'PAGE_ROWS'))!.every((c) => c.kind === 'free'));
+  assert.equal(slotCells(by(bars, 'ARENA')), null, 'bytes');
+  assert.equal(slotCells({ ...by(bars, 'MODULES'), limit: 64 }), null, 'too many slots to draw one by one');
+});
+
+test('slots past the limit are drawn after it and marked', () => {
+  const over = buildBars({ ...dn2, MACHINE_ROWS: c(1, 2) }, loaded, library);
+  const cells = slotCells(by(over, 'MACHINE_ROWS'))!;
+  assert.equal(cells.length, 2);
+  assert.deepEqual(
+    cells.map((x) => x.over),
+    [false, true],
+  );
+});
+
+test('per-module rows list what each loaded module takes of a bar, from the fixed capacity and the needs of its file', () => {
+  const bars = buildBars(dn2, loaded, library);
+  // DSP memory: only the machine takes it; the rest of `used` is none (259 KiB of 259 KiB)
+  assert.deepEqual(moduleRows(by(bars, 'DSP_AREA')), [
+    { id: 'test/sine', label: 'sine', kind: 'machine', text: '259 KiB' },
+  ]);
+  // CPU memory: largest first, then the runtime's own 6 KiB as Other
+  assert.deepEqual(
+    moduleRows(by(bars, 'ARENA')).map((r) => [r.label, r.text]),
+    [
+      ['sine', '4 KiB'],
+      ['chorus', '2 KiB'],
+      ['remote', '1 KiB'],
+      ['Other', '6 KiB'],
+    ],
+  );
+  // a count: one row per module that takes a slot
+  assert.deepEqual(
+    moduleRows(by(bars, 'MACHINE_ROWS')).map((r) => [r.label, r.text]),
+    [['sine', '1']],
+  );
+  // a resource nothing takes has no rows
+  assert.deepEqual(moduleRows(by(bars, 'PAGE_ROWS')), []);
 });

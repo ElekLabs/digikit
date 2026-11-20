@@ -14,11 +14,12 @@ export default defineConfig({
   plugins: [solid()],
   resolve: {
     alias: [
-      { find: '@web', replacement: here('../../../web/src') },
       { find: '@tauri-apps/api/core', replacement: here('./tauri-mock.ts') },
       // the pages import their backends by these two relative names; the mocks answer instead
       { find: /^\.\/transfer-backend$/, replacement: here('./transfer-backend.mock.ts') },
       { find: /^\.\/memory-backend$/, replacement: here('./memory-backend.mock.ts') },
+      { find: /^\.\/calibration-backend$/, replacement: here('./calibration-backend.mock.ts') },
+      { find: /^\.\/profile-backend$/, replacement: here('./profile-backend.mock.ts') },
       { find: /^\.\/samples-backend$/, replacement: here('./samples-backend.mock.ts') },
     ],
     dedupe: ['solid-js'],

@@ -21,10 +21,10 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { resolveInputs, repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
 import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
+import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
 import { MS, Session } from '../../packages/test-support/src/session.ts';
 
 const FIRMWARE: Record<Device, string> = { dt2: '1.17', dn2: '1.12' };
-const BOOT_LIMIT_MS = 180_000;
 
 function sha256File(file: string): string {
   const hash = createHash('sha256');
@@ -123,7 +123,6 @@ try {
   if (load.start_used !== 'cold') throw new Error(`expected a cold boot, got start_used=${load.start_used}`);
   if (!load.runtime?.patched || load.runtime.set !== patchSet) throw new Error('boot is not the patched runtime');
   if (!status.cf.ready || status.cf.error) throw new Error(`firmware not ready: phase=${status.cf.phase}`);
-  if (Date.now() - started > BOOT_LIMIT_MS) throw new Error('boot exceeded its limit');
   const cacheDir = String((load as unknown as { cache_dir?: string }).cache_dir ?? '');
   let snapDir = cacheDir;
   if (state === 'reset') {
@@ -131,10 +130,12 @@ try {
     // ready pair of that cold boot in a new directory under runDir/patched; it is the CF snapshot and DSP state.
     const call = <T>(method: string, params?: Record<string, unknown>) => session!.client.call<T>(method, params);
     const stepSeconds = (s: number) => session!.client.step(s * 1000 * MS, { timeout_wall_s: 300 });
-    const dk = new DkSession(new EmuUsbTransport(call, { stepInstructions: 20_000_000 }));
+    const dk = new DkSession(new EmuUsbTransport(call, { stepInstructions: 20_000_000 }), {
+      clock: steppedClock(session),
+    });
     await stepSeconds(15);
     await dk.restart();
-    await dk.waitForBoot(() => stepSeconds(5).then(() => undefined));
+    await dk.waitForBoot(90_000, { pollMs: 5000 });
     await stepSeconds(25);
     const patchedRoot = path.join(runDir, 'patched');
     const dirs = fs

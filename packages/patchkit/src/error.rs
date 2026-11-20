@@ -22,6 +22,11 @@ impl From<dt2_firmware_loader::Error> for Error {
         Error(format!("firmware container: {e}"))
     }
 }
+impl From<String> for Error {
+    fn from(e: String) -> Self {
+        Error(e)
+    }
+}
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error(format!("json: {e}"))

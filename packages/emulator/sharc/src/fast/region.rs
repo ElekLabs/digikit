@@ -235,7 +235,7 @@ pub fn build_straight(s: &St, pc: u32) -> Result<Region, Refuse> {
 const MAX_PASSES: u8 = 5;
 
 fn build(s: &St, pc: u32, lp: Option<LoopSpec>, decs: Vec<(u32, Dec)>) -> Result<Region, Refuse> {
-    if !cfg!(sharc_gen) {
+    if !s.core.generated {
         return Err(Refuse("no generated core (SHARC_GEN_DIR)".into()));
     }
     if !s.r[MODE1].is_c() {
@@ -402,7 +402,7 @@ pub fn build_cfg_opts(
     cluster: bool,
     barrier: &std::collections::BTreeSet<u32>,
 ) -> Result<Region, Refuse> {
-    if !cfg!(sharc_gen) {
+    if !s.core.generated {
         return Err(Refuse("no generated core (SHARC_GEN_DIR)".into()));
     }
     if !s.r[MODE1].is_c() {

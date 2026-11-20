@@ -1,8 +1,9 @@
 import path from 'node:path';
-import { DkSession, EmuUsbTransport } from '@digi/dk-session';
 import { withinRuntimeDeadline } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
+import { withWaitApi } from '@digi/regression/support.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
+import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { timePhase, timingContext } from '@digi/regression/timing.ts';
@@ -11,7 +12,7 @@ import {
   rpc,
   dspWords,
   rows,
-  frames,
+  runFrames,
   capture,
   compare,
   inspect,
@@ -21,7 +22,7 @@ import {
 
 for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} reusable FX fixture`, () => {
-    const context = withGainFxSession(device, 'FX dry/gain/deselect/reset');
+    const context = withGainFxSession(device, 'FX dry/gain/deselect/reset', { requireAudible: true });
     test('reuses an owned daemon while clean reset and protocol restart preserve their distinct FX contracts', async () => {
       const { fixture, plan, dry, wet, artifacts, slots, rememberEpoch } = context;
       const initial = fixture.runtime;
@@ -46,9 +47,7 @@ for (const device of DEVICES) {
       await compare(dryPcm, wetPcm, 0.5, artifacts, 'gain');
       const stateAddress = wetState.chain[0]![2]!;
       const before = (await dspWords(dirty.session, stateAddress, 1))[0]!;
-      await bounded(async () =>
-        dirty.session.client.runUntil({ frames: (await frames(dirty.session)) + 100, timeout_wall_s: 30 }),
-      );
+      await runFrames(dirty.session, 100);
       const after = (await dspWords(dirty.session, stateAddress, 1))[0]!;
       expect(before).toBeGreaterThan(1000);
       expect(after - before).toBeGreaterThanOrEqual(90);
@@ -66,10 +65,8 @@ for (const device of DEVICES) {
       expect(typeof epoch).toBe('number');
       await timePhase('protocol.restart', () => bounded(() => dirty.dk.restart()), timingContext(dirty.session));
       dirty.dk.cancelPending();
-      const rebootDk = new DkSession(
-        new EmuUsbTransport((method, params) => dirty.session.client.call(method, params)),
-      );
-      const reboot = { session: dirty.session, dk: rebootDk, close: dirty.close };
+      const rebootDk = emulatorDk(dirty.session);
+      const reboot = withWaitApi({ session: dirty.session, dk: rebootDk, close: dirty.close });
       try {
         await timePhase(
           'protocol.waitForBoot',

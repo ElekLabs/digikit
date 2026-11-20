@@ -35,6 +35,28 @@ pub mod draw {
     }
 }
 
+pub mod filter {
+    // cf.filter.fn.accessor: no sig yet
+
+    unsafe extern "C" {
+        /// Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store.
+        #[link_name = "cf.filter.fn.get"]
+        pub fn get(track_object: u32) -> i32;
+    }
+
+    // cf.filter.fn.list_vector: no sig yet
+
+    // cf.filter.fn.name: no sig yet
+
+    // cf.filter.fn.set: no sig yet
+
+    unsafe extern "C" {
+        /// The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150.
+        #[link_name = "cf.filter.fn.set_kit"]
+        pub fn set_kit(kit: u32, track: i32, ty: i32, flag4: i32, flag5: i32) -> i32;
+    }
+}
+
 pub mod input {
     // cf.input.fn.enc_decoder: no sig yet
 
@@ -47,14 +69,28 @@ pub mod input {
     }
 }
 
-pub mod link {
-    // cf.link.fn.block_isr: no sig yet
+pub mod lfo {
+    unsafe extern "C" {
+        /// The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79): mirror index 5, range 0..0x600, default 0x100, slot 0xae.
+        #[link_name = "cf.lfo.data.wave_row.1"]
+        pub static WAVE_ROW_1: u8;
+    }
 
     unsafe extern "C" {
-        /// DN2 1.12 native LP0 tag plus 1024-word sender (finding 92). Locks the boot-initialized mutex; unbounded hardware-readiness wait. Emulator-only diagnostic use, format 1 sends numeric source words least-significant byte first.
-        #[link_name = "cf.link.fn.bulk_send"]
-        pub fn bulk_send(tag: u32, source: *const u32, format: u32);
+        /// The descriptor row of the WAVE parameter of LFO 2 (code 89): mirror index 0xd, range 0..0x600, default 0, slot 0xb6.
+        #[link_name = "cf.lfo.data.wave_row.2"]
+        pub static WAVE_ROW_2: u8;
     }
+
+    unsafe extern "C" {
+        /// The descriptor row of the WAVE parameter of LFO 3 (code 99): mirror index 0x15, range 0..0x600, default 0, slot 0xbe.
+        #[link_name = "cf.lfo.data.wave_row.3"]
+        pub static WAVE_ROW_3: u8;
+    }
+}
+
+pub mod link {
+    // cf.link.fn.block_isr: no sig yet
 
     // cf.link.fn.frame: no sig yet
 
@@ -94,9 +130,21 @@ pub mod machine {
 
     // cf.machine.fn.permit: no sig yet
 
+    unsafe extern "C" {
+        /// The KitActive set-machine wrapper the machine chooser commits through: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15, calls the machine setter on the track object (k + 0x6c + track * 0x3c0; the setter checks the permit and sends the change), and updates the mask of tracks that hold the special type. DT2 0x40036798, DN2 0x40031880. Finding 150. The debug module's SETUP command calls it from the UI task.
+        #[link_name = "cf.machine.fn.set_kit"]
+        pub fn set_kit(kit: u32, track: i32, ty: i32, flag4: i32, flag5: i32) -> i32;
+    }
+
     // cf.machine.fn.type_page.count: no sig yet
 
     // cf.machine.fn.type_reader: no sig yet
+
+    unsafe extern "C" {
+        /// `void f(MachineSelectionView *)`: fills the items of the machine selection view from the list getter (it clears its items first); the view's constructor calls it once at boot. The list is cached in the view, so a reload calls it again on the stored view (the hook `cf.machine.hook.view.build` remembers the view).
+        #[link_name = "cf.machine.fn.view.build"]
+        pub fn view_build(view: u32);
+    }
 
     unsafe extern "C" {
         /// Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted.
@@ -121,6 +169,9 @@ pub mod machine {
         #[link_name = "cf.machine.data.pertype.table"]
         pub static PERTYPE_TABLE: u8;
     }
+
+    /// Entry of the machine selection view's item builder (view at 4(sp)); the hook remembers the view for a reload's list rebuild.
+    pub type ViewBuildHook = unsafe extern "C" fn(view: u32);
 }
 
 pub mod mem {
@@ -403,6 +454,12 @@ pub mod menu {
         pub static SETTINGS_LIST_SYSTEM_ICON_REF: u8;
     }
 
+    unsafe extern "C" {
+        /// The `move.l #font,d0` instruction (6 bytes of code) in the VerticalMenuView constructor: its operand is the address of the font object that the constructor stores twice in the view. The field offset is not the same in every firmware, so a module reads the font from this literal, not from a fixed offset.
+        #[link_name = "cf.menu.site.vertical_menu_view_ctor.font_ref"]
+        pub static VERTICAL_MENU_VIEW_CTOR_FONT_REF: u8;
+    }
+
     /// Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item.
     pub type SettingsListTailHook = unsafe extern "C" fn(menu: *mut u8);
 }
@@ -491,7 +548,7 @@ pub mod param {
     // cf.param.fn.value_class: no sig yet
 
     unsafe extern "C" {
-        /// the parameter table (60-byte rows), by the signature of its reader
+        /// the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes.
         #[link_name = "cf.param.data.descriptor_table"]
         pub static DESCRIPTOR_TABLE: u8;
     }
@@ -500,6 +557,20 @@ pub mod param {
         /// The descriptor row (60 bytes) of that parameter: mirror index 66, range 0..0x7f00, default 0x5000.
         #[link_name = "cf.param.data.descriptor_table.master_sidechain_filter"]
         pub static DESCRIPTOR_TABLE_MASTER_SIDECHAIN_FILTER: u8;
+    }
+}
+
+pub mod peer {
+    unsafe extern "C" {
+        /// st-1.42 0x401181ec: the container section depacker. It skips the 8-byte stream header, has no output bound and returns the output length in D0.
+        #[link_name = "cf.peer.fn.depack"]
+        pub fn depack(src: *const u8, dst: *mut u8) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// st-1.42 0x40116d7a: the NOR flash read `void f(u32 src, u32 len, u8 *dst)` (byte loop on the SPI controller, takes the NOR mutex). The peer thread calls it for the section 6 and section 7 payloads; core/peer-image forwards the section 6 call to it.
+        #[link_name = "cf.peer.fn.nor_read"]
+        pub fn nor_read(src: u32, len: u32, dst: *mut u8);
     }
 }
 
@@ -533,25 +604,79 @@ pub mod project {
         #[link_name = "cf.project.fn.track_type"]
         pub fn track_type(kit: u32, track: i32) -> i32;
     }
+
+    unsafe extern "C" {
+        /// Both sequencer play words ORed (the firmware's own test): 0 stopped, 1 playing, 2 paused, 3 mixed. Finding 147.
+        #[link_name = "cf.project.fn.transport_state"]
+        pub fn transport_state() -> u32;
+    }
 }
 
 pub mod rtos {
     // cf.rtos.fn.create_main: no sig yet
+
+    unsafe extern "C" {
+        /// Lock a recursive owner-aware mutex (FUN_400015a0 on DT2 1.17): a task that holds it takes it again without blocking. Task context only.
+        #[link_name = "cf.rtos.fn.mutex_lock"]
+        pub fn mutex_lock(mutex: *mut u32);
+    }
+
+    unsafe extern "C" {
+        /// Unlock a mutex of mutex_lock (FUN_400016d2 on DT2 1.17). Task context only.
+        #[link_name = "cf.rtos.fn.mutex_unlock"]
+        pub fn mutex_unlock(mutex: *mut u32);
+    }
 
     // cf.rtos.fn.queue_pop: no sig yet
 
     // cf.rtos.fn.reset.init_calls: no sig yet
 
     unsafe extern "C" {
-        /// DN2 1.12 stock short sleep (DT2 pair 0x40136544): locks its own mutex, loads timer DTIM1 (prescaler 0x84, about 1 MHz) with `us` and blocks the task on a semaphore until the timer interrupt. Task context only. Eight stock callers; the LP0 sender waits 100 after each page with it.
+        /// Semaphore init (0x40001398 on all three images). A semaphore is 8 bytes: +0 count or flag, +4 the one waiting TCB (one waiter only). No static initialiser.
+        #[link_name = "cf.rtos.fn.sem_init"]
+        pub fn sem_init(sem: *mut u32, count: u32);
+    }
+
+    unsafe extern "C" {
+        /// Binary semaphore pend (0x4000141a on all three images): if the flag is set it clears it and returns, else the task blocks (trap #0). No timeout; task context only.
+        #[link_name = "cf.rtos.fn.sem_pend"]
+        pub fn sem_pend(sem: *mut u32);
+    }
+
+    unsafe extern "C" {
+        /// Binary semaphore post (0x4000155c on all three images): masks SR, sets the flag, readies the waiter and forces the reschedule interrupt. ISR-safe (the DTIM1 interrupt posts the sleep semaphore this way). Posts coalesce: the waiter must drain its work after each wake. Shares its hash with cf.rtos.fn.task_start (ordinal 2).
+        #[link_name = "cf.rtos.fn.sem_post"]
+        pub fn sem_post(sem: *mut u32);
+    }
+
+    unsafe extern "C" {
+        /// Stock short sleep (DT2 1.17 0x40136544, DN2 1.12 0x4013492c, DN2 1.11 0x4013464c; DT2 stock name dtim1_sleep_100us): locks its own mutex, loads timer DTIM1 (prescaler 0x84, about 1 MHz) with `us` and blocks the task on a semaphore until the timer interrupt. Task context only. The LP0 sender waits 100 after each page with it; the runtime's I/O task uses it for delays (the kernel has no timed pend).
         #[link_name = "cf.rtos.fn.sleep_us"]
         pub fn sleep_us(us: u32);
+    }
+
+    unsafe extern "C" {
+        /// Kernel task init (0x400012c8 on DT2 1.17, DN2 1.12 and DN2 1.11; the kernel is byte-identical): fills the caller's TCB (at least 0x54 bytes) for priority `prio` (0 to 15, higher wins; above 15 overwrites the current-TCB pointer) and builds the first RTE frame at the top of the caller's stack (entry gets no argument and must never return). Writes only the TCB and the stack; returns 1. The task runs after cf.rtos.fn.task_start. Stock creates tasks this way from the boot thread and, after the scheduler runs, from the main-OS task (the progress screen).
+        #[link_name = "cf.rtos.fn.task_create"]
+        pub fn task_create(tcb: u32, entry: u32, prio: u32, stack: u32, size: u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Kernel task start (0x40001314 on all three images): links the TCB into its priority's ready ring under SR 0x2700; does not reschedule. The hash is shared by three identical wrappers (0x40001314, 0x4000132c, 0x4000155c), hence the ordinal.
+        #[link_name = "cf.rtos.fn.task_start"]
+        pub fn task_start(tcb: u32);
     }
 
     unsafe extern "C" {
         /// The firmware's default exception handler (the code every vector points at until a specific handler is installed; DT2 1.16 0x40001252, not a function of its own): `move #0x2700,sr; move.l sp,<save>; lea -16(sp),sp; movem.l d0-d1/a0-a1,(sp); movea.l <hook word>,a0; tst.l a0; beq +10; move.l <save>,-(sp); jsr (a0); ...; rte`.
         #[link_name = "cf.rtos.site.exc_hook_lit"]
         pub static EXC_HOOK_LIT: u8;
+    }
+
+    unsafe extern "C" {
+        /// The kernel's current-TCB pointer variable (DT2 1.17 0x47db3f64, DN2 1.12 0x4664bcdc: the literal that cf.rtos.fn.sem_pend loads first; it stores the value as the semaphore's waiting task). Read the word at this address to learn which task runs now; the kernel is byte-identical on all three images.
+        #[link_name = "cf.rtos.value.current_tcb"]
+        pub static CURRENT_TCB: u8;
     }
 
     unsafe extern "C" {
@@ -646,6 +771,12 @@ pub mod storage {
     }
 
     unsafe extern "C" {
+        /// The eMMC driver's capacity getter (20 bytes): the card's capacity in 512-byte sectors, 0xFFFFFFFF while the driver is not ready (DT2 1.17 FUN_4012ddd6, DN2 1.12 0x4012c49a, Syntakt 1.42 0x4010f232; one hash on all three). The firmware's block read refuses a start at or past it.
+        #[link_name = "cf.storage.fn.capacity"]
+        pub fn capacity() -> u32;
+    }
+
+    unsafe extern "C" {
         /// DT2 1.17 locked stored metadata getter: 0 success/-1 failure, output unchanged on failure. Four words: id, stored odd hash, physical byte size, node word. No hash recomputation or source lease (finding 93).
         #[link_name = "cf.storage.fn.directory.metadata"]
         pub fn directory_metadata(entry_id: u32, output: *mut u32) -> i32;
@@ -661,6 +792,114 @@ pub mod storage {
         /// DT2 1.17 read-only path directory open, 0 success/-1 failure; caller-owned four-word state. Task context; may block under filesystem locking (finding 93).
         #[link_name = "cf.storage.fn.directory.open"]
         pub fn directory_open(path: *const u8, state: *mut u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Post a file-system event (FUN_4015a6aa) into the 32-entry ring and wake its consumer: kind 2 after a write, kind 3 after the close hash (a = inode word +8, b = inode id) (finding 120).
+        #[link_name = "cf.storage.fn.event.post"]
+        pub fn event_post(kind: u32, a: u32, b: u32);
+    }
+
+    unsafe extern "C" {
+        /// Page allocation FUN_401581dc (DT2 1.17): allocates `pages` card pages for file pages [first_page, first_page + pages) of the inode, first fit from the bitmap start 0xa7a (hint 0), and adds one extent per allocation (FUN_40157c68, FUN_40155974); stops silently when no page is free. It does not write the inode back (inode.write does) and does not count free pages first, which file.reserve does (FUN_40155f84, bit by bit). Call under the filesystem mutex with an inode of inode.get. Pass hint 0 (finding 120, finding 134).
+        #[link_name = "cf.storage.fn.file.alloc_pages"]
+        pub fn file_alloc_pages(inode: *mut u8, first_page: u32, pages: u32, hint: u8);
+    }
+
+    unsafe extern "C" {
+        /// Nonzero when any inode's bit is set in the open-file bitmap (finding 120).
+        #[link_name = "cf.storage.fn.file.any_open"]
+        pub fn file_any_open() -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Delete a file and free its pages: 0, -1 for a missing path or an open file (open bitmap) (finding 120).
+        #[link_name = "cf.storage.fn.file.delete"]
+        pub fn file_delete(path: *const u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Read the whole open file back and store its hash (hashlittle, seed 0x43fa243a; hash|1 in the inode) and hash-table page: 0 or -1. Holds the filesystem mutex for the read-back; call before path.close (finding 120).
+        #[link_name = "cf.storage.fn.file.hash"]
+        pub fn file_hash(handle: *mut u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Nonzero when the inode's bit is set in the open-file bitmap 0x46f4ded0 (any reader or writer holds it open). No mutex (finding 120).
+        #[link_name = "cf.storage.fn.file.id_open"]
+        pub fn file_id_open(inode_id: u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Four words: id, stored hash|1, size incl. the 16-byte trailer, record counter. -1 when the leaf is missing or not hashed (finding 120).
+        #[link_name = "cf.storage.fn.file.info"]
+        pub fn file_info(path: *const u8, out: *mut u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Add a second directory entry for an existing file (FUN_40156b00 with limit check 1; the sibling of file.rename that does not remove the old entry): the inode's link count goes 1 to 2 and is written through before the entry. 0 or -1. A name of a file whose count is 2 can be deleted with file.delete without freeing the data (finding 120). The adapter calls it only to make the two-names state for its power-cut test.
+        #[link_name = "cf.storage.fn.file.link"]
+        pub fn file_link(old_path: *const u8, new_path: *const u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Create one folder level; the parent must exist: 0, -1 when the leaf exists or a name character is invalid (finding 120).
+        #[link_name = "cf.storage.fn.file.mkdir"]
+        pub fn file_mkdir(path: *const u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Extent lookup FUN_4015813c: the low byte is 1 and *phys is the card page of file page `page` (32 KiB units; card sector = phys * 0x40 + the data base site); 0 when the page is past the extents. No mutex (finding 120).
+        #[link_name = "cf.storage.fn.file.page_find"]
+        pub fn file_page_find(inode: *mut u8, page: u32, phys: *mut u32) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// Path rename under the filesystem mutex (FUN_40156b00 adds the new directory entry for the same inode, then FUN_40156e94 removes the old one): 0, -1 when the source is missing, a folder or open (a destination that exists was not tested: callers delete it first). The inode id and hash stay (finding 120).
+        #[link_name = "cf.storage.fn.file.rename"]
+        pub fn file_rename(old_path: *const u8, new_path: *const u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Reserve pages for [offset, offset+bytes) of an open file: 0, -1 when the card cannot hold them (finding 120).
+        #[link_name = "cf.storage.fn.file.reserve"]
+        pub fn file_reserve(handle: *mut u32, offset: u32, bytes: u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Remove an empty folder: 0 or -1 (finding 120).
+        #[link_name = "cf.storage.fn.file.rmdir"]
+        pub fn file_rmdir(path: *const u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Write `bytes` at handle.pos and advance it; the byte count, -1 when the card is full. Reserves 32 KiB pages, a whole page goes straight from a 16-byte aligned `buf`. Task context; takes the filesystem mutex (finding 120).
+        #[link_name = "cf.storage.fn.file.write"]
+        pub fn file_write(buf: *const u8, bytes: u32, handle: *mut u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Rebuild the RAM content-hash table (FUN_4015b0ee) from the 44 hash pages on the card and the RAM inodes, and sort it; the close hash calls it after each hash page update. Call under the filesystem mutex (finding 120).
+        #[link_name = "cf.storage.fn.hash_table.rebuild"]
+        pub fn hash_table_rebuild();
+    }
+
+    unsafe extern "C" {
+        /// Inode cache lookup FUN_4015b92a (DT2 1.17): the cached 0x80-byte inode of inode_id with its use count raised, read from the card when it is not cached; 0 for an id out of range. No mutex: call it under the filesystem mutex and release it with inode.put (finding 120).
+        #[link_name = "cf.storage.fn.inode.get"]
+        pub fn inode_get(inode_id: u32) -> *mut u8;
+    }
+
+    unsafe extern "C" {
+        /// Release an inode of inode.get (FUN_4015b846): lowers its use count. No mutex (finding 120).
+        #[link_name = "cf.storage.fn.inode.put"]
+        pub fn inode_put(inode: *mut u8);
+    }
+
+    unsafe extern "C" {
+        /// Inode write-back FUN_4015b868: reads the inode's 32 KiB card page, replaces the 0x80-byte inode and writes the page through (synchronous). No mutex (finding 120).
+        #[link_name = "cf.storage.fn.inode.write"]
+        pub fn inode_write(inode: *mut u8);
     }
 
     unsafe extern "C" {
@@ -685,6 +924,42 @@ pub mod storage {
         /// File byte length by internal entry id (handle word 0), NOT by handle pointer; 0xffffffff on error (finding 105).
         #[link_name = "cf.storage.fn.path.size"]
         pub fn path_size(entry_id: u32) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte literal of the card sector of data page 0 (0x5ee180 on 1.17): page p of the +Drive is at sector base + p * 0x40 (the page write-back FUN_40155c34) (finding 120).
+        #[link_name = "cf.storage.site.data_sector_base"]
+        pub static DATA_SECTOR_BASE: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte literal of the filesystem mutex address (0x46f4deb0 on 1.17), the `pea` before the lock call in file.hash (finding 120).
+        #[link_name = "cf.storage.site.fs_mutex"]
+        pub static FS_MUTEX: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte literal of the 32 KiB scratch buffer (0x406658c0 on 1.17) in which the close hash FUN_4015b1e8 updates a hash page; used under the filesystem mutex (finding 120).
+        #[link_name = "cf.storage.site.hash_page_buf"]
+        pub static HASH_PAGE_BUF: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte literal of the card sector of the first hash page (0x5ee980 on 1.17): the page of inode id is at sector + (id >> 13) * 0x40, word id & 0x1fff holds hash|1 (finding 120).
+        #[link_name = "cf.storage.site.hash_page_sector"]
+        pub static HASH_PAGE_SECTOR: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte literal of the 32 KiB scratch buffer (0x4066d8c0 on 1.17) that the close hash FUN_4015b1e8 reads the file into; free for a caller that holds the filesystem mutex (finding 120).
+        #[link_name = "cf.storage.site.hash_read_buf"]
+        pub static HASH_READ_BUF: u8;
+    }
+
+    unsafe extern "C" {
+        /// The 4-byte address literal of the filesystem's mounted flag (0x44f2bd68 on 1.17): every path function starts with `tst.l (flag)`; nonzero after FUN_4015a72c mounted the +Drive (finding 120).
+        #[link_name = "cf.storage.site.mounted"]
+        pub static MOUNTED: u8;
     }
 }
 
@@ -760,6 +1035,19 @@ pub mod test {
 }
 
 pub mod text {
+    /// The ROM font header. Word 0 is not the glyph width (the stock font's widths reach 5 with word 0 = 3): its meaning is open. +6 is the glyph box height (6 for the stock font, 15 for the large one), checked by a second agent.
+    #[repr(C)]
+    pub struct FontData {
+        pub _pad0: [u8; 6],
+        pub height: u16,
+        pub _pad1: [u8; 12],
+    }
+    #[cfg(target_arch = "m68k")]
+    const _: () = {
+        assert!(core::mem::size_of::<FontData>() == 0x14);
+        assert!(core::mem::offset_of!(FontData, height) == 0x6);
+    };
+
     unsafe extern "C" {
         /// Draws the plain string `s` at x, y: a 36-byte wrapper of the text routine 0x40113a84 with flags 0. Returns the advance. `maxw` is the fifth argument of the wrapper; its exact meaning is not read.
         #[link_name = "cf.text.fn.draw"]
@@ -777,21 +1065,108 @@ pub mod text {
         #[link_name = "cf.text.fn.draw_fmt"]
         pub fn draw_fmt(bitmap: *mut u8, font: *mut u8, x: i32, y: i32, flags: u32, fmt: *const u8, ...) -> i32;
     }
+
+    unsafe extern "C" {
+        /// Pixel width of a COW `std::string` (pointer to the one-word object) in a FontData; `maxlen` -1 for all characters. DT2 0x4011467a, DN2 0x40115fee.
+        #[link_name = "cf.text.fn.width"]
+        pub fn width(fontdata: *mut u8, maxlen: i32, str: *const u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// The large ROM font (FontData header, 20 bytes): box height 15, glyph widths 2 to 8, two bytes for each glyph column; it has A to Z, 0 to 9, the space and `~!@#$%^&()_+-=`. The header words are 7, 0x0002000f and three pointers (width table, glyph offset table in columns, glyph data); the header is unique in the image. Finding 155 section 5.
+        #[link_name = "cf.text.data.font_large"]
+        pub static FONT_LARGE: u8;
+    }
+}
+
+pub mod usb {
+    unsafe extern "C" {
+        /// Cancel and free every transfer descriptor queued on endpoint queue `index` (`FUN_400059aa`, 0x400059aa); each one's cancel callback (+0x28) is called.
+        #[link_name = "cf.usb.fn.cancel_ep"]
+        pub fn cancel_ep(index: u32);
+    }
+
+    unsafe extern "C" {
+        /// The connect body of the USB MIDI port (`FUN_400043e2`, 0x400043e2): sets the EP1 queue heads, ENDPTCTRL1 and primes EP1 OUT.
+        #[link_name = "cf.usb.fn.connect"]
+        pub fn connect(hs: u32);
+    }
+
+    unsafe extern "C" {
+        /// The disconnect callback of the USB MIDI port (`FUN_4000436e`, 0x4000436e): clears ENDPTCTRL1, flushes EP1 (an unbounded poll on ENDPTFLUSH), cancels both EP1 queues.
+        #[link_name = "cf.usb.fn.disconnect"]
+        pub fn disconnect();
+    }
+
+    unsafe extern "C" {
+        /// Queue a transfer descriptor on endpoint queue `index` = endpoint + 4 * direction (IN = 1) and prime it (`FUN_40005a86`, 0x40005a86).
+        #[link_name = "cf.usb.fn.queue_td"]
+        pub fn queue_td(index: u32, dtd: *mut u8) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Start the USB device again when the stop delay has ended (`FUN_40006bc6`, 0x40006bc6); the second half of a re-enumeration.
+        #[link_name = "cf.usb.fn.restart"]
+        pub fn restart();
+    }
+
+    unsafe extern "C" {
+        /// Stop the USB device (`FUN_40006bac`, 0x40006bac): clears USBCMD.RS, calls the port's disconnect callback and starts a 30-tick delay; the first half of a re-enumeration.
+        #[link_name = "cf.usb.fn.stop"]
+        pub fn stop();
+    }
+
+    unsafe extern "C" {
+        /// Take a dTD from the pool of 32 bulk and interrupt descriptors (`FUN_40005764`, 0x40005764); non-blocking, safe in the ISR; 0 when the pool is empty. Its hash is shared with `FUN_400056be`: the ordinal picks this one.
+        #[link_name = "cf.usb.fn.td_alloc"]
+        pub fn td_alloc() -> *mut u8;
+    }
+
+    unsafe extern "C" {
+        /// The USB port table, 0x28 bytes an entry (+0 connect callback, +4 disconnect callback, +8 device descriptor, +0xC configuration pointer, +0x10 its length, +0x24 high-speed flag), the pointer operand at +0x22 of the mode switch `FUN_40006c16`. Entry 2 is USB MIDI. DT2 1.17 0x4029ef80, DN2 1.12 0x40287af0. RAM at run time.
+        #[link_name = "cf.usb.data.port_table"]
+        pub static PORT_TABLE: u8;
+    }
+
+    unsafe extern "C" {
+        /// The active USB port index (u32): 2 USB MIDI, 5 USB AUDIO/MIDI, 6 Overbridge; written by the mode switch `FUN_40006c16` and at boot by `FUN_40006c52`. DT2 1.17 0x40965a60, DN2 1.12 0x4058f2a8. RAM at run time.
+        #[link_name = "cf.usb.value.active_port"]
+        pub static ACTIVE_PORT: u8;
+    }
+
+    unsafe extern "C" {
+        /// The restart delay of the USB mode switch (u32): the stop (`FUN_40006bac`) sets it to 30, the USB tick `FUN_4000713e` counts it down (one a tick, about 33 ms) and calls the restart (`FUN_40006bc6`) when it reaches 0. Non-zero while a stop waits to restart. The operand of the tick's first read. DT2 1.17 0x40965a38, DN2 1.12 0x4058f280. RAM at run time.
+        #[link_name = "cf.usb.value.restart_delay"]
+        pub static RESTART_DELAY: u8;
+    }
+
+    /// Entry of the USB init, before it starts the controller; the point where the adapter extends the USB AUDIO/MIDI port entry. Runs in the boot thread and in interrupt context.
+    pub type InitHook = unsafe extern "C" fn();
 }
 
 pub mod view {
-    /// View (finding 71 section 2, "View vtable"): the vptr at +0, the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. The fields are [D] (finding 71); the size is [O]: derived windows start their own fields at +0x4c.
+    /// View (finding 71 section 2, "View vtable"): the vptr at +0, the redraw flag at +0x14, the opaque byte at +0x16 (the relayout draws from the topmost opaque view up and sets +0x17 on the views below it), the name C string pointer at +0x28 (not copied), the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. Size 0x4c, +0x14, +0x16, +0x17 and +0x2c checked by a second agent on both devices; +0x28 is [D].
     #[repr(C)]
     pub struct View {
         pub vptr: u32,
-        pub _pad0: [u8; 40],
+        pub _pad0: [u8; 16],
+        pub dirty: u8,
+        pub _pad1: [u8; 1],
+        pub opaque: u8,
+        pub blocked: u8,
+        pub _pad2: [u8; 16],
+        pub name: u32,
         pub mgr: u32,
-        pub _pad1: [u8; 28],
+        pub _pad3: [u8; 28],
     }
     #[cfg(target_arch = "m68k")]
     const _: () = {
         assert!(core::mem::size_of::<View>() == 0x4c);
         assert!(core::mem::offset_of!(View, vptr) == 0x0);
+        assert!(core::mem::offset_of!(View, dirty) == 0x14);
+        assert!(core::mem::offset_of!(View, opaque) == 0x16);
+        assert!(core::mem::offset_of!(View, blocked) == 0x17);
+        assert!(core::mem::offset_of!(View, name) == 0x28);
         assert!(core::mem::offset_of!(View, mgr) == 0x2c);
     };
 
@@ -814,7 +1189,7 @@ pub mod view {
     }
 
     unsafe extern "C" {
-        /// `View::invalidate(View *)`: asks for a redraw of the view.
+        /// `View::invalidate(View *)`, DT2 0x4011b126, DN2 0x4011ca9a (34 bytes): when +0x17 is clear sets +0x14 and tail-jumps through the manager (+0x2c) to set the redraw flag VC+0x20. The render draws only when that flag is set, from the topmost opaque view up.
         #[link_name = "cf.view.fn.invalidate"]
         pub fn invalidate(view: *mut u8);
     }
@@ -829,6 +1204,12 @@ pub mod view {
         /// `ViewController::push(mgr, shared_ptr<View> *, exclusive)`.
         #[link_name = "cf.view.fn.view_controller_push"]
         pub fn view_controller_push(mgr: *mut u8, sp: *const crate::string::shared_ptr, exclusive: u32) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// `View::View(this, name)`: DT2 0x4011b06e, DN2 0x4011c9e2. Builds the handler bases and secondary vptrs, stores `name` (not copied) at +0x28 and the View vptr at +0, zeroes +0x1c..+0x24, +0x2c and +0x34..+0x48. It does not clear +0x14, +0x16, +0x17 or +0x30: allocate zeroed.
+        #[link_name = "cf.view.fn.view_ctor"]
+        pub fn view_ctor(this: *mut u8, name: *const u8);
     }
 
     unsafe extern "C" {
@@ -899,6 +1280,39 @@ pub mod window {
         assert!(core::mem::offset_of!(MultiChoiceWindow, vertical) == 0xac);
     };
 
+    /// NameView (View at +0, own fields from +0x4c). Prompt, number, show_number, number_fmt, text, maxlen, done and allow_empty checked by a second agent on both devices.
+    #[repr(C)]
+    pub struct NameView {
+        pub view: crate::view::View,
+        pub prompt: u32,
+        pub number: u32,
+        pub show_number: u8,
+        pub _pad0: [u8; 3],
+        pub number_fmt: u32,
+        pub _pad1: [u8; 4],
+        pub text: u32,
+        pub _pad2: [u8; 8],
+        pub maxlen: u32,
+        pub _pad3: [u8; 12],
+        pub done: crate::string::std_function,
+        pub _pad4: [u8; 8],
+        pub allow_empty: u8,
+        pub _pad5: [u8; 11],
+    }
+    #[cfg(target_arch = "m68k")]
+    const _: () = {
+        assert!(core::mem::size_of::<NameView>() == 0xa0);
+        assert!(core::mem::offset_of!(NameView, view) == 0x0);
+        assert!(core::mem::offset_of!(NameView, prompt) == 0x4c);
+        assert!(core::mem::offset_of!(NameView, number) == 0x50);
+        assert!(core::mem::offset_of!(NameView, show_number) == 0x54);
+        assert!(core::mem::offset_of!(NameView, number_fmt) == 0x58);
+        assert!(core::mem::offset_of!(NameView, text) == 0x60);
+        assert!(core::mem::offset_of!(NameView, maxlen) == 0x6c);
+        assert!(core::mem::offset_of!(NameView, done) == 0x7c);
+        assert!(core::mem::offset_of!(NameView, allow_empty) == 0x94);
+    };
+
     unsafe extern "C" {
         /// `ConfirmWindow(this, title, text, cb, flag)`: `title` and `text` point at COW `std::string`s (each cut to 80 chars; an empty `text` gives one line), `cb` is a `std::function<void(bool)>` that the constructor clones into +0x5c, `flag` is stored at +0x6c (0: the TRIG keys 0x19 to 0x28 are swallowed). The key handler (0x401114f0) closes the window on press of key 10 (YES) and calls cb(true), on key 12 (NO) and calls cb(false); it sets +0x4c to 1 or 2, and every other key is handled (modal). Allocate 0x8c bytes as a make_shared block: 0x10 control block, then the object at +0x10; push with `cf.view.fn.view_controller_push(brain view manager, &sp, 0)` (as the stock call sites that use 0x4011c08a do) or with `cf.view.fn.view_push` on a view that is on the stack. The shared_ptr is {object, control block}; release your own count after the push (`cf.string.fn.shared_ptr.release`). core/ui does the first.
         #[link_name = "cf.window.fn.confirm_ctor"]
@@ -909,6 +1323,12 @@ pub mod window {
         /// `MultiChoiceWindow(this, items, title, cb, vertical)`: `items` points at a vector of COW `std::string` (begin, end, capacity; copied), `title` at a `std::string` (split at line breaks into the title lines at +0x80), `cb` is a `std::function<void(int)>` cloned into +0x8c, `vertical` is stored at +0xac (nonzero: items stacked and UP 11 / DOWN 14 move the selection; 0: items side by side and LEFT 13 / RIGHT 15). The selection index is at +0x9c. The key handler (0x40116e44) calls cb(index) and closes on press of key 10 (YES) or 0x31, and closes without a callback on key 12 (NO). The window is 0x40 x 0x20 pixels before sizing. Allocate 0xe8 bytes as a make_shared block (0x10 control block, object at +0x10); push with `cf.view.fn.view_push`.
         #[link_name = "cf.window.fn.multichoice_ctor"]
         pub fn multichoice_ctor(this: *mut u8, items_vector: *const u32, title: *const u32, cb: *const crate::string::std_function, vertical: u8);
+    }
+
+    unsafe extern "C" {
+        /// `NameView(this, prompt, initial, number, maxlen, show_number, number_fmt, done)`: DT2 0x40117ac2, DN2 0x40119436. The strings are pointers to COW `std::string` (copied); `done` is a `std::function<void(std::string, int)>` cloned to +0x7c; on YES it runs before the close with (storage, std::string *, number), NO closes without calling it. An empty text is refused unless byte +0x94 is set. Size 0xa0 (the View is at +0). The 7-argument wrapper (hash 0e537b985689c8d97a905c64f74eb485) omits number_fmt.
+        #[link_name = "cf.window.fn.name_ctor"]
+        pub fn name_ctor(this: *mut u8, prompt: *const u32, initial: *const u32, number: i32, maxlen: i32, show_number: u8, number_fmt: *const u32, done: *const crate::string::std_function);
     }
 
     // cf.window.fn.popup_make: no sig yet

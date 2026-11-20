@@ -1,21 +1,37 @@
 /* Host test of digikit/remote's settings: the module's own C source, compiled here with fakes of core/input and of the runtime's
-   Api table. The fake <dk/ui.h> (src/lib.rs) shows the page, and modules/core/adapters/ui/host/tests/remote.rs presses the keys. */
+   imports (the new entry of <dk/core/module.h>). The fake <dk/platform/ui.h> (src/lib.rs) shows the page, and modules/core/adapters/ui/host/tests/remote.rs presses the keys. */
+#include <string.h>
 #include "../../../../../../tools/remote/src/c/remote.c"
 
-static dk_service_cmd *handlers[256];
+static dk_host_cmd_fn *handlers[256];
 static int key_state[128];
 static int key_calls, next_result;
 
 /* modules/tools/remote/tests/remote-pacing.c checks the INPUT_TAKEN records; the settings page test here ignores them. */
-void dkrt_log_ev(uint32_t kind, uint32_t flags, const uint32_t *a)
+void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
 {
     (void)kind;
     (void)flags;
     (void)a;
 }
 
-int input_key(uint32_t code, uint32_t down)
+static int input_token;
+
+int32_t dk_input_open(dk_module_ctx *ctx, dk_input **out)
 {
+    (void)ctx;
+    *out = (dk_input *)&input_token;
+    return 0;
+}
+
+uint32_t dk_time_blocks(void)
+{
+    return 0;
+}
+
+int32_t dk_input_key(dk_input *in, uint32_t code, uint32_t down)
+{
+    (void)in;
     key_calls++;
     if (next_result) {
         int r = next_result;
@@ -26,39 +42,52 @@ int input_key(uint32_t code, uint32_t down)
     return 0;
 }
 
-int input_turn(uint32_t encoder, int delta)
+int32_t dk_input_turn(dk_input *in, uint32_t encoder, int32_t delta)
 {
+    (void)in;
     (void)encoder;
     (void)delta;
     return 0;
 }
 
-static int32_t register_cmds(uint32_t first, uint32_t count, dk_service_cmd *handler)
+int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *handler)
 {
     for (uint32_t c = first; c < first + count && c < 256; c++)
         handlers[c] = handler;
     return 0;
 }
 
-static void log_message(const uint8_t *message, uint32_t value)
+void dk_log(uint32_t level, const char *message, uint32_t value)
 {
+    (void)level;
     (void)message;
     (void)value;
 }
 
-static void fill_page(dk_ui_menu *m, void *ctx)
+static void fill_page(dk_ui_menu *m, void *arg)
 {
-    dkm_menu(m, ctx);
+    (void)arg;
+    dk_module.menu(0, m);
 }
 
-static const dk_ui_menu_desc page = {.name = "RemoteSettings", .title = "REMOTE CONTROL", .fill = fill_page};
+static const dk_ui_menu_desc page = {
+    .name = "RemoteSettings", .title = "REMOTE CONTROL", .fill = fill_page};
+
+/* The module's state back to a fresh load (the fake includes remote.c): the keys held, the last command and the fake's counters, so the tests do not depend on their order. */
+void r_reset(void)
+{
+    memset(held, 0, sizeof held);
+    memset(pending, 0, sizeof pending);
+    memset(stamp, 0, sizeof stamp);
+    last_is(0, 0, 0, 0);
+    key_calls = 0;
+    next_result = 0;
+}
 
 int r_init(void)
 {
-    dk_api api = {0};
-    api.register_cmds = register_cmds;
-    api.log = log_message;
-    return dkm_init(&api);
+    static int ctx_token;
+    return (int)dk_module.init((dk_module_ctx *)&ctx_token);
 }
 
 int r_cmd(int cmd, const uint8_t *body, int len)
@@ -67,7 +96,19 @@ int r_cmd(int cmd, const uint8_t *body, int len)
     return handlers[cmd & 255]((uint32_t)cmd, 1, body, (uint32_t)len, out);
 }
 
-dk_ui_menu *r_page(void) { return dk_ui_menu_new(&page); }
-int r_key_down(int code) { return key_state[code & 127]; }
-int r_key_calls(void) { return key_calls; }
-void r_fail_next(int result) { next_result = result; }
+dk_ui_menu *r_page(void)
+{
+    return dk_ui_menu_new(0, &page);
+}
+int r_key_down(int code)
+{
+    return key_state[code & 127];
+}
+int r_key_calls(void)
+{
+    return key_calls;
+}
+void r_fail_next(int result)
+{
+    next_result = result;
+}

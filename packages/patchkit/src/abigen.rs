@@ -295,6 +295,11 @@ fn rust(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInputs) 
         "/// Paths of the selection (`[limits.max] modules` of sdk/sdk.toml).\npub const SEL_MAX: usize = {};",
         inputs.sel_max
     );
+    let _ = writeln!(
+        s,
+        "/// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.\npub const PROVIDER_MAX: usize = {};",
+        inputs.provider_max
+    );
     for l in lays {
         let _ = writeln!(s, "\n/// {}\n#[repr(C)]", l.doc);
         if !l.derive.is_empty() {
@@ -373,6 +378,11 @@ fn c_header(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInpu
     s.push_str("\n/* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */\n");
     for (n, code, text) in &inputs.codes {
         let d = format!("#define DKRT_{n} ({code})");
+        let _ = writeln!(s, "{d:<40} /* {} */", c_text(text));
+    }
+    s.push_str("\n/* Module states (DkrtBootInfo.states), from [load.state] of sdk/sdk.toml. */\n");
+    for (n, code, text) in &inputs.states {
+        let d = format!("#define DKRT_STATE_{n} {code}");
         let _ = writeln!(s, "{d:<40} /* {} */", c_text(text));
     }
     s.push_str("\n/* CAPACITY kinds (DkrtCap.kind), from [capacity.kinds] of sdk/sdk.toml. */\n");

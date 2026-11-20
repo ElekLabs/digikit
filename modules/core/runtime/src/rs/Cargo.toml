@@ -9,9 +9,24 @@ crate-type = ["staticlib"]
 
 [dependencies]
 dkrt-sdk = { path = "../../sdk" }
+dkrt-abi = { path = "../../abi" }
 dkrt-fit = { path = "../../fit" }
+dkrt-link = { path = "../../link" }
 dkneeds = { path = "../../../../../packages/dkneeds" }
 dkfw = { path = "../../../fw/rs" }
+
+[dev-dependencies]
+dkrt-test-support = { path = "../../test-support" }
+dkrt-svc-rt = { path = "../../svc-rt" }
+toml = "0.9.12"
+dkrt-svc-lfo = { path = "../../../services/lfo" }
+dkrt-svc-fx = { path = "../../../services/fx" }
+dkrt-svc-machines = { path = "../../../services/machines" }
+dkrt-svc-machines-dks = { path = "../../../services/machines/dks" }
+dkrt-svc-fx-dks = { path = "../../../services/fx/dks" }
+dkrt-svc-lfo-dks = { path = "../../../services/lfo/dks" }
+dkrt-svc-shortcuts-dks = { path = "../../../services/shortcuts/dks" }
+dkrt-svc-samples-dks = { path = "../../../services/samples/dks" }
 
 # This crate sits inside the repository's cargo workspace but is built on its own (`patchkit build`).
 [workspace]

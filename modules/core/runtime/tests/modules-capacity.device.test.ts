@@ -10,8 +10,9 @@ import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/r
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { DSP_SLOT_BYTES } from '@digi/regression/runtime/synth.ts';
 
-/** MODULES (protocol command 3): after a boot with two modules with DSP code (dyn-params and sine, then the debug module) the reply lists them with ranges
+/** MODULES (protocol command 3): after a boot with two modules with DSP code (dyn-dn2 and sine, then the debug module) the reply lists them with ranges
  * inside the arena and the DSP area, the contract bytes and version of the file and the assigned machine types; it pages by start index and is not
  * logged as an UPLOAD event. CAPACITY lists every kind with the device file's limit. */
 async function expectModulesReply(runtime: PatchedSession): Promise<void> {
@@ -19,10 +20,11 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   await expectRuntimeReady(session);
   const device = session.options.device;
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'modules-capacity'), ['DKRT_STATE']);
-  const ids = ['test/dyn-params', 'test/sine', DEBUG_MODULE]; // the debug module last: it owns no machine
+  const ids = ['test/dyn-dn2', 'test/sine', DEBUG_MODULE]; // the debug module last: it owns no machine
   await installModules(
     dk,
     ids.map((id) => ({ id, artifact: moduleArtifact(device, id) })),
+    { device, session }, // the machines need machines.dks on the card, whose DSP part needs the SHARC
   );
   const info = await dk.info();
   expect(hasCap(info, 'MODULES') && hasCap(info, 'CAPACITY'), 'INFO sets the MODULES and CAPACITY capabilities').toBe(
@@ -35,7 +37,7 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   ids.slice(0, 2).forEach((id, i) => {
     const raw = fs.readFileSync(moduleArtifact(device, id));
     expect(modules[i]!.version, `${id}: the file's version`).toBe(raw.readUInt32BE(0x34));
-    expect(Buffer.from(modules[i]!.contracts.flat()), `${id}: the contract bytes`).toEqual(raw.subarray(0x38, 0x40));
+    expect(modules[i]!.needs, `${id}: the runtime version it needs`).toBe(raw.readUInt32BE(0x30) & 0x7fffffff);
   });
 
   const cap = await dk.capacity();
@@ -75,7 +77,7 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
     MODULES: file.limits.modules,
     ARENA: arenaHi - arenaLo,
     STAGE: file.limits.stage_bytes,
-    DSP_AREA: file.digikit.dsp_area_bytes,
+    DSP_AREA: file.digikit.dsp_area_bytes - DSP_SLOT_BYTES, // window 0 starts with the slot block of core/dsp-link
     MACHINE_ROWS: file.limits.machine_rows,
     VOICE_ROWS: file.limits.machine_rows,
     PARAM_ROWS: file.limits.param_rows,
@@ -105,4 +107,5 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
 
 runtimeTests('MODULES and CAPACITY list the loaded modules, ranges, types and limits', expectModulesReply, {
   devices: ['dt2'],
+  dsp: 'sharc',
 });

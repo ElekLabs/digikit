@@ -40,7 +40,7 @@ Digitone dyn-dn2 `dyn_pluck` 16, dyn-pluck `pluck` 17, dyn-guard-nan `guardnan` 
 
 **Rule order** (`assign.rs`, per machine in load order): (1) its map entry, when that number is not taken in this boot; (2) else its hint, when nonzero, in range, not taken in this boot and not
 referenced by another machine's map entry; (3) else the lowest number no map entry references and this boot has not given out; (4) else evict as before. The result is written to the map as before.
-Same-hash machines in one boot behave as before (the second takes a fresh number, not recorded). `MACHINE_TYPE_ASSIGNED` has a fourth argument `rule`: 0 lowest free, 1 map, 2 hint (`sticky` stays 1 for the map). **[D]**
+Two machines with one key in one boot do not reach the assignment: the boot planner refuses the second module (`E_PLAN_KEY`). `MACHINE_TYPE_ASSIGNED` has a fourth argument `rule`: 0 lowest free, 1 map, 2 hint (`sticky` stays 1 for the map). **[D]**
 Scenario `sticky-types` boots 7 to 9: a fresh card gives pluck 18; an entry of another machine on 18 sends pluck to 16; its own entry (20) beats the hint. Boots 1 to 6 now start from the hints
 (pluck 18, xslice 16, params 17). **Only the emulator ran it; the device has not.**
 
@@ -50,4 +50,3 @@ Scenario `sticky-types` boots 7 to 9: a fresh card gives pluck 18; an entry of a
   two types fault inside one poll. A per-row count needs the DSP rows to be readable from the ColdFire (they are write-only through the link now).
 - **[O]** A card rebuilt from a +Drive folder (builder) has a zero map: the exporter does not carry it, so types may be assigned again after such a round trip. A project saved before that keeps the old
   numbers and would load another machine, or an empty row.
-- **[O]** A hash collision between two machines of one boot gives the second a fresh number that is not remembered (the rule is implemented and has no test: no two ids collide in the repository).

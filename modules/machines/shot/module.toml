@@ -11,21 +11,40 @@ dynamic = true
 ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
-# Every dk_api field the module's sources call (module and picker); the packer takes the API floor from the newest.
-uses_api = ["files_client", "files_list", "files_poll", "files_cancel", "sample_tracks", "sample_pool_set", "sample_pool_clear", "sample_pool_status", "sample_pool_info", "sample_pool_path", "sample_pool_peaks", "sample_pool_peaks_window", "param_get", "param_set"]
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A stereo sample-playback machine (machine contract 1.2, track samples API 1.5). `patchkit pack digikit/shot --device dt2|dn2 -o shot.dkm` makes
-# the .dkm. The machine declaration, the parameters and the track table are in src/module.c; the DSP in src/dsp/shot.s.
+# A stereo sample-playback machine (machine contract 1.2, per-module sample pool). `patchkit pack digikit/shot --device dt2|dn2 -o shot.dkm` makes
+# the .dkm. The machine, its parameters and pages are declared by builder calls in init (src/module.c); the DSP in src/dsp/shot.s.
+[[machine]]
+id = "shot"
+
 [[object]]
 path = "build/shot-cf.dko.json"
-sources = ["src/module.c", "src/pages.c", "src/sample_view.c", "../../../sdk/src/sample_picker.c", "../../../sdk/src/chooser.c", "../../../sdk/src/picker_logic.c"]
+sources = ["src/module.c", "src/pages.c", "src/sample_view.c"]
 place = "cf.expansion"
 
 [[object]]
 path = "build/shot-dsp.dko.json"
 sources = ["src/dsp/shot.s"]
 place = "dsp.l2"
+
+[conformance]
+fixtures = ["sample-pool"]
+sample_records = "_shot_sample_rec"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 5
+page_rows = 0
+record_bytes = 844
+dsp_cost_voice = 2449
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 5
+page_rows = 1
+record_bytes = 940
+dsp_cost_voice = 2658

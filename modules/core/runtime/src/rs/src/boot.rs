@@ -10,17 +10,20 @@
 //!
 //! The record is the only thing the runtime writes to the card here, and only to its two sectors (`store::Layout::sel_a`/`sel_b`), through
 //! `block_write`, which refuses a write when the card's area is not ours (`card.rs`): then the boot counter is not raised either.
-use crate::{assign, block_read, block_write, card, crash, dlog, loader, st};
+
+use crate::platform::st;
+use crate::safe_mode::{key_held, DKRT_STABLE_BLOCKS, LATE_FLOOR};
+use crate::selection::{current, update, Choice, REC, REC_COPY, REC_VALID};
+use crate::{card, fault, dlog, loader, store};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
 
-const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"
+pub use crate::safe_mode::*;
+pub use crate::selection::*;
 
-#[repr(C, align(16))]
-pub struct Sector([u8; 512]);
-#[no_mangle]
-pub static mut DKRT_SECBUF: Sector = Sector([0; 512]);
+
+pub(crate) const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"
 
 #[no_mangle]
 pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
@@ -37,25 +40,55 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
     results: [0; SEL_MAX],
     dsp_wait: 0,
     stable: 0,
+    needs: [[0; NEEDS_LEN]; SEL_MAX],
+    states: [STATE_SELECTED; SEL_MAX],
+    detail: [[0; 2]; SEL_MAX],
+    unloads: 0,
+    reloads: 0,
 };
-/// The stable period in DSP blocks (`STABLE_BLOCKS`). A static so that the scenarios can shorten it (they poke it; nothing else writes it).
-#[repr(C, align(4))]
-pub struct Knob(pub u32); // a ColdFire gcc aligns a u32 to 2: the emulator's poke wants a word
-#[no_mangle]
-pub static mut DKRT_STABLE_BLOCKS: Knob = Knob(STABLE_BLOCKS);
-/// The block count at the first UI-loop pass and the number of passes since (the fallback when the block counter does not move).
-#[no_mangle]
-pub static mut DKRT_UI_START: Knob = Knob(0);
-static mut UI_PASSES: u32 = 0;
-/// The boot counter a stable session leaves behind: 1 after a boot that found the crash record of a session that had been stable, else 0.
-static mut LATE_FLOOR: u32 = 0;
-/// UI-loop passes after which a block counter that has not moved at all is taken for dead and the counter is cleared as in the first
-/// pass of old (the UI loop runs 30 to 120 times a second: 1800 passes are 15 s to a minute).
-const DEAD_CLOCK_PASSES: u32 = 1800;
-/// The record this boot started from (or an empty one) and the bookkeeping the writes need.
-static mut REC: Record = Record::empty();
-static mut REC_VALID: bool = false;
-static mut REC_COPY: u32 = 0;
+
+/// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
+/// command reports it with the result, and the record may change after the boot (a SELECT).
+pub use dkrt_abi::state::NAME_LEN;
+static mut BOOT_NAME: [[u8; NAME_LEN]; SEL_MAX] = [[0; NAME_LEN]; SEL_MAX];
+
+/// The file name of module `k` of this boot's selection (NUL padded, `NAME_LEN` bytes).
+pub unsafe fn boot_name(k: usize) -> *const u8 {
+    addr_of!(BOOT_NAME[k]) as *const u8
+}
+
+/// `dkrt_boot_name`: copy the name of index `k` to `out` (`NAME_LEN` bytes); `E_NOT_FOUND` past `SEL_MAX`.
+pub unsafe fn name_copy(k: usize, out: *mut u8) -> i32 {
+    if k >= SEL_MAX {
+        return dkrt_sdk::E_NOT_FOUND;
+    }
+    let src = boot_name(k);
+    let mut i = 0;
+    while i < NAME_LEN {
+        *out.add(i) = *src.add(i);
+        i += 1;
+    }
+    dkrt_sdk::OK
+}
+
+/// The states of this boot's modules (`dkrt_abi::state`): a view of `DKRT_BOOT.states` and `.detail`.
+pub fn states() -> dkrt_abi::state::BootStates<'static> {
+    let b = info();
+    dkrt_abi::state::BootStates { states: &mut b.states, detail: &mut b.detail }
+}
+
+/// The module records `LOADS` reports, as `dkrt_abi::state::LoadsView`.
+pub fn loads_view() -> dkrt_abi::state::LoadsView<'static> {
+    let b = info();
+    dkrt_abi::state::LoadsView {
+        count: b.count as usize,
+        results: &b.results,
+        states: &b.states,
+        detail: &b.detail,
+        needs: &b.needs,
+        names: unsafe { &*addr_of!(BOOT_NAME) },
+    }
+}
 
 /// Paths of the selection this boot loaded (for CAPACITY).
 pub fn selected() -> u32 {
@@ -66,202 +99,13 @@ pub fn info() -> &'static mut DkrtBootInfo {
     unsafe { &mut *addr_of_mut!(DKRT_BOOT) }
 }
 
-fn secbuf() -> *mut u8 {
-    unsafe { addr_of_mut!(DKRT_SECBUF) as *mut u8 }
-}
-
-/// One selection copy as read from the card.
-#[derive(Clone, Copy)]
-enum CopyRead {
-    /// The read worked and the record is good.
-    Valid(Record),
-    /// The read worked and the record is bad.
-    Invalid,
-    /// The block read failed.
-    ReadError,
-}
-
-/// The selection as the two copies give it.
-#[derive(Clone, Copy)]
-enum Choice {
-    /// The valid copy with the higher sequence number (A when equal), the copy it is in, and whether the other copy is valid too.
-    Use { record: Record, copy: u32, other_valid: bool },
-    /// No valid copy and no read error: nothing was ever saved.
-    Empty,
-    /// No valid copy and at least one read error: the record cannot be known.
-    Unreadable,
-}
-
-/// The choice from the two copies. A valid copy wins even when the other copy could not be read.
-fn choose(a: CopyRead, b: CopyRead) -> Choice {
-    match (a, b) {
-        (CopyRead::Valid(x), CopyRead::Valid(y)) => {
-            if y.seq > x.seq {
-                Choice::Use { record: y, copy: 1, other_valid: true }
-            } else {
-                Choice::Use { record: x, copy: 0, other_valid: true }
-            }
-        }
-        (CopyRead::Valid(x), _) => Choice::Use { record: x, copy: 0, other_valid: false },
-        (_, CopyRead::Valid(y)) => Choice::Use { record: y, copy: 1, other_valid: false },
-        (CopyRead::ReadError, _) | (_, CopyRead::ReadError) => Choice::Unreadable,
-        _ => Choice::Empty,
-    }
-}
-
-/// The copy `selection_set` writes first: the one that is not the only valid copy, so that a cut write leaves a valid copy.
-fn first_write(c: &Choice) -> u32 {
-    match c {
-        Choice::Use { copy: 0, other_valid: false, .. } => 1,
-        _ => 0,
-    }
-}
-
-/// Read one copy (0 = A, 1 = B).
-unsafe fn read_copy(i: u32) -> CopyRead {
-    let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    if block_read(sector, 512, secbuf()) != 0 {
-        return CopyRead::ReadError;
-    }
-    let b = &*(secbuf() as *const [u8; 512]);
-    match sel::decode(b) {
-        Some(r) => CopyRead::Valid(r),
-        None => CopyRead::Invalid,
-    }
-}
-
-/// The record in use, read from both copies.
-unsafe fn current() -> Choice {
-    // the card's state first (reads only): a card too small has no store, which is an empty record and not a read failure
-    card::check();
-    current_on(card::state() == CARD_TOO_SMALL, |i| read_copy(i))
-}
-
-/// `current` with the card state and the copy reader given: no store means `Empty` with no read.
-fn current_on(no_store: bool, mut read: impl FnMut(u32) -> CopyRead) -> Choice {
-    if no_store {
-        return Choice::Empty;
-    }
-    let a = read(0);
-    let b = read(1);
-    choose(a, b)
-}
-
-/// Write `r` to copy `i`. Only these two sectors are ever written.
-unsafe fn write_copy(i: u32, r: &Record) -> i32 {
-    let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    let b = &mut *(secbuf() as *mut [u8; 512]);
-    sel::encode(r, b);
-    let e = block_write(sector, 512, secbuf());
-    if e == E_CARD_RO || e == E_RANGE {
-        return e;
-    }
-    if e != 0 {
-        return E_SEL_WRITE;
-    }
-    OK
-}
-
-unsafe fn path_ok(p: *const u8) -> bool {
-    let mut n = 0;
-    while n < SEL_PATH {
-        let c = *p.add(n);
-        if c == 0 {
-            return n > 0;
-        }
-        if !(0x21..0x7f).contains(&c) {
-            return false;
-        }
-        n += 1;
-    }
-    false
-}
-
-/// `dkrt_selection_get`: `E_READ` when no copy is valid and a copy could not be read.
-pub unsafe fn selection_get(out: *mut DkrtSelection) -> i32 {
-    let r = match current() {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let o = &mut *out;
-    o.count = r.count;
-    o.flags = r.flags;
-    o.paths = r.paths;
-    OK
-}
-
-/// `dkrt_selection_set`: both copies, A then B, with the next sequence number (B first when A is the only valid copy). The boot counter
-/// carries over. `E_READ`, with no write, when no copy is valid and a copy could not be read.
-pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
-    let s = &*s;
-    let r = sel::check_count(s.count);
-    if r != OK {
-        return r;
-    }
-    let mut k = 0;
-    while k < s.count as usize {
-        if !path_ok(s.paths[k].as_ptr()) {
-            return E_SEL_PATH;
-        }
-        k += 1;
-    }
-    let choice = current();
-    let cur = match choice {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_SELECT, s.count, 0, 0, 0]);
-    let first = first_write(&choice);
-    let e = write_copy(first, &r);
-    if e != OK {
-        return e;
-    }
-    write_copy(1 - first, &r)
-}
-
-/// `CMD_SELECT_ONE`: write copy `i` only, with `seq + 1` (the state of a power cut between the two writes).
-pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
-    let s = &*s;
-    let e = sel::check_one(s.count, i);
-    if e != OK {
-        return e;
-    }
-    let cur = match current() {
-        Choice::Use { record, .. } => record,
-        Choice::Empty => Record::empty(),
-        Choice::Unreadable => return E_READ,
-    };
-    let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    write_copy(i, &r)
-}
-
-/// Write the record with a changed counter/flags into the copy that is not the current one (the current one stays valid if
-/// the write is cut).
-unsafe fn update(mut r: Record, current_copy: u32, valid: bool) -> i32 {
-    r.seq = if valid { r.seq.wrapping_add(1) } else { 1 };
-    let target = if valid { 1 - current_copy } else { 0 };
-    let e = write_copy(target, &r);
-    if e == OK {
-        REC = r;
-        REC_VALID = true;
-        REC_COPY = target;
-    }
-    e
-}
-
-/// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
-/// channel-2 report. Hardware timing not yet proved **[O]**.
-unsafe fn key_held() -> bool {
-    dkfw::input::key_down(SAFE_KEY_CODE) != 0
-}
-
 /// The boot hook (once per boot, main-OS task).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_boot() {
     crate::init_once();
+    if !crate::dev::valid() {
+        return; // a device object this runtime cannot read (a patch bug): load nothing, leave the firmware alone
+    }
     let b = info();
     if b.magic == INFO_MAGIC {
         return; // the constructor ran once already: a second call is a bug, not a second boot
@@ -281,20 +125,20 @@ pub unsafe extern "C" fn dkrt_boot() {
     // the settings record (the fx routes and send amounts): into RAM before the UI starts
     crate::settings::load();
     // the crash record and the RAM probe of the boot before
-    crash::keep_probe();
-    if crash::at_boot() {
-        let seen = crash::seen();
+    fault::keep_probe();
+    if fault::at_boot() {
+        let seen = fault::seen();
         if seen.found != 0 && seen.stable != 0 {
             // the crashed boot had already cleared its counter: count it as bad now, and keep that one count until a boot with no crash
             // behind it has run 30 s (`ui_pass`)
-            r.boot_counter = r.boot_counter.wrapping_add(1);
-            LATE_FLOOR = 1;
+            LATE_FLOOR = crate::safe_mode::count_late_crash(&mut r);
         }
     }
     b.seq = if valid { r.seq } else { 0 };
     b.copy = copy;
     b.counter = r.boot_counter;
     b.count = r.count;
+    states().begin();
     REC = r;
     REC_VALID = valid;
     REC_COPY = copy;
@@ -308,13 +152,13 @@ pub unsafe extern "C" fn dkrt_boot() {
         SAFE_FLAG
     } else if key_held() {
         SAFE_KEY
-    } else if crash::seen().hang != 0 {
+    } else if fault::seen().hang != 0 {
         // the boot before stopped because the DSP stopped (a hang record): one stop is enough, even after a stable boot; the selection stays as it is
         SAFE_DSP
-    } else if crash::seen().panic != 0 {
+    } else if fault::seen().panic != 0 {
         // the boot before panicked (a panic record): one panic is enough, like a stop
         SAFE_PANIC
-    } else if r.boot_counter >= SAFE_AFTER {
+    } else if crate::safe_mode::counter_is_safe(&r) {
         SAFE_COUNTER
     } else {
         SAFE_NONE
@@ -336,116 +180,280 @@ pub unsafe extern "C" fn dkrt_boot() {
         }
         // a safe boot loads no module: show the safe-mode screen in place of the stock intro (no storage access, built here on the main-OS task)
         crate::intro::show_safe(reason);
+        // no provider loads and the installer writes nothing: every hook site stays stock
+        loader::set_safe();
         let mut k = 0;
         while k < SEL_MAX {
             b.results[k] = E_SAFE_MODE;
             k += 1;
         }
+        states().skip_all(r.count as usize);
         return;
     }
-    // raise the counter before anything of a module runs; the first UI-loop pass clears it. On a card the runtime does not write there is no
-    // counter, so no safe mode by counter (ABOUT says so).
-    if (r.count != 0 || r.boot_counter != 0) && card::writable() {
-        r.boot_counter = r.boot_counter.wrapping_add(1);
-        update(r, copy, valid);
-    }
+    // raise the counter before anything of a module runs; the stable period clears it. This counts from the first boot: with no record
+    // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
+    // (ABOUT says so).
+    r = crate::safe_mode::count_boot_with(&crate::PLATFORM, r, copy, valid, card::writable());
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
-    loader::EARLY = true;
-    // the type numbers of every machine of the selection, before the first load (reads the files; the staging buffer is free)
-    assign::plan(&r);
+    // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them
+    read_tables(&r);
+    // the boot plan over the header tables that read gave, with the providers the search found for the hard needs the runtime does not meet: the order to
+    // load in, and a module the plan refuses is not loaded
+    let mut planned = loader::plan_selection(r.count as usize);
+    // the providers load before any module; a module that needs one that did not load is refused before the module stage
+    loader::load_providers(&planned);
+    loader::settle(&mut planned, r.count as usize);
     let mut k = 0;
     while k < r.count as usize {
-        loader::BOOT_IDX = k as u32;
-        let res = loader::load(r.paths[k].as_ptr());
-        st().last_result = res;
-        b.results[k] = res;
-        if res == OK {
-            b.loaded += 1;
-        }
-        let p = r.paths[k].as_ptr();
-        let mut at = 0;
-        let mut i = 0;
-        while i < SEL_PATH && *p.add(i) != 0 {
-            if *p.add(i) == b'/' {
-                at = i + 1;
-            }
-            i += 1;
-        }
-        let bad = if res == OK || res == LOADING { dlog::INFO } else { logk::F_ERROR };
-        dlog::ev(
-            logk::MOD_LOAD,
-            bad,
-            [k as u32, res as u32, dlog::word_of(p, at, SEL_PATH), dlog::word_of(p, at + 4, SEL_PATH), dlog::word_of(p, at + 8, SEL_PATH)],
-        );
+        states().planned(k, planned.verdicts[k]);
         k += 1;
     }
-    loader::EARLY = false;
-    loader::BOOT_IDX = u32::MAX;
+    loader::boot(&r, &planned);
+    crate::selection::BOOT_IDX = u32::MAX;
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
-    // the sticky map: written once, after the loads, and only when this boot changed it
-    if let Some(map) = assign::changed_map() {
-        let mut nr = REC;
-        nr.map = map;
-        update(nr, REC_COPY, REC_VALID);
+}
+
+/// Read the file of each selected module into the staging buffer and keep its header table for the boot plan (`loader::capture`). A file that is missing, torn or
+/// not a `.dkm` has none (its load reports the error).
+unsafe fn read_tables(rec: &Record) {
+    loader::reset_plan();
+    let mut k = 0;
+    while k < rec.count as usize {
+        if let Ok(found) = store::find(rec.paths[k].as_ptr()) {
+            if store::load_to_stage(&found) == OK {
+                let file = core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize);
+                loader::capture(k, file);
+            }
+        }
+        k += 1;
     }
+}
+
+/// A 32-bit hash of each index's full selection path at this boot (0: no path; an index that a live load added past the boot's count has none). Written once, by the boot's
+/// load loop (`note_boot_path`); a live load never writes it, so an index stays the index its path had at the boot, whichever module used it in between.
+static mut BOOT_PATH: [u32; SEL_MAX] = [0; SEL_MAX];
+
+/// The hash of a store path (the bytes up to the NUL): FNV-1a, never 0.
+pub unsafe fn path_hash(path: *const u8) -> u32 {
+    let n = crate::cstr_len(path, 64);
+    let h = dkneeds::keys::name_hash_bytes(core::slice::from_raw_parts(path, n));
+    if h == 0 {
+        1
+    } else {
+        h
+    }
+}
+
+/// The boot's load loop reads selection entry `k` with path `path`: its index belongs to that path from now on.
+pub unsafe fn note_boot_path(k: usize, path: *const u8) {
+    if k < SEL_MAX {
+        BOOT_PATH[k] = path_hash(path);
+    }
+}
+
+/// The selection index a run-time load of the file with path hash `hash` takes (docs/plans/extension-model.md E5c): the index that path had at this boot, when no module lives
+/// there now (`live`); else the first index below `count` that no module lives at and no boot path owns (an index an earlier live load added); else a new index (`count`).
+/// `E_SEL_COUNT` when all `SEL_MAX` are taken. An unloaded boot module keeps its index for itself.
+pub fn pick_index(hash: u32, boot: &[u32; SEL_MAX], count: usize, live: &[bool; SEL_MAX]) -> Result<usize, i32> {
+    let count = count.min(SEL_MAX);
+    let mut k = 0;
+    while k < count {
+        if !live[k] && hash != 0 && boot[k] == hash {
+            return Ok(k);
+        }
+        k += 1;
+    }
+    k = 0;
+    while k < count {
+        if !live[k] && boot[k] == 0 {
+            return Ok(k);
+        }
+        k += 1;
+    }
+    if count < SEL_MAX {
+        Ok(count)
+    } else {
+        Err(E_SEL_COUNT)
+    }
+}
+
+/// `pick_index` over this boot's record for the file at `path`.
+pub unsafe fn live_index(path: *const u8, live: &[bool; SEL_MAX]) -> Result<usize, i32> {
+    pick_index(path_hash(path), &*addr_of!(BOOT_PATH), info().count as usize, live)
+}
+
+/// The boot record's row of the index a live job started to load into, as it was before (`begin_live`): a load that fails puts it back.
+struct Saved {
+    k: usize,
+    count: u32,
+    state: u8,
+    result: i32,
+    needs: [u8; NEEDS_LEN],
+    detail: [u32; 2],
+    name: [u8; NAME_LEN],
+}
+static mut SAVED: Saved = Saved { k: SEL_MAX, count: 0, state: 0, result: 0, needs: [0; NEEDS_LEN], detail: [0; 2], name: [0; NAME_LEN] };
+
+/// A live load of index `k` failed: the boot record is as before the job (an UNLOADED module stays UNLOADED, an index that was never used is SELECTED again and the count
+/// is the old one), so a failed load leaves no FAILED row and no name behind. Only a load calls it: a reload that fails leaves the module FAILED.
+pub unsafe fn restore_live(k: usize) {
+    if k >= SEL_MAX || SAVED.k != k {
+        return;
+    }
+    let b = info();
+    b.count = SAVED.count;
+    b.states[k] = SAVED.state;
+    b.results[k] = SAVED.result;
+    b.needs[k] = SAVED.needs;
+    b.detail[k] = SAVED.detail;
+    BOOT_NAME[k] = SAVED.name;
+    SAVED.k = SEL_MAX;
+}
+
+/// A live job starts the load of selection index `k` (a load into a free index, or the load half of a reload): the module is INIT, the loaded count drops if it was ACTIVE,
+/// an index past the boot's count joins it, and the result words of the last attempt are cleared.
+pub unsafe fn begin_live(k: usize) {
+    let b = info();
+    SAVED = Saved { k, count: b.count, state: b.states[k], result: b.results[k], needs: b.needs[k], detail: b.detail[k], name: BOOT_NAME[k] };
+    if b.states[k] == STATE_ACTIVE && b.loaded > 0 {
+        b.loaded -= 1;
+    }
+    if k >= b.count as usize {
+        b.count = k as u32 + 1;
+    }
+    b.states[k] = STATE_INIT;
+    b.results[k] = OK;
+    b.needs[k] = [0; NEEDS_LEN];
+    b.detail[k] = [0; 2];
+}
+
+/// Module `k` was taken down by an unload: UNLOADED, and the loaded count drops if it was ACTIVE.
+pub unsafe fn unloaded(k: usize) {
+    if k >= SEL_MAX {
+        return;
+    }
+    let b = info();
+    if b.states[k] == STATE_ACTIVE && b.loaded > 0 {
+        b.loaded -= 1;
+    }
+    b.states[k] = STATE_UNLOADED;
+    b.results[k] = OK;
+}
+
+/// The name a module event shows (`LOG_NAME` bytes): the name part of the module id when the loader read the header (`name`, not empty), else the file leaf without its `.dkm`.
+pub fn shown_name(leaf: &[u8], name: &[u8; crate::loader::LOG_NAME]) -> [u8; crate::loader::LOG_NAME] {
+    if name[0] != 0 {
+        return *name;
+    }
+    let leaf = leaf.strip_suffix(b".dkm").unwrap_or(leaf);
+    let mut out = [0u8; crate::loader::LOG_NAME];
+    let n = leaf.len().min(crate::loader::LOG_NAME);
+    out[..n].copy_from_slice(&leaf[..n]);
+    out
+}
+
+/// The result `res` of the load of selection entry `k` (the file at `path`): the boot record, the log events and the name the LOADS report shows.
+pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; NEEDS_LEN], name: &[u8; crate::loader::LOG_NAME]) {
+    let b = info();
+    st().last_result = res;
+    b.results[k] = res;
+    if res == OK {
+        b.loaded += 1;
+    }
+    let p = path;
+    let mut at = 0;
+    let mut i = 0;
+    while i < SEL_PATH && *p.add(i) != 0 {
+        if *p.add(i) == b'/' {
+            at = i + 1;
+        }
+        i += 1;
+    }
+    let bad = if res == OK || res == LOADING { dlog::INFO } else { logk::F_ERROR };
+    let mut leaf_len = 0;
+    while at + leaf_len < SEL_PATH && *p.add(at + leaf_len) != 0 {
+        leaf_len += 1;
+    }
+    let shown = shown_name(core::slice::from_raw_parts(p.add(at), leaf_len), name);
+    let w = crate::loader::LOG_NAME;
+    dlog::ev(
+        logk::MOD_LOAD,
+        bad,
+        [k as u32, res as u32, dlog::word_of(shown.as_ptr(), 0, w), dlog::word_of(shown.as_ptr(), 4, w), dlog::word_of(shown.as_ptr(), 8, w)],
+    );
+    let mut j = 0;
+    while j < NAME_LEN - 1 && at + j < SEL_PATH && *p.add(at + j) != 0 {
+        BOOT_NAME[k][j] = *p.add(at + j);
+        j += 1;
+    }
+    if res == E_IMPORT && missing[0] != 0 {
+        let m = *missing;
+        b.needs[k] = m;
+        dlog::ev(
+            logk::MOD_NEEDS,
+            logk::F_ERROR,
+            [k as u32, dlog::word_of(m.as_ptr(), 0, NEEDS_LEN), dlog::word_of(m.as_ptr(), 4, NEEDS_LEN), dlog::word_of(m.as_ptr(), 8, NEEDS_LEN), 0],
+        );
+    }
+}
+
+/// The result `res` of the load of the provider file at the store path `path` (`services/<name>.dks`) that provides the service `hash`, loaded at `base` (0 when
+/// it did not load): log only. The event is `MOD_LOAD` with the provider index (`loader::PROVIDER_IDX`, not a selection index), the result, the first four
+/// characters of the file name, the service hash and the base; the boot record and `LOADS` do not change.
+pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
+    let mut at = 0;
+    let mut i = 0;
+    while i < path.len() {
+        if path[i] == b'/' {
+            at = i + 1;
+        }
+        i += 1;
+    }
+    let mut name = [0u8; 4];
+    let mut j = 0;
+    while j < 4 && at + j < path.len() {
+        name[j] = path[at + j];
+        j += 1;
+    }
+    let bad = if res == OK { dlog::INFO } else { logk::F_ERROR };
+    dlog::ev(
+        logk::MOD_LOAD,
+        bad,
+        [loader::PROVIDER_IDX, res as u32, dlog::word_of(name.as_ptr(), 0, 4), hash, base],
+    );
 }
 
 /// The DSP part of the module loaded for selection index `idx` is over with result `r` (called by the DSP loader).
-pub unsafe fn note_result(idx: u32, r: i32) {
+pub unsafe fn report_dsp(idx: u32, r: i32) {
     dlog::ev(logk::MOD_DSP, if r == OK { dlog::INFO } else { logk::F_ERROR }, [idx, r as u32, 0, 0, 0]);
     if (idx as usize) < SEL_MAX {
-        let b = info();
-        b.results[idx as usize] = r;
-        if r == OK {
-            b.loaded += 1;
+        // only a module that waits for its DSP part takes the result; an active or failed module keeps its record
+        if states().dsp_done(idx as usize, r) {
+            let b = info();
+            b.results[idx as usize] = r;
+            if r == OK {
+                b.loaded += 1;
+            }
         }
     }
 }
 
-/// Every pass of the UI loop (`dkrt_tick`). The first pass notes the block count; the boot counter goes back to 0 when the session has run
-/// `DKRT_STABLE_BLOCKS` blocks past it, or at once in a safe boot (nothing of a module runs there). A hang or a fault in between leaves
-/// the counter raised, so the next boots count it: two such boots in a row start the third in safe mode.
-pub unsafe fn ui_pass() {
-    let b = info();
-    if b.stable != 0 {
-        return;
-    }
-    if b.magic != INFO_MAGIC {
-        b.ui_reached = 1;
-        b.stable = 1;
-        return; // the boot hook did not run (an image patched without the boot site)
-    }
-    let now = crate::fw_blocks().unwrap_or(0);
-    if b.ui_reached == 0 {
-        b.ui_reached = 1;
-        DKRT_UI_START.0 = now;
-        UI_PASSES = 0;
-        dlog::ev(logk::UI_FIRST, dlog::INFO, [now, b.safe, b.loaded, 0, 0]);
-    }
-    UI_PASSES = UI_PASSES.wrapping_add(1);
-    let elapsed = now.wrapping_sub(DKRT_UI_START.0);
-    let period = core::ptr::read_volatile(addr_of!(DKRT_STABLE_BLOCKS.0));
-    let dead = elapsed == 0 && UI_PASSES >= DEAD_CLOCK_PASSES;
-    if b.safe != 0 || elapsed >= period || dead {
-        b.stable = 1;
-        // The record as the card holds it now, not the one this boot started from: the menu may have saved a selection since.
-        // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
-        let floor = LATE_FLOOR;
-        // With SAFE_READ the record is unknown: the counter stays as it is.
-        let cur = match current() {
-            Choice::Use { record, copy, .. } if b.reason != SAFE_READ => Some((record, copy)),
-            _ => None,
-        };
-        if let Some((mut r, copy)) = cur {
-            if r.boot_counter != floor {
-                r.boot_counter = floor;
-                update(r, copy, true);
+/// Module `idx` of the selection was taken down because a service it needs failed (late teardown of a service whose DSP part failed): FAILED with `code`
+/// (`E_MISSING`), the count of loaded modules corrected, one `MOD_DSP` event like the end of a DSP part.
+pub unsafe fn report_taken_down(idx: u32, code: i32) {
+    if (idx as usize) < SEL_MAX {
+        let b = info();
+        let was_active = states().states[idx as usize] == dkrt_sdk::STATE_ACTIVE;
+        if states().taken_down(idx as usize) {
+            if was_active && b.loaded > 0 {
+                b.loaded -= 1;
             }
+            b.results[idx as usize] = code;
         }
-        dlog::ev(logk::STABLE, dlog::INFO, [now, floor, 0, 0, 0]);
     }
+    dlog::ev(logk::MOD_DSP, logk::F_ERROR, [idx, code as u32, 0, 0, 0]);
 }
 
 pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
@@ -465,81 +473,321 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         results: b.results,
         dsp_wait: b.dsp_wait,
         stable: b.stable,
+        needs: b.needs,
+        states: b.states,
+        detail: b.detail,
+        unloads: b.unloads,
+        reloads: b.reloads,
     };
 }
 
 #[cfg(test)]
-mod choice_tests {
+mod tests {
     use super::*;
+    use crate::test_lock::LOCK;
+    use dkrt_abi::plan::{Reason, Verdict};
 
-    #[derive(Clone, Copy)]
-    enum In {
-        Valid(u32),
-        Invalid,
-        ReadError,
+    #[test]
+    fn the_boot_record_feeds_the_loads_reply_and_the_boot_info_copy() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            *info() = core::mem::zeroed();
+            info().count = 2;
+            states().begin();
+            states().planned(0, Verdict::Accepted);
+            states().init(0);
+            states().finished(0, OK);
+            states().planned(1, Verdict::Refused(Reason::DuplicateKey(7, 99)));
+            info().results[1] = E_PLAN_KEY;
+            BOOT_NAME[0][..5].copy_from_slice(b"a.dkm");
+            let mut out = [0u8; dkrt_abi::state::loads_len(SEL_MAX)];
+            let n = dkrt_abi::state::loads_v2(&loads_view(), &mut out);
+            assert_eq!(n, dkrt_abi::state::loads_len(2));
+            assert_eq!(out[..2], [2, 2]);
+            assert_eq!(out[2 + 4], STATE_ACTIVE);
+            let e1 = 2 + dkrt_abi::state::LOADS_ENTRY;
+            assert_eq!((out[e1 + 4], out[e1 + 11], out[e1 + 15]), (STATE_REFUSED, 7, 99));
+            let mut copy: DkrtBootInfo = core::mem::zeroed();
+            boot_info(&mut copy);
+            assert_eq!((copy.states[..2].to_vec(), copy.detail[1]), (vec![STATE_ACTIVE, STATE_REFUSED], [7, 99]));
+        }
+    }
+    #[test]
+    fn boot_name_copies_the_name_of_an_index_and_refuses_one_past_the_selection() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            BOOT_NAME[1][..5].copy_from_slice(b"b.dkm");
+            let mut out = [0xffu8; NAME_LEN];
+            assert_eq!(name_copy(1, out.as_mut_ptr()), OK);
+            assert_eq!(&out[..6], b"b.dkm\0");
+            assert_eq!(out[NAME_LEN - 1], 0);
+            assert_eq!(name_copy(SEL_MAX, out.as_mut_ptr()), E_NOT_FOUND);
+        }
     }
 
-    fn read(i: In) -> CopyRead {
-        match i {
-            In::Valid(seq) => {
-                let mut r = Record::empty();
-                r.seq = seq;
-                CopyRead::Valid(r)
+    /// `path` as the NUL-terminated selection path the loader hands to `report_module`.
+    fn sel_path(p: &[u8]) -> [u8; SEL_PATH] {
+        let mut out = [0u8; SEL_PATH];
+        out[..p.len()].copy_from_slice(p);
+        out
+    }
+
+    unsafe fn name_of(k: usize) -> [u8; NAME_LEN] {
+        *addr_of!(BOOT_NAME[k])
+    }
+
+    unsafe fn fresh_boot_record() {
+        *info() = core::mem::zeroed();
+        BOOT_NAME = [[0; NAME_LEN]; SEL_MAX];
+        states().begin();
+    }
+
+    #[test]
+    fn a_module_event_shows_the_module_name_when_the_header_was_read_else_the_leaf_without_dkm() {
+        let id = |s: &[u8]| {
+            let mut n = [0u8; crate::loader::LOG_NAME];
+            n[..s.len()].copy_from_slice(s);
+            n
+        };
+        // the header was read: the name part of the id, whatever the file is called
+        assert_eq!(shown_name(b"digikit-usb-fast.dkm", &id(b"usb-fast")), id(b"usb-fast"));
+        // no header (file missing, unreadable): the leaf without `.dkm`, cut to the log's width
+        assert_eq!(shown_name(b"digikit-usb-fast.dkm", &[0; crate::loader::LOG_NAME]), id(b"digikit-usb-"));
+        assert_eq!(shown_name(b"gone.dkm", &[0; crate::loader::LOG_NAME]), id(b"gone"));
+        assert_eq!(shown_name(b"noext", &[0; crate::loader::LOG_NAME]), id(b"noext"));
+    }
+
+    #[test]
+    fn a_module_report_keeps_the_file_leaf_and_names_the_missing_service_on_an_import_error() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            let mut missing = [0u8; NEEDS_LEN];
+            missing[..8].copy_from_slice(b"usb-bulk");
+            report_module(1, sel_path(b"mods/deep/a.dkm").as_ptr(), E_IMPORT, &missing, &[0; crate::loader::LOG_NAME]);
+            assert_eq!(info().results[1], E_IMPORT);
+            assert_eq!(st().last_result, E_IMPORT);
+            assert_eq!(info().loaded, 0, "only OK counts as loaded");
+            assert_eq!(info().needs[1], missing);
+            assert_eq!(name_of(1)[..6], *b"a.dkm\0");
+            assert_eq!(info().needs[0], [0; NEEDS_LEN]);
+
+            // another error with a name set keeps no needs; an import error with no name keeps none either
+            fresh_boot_record();
+            report_module(0, sel_path(b"a.dkm").as_ptr(), E_INIT, &missing, &[0; crate::loader::LOG_NAME]);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_IMPORT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            assert_eq!(info().needs, [[0; NEEDS_LEN]; SEL_MAX]);
+            assert_eq!(info().results[..2], [E_INIT, E_IMPORT]);
+
+            // OK counts, LOADING does not (the DSP part reports later), and a leaf over the name field is cut with its NUL kept
+            fresh_boot_record();
+            report_module(0, sel_path(b"x/ok.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(1, sel_path(b"x/dsp.dkm").as_ptr(), LOADING, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            assert_eq!(info().loaded, 1);
+            let mut long = b"mods/".to_vec();
+            long.extend_from_slice(&[b'n'; 40]);
+            long.extend_from_slice(b".dkm");
+            report_module(2, sel_path(&long).as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            assert_eq!(name_of(2)[..NAME_LEN - 1], [b'n'; NAME_LEN - 1]);
+            assert_eq!(name_of(2)[NAME_LEN - 1], 0);
+        }
+    }
+
+    #[test]
+    fn a_provider_report_is_a_log_event_only_and_a_dsp_report_updates_one_row() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+                states().finished(k, LOADING);
             }
-            In::Invalid => CopyRead::Invalid,
-            In::ReadError => CopyRead::ReadError,
-        }
-    }
+            let (results, states_before, loaded) = (info().results, info().states, info().loaded);
+            report_provider(b"services/lfo.dks", OK, 0x1234, 0x0010_0000);
+            report_provider(b"services/x", E_FORMAT, 0, 0);
+            assert_eq!((info().results, info().states, info().loaded), (results, states_before, loaded));
+            assert_eq!(*addr_of!(BOOT_NAME), [[0; NAME_LEN]; SEL_MAX]);
 
-    /// (kind, seq, copy, other_valid)
-    fn summary(c: &Choice) -> (&'static str, u32, u32, bool) {
-        match c {
-            Choice::Use { record, copy, other_valid } => ("use", record.seq, *copy, *other_valid),
-            Choice::Empty => ("empty", 0, 0, false),
-            Choice::Unreadable => ("unreadable", 0, 0, false),
-        }
-    }
-
-    #[test]
-    fn the_choice_over_every_pair_of_copy_states() {
-        use In::*;
-        let table = [
-            (Valid(5), Valid(9), ("use", 9, 1, true)),
-            (Valid(9), Valid(5), ("use", 9, 0, true)),
-            (Valid(7), Valid(7), ("use", 7, 0, true)),
-            (Valid(5), Invalid, ("use", 5, 0, false)),
-            (Valid(5), ReadError, ("use", 5, 0, false)),
-            (Invalid, Valid(5), ("use", 5, 1, false)),
-            (Invalid, Invalid, ("empty", 0, 0, false)),
-            (Invalid, ReadError, ("unreadable", 0, 0, false)),
-            (ReadError, Valid(5), ("use", 5, 1, false)),
-            (ReadError, Invalid, ("unreadable", 0, 0, false)),
-            (ReadError, ReadError, ("unreadable", 0, 0, false)),
-        ];
-        for (a, b, want) in table {
-            assert_eq!(summary(&choose(read(a), read(b))), want);
+            report_dsp(0, OK);
+            assert_eq!((info().results[0], info().states[0], info().loaded), (OK, STATE_ACTIVE, 1));
+            assert_eq!((info().results[1], info().states[1]), (0, STATE_DSP_LOADING), "the other row is untouched");
+            report_dsp(1, E_INIT);
+            assert_eq!((info().results[1], info().states[1], info().loaded), (E_INIT, STATE_FAILED, 1));
+            // an index past the selection changes nothing
+            let before = (info().results, info().states, info().loaded);
+            report_dsp(SEL_MAX as u32, E_INIT);
+            assert_eq!((info().results, info().states, info().loaded), before);
         }
     }
 
     #[test]
-    fn a_card_without_a_store_is_empty_and_is_not_read() {
-        let c = current_on(true, |_| panic!("no read on a card without a store"));
-        assert_eq!(summary(&c), ("empty", 0, 0, false));
-        assert_eq!(first_write(&c), 0);
-        // with a store, read errors with no valid copy are still unreadable
-        let c = current_on(false, |_| CopyRead::ReadError);
-        assert_eq!(summary(&c), ("unreadable", 0, 0, false));
+    fn a_dsp_report_for_a_module_that_is_not_waiting_for_its_dsp_changes_nothing() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+            }
+            // module 0 is active (no DSP part); module 1 failed in its init
+            states().finished(0, OK);
+            report_module(0, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            states().finished(1, E_INIT);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            let before = (info().results, info().states, info().loaded);
+            report_dsp(0, E_INIT);
+            report_dsp(1, OK);
+            assert_eq!((info().results, info().states, info().loaded), before);
+        }
+    }
+
+    fn h(p: &str) -> u32 {
+        let mut v = p.as_bytes().to_vec();
+        v.push(0);
+        unsafe { path_hash(v.as_ptr()) }
+    }
+
+    fn boot_of(list: &[&str]) -> [u32; SEL_MAX] {
+        let mut out = [0u32; SEL_MAX];
+        for (k, p) in list.iter().enumerate() {
+            out[k] = h(p);
+        }
+        out
     }
 
     #[test]
-    fn selection_set_never_writes_first_to_the_only_valid_copy() {
-        use In::*;
-        let first = |a, b| first_write(&choose(read(a), read(b)));
-        assert_eq!(first(Valid(5), ReadError), 1);
-        assert_eq!(first(Valid(5), Invalid), 1);
-        assert_eq!(first(Invalid, Valid(5)), 0);
-        assert_eq!(first(ReadError, Valid(5)), 0);
-        assert_eq!(first(Valid(5), Valid(9)), 0);
-        assert_eq!(first(Invalid, Invalid), 0);
+    fn a_live_load_takes_the_index_its_path_had_at_the_boot_else_a_free_one_no_boot_path_owns_else_a_new_one() {
+        let boot = boot_of(&["modules/a.dkm", "modules/b.dkm", "modules/c.dkm"]);
+        let mut live = [false; SEL_MAX];
+        // the path was in the boot's selection and no module lives there
+        assert_eq!(pick_index(h("modules/b.dkm"), &boot, 3, &live), Ok(1));
+        // a module lives at that index (it cannot be another file, a boot index belongs to its path): the file takes a new index, not another boot path's
+        live[1] = true;
+        assert_eq!(pick_index(h("modules/b.dkm"), &boot, 3, &live), Ok(3), "the other boot indices belong to their paths");
+        assert_eq!(pick_index(h("modules/new.dkm"), &boot, 3, &[false; SEL_MAX]), Ok(3), "an unknown file does not take the index of an unloaded boot module");
+        // an index an earlier live load added is free for any file once its module is gone
+        let mut count4 = boot;
+        count4[3] = 0;
+        assert_eq!(pick_index(h("modules/new.dkm"), &count4, 4, &[false; SEL_MAX]), Ok(3));
+        assert_eq!(pick_index(h("modules/new.dkm"), &count4, 4, &{
+            let mut l = [false; SEL_MAX];
+            l[3] = true;
+            l
+        }), Ok(4));
+        // the table is full
+        let full = [true; SEL_MAX];
+        assert_eq!(pick_index(h("modules/new.dkm"), &boot_of(&[]), SEL_MAX, &full), Err(E_SEL_COUNT));
+        assert_eq!(pick_index(h("modules/new.dkm"), &[1; SEL_MAX], SEL_MAX + 3, &[false; SEL_MAX]), Err(E_SEL_COUNT), "a count past the table is cut to it; every index belongs to a boot path");
+        // an empty boot selection: the first index
+        assert_eq!(pick_index(h("modules/x.dkm"), &boot_of(&[]), 0, &[false; SEL_MAX]), Ok(0));
+    }
+
+    #[test]
+    fn a_module_keeps_its_boot_index_after_another_used_it_and_long_leaves_with_one_prefix_do_not_collide() {
+        // A at 0 and B at 1 at the boot. A is unloaded, C loads (a new index, 2, since 0 belongs to A), C is unloaded: A loads again at 0
+        let boot = boot_of(&["modules/a.dkm", "modules/b.dkm"]);
+        let mut live = [false, true, false, false, false, false, false, false];
+        let c = pick_index(h("modules/c.dkm"), &boot, 2, &live).unwrap();
+        assert_eq!(c, 2);
+        live[c] = true;
+        live[c] = false;
+        assert_eq!(pick_index(h("modules/a.dkm"), &boot, 3, &live), Ok(0), "A is back at the index it had");
+        // taxonomy leaves of 35 characters that differ in the last characters only (the old name match cut them at 27)
+        let (x, y) = ("modules/machines/digikit-long-machine-name-1.dkm", "modules/machines/digikit-long-machine-name-2.dkm");
+        let boot = boot_of(&[x, y]);
+        assert_eq!(pick_index(h(y), &boot, 2, &[false; SEL_MAX]), Ok(1));
+        assert_eq!(pick_index(h(x), &boot, 2, &[false; SEL_MAX]), Ok(0));
+        assert_ne!(h(x), h(y));
+    }
+
+    #[test]
+    fn the_boot_paths_are_noted_once_by_the_boot_and_a_live_load_never_changes_them() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            BOOT_PATH = [0; SEL_MAX];
+            fresh_boot_record();
+            info().count = 2;
+            note_boot_path(0, b"modules/a.dkm\0".as_ptr());
+            note_boot_path(1, b"modules/b.dkm\0".as_ptr());
+            note_boot_path(SEL_MAX, b"x\0".as_ptr());
+            // a live load of another file into index 1 (it was unloaded) overwrites the display name and nothing else
+            begin_live(1);
+            report_module(1, sel_path(b"modules/c.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            assert_eq!(&name_of(1)[..5], b"c.dkm");
+            assert_eq!(BOOT_PATH[..2], [h("modules/a.dkm"), h("modules/b.dkm")]);
+            let mut live = [false; SEL_MAX];
+            live[1] = true;
+            assert_eq!(live_index(b"modules/c.dkm\0".as_ptr(), &live), Ok(2));
+            live[1] = false;
+            assert_eq!(live_index(b"modules/b.dkm\0".as_ptr(), &live), Ok(1), "b comes back to its own index");
+        }
+    }
+
+    #[test]
+    fn a_failed_live_load_puts_the_boot_record_back() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            // an unloaded module stays UNLOADED, with its name and result
+            fresh_boot_record();
+            info().count = 1;
+            states().planned(0, Verdict::Accepted);
+            states().init(0);
+            states().finished(0, OK);
+            report_module(0, sel_path(b"modules/a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            unloaded(0);
+            let before = (info().count, info().states[0], info().results[0], info().loaded, name_of(0));
+            begin_live(0);
+            states().finished(0, E_INIT);
+            report_module(0, sel_path(b"modules/other.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            restore_live(0);
+            assert_eq!((info().count, info().states[0], info().results[0], info().loaded, name_of(0)), before);
+            // an index that was never used leaves no FAILED row, no name and no count
+            begin_live(1);
+            assert_eq!(info().count, 2);
+            states().finished(1, E_INIT);
+            report_module(1, sel_path(b"modules/new.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            restore_live(1);
+            assert_eq!((info().count, info().states[1], info().results[1], name_of(1)), (1, STATE_SELECTED, OK, [0; NAME_LEN]));
+        }
+    }
+
+    #[test]
+    fn a_live_job_moves_the_boot_record_through_init_active_and_unloaded() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            fresh_boot_record();
+            info().count = 2;
+            for k in 0..2 {
+                states().planned(k, Verdict::Accepted);
+                states().init(k);
+                states().finished(k, OK);
+                report_module(k, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            }
+            assert_eq!((info().loaded, info().states[..2].to_vec()), (2, vec![STATE_ACTIVE, STATE_ACTIVE]));
+            // an unload: UNLOADED, the loaded count drops once, the other module is untouched; a second one does not drop it again
+            unloaded(0);
+            assert_eq!((info().loaded, info().states[..2].to_vec(), info().results[0]), (1, vec![STATE_UNLOADED, STATE_ACTIVE], OK));
+            unloaded(0);
+            assert_eq!(info().loaded, 1);
+            unloaded(SEL_MAX);
+            // a load into the free index, and one into a new index that joins the count
+            info().needs[0] = [7; NEEDS_LEN];
+            info().results[0] = E_IMPORT;
+            begin_live(0);
+            assert_eq!((info().states[0], info().results[0], info().needs[0], info().count), (STATE_INIT, OK, [0; NEEDS_LEN], 2));
+            begin_live(2);
+            assert_eq!((info().states[2], info().count), (STATE_INIT, 3));
+            assert!(states().finished(2, OK) && states().finished(0, LOADING));
+            report_module(2, sel_path(b"new.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            assert_eq!((info().loaded, info().states[..3].to_vec()), (2, vec![STATE_DSP_LOADING, STATE_ACTIVE, STATE_ACTIVE]));
+            assert_eq!(name_of(2)[..8], *b"new.dkm\0");
+            // the load half of a reload takes an active module to INIT and drops the count
+            begin_live(1);
+            assert_eq!((info().loaded, info().states[1]), (1, STATE_INIT));
+        }
     }
 }

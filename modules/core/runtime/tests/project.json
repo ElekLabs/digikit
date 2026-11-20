@@ -6,103 +6,252 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "files": ["reload.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "S:machines"],
+        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      },
+      {
+        "files": ["reload-fx.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "A:core/fx"],
+        "modules": ["digikit/debug", "test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-send", "core/services/machines", "core/services/fx"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts",
+          "tools/patchkit/pk_digikit_fxroutes.py"
+        ]
+      },
+      {
+        "files": ["reload-project.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "C:storage", "S:machines"],
+        "modules": ["test/sine", "core/services/machines"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      },
+      {
+        "files": ["reload-menus.device.test.ts"],
+        "tags": ["C:loading", "C:state"],
+        "modules": ["digikit/debug", "test/entry-demo"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      },
+      {
+        "files": ["live.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "S:machines"],
+        "modules": ["digikit/debug", "test/c-demo", "test/sine", "core/services/machines"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts",
+          "packages/dk-session/src/loads.ts",
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/workbench-core/src/modules/dktransfer.ts"
+        ]
+      },
+      {
+        "files": ["missing.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "C:dsp", "S:machines"],
+        "modules": ["digikit/debug", "test/sine", "test/native-page", "core/services/machines"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts",
+          "packages/dk-session/src/loads.ts",
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/workbench-core/src/modules/dktransfer.ts"
+        ]
+      },
+      {
         "files": ["modules-capacity.device.test.ts"],
-        "modules": ["digikit/debug", "digikit/probe", "digikit/remote", "test/dyn-params"]
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:loading"],
+        "modules": ["digikit/debug", "digikit/probe", "digikit/remote", "test/dyn-dn2", "core/services/machines"]
       },
       {
         "files": ["fault-trace.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
+        "modules": [
+          "digikit/debug",
+          "test/dyn-fx-gain-send",
+          "test/dyn-fx-hang",
+          "test/dyn-fx-nan",
+          "core/services/machines",
+          "core/services/fx"
+        ]
+      },
+      {
+        "files": ["fault-trace-dt2.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
         "modules": [
           "digikit/debug",
           "test/dyn-crash",
           "test/dyn-dsp-hang",
-          "test/dyn-fx-gain-send",
-          "test/dyn-fx-hang",
-          "test/dyn-fx-nan"
+          "core/services/machines",
+          "core/services/fx"
         ]
       },
       {
         "files": ["transfer-live.device.test.ts"],
-        "modules": ["digikit/debug", "test/sine"],
-        "sources": ["tools/device/dktransfer.py"],
-        "pythonTools": true
+        "dsp": "sharc",
+        "tags": ["C:storage", "C:transport"],
+        "modules": ["digikit/debug", "test/sine", "core/services/machines"],
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/devices/src/node.ts",
+          "packages/devices/src/parse.ts",
+          "packages/dk-session/src/samples.ts",
+          "packages/dk-session/src/identify.ts",
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/workbench-core/src/modules/dktransfer.ts",
+          "packages/workbench-core/src/node/node-host.ts",
+          "packages/workbench-core/src/node/stock-image.ts"
+        ]
       },
       {
         "files": ["samples-live.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["C:storage", "S:samples"],
         "modules": [],
         "sources": [
           "packages/dk-session/src/dksample.ts",
           "packages/dk-session/src/rpcfiles.ts",
           "packages/dk-session/src/samples.ts",
-          "apps/desktop/ui/src/samples-core.ts"
+          "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
         "plusdrive": true,
         "dksampleWasm": true
       },
       {
         "files": ["store-format.device.test.ts"],
-        "modules": ["test/c-demo"],
-        "sources": ["apps/web/src/firmware/default-modules-core.ts", "apps/web/src/modules/dktransfer.ts"],
+        "tags": ["C:loading", "C:storage"],
+        "modules": ["test/c-demo", "digikit/debug", "test/svc-test", "test/svc-test-user"],
+        "sources": [
+          "packages/workbench-core/src/firmware/default-modules-core.ts",
+          "packages/workbench-core/src/modules/dktransfer.ts",
+          "packages/workbench-core/src/modules/services.ts"
+        ],
         "plusdrive": true
       },
       {
         "files": ["samples-store-live.device.test.ts"],
+        "devices": ["dn2"],
+        "tags": ["C:storage", "S:samples"],
         "modules": [],
         "sources": [
           "packages/dk-session/src/dksample.ts",
           "packages/dk-session/src/rpcfiles.ts",
           "packages/dk-session/src/samples.ts",
-          "apps/desktop/ui/src/samples-core.ts"
+          "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
         "dksampleWasm": true
       },
       {
         "files": ["upload.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["C:storage", "C:transport"],
         "modules": [],
         "plusdrive": true
       },
       {
         "files": ["upload-depth.device.test.ts"],
+        "tags": ["C:transport"],
         "modules": [],
         "plusdrive": true
       },
       {
         "files": ["upload-faults.device.test.ts"],
-        "modules": ["test/sine"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:layout", "C:storage", "C:transport"],
+        "modules": ["test/sine", "core/services/machines"],
         "sources": ["tools/patchkit/pk_digikit_fxroutes.py"],
-        "pythonTools": true,
         "plusdrive": true
       },
       {
         "files": ["card-safety.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["C:storage"],
         "modules": ["test/c-demo"],
         "plusdrive": true
       },
       {
         "files": ["safe-mode.device.test.ts"],
-        "modules": ["test/c-demo", "test/dyn-dn2", "test/dyn-fault", "test/dyn-fault-late", "test/sine"],
+        "dsp": "sharc",
+        "tags": ["C:boot", "C:layout", "C:storage"],
+        "modules": ["test/c-demo", "test/dyn-dn2", "test/dyn-crash", "test/sine", "core/services/machines"],
         "plusdrive": true
       },
       {
         "files": ["boot-restart.device.test.ts"],
-        "modules": ["test/dyn-dn2", "test/sine"],
+        "dsp": "sharc",
+        "tags": ["C:boot", "C:dsp", "C:loading"],
+        "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
       },
       {
         "files": ["crash-capture.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:diagnostics", "C:fault", "C:layout"],
         "modules": ["digikit/debug", "test/dyn-crash"],
         "plusdrive": true
       },
       {
         "files": ["debug-guard.device.test.ts"],
-        "modules": ["digikit/debug", "test/dyn-guard-nan", "test/sine"],
+        "dsp": "sharc",
+        "tags": ["C:diagnostics", "C:dsp", "C:layout"],
+        "modules": ["digikit/debug", "test/dyn-guard-nan", "test/sine", "core/services/machines"],
         "plusdrive": true
       },
       {
+        "files": ["platform-contract.device.test.ts"],
+        "tags": ["C:boot", "C:device-facts", "C:storage", "C:tick", "C:transport"],
+        "modules": [],
+        "sources": ["modules/core/runtime/tests/platform/contract.toml"]
+      },
+      {
+        "files": ["addrmap.device.test.ts"],
+        "tags": ["C:layout"],
+        "modules": ["digikit/debug", "test/dyn-demo"]
+      },
+      {
+        "files": ["log-names.device.test.ts"],
+        "tags": ["C:diagnostics", "C:layout"],
+        "modules": ["digikit/debug", "test/dyn-demo"],
+        "sources": ["packages/dk-session/src/log-names.ts"],
+        "dkprofWasm": true
+      },
+      {
         "files": ["memaudit.device.test.ts"],
-        "modules": ["test/c-demo", "test/dyn-demo", "test/dyn-demo-stray", "test/dyn-dn2", "test/sine"],
+        "dsp": "sharc",
+        "tags": ["C:layout"],
+        "modules": ["test/c-demo", "test/dyn-demo", "test/dyn-demo-stray", "test/dyn-dn2", "test/sine", "core/services/machines"],
         "plusdrive": true
       }
     ],
-    "mergeTests": ["upload-depth.device.test.ts", "safe-mode.device.test.ts"]
+    "mergeTests": [
+      "upload-depth.device.test.ts",
+      "safe-mode.device.test.ts",
+      "samples-live.device.test.ts",
+      "samples-store-live.device.test.ts"
+    ]
   }
 }

@@ -1,5 +1,5 @@
-//! The sample picker (sdk/src/sample_picker.c) on the fake <dk/ui.h> and a fake dk_api: the SMP pool list, the browser, the INFO page, keys
-//! and texts. The pure functions (sdk/src/picker_logic.c) have their own tests at the end.
+//! The sample picker (sdk/src/sample/picker.c) on the fake <dk/platform/ui.h> and fakes of the listing and pool imports: the SMP pool list, the browser, the INFO page, keys
+//! and texts. The pure functions (sdk/src/chooser/logic.c, core/text.c, core/path.c) have their own tests at the end.
 use dkui_host::driver::*;
 use dkui_host::*;
 use std::ffi::{c_char, c_int, CStr, CString};
@@ -9,7 +9,7 @@ extern "C" {
     fn pf_init(handle: u32) -> c_int;
     fn pf_open_pool(current: c_int, with_pick: c_int);
     fn pf_fini();
-    fn pf_api_without_set();
+    fn pf_init_with(pool: c_int, files: c_int, ui: c_int) -> c_int;
     fn pf_add(path: *const c_char, dir: c_int, size: u32);
     fn pf_finish();
     fn pf_partial();
@@ -19,7 +19,6 @@ extern "C" {
     fn pf_list_calls() -> c_int;
     fn pf_cancels() -> c_int;
     fn pf_list_dir() -> *const c_char;
-    fn pf_client_calls() -> c_int;
     fn pf_track(t: c_int, status: c_int, path: *const c_char, frames: u32, rate: u32, ch: u32);
     fn pf_status(t: c_int, status: c_int);
     fn pf_set_result(rc: c_int);
@@ -40,14 +39,14 @@ extern "C" {
     fn cf_last_fill() -> *const c_char;
     fn cf_panel_entry() -> c_int;
 
-    fn pk_trunc(out: *mut c_char, name: *const c_char, max: c_int);
-    fn pk_size_text(out: *mut c_char, bytes: u32);
-    fn pk_secs_text(out: *mut c_char, frames: u32, rate: u32);
-    fn pk_join(out: *mut c_char, cap: c_int, dir: *const c_char, leaf: *const c_char) -> c_int;
-    fn pk_parent(dir: *mut c_char) -> c_int;
-    fn pk_err_tail(out: *mut c_char, code: c_int);
-    fn pk_err_info(out: *mut c_char, code: c_int);
-    fn pk_pool_row(
+    fn dk_text_trunc(out: *mut c_char, name: *const c_char, max: u32);
+    fn dk_text_size(out: *mut c_char, bytes: u32);
+    fn dk_text_secs(out: *mut c_char, frames: u32, rate: u32);
+    fn dk_path_join(out: *mut c_char, cap: u32, dir: *const c_char, leaf: *const c_char) -> u32;
+    fn dk_path_parent(dir: *mut c_char) -> c_int;
+    fn dk_sample_pool_err_tail(out: *mut c_char, code: c_int);
+    fn dk_sample_pool_err_info(out: *mut c_char, code: c_int);
+    fn dk_sample_pool_row_text(
         out: *mut c_char,
         index: c_int,
         current: c_int,
@@ -133,7 +132,7 @@ fn nothing_opens_without_a_handle_a_client_or_lists() {
     let _g = session();
     unsafe {
         pf_reset();
-        assert_eq!(pf_init(0), -1, "no pool handle");
+        assert_eq!(pf_init(0), -73, "no pool handle");
         pf_open_pool(0, 1);
     }
     assert_eq!(depth(), 0);
@@ -147,27 +146,16 @@ fn nothing_opens_without_a_handle_a_client_or_lists() {
 }
 
 #[test]
-fn a_runtime_without_the_listing_api_cannot_open_the_pool() {
+fn a_missing_pool_listing_or_ui_handle_cannot_open_the_pool() {
     let _g = session();
-    unsafe {
-        pf_reset();
-        // an Api table that ends before files_client (API 1.3)
-        extern "C" {
-            fn pf_short_api();
+    for (pool, files, ui) in [(0, 1, 1), (1, 0, 1), (1, 1, 0)] {
+        unsafe {
+            pf_reset();
+            assert_eq!(pf_init_with(pool, files, ui), -73);
+            pf_open_pool(0, 1);
         }
-        pf_short_api();
-        assert_eq!(pf_init(1), -1);
-        pf_open_pool(0, 1);
+        assert_eq!(depth(), 0);
     }
-    assert_eq!(depth(), 0);
-}
-
-#[test]
-fn the_listing_client_is_acquired_once_in_init() {
-    let _g = start();
-    assert_eq!(unsafe { pf_client_calls() }, 1);
-    press_yes(0);
-    assert_eq!(unsafe { pf_client_calls() }, 1);
 }
 
 #[test]
@@ -198,18 +186,6 @@ fn the_pool_list_is_sixteen_slots_numbered_like_the_knob() {
 }
 
 #[test]
-fn a_runtime_without_sample_pool_set_cannot_open_the_pool() {
-    let _g = session();
-    unsafe {
-        pf_reset();
-        pf_api_without_set();
-        assert_eq!(pf_init(1), -1);
-        pf_open_pool(0, 1);
-    }
-    assert_eq!(depth(), 0);
-}
-
-#[test]
 fn row_text_per_state_and_error_code() {
     let cases = [
         (E_NOT_FOUND, "!MISSING", "FILE NOT FOUND"),
@@ -229,19 +205,21 @@ fn row_text_per_state_and_error_code() {
     ];
     for (code, tail, info) in cases {
         let mut b = [0 as c_char; 32];
-        unsafe { pk_err_tail(b.as_mut_ptr(), code) };
+        unsafe { dk_sample_pool_err_tail(b.as_mut_ptr(), code) };
         assert_eq!(
             unsafe { CStr::from_ptr(b.as_ptr()) }.to_str().unwrap(),
             tail
         );
-        unsafe { pk_err_info(b.as_mut_ptr(), code) };
+        unsafe { dk_sample_pool_err_info(b.as_mut_ptr(), code) };
         assert_eq!(
             unsafe { CStr::from_ptr(b.as_ptr()) }.to_str().unwrap(),
             info
         );
         assert!(tail.len() <= 14);
         let mut row = [0 as c_char; 24];
-        unsafe { pk_pool_row(row.as_mut_ptr(), 4, 0, code, c("LOOP").as_ptr(), 0, 0, 0) };
+        unsafe {
+            dk_sample_pool_row_text(row.as_mut_ptr(), 4, 0, code, c("LOOP").as_ptr(), 0, 0, 0)
+        };
         let s = unsafe { CStr::from_ptr(row.as_ptr()) }.to_str().unwrap();
         assert!(s.ends_with(tail) && s.len() <= 23, "{s}");
     }
@@ -251,7 +229,7 @@ fn row_text_per_state_and_error_code() {
 fn a_long_name_gives_way_to_the_error_text_and_holes_show_a_dash() {
     let mut row = [0 as c_char; 24];
     unsafe {
-        pk_pool_row(
+        dk_sample_pool_row_text(
             row.as_mut_ptr(),
             0,
             0,
@@ -264,10 +242,10 @@ fn a_long_name_gives_way_to_the_error_text_and_holes_show_a_dash() {
     };
     let s = unsafe { CStr::from_ptr(row.as_ptr()) }.to_str().unwrap();
     assert_eq!(s, "00 KICK_~NAL !POOL FULL");
-    unsafe { pk_pool_row(row.as_mut_ptr(), 9, 0, E_CONTRACT, c("").as_ptr(), 0, 0, 0) };
+    unsafe { dk_sample_pool_row_text(row.as_mut_ptr(), 9, 0, E_CONTRACT, c("").as_ptr(), 0, 0, 0) };
     let s = unsafe { CStr::from_ptr(row.as_ptr()) }.to_str().unwrap();
     assert_eq!(s, "09 NO SAMPLE POOL");
-    unsafe { pk_pool_row(row.as_mut_ptr(), 15, 1, 0, c("").as_ptr(), 0, 0, 0) };
+    unsafe { dk_sample_pool_row_text(row.as_mut_ptr(), 15, 1, 0, c("").as_ptr(), 0, 0, 0) };
     let s = unsafe { CStr::from_ptr(row.as_ptr()) }.to_str().unwrap();
     assert_eq!(s, "15>-");
 }
@@ -905,17 +883,17 @@ fn a_chooser_that_cannot_run_does_not_open() {
     let _g = session();
     unsafe {
         pf_reset();
-        assert_eq!(cf_open(0, 0), -1, "init was not called");
+        assert_eq!(cf_open(0, 0), -53, "init was not called");
     }
     assert_eq!(depth(), 0);
     unsafe {
         assert_eq!(cf_init(), 0);
-        assert_eq!(cf_open_without_fill(), -1, "no fill callback");
+        assert_eq!(cf_open_without_fill(), -48, "no fill callback");
     }
     assert_eq!(depth(), 0);
     unsafe {
         set_cap(CAP_LIST, false);
-        assert_eq!(cf_open(0, 0), -1, "no lists");
+        assert_eq!(cf_open(0, 0), -8, "no lists");
     }
     assert_eq!(depth(), 0);
 }
@@ -933,7 +911,7 @@ fn text(f: impl FnOnce(*mut c_char)) -> String {
 
 #[test]
 fn truncation_keeps_start_and_end() {
-    let t = |n: &str, max| text(|o| unsafe { pk_trunc(o, c(n).as_ptr(), max) });
+    let t = |n: &str, max| text(|o| unsafe { dk_text_trunc(o, c(n).as_ptr(), max) });
     assert_eq!(t("KICK", 10), "KICK");
     assert_eq!(t("ABCDEFGHIJ", 10), "ABCDEFGHIJ");
     assert_eq!(t("ABCDEFGHIJK", 10), "ABCDE~HIJK");
@@ -944,7 +922,7 @@ fn truncation_keeps_start_and_end() {
 
 #[test]
 fn size_and_length_text() {
-    let s = |b| text(|o| unsafe { pk_size_text(o, b) });
+    let s = |b| text(|o| unsafe { dk_text_size(o, b) });
     assert_eq!(
         (
             s(0).as_str(),
@@ -958,7 +936,7 @@ fn size_and_length_text() {
     assert_eq!(s(1024 * 1024), "1.0M");
     assert_eq!(s(5 * 1024 * 1024 / 2), "2.5M");
     assert_eq!(s(u32::MAX), "4096.0M");
-    let l = |f, r| text(|o| unsafe { pk_secs_text(o, f, r) });
+    let l = |f, r| text(|o| unsafe { dk_text_secs(o, f, r) });
     assert_eq!(l(57600, 48000), "1.2s");
     assert_eq!(l(0, 48000), "0.0s");
     assert_eq!(l(48000 * 99, 48000), "99.0s");
@@ -970,7 +948,7 @@ fn size_and_length_text() {
 fn path_join_and_parent() {
     let j = |d: &str, l: &str| {
         let mut b = [0 as c_char; 300];
-        let n = unsafe { pk_join(b.as_mut_ptr(), 300, c(d).as_ptr(), c(l).as_ptr()) };
+        let n = unsafe { dk_path_join(b.as_mut_ptr(), 300, c(d).as_ptr(), c(l).as_ptr()) };
         (
             n,
             unsafe { CStr::from_ptr(b.as_ptr()) }
@@ -984,12 +962,12 @@ fn path_join_and_parent() {
     // 255 bytes fit, 256 do not
     let d = "d".repeat(200);
     assert_eq!(j(&d, &"f".repeat(54)).0, 255);
-    assert_eq!(j(&d, &"f".repeat(55)).0, -1);
-    assert_eq!(j("A", "").0, -1);
+    assert_eq!(j(&d, &"f".repeat(55)).0, 0);
+    assert_eq!(j("A", "").0, 0);
     let mut b = [0 as c_char; 8];
     assert_eq!(
-        unsafe { pk_join(b.as_mut_ptr(), 4, c("AB").as_ptr(), c("C").as_ptr()) },
-        -1,
+        unsafe { dk_path_join(b.as_mut_ptr(), 4, c("AB").as_ptr(), c("C").as_ptr()) },
+        0,
         "cap"
     );
 
@@ -998,7 +976,7 @@ fn path_join_and_parent() {
         for (i, ch) in s.bytes().enumerate() {
             b[i] = ch as c_char;
         }
-        let r = unsafe { pk_parent(b.as_mut_ptr()) };
+        let r = unsafe { dk_path_parent(b.as_mut_ptr()) };
         (
             r,
             unsafe { CStr::from_ptr(b.as_ptr()) }

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { describe, expect, test } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import { withWaitApi, type PatchedSession } from '@digi/regression/support.ts';
 import {
   analysisJson,
   bounded,
@@ -22,13 +22,16 @@ import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 
+/** DSP frames added to the shared trigger frame: the hooked setup takes up to the shared frame (frames 6988 to 7005 of 7000 seen). */
+const SETUP_SLACK = 300;
+
 for (const device of DEVICES) {
   // These nested suites are ordered: the plain owned process closes before the hooked image starts.
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} BASIC FX chain`, () => {
     const slots = slotsFor(device);
     const effects = Array.from({ length: slots + 1 }, (_, index) => (index === 0 ? GAIN : `${GAIN}-${index + 1}`));
     const inventory = [SINE, ...effects];
-    const symbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'dynreg_info'];
+    const symbols = ['DKRT_BOOT', 'dynreg_info'];
     let plainPcm: string;
 
     const capture = async (runtime: PatchedSession, context: ReturnType<typeof withPreparedFxSession>, tag: string) => {
@@ -36,9 +39,9 @@ for (const device of DEVICES) {
       await rpc(session, 'run.mode', { mode: 'paused' });
       await rpc(session, 'pcm.tap', { action: 'start' });
       // DT2 checks the assigned sine type and selected-track readback; DN2 retains its hint-only choice.
-      await selectSine(runtime, context.profile);
+      await selectSine(withWaitApi(runtime), context.profile);
       const current = await frames(session);
-      const trigger = triggerFrame(device);
+      const trigger = triggerFrame(device) + SETUP_SLACK;
       record(context.artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
       const file = path.join(context.artifacts, `${tag}.wav`);
       // Rig.note: same instruction offset after the DSP boundary, held for the whole 1500-frame capture.
@@ -58,6 +61,7 @@ for (const device of DEVICES) {
         image: { name: 'fx-plain', modules: RT, inventory, symbols, policy: 'default' },
         initial: 'plain',
         presets: { plain: { selection: ['modules/m0.dkm'] } },
+        requireAudible: true,
       });
       test('loads the sine safely and renders the unhooked audible reference', async () => {
         const runtime = context.fixture.runtime;

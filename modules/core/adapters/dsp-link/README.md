@@ -40,6 +40,8 @@ the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.1
   | 29-30 | the addresses of this block's reply record and of the one before |
   | 31 | the effect row switched off last (byte offset + 1) |
 
+  Who reads the words: the runtime core keeps the heartbeat (1, 2), the breadcrumbs (14, 24, 25) and the raw log of the block; the machines service logs words 17 to 23 and the fx service words 28 and 31 (`Service::diag`); the layout is this file's.
+
   Words 3-13 are the registers as the firmware left them at the first voice of the block, before the wrapper pins anything. A frozen heartbeat is a halted
   core. The breadcrumb names the step of a machine's path that `core/dsp-voice` reached last: 1 hook entered (every voice; the type is not known yet and
   the field is 0), 2 type registered, 3 stock path taken for a type of 7 or more that no module registered, 4 routine about to be called, 5 routine returned,
@@ -66,7 +68,7 @@ the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.1
   `0x1c2b24` at `0x1c771e` and the function `0x1c74cd` (hook site `0x1c75c1`) at `0x1c7756`; the orchestrator calls the master hook site `0x1c80f2` at `0x1c311f` and the send hook
   site `0x1c207b` at `0x1c3099`. DN2 1.12: handler `0x1c9e76`, orchestrator `0x1c2712` at `0x1c9fbc`, tail function `0x1c9d6b` at `0x1c9ff4`; effect sites `0x1c244d` (call
   `0x1c307b`) and `0x1c1f1e` (call `0x1c305d`).
-- Per-block callback: `dl_set_tick_cb(cb)` (a runtime import for modules, `requires core/dsp-link`; a no-op stub when the module is absent) sets one
+- Per-block callback: `dk_dsp_link_set_tick(dl, cb)` (an import for modules, `requires core/dsp-link`; without the module it returns DK_E_MISSING) sets one
   function, `void cb(const volatile u16 *rec)`, that `dl_tick` calls every block in the block interrupt, before the transfer code, with the copy of the
   previous reply record (diagnostic word j: see `dl_diag`). NULL is off and costs one pointer test per block. The callback must be a short C function with
   no allocation and no logging, and its module clears it in `fini`; the runtime also clears it after a `fini` when it points into the module

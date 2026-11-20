@@ -209,6 +209,11 @@ class BuildSuperblockTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from(">I", sb, 0x04)[0], pd.SUPERBLOCK_VERSION)
         self.assertEqual(struct.unpack_from(">I", sb, 0x08)[0], pd.PAGE)
 
+    def test_verified_state_skips_the_boot_check(self):
+        sb = pd.build_superblock()
+        self.assertEqual(struct.unpack_from(">I", sb, 0x04)[0], 4)
+        self.assertEqual(struct.unpack_from(">I", sb, 0x34)[0], 1)
+
     def test_region_offsets_are_sector_relative(self):
         sb = pd.build_superblock()
         self.assertEqual(
@@ -263,6 +268,33 @@ class BuildWritesSuperblockTest(unittest.TestCase):
             self.assertEqual(checksum, recomputed)
             version = struct.unpack_from(">I", sb, 0x04)[0]
             self.assertIn(version, (3, 4))
+
+
+@unittest.skipUnless(os.name == "nt", "NTFS sparse files: Windows only")
+class SparseImageWindowsTest(unittest.TestCase):
+    def test_image_takes_only_the_written_bytes_on_disk(self):
+        import ctypes
+        from ctypes import wintypes
+
+        size_on_disk = ctypes.WinDLL("kernel32").GetCompressedFileSizeW
+        size_on_disk.restype = wintypes.DWORD
+        size_on_disk.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "card.img")
+            img = pd.Image(path, 1 << 21)  # 1 GiB
+            img.write(1 << 12, b"\xa5" * pd.SECTOR)
+            img.close()
+            high = wintypes.DWORD(0)
+            low = size_on_disk(path, ctypes.byref(high))
+            self.assertEqual(os.path.getsize(path), 1 << 30)
+            sparse_attr = 0x200  # FILE_ATTRIBUTE_SPARSE_FILE
+            self.assertTrue(os.stat(path).st_file_attributes & sparse_attr)
+            self.assertLess((high.value << 32) | low, 16 << 20)
+            with open(path, "rb") as f:
+                f.seek((1 << 12) * pd.SECTOR)
+                self.assertEqual(f.read(pd.SECTOR), b"\xa5" * pd.SECTOR)
+                f.seek(1 << 29)
+                self.assertEqual(f.read(pd.SECTOR), bytes(pd.SECTOR))
 
 
 class NativeSampleTest(unittest.TestCase):

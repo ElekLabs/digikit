@@ -1,0 +1,16 @@
+schema = "dk.steps/1"
+name = "hold-note"
+description = "Press a key on the tracks and hold it: the voices play for the whole capture. `retrigger_ms` (0: off) presses the key again every that many ms of the warm-up and the window, for a note that ends by itself (the amp envelope)."
+
+[args]
+tracks = "1"
+key = 60
+velocity = 100
+retrigger_ms = 0
+
+[[step]]
+action = "midi.note"
+track = "{tracks}"
+key = "{key}"
+velocity = "{velocity}"
+retrigger_ms = "{retrigger_ms}"

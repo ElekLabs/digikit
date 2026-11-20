@@ -7,15 +7,21 @@ import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
 import { parse } from 'smol-toml';
 
+// The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
+const NEEDS_PACKS = JSON.parse(
+  readFileSync(new URL('../../tests/regression/runtime/needs-packs.json', import.meta.url), 'utf8'),
+).modules;
+
 const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
 const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
 // CLI builds into dist/ (gitignored). Copy then rename: a running process keeps the old file.
 const CLI = {
   patchkit: {
-    build: 'cargo build -p patchkit --release --offline --target-dir dist/cargo',
+    build: 'cargo build -p patchkit --features record-rules --release --offline --target-dir dist/cargo',
     bin: 'patchkit',
     dir: 'patchkit',
+    key: 'node tools/nx/patchkit-key.mjs', // dist/bytes/patchkit-test-<device>.key, the key of live device tests
   },
   'plusdrive-format': {
     build: 'cargo build -p plusdrive-format --bin plusdrive --release --locked --offline --target-dir dist/cargo',
@@ -23,15 +29,16 @@ const CLI = {
     dir: 'plusdrive',
   },
 };
-const cliTarget = ({ build, bin, dir }) => ({
+const cliTarget = ({ build, bin, dir, key }) => ({
   executor: 'nx:run-commands',
   cache: false,
   parallelism: true, // cargo locks dist/cargo itself and the install step is cp+mv, so it may run beside other tasks
-  outputs: [`{workspaceRoot}/dist/${dir}/${bin}`],
+  outputs: [`{workspaceRoot}/dist/${dir}/${bin}`, ...(key ? ['{workspaceRoot}/dist/bytes/patchkit-test-*.key'] : [])],
   options: {
     commands: [
       build,
       `mkdir -p dist/${dir} && cp dist/cargo/release/${bin} dist/${dir}/${bin}.tmp && mv -f dist/${dir}/${bin}.tmp dist/${dir}/${bin}`,
+      ...(key ? [key] : []),
     ],
     parallel: false,
     cwd: '.',
@@ -40,6 +47,26 @@ const cliTarget = ({ build, bin, dir }) => ({
 
 // Extra targets of named crates.
 const CRATE_TARGETS = {
+  'sharc-rig': {
+    build: {
+      executor: 'nx:run-commands',
+      cache: false, // cargo decides; the hash file it writes is the cache key of the tasks that run the rig
+      parallelism: true,
+      description:
+        'Builds the SHARC-only rig against the shared generated core into dist/bin/sharc-rig and writes dist/bytes/sharc-rig.sha256 (tools/nx/sharc-rig-bin.mjs).',
+      inputs: [
+        'default',
+        '^production',
+        '{workspaceRoot}/Cargo.toml',
+        '{workspaceRoot}/Cargo.lock',
+        '{workspaceRoot}/tools/nx/sharc-rig-bin.mjs',
+        '{workspaceRoot}/tools/nx/rust-env.mjs',
+        '{workspaceRoot}/out/native/shared-core/gen/CORE_FINGERPRINT',
+      ],
+      outputs: ['{workspaceRoot}/dist/bin/sharc-rig', '{workspaceRoot}/dist/bytes/sharc-rig.sha256'],
+      options: { command: 'node tools/nx/sharc-rig-bin.mjs', cwd: '.' },
+    },
+  },
   patchkit: {
     'device-bytes': {
       executor: 'nx:run-commands',
@@ -47,10 +74,74 @@ const CRATE_TARGETS = {
       parallelism: true,
       description:
         'Writes dist/bytes/core-objects.sha256: the hash of each committed core object without its source hash.',
-      inputs: ['{workspaceRoot}/tools/nx/device-bytes.mjs', { dependentTasksOutputFiles: '**/*', transitive: true }],
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-bytes.mjs',
+        '{workspaceRoot}/tools/nx/object-hash.mjs',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
       dependsOn: [{ target: 'build-objects', projects: ['tag:acceptance-image'] }],
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
+    },
+    'runtime-owners': {
+      executor: 'nx:run-commands',
+      cache: true,
+      parallelism: true,
+      description:
+        'Writes dist/bytes/owners/: one hash per owner of the runtime object (`patchkit owners`, modules/core/runtime/owners.toml), the shared set, the other runtime objects and the whole object.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/runtime-owners.mjs',
+        '{workspaceRoot}/tools/nx/object-hash.mjs',
+        '{workspaceRoot}/modules/core/runtime/owners.toml',
+        '{workspaceRoot}/modules/core/runtime/build/*.dko.json',
+        { dependentTasksOutputFiles: 'dist/patchkit/patchkit', transitive: true },
+      ],
+      dependsOn: ['cli'],
+      outputs: ['{workspaceRoot}/dist/bytes/owners'],
+      options: { command: 'node tools/nx/runtime-owners.mjs', cwd: '.' },
+    },
+    'pack-verdicts': {
+      executor: 'nx:run-commands',
+      cache: false, // under a second: the file it writes is part of the key of the device tasks that read it
+      parallelism: true,
+      description:
+        'Writes dist/bytes/pack-verdicts.json: the `patchkit needs` verdict of each pack in tests/regression/runtime/needs-packs.json.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/pack-verdicts.mjs',
+        '{workspaceRoot}/tests/regression/runtime/needs-packs.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', ...NEEDS_PACKS.map((id) => `${id}:pack`)],
+      outputs: ['{workspaceRoot}/dist/bytes/pack-verdicts.json'],
+      options: { command: 'node tools/nx/pack-verdicts.mjs', cwd: '.' },
+    },
+    'device-images': {
+      executor: 'nx:run-commands',
+      cache: false, // a few seconds: the file it writes is part of the merge key of the device tasks
+      parallelism: true,
+      description:
+        'Writes dist/bytes/images.sha256 and dist/bytes/images-<device>.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set, in one file for all devices and one per device.',
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-images.mjs',
+        '{workspaceRoot}/tests/regression/runtime/image-roots.json',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
+      dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
+      outputs: [
+        '{workspaceRoot}/dist/bytes/images.sha256',
+        '{workspaceRoot}/dist/bytes/images-*.sha256',
+        '{workspaceRoot}/dist/bytes/images',
+      ],
+      options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
+    },
+  },
+  dkprof: {
+    wasm: {
+      executor: 'nx:run-commands',
+      cache: false,
+      description: 'Builds the dkprof wasm that wb (profile, addrmap and module commands) loads.',
+      outputs: ['{workspaceRoot}/apps/web/public/dkprof.wasm'],
+      options: { command: 'node tools/nx/wasm.mjs --dkprof-only', cwd: '.' },
     },
   },
   dksample: {
@@ -71,7 +162,11 @@ const GATE = {
       executor: 'nx:run-commands',
       cache: false,
       parallelism: true, // no gate task is exclusive; an exclusive task scheduled mid-run makes Nx wait for every running task
-      outputs: ['{workspaceRoot}/dist/daemons.json'],
+      outputs: [
+        '{workspaceRoot}/dist/daemons.json',
+        '{workspaceRoot}/dist/bytes/daemon-test.key',
+        '{workspaceRoot}/dist/bytes/daemon-test-*.key',
+      ],
       inputs: [
         // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
         // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.
@@ -80,20 +175,29 @@ const GATE = {
         '{workspaceRoot}/rust-toolchain*',
         '{workspaceRoot}/.cargo/**/*',
         '{workspaceRoot}/packages/emulator/**/*',
+        '{workspaceRoot}/packages/dkaddrmap/**/*',
+        '{workspaceRoot}/packages/dksharc/**/*',
         '{workspaceRoot}/packages/dkneeds/**/*',
         '{workspaceRoot}/packages/dksample/**/*',
         '{workspaceRoot}/packages/dkupload/**/*',
         '{workspaceRoot}/packages/patchkit/**/*',
         '{workspaceRoot}/modules/core/runtime/fit/{Cargo.toml,build.rs,src/**/*}',
         '{workspaceRoot}/modules/core/runtime/sdk/{Cargo.toml,build.rs,src/**/*}',
+        // Test-only Rust files: `#[cfg(test)]` modules that the release build does not compile (an edit cannot change the binary).
+        // tools/devtools/emud_key.py checks that each of them is declared behind cfg(test) when it leaves the daemon test key.
+        '!{workspaceRoot}/{packages,modules}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}',
+        '!{workspaceRoot}/{packages,modules}/**/tests/**/*.rs',
         '{workspaceRoot}/devices/**/*',
         '{workspaceRoot}/tests/scenarios/dn2.json',
         '{workspaceRoot}/sdk/sdk.toml',
+        '{workspaceRoot}/modules/core/runtime/abi.toml',
         '{workspaceRoot}/tools/patchkit/toolchain/**/*',
         '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
         '{workspaceRoot}/tools/devtools/emud_key.py',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
+        '{workspaceRoot}/tools/devtools/store.py',
+        '{workspaceRoot}/tools/devtools/core_store.py',
         '{workspaceRoot}/tools/emulator/digi_env.py',
         '{workspaceRoot}/tools/emulator/native_pgo.py',
         '{workspaceRoot}/tools/emulator/native_target.py',
@@ -141,13 +245,14 @@ const GATE = {
 const NO_TESTS = new Set([
   'sharc-stats',
   'sharc-gen',
-  'sharc-gen-2',
-  'sharc-native-2',
   'dkfw',
+  'dkrt-test-support',
   'sharc-fast-cl',
-  'sharc-fast-cl-2',
   'bootstrap-emu',
   'digiemu-desktop',
+  'digi-wasm-core',
+  'dynlib',
+  'sharc-core-lib',
 ]);
 
 // Crates whose tests read no firmware, generated core or out/ data; their rust-tests are cached.
@@ -156,27 +261,43 @@ export const HERMETIC = {
   coldfire: [],
   periph: [],
   'emmc-card': [],
+  dkaddrmap: [],
+  dkprof: [],
   dkneeds: [],
-  'dkrt-sdk': ['{workspaceRoot}/sdk/vectors/settings-vectors.json'],
-  'dkrt-fit': ['{workspaceRoot}/sdk/vectors/fit-vectors.json'],
+  dksharc: [],
+  'dkrt-sdk': ['{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json'],
+  'dkrt-fit': ['{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json'],
   'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
   dkupload: [],
   dksample: [],
   machine: [],
   'sharc-rt': [],
   dkmidi: [],
+  dkbulk: [],
 };
 
-// Crates that compile another crate's sources by path (sharc-2 builds packages/emulator/sharc/src);
-// those files are outside the project root.
-const SHARED_SOURCE = { 'sharc-native-2': ['{workspaceRoot}/packages/emulator/sharc/**/*'] };
+// The shared fixtures (`tests/fixtures/modules`) whose `init` the contract suite of a service crate mirrors with a call list (`tests/contract.rs`): a change of a
+// fixture selects the crate's tests, so the call list is read against it.
+const fixture = (name) => [
+  `{workspaceRoot}/tests/fixtures/modules/${name}/module.toml`,
+  `{workspaceRoot}/tests/fixtures/modules/${name}/src/**/*`,
+  `{workspaceRoot}/tests/fixtures/modules/${name}/build/gen/module_ids.h`,
+];
+const FIXTURE_SOURCE = {
+  'dkrt-svc-lfo': fixture('lfo-shape'),
+  'dkrt-svc-fx': [...fixture('dyn-fx-gain'), ...fixture('dyn-fx-gain-b')],
+  'dkrt-svc-machines': fixture('sine'),
+  'dkrt-svc-shortcuts': fixture('shortcut-demo'),
+};
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.
 const COMPILE_SOURCE = {
   patchkit: [
     '{workspaceRoot}/sdk/sdk.toml',
-    '{workspaceRoot}/sdk/vectors/fit-vectors.json',
-    '{workspaceRoot}/sdk/vectors/settings-vectors.json',
+    '{workspaceRoot}/modules/core/runtime/abi.toml',
+    '{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json',
+    '{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json',
+    '{workspaceRoot}/tests/fixtures/ping-vectors.json', // flash_rpc.rs: `include_str!` in its unit test
     '{workspaceRoot}/devices/*.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/pins.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/m68k-cf-none-elf-a2.json',
@@ -196,13 +317,51 @@ export const pathDeps = (workspaceRoot, crateRoot) => {
   return [...new Set(deps)];
 };
 
+// Package names of the path dependencies of a crate, transitively (each is a project of this plugin).
+const pathDepNames = (workspaceRoot, crateRoot, seen = new Set()) => {
+  for (const dep of pathDeps(workspaceRoot, crateRoot)) {
+    const { name } = read(workspaceRoot, join(dep, 'Cargo.toml')).package;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    pathDepNames(workspaceRoot, dep, seen);
+  }
+  return [...seen].sort();
+};
+
+// `rust-tests` of a standalone crate: a crate with its own `[workspace]` and Cargo.lock inside a module directory (the
+// service crates `modules/core/services/*/dks`), so no member of the root workspace. modules.mjs gives it to every module
+// project whose root holds such a crate. Uncached like the non-hermetic members. The inputs are the project's own files
+// (crate, Cargo.lock, tests), the production files of the projects it depends on by path (listed,
+// transitively, from the Cargo.toml path dependencies) and the toolchain. A crate without tests passes (`--no-tests=pass`).
+export const standaloneRustTests = (workspaceRoot, root) => {
+  const manifest = join(root, 'Cargo.toml');
+  if (!existsSync(join(workspaceRoot, manifest)) || !read(workspaceRoot, manifest).workspace) return null;
+  return {
+    executor: 'nx:run-commands',
+    cache: false,
+    inputs: [
+      ...rustInputs(workspaceRoot),
+      { input: 'production', projects: pathDepNames(workspaceRoot, root) },
+      '{workspaceRoot}/tools/nx/rust-env.mjs',
+    ],
+    options: {
+      command: `node tools/nx/rust-env.mjs -- cargo nextest run --manifest-path ${manifest} --release --locked --offline --no-tests=pass`,
+      cwd: '.',
+    },
+  };
+};
+
+const rustInputs = (workspaceRoot) => {
+  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
+  if (existsSync(join(workspaceRoot, 'rust-toolchain.toml'))) inputs.push('{workspaceRoot}/rust-toolchain.toml');
+  return inputs;
+};
+
 export const createNodesV2 = [
   'Cargo.toml',
   (files, _opts, ctx) =>
     files.map((f) => {
-      const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
-      if (existsSync(join(ctx.workspaceRoot, 'rust-toolchain.toml')))
-        inputs.push('{workspaceRoot}/rust-toolchain.toml');
+      const inputs = rustInputs(ctx.workspaceRoot);
       const rust = read(ctx.workspaceRoot, 'mise.toml').tools.rust;
       const hermeticInputs = [
         'default',
@@ -238,12 +397,13 @@ export const createNodesV2 = [
               inputs: [
                 ...inputs,
                 '{workspaceRoot}/tools/nx/rust-env.mjs',
-                ...(SHARED_SOURCE[name] ?? []),
                 ...(COMPILE_SOURCE[name] ?? []),
+                ...(FIXTURE_SOURCE[name] ?? []),
               ],
               options: {
-                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
+                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name}${name === 'patchkit' ? ' --features record-rules' : ''} --release --locked --offline`,
                 cwd: '.',
+                ...(name === 'patchkit' && { env: { DIGI_REQUIRE_TOOLCHAINS: '1' } }),
               },
             };
       const projects = {};

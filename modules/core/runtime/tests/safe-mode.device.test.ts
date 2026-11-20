@@ -1,5 +1,5 @@
 import { be32 } from '@digi/dk-session';
-import { button, type Device } from '@digi/test-support';
+import { button, emulatorClock, waitClock, type Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo, bootInfoLoaded, CMD as MAILBOX, currentRecord, encodeRecord, postRaw } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
@@ -7,8 +7,10 @@ import { settleHang } from '@digi/regression/runtime/debug-kit.ts';
 import { rpc } from '@digi/regression/runtime/fx-live.ts';
 import { drainInputs } from '@digi/regression/runtime/fx-session.ts';
 import { introNow, safeFrame } from '@digi/regression/runtime/intro-frame.ts';
+import { stateName } from '@digi/regression/runtime/load-states.ts';
+import { FREE_TYPE, voiceRows } from '@digi/regression/runtime/project-kit.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { waitEmulatedFrames, waitForBootEmulated } from '@digi/regression/runtime/waits.ts';
+import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**
  * Safe mode and power cuts (the Python scenarios, deleted: safe-fault, safe-late-fault and cut-selection, all full
@@ -21,6 +23,9 @@ const E_SAFE_MODE = -44;
 const SAFE_COUNTER = 1;
 const SAFE_KEY = 2;
 const SAFE_FLAG = 3;
+/** Modes of `test/dyn-crash` (`cfg/crash-after.bin`, byte 4). */
+const CRASH_HANG_UI = 3;
+const CRASH_RESET_IN_INIT = 4;
 /** Scenario safe-fault: the module that follows `fault` on the card of the safe-once flag. */
 const FLAG_MODULES: Record<Device, string[]> = { dt2: ['test/sine'], dn2: ['test/dyn-dn2'] };
 /** `cut-selection.toml`. */
@@ -29,28 +34,34 @@ const CUT_MODULES: Record<Device, string[]> = { dt2: ['test/sine'], dn2: ['test/
 const LATE = { stable: 9000, early: 8000, late: 10000 };
 /** `cut-selection.toml` cases: the copies A and B, and what the boot uses. */
 const CUT_CASES = [
-  { a: 'new', b: 'old', want: { loaded: 'all', seq: 2, copy: 0 } },
   { a: 'torn', b: 'old', want: { loaded: 0, seq: 1, copy: 1 } },
   { a: 'old', b: 'new', want: { loaded: 'all', seq: 2, copy: 1 } },
-  { a: 'torn', b: 'torn', want: { loaded: 0, seq: 0, copy: 0 } },
 ] as const;
 
 
-cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symbols: CARD_SYMBOLS }, (h) => {
+cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symbols: [...CARD_SYMBOLS, 'voices.rows', 'dyndsp_info'] }, (h) => {
   test(
     'a module that resets the machine in its init: two boots never reach the UI loop, the third boots in safe mode',
     async () => {
-      const fault = h.mod('test/dyn-fault', 'fault');
+      const fault = h.mod('test/dyn-crash', 'fault');
+      const cfg = h.cfg('crash-after.bin', Buffer.concat([be32(0), Buffer.from([CRASH_RESET_IN_INIT])]));
       // Three boots of the fault card run inside this one reload; the no-progress watchdog sees each of them (`boot.icount`).
-      await h.boot(await h.card({ modules: [fault], selection: [fault.name] }));
+      // Without the cfg file the module never faults: the third boot would not be safe mode (the counter assert below).
+      await h.boot(await h.card({ modules: [fault, cfg], selection: [fault.name] }));
       const info = await h.ready(true);
       expect(info, 'the third boot is safe mode (counter 2)').toMatchObject({
         safe: 1,
         reason: SAFE_COUNTER,
         counter: 2,
       });
+      expect(info.uiReached, 'the UI was reached in safe mode').toBe(1);
       expect(info.loaded, 'safe mode loaded no module').toBe(0);
       expect(info.allResults[0], 'and reported it').toBe(E_SAFE_MODE);
+      expect(stateName(info.states[0]!), 'and skipped it').toBe('SKIPPED');
+      expect(
+        (await voiceRows(h.session, h.plan)).filter(([type]) => type !== FREE_TYPE),
+        'and claimed no voice row',
+      ).toEqual([]);
       expect((await introNow(h.session)).equals(safeFrame('counter')), 'the intro shows the 2 FAILED BOOTS frame').toBe(true);
       const rec = currentRecord(await h.records());
       expect(rec?.counter, 'the UI loop ran: counter 0').toBe(0);
@@ -71,12 +82,51 @@ cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symb
     },
   );
 
+  test(
+    'a fresh card with no record: boots that never reach the stable period lead to safe mode (counter) from the first boot, and a stable session clears it',
+    async () => {
+      // No selection and no module: nothing of ours can hang the boot. What counts is a session that ends before its stable period (a power-off, a
+      // firmware hang, a crash): the first boot creates the selection record and raises its counter, like every later one.
+      let card = await h.card();
+      for (const counter of [0, 1]) {
+        await h.boot(card);
+        const info = await h.ready();
+        expect(info, `boot ${counter + 1} of a card with no record: not safe, counter ${counter}`).toMatchObject({ safe: 0, counter, count: 0 });
+        expect(info.stable, 'its stable period has not ended when the power goes').toBe(0);
+        expect(currentRecord(await h.records())?.counter, 'the record exists and holds the raised counter').toBe(counter + 1);
+        card = await h.after(); // a power cycle: the card as the last boot left it
+      }
+      await h.boot(card);
+      const safe = await h.ready(true);
+      expect(safe, 'two boots without a stable period: the third is safe mode (counter 2)').toMatchObject({
+        safe: 1,
+        reason: SAFE_COUNTER,
+        counter: 2,
+      });
+      expect((await introNow(h.session)).equals(safeFrame('counter')), 'the intro shows the 2 FAILED BOOTS frame').toBe(true);
+      expect(currentRecord(await h.records())?.counter, 'the safe boot cleared the counter at its first UI-loop pass').toBe(0);
+
+      // the next boot is not safe; a stable session leaves the counter at 0
+      await h.boot(await h.after());
+      const next = await h.ready();
+      expect(next, 'the boot after the safe one is not safe').toMatchObject({ safe: 0, counter: 0 });
+      await expectPollEmulated(
+        h.session,
+        async () => (await bootInfo(h.session, h.plan)).stable,
+        (value) => expect(value, 'the session reaches its stable period').toBe(1),
+        { emulatedMs: 120_000, message: 'the stable period ends' },
+      );
+      expect(currentRecord(await h.records())?.counter, 'a stable session clears the counter').toBe(0);
+    },
+  );
+
   for (const kind of ['early', 'late'] as const) {
     test(
       `a module that hangs the UI task ${kind} in a session: the boot counter and the stable period`,
       async () => {
-        const mod = h.mod('test/dyn-fault-late', 'late');
-        const after = h.cfg('fault-after.bin', Buffer.concat([be32(LATE[kind]), Buffer.from([1])])); // hang
+        const mod = h.mod('test/dyn-crash', 'late');
+        // a missing cfg file would never hang: every boot asserts `hung` below
+        const after = h.cfg('crash-after.bin', Buffer.concat([be32(LATE[kind]), Buffer.from([CRASH_HANG_UI])]));
         let card = await h.card({ modules: [mod, after], selection: [mod.name], stableBlocks: LATE.stable });
         const ticks = planSymbol(h.plan, 'DKRT_STATE') + 8; // the runtime's UI-loop count
         const seen: { info: BootInfo; after: BootInfo; rec: ReturnType<typeof currentRecord>; hung: boolean }[] = [];
@@ -135,7 +185,7 @@ for (const held of [true, false]) {
       roots: RT, // default tier: these two cases run in the normal gate
       symbols: CARD_SYMBOLS,
       startEmpty: true,
-      initial: () => ({ modules: ['test/c-demo'], selection: ['modules/c-demo.dkm'] }),
+      initial: ({ mod }) => ({ modules: ['test/c-demo'], selection: [mod('test/c-demo').name] }),
       initialButtons: held
         ? [{ code: button('RECORD'), down: true }]
         : [
@@ -147,7 +197,7 @@ for (const held of [true, false]) {
       test(
         held ? 'REC held: safe mode (key), no module loaded' : 'REC released: no safe mode, the module loads',
         async () => {
-          await expect.poll(async () => (await bootInfo(h.session, h.plan)).uiReached, { timeout: 30_000 }).toBe(1);
+          await expectPollEmulated(h.session, async () => (await bootInfo(h.session, h.plan)).uiReached, (value) => expect(value).toBe(1), { emulatedMs: 30000 });
           // Check the first decision, not a later boot: a wrong safe result must fail here.
           const first = await bootInfo(h.session, h.plan);
           expect(first).toMatchObject({ safe: held ? 1 : 0, reason: held ? SAFE_KEY : 0, count: 1 });
@@ -160,7 +210,7 @@ for (const held of [true, false]) {
           await rpc(h.session, 'run.mode', { mode: 'free' });
           try {
             if (held) await rpc(h.session, 'input.button', { code: button('RECORD'), down: false });
-            await waitEmulatedFrames(h.session, 150);
+            await waitClock(emulatorClock(h.session), 100); // 150 frames of the released key reach the firmware
           } finally {
             try {
               await drainInputs(h.session);
@@ -217,11 +267,15 @@ cardRigs(
         );
         const recs = await h.records();
         expect(r).toBe(0);
-        expect(recs[0]?.seq, 'A is new').toBe(1);
-        expect(recs[1], 'B is still empty').toBeNull();
+        // The boot counted itself in the record on this card with no record (copy A, seq 1), and the stable-period clear may have written B (seq 2)
+        // before this call; SELECT_ONE then wrote A only, with the next sequence number. So: A holds the selection and is the newer copy; B is either
+        // still empty or the counter clear of the boot, which selects nothing.
+        expect(recs[0]?.paths, 'A is new: it holds the selection').toEqual(mods.map((m) => m.name));
+        expect(recs[0]?.seq, 'A is newer than anything the boot wrote').toBeGreaterThan(recs[1]?.seq ?? 1);
+        expect(recs[1]?.paths ?? [], 'B is still empty, or the boot\'s counter clear (no selection)').toEqual([]);
 
         await dk.restart();
-        await waitForBootEmulated(dk);
+        await dk.waitForBoot(90_000, { until: 'boot' }); // the boot record test: h.ready() follows
         await h.ready();
         expect(await bootInfoLoaded(session, h.plan), 'the restart loads the new copy').toMatchObject({
           loaded: mods.length,

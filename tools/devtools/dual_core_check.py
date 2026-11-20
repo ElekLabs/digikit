@@ -1,4 +1,4 @@
-"""Prove that one `digi-emud` with both generated cores boots either device coupled.
+"""Prove that one `digi-emud` with both core libraries boots either device coupled.
 
 The daemon starts on the first device (DN2) with the second device's ready inputs passed as
 `--also-coupled`. Then it opens the other firmware (`firmware.load replace`, as the app's Open does),
@@ -10,8 +10,9 @@ report's `dsp_core` of that device, advancing DSP frames, no DSP halt and (with 
         uv run python -m tools.devtools.dual_core_check --bench dt2 --binary second=BIN_A --binary first=BIN_B --pairs 3
         uv run python -m tools.devtools.dual_core_check --menu <machine id> --menu <effect id> [--shots DIR]
 
-The binary comes from `cargo build --release -p digi-control --features second-core --bin digi-emud`
-with SHARC_GEN_DIR (DN2) and SHARC_GEN_DIR_2 (DT2) set. It stops its daemon on exit.
+The binary comes from `cargo build --release -p digi-control --features sharc,play --bin digi-emud`; the core libraries
+of both devices come from the store (`uv run python -m tools.devtools.verify_build cores`, DIGI_SHARC_CORE_LIB_DN2 and
+DIGI_SHARC_CORE_LIB_DT2). It stops its daemon on exit.
 """
 
 from __future__ import annotations
@@ -33,7 +34,9 @@ from tools import python_env
 from tools.control.digi_client import ROOT, Emu
 from tools.device import dkrun
 from tools.device import dkupload as D
+from tools.devtools import core_store
 from tools.emulator import digi_env
+from tools.firmware import device as device_files
 from tools.patchkit import modroots
 from tools.patchkit import pk_harness as H
 
@@ -313,7 +316,11 @@ def bench_once(
     BINARY that started on START. The tier counters over SLICES run slices, after three warm-up slices. No fast tier (the lists
     exist for DN2 only, so a DT2 core has none in the launcher either)."""
     with Emu.spawn(
-        *daemon_args(start, ready), binary=binary, run_dir=keep, timeout=600.0
+        *daemon_args(start, ready),
+        binary=binary,
+        run_dir=keep,
+        timeout=600.0,
+        env=core_store.library_env(["dn2", "dt2"]),
     ) as emu:
         emu.step(STEP)
         emu.call(
@@ -371,8 +378,9 @@ def bench(
     slices: int,
     keep: str,
 ) -> int:
-    """Alternating runs of each binary (LABEL=PATH; the order rotates on each pair). A DT2 core that is the second core of one binary
-    and the first of another makes the comparison of the role. START is the device the daemon starts on (default: the other one);
+    """Alternating runs of each binary (LABEL=PATH; the order rotates on each pair). Every binary loads the same core libraries from
+    the store (`core_store.library_env`), so the runs compare the binaries; to compare cores, run it twice with
+    `DIGI_SHARC_CORE_LIB_<DEV>` set to each library. START is the device the daemon starts on (default: the other one);
     pass the same for both. Prints each run and the medians per binary."""
     ready = {d: digi_env.ready_inputs(device=d) for d in ("dn2", "dt2")}
     start = start or ("dt2" if device == "dn2" else "dn2")
@@ -428,7 +436,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--start",
-        choices=("dn2", "dt2"),
+        choices=device_files.shorts(),
         default="dn2",
         help="the device the daemon starts on (the other one is opened next)",
     )
@@ -436,7 +444,7 @@ def main() -> int:
         "--menu",
         action="append",
         metavar="MODULE",
-        help="on the other device (the second core when starting on DN2): upload MODULE (repeatable), then the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, with screenshots (implies --runtime; a machine also plays a note, an effect: its FX page)",
+        help="on the other device (the second engine of the process): upload MODULE (repeatable), then the on-device path SETTINGS > DIGIKIT > MODULES > tick > APPLY & RESTART, with screenshots (implies --runtime; a machine also plays a note, an effect: its FX page)",
     )
     ap.add_argument(
         "--shots",
@@ -446,18 +454,18 @@ def main() -> int:
     )
     ap.add_argument(
         "--bench",
-        choices=("dn2", "dt2"),
+        choices=device_files.shorts(),
         help="measure this device with the runtime patched in (DSP CPU per audio second, AOT share, real-time factor) on each --binary, alternating --pairs; no fast tier",
     )
     ap.add_argument(
         "--binary",
         action="append",
         metavar="LABEL=PATH",
-        help="--bench: a digi-emud to measure (repeatable; default: $DIGI_EMUD). A build whose first core is the device against one whose second core is it shows what the role costs",
+        help="--bench: a digi-emud to measure (repeatable; default: $DIGI_EMUD). Both builds load the core libraries of the store (or the DIGI_SHARC_CORE_LIB_<DEV> of the environment)",
     )
     ap.add_argument(
         "--bench-start",
-        choices=("dn2", "dt2"),
+        choices=device_files.shorts(),
         help="--bench: the device the daemon starts on (default: the other one)",
     )
     ap.add_argument("--pairs", type=int, default=3)
@@ -502,7 +510,12 @@ def main() -> int:
         "--no-audio",
     ]
     results: list[dict[str, Any]] = []
-    with Emu.spawn(*first, run_dir=keep, timeout=300.0) as emu:
+    with Emu.spawn(
+        *first,
+        run_dir=keep,
+        timeout=300.0,
+        env=core_store.library_env(["dn2", "dt2"]),
+    ) as emu:
         results.append(phase(emu, f"{start} at start", args.steps, start, args.pcm))
         for device, came_from in ((other, start), (start, other)):
             inputs = ready[device]

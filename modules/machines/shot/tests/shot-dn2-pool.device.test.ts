@@ -1,6 +1,11 @@
 import { expect } from 'vitest';
+import { fileHashHex } from '@digi/dk-session';
+import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import { RATE, expectedWindow } from './shot-support.ts';
-import { LAYOUTS, PAGE, dn2Tests, physOf, plane, planePages, type Dn2, type Fixture } from './shot-dn2-support.ts';
+import { LAYOUTS, PAGE, FOLDER, dn2Tests, physOf, plane, planePages, type Dn2, type Fixture } from './shot-dn2-support.ts';
+
+// One boot, one install and one upload for the two DN2 sample-pool files that shared a setup: the pool (load, planes, dedup, windows, reselect,
+// throughput) and the store read leases. The pool phases run first and need the empty pool; the lease phases select their own files on track 0.
 
 // DN2 OS 1.12, the sample pool (core/sample-pool: allocator, LP0 page transport into DDR) through the runtime sample pool (API 1.5/1.6):
 // boot state, load, handle, DDR planes, dedup, peak windows, cached reselect, throughput with dsp-link coexistence, a missing path.
@@ -15,7 +20,8 @@ const THROUGHPUT_FLOOR = 150;
 const BLOCKS_PER_SECOND = 1500;
 const layoutSeen = 'wordrev';
 
-dn2Tests('DN2 sample pool: load, planes, dedup, windows, reselect, throughput', 'shot-dn2-pool', ['a', 'm', 'x', 't'], async (c: Dn2) => {
+
+async function poolPhases(c: Dn2) {
   const { api, settle, log, phase, pool, link, clocks, rec, ddr, fixtures, file, dspWords } = c;
 
   // ---- 0. boot state of the pool -------------------------------------------------------------------------------------------
@@ -219,4 +225,87 @@ dn2Tests('DN2 sample pool: load, planes, dedup, windows, reselect, throughput', 
     expect(s.state, 'NOT_FOUND').toBe(-1);
     expect(await api.clear(index), 'the failed entry can be cleared').toBe(0);
   });
-});
+}
+
+// DN2 OS 1.12, store read leases (docs/plans/usb-fast.md step 1b): while the sample pool loads a store file, the runtime refuses to replace it, delete it or
+// clear the store (E_FILE_IN_USE on SysEx), a new file can still be stored, and the pool's copy in DDR is the file as it was. When the load is done the
+// lease is gone: replace and delete work.
+
+async function leasePhases(c: Dn2) {
+  const { dk, api, settle, log, phase, pool, rec, ddr, fixtures, file } = c;
+  const q = fixtures.q!;
+  const t = fixtures.t!;
+  const path = `samples/${FOLDER}/q`;
+  const other = `samples/${FOLDER}/n`;
+  const hashOf = async (p: string) => (await dk.list()).find((e) => e.path === p)?.hash;
+  const qHash = fileHashHex(q.prep.stored);
+
+  await phase('lease', async () => {
+    expect(await hashOf(path), 'the fixture is stored where the test expects it').toBe(qHash);
+    const p0 = await pool();
+    expect(await api.select(file('q'), 0), 'select queues the load').toBe(0);
+    // wait until pages flow: the load is running and holds its lease
+    await pollEmulated(c.session, pool, (v) => v.pages - p0.pages >= 8, {
+      emulatedMs: 60_000,
+      message: 'the load did not start',
+      intervalMs: 30,
+    });
+    const refusals: Record<string, string | undefined> = {};
+    const refused = async (name: string, op: () => Promise<unknown>) => {
+      refusals[name] = await op().then(
+        () => 'accepted',
+        (e: unknown) => (e as { status?: string }).status ?? String(e),
+      );
+    };
+    await refused('replace', () => dk.put(path, t.prep.stored));
+    await refused('delete', () => dk.delete(path));
+    await refused('clear', () => dk.clear());
+    const mid = await api.status(0);
+    const pMid = await pool();
+    log.lease = { refusals, stateAfterRefusals: mid.state, pagesAfterRefusals: pMid.pages - p0.pages, expectedPages: 2 * planePages(q.frames) };
+    expect(refusals, 'replace, delete and clear are refused while the pool loads the file').toEqual({
+      replace: 'E_FILE_IN_USE',
+      delete: 'E_FILE_IN_USE',
+      clear: 'E_FILE_IN_USE',
+    });
+    expect(
+      mid.state !== 3 && pMid.pages - p0.pages < 2 * planePages(q.frames),
+      `the load had finished before the three refusals were answered (state ${mid.state}, ${pMid.pages - p0.pages} pages): the test proves nothing, use a longer fixture`,
+    ).toBe(true);
+    expect(await hashOf(path), 'the refused commands changed nothing').toBe(qHash);
+    // an unrelated upload still works during the load (the store lock is shared with the load's card reads; the session retries E_BUSY)
+    await dk.put(other, t.prep.stored);
+    expect(await hashOf(other)).toBe(fileHashHex(t.prep.stored));
+    expect(await hashOf(path), 'the leased file is unchanged after the other upload').toBe(qHash);
+
+    const ready = await settle(0);
+    expect(ready.state, `Q reaches ready ${JSON.stringify(ready.seen)}`).toBe(3);
+    const r = await rec(0);
+    expect(r.frames).toBe(q.frames);
+    // the pool's copy is the old file, plane by plane
+    for (const [channel, base] of [[0, r.baseL!], [1, r.baseR!]] as [number, number][]) {
+      const got = await ddr(physOf(base), planePages(q.frames) * PAGE);
+      expect(got.equals(plane(q, channel, LAYOUTS.wordrev!)), `plane ${channel} of the pool is the file that was loaded`).toBe(true);
+    }
+  });
+
+  await phase('after the load', async () => {
+    // the lease ended with the load: the same three commands work now
+    await dk.put(path, t.prep.stored);
+    expect(await hashOf(path), 'replace works after the load').toBe(fileHashHex(t.prep.stored));
+    await dk.delete(path);
+    expect(await hashOf(path), 'delete works after the load').toBeUndefined();
+    await dk.delete(other);
+    expect(await hashOf(other)).toBeUndefined();
+  });
+}
+
+dn2Tests(
+  'DN2 sample pool: load, planes, dedup, windows, reselect, throughput, store leases',
+  'shot-dn2-pool',
+  ['a', 'm', 'x', 't', 'q'],
+  async (c: Dn2) => {
+    await poolPhases(c);
+    await leasePhases(c);
+  },
+);

@@ -130,7 +130,6 @@ export default defineConfig({
   plugins: [solid(), controller(process.env.DIGI_LIVE_SOCKET ?? '')],
   resolve: {
     alias: [
-      { find: '@web', replacement: here('../../../web/src') },
       { find: '@tauri-apps/api/core', replacement: here('./live-tauri.ts') },
       // the file dialogs and the samples folder have no live stand-in: the plain preview's fakes stay for the Samples mode
       { find: /^\.\/samples-backend$/, replacement: here('./samples-backend.mock.ts') },

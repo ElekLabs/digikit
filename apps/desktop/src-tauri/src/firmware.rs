@@ -1,6 +1,7 @@
 //! The Firmware page's two native parts: `patchkit::flash` in process (the page cannot patch and check a firmware image itself here, the
 //! browser build does it in patchkit.wasm) and the system's save dialog for the image. The MIDI side is `midi_port.rs`; the page paces the
-//! messages with the Rust sender through patchkit.wasm, like the site.
+//! messages with the Rust sender through patchkit.wasm, like the site. `prepare` also keeps the ship map and the load-table symbol addresses of the
+//! image (`library::store_ship`), so the Log pane can name addresses of a device that runs it.
 use std::path::Path;
 
 /// The answer of `firmware_prepare`: the length of the summary JSON as 4 bytes big endian, the JSON (`Prepared::summary_json`), the image.
@@ -15,6 +16,20 @@ pub fn pack(summary: &str, image: &[u8]) -> Vec<u8> {
 /// Patch and check `stock` (or, with `restore`, check the stock file itself) with the checkout's modules, ports and device files.
 pub fn prepare(root: &Path, stock: &[u8], restore: bool, set: &str) -> Result<Vec<u8>, String> {
     let p = patchkit::flash::prepare_in_repo(root, stock, restore, set).map_err(|e| e.0)?;
+    // the names of the image's addresses (the Log pane of a device that runs it): a failure to keep them must not stop the flash
+    if let (Some(map), Some(id)) = (&p.ship_map, p.image_id_hex())
+        && let Err(e) = crate::library::store_ship(
+            root,
+            &p.device,
+            &crate::library::ShipRecord {
+                image_id: id,
+                ship: map.json.clone(),
+                symbols: map.symbols.clone(),
+            },
+        )
+    {
+        eprintln!("firmware_prepare: the address map was not kept: {e}");
+    }
     Ok(pack(&p.summary_json().to_string(), &p.image))
 }
 
@@ -111,6 +126,38 @@ mod tests {
         assert_eq!(&out[..4], &11u32.to_be_bytes());
         assert_eq!(&out[4..15], b"{\"ok\":true}");
         assert_eq!(&out[15..], &[1, 2, 3]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_prepared_image_keeps_its_ship_map_for_the_log_pane() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let Ok(stock) = std::fs::read(repo.join("firmware/Digitone_II_OS1.12.syx")) else {
+            eprintln!("skipped: firmware/Digitone_II_OS1.12.syx is absent");
+            return;
+        };
+        // a scratch root with the repository's modules and devices linked in, so the maps land in a temp directory
+        let dir = std::env::temp_dir().join(format!("digikit-prepare-maps-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for d in ["modules", "devices", "tests"] {
+            std::os::unix::fs::symlink(repo.join(d), dir.join(d)).unwrap();
+        }
+        prepare(&dir, &stock, false, "device").unwrap();
+        let maps = crate::library::read_maps(&dir, "dn2").unwrap();
+        assert_eq!(maps.ships.len(), 1);
+        let ship = &maps.ships[0];
+        assert_eq!(ship.image_id.len(), 16);
+        assert!(
+            ship.symbols.contains_key("DKRT_STATE"),
+            "{:?}",
+            ship.symbols
+        );
+        assert!(
+            ship.ship.contains("\"kind\":\"ship\"") || ship.ship.contains("\"kind\": \"ship\"")
+        );
+        // the image the device runs reports this id in INFO: the page picks the record by it
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

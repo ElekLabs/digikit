@@ -1,4 +1,4 @@
-//! The settings page of digikit/remote (modules/tools/remote/src/c/remote.c) on the fake <dk/ui.h>, with a fake core/input.
+//! The settings page of digikit/remote (modules/tools/remote/src/c/remote.c) on the fake <dk/platform/ui.h>, with a fake core/input.
 use dkui_host::driver::*;
 use dkui_host::*;
 use std::ffi::c_int;
@@ -9,6 +9,7 @@ extern "C" {
     fn r_page() -> *mut DkUiMenu;
     fn r_key_down(code: c_int) -> c_int;
     fn r_fail_next(result: c_int);
+    fn r_reset();
 }
 
 const KEY: c_int = 0x38;
@@ -18,11 +19,12 @@ fn cmd(c: c_int, body: &[u8]) -> c_int {
     unsafe { r_cmd(c, body.as_ptr(), body.len() as c_int) }
 }
 
-/// The module is initialised once per process; each test builds the page in its own UI model.
+/// The module is initialised once per process and reset for each test (the state of remote.c is static); each test builds the page in its own UI model.
 fn page() -> (std::sync::MutexGuard<'static, ()>, *mut DkUiMenu) {
     static ONCE: std::sync::Once = std::sync::Once::new();
     let g = session();
     ONCE.call_once(|| assert_eq!(unsafe { r_init() }, 0));
+    unsafe { r_reset() };
     (g, unsafe { r_page() })
 }
 

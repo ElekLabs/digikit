@@ -1,4 +1,4 @@
-// test/dyn-guard-nan: a machine of the SDK contract (<dk/machine.h>) whose render outputs NaN, one body for both devices (fixture of the runtime
+// test/dyn-guard-nan: a machine of the SDK contract (<dk/machine/machine.h>) whose render outputs NaN, one body for both devices (fixture of the runtime
 // guard of core/dsp-voice, docs/findings/51-pluck-tune-guard.md). The adapter calls note_on once per note and render once per block while the
 // voice runs; the guard zeroes the block, ends the voice and counts the fault.
 
@@ -24,7 +24,7 @@ _gn_note_on:
     JUMP (M13, I13);
 
 .SECTION/DM seg_dmda;
-// dk_machine_desc: magic, contract, n_params, voices, state_bytes, state_clear_bytes, max_cycles_block, max_cycles_note_on, max_call_depth, stack_bytes.
+// dk_machine_desc: magic, contract, n_params, voices, state_bytes, state_clear_bytes, max_call_depth, stack_bytes.
 .GLOBAL _gn_desc;
 .VAR _gn_desc = DK_MAGIC;
 .VAR _gn_desc1 = DK_MACHINE_V1;
@@ -32,7 +32,5 @@ _gn_note_on:
 .VAR _gn_desc3 = DK_MAX_VOICES;
 .VAR _gn_desc4 = 8;
 .VAR _gn_desc5 = 0;
-.VAR _gn_desc6 = 100;
-.VAR _gn_desc7 = 100;
-.VAR _gn_desc8 = 0;
-.VAR _gn_desc9 = 0;
+.VAR _gn_desc6 = 0;
+.VAR _gn_desc7 = 0;

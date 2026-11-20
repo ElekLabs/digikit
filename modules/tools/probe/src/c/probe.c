@@ -1,7 +1,7 @@
 /* digikit/probe: collects the words of a DSP probe module (docs/plans/debug-mode-and-probes.md, phase 1).
  *
  * The DSP module stores one word per block in the module step word; the block tail of core/dsp-link copies it into diagnostic word 25 of that block's reply
- * record. dkm_init sets the per-block callback of core/dsp-link; the callback runs in the block interrupt (1500 Hz) with the copy of the previous reply, and keeps
+ * record. `init` sets the per-block callback of core/dsp-link; the callback runs in the block interrupt (1500 Hz) with the copy of the previous reply, and keeps
  * word 25 in a ring when the module ran in that record. The ring takes words until it is full (the rest count as overruns); RESET empties it. The words are framed by the
  * module (tools/device/dkprobe_seq.py): header 0xB0 << 24 | n << 16 | sequence, n payload words, checksum s1 ^ s2 (s1 += w; s2 += s1). STATUS checks the frames
  * in the MIDI task, a bounded number of words per request; the callback does no checking.
@@ -14,7 +14,11 @@
  *   0x34 RESET   body: none            reply: status 0
  */
 
-#include <dk/api.h>
+#include <dk/core/module.h>
+#include <dk/core/bytes.h>
+#include <dk/core/log.h>
+#include <dk/platform/dsp_link.h>
+#include <dk/platform/host.h>
 
 typedef uint32_t u32;
 typedef uint16_t u16;
@@ -27,7 +31,8 @@ typedef uint8_t u8;
 #define CMD_READ 0x33u
 #define CMD_RESET 0x34u
 
-#define RING_WORDS 24576u /* one run of the SHARC probe is 23,436 words; the rest is the margin for a start inside a frame */
+#define RING_WORDS                                                                                 \
+    24576u /* one run of the SHARC probe is 23,436 words; the rest is the margin for a start inside a frame */
 #define READ_MAX 200u
 #define PARSE_BUDGET 4096u /* words looked at per STATUS */
 #define MAGIC 0xB0u
@@ -40,7 +45,7 @@ typedef uint8_t u8;
 #define W_CALLS_MASTER 26u
 #define W_CALLS_SEND 27u
 
-/* The ring is module bss, not an `Api.alloc` block: the arena need is then what `dkneeds` reads from the file (docs/design/digikit-dkm.md, "Needs are inferred from the contents"). */
+/* The ring is module bss, not a `dk_alloc` block: the arena need is then what `dkneeds` reads from the file (docs/design/digikit-dkm.md, "Needs are inferred from the contents"). */
 static u32 ring_store[RING_WORDS];
 
 typedef struct Probe {
@@ -57,8 +62,8 @@ typedef struct Probe {
     u32 last_beat;
     u32 last_calls;
     /* the checker's state (STATUS) */
-    u32 parsed;      /* the next word to look at */
-    u32 synced;      /* a frame was accepted since RESET */
+    u32 parsed; /* the next word to look at */
+    u32 synced; /* a frame was accepted since RESET */
     u32 have_seq;
     u32 last_seq;
     u32 frames_ok;
@@ -67,6 +72,7 @@ typedef struct Probe {
 } Probe;
 
 static Probe pr;
+static dk_dsp_link *dsp; /* core/dsp-link, opened in init */
 
 static u32 diag(const volatile u16 *rec, u32 j)
 {
@@ -151,36 +157,30 @@ static void check_frames(void)
     pr.parsed = p;
 }
 
-static void put32(u8 *o, u32 v)
+static int32_t cmd(u32 c, u32 seq, const void *request, u32 len, void *reply)
 {
-    o[0] = (u8)(v >> 24);
-    o[1] = (u8)(v >> 16);
-    o[2] = (u8)(v >> 8);
-    o[3] = (u8)v;
-}
-
-static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
-{
+    const u8 *body = request;
+    u8 *out = reply;
     u32 i;
     (void)seq;
     if (c == CMD_STATUS) {
         check_frames();
-        put32(out + 0, 3u); /* format */
-        put32(out + 4, pr.blocks);
-        put32(out + 8, pr.records);
-        put32(out + 12, pr.drops);
-        put32(out + 16, pr.repeats);
-        put32(out + 20, pr.idle);
-        put32(out + 24, pr.n);
-        put32(out + 28, pr.overruns);
-        put32(out + 32, RING_WORDS);
-        put32(out + 36, pr.parsed);
-        put32(out + 40, pr.frames_ok);
-        put32(out + 44, pr.seq_errors);
-        put32(out + 48, pr.cks_errors);
-        put32(out + 52, pr.have_seq ? pr.last_seq : 0xffffffffu);
-        put32(out + 56, pr.last_beat);
-        put32(out + 60, pr.synced);
+        dk_bytes_put32(out + 0, 3u); /* format */
+        dk_bytes_put32(out + 4, pr.blocks);
+        dk_bytes_put32(out + 8, pr.records);
+        dk_bytes_put32(out + 12, pr.drops);
+        dk_bytes_put32(out + 16, pr.repeats);
+        dk_bytes_put32(out + 20, pr.idle);
+        dk_bytes_put32(out + 24, pr.n);
+        dk_bytes_put32(out + 28, pr.overruns);
+        dk_bytes_put32(out + 32, RING_WORDS);
+        dk_bytes_put32(out + 36, pr.parsed);
+        dk_bytes_put32(out + 40, pr.frames_ok);
+        dk_bytes_put32(out + 44, pr.seq_errors);
+        dk_bytes_put32(out + 48, pr.cks_errors);
+        dk_bytes_put32(out + 52, pr.have_seq ? pr.last_seq : 0xffffffffu);
+        dk_bytes_put32(out + 56, pr.last_beat);
+        dk_bytes_put32(out + 60, pr.synced);
         return 64;
     }
     if (c == CMD_READ) {
@@ -195,10 +195,10 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
             count = 0;
         else if (count > n - first)
             count = n - first;
-        put32(out, n);
-        put32(out + 4, first);
+        dk_bytes_put32(out, n);
+        dk_bytes_put32(out + 4, first);
         for (i = 0; i < count; i++)
-            put32(out + 8u + 4u * i, pr.ring[first + i]);
+            dk_bytes_put32(out + 8u + 4u * i, pr.ring[first + i]);
         return (int32_t)(8u + 4u * count);
     }
     if (c == CMD_RESET) {
@@ -212,24 +212,29 @@ static int32_t cmd(u32 c, u32 seq, const u8 *body, u32 len, u8 *out)
     return E_MSG;
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
-    int r;
+    int32_t r = dk_dsp_link_open(ctx, &dsp);
+    if (r != DK_OK)
+        return r;
     pr.ring = ring_store;
-    r = api->register_cmds(CMD_FIRST, CMD_COUNT, cmd);
+    r = dk_host_register(CMD_FIRST, CMD_COUNT, cmd);
     if (r != 0) {
-        api->log((const u8 *)"probe: register_cmds refused", (u32)r);
+        dk_log(DK_LOG_INFO, "probe: dk_host_register refused", (u32)r);
         pr.ring = 0;
-        return -1;
+        return r;
     }
-    dl_set_tick_cb((uint8_t *)tick);
-    api->log((const u8 *)"probe ready", RING_WORDS);
-    return 0;
+    dk_dsp_link_set_tick(dsp, (uint8_t *)tick);
+    dk_log(DK_LOG_INFO, "probe ready", RING_WORDS);
+    return DK_OK;
 }
 
-void dkm_fini(const dk_api *api)
+static void fini(dk_module_ctx *ctx)
 {
-    (void)api;
-    dl_set_tick_cb(0);
+    (void)ctx;
+    if (dsp)
+        dk_dsp_link_set_tick(dsp, 0);
     pr.ring = 0;
 }
+
+const dk_module_def dk_module = {.init = init, .fini = fini};

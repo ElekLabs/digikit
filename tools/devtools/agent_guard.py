@@ -1,6 +1,7 @@
 """A Claude Code PreToolUse hook for the Bash tool: blocks the commands that cost agents the most time.
 
-Blocked (docs/TESTING.md, AGENTS.md "Checks"): pytest on a test directory, `--tier full`, `test:full`, `sleep` that adds up to over 60 s and `tail -f`. A command that starts with `DIGI_GUARD=off `
+Blocked (docs/TESTING.md, AGENTS.md "Checks"): pytest on a test directory, `--tier full`, `test:full`, `sleep` that adds up to over 60 s, `tail -f`, and
+reading a whole Nx terminal output or run log (`cat`, `less`, `more`, `head` or `tail` of over 200 lines of `.nx/cache/terminalOutputs/*` or `out/runs/**/*.log`). A command that starts with `DIGI_GUARD=off `
 passes (the coordinator, deliberately). Registered in .claude/settings.json. Stdlib only.
 
 The hook reads one JSON object from stdin. Exit 2 with a reason on stderr blocks the command; exit 0 lets it
@@ -26,6 +27,13 @@ TAIL_FOLLOW_RE = re.compile(
 TIER_FULL_RE = re.compile(r"--tier[ =]full\b")
 FULL_TEST_RE = re.compile(r"\btest:full\b")
 QUOTED_RE = re.compile(r"'[^']*'|\"(?:[^\"\\\\]|\\\\.)*\"")
+# Test logs are read through `node tools/nx/failures.mjs FILE`, or a bounded head/tail/grep.
+LOG_PATH_RE = re.compile(
+    r"(?:^|/)\.nx/cache/terminalOutputs/|(?:^|/)out/runs/(?:.*/)?[^/]*\.log$"
+)
+LOG_LINES_LIMIT = 200
+LOG_PAGERS = {"cat", "less", "more", "bat"}
+COMMAND_SPLIT_RE = re.compile(r"\s*(?:&&|\|\||[;\n])\s*")
 SEGMENT_SPLIT_RE = re.compile(r"\s*(?:&&|\|\||[;|\n])\s*")
 GUARD_OFF_RE = re.compile(r"^\s*DIGI_GUARD=off\s")
 
@@ -78,6 +86,67 @@ def runner_args(tokens: list[str]) -> list[str] | None:
     return None
 
 
+def line_count(args: list[str]) -> int | None:
+    """The line count of a head or tail command: None when it has none (10 lines), a huge number when unbounded."""
+    for i, arg in enumerate(args):
+        value = None
+        if arg in ("-n", "--lines") and i + 1 < len(args):
+            value = args[i + 1]
+        elif arg.startswith("--lines="):
+            value = arg[8:]
+        elif re.fullmatch(r"-n\S+", arg):
+            value = arg[2:]
+        elif re.fullmatch(r"-\d+", arg):
+            value = arg[1:]
+        if value is not None:
+            if value.startswith("+") or not value.isdigit():
+                return 10**9
+            return int(value)
+    return None
+
+
+def log_read(command: str) -> str | None:
+    """The reason to block a read of a whole test log, or None."""
+    for line in COMMAND_SPLIT_RE.split(command):
+        stages = []
+        for stage in line.split("|"):
+            try:
+                tokens = shlex.split(stage)
+            except ValueError:
+                tokens = []
+            while tokens and re.match(r"[A-Za-z_]\w*=", tokens[0]):
+                tokens.pop(0)
+            stages.append(tokens)
+        for i, tokens in enumerate(stages):
+            if not tokens:
+                continue
+            name = tokens[0].rsplit("/", 1)[-1]
+            files = [t for t in tokens[1:] if LOG_PATH_RE.search(t)]
+            if not files:
+                continue
+            if name in LOG_PAGERS:
+                # `cat LOG | head -n 20` is bounded by the stage after it.
+                bounded = False
+                for later in stages[i + 1 :]:
+                    if later and later[0].rsplit("/", 1)[-1] in ("head", "tail"):
+                        bounded = (line_count(later[1:]) or 10) <= LOG_LINES_LIMIT
+                    elif later and later[0].rsplit("/", 1)[-1] in ("grep", "rg", "wc"):
+                        bounded = True
+                if not bounded:
+                    return (
+                        f"{name} of a whole test log ({files[0]}): "
+                        f"node tools/nx/failures.mjs {files[0]} prints the first failure block"
+                    )
+            elif name in ("head", "tail"):
+                count = line_count(tokens[1:])
+                if count is not None and count > LOG_LINES_LIMIT:
+                    return (
+                        f"{name} of over {LOG_LINES_LIMIT} lines of a test log ({files[0]}): "
+                        f"node tools/nx/failures.mjs {files[0]} prints the first failure block"
+                    )
+    return None
+
+
 def unquoted(command: str) -> str:
     return QUOTED_RE.sub("''", command)
 
@@ -112,6 +181,9 @@ def check(command: str, cwd: Path) -> str | None:
             "test:full runs once per batch of merges (a background lane) and after generated-core "
             "changes, by the coordinator; lanes run scoped checks, the coordinator runs mise run test"
         )
+    reason = log_read(bare)
+    if reason:
+        return reason
     for segment in SEGMENT_SPLIT_RE.split(command):
         try:
             tokens = shlex.split(segment)

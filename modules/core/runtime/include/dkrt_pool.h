@@ -1,8 +1,8 @@
 /* The sample backing plug-in point, version 1. NOT an SDK contract: content modules never see it.
    The runtime (device-neutral) calls the optional symbols dkpool_* that a device adapter
-   exports (modules/core/adapters/sample-pool); the adapter calls dkrt_pool_done and
-   dkrt_pool_lost. Without the adapter the symbols resolve to 0 and sample_pool_add returns
-   DK_SAMPLE_E_CONTRACT. docs/design/sample-api-1.5.md, section 2.2.
+   exports (modules/core/adapters/sample-pool), and lists in its data table `sample_pool_info`; the adapter reports
+   events through the pointer slots pool_done and pool_lost (src/cf/pool_events.h), which the samples service file fills.
+   Without the adapter (or without the service) sample_pool_add returns DK_SAMPLE_E_CONTRACT. docs/design/sample-api-1.5.md, section 2.2.
    All calls run in the runtime's task context. `id` and `path` belong to the runtime;
    the adapter does not keep them past the call. Additive growth only: new symbols are
    optional, existing signatures never change.
@@ -27,9 +27,11 @@ uint32_t dkpool_version(void);
 #define DKPOOL_E_FORMAT (-5)
 #define DKPOOL_E_LOST (-15)
 #define DKPOOL_E_POOL (-16)
-#define DKPOOL_E_CHANGED (-17) /* runtime only: the file differs from the selection snapshot */
-#define DKPOOL_E_CONTRACT (-48) /* the caller broke the contract (no free request, token counter exhausted) */
-#define DKPOOL_DONE 0   /* dkpool_load finished, `out` is filled */
+#define DKPOOL_E_CHANGED                                                                           \
+    (-17) /* the file differs from the selection snapshot (runtime), or the store file changed after the load (dkpool_window_step) */
+#define DKPOOL_E_CONTRACT                                                                          \
+    (-48)             /* the caller broke the contract (no free request, token counter exhausted) */
+#define DKPOOL_DONE 0 /* dkpool_load finished, `out` is filled */
 #define DKPOOL_QUEUED 1 /* dkrt_pool_done(req, result) follows later */
 
 /* File identity snapshot taken by the runtime at select. Two selections with equal
@@ -46,13 +48,14 @@ typedef struct dk_file_id {
 
 /* What the runtime stores per dedup entry. */
 typedef struct dkpool_handle {
-    uint32_t id;      /* adapter-private (DT2: slot; DN2: block index) */
-    uint32_t token;   /* nonzero, unique per load, never reused */
-    uint32_t base_l;  /* DSP normal-word address of plane L, as dk_strack.base_l: NW32 alias of DDR, 0x10000000 + (phys - 0x80000000) / 4 */
-    uint32_t base_r;  /* plane R; == base_l for mono */
+    uint32_t id;    /* adapter-private (DT2: slot; DN2: block index) */
+    uint32_t token; /* nonzero, unique per load, never reused */
+    uint32_t
+        base_l; /* DSP normal-word address of plane L, as dk_sample_pool_entry.base_l: NW32 alias of DDR, 0x10000000 + (phys - 0x80000000) / 4 */
+    uint32_t base_r; /* plane R; == base_l for mono */
     uint32_t frames;
-    uint32_t rate;    /* Hz */
-    uint32_t channels;/* 1 or 2 */
+    uint32_t rate;     /* Hz */
+    uint32_t channels; /* 1 or 2 */
 } dkpool_handle;
 
 /* Alloc, read, convert, make DSP-visible. `req` is chosen by the runtime and returned by
@@ -89,11 +92,11 @@ int32_t dkpool_peaks(const dkpool_handle *h, uint8_t *out, uint32_t capacity);
    step. out is `columns` pairs {min, max} of int16 (the layout of dkpool_peaks). Returns 1: call again; 0: done
    (*cursor == first + frames); or a negative DKPOOL_E_*. */
 #define DKPOOL_WINDOW_CHUNK 65536u
-int32_t dkpool_window_step(const dkpool_handle *h, const uint8_t *path, uint32_t first, uint32_t frames, uint32_t columns,
-                           int16_t *out, uint32_t *cursor);
+int32_t dkpool_window_step(const dkpool_handle *h, const uint8_t *path, uint32_t first,
+                           uint32_t frames, uint32_t columns, int16_t *out, uint32_t *cursor);
 
-/* Adapter to runtime. result: 0, DKPOOL_E_POOL, DKPOOL_E_READ or DKPOOL_E_FORMAT. */
-void dkrt_pool_done(uint32_t req, int32_t result);
+/* Adapter to service: the slot pool_done, void (*)(uint32_t req, int32_t result): result 0, DKPOOL_E_POOL, DKPOOL_E_READ or DKPOOL_E_FORMAT
+   (sp_pool_done in src/cf/pool_events.h calls it when it is set). */
 /* Adapter to runtime: the background job queue (owner 0). step runs in the worker task and returns 1 (call again), 0 (finished) or a
    negative error; done runs once in the UI task with the final status (-80 after a cancel). dkrt_job_post returns a job id > 0, or a
    negative error (queue full, null step). dkrt_job_cancel returns 0 or a negative error. */
@@ -102,8 +105,5 @@ typedef void (*dkrt_job_done)(uint8_t *ctx, int32_t status);
 /* step and done are function addresses (uintptr_t, as the generated dkrt.h declares them): cast the dkrt_job_step and dkrt_job_done. */
 int32_t dkrt_job_post(uintptr_t step, uintptr_t done, uint8_t *ctx);
 int32_t dkrt_job_cancel(uint32_t id);
-/* "Backing lost": all handles are invalid (reset). */
-void dkrt_pool_lost(void);
-/* Project adapter to runtime: the current project slot changed. The runtime never reads the byte. */
-void dkrt_project_changed(uint32_t slot);
+/* "Backing lost" (the slot pool_lost, void (*)(void)): all handles are invalid (reset). */
 #endif

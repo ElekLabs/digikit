@@ -5,32 +5,38 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect } from 'vitest';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import {
-  button,
-  MS,
-  repoRoot,
-  withinRuntimeDeadline,
-  type Device,
-  type RuntimeBaseline,
-  type Session,
-} from '@digi/test-support';
+import { repoRoot, withinRuntimeDeadline, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { aggregate, withReusablePatchedSession, type PatchedSession } from '../support.ts';
 import { record } from './artifacts.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
+import { neededServices, portFile } from './service-files.ts';
+import { bindServiceSymbols } from './service-symbols.ts';
 import { expectRuntimeUi } from './ready.ts';
+import { moduleResultsNote } from './runtime-menu.ts';
 import { pollEmulated } from './waits.ts';
-import { advance, analysisJson, bounded, evidence, options, pickSine, word } from './fx-live.ts';
+import {
+  analysisJson,
+  bounded,
+  evidence,
+  evidenceCollector,
+  options,
+  pickSine,
+  word,
+  type RequireAudible,
+  type Rt,
+  expectLifetimeSafety,
+} from './fx-live.ts';
 import {
   planSymbol,
-  prepareRuntimePlanOffline,
+  prepareRuntimePlanListedOffline,
   validateRuntimePlan,
   type PreparedRuntimePlan,
   type RuntimePlan,
 } from './runtime-plan.ts';
-import { runtimeSafety, runtimeWatchEnv } from './write-safety.ts';
+import { runtimeWatchEnv } from './write-safety.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
@@ -66,7 +72,16 @@ export interface FxCardPreset {
   selection: string[];
   /** UTF-8 settings keys and hex-encoded byte values. */
   settings?: [string, string][];
+  /**
+   * `true`: no service files on the card, so every module that needs one is refused (machines need machines.dks too). A list of service names (`['fx']`): only
+   * those files are left off the card: an effect module in the selection is refused (the fx service is missing), the FX pages stay stock, and the machines load.
+   */
+  noServices?: boolean | string[];
 }
+
+/** True when a preset or readiness `noServices` leaves the service file `name` off the card. */
+export const dropsService = (noServices: boolean | string[] | undefined, name: string): boolean =>
+  noServices === true || (Array.isArray(noServices) && noServices.includes(name));
 export interface PreparedFxSessionOptions {
   image: {
     name: string;
@@ -77,25 +92,7 @@ export interface PreparedFxSessionOptions {
   };
   initial: string;
   presets: Record<string, FxCardPreset>;
-  requireAudible?: boolean | ((runtime: PatchedSession) => boolean);
-}
-
-/** Legacy bounded panel tap, including release of every held chord key on failure. */
-export async function tap(session: Session, key: string, settleMs = 300, held?: string): Promise<void> {
-  try {
-    if (held) {
-      await bounded(() => session.client.inputButton(button(held), true));
-      await advance(session, 5);
-    }
-    await bounded(() => session.client.inputTap(button(key), 20 * MS));
-    await advance(session, 25);
-  } finally {
-    if (held) {
-      await bounded(() => session.client.inputButton(button(held), false));
-      await advance(session, 5);
-    }
-  }
-  if (settleMs) await advance(session, settleMs);
+  requireAudible?: RequireAudible;
 }
 
 /** Wait until the boot input has finished, so the run can pause. */
@@ -138,13 +135,14 @@ export async function readTextRows(session: Session, address: number, count: num
 
 /** Read protocol state while paused using the existing USB transport's legacy 400,000-instruction poll step. */
 export async function withPausedFxProtocol<T>(
-  runtime: PatchedSession,
+  runtime: Pick<PatchedSession, 'session'>,
   operation: (dk: DkSession) => Promise<T>,
 ): Promise<T> {
   const deadline = Date.now() + 30_000;
   const status = await withinRuntimeDeadline(deadline, () => runtime.session.status());
   if (status.mode !== 'paused') throw new Error('route protocol reads require a paused runtime');
   let active = true;
+  // Wall-time wait: the daemon is paused, so its emulated clock stands still.
   const dk = new DkSession(
     new EmuUsbTransport(
       async <R>(method: string, params?: Record<string, unknown>) => {
@@ -172,7 +170,7 @@ export async function inspectFxBoot(
   artifacts: string,
   tag: string,
   expectedResults = expectedNames.map(() => 0),
-  readiness: { afterEpoch?: number } = {},
+  readiness: { afterEpoch?: number; noServices?: boolean | string[] } = {},
 ) {
   const { session, dk } = runtime;
   validateRuntimePlan(plan, session);
@@ -182,20 +180,30 @@ export async function inspectFxBoot(
   const boot = planSymbol(plan, 'DKRT_BOOT');
   let modules = await bounded(() => dk.modules());
   let results: number[] = [];
-  await pollEmulated(
-    session,
-    async () => {
-      modules = await bounded(() => dk.modules());
-      results = await Promise.all(expectedResults.map(async (_, i) => (await word(session, boot + 40 + i * 4)) | 0));
-      return { names: modules.map((module) => module.name), results };
-    },
-    (state) => JSON.stringify(state) === JSON.stringify({ names: expectedNames, results: expectedResults }),
-    { emulatedMs: 30_000, intervalMs: 500, message: 'the expected modules and results' },
-  );
+  try {
+    await pollEmulated(
+      session,
+      async () => {
+        modules = await bounded(() => dk.modules());
+        results = await Promise.all(expectedResults.map(async (_, i) => (await word(session, boot + 40 + i * 4)) | 0));
+        return { names: modules.map((module) => module.name), results };
+      },
+      (state) => JSON.stringify(state) === JSON.stringify({ names: expectedNames, results: expectedResults }),
+      { emulatedMs: 30_000, intervalMs: 500, message: 'the expected modules and results' },
+    );
+  } catch (error) {
+    throw new Error(`${(error as Error).message}${await moduleResultsNote(session, plan, results)}`);
+  }
   const capacity = await bounded(() => dk.capacity());
   await drainInputs(session);
   await bounded(() => session.client.call('run.mode', { mode: 'paused' }));
   const fields = await Promise.all(Array.from({ length: 10 }, (_, i) => word(session, boot + i * 4)));
+  // the symbols of the fx service file for this boot (`symbolsOf`): the runtime loads the file only when a selected module needs it, so a boot of machines
+  // alone (or a preset with `noServices`) has none; any other boot without them fails here
+  const needsFx = neededServices(expectedNames.map((id) => moduleArtifact(session.options.device, id))).some(
+    (s) => s.service === 'fx',
+  );
+  await bindServiceSymbols(runtime, plan, 'fx', { expected: !dropsService(readiness.noServices, 'fx') && needsFx });
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([expectedResults.length, expectedNames.length, 1]);
   const status = await bounded(() => session.status());
@@ -207,7 +215,7 @@ export async function inspectFxBoot(
 }
 
 /** DT2 retains the legacy selected-type readback and adjacent-list-position retries. */
-export async function selectSine(runtime: PatchedSession, profile: FxProfile): Promise<void> {
+export async function selectSine(runtime: Rt, profile: FxProfile): Promise<void> {
   const hint = runtime.session.options.device === 'dt2' ? 7 : 5;
   const sine = (await withPausedFxProtocol(runtime, (dk) => dk.modules())).find(
     (module) => module.name === 'test/sine',
@@ -218,7 +226,7 @@ export async function selectSine(runtime: PatchedSession, profile: FxProfile): P
   for (const downs of runtime.session.options.device === 'dt2'
     ? [hint, hint + 1, hint - 1, hint + 2, hint + 3]
     : [hint]) {
-    await pickSine(runtime.session, downs);
+    await pickSine(runtime, downs);
     if (runtime.session.options.device !== 'dt2') return;
     if ((((await word(runtime.session, profile.track_type_word)) >>> 8) & 0xff) === want) return;
   }
@@ -238,18 +246,13 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
   let closed = 0;
   const baselines = new Map<string, RuntimeBaseline>();
   const overlays: string[] = [];
+  const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const rememberEpoch = (epoch: unknown) => {
     if (typeof epoch !== 'number') throw new Error('route status lacks epoch');
     epochs.add(epoch);
   };
-  const collectEvidence = async (runtime: PatchedSession, tag: string, requireAudible?: boolean) => {
-    rememberEpoch((await bounded(() => runtime.session.status())).epoch);
-    const required =
-      requireAudible ??
-      (typeof config.requireAudible === 'function' ? config.requireAudible(runtime) : (config.requireAudible ?? true));
-    await evidence(runtime, artifacts, tag, overlays, required);
-  };
+  const collectEvidence = evidenceCollector(config, () => artifacts, overlays, rememberEpoch, evidence);
   const fixture = withReusablePatchedSession(
     {
       ...options(device),
@@ -258,7 +261,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       env: async () => {
         artifacts = fs.mkdtempSync(path.join(os.tmpdir(), `digi-fx-${name}-${device}-`));
         console.info('FX route safety artifacts:', artifacts);
-        prepared = await prepareRuntimePlanOffline(
+        prepared = await prepareRuntimePlanListedOffline(
           { device, firmware: FIRMWARE[device] },
           artifacts,
           artifacts,
@@ -291,6 +294,12 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
           )
             throw new Error(`invalid route preset selection ${tag}`);
           const files = inventory.map((id, index) => ({ name: `m${index}.dkm`, file: moduleArtifact(device, id) }));
+          // the services the inventory needs (fx.dks), go to digikit/services as packed, with the port file in digikit/ports; a preset with `noServices` leaves out all (`true`) or the named ones (the effect is refused)
+          const services = neededServices(files.map((f) => f.file))
+            .filter((needed) => !dropsService(preset.noServices, needed.service))
+            .map((needed) => (cardServices.add(needed.service), needed))
+            .map((needed) => ({ name: `${needed.service}.dks`, file: moduleArtifact(device, needed.moduleId) }));
+          const port = services.length ? portFile(device) : undefined;
           // The card is built in WORK (`<work>/card/card.img`).
           const produce = async (work: string) => {
             // The seed stays in the card dir: tests read the built modules from it.
@@ -298,6 +307,14 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
             const destination = path.join(seed, 'digikit', 'modules');
             fs.mkdirSync(destination, { recursive: true });
             for (const f of files) fs.copyFileSync(f.file, path.join(destination, f.name));
+            const serviceDir = path.join(seed, 'digikit', 'services');
+            fs.mkdirSync(serviceDir, { recursive: true });
+            for (const f of services) fs.copyFileSync(f.file, path.join(serviceDir, f.name));
+            if (port) {
+              const portDir = path.join(seed, 'digikit', 'ports');
+              fs.mkdirSync(portDir, { recursive: true });
+              fs.copyFileSync(port.file, path.join(portDir, path.basename(port.name)));
+            }
             fs.writeFileSync(path.join(seed, 'digikit', 'selection.txt'), preset.selection.join('\n') + '\n');
             const out = path.join(work, 'card', 'card.img');
             fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -333,6 +350,8 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
             const key = cardKey(device, {
               kind: 'fx-route-preset',
               modules: files.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
+              services: services.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
+              port: port ? fileSha(port.file) : undefined,
               selection: preset.selection,
             });
             cardImage = await cachedCard(key, produce);
@@ -352,9 +371,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
       afterClose: async () => {
         const results = await Promise.allSettled([
           (async () => {
-            const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy);
-            record(artifacts, 'lifetime-safety', report);
-            expect(report.pass, 'every route emulator and exported overlay meets legacy safety policy').toBe(true);
+            expectLifetimeSafety({ device, watchOutput, overlays, epochs, artifacts, policy, cardServices });
           })(),
           analysisJson('tools.patchkit.pk_digikit_fxroutes', ['render-shots', artifacts], artifacts, 'rendered-shots'),
         ]);

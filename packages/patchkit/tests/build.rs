@@ -20,7 +20,7 @@ fn tiny() -> Vec<u8> {
 
 fn toolchain() -> Option<Env> {
     let env = Env::new(&root());
-    env.m68k("gcc").is_ok().then_some(env)
+    env.m68k_or_skip().then_some(env)
 }
 
 fn find_objects(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -429,7 +429,7 @@ fn a_header_change_changes_the_source_hash() {
     std::fs::write(d.join("b.inc"), ".equ N, 1\n").unwrap();
     std::fs::write(d.join("b.s"), ".include \"b.inc\"\n.text\nnop\n").unwrap();
     let inc = [d.clone()];
-    let hash = |f: &str| cf::source_digest(&env, &[d.join(f)], &inc).unwrap();
+    let hash = |f: &str| cf::source_digest(&env, &[d.join(f)], &inc, false).unwrap();
     let (a, b) = (hash("a.c"), hash("b.s"));
     assert_eq!(a, hash("a.c"));
     std::fs::write(d.join("a.h"), "#define N 2\n").unwrap();
@@ -606,6 +606,53 @@ fn a_content_module_builds_into_the_cache_on_demand() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
+/// A C object of a content module links the SDK functions it calls and what they call, and nothing else of the SDK.
+#[test]
+fn a_content_c_object_links_only_the_sdk_functions_it_uses() {
+    let Some(env) = toolchain() else { return };
+    let d = build_dir("sdk-prune");
+    std::fs::write(
+        d.join("t.c"),
+        "#include <dk/core/text.h>\nvoid f(char *out, const char *name) { dk_text_trunc(out, name, 5); }\n",
+    )
+    .unwrap();
+    let inc = [root().join("sdk/include")];
+    let defined = |sdk: bool| -> Vec<String> {
+        let proto = cf::proto_of_sources(&env, &[d.join("t.c")], &inc, sdk).unwrap();
+        proto
+            .symbols
+            .iter()
+            .filter(|s| s.global && s.section.is_some())
+            .map(|s| s.name.clone())
+            .collect()
+    };
+    let without = defined(false);
+    assert!(
+        !without.iter().any(|n| n.contains("dk_text_")),
+        "{without:?}"
+    );
+    let with = defined(true);
+    // the function it calls, and its callee in the SDK
+    assert!(
+        with.iter().any(|n| n.ends_with("dk_text_trunc")),
+        "{with:?}"
+    );
+    assert!(with.iter().any(|n| n.ends_with("dk_text_len")), "{with:?}");
+    // an SDK function nothing reaches is not there
+    for unused in [
+        "dk_text_secs",
+        "dk_text_size",
+        "dk_text_itoa",
+        "dk_path_join",
+    ] {
+        assert!(
+            !with.iter().any(|n| n.ends_with(unused)),
+            "{unused} in {with:?}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 #[test]
 fn defines_need_an_output_directory() {
     let opts = BuildOptions {
@@ -654,7 +701,10 @@ fn sharc_sources_given_as_texts_make_the_object_of_the_files() {
     // a missing include and a refused instruction are errors, not panics
     assert!(sharc::source_text_from(&["#include \"no.inc\"".into()], &includes, &[]).is_err());
     let e = sharc::sharc_object(".SECTION/PM seg_pmco;\nDM(15, I4) = I0;\n").unwrap_err();
-    assert!(e.0.contains("the ISA does not allow"), "{e}");
+    assert!(
+        e.0.contains("the ISA does not allow") || e.0.contains("through its own DAG"),
+        "{e}"
+    );
 }
 
 /// Exercise endian conversions compiled by the actual ColdFire Rust backend.
@@ -810,6 +860,82 @@ pub unsafe extern "C" fn endian_write(value: u32, p: *mut u32) {
             } else {
                 assert_eq!(&ram.0[0x8100..0x8104], &value.to_le_bytes());
             }
+        }
+    }
+}
+
+/// The service objects and the runtime object are built from crates that share `dkrt-abi`: a change of a boundary file (`SVC_ABI_FILES`, the input of `SVC_ABI`) must
+/// make `patchkit build` rebuild them, or the loader refuses every service file with E_SVC_ABI. The source hash covers the sources of the path dependencies.
+#[test]
+fn the_source_hash_of_a_crate_covers_the_sources_of_its_path_dependencies() {
+    let d = build_dir("pathdep");
+    let write = |rel: &str, text: &str| {
+        std::fs::create_dir_all(d.join(rel).parent().unwrap()).unwrap();
+        std::fs::write(d.join(rel), text).unwrap();
+    };
+    write(
+        "svc/Cargo.toml",
+        "[package]\nname = \"svc\"\nversion = \"0.1.0\"\n\n[dependencies]\nabi = { path = \"../abi\" }\n",
+    );
+    write("svc/src/lib.rs", "pub fn f() {}\n");
+    write(
+        "abi/Cargo.toml",
+        "[package]\nname = \"abi\"\nversion = \"0.1.0\"\n",
+    );
+    write("abi/src/service.rs", "pub const A: u32 = 1;\n");
+    write("abi/src/gen_svc_abi.rs", "pub const FILES_HASH: u32 = 1;\n");
+    let manifest = d.join("svc/Cargo.toml");
+    let before = rust::source_sha256(&manifest).unwrap();
+    for file in ["abi/src/service.rs", "abi/src/gen_svc_abi.rs"] {
+        let old = std::fs::read_to_string(d.join(file)).unwrap();
+        write(file, &old.replace('1', "2"));
+        assert_ne!(rust::source_sha256(&manifest).unwrap(), before, "{file}");
+        write(file, &old);
+        assert_eq!(rust::source_sha256(&manifest).unwrap(), before);
+    }
+}
+
+/// The real crates: every boundary file of `dkrt-abi` is among the files that the source hash of each service object and of the runtime object reads, and the
+/// committed objects of the services are current with them.
+#[test]
+fn every_service_and_the_runtime_object_is_built_from_the_abi_boundary_files() {
+    let r = root();
+    let manifests = [
+        "modules/core/services/fx/dks/Cargo.toml",
+        "modules/core/services/machines/dks/Cargo.toml",
+        "modules/core/services/lfo/dks/Cargo.toml",
+        "modules/core/runtime/src/rs/Cargo.toml",
+    ];
+    for m in manifests {
+        let files: Vec<PathBuf> = rust::crate_files(&r.join(m))
+            .unwrap()
+            .into_iter()
+            .map(|p| std::fs::canonicalize(&p).unwrap())
+            .collect();
+        // the .rs files; a contract include (the stub slot offsets) reaches the Rust objects through `gen_svc_abi.rs` (`FILES_HASH`), which is one of them
+        for f in patchkit::sdkgen::SVC_ABI_FILES
+            .iter()
+            .filter(|f| f.ends_with(".rs"))
+        {
+            let f = std::fs::canonicalize(r.join(f)).unwrap();
+            assert!(
+                files.contains(&f),
+                "{m}: the source hash does not read {}",
+                f.display()
+            );
+        }
+    }
+    // (the runtime module also has assembly objects, whose hash needs the toolchain: `objects-check` covers them)
+    for dir in [
+        "modules/core/services/fx/dks",
+        "modules/core/services/machines/dks",
+        "modules/core/services/lfo/dks",
+    ] {
+        for (object, current) in build::module_status(&r, &r.join(dir)).unwrap() {
+            assert!(
+                current,
+                "{dir}/{object} is older than its sources: patchkit build {dir}"
+            );
         }
     }
 }

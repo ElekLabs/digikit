@@ -5,7 +5,10 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/tb303.device.test.ts"],
-        "modules": ["tom/tb303", "digikit/debug"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["S:machines"],
+        "modules": ["tom/tb303", "digikit/debug", "core/services/machines"],
         "plusdrive": true
       }
     ],

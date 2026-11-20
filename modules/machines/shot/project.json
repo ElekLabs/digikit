@@ -5,34 +5,69 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/shot-dt2.device.test.ts"],
-        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true
       },
       {
+        "files": ["tests/shot-live-dt2.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["C:loading", "S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "sources": ["packages/dk-session/src/dkupload-core.ts", "packages/dk-session/src/gen_proto.ts"]
+      },
+      {
         "files": ["tests/shot-dn2-pool.device.test.ts"],
-        "modules": ["digikit/shot", "digikit/debug", "test/track-select"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true
+      },
+      {
+        "files": ["tests/shot-dn2-link.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "test/dyn-fx-gain", "core/services/fx", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true
       },
       {
         "files": ["tests/shot-dn2-audio.device.test.ts"],
-        "modules": ["digikit/shot", "digikit/debug", "test/track-select"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "tags": ["C:dsp", "S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true
       },
       {
         "files": ["tests/shot-dn2-supersede.device.test.ts"],
-        "modules": ["digikit/shot", "digikit/debug", "digikit/remote", "test/track-select"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "tags": ["M:digikit/remote", "S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "digikit/remote", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true
       },
       {
         "files": ["tests/shot-picker.device.test.ts"],
-        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "S:samples"],
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true
       }
-    ]
+    ],
+    "mergeTests": ["tests/shot-dt2.device.test.ts", "tests/shot-dn2-audio.device.test.ts"]
   }
 }

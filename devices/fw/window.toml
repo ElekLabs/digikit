@@ -7,6 +7,7 @@ was = ["cf.menu.fn.popup_make"]
 cpu = "cf"
 rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x32, len = 4 }
 mark = "D"
+devices = ["dt2", "dn2"]
 users = ["core/digikit-menu"]
 doc = "The firmware's `make_shared<PopupWindow>(const char *const &)`: `out` in a0, a reference to the message pointer on the stack. core/digikit-menu calls it through its dk_popup_make shim."
 
@@ -22,7 +23,9 @@ doc = "`ConfirmWindow(this, title, text, cb, flag)`: `title` and `text` point at
 [[site]]
 name = "cf.window.site.confirm_cb_vptr_lit"
 cpu = "cf"
-rule = { kind = "cf_ptr", hash = "15fe03a811fbded8c0bb04292059c0e4", offset = 0x4a, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "15fe03a811fbded8c0bb04292059c0e4", offset = 0x4a, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "15fe03a811fbded8c0bb04292059c0e4", offset = 0x4a, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "47fe8c26b6ae51245c4492dc0b822758", offset = 0x4a, len = 4, mark = "D" }
 mark = "D"
 users = ["core/ui"]
 doc = "The 4-byte vtable literal of the `_Sp_counted_ptr_inplace<ConfirmWindow>` control block (the immediate of `move.l #vptr,(a2)` in the stock call site 0x40084d02, \"CLEAR SONG?\"); the anchor is that vtable. A module that builds a ConfirmWindow stores this value in word 0 of its 0x10-byte control block (use count and weak count 1 at +4, +8, object pointer at +0xc)."
@@ -39,7 +42,9 @@ doc = "`MultiChoiceWindow(this, items, title, cb, vertical)`: `items` points at 
 [[site]]
 name = "cf.window.site.multichoice_cb_vptr_lit"
 cpu = "cf"
-rule = { kind = "cf_ptr", hash = "1c0abc995058d98e0883295990696adc", offset = 0xfa, len = 4 }
+rule.dt2 = { kind = "cf_ptr", hash = "1c0abc995058d98e0883295990696adc", offset = 0xfa, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "1c0abc995058d98e0883295990696adc", offset = 0xfa, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "53fbfced0373247f72193989da2805cf", offset = 0xfa, len = 4, mark = "O" }
 mark = "D"
 users = ["core/ui"]
 doc = "The 4-byte vtable literal of the `_Sp_counted_ptr_inplace<MultiChoiceWindow>` control block (the immediate of `move.l #vptr,(a2)` at 0x400aa04c in the stock call site 0x400a9f54, SELECT INTERFACE); the anchor is that vtable. This vtable differs from the ConfirmWindow one: each make_shared type has its own."
@@ -66,7 +71,9 @@ doc = "As `cf.window.fn.toast` for a ready `std::string` (pointer to the one-wor
 name = "cf.window.fn.ui_states"
 cpu = "cf"
 sig = "u8 *()"
-rule = { kind = "cf_func", hash = "eae813a5ca189660d787e01b9a909c62", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "eae813a5ca189660d787e01b9a909c62", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "eae813a5ca189660d787e01b9a909c62", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "2eb0f9476c77c0210505ac8d2447eedd", offset = 0x0, len = 4, mark = "D" }
 mark = "D"
 users = ["core/ui"]
 doc = "Returns the UIStates singleton (0x2f8 bytes, created on first use), the first argument of the toast functions. Read in the stock `shared_ptr<UIStates>` accessor."
@@ -101,3 +108,60 @@ fields = [
 mark = "D"
 users = ["core/ui"]
 doc = "MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb."
+
+[[site]]
+name = "cf.window.site.confirm_vptr_lit"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_ptr", hash = "2946e3541ac17682297f52c056397b89", offset = 0x3a, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The vtable pointer that the ConfirmWindow constructor stores at +0 of its object (the immediate of `move.l #vptr,(a2)`); the anchor is that vtable. A device test recognises a ConfirmWindow on top of the view stack by it (the [ui.boot_window] confirm_vptr fact of the device file)."
+
+[[site]]
+name = "cf.window.site.progress_vptr_lit"
+cpu = "cf"
+devices = ["dt2"]
+rule = { kind = "cf_ptr", hash = "7397a868cd0e5f31adde276fb9c248cf", offset = 0x22, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The vtable pointer that the ProgressWindow constructor (0x401196c4 on DT2 1.17) stores at +0 of its object; the anchor is that vtable. A device test recognises the \"VERIFYING FILE SYSTEM...\" view by it (the [ui.boot_window] progress_vptr fact of the device file)."
+
+[[fn]]
+name = "cf.window.fn.name_ctor"
+cpu = "cf"
+sig = "void (u8 *this, const u32 *prompt, const u32 *initial, i32 number, i32 maxlen, u8 show_number, const u32 *number_fmt, const std_function *done)"
+rule = { kind = "cf_func", hash = "c4d23607647ee2f926e547f94aa0401a", offset = 0x0, len = 4 }
+devices = ["dt2", "dn2"]
+mark = "V"
+users = ["core/ui"]
+doc = "`NameView(this, prompt, initial, number, maxlen, show_number, number_fmt, done)`: DT2 0x40117ac2, DN2 0x40119436. The strings are pointers to COW `std::string` (copied); `done` is a `std::function<void(std::string, int)>` cloned to +0x7c; on YES it runs before the close with (storage, std::string *, number), NO closes without calling it. An empty text is refused unless byte +0x94 is set. Size 0xa0 (the View is at +0). The 7-argument wrapper (hash 0e537b985689c8d97a905c64f74eb485) omits number_fmt."
+
+[[site]]
+name = "cf.window.site.name_cb_vptr_lit"
+cpu = "cf"
+rule = { kind = "cf_ptr", hash = "83705ec89c59ddd441f57691b6c1b89a", offset = 0x11a, len = 4 }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/ui"]
+doc = "The 4-byte vtable literal of the `_Sp_counted_ptr_inplace<NameView>` control block (DT2 0x401ef190, DN2 0x401e0fd8): the immediate of `move.l #vptr,(a5)` in the function at DT2 0x4007f086 / DN2 0x400795ba; the anchor is that vtable. Block: vptr, use 1, weak 1, object pointer (block+0x10)."
+
+[[struct]]
+name = "cf.window.struct.NameView"
+size = 0xa0
+fields = [
+  { name = "view", off = 0x0, type = "View" },
+  { name = "prompt", off = 0x4c, type = "ptr" },
+  { name = "number", off = 0x50, type = "u32" },
+  { name = "show_number", off = 0x54, type = "u8" },
+  { name = "number_fmt", off = 0x58, type = "ptr" },
+  { name = "text", off = 0x60, type = "ptr" },
+  { name = "maxlen", off = 0x6c, type = "u32" },
+  { name = "done", off = 0x7c, type = "std_function" },
+  { name = "allow_empty", off = 0x94, type = "u8" },
+]
+mark = "D"
+users = ["core/ui"]
+doc = "NameView (View at +0, own fields from +0x4c). Prompt, number, show_number, number_fmt, text, maxlen, done and allow_empty checked by a second agent on both devices."

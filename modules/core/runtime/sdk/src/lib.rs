@@ -5,27 +5,14 @@
 //! Format and rules: docs/design/digikit-runtime.md and docs/design/digikit-dkm.md.
 #![no_std]
 
-/// Version of the `Api` table layout. A field is only ever appended; `Api::size` tells a module how much is there.
-pub const API_VERSION: u32 = 1;
-/// Version of the runtime a module was packed against (`runtime_min` in the `.dkm` header). 2: DSP sections and asynchronous loads
+/// The one version of the SDK: the runtime release. A module records the version it needs in the `.dkm` header (the newest `since` of its imports). 2: DSP sections and asynchronous loads
 /// (finding 32), `register` PAGE records and `own_dsp` (finding 33), codes -25/-26 and -30 to -37. 3: card safety (codes -46/-47, -62), the
 /// debug log and its SysEx commands LOG and PEEK, `dkrt_diag`, `dkrt_debug_set`, the crash record (finding 46). 4: SELECT and RESTART.
 /// 5: the DSP guard (finding 51): voice rows of 16 words with the knob ranges, DSP sections of version 2 (voices of 48 bytes), the 24-word
 /// DSP diagnostics with the guard's fault words, the log events `MACHINE_FAULT` and `MACHINE_DISABLED`.
 /// Versions 1 to 5 were plain integers (they read as 0.0.1 to 0.0.5 packed).
-/// 0.1.0 = semantic version; contract versions in the .dkm header (a module is refused only on a contract mismatch, docs/design/module-sdk.md 11.5 D3); LOGCFG, log levels and sources, Api.log_lv.
+/// 0.1.0 = semantic version (a module needs the same major and minor and at most this patch); LOGCFG, log levels and sources, `dk_log` with a level.
 pub use gen_sdk::RUNTIME_VERSION;
-
-/// Facts from the device files (`devices/*.toml`) and `core/machines` types.toml that every device agrees on, written by
-/// `patchkit gen` (the `[[gen]]` of core/runtime's module.toml; docs/design/device-data.md). `Api::device` is the device's
-/// `[digikit] id`, read from the runtime's device object, not a constant here.
-pub mod device {
-    include!("device.rs");
-}
-
-/// Slots: function pointers the firmware hooks call. A module binds one by exporting `dkm_slot_<n>`.
-/// Slot 0 runs once per pass of the UI task's event loop (about 120 Hz), as `extern "C" fn(*const Api)`.
-pub const SLOTS: usize = 8;
 
 /// The structs, constants and function types of the runtime's C ABI, written by `patchkit gen` from `core/runtime/abi.toml` (also the C header
 /// `core/runtime/include/dkrt.h`): `OK`, `LOADING`, `Dkrt*`, `HEALTH_*`, `SAFE_*`, `CARD_*`, `SCAN_*`, `sig`.
@@ -33,21 +20,20 @@ pub const SLOTS: usize = 8;
 pub mod gen_abi;
 pub use gen_abi::*;
 
-// Result codes of `dkrt_load` and `Api::store_read` (negative = error; `OK` is in `gen_abi`). The codes themselves are written by `patchkit gen` from `[load.status]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `load`, with their
+// Result codes of `dkrt_load` and `dk_files_read` (negative = error; `OK` is in `gen_abi`). The codes themselves are written by `patchkit gen` from `[load.status]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `load`, with their
 // texts): -1 to -14 `dkrt_load`; -20 to -29 the run-time registry (`register` records, docs/design/digikit-registry.md); -30 to -39 the
 // DSP side's (docs/design/digikit-dkm.md, "DSP section"); -40 to -49 boot-time loading (finding 37). Additive: a code is never renumbered.
 pub use gen_sdk::load::*;
 
-// The `Api` table and `ServiceCmd` are written by `patchkit gen` from `[api]` and `[api.types]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `api`).
+// The import names, their function types and the callback types are written by `patchkit gen` from `[[import]]` and `[handle.callbacks]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `api`).
 pub use gen_sdk::api;
-pub use gen_sdk::api::{Api, ServiceCmd};
+pub use gen_sdk::api::HostCmdFn;
+pub use gen_sdk::keys;
+pub use gen_sdk::records;
+pub use gen_sdk::sample_pool;
 
 // `DkrtStatus`, `DkrtCap`, `DkrtHealth`, `DkrtStoreEntry`, `DkrtModule`, `DkrtFx`, `DkrtSelection`, `DkrtBootInfo`, `DkrtDiag` and the scan and fit
 // structs, with `STATE_*`, `MOD_*`, `CAP_MAX`, `HEALTH_*`, `SEL_PATH`, `SAFE_*`, `CARD_*` and `DIAG_MAGIC`, are in `gen_abi`.
-
-/// Cycles in one DSP block (32 samples at 48 kHz, 1500 blocks per second) at the 1 GHz core clock of the emulator's model
-/// (`[board]` of the device files). The real clock of the device is not known **[O]** (finding 41): the DSP percentages scale with it.
-pub const DSP_BLOCK_CYCLES: u32 = device::DSP_BLOCK_CYCLES;
 
 /// Text for a result code, for a menu line (upper case, at most 14 characters). A table, not a `match`: the compiler turns a
 /// dense `match` into a PC-relative jump table that is not ColdFire code.
@@ -64,7 +50,7 @@ pub fn result_text(code: i32) -> &'static str {
         "NO MEMORY",
         "INIT FAILED",
         "ALREADY LOADED",
-        "SLOT TAKEN",
+        "ERROR",
         "BUSY",
         "TOO BIG",
         "TABLE FULL",
@@ -118,9 +104,6 @@ pub const CMD_SETTINGS_FLUSH: u32 = 12;
 
 // The selection (what the next boot loads): `SEL_MAX` (`[limits.max] modules` of sdk/sdk.toml, the record's format), `SEL_PATH` and `DkrtSelection` are in
 // `gen_abi`, as are `SAFE_*`, `SAFE_AFTER`, `STABLE_BLOCKS` and `DkrtBootInfo`.
-/// The key held at power-on for safe mode (`[digikit] safe_key` of the device files; RECORD, panel button 19).
-pub const SAFE_KEY_CODE: u32 = device::SAFE_KEY_CODE;
-
 /// The selection record (docs/design/digikit-store.md): one sector, big endian, in two copies at the end of the store range.
 pub mod sel {
     use super::*;
@@ -340,7 +323,6 @@ pub mod sample_tracks;
 pub mod files;
 /// Internal fixed-memory listing work/notification lifecycle model.
 pub mod files_job;
-pub mod sample_stream;
 
 /// The sticky machine type assignment (docs/design/module-sdk.md 11.5 D7) as a pure function, tested on the host; the runtime's `assign` calls it.
 pub mod sticky;
@@ -360,10 +342,10 @@ pub mod fault;
 /// Event kinds of the debug log (docs/findings/46-digikit-debug.md has the argument meanings; `tools/device/dklog.py` the readable names).
 /// An event is 32 bytes: `seq`, `time` (the firmware's block counter, 1500 per second), `kind`, `flags` (bit 0: an error, kept when debug is
 /// off), five argument words.
-/// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the contract version numbers (`contract`).
+/// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the runtime version.
 #[rustfmt::skip]
 mod gen_sdk;
-pub use gen_sdk::{contract, limits, logk, proto};
+pub use gen_sdk::{limits, logk, proto};
 
 #[cfg(test)]
 mod tests {

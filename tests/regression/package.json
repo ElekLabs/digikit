@@ -16,7 +16,8 @@
   "dependencies": {
     "@digi/control-client": "workspace:*",
     "@digi/test-support": "workspace:*",
-    "@digi/dk-session": "workspace:*"
+    "@digi/dk-session": "workspace:*",
+    "@digi/sharc-rig-kit": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.15.0",

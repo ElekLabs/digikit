@@ -1,15 +1,22 @@
-"""digikit/debug: the module's logic on the host. The C file is compiled with a fake api and fake runtime imports (sink, clock, peek ranges, track types,
-`dkrt_log_ev`) and driven through the sink and the three commands. It checks the level filter (default and per module, errors always kept), the ring and its
+"""digikit/debug: the module's logic on the host. The C file is compiled with fakes of the runtime imports (sink, clock, peek ranges, track types,
+`dk_log_event`) and driven through the sink and the three commands. It checks the level filter (default and per module, errors always kept), the ring and its
 paging, PEEK's range rules, LOGCFG, the track watch and what fini clears. No firmware, no emulator."""
 
 import shutil
 import struct
 import subprocess
+import tomllib
 
 import pytest
 from support.paths import REPO_ROOT
 
 MOD = REPO_ROOT / "modules/tools/debug"
+# the kind the module logs SETUP_DONE with is the one of sdk/sdk.toml (debug.c names it K_SETUP_DONE)
+SETUP_DONE = next(
+    k["id"]
+    for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"]
+    if k["name"] == "SETUP_DONE"
+)
 
 HARNESS = r"""
 #include <stdio.h>
@@ -17,11 +24,49 @@ HARNESS = r"""
 #include <string.h>
 static unsigned char peek_mem[64];
 #define DEBUG_READ8(a) (peek_mem[(a) - 4096u])
+static unsigned int fake_clk;
+#define DEBUG_READ32(a) (fake_clk)
 #include "debug.c"
+
+static void (*the_span)(const dk_span *);
+static uint32_t (*the_span_clock)(void);
+static int span_busy, span_noclock;
+int32_t dk_span_sink_set(uint8_t *emit, uint8_t *clock)
+{
+    if (span_busy && emit) return DK_E_BUSY;
+    the_span = (void (*)(const dk_span *))emit;
+    the_span_clock = (uint32_t (*)(void))clock;
+    return 0;
+}
+static uint32_t poll_owner[4], poll_fn[4];
+uint32_t dk_debug_poll(uint32_t slot, uint32_t *fn) { if (slot > 3 || !poll_owner[slot]) return 0; if (fn) *fn = poll_fn[slot]; return poll_owner[slot]; }
+uint32_t dk_debug_span_clock(uint32_t *hz) { *hz = 150000000u; return span_noclock ? 0u : 0x1000u; }
 
 static void (*the_sink)(const Ev *);
 static void (*the_tick)(void);
-static int32_t (*the_cmd)(u32, u32, const u8 *, u32, u8 *);
+static dk_host_cmd_fn *the_cmd;
+static dk_host_cmd_fn *the_profile;
+static dk_host_cmd_fn *the_dsp;
+static dk_host_cmd_fn *the_setup;
+/* dk_debug_setup as a fake: the calls it got and what it answers (`setupres`); a machine or filter type is "set" when it answers 0 */
+static uint32_t setup_calls, setup_op, setup_track, setup_ty;
+static int32_t setup_result;
+static unsigned setup_reg[2];
+int32_t dk_debug_setup(uint32_t op, uint32_t track, uint32_t ty) { setup_calls++; setup_op = op; setup_track = track; setup_ty = ty; return setup_result; }
+/* the runtime's DSP stats control and mirror, as fakes: the control is the span channel owner's (the sink is set); a sweep is `fake_sweep` (0: none) */
+static unsigned ctl_on, ctl_gen, ctl_calls, fake_sweep;
+int32_t dk_dsp_stats_ctl(uint32_t on, uint32_t clear)
+{
+    if (!the_span) return DK_E_BUSY;
+    ctl_on = on; ctl_gen = clear; ctl_calls++;
+    return 0;
+}
+uint32_t dk_dsp_stats_read(uint32_t *out, uint32_t max)
+{
+    for (uint32_t i = 0; i < max && i < 100; i++) out[i] = fake_sweep ? 1000u * fake_sweep + i : 0;
+    if (max > 102) { out[100] = fake_sweep; out[101] = 2; out[102] = 3; }
+    return fake_sweep;
+}
 static u32 clock_blocks;
 static int32_t track_ty[16];
 static int project = 1;
@@ -30,32 +75,60 @@ static int16_t sel_words[101];
 static u32 ranges[2][2];
 static u32 n_ranges;
 
-void dkrt_log_sink_set(uint8_t *s, uint8_t *t) { the_sink = (void (*)(const Ev *))s; the_tick = (void (*)(void))t; }
-uint32_t dkrt_blocks(void) { return clock_blocks; }
-uint32_t dkrt_peek_range(uint32_t i, uint32_t *out) { if (i < n_ranges) { out[0] = ranges[i][0]; out[1] = ranges[i][1]; } return n_ranges; }
-int32_t dkrt_track_type(uint32_t t) { return !project ? -2 : t < 16 ? track_ty[t] : -1; }
-int32_t dkrt_selected_params(int16_t *out, uint32_t n)
+void dk_debug_log_sink_set(uint8_t *s, uint8_t *t) { the_sink = (void (*)(const Ev *))s; the_tick = (void (*)(void))t; }
+uint32_t dk_time_blocks(void) { return clock_blocks; }
+uint32_t dk_debug_peek(uint32_t i, uint32_t *out) { if (i < n_ranges) { out[0] = ranges[i][0]; out[1] = ranges[i][1]; } return n_ranges; }
+int32_t dk_debug_track_type(uint32_t t) { return !project ? -2 : t < 16 ? track_ty[t] : -1; }
+int32_t dk_debug_selected_params(int16_t *out, uint32_t n)
 {
     if (!project) return -2;
     if (sel_track < 0) return -3;
     for (uint32_t i = 0; i < n; i++) out[i] = sel_words[i];
     return sel_track;
 }
-void dkrt_log_ev(uint32_t kind, uint32_t flags, const uint32_t *a)
+void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
 {
     Ev e = { 0, clock_blocks, (u16)kind, (u16)flags, { a[0], a[1], a[2], a[3], a[4] } };
+    if (!the_sink) { printf("late %u %d\n", (unsigned)kind, (int)a[4]); return; } /* after fini: the runtime's own ring */
     the_sink(&e);
 }
-static void f_log(const u8 *m, u32 v) { (void)m; (void)v; }
-static int32_t f_reg(u32 first, u32 count, dk_service_cmd *h) { the_cmd = h; printf("reg %u %u\n", first, count); return 0; }
-
-int main(void)
+void dk_log(uint32_t level, const char *m, uint32_t v) { (void)level; (void)m; (void)v; }
+/* the services of the card log: linked, not run (the open calls fail, so the card log is off) */
+int32_t dk_files_open(dk_module_ctx *c, dk_files **o) { (void)c; (void)o; return DK_E_NOT_FOUND; }
+int32_t dk_settings_open(dk_module_ctx *c, dk_settings **o) { (void)c; (void)o; return DK_E_NOT_FOUND; }
+int32_t dk_settings_get(dk_settings *s, const char *k, void *o, uint32_t cap) { (void)s; (void)k; (void)o; (void)cap; return DK_E_SET_OFF; }
+int32_t dk_settings_put(dk_settings *s, const char *k, const void *v, uint32_t n) { (void)s; (void)k; (void)v; (void)n; return DK_E_SET_OFF; }
+int32_t dk_io_post(dk_io_step_fn *s, dk_io_done_fn *d, void *a) { (void)s; (void)d; (void)a; return DK_E_BUSY; }
+int32_t dk_io_cancel(int32_t id) { (void)id; return 0; }
+void dk_io_wake(int32_t id) { (void)id; }
+int32_t dk_files_create(dk_files *f, uint32_t r, const char *p, uint32_t n, const void *h, uint32_t fl) { (void)f; (void)r; (void)p; (void)n; (void)h; (void)fl; return DK_E_STATE; }
+int32_t dk_files_write(dk_files *f, int32_t h, uint32_t o, const void *b, uint32_t n) { (void)f; (void)h; (void)o; (void)b; (void)n; return DK_E_STATE; }
+int32_t dk_files_close(dk_files *f, int32_t h, void *o) { (void)f; (void)h; (void)o; return DK_E_STATE; }
+int32_t dk_files_abort(dk_files *f, int32_t h) { (void)f; (void)h; return DK_E_STATE; }
+void dk_ui_menu_add_toggle(dk_ui_menu *m, const char *t, int32_t *v, dk_ui_action_fn *f, void *a) { (void)m; (void)t; (void)v; (void)f; (void)a; }
+void dk_ui_menu_add_text(dk_ui_menu *m, const char *t) { (void)m; (void)t; }
+uint32_t dk_text_itoa(char *o, int32_t v) { (void)o; (void)v; return 0; }
+uint32_t dk_text_utoa(char *o, uint32_t v) { (void)o; (void)v; return 0; }
+static unsigned reg_first, reg_count;
+int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *h)
 {
-    dk_api api;
+    /* the first range is the log commands, the second the profiling commands; both print as one line */
+    if (!the_cmd) { the_cmd = h; reg_first = first; reg_count = count; return 0; }
+    if (!the_profile) { the_profile = h; printf("reg %u %u %u %u", reg_first, reg_count, first, count); return 0; }
+    if (!the_dsp) { the_dsp = h; printf(" %u %u\n", first, count); return 0; }
+    the_setup = h;
+    setup_reg[0] = first; setup_reg[1] = count;
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
     char line[4096];
-    memset(&api, 0, sizeof api);
-    api.log = f_log; api.register_cmds = f_reg;
-    printf("init %d %d\n", dkm_init(&api), the_sink != NULL);
+    for (int k = 1; k < argc; k++) {
+        if (!strcmp(argv[k], "noclock")) span_noclock = 1;
+        if (!strcmp(argv[k], "busy")) span_busy = 1;
+    }
+    printf("init %d %d\n", (int)dk_module.init(NULL), the_sink != NULL);
     while (fgets(line, sizeof line, stdin)) {
         unsigned a, b, c, d;
         char hex[2048];
@@ -65,6 +138,16 @@ int main(void)
             the_sink(&e);
         } else if (sscanf(line, "clock %u", &a) == 1) {
             clock_blocks = a;
+        } else if (sscanf(line, "span %u %u %u", &a, &b, &c) == 3) {
+            /* owner, ticks, number of spans */
+            dk_span s = { a, b };
+            while (c--) the_span(&s);
+        } else if (sscanf(line, "setclk %u", &a) == 1) {
+            fake_clk = a;
+        } else if (!strncmp(line, "readclk", 7)) {
+            printf("clk %u\n", the_span_clock());
+        } else if (!strncmp(line, "sinkstat", 8)) {
+            printf("sink %d %d\n", the_span != NULL, the_span_clock != NULL);
         } else if (sscanf(line, "range %u %u", &a, &b) == 2) {
             ranges[n_ranges][0] = a; ranges[n_ranges][1] = b; n_ranges++;
         } else if (sscanf(line, "peekmem %u", &a) == 1) {
@@ -76,10 +159,25 @@ int main(void)
             sel_track = (int32_t)c;
         } else if (sscanf(line, "word %u %d", &a, &c) == 2) {
             sel_words[a] = (int16_t)c;
+        } else if (sscanf(line, "poll %u %u %x", &a, &b, &c) == 3) {
+            poll_owner[a] = b;
+            poll_fn[a] = (uint32_t)c;
+        } else if (sscanf(line, "dspsweep %u", &a) == 1) {
+            fake_sweep = a;
+        } else if (!strncmp(line, "dspctl", 6)) {
+            printf("ctl %u %u %u\n", ctl_on, ctl_gen, ctl_calls);
+        } else if (sscanf(line, "setupres %d", &c) == 1) {
+            setup_result = (int32_t)c;
+        } else if (!strncmp(line, "setupreg", 8)) {
+            printf("setupreg %u %u\n", setup_reg[0], setup_reg[1]);
+        } else if (!strncmp(line, "setupcalls", 10)) {
+            printf("setup %u %u %u %u\n", setup_calls, setup_op, setup_track, setup_ty);
         } else if (!strncmp(line, "noproject", 9)) {
             project = 0;
         } else if (!strncmp(line, "project", 7)) {
             project = 1;
+        } else if (!strncmp(line, "modtick", 7)) {
+            dk_module.tick(NULL);
         } else if (!strncmp(line, "slot", 4)) {
             the_tick();
         } else if (sscanf(line, "cmd %u %2047s", &a, hex) == 2 || sscanf(line, "cmd %u", &a) == 1) {
@@ -87,13 +185,13 @@ int main(void)
             u32 len = 0, i;
             if (sscanf(line, "cmd %u %2047s", &a, hex) != 2) hex[0] = 0;
             for (i = 0; hex[2 * i] && hex[2 * i + 1]; i++) { unsigned v; sscanf(hex + 2 * i, "%2x", &v); body[len++] = (u8)v; }
-            int32_t r = the_cmd(a, 0, body, len, out);
+            int32_t r = (a == 0x0au ? the_setup : a == 0x1bu ? the_dsp : a >= 0x1eu && a <= 0x1fu ? the_profile : the_cmd)(a, 0, body, len, out);
             printf("reply %d ", r);
             for (i = 0; r > 0 && i < (u32)r; i++) printf("%02x", out[i]);
             printf("\n");
         } else if (!strncmp(line, "fini", 4)) {
-            dkm_fini(&api);
-            printf("fini %d\n", the_sink == NULL && the_tick == NULL);
+            dk_module.fini(NULL);
+            printf("fini %d %d\n", the_sink == NULL && the_tick == NULL, the_span == NULL && the_span_clock == NULL);
         }
         (void)d;
     }
@@ -136,9 +234,9 @@ def harness(tmp_path_factory):
     return exe
 
 
-def run(exe, lines):
+def run(exe, lines, args=()):
     done = subprocess.run(
-        [str(exe)],
+        [str(exe), *args],
         input="\n".join(lines) + "\n",
         capture_output=True,
         text=True,
@@ -162,8 +260,150 @@ def ev(kind, flags, a=0):
 
 
 def test_init_registers_the_range_and_the_sink_and_fini_clears_it(harness):
-    out = run(harness, ["fini"])
-    assert out == ["reg 32 3", "init 0 1", "fini 1"]
+    out = run(harness, ["fini", "setupreg"])
+    assert out == ["reg 32 3 30 2 27 1", "init 0 1", "fini 1 1", "setupreg 10 1"]
+
+
+ROWS = 8 + 3 + 4  # module records (limits.max modules), service phases, polls
+PHASE = 0x100
+POLL = 0x200
+
+
+def profile_state(reply: str):
+    raw = bytes.fromhex(reply.split()[2])
+    assert len(raw) == 35
+    return struct.unpack(">BIH", raw[:7])
+
+
+def profile_elapsed(reply: str):
+    return struct.unpack(">Q", bytes.fromhex(reply.split()[2])[7:15])[0]
+
+
+def profile_rows(reply: str):
+    raw = bytes.fromhex(reply.split()[2])
+    first, n = struct.unpack(">HB", raw[:3])
+    assert len(raw) == 3 + 16 * n
+    rows = [struct.unpack(">IQI", raw[3 + 16 * i : 19 + 16 * i]) for i in range(n)]
+    return first, rows
+
+
+def test_profile_start_sets_the_span_sink_and_stop_clears_it(harness):
+    out = run(
+        harness,
+        ["sinkstat", "cmd 30 00", "cmd 30 01", "sinkstat", "cmd 30 02", "sinkstat"],
+    )
+    assert out[2] == "sink 0 0"
+    assert profile_state(out[3]) == (0, 150000000, ROWS)
+    assert profile_state(out[4]) == (1, 150000000, ROWS)
+    assert out[5] == "sink 1 1"
+    assert profile_state(out[6]) == (0, 150000000, ROWS)
+    assert out[7] == "sink 0 0"
+
+
+def test_profile_state_names_the_poll_owners(harness):
+    out = run(harness, ["poll 0 3 12345678", "poll 2 255 4000", "cmd 30 00"])
+    raw = bytes.fromhex(out[2].split()[2])
+    assert len(raw) == 35
+    assert struct.unpack(">BI", raw[15:20]) == (3, 0x12345678)
+    assert struct.unpack(">BI", raw[20:25]) == (0, 0), "an empty slot"
+    assert struct.unpack(">BI", raw[25:30]) == (255, 0x4000)
+    assert raw[30:35] == bytes(5)
+
+
+def test_profile_span_clock_reads_the_counter_and_fini_clears_the_sink(harness):
+    out = run(harness, ["cmd 30 01", "setclk 12345", "readclk", "fini"])
+    assert out[3] == "clk 12345"
+    assert out[4] == "fini 1 1"
+
+
+def test_profile_start_without_a_clock_is_refused(harness):
+    out = run(harness, ["cmd 30 01", "cmd 30 00", "sinkstat"], args=["noclock"])
+    assert out[2].split()[1] == "-60"
+    assert profile_state(out[3])[0] == 0
+    assert out[4] == "sink 0 0"
+
+
+def test_profile_start_gets_the_runtime_busy_code(harness):
+    out = run(harness, ["cmd 30 01", "cmd 30 00"], args=["busy"])
+    assert out[2].split()[1] == "-12"
+    assert profile_state(out[3])[0] == 0
+
+
+def test_profile_bad_op_and_body(harness):
+    out = run(harness, ["cmd 30 04", "cmd 30", "cmd 31 00", "cmd 31 00000000"])
+    assert [o.split()[1] for o in out[2:]] == ["-60", "-50", "-50", "-50"]
+
+
+def test_profile_spans_add_up_per_owner_and_unknown_owners_are_ignored(harness):
+    out = run(
+        harness,
+        [
+            "cmd 30 01",
+            "span 3 100 1",
+            "span 3 40 1",
+            "span 3 70 2",
+            f"span {PHASE + 1} 9 3",
+            f"span {POLL + 2} 5 1",
+            f"span {POLL + 4} 99 1",  # no such poll
+            f"span {PHASE + 3} 99 1",  # no such phase
+            "span 8 99 1",  # between the modules and the phases
+            "span 4096 99 1",
+            "cmd 31 0000",
+        ],
+    )
+    first, rows = profile_rows(out[3])
+    assert first == 0 and len(rows) == ROWS
+    assert rows[3] == (4, 280, 100)
+    assert rows[8 + 1] == (3, 27, 9)
+    assert rows[8 + 3 + 2] == (1, 5, 5)
+    others = [r for i, r in enumerate(rows) if i not in (3, 9, 13)]
+    assert all(r == (0, 0, 0) for r in others)
+
+
+def test_profile_sum_is_64_bits(harness):
+    big = 0xF0000000
+    out = run(harness, ["cmd 30 01", f"span 0 {big} 3", "cmd 31 0000"])
+    _, rows = profile_rows(out[3])
+    assert rows[0] == (3, 3 * big, big)
+    assert rows[0][1] > 2**32
+
+
+def test_profile_reset_zeroes_the_table_in_both_states(harness):
+    out = run(
+        harness,
+        [
+            "cmd 30 01",
+            "span 1 7 2",
+            "cmd 30 03",  # running
+            "cmd 31 0000",
+            "cmd 30 02",
+            "cmd 30 03",  # stopped
+            "cmd 31 0000",
+        ],
+    )
+    assert all(r == (0, 0, 0) for r in profile_rows(out[4])[1])
+    assert profile_state(out[3])[0] == 1
+    assert all(r == (0, 0, 0) for r in profile_rows(out[-1])[1])
+
+
+def test_profile_read_pages_and_refuses_a_first_row_past_the_end(harness):
+    out = run(
+        harness,
+        [
+            "cmd 30 01",
+            "span 5 11 1",
+            "span 9999 1 1",
+            "cmd 31 0004",
+            "cmd 31 000e",
+            f"cmd 31 {ROWS:04x}",
+            f"cmd 31 {ROWS + 1:04x}",
+        ],
+    )
+    first, rows = profile_rows(out[3])
+    assert first == 4 and len(rows) == ROWS - 4 and rows[1] == (1, 11, 11)
+    first, rows = profile_rows(out[4])
+    assert first == ROWS - 1 and len(rows) == 1
+    assert out[5].split()[1] == "-63" and out[6].split()[1] == "-63"
 
 
 def test_events_are_numbered_from_one_and_read_back_in_order(harness):
@@ -342,4 +582,269 @@ def test_param_watch_logs_a_changed_word_and_takes_the_snapshot_again_on_a_new_t
         (4, B, 0, 0, 0),
         (4, B, 0, 0, 0),
         (4, 5, 8, 9, 0),
+    ]
+
+
+def test_profile_elapsed_counts_clock_ticks_across_wraps_while_running(harness):
+    out = run(
+        harness,
+        [
+            "setclk 4000000000",
+            "cmd 30 01",
+            "cmd 30 00",  # 0
+            "setclk 4000000100",
+            "cmd 30 00",  # 100
+            "setclk 3000000000",  # wrapped, then 3000000000 - 4000000100 mod 2^32
+            "modtick",
+            "setclk 3000000010",
+            "cmd 30 02",  # stop reads the clock once more
+            "setclk 5",
+            "cmd 30 00",  # stopped: frozen
+            "cmd 30 03",  # reset zeroes it
+        ],
+    )
+    wrapped = (3000000000 - 4000000100) % 2**32
+    assert [profile_elapsed(out[i]) for i in (3, 4)] == [0, 100]
+    assert profile_elapsed(out[5]) == 100 + wrapped + 10
+    assert profile_elapsed(out[6]) == 100 + wrapped + 10
+    assert profile_elapsed(out[7]) == 0
+
+
+def dsp_reply(reply: str):
+    raw = bytes.fromhex(reply.split()[2])
+    version, flags, gen, rows, sweep, sweeps, gaps, ignored = struct.unpack(
+        ">BBBBIIII", raw[:20]
+    )
+    assert (version, rows) == (1, 16)
+    words = struct.unpack(f">{(len(raw) - 20) // 4}I", raw[20:])
+    assert len(words) == (100 if flags & 2 else 0)
+    return flags, gen, sweep, (sweeps, gaps, ignored), words
+
+
+def test_profile_dsp_start_takes_the_span_channel_and_sends_the_control(harness):
+    out = run(
+        harness,
+        [
+            "sinkstat",
+            "dspctl",
+            "cmd 27 00",
+            "cmd 27 01",
+            "sinkstat",
+            "dspctl",
+            "cmd 27 02",
+            "sinkstat",
+            "dspctl",
+        ],
+    )
+    assert out[2:4] == ["sink 0 0", "ctl 0 0 0"]
+    assert dsp_reply(out[4]) == (
+        0,
+        0,
+        0,
+        (0, 2, 3),
+        (),
+    )  # off: no sweep, the mirror's counters
+    assert dsp_reply(out[5]) == (1, 0, 0, (0, 2, 3), ())  # on, no sweep yet
+    assert out[6:8] == ["sink 1 1", "ctl 1 0 1"], (
+        "start owns the channel, as PROFILE_STATE start does"
+    )
+    assert dsp_reply(out[8])[0] == 0
+    assert out[9:] == ["sink 1 1", "ctl 0 0 2"], (
+        "stopping the DSP counters keeps the spans"
+    )
+
+
+def test_profile_dsp_reply_carries_the_sweep_when_one_is_complete(harness):
+    out = run(harness, ["cmd 27 01", "dspsweep 3", "cmd 27 00"])
+    flags, gen, sweep, counts, words = dsp_reply(out[3])
+    assert (flags, gen, sweep, counts) == (3, 0, 3, (3, 2, 3))
+    assert words == tuple(3000 + i for i in range(100))
+
+
+def test_profile_dsp_clear_is_a_new_generation_and_needs_the_span_channel(harness):
+    out = run(
+        harness,
+        [
+            "cmd 27 03",
+            "dspctl",
+            "cmd 27 01",
+            "cmd 27 03",
+            "dspctl",
+            "cmd 27 02",
+            "cmd 27 03",
+            "dspctl",
+        ],
+    )
+    assert out[2].startswith("reply -53") and out[3] == "ctl 0 0 0", (
+        "without the span channel nothing could be sent: refused"
+    )
+    assert dsp_reply(out[4])[:2] == (1, 0), "start sends the generation"
+    assert dsp_reply(out[5])[1] == 1 and out[6] == "ctl 1 1 2"
+    assert dsp_reply(out[8])[1] == 2 and out[9] == "ctl 0 2 4", (
+        "stopped, the spans still on: the new generation reaches the DSP with on = 0"
+    )
+
+
+def test_profile_dsp_stops_with_the_spans_and_with_the_module(harness):
+    out = run(
+        harness, ["cmd 27 01", "cmd 30 02", "dspctl", "cmd 27 01", "fini", "dspctl"]
+    )
+    assert out[4] == "ctl 0 0 2", (
+        "PROFILE_STATE stop stops the DSP counters before it gives up the channel"
+    )
+    assert dsp_reply(out[5])[0] == 1
+    assert out[6:] == ["fini 1 1", "ctl 0 0 4"], "fini stops them too"
+
+
+def test_profile_dsp_start_gets_the_runtime_busy_code_and_bad_bodies_are_refused(
+    harness,
+):
+    out = run(
+        harness,
+        ["cmd 27 01", "cmd 27 00", "cmd 27 09", "cmd 27", "cmd 27 0001"],
+        args=["busy"],
+    )
+    assert out[2].split()[1] == "-12", "another module owns the span channel"
+    assert dsp_reply(out[3])[0] == 0
+    assert out[4].startswith("reply -60"), "an op past clear"
+    assert out[5].startswith("reply -50") and out[6].startswith("reply -50"), (
+        "a body of another length"
+    )
+
+
+READY = [
+    "clock 0",
+    "slot",
+    "clock 3000",
+    "slot",
+]  # the track watch has its baseline: the project is scanned
+
+
+def test_setup_queues_the_request_and_the_ui_pass_performs_it_and_logs_the_result(
+    harness,
+):
+    lines = [
+        *READY,
+        "setupres 0",
+        "cmd 10 010305",  # machine type 5 on track 3
+        "setupcalls",  # not yet: the UI task performs it
+        "clock 3010",
+        "slot",
+        "setupcalls",
+        "cmd 10 020106",  # filter type 6 on track 1: the next request takes the next seq
+        "clock 3020",
+        "slot",
+        "setupcalls",
+        "cmd 32 00000000",
+    ]
+    out = run(harness, lines)
+    assert out[2:7] == [
+        "reply 1 01",
+        "setup 0 0 0 0",
+        "setup 1 1 3 5",
+        "reply 1 02",
+        "setup 2 2 1 6",
+    ]
+    _, _, evs = log(out[-1])
+    done = [e for e in evs if e[2] == SETUP_DONE]
+    assert [(e[4], e[5], e[6], e[7], e[8]) for e in done] == [
+        (1, 3, 5, 1, 0),
+        (2, 1, 6, 2, 0),
+    ]
+    assert [(e[3] >> 1) & 7 for e in done] == [2, 2]  # info
+
+
+def test_setup_refuses_while_one_is_queued_and_takes_the_next_after_the_pass(harness):
+    out = run(
+        harness,
+        [
+            *READY,
+            "cmd 10 010105",
+            "cmd 10 010206",  # queued: refused, and it did not replace the first
+            "slot",
+            "setupcalls",
+            "cmd 10 010206",
+        ],
+    )
+    assert out[2:6] == [
+        "reply 1 01",
+        "reply -12 ",  # DK_E_BUSY
+        "setup 1 1 1 5",
+        "reply 1 02",
+    ]
+
+
+def test_setup_refuses_a_bad_body_op_or_track_and_queues_nothing(harness):
+    out = run(
+        harness,
+        [
+            *READY,
+            "cmd 10",  # empty
+            "cmd 10 0103",  # too short
+            "cmd 10 01030500",  # too long
+            "cmd 10 000305",  # op 0
+            "cmd 10 030305",  # op 3
+            "cmd 10 011005",  # track 16
+            "slot",
+            "setupcalls",
+        ],
+    )
+    assert out[2:9] == [
+        "reply -50 ",
+        "reply -50 ",
+        "reply -50 ",
+        "reply -60 ",
+        "reply -60 ",
+        "reply -60 ",
+        "setup 0 0 0 0",
+    ]
+
+
+def test_setup_logs_the_status_the_runtime_gave_when_it_refuses(harness):
+    out = run(
+        harness,
+        [*READY, "setupres -53", "cmd 10 010101", "slot", "cmd 32 00000000"],
+    )
+    _, _, evs = log(out[-1])
+    done = [e for e in evs if e[2] == SETUP_DONE]
+    assert [(e[4], e[5], e[6], e[7], e[8]) for e in done] == [
+        (1, 1, 1, 1, 0xFFFFFFCB)  # -53, DK_E_STATE
+    ]
+
+
+def test_setup_is_refused_until_the_track_watch_has_its_baseline(harness):
+    out = run(
+        harness,
+        [
+            "noproject",
+            "clock 0",
+            "slot",  # the first pass
+            "cmd 10 010305",  # before anything is scanned
+            "clock 3000",
+            "slot",  # no project yet: no baseline
+            "cmd 10 010305",
+            "project",
+            "clock 3060",
+            "slot",  # the baseline
+            "cmd 10 010305",
+        ],
+    )
+    assert out[2:5] == [
+        "reply -53 ",
+        "reply -53 ",
+        "reply 1 01",
+    ]  # DK_E_STATE, then queued
+
+
+def test_a_request_pending_at_fini_is_logged_as_cancelled_and_never_runs(harness):
+    out = run(
+        harness,
+        [*READY, "cmd 10 010305", "fini", "setupcalls"],
+    )
+    # SETUP_DONE with DK_E_AGAIN (-72) goes to the runtime's ring: the sink is already cleared
+    assert out[2:6] == [
+        "reply 1 01",
+        f"late {SETUP_DONE} -72",
+        "fini 1 1",
+        "setup 0 0 0 0",
     ]

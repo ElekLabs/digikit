@@ -8,39 +8,69 @@
 _Static_assert(sizeof(u32) == sizeof(uint32_t) && UINT_MAX == UINT32_MAX,
                "remote pacing requires 32-bit unsigned int");
 
-static dk_service_cmd *handlers[256];
+static dk_host_cmd_fn *handlers[256];
 static uint32_t blocks;
 static unsigned calls, last_encoder;
 static int last_delta, callback_result;
 static unsigned events;
 static uint32_t ev_kind, ev_flags, ev_a[5];
 
-void dkrt_log_ev(uint32_t kind, uint32_t flags, const uint32_t *a)
+void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
 {
     events++;
     ev_kind = kind;
     ev_flags = flags;
-    for (int i = 0; i < 5; i++) ev_a[i] = a[i];
+    for (int i = 0; i < 5; i++)
+        ev_a[i] = a[i];
 }
 
-u32 dkrt_blocks(void) { return blocks; }
-int input_key(u32 code, u32 down) { (void)code; (void)down; return 0; }
-/* The settings page of the module is tested on the host UI model (modules/core/adapters/ui/host); here its calls do nothing. */
-void dk_ui_text(dk_ui_menu *m, const char *text) { (void)m; (void)text; }
-void dk_ui_action(dk_ui_menu *m, const char *text, dk_ui_act_fn *run, void *ctx, int arg)
+uint32_t dk_time_blocks(void)
 {
-    (void)m; (void)text; (void)run; (void)ctx; (void)arg;
+    return blocks;
 }
-void dk_ui_refresh(dk_ui_menu *m) { (void)m; }
-int input_turn(u32 encoder, int delta)
+static int input_token;
+int32_t dk_input_open(dk_module_ctx *ctx, dk_input **out)
 {
+    (void)ctx;
+    *out = (dk_input *)&input_token;
+    return 0;
+}
+int32_t dk_input_key(dk_input *in, uint32_t code, uint32_t down)
+{
+    (void)in;
+    (void)code;
+    (void)down;
+    return 0;
+}
+/* The settings page of the module is tested on the host UI model (modules/core/adapters/ui/host); here its calls do nothing. */
+void dk_ui_menu_add_text(dk_ui_menu *m, const char *text)
+{
+    (void)m;
+    (void)text;
+}
+void dk_ui_menu_add_action(dk_ui_menu *m, const char *text, dk_ui_action_fn *run, void *arg,
+                           int32_t value)
+{
+    (void)m;
+    (void)text;
+    (void)run;
+    (void)arg;
+    (void)value;
+}
+void dk_ui_menu_refresh(dk_ui_menu *m)
+{
+    (void)m;
+}
+int32_t dk_input_turn(dk_input *in, uint32_t encoder, int32_t delta)
+{
+    (void)in;
     calls++;
     last_encoder = encoder;
     last_delta = delta;
     return callback_result;
 }
 
-static int32_t register_cmds(u32 first, u32 count, dk_service_cmd *handler)
+int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *handler)
 {
     assert(count >= 1 && first + count <= 256);
     for (u32 c = first; c < first + count; c++) {
@@ -49,7 +79,12 @@ static int32_t register_cmds(u32 first, u32 count, dk_service_cmd *handler)
     }
     return 0;
 }
-static void log_message(const u8 *message, u32 value) { (void)message; assert(value == 0); }
+void dk_log(uint32_t level, const char *message, uint32_t value)
+{
+    (void)level;
+    (void)message;
+    assert(value == 0);
+}
 
 static void accepted(u32 encoder, int delta, int expected)
 {
@@ -58,8 +93,8 @@ static void accepted(u32 encoder, int delta, int expected)
     assert(handlers[0x39](0x39, 1, body, 2, out) == 1);
     int taken = (s8)out[0];
     if (taken != expected)
-        fprintf(stderr, "encoder %u delta %d at %u: expected %d, got %d\n",
-                encoder, delta, blocks, expected, taken);
+        fprintf(stderr, "encoder %u delta %d at %u: expected %d, got %d\n", encoder, delta, blocks,
+                expected, taken);
     assert(taken >= -30 && taken <= 30);
     assert(taken == expected);
     assert(calls == before + (expected != 0));
@@ -68,16 +103,15 @@ static void accepted(u32 encoder, int delta, int expected)
     if (expected) {
         assert(last_encoder == encoder);
         assert(last_delta == expected);
-        assert(ev_kind == 41u && ev_flags == (3u << 1) && ev_a[0] == 2u && ev_a[1] == encoder && (int)ev_a[2] == expected);
+        assert(ev_kind == 41u && ev_flags == (3u << 1) && ev_a[0] == 2u && ev_a[1] == encoder &&
+               (int)ev_a[2] == expected);
     }
 }
 
 int main(void)
 {
-    dk_api api = {0};
-    api.register_cmds = register_cmds;
-    api.log = log_message;
-    assert(dkm_init(&api) == 0);
+    static int ctx_token;
+    assert(dk_module.init((dk_module_ctx *)&ctx_token) == 0);
 
     accepted(1, 100, 30);
     accepted(1, 100, 0);

@@ -54,9 +54,31 @@ pub struct Prepared {
     pub sha_stock: String,
     pub sha_image: String,
     pub restore: bool,
+    /// The ship map of the patch (docs/ADDRMAP.md) as JSON text, and the addresses of the symbols the load table is read from: what a host needs to
+    /// name addresses of this image. `None` for a restore.
+    pub ship_map: Option<ShipMap>,
+}
+
+/// The ship map of a prepared image with the symbol addresses of its load table.
+#[derive(Clone, Debug)]
+pub struct ShipMap {
+    pub json: String,
+    pub symbols: std::collections::BTreeMap<String, u64>,
 }
 
 impl Prepared {
+    /// Whether the flashed image carries the digikit runtime (and so answers INFO after the restart): not a restore, and the patch has an image id.
+    /// A patch without the runtime (the Syntakt's `device` set) is confirmed by the stock identity instead.
+    pub fn leaves_runtime(&self) -> bool {
+        !self.restore && self.image_id.is_some()
+    }
+
+    /// The runtime version of the image as its INFO reports it after the flash (`dkm::runtime_version`, the SDK version built into the runtime
+    /// object), as `major.minor.patch`; `None` when the image has no runtime. The flash question, the summary and the check after the restart use this one value.
+    pub fn runtime_text(&self) -> Option<String> {
+        self.leaves_runtime()
+            .then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version()))
+    }
     /// Every check passed (and there is something to send).
     pub fn ok(&self) -> bool {
         !self.messages.is_empty() && self.checks.iter().all(|c| c.ok)
@@ -86,7 +108,7 @@ impl Prepared {
             "sha_image": self.sha_image,
             "image_id": self.image_id_hex(),
             // the runtime version the patch carries (a restore has none)
-            "runtime": (!self.restore).then(|| crate::dkm::fmt_runtime(crate::dkm::runtime_version())),
+            "runtime": self.runtime_text(),
             "pace_ms": PACE_MS,
             "bytes": self.image.len(),
             "ends": self.messages.iter().map(|m| m.end).collect::<Vec<_>>(),
@@ -190,10 +212,14 @@ pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result
             bad.join(" | ")
         },
     });
-    let mut p = finish(applied.syx, reg, cs, false, Some(&code))?;
+    let mut p = finish(applied.syx, reg, cs, false, Some(&code), Some(stock))?;
     p.os = os;
     p.sha_stock = stock_sha;
     p.image_id = applied.image_id;
+    p.ship_map = Some(ShipMap {
+        json: crate::addrmap::ship_map(&applied.plan).to_json(),
+        symbols: crate::addrmap::load_symbols(&applied.plan),
+    });
     // the id the image carries is the id the patch made (`image id` check: it also matches the sections)
     let carried = read_id(&p.image)?;
     match (carried, p.image_id) {
@@ -251,7 +277,7 @@ pub fn restore(stock: &[u8], reg: &Registry) -> Result<Prepared> {
         "stock",
         Ok(((), format!("{device} {os}, sha256 {}", sfw.syx_sha256))),
     );
-    let mut p = finish(stock.to_vec(), reg, cs, true, None)?;
+    let mut p = finish(stock.to_vec(), reg, cs, true, None, Some(stock))?;
     p.os = os;
     p.sha_stock = sfw.syx_sha256;
     Ok(p)
@@ -274,9 +300,10 @@ fn known_port<'a>(fw: &Firmware, raw: &[u8], reg: &'a Registry) -> Result<&'a cr
 }
 
 /// The checks every image takes, patched or stock: verify (checksums, HMAC, limits, record), the product byte, the build floor and
-/// the round trip through the model of the device's receiver. `check_image` runs them on any image (the tests tamper with images).
-pub fn check_image(image: Vec<u8>, reg: &Registry) -> Result<Prepared> {
-    finish(image, reg, Checks(vec![]), false, None)
+/// the round trip through the model of the device's receiver. `check_image` runs them on any image (the tests tamper with images);
+/// `base` is the stock image it was made from, which a device with read-only sections needs for the verify check.
+pub fn check_image(image: Vec<u8>, reg: &Registry, base: Option<&[u8]>) -> Result<Prepared> {
+    finish(image, reg, Checks(vec![]), false, None, base)
 }
 
 fn finish(
@@ -285,21 +312,43 @@ fn finish(
     mut cs: Checks,
     restore: bool,
     code: Option<&[(u64, u64)]>,
+    base: Option<&[u8]>,
 ) -> Result<Prepared> {
     let device = Firmware::parse(&image)?.device.short().to_string();
     let info = info_of(&device)?;
     let mut messages: Vec<Range<usize>> = vec![];
     let rep = cs.run(
         "verify",
-        verify::verify(&image, Some(reg), None).map(|r| {
-            let d = format!(
-                "{}; container {} bytes, {} data messages",
-                r.checks.join("; "),
-                r.container_bytes,
-                r.data_messages
-            );
-            (r, d)
-        }),
+        verify::verify(&image, Some(reg), base)
+            .and_then(|r| {
+                // the receiver stages the image in RAM without a size check: a flash image over the limit is refused here
+                if r.container_bytes > r.container_max {
+                    return Err(err!(
+                        "container is {} bytes, over the {} limit",
+                        r.container_bytes,
+                        r.container_max
+                    ));
+                }
+                Ok(r)
+            })
+            .map(|r| {
+                // the bootstrap budget first: the detail is cut when it is shown
+                let budget = r.budget.map(|b| b.to_string());
+                let rest: Vec<&str> = r
+                    .checks
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|c| Some(*c) != budget.as_deref())
+                    .collect();
+                let d = format!(
+                    "{}{}; container {} bytes, {} data messages",
+                    budget.map_or(String::new(), |b| format!("{b}; ")),
+                    rest.join("; "),
+                    r.container_bytes,
+                    r.data_messages
+                );
+                (r, d)
+            }),
     );
     if let Some(r) = &rep
         && restore
@@ -329,6 +378,7 @@ fn finish(
         sha_stock: String::new(),
         sha_image,
         restore,
+        ship_map: None,
     })
 }
 
@@ -345,14 +395,20 @@ fn split(image: &[u8]) -> Result<Vec<Range<usize>>> {
 
 fn read_id(image: &[u8]) -> Result<Option<([u8; 8], bool)>> {
     let fw = Firmware::parse(image)?;
-    let (Some(main), Some(dsp)) = (fw.section(3), fw.section(7)) else {
+    // the image id mixes the DSP stream in; a device without a DSP has none
+    let Some(main) = fw.main() else {
         return Ok(None);
+    };
+    let no_dsp = Vec::new();
+    let dsp = match (fw.device.dsp_section(), fw.dsp()) {
+        (Some(_), None) => return Ok(None),
+        (_, d) => d.map_or(&no_dsp, |d| &d.data),
     };
     let base = match verify::patch_record(image)? {
         Some(r) => unhex(&r.base_sha256)?,
         None => return Ok(None),
     };
-    imageid::read(&base, &main.data, &dsp.data)
+    imageid::read(&base, &main.data, dsp)
 }
 
 /// The stream id byte of both framing messages is the device's (`[patch] stream_id`): the device refuses a header with another id,
@@ -416,12 +472,18 @@ fn floor_of(word: [u8; 4], info: &DeviceInfo) -> Result<String> {
     }
 }
 
-/// The DSP section (7) holds no store the SHARC+ ISA excludes (`dspscan`; the stock images have none). With `code` (the plan's SHARC code ranges), appended blocks are scanned only inside those ranges.
+/// The DSP section (`[container] dsp`) holds no store the SHARC+ ISA excludes (`dspscan`; the stock images have none). With `code` (the plan's SHARC code ranges), appended blocks are scanned only inside those ranges. A device without a DSP has nothing to scan.
 pub fn dsp_scan(image: &[u8], code: Option<&[(u64, u64)]>) -> Result<((), String)> {
     let fw = Firmware::parse(image)?;
+    if fw.device.dsp_section().is_none() {
+        return Ok((
+            (),
+            format!("{} has no DSP section: nothing to scan", fw.device.short()),
+        ));
+    }
     let dsp = fw
-        .section(7)
-        .ok_or_else(|| err!("the image has no DSP section (7)"))?;
+        .dsp()
+        .ok_or_else(|| err!("the image has no DSP section"))?;
     Ok(((), crate::dspscan::check_section7(&dsp.data, code)?))
 }
 
@@ -528,7 +590,7 @@ pub fn device_validate(stream: &[u8], info: &DeviceInfo) -> Result<()> {
     }
     floor_of(build_word(stream)?, info)?;
     let dev = syx::Device::from_id(info.syx_id)?;
-    if syx::trailer(container, dev)[..] != container[total - 32..] {
+    if !syx::trailer_matches(container, dev) {
         return Err(err!("HMAC fails: the device shows \"Checksum error!\""));
     }
     Ok(())
@@ -571,7 +633,7 @@ pub fn container_of(image: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// The `.syx` for a container read back from flash (from its first byte on; erased bytes may follow). The container's length is
-/// its last section's end, rounded up to 16, and the 32-byte trailer; the trailer must be the device's HMAC. The framing messages
+/// its last section's end, rounded up to 16, and the 32-byte trailer (a device without a seal has none); the trailer must be the device's HMAC. The framing messages
 /// come from `like`, an image of the same device (the emulator boots what the device flashed).
 pub fn image_from_flash(flash: &[u8], like: &[u8]) -> Result<Vec<u8>> {
     let fw = Firmware::parse(like)?;
@@ -593,11 +655,11 @@ pub fn image_from_flash(flash: &[u8], like: &[u8]) -> Result<Vec<u8>> {
         let e = syx::TABLE_OFF + i * syx::ENTRY_SZ;
         end = end.max(be(e + 4)? + be(e + 8)?);
     }
-    let total = end.div_ceil(16) * 16 + 32;
+    let total = end.div_ceil(16) * 16 + syx::trailer_len(fw.device);
     let container = flash
         .get(..total)
         .ok_or_else(|| err!("the container ({total} bytes) is cut"))?;
-    if syx::trailer(container, fw.device)[..] != container[total - 32..] {
+    if !syx::trailer_matches(container, fw.device) {
         return Err(err!("the flash container does not carry the device's HMAC"));
     }
     let mut stream = (total as u32).to_be_bytes().to_vec();

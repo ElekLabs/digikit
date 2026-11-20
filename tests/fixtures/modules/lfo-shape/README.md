@@ -1,0 +1,1 @@
+Test fixture of the R7 registry proof: `init` emits one `lfo_shape` record (its key from `DK_KEY_SHAPE`, the name RAMP, a ramp from -1000 in steps of 100) with `dk_record_add`. The `lfo` service of the runtime keeps it; nothing in the firmware uses it.

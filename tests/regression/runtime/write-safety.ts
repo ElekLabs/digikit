@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
-import { cardStore, expansionRegion, uploadStore } from './device-data.ts';
+import { cardStore, deviceProfile, expansionRegion, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 /** Write-watch and card-overlay safety of the runtime proofs. */
@@ -170,11 +170,18 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
     if (start !== undefined) holes.push([start, size]);
     return start !== undefined;
   };
-  if (!hole('DKRT_STAGE', 64 * 1024)) throw new Error('no symbol core/runtime:DKRT_STAGE');
+  const stageBytes = deviceProfile(plan.base.device as Device).limits.stage_bytes;
+  if (stageBytes === undefined) throw new Error(`no limits.stage_bytes in the ${plan.base.device} profile`);
+  if (!hole('DKRT_STAGE', stageBytes)) throw new Error('no symbol core/runtime:DKRT_STAGE');
   hole('DKRT_SECBUF', 512);
   hole('DKRT_UPLOAD_BUF', 36896);
+  hole('DKRT_SDK_BUF', 17408); // the SDK file calls' table streams (card reads land by DMA)
+  hole('DKRT_IO_TASK', 16496); // the I/O task's stack, TCB and semaphore (the kernel writes them)
+  hole('DKRT_AUX_TASK', 4208); // the helper task's stack, TCB and semaphores (the kernel writes them)
   hole('DKRT_STORE_PEEK', 512);
   hole('DKRT_STORE_FP', 512);
+  const pdw = ownedSymbol(plan, 'core/plusdrive-write', 'DKPW_DMA'); // the +Drive adapter's buffers that the firmware's file code writes
+  if (pdw !== undefined) holes.push([pdw, 640]);
   // The header sector of the settings record is a hole only together with the record.
   if (hole('DKRT_SETTINGS', SETTINGS_SECTORS * SECTOR)) hole('DKRT_SETTINGS_HDR', 512);
   return holes.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -202,14 +209,18 @@ export function runtimeWatchEnv(planFile: string, out: string): Record<string, s
   };
 }
 
-function runtimePolicy(device: Device, name: SafetyPolicy) {
+/**
+ * The settings copies (both) are written by the services of the card that keep settings: the fx routes (policy `fx-routes`) and
+ * the machines service (sticky type map, key `machines.types`, flushed on the first boot that loads a machine on a fresh card).
+ */
+function runtimePolicy(device: Device, name: SafetyPolicy, cardServices: readonly string[]) {
   if (name !== 'default' && name !== 'fx-kit' && name !== 'fx-routes')
     throw new Error(`unknown runtime safety policy: ${String(name)}`);
   const store = cardStore(device);
   return {
     name,
     firmware_areas: name === 'default' ? [] : KIT_AREAS[device],
-    store_extra: name === 'fx-routes' ? [store.setA, store.setB] : [],
+    store_extra: name === 'fx-routes' || cardServices.includes('machines') ? [store.setA, store.setB] : [],
   };
 }
 
@@ -235,13 +246,15 @@ export function runtimeSafety(
   device: Device,
   output: string,
   overlays: string[],
-  minEmulators = 1,
-  policy: SafetyPolicy = 'default',
-  storeExtra: readonly number[] = [],
+  minEmulators: number,
+  policy: SafetyPolicy,
+  storeExtra: readonly number[],
+  /** Names of the service files on the card (`neededServices`): a settings writer widens the policy. */
+  cardServices: readonly string[],
 ) {
   if (minEmulators < 1 || !overlays.length)
     throw new Error('runtime safety needs observed emulators and exported overlays');
-  const facts = runtimePolicy(device, policy);
+  const facts = runtimePolicy(device, policy, cardServices);
   facts.store_extra = [...new Set([...facts.store_extra, ...storeExtra])];
   const { dir, name: stem } = path.parse(output);
   const indexed = (suffix: string) => {

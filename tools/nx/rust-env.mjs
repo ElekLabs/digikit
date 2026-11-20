@@ -151,7 +151,6 @@ const main = (argv) => {
     env.CARGO_TARGET_DIR ||= targetDir(gen, variant);
   } else {
     delete env.SHARC_GEN_DIR;
-    delete env.SHARC_GEN_DIR_2;
     env.CARGO_TARGET_DIR ||= targetDir('', variant);
   }
   const [head, ...rest] = cmd;

@@ -34,17 +34,32 @@ name = "cf.menu.fn.vertical_menu_view_ctor"
 was = ["cf.menu.fn.view_ctor"]
 cpu = "cf"
 sig = "void (u8 *this, const char *name, u32 reserve, const u32 *title, const u8 *icon)"
-rule = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0x0, len = 4 }
+rule.dt2 = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "68fd5bf65ff832320bafafb6c02bcf2b", offset = 0x0, len = 4, mark = "O" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "`VerticalMenuView(this, name cstr, reserve, const std::string *title, icon)`; `title` points at the one-pointer COW string."
+
+[[site]]
+name = "cf.menu.site.vertical_menu_view_ctor.font_ref"
+bind = "static"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0xb6, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "78a29b8d6b996f37e90aa83cbf1eb73d", offset = 0xb6, len = 6 }
+rule.st = { kind = "cf_func", hash = "68fd5bf65ff832320bafafb6c02bcf2b", offset = 0xa4, len = 6, mark = "D" }
+mark = "D"
+users = ["core/ui"]
+doc = "The `move.l #font,d0` instruction (6 bytes of code) in the VerticalMenuView constructor: its operand is the address of the font object that the constructor stores twice in the view. The field offset is not the same in every firmware, so a module reads the font from this literal, not from a fixed offset."
 
 [[site]]
 name = "cf.menu.site.settings_list.system_icon_ref"
 was = ["cf.menu.icon_ref", "cf.menu.site.icon_ref"]
 bind = "static"
 cpu = "cf"
-rule = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x382, len = 6 }
+rule.dt2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x382, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x382, len = 6 }
+rule.st = { kind = "cf_func", hash = "39d0c862c76cde230315ac00e6a93ebf", offset = 0x3de, len = 6, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its operand is the address of a stock icon object built at run time."
@@ -53,7 +68,9 @@ doc = "The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its 
 name = "cf.menu.site.settings_list.tail"
 was = ["cf.menu.settings_tail", "cf.menu.site.settings_tail"]
 cpu = "cf"
-rule = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x3a8, len = 8 }
+rule.dt2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x3a8, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x3a8, len = 8 }
+rule.st = { kind = "cf_func", hash = "39d0c862c76cde230315ac00e6a93ebf", offset = 0x404, len = 8, mark = "D" }
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "The last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding a menu item."
@@ -95,10 +112,24 @@ cpu = "cf"
 mode = "before"
 regs = { in = ["a2"], clobbers = ["d0-d1", "a0-a1", "ccr"] }   # d4 = the saved selection is live
 handler = { sig = "void (u8 *menu)", args = ["a2"] }
-devices = ["dt2", "dn2"]
+devices = ["dt2", "dn2", "st"]
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item."
+
+# The hook of the test service `test/svc-test` (tests/fixtures/modules/svc-test): the same site as the hook above, as a raw hook of a service file (its routine calls a C
+# function with a2, then the tail runs the displaced instructions). Only the test fixture takes it.
+[[hook]]
+name = "cf.menu.hook.settings_list.test"
+site = "cf.menu.site.settings_list.tail"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = ["a2"], clobbers = ["d0-d1", "a0-a1", "ccr"] }   # d0, d1, a0 and a1 are saved around the call
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["test/svc-test"]
+doc = "Test only: the last step of the SETTINGS item list rebuild, as a service hook. The fixture counts the runs and runs the displaced instructions through the tail."
 
 # ---- CompactVerticalMenuView and MenuWithPopoutSideBarsView (PRESET MANAGER, KIT MANAGER, PROJECT MANAGER; finding 71 section 8) ----
 

@@ -5,9 +5,9 @@
  * previous mask of every channel in firmware RAM, which chords, repeat and the key-down query read. This module calls those two decoders, so a key
  * pressed here is exactly a key the panel reported, and nothing in the firmware's event path is bypassed.
  *
- * Interface for modules (C ABI, named imports of the runtime's table; 0 is ok, negative an error):
- *   int input_key(u32 code, u32 down);     a key code (the device file, [panel]) pressed or released
- *   int input_turn(u32 encoder, int delta); encoder 1..9, delta in detents (split into parts of at most 127)
+ * Interface for modules (the service `input`, <dk/platform/input.h>; 0 is ok, negative an error):
+ *   int dk_input_key(dk_input *inp, u32 code, u32 down);     a key code (the device file, [panel]) pressed or released
+ *   int dk_input_turn(dk_input *inp, u32 encoder, int delta); encoder 1..9, delta in detents (split into parts of at most 127)
  *
  * Device facts (the code layout, the backend) come from the device file through `input_cfg` (device.s). A backend is one set of the two functions; the
  * profile names it ([input] backend), and a device with another path to its events adds a backend here.
@@ -18,6 +18,12 @@
  * A key is passed to the decoder only when it changes the channel's mask. The panel's next real packet for that channel carries the whole mask and
  * overrides what this module set; on the emulator no panel sends any. A turn is accumulated by the firmware and flushed by its periodic tick, which
  * clamps a flush to +-30: the caller paces large turns. */
+
+#include <stdint.h>
+
+/* The opaque handle types of the service imports (sdk/sdk.toml [handle]); <dk/gen/imports.h> is not included: it also declares the old import names with the SDK's integer types. */
+typedef struct dk_module_ctx dk_module_ctx;
+typedef struct dk_input dk_input;
 
 typedef unsigned int u32;
 typedef unsigned char u8;
@@ -36,13 +42,14 @@ extern const u32 input_cfg[];
 #define CFG_LINEAR 1
 #define CFG_ENCODERS 2
 #define CFG_EXC_N 3
-#define CFG_EXC 4 /* 8 x (code, channel, bit) */
+#define CFG_EXC 4        /* 8 x (code, channel, bit) */
 #define CFG_BUTTON_CH 28 /* the channels the button decoder has tables for */
 
 /* firmware (anchors by hash in the port files): the decoders, and the literals that locate their state */
 extern void input_fw_key(u32 channel, u32 mask);
 extern void input_fw_turn(u32 encoder0, int delta);
-extern volatile u32 input_mask_lit;  /* the literal: address of the previous mask of channel 0 (one byte per channel) */
+extern volatile u32
+    input_mask_lit; /* the literal: address of the previous mask of channel 0 (one byte per channel) */
 extern volatile u32 input_queue_lit; /* the literal: address of the UI queue object's pointer */
 
 /* events one decoder call may add at most (a key: one per changed bit, here one bit; a turn: one) plus a margin */
@@ -139,16 +146,40 @@ static int panel_turn(u32 encoder, int delta)
 
 /* ---- the interface ---- */
 
-int input_key(u32 code, u32 down)
+static int key_press(u32 code, u32 down)
 {
     if (input_cfg[CFG_BACKEND] == BACKEND_PANEL_UART)
         return panel_key(code, down);
     return IN_NO_BACKEND;
 }
 
-int input_turn(u32 encoder, int delta)
+static int encoder_turn(u32 encoder, int delta)
 {
     if (input_cfg[CFG_BACKEND] == BACKEND_PANEL_UART)
         return panel_turn(encoder, delta);
     return IN_NO_BACKEND;
+}
+
+/* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ---- */
+
+static int input_token; /* the dk_input handle: only a token */
+
+int32_t dk_input_open(dk_module_ctx *ctx, dk_input **out)
+{
+    if (!ctx || !out)
+        return -48; /* DK_E_CONTRACT */
+    *out = (dk_input *)&input_token;
+    return 0;
+}
+
+int32_t dk_input_key(dk_input *inp, uint32_t code, uint32_t down)
+{
+    (void)inp;
+    return key_press(code, down);
+}
+
+int32_t dk_input_turn(dk_input *inp, uint32_t encoder, int32_t delta)
+{
+    (void)inp;
+    return encoder_turn(encoder, delta);
 }

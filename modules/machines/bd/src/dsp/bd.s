@@ -14,8 +14,7 @@
 //
 //  The amplitude decay is the track's AMP envelope, so the machine only has to sound right for the first 50 ms.
 //
-//  State: carrier phase, block counter, modulator phase (all zeroed at note-on, which is the envelope trigger), the
-//  index, and the modulator's last value. Nothing survives a trigger, so there is nothing to seed.
+//  Note-on clears the carrier phase, block counter and modulator phase. The noise generator keeps its state across hits.
 //
 //  Register map (F and R are one file):
 //    F13 carrier phase   F15 modulator phase   F12 carrier inc   F14 modulator inc
@@ -23,8 +22,8 @@
 //    per-sample scratch: F0 F1 F2 F3
 // =====================================================================
 #include "dk_machine.inc"
-#include "dsp/oscillator.inc"
-#include "dsp/noise.inc"
+#include "dsp/osc/oscillator.inc"
+#include "dsp/osc/noise.inc"
 
 .SECTION/PM seg_pmco;
 .GLOBAL _bd_render;
@@ -46,7 +45,7 @@ _bd_render:
     CALL _dv_exp2;
     R1 = 0x39329a62;                      // 440 * 2^(-69/12) / 48000
     F0 = F0 * F1;
-    F7 = F0;
+    F7 = PASS F0;
 
     // ---- level from velocity ----
     R0 = DM(DK_IN_W_VELOCITY, I2);
@@ -118,7 +117,7 @@ _bd_render:
     R1 = 0x40400000;                      // 3.0: up to three cycles of excursion, which is real FM. The phase is
     NOP;                                  // wrapped before the sine (any value in -3 .. 4 is reduced to 0 .. 1), so
     F2 = F2 * F1;                         // the polynomial is always inside its range
-    R1 = F2;
+    R1 = PASS F2;
     DM(3, I3) = R1;                       // the index for this block
 
     // noise envelope: (1 - n/60), 40 ms, so NOISE turns the drum into a snare or a hat
@@ -131,13 +130,13 @@ _bd_render:
     R1 = 0;                               // 0.0
     NOP;
     F2 = MAX(F2, F1);
-    R1 = F2;
+    R1 = PASS F2;
     DM(6, I3) = R1;
     R1 = 0x38010204;                      // 1 / 32512
     R0 = DM(3, I1);
     F0 = FLOAT R0;
     F0 = F0 * F1;                         // NOISE 0 .. 1
-    R1 = F0;
+    R1 = PASS F0;
     DM(7, I3) = R1;
 
     // ---- constants and state ----
@@ -158,7 +157,7 @@ _bd_render:
     F0 = F2 - F0;
     NOP;
     DK_SINE_POLY_STEP(F2, F0, F1, F3, R2, R3);
-    R0 = F2;
+    R0 = PASS F2;
     NOP;
     DM(4, I3) = R0;                       // the modulator value
 
@@ -239,10 +238,7 @@ _bd_last: MODIFY(I0, 4);
 
 _bd_note_on:
     I3 = R4;
-    // Seed the noise only while the state is still zero (the first note after load, when contract 1.6
-    // has zeroed the state). Reseeding to a fixed value on every note made each hit replay the same
-    // noise bytes; on later notes the xorshift has already advanced, so leaving it alone continues the
-    // sequence and every hit gets different noise. A zero state would stay zero, so it is seeded once.
+    // Seed a fresh voice once. Later hits continue its noise sequence.
     R0 = DM(5, I3);
     R0 = PASS R0;
     IF NE JUMP _bd_seeded;
@@ -260,7 +256,5 @@ _bd_seeded:
 .VAR _bd_desc3 = DK_MAX_VOICES;
 .VAR _bd_desc4 = 32;                      // 8 words: carrier phase, counter, mod phase, index, mod value, noise state, noise env, noise level
 .VAR _bd_desc5 = 12;                      // phase, counter, modulator phase zeroed at note-on
-.VAR _bd_desc6 = 4450;                    // worst render block (measured by the conformance)
-.VAR _bd_desc7 = 4500;                    // note-on block = note_on + one render block
-.VAR _bd_desc8 = 2;
-.VAR _bd_desc9 = 0;
+.VAR _bd_desc6 = 2;
+.VAR _bd_desc7 = 0;

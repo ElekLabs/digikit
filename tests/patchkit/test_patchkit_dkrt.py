@@ -49,7 +49,7 @@ def test_pack_is_deterministic_and_the_file_checks_itself(tmp_path):
     pk_dkrt.pack(tools, "test/dyn-demo", b)
     assert a.read_bytes() == b.read_bytes()
     info = tools.patchkit_run("dkm-info", a)
-    assert "test/dyn-demo" in info and "slots     [(0," in info
+    assert "test/dyn-demo" in info and "tick      Some(" in info
     bad = bytearray(a.read_bytes())
     bad[-1] ^= 1
     (tmp_path / "bad.dkm").write_bytes(bad)
@@ -69,7 +69,7 @@ def test_boot_loads_the_module_and_refuses_the_bad_files(image, tmp_path):
     assert not failed, failed
     n = report["numbers"]
     assert n["counter"][0] < n["counter"][1] < n["counter"][2]
-    assert n["boot_results"] == [-4, -7, -1, -48, -48, 0, -11]
+    assert n["boot_results"] == [-4, -7, -1, -48, -48, 0, -10]
     assert n["write_watch"]["events"] == 0
 
 

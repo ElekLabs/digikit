@@ -7,8 +7,9 @@
     uv run python -m tools.patchkit.pk_toolchains status    # what is installed (JSON)
 
 The ColdFire toolchain installs to out/tools/m68k-elf/ (bin/m68k-elf-gcc, ...). Selache builds in
-out/tools/selache/ (target/release/selas, seldump, selcc, ...). Both are plain user-space builds; nothing
-is installed globally. Paths are resolved by `m68k_bin()` / `selache_dir()` for the tools and tests, which
+out/tools/selache/ (target/release/selas, seld, seldump; selcc is not built). Both are plain user-space builds; nothing
+is installed globally. With Intel Homebrew on Apple silicon (Rosetta), the m68k and codegen-gcc builds set CC and CXX to
+`-arch x86_64` so they link its x86_64 libraries (unless CC or CXX is already set). Paths are resolved by `m68k_bin()` / `selache_dir()` for the tools and tests, which
 skip when a toolchain is absent.
 
 `codegen-gcc` builds Rust for the ColdFire MCF54418 (finding 26, findings 23 S1b): the rust-lang GCC fork at the commit
@@ -27,6 +28,7 @@ import hashlib
 import json
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import sys
@@ -46,7 +48,7 @@ SHA256 = {
 }
 M68K_PREFIX = TOOLS / "m68k-elf"
 SELACHE_URL = "https://github.com/ElekLabs/selache"
-SELACHE_REV = "02d6d785b8e3a125ab237a00bb89503aff835f5d"
+SELACHE_REV = "967c1d1e4d02e41f483181964f0ba333558a1fa7"
 SELACHE_DIR = TOOLS / "selache"
 
 # Rust through GCC (finding 23 S1b, finding 26). Every revision is pinned.
@@ -81,6 +83,11 @@ def selache_dir() -> pathlib.Path | None:
     )
 
 
+def selcc_bin() -> pathlib.Path | None:
+    p = SELACHE_DIR / "target" / "release" / "selcc"
+    return p if p.exists() else None
+
+
 DARWIN = sys.platform == "darwin"
 
 
@@ -106,6 +113,8 @@ def codegen_gcc_env(extra_rustflags: str = "") -> dict[str, str]:
     env = dict(os.environ)
     env.pop("RUSTUP_TOOLCHAIN", None)  # it would override the channel
     env["PATH"] = f"{M68K_PREFIX / 'bin'}:{env['PATH']}"
+    # libgccjit's built-in driver holds the absolute --with-as path; COMPILER_PATH finds `as` after a move
+    env["COMPILER_PATH"] = str(M68K_PREFIX / "m68k-elf" / "bin")
     env["CG_GCCJIT_LIBRARY_PATH"] = str(CG_DIR / "jitlib" / "libgccjit.so")
     flags = f"-Zcodegen-backend={codegen_gcc_backend()} -Cllvm-args=-mcpu=54418 -Cpanic=abort {extra_rustflags}"
     env["RUSTFLAGS"] = flags.strip()
@@ -155,9 +164,24 @@ def brew_prefix(formula: str) -> str:
     ).stdout.strip()
 
 
+def brew_arch_env(env: dict[str, str]) -> dict[str, str]:
+    """Intel Homebrew on Apple silicon (Rosetta) has x86_64 libraries: build x86_64 too, unless CC or CXX is set."""
+    if not (DARWIN and platform.machine() == "arm64"):
+        return env
+    if "CC" in env or "CXX" in env or shutil.which("brew") is None:
+        return env
+    prefix = subprocess.run(
+        ["brew", "--prefix"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if not prefix.startswith("/usr/local"):
+        return env
+    print("Intel Homebrew on Apple silicon: building for x86_64 (CC, CXX)", flush=True)
+    return {**env, "CC": "clang -arch x86_64", "CXX": "clang++ -arch x86_64"}
+
+
 def build_m68k() -> None:
     jobs = str(os.cpu_count() or 4)
-    env = dict(os.environ)
+    env = brew_arch_env(dict(os.environ))
     deps = {f: brew_prefix(f) for f in ("gmp", "mpfr", "libmpc", "isl", "zstd")}
     # binutils
     b_src = unpack(fetch(BINUTILS[1]))
@@ -309,7 +333,7 @@ def build_codegen_gcc() -> None:
         sys.exit("build the m68k toolchain first: pk_toolchains m68k")
     jobs = str(min(os.cpu_count() or 4, 8))
     deps = {f: brew_prefix(f) for f in ("gmp", "mpfr", "libmpc", "isl", "zstd")}
-    env = dict(os.environ)
+    env = brew_arch_env(dict(os.environ))
     env.pop("RUSTUP_TOOLCHAIN", None)
     env["PATH"] = f"{M68K_PREFIX / 'bin'}:{env['PATH']}"
     # 1. the pinned nightly with the compiler libraries the back end links
@@ -385,7 +409,8 @@ def build_codegen_gcc() -> None:
         for n in names:
             link = jitlib / n
             link.unlink(missing_ok=True)
-            link.symlink_to(built)
+            # relative, so out/tools can move
+            link.symlink_to(os.path.relpath(built, jitlib))
     # 3. the back end, with the -mcpu patch; the clone sits inside the repository's cargo workspace, so each of
     #    its manifests gets an empty [workspace]
     be = CG_DIR / "rustc_codegen_gcc"
@@ -406,11 +431,41 @@ def build_codegen_gcc() -> None:
         sys.exit("rustc_codegen_gcc did not build")
 
 
+def point_origin_at(directory: pathlib.Path, url: str) -> bool:
+    """Set `origin` of the clone in `directory` to `url` when it differs; true if it was changed. An older clone may point at the
+    repository the pin came from before the fork: its fetch would not find the pinned commit."""
+    have = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=directory,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if have == url:
+        return False
+    print(f"selache: origin of {directory} was {have or '(none)'}, set to {url}")
+    run(["git", "remote", "set-url" if have else "add", "origin", url], cwd=directory)
+    return True
+
+
 def build_selache() -> None:
     if not (SELACHE_DIR / ".git").exists():
         run(["git", "clone", SELACHE_URL, str(SELACHE_DIR)])
+    point_origin_at(SELACHE_DIR, SELACHE_URL)
+    have = subprocess.run(
+        ["git", "cat-file", "-e", f"{SELACHE_REV}^{{commit}}"],
+        cwd=SELACHE_DIR,
+        capture_output=True,
+        check=False,
+    )
+    if have.returncode:
+        run(["git", "fetch", "-q", "origin"], cwd=SELACHE_DIR)
     run(["git", "checkout", "-q", SELACHE_REV], cwd=SELACHE_DIR)
-    run(["cargo", "build", "--release"], cwd=SELACHE_DIR)
+    # selcc is not built: it does not compile at this rev and nothing outside two tests uses it
+    run(
+        ["cargo", "build", "--release", "-p", "selas", "-p", "seld", "-p", "seldump"],
+        cwd=SELACHE_DIR,
+    )
 
 
 def status() -> dict[str, object]:

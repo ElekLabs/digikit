@@ -23,14 +23,19 @@ pub struct PortInfo {
     pub version: String,
     pub syx_sha256: String,
     pub main_sha256: String,
-    pub dsp_sha256: String,
+    /// The DSP section's hash; absent in the port of a device without a DSP.
+    #[serde(default)]
+    pub dsp_sha256: Option<String>,
     pub resolved_by: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Limits {
     pub container_max: u64,
+    /// 0 on a device without a DSP; a port with a DSP must state both (`Port::parse` refuses a port that leaves one out).
+    #[serde(default)]
     pub dsp_stored_max: u64,
+    #[serde(default)]
     pub dsp_depacked_max: u64,
     pub main_staged_max: u64,
 }
@@ -79,11 +84,48 @@ pub struct Hook {
     pub offset: i64,
     /// `before` (displaced instructions still run), `replace` (they are dropped) or `retarget`
     pub mode: String,
+    /// `regs.clobbers` of the declaration (devices/fw), as written: registers or ranges like `d0-d1`. A guarded stub's scratch register is one of them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clobbers: Vec<String>,
+    /// The site facts of a hook that a service uses (`devices/fw` `users`), written by `port_resolve` from the local firmware (`patchkit port-facts`); a hook of
+    /// no service has none. No firmware bytes: a length, a kind and a truncated hash. `len` is the bytes of the displaced whole instructions (at least 6, the jump).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub len: Option<u32>,
+    /// `raw` (the service redoes the instructions), `tail` (`tail = true` of the declaration) or `stock` (`stock = true`): the last two copy the displaced bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// The first 8 bytes of the sha256 of the displaced bytes, as 16 hex digits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<String>,
+    /// Reserved: re-encodings that the displaced bytes need to run elsewhere (a PC-relative operand). Empty today; the port build refuses any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixups: Vec<Fixup>,
+}
+
+/// One fixup of a copied site (reserved).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Fixup {
+    /// Byte offset in the displaced bytes.
+    pub at: u32,
+    /// The form to re-encode (for example `pcrel16_to_abs32`).
+    pub form: String,
 }
 
 impl Port {
     pub fn parse(text: &str) -> Result<Port> {
         let p: Port = toml::from_str(text)?;
+        if p.port.dsp_sha256.as_deref().is_some_and(|h| !h.is_empty()) {
+            // the field defaults to 0, which would make every DSP image "too big": a port with a DSP has to say its limits
+            let raw: toml::Value = toml::from_str(text)?;
+            for field in ["dsp_stored_max", "dsp_depacked_max"] {
+                if raw.get("limits").and_then(|l| l.get(field)).is_none() {
+                    return Err(err!(
+                        "port {}: [limits] {field} is missing, and the port has a DSP",
+                        p.port.version
+                    ));
+                }
+            }
+        }
         if p.port.syx_sha256.len() != 64 {
             return Err(err!("port {}: syx_sha256 is not a sha256", p.port.version));
         }
@@ -165,5 +207,42 @@ impl Registry {
             }
         }
         Registry::from_texts(texts.iter().map(|s| s.as_str()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(dsp: bool, limits: &str) -> String {
+        let h = "a".repeat(64);
+        let dsp = if dsp {
+            format!("dsp_sha256 = \"{h}\"\n")
+        } else {
+            String::new()
+        };
+        format!(
+            "[port]\ndevice = \"d\"\nversion = \"1\"\nsyx_sha256 = \"{h}\"\nmain_sha256 = \"{h}\"\n{dsp}resolved_by = \"t\"\n[limits]\ncontainer_max = 1\nmain_staged_max = 1\n{limits}"
+        )
+    }
+
+    #[test]
+    fn a_port_with_a_dsp_must_state_both_dsp_limits() {
+        let both = "dsp_stored_max = 5\ndsp_depacked_max = 9\n";
+        let p = Port::parse(&text(true, both)).unwrap();
+        assert_eq!((p.limits.dsp_stored_max, p.limits.dsp_depacked_max), (5, 9));
+        for (what, limits) in [
+            ("none", ""),
+            ("depacked only", "dsp_depacked_max = 9\n"),
+            ("stored only", "dsp_stored_max = 5\n"),
+        ] {
+            let e = Port::parse(&text(true, limits)).unwrap_err().to_string();
+            assert!(e.contains("dsp_") && e.contains("missing"), "{what}: {e}");
+        }
+        // a port without a DSP has none
+        assert_eq!(
+            Port::parse(&text(false, "")).unwrap().limits.dsp_stored_max,
+            0
+        );
     }
 }

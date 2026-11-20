@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { Session } from '@digi/test-support';
 import { DkSession } from '@digi/dk-session';
-import type { PatchedSession } from '../support.ts';
+import { withWaitApi, type PatchedSession } from '../support.ts';
 import type { RuntimePlan } from '../runtime/runtime-plan.ts';
 
 const fake = vi.hoisted(() => ({
@@ -21,10 +21,19 @@ const fake = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({
   execFile: Object.assign(vi.fn(), { [Symbol.for('nodejs.util.promisify.custom')]: fake.exec }),
 }));
-vi.mock('../support.ts', () => ({ withReusablePatchedSession: fake.fixture, expectNoGuardHits: fake.noGuardHits }));
+vi.mock('../support.ts', async (original) => ({
+  ...(await original<object>()),
+  withReusablePatchedSession: fake.fixture,
+  expectNoGuardHits: fake.noGuardHits,
+}));
 vi.mock('../runtime/runtime-plan.ts', async (original) => ({
   ...(await original<object>()),
-  prepareRuntimePlanOffline: fake.prepare,
+  prepareRuntimePlanListedOffline: fake.prepare,
+}));
+// the host boot has no card and no service file: the symbol binding is not what these tests observe
+vi.mock('../runtime/service-symbols.ts', async (original) => ({
+  ...(await original<object>()),
+  bindServiceSymbols: vi.fn(async () => {}),
 }));
 vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, runtimeSafety: fake.safety }));
 vi.mock('../runtime/fx-live.ts', async (original) => ({
@@ -35,17 +44,13 @@ vi.mock('../runtime/fx-live.ts', async (original) => ({
 }));
 vi.mock('../runtime/ready.ts', async (original) => ({ ...(await original<object>()), expectRuntimeUi: fake.ready }));
 import { withRouteFxSession } from '../runtime/fx-route-live.ts';
-import {
-  withPreparedFxSession,
-  readTextRows,
-  tap,
-  inspectFxBoot,
-  withPausedFxProtocol,
-} from '../runtime/fx-session.ts';
+import { fakeClock } from './fake-status.ts';
+import { withPreparedFxSession, readTextRows, inspectFxBoot, withPausedFxProtocol } from '../runtime/fx-session.ts';
 
 const directories: string[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
 });
 
@@ -71,7 +76,11 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
           : ['sine', 'dyn-fx-gain-both', 'dyn-fx-gain-both-2', 'dyn-fx-gain-both-3'];
     const modulesRoot = path.join(directory, 'modules');
     fs.mkdirSync(path.join(modulesRoot, 'dt2'), { recursive: true });
-    ids.forEach((id) => fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.dkm`), id));
+    ids.forEach((id) => {
+      fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.dkm`), id);
+      // the pack target's list of the services the module needs (`patchkit services`): none here
+      fs.writeFileSync(path.join(modulesRoot, 'dt2', `${id}.services.json`), '');
+    });
     vi.stubEnv('DIGI_RUNTIME_MODULES', modulesRoot);
     // The card cache and the card builder binary of this test (the cache hashes the binary).
     vi.stubEnv('DIGI_CARD_CACHE', path.join(directory, 'cards'));
@@ -148,22 +157,14 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       expect(fake.prepare).toHaveBeenCalledTimes(1);
       const requestedSymbols = fake.prepare.mock.calls[0]![3];
       const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
-      const commonSymbols = ['DKRT_BOOT', 'DKRT_ASSIGN', 'fx.rows', '_dl_area'];
+      const commonSymbols = ['DKRT_BOOT', 'fx.rows', '_dl_area'];
       const roots = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
       const expectedSymbols = plain
         ? ['DKRT_BOOT']
         : image === 'track-base'
           ? [...commonSymbols, 'dynreg_info']
           : image === 'track'
-            ? [
-                ...commonSymbols,
-                'dynreg_info',
-                'fxpages_info',
-                'fxp_send_row',
-                'fxp_send_count',
-                'fxp_nload',
-                'DKRT_FXS',
-              ]
+            ? [...commonSymbols, 'dynreg_info', 'fxpages_info']
             : [
                 ...commonSymbols,
                 'DK_FXR_PEND',
@@ -177,8 +178,6 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
                 'DK_PANEL_N',
                 'DK_ROUTE_N',
                 'DK_ROUTE_ITEM',
-                'fxp_send_count',
-                'DKRT_FXS',
                 'fxpages_info',
               ];
       expect(requestedSymbols).toEqual(expectedSymbols);
@@ -228,16 +227,19 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
 }
 
 test('route diagnostic text decodes big endian words and panel chords release on failure', async () => {
+  const { status, step } = fakeClock();
   const session = {
+    status,
     client: {
       memPeek: vi.fn(async () => 0x41420000),
-      inputButton: vi.fn(),
+      inputButton: vi.fn(async () => {}),
       inputTap: vi.fn().mockRejectedValue(new Error('panel failure')),
-      step: vi.fn(),
+      step,
     },
   } as unknown as Session;
   expect(await readTextRows(session, 4096, 2, 4)).toEqual(['AB', 'AB']);
-  await expect(tap(session, 'YES', 0, 'FUNC')).rejects.toThrow('panel failure');
+  const rt = withWaitApi({ session, dk: {}, close: async () => {} } as unknown as PatchedSession);
+  await expect(rt.ui.tap('YES', { until: { drained: true }, held: 'FUNC' })).rejects.toThrow('panel failure');
   expect(session.client.inputButton).toHaveBeenLastCalledWith(expect.any(Number), false);
 });
 
@@ -249,6 +251,11 @@ for (const { afterEpoch, loaderResult } of [
   test(`route boot drains input and returns paused with ${afterEpoch === undefined ? 'strict fresh' : 'explicit restart'} readiness and loader result ${loaderResult}`, async () => {
     const artifacts = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-route-inspect-'));
     directories.push(artifacts);
+    // the module list of this boot: a packed file and the pack target's list of the services it needs (none)
+    fs.mkdirSync(path.join(artifacts, 'modules', 'dt2'), { recursive: true });
+    fs.writeFileSync(path.join(artifacts, 'modules', 'dt2', 'sine.dkm'), 'sine');
+    fs.writeFileSync(path.join(artifacts, 'modules', 'dt2', 'sine.services.json'), '');
+    vi.stubEnv('DIGI_RUNTIME_MODULES', path.join(artifacts, 'modules'));
     const order: string[] = [];
     let mode = 'paused';
     let observations = 0;
@@ -267,6 +274,9 @@ for (const { afterEpoch, loaderResult } of [
     });
     const session = {
       expectNoFault: vi.fn(),
+      get pcmTapStarted() {
+        return pcmStarted;
+      },
       options: { device: 'dt2', firmware: '1.17' },
       loadResult: { syx_sha256: plan.output!.syx_sha256 },
       preparedRuntimeImage: {

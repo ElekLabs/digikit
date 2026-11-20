@@ -1,8 +1,8 @@
-import { defineEquiv, DT2_TRIG, type Equiv } from '@digi/regression/runtime/equiv.ts';
+import { defineEquiv, DT2_TRIG, pcmPinFile, type Equiv } from '@digi/regression/runtime/equiv.ts';
 
 const SCENARIOS: Equiv[] = [
   {
-    // no twin and no PCM pin: the rows equal a boot of no module and the note of test/sine is audible
+    // the one full-firmware audio check of the DT2 run-time machine path (onset, level, mixer): onset frame 97, 12000 frames (DT2 1.17, note 60, 261.63 Hz, crest 1.438 over the window with its start-up settling, 1.412 in the second half, harmonics -115 dB, L = R)
     name: 'equiv-dt2-sine',
     device: 'dt2',
     modules: ['test/sine'],
@@ -10,18 +10,19 @@ const SCENARIOS: Equiv[] = [
     trigFrame: DT2_TRIG,
     voices: 1,
     ignoreRunMachines: ['Sine'],
+    pcmPin: pcmPinFile(import.meta.dirname, 'equiv-dt2-sine'),
+    sine: { note: 60 },
   },
   {
     name: 'equiv-dn2-set',
     device: 'dn2',
     modules: ['test/dyn-dn2', 'test/sine'],
-    twin: 'test/twin-dn2',
-    hintRun: 6,
+    hint: 6,
     trigFrame: 7000,
     voices: 2,
-    ignoreRunMachines: ['Sine'],
-    // onset 400, 24000 samples (DN2 1.12, note 60, 261.65 Hz); approved by Em 2026-11-01 (exact RECIPS, finding 102)
-    pcmSha256: '330e9725263aa2aab1da1c4f9b562b5b0d64c9896212106c4eddc3c4547db1d3',
+    ignoreRunMachines: ['DynSyn', 'Sine'],
+    // onset frame 168, 12000 frames (DN2 1.12, note 60, 261.63 Hz); exact pin (exact RECIPS output, finding 102): write it with `pin-cli.ts write --exact`
+    pcmPin: pcmPinFile(import.meta.dirname, 'equiv-dn2-set'),
   },
 ];
 

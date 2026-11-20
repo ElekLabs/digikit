@@ -14,7 +14,6 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 
-from tools.device.dklog_kinds import RUNTIME_VERSION  # noqa: E402
 from tools.patchkit import (  # noqa: E402
     modroots,
     pk_dkrt,
@@ -73,14 +72,15 @@ def test_dsp_section_is_deterministic_and_relocates_like_the_reference(tmp_path)
     # the voice names its machine by key: the 24-bit hash of "test/sine:sine" above a zero type byte
     h = pk_dkrt_machine.machine_hash("test/sine", "sine")
     assert (
-        f"voice type h{h:06x} entry +0x0 note_on +0x14a state 16x8 clear 8" in info
+        f"voice type h{h:06x} entry +0x0 note_on +0x126 state 16x8 clear 8" in info
         and "imports _dv_exp2" in info
     )
-    # the guard's ranges: LEVEL (knob 1) declares 0 .. 0x7f00; TUNE and LEV are stock rows (undeclared)
-    assert "ranges [0, 7f000000, 0, 0, 0, 0, 0, 0]" in info
-    assert (
-        f"runtime   >= {'.'.join(map(str, RUNTIME_VERSION))}" in info
-    )  # DSP sections of version 2 (voices with knob ranges) need runtime 5
+    # the guard's ranges: since S3 a parameter is declared by a builder call that carries no range, so every knob is undeclared (0)
+    assert "ranges [0, 0, 0, 0, 0, 0, 0, 0]" in info
+    # a module needs the newest `since` of the imports it links (sdk.toml), at least the version that introduced the header table (`[runtime] table`):
+    # not the runtime's own patch version
+    table = tomllib.loads((ROOT / "sdk/sdk.toml").read_text())["runtime"]["table"]
+    assert f"runtime   >= {table}" in info
     sec = pk_dkrt_machine.parse_dsp_section(a.read_bytes())
     imports = {"_dv_exp2": 0xB9D7E0, "_dv_frame_hw": 0xB9D80E}
     for base in (0x2000_0000, 0x2001_AE80, 0x2003_F000):

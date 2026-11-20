@@ -36,6 +36,9 @@ pub const METHODS: &[&str] = &[
     "guard.set",
     "guard.report",
     "guard.clear",
+    "pc.probe.set",
+    "pc.probe.report",
+    "pc.probe.clear",
     "events.subscribe",
     "quit",
 ];
@@ -71,7 +74,7 @@ impl Dispatcher {
             "schema_version": SCHEMA_VERSION,
             "host": self.host,
             "features": {
-                "coupled_audio": cfg!(feature = "coupled-audio"),
+                "coupled_audio": cfg!(feature = "sharc"),
                 "server": cfg!(feature = "server"),
             },
             "methods": METHODS,

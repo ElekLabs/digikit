@@ -1,5 +1,5 @@
 """DSP patch files: edits addressed in SHARC+ memory terms (see
-packages/emulator/boot/src/dsp_patch.rs for the format, which the Rust side also parses).
+packages/emulator/sharc-peer/src/dsp_patch.rs for the format, which the Rust side also parses).
 
     BASE <sha256 of the unpatched .syx>
     PM <pc> <hex> [was <hex>]      4/8/12 hex digits = 16/32/48-bit instruction

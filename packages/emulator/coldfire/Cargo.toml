@@ -26,3 +26,7 @@ path = "src/bin/cfbench.rs"
 [[bin]]
 name = "cfrealmix"
 path = "src/bin/cfrealmix.rs"
+
+[[bin]]
+name = "cfaot"
+path = "src/bin/cfaot.rs"

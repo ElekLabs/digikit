@@ -14,19 +14,28 @@
  *
  * Interface for the runtime (C ABI, no struct results):
  *   int dl_send(u32 dst_l2, const void *buf, u32 len);   0 started; -1 busy; -2 bad destination or size
- *   int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len);   the same into window `win` (1: the voices registry, 2: the effect rows of core/fx),
+ *   int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len);   the same into window `win` (1: the voices registry, 2: the effect rows of core/fx, 3: the stats control words, only the runtime sends them),
  *       the destination in words from the start of the window; the DSP checks it against the window's size (status 3)
  *   int dl_poll(DlStatus *st);                           the state (DL_IDLE, DL_BUSY, DL_DONE, DL_ERROR), and *st filled
  *   int dl_diag(u32 *out, u32 n);                        the DSP's diagnostic words of the last block (layout: README.md and
  *       src/dsp/dsp-link.inc); returns the number of words written (at most n, at most DL_DG_WORDS), -1 when the image has no record
  *       address, -2 when the reply carries no diagnostic block (core/dsp-voice absent from the image, or the DSP halted
  *       before it ran: the heartbeat words of an earlier call stop moving, the block stays in the record copy)
- *   void dl_set_tick_cb(void (*cb)(const volatile u16 *rec));   one per-block callback (NULL: off), called from dl_tick with the copy of
- *       the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
+ *   The one per-block callback of a module is set with dk_dsp_link_set_tick (below): `void cb(const volatile u16 *rec)` (NULL: off), called from dl_tick
+ *       with the copy of the previous reply, in the block interrupt. It must be a short C function with no allocation and no logging. Off costs one pointer test.
  *   void dl_tick_cb_drop(u32 lo, u32 hi);   the runtime calls it after a module's fini: clears the callback when it points into [lo, hi)
- * dst_l2 is a byte address in the DSP's reserved area (_dl_area, DL_AREA_BYTES long), 4-aligned; len is a multiple of 4;
+ *   void dl_stats_hook(u32 (*cb)(u32 tag, u32 a, u32 b));   the runtime's feed of the DSP stats pages (P8d): dl_tick calls it for every reply whose
+ *       acknowledgement slot holds a page of the stats window (tag magic DL_STATS_MAGIC, src/dsp/dsp-link.inc). Set by the runtime while the counters run and cleared when they stop or their owner is gone (with stats off the slot holds stock data); off costs one pointer test per block.
+ * dst_l2 is a byte address in window 0 of the DSP: the reserved area (_dl_area; DL_AREA_BYTES - DL_SLOT_WORDS * 4 long) or the slot block of the hook stubs (DL_SLOT_WORDS words directly
+ * below _dl_area, which a write may not leave), 4-aligned; len is a multiple of 4;
  * buf must stay valid until the state is DL_DONE or DL_ERROR. DL_DONE means the DSP has taken every chunk, has the bytes
  * in L2 and has invalidated its instruction caches. */
+
+#include <stdint.h>
+
+/* The opaque handle types of the service imports (sdk/sdk.toml [handle]); <dk/gen/imports.h> is not included: it also declares the old import names with the SDK's integer types. */
+typedef struct dk_module_ctx dk_module_ctx;
+typedef struct dk_dsp_link dk_dsp_link;
 
 #include "dl-limits.h"
 
@@ -39,7 +48,11 @@ typedef unsigned char u8;
 #define DL_ACK_OFF 0x60u
 #define DL_DG_MAGIC 0xD1A6u /* low half of diagnostic word 0; the high half is the word count */
 #define DL_DG_WORDS 32u
-#define DL_AREA_BYTES DL_AREA_MAX_BYTES /* the largest area the 17-bit offset reaches (generated, sdk.toml); the DSP knows the real size (status 3) */
+#define DL_STATS_MAGIC                                                                             \
+    0x57A7u /* low half of the tag word of a stats page in the acknowledgement slot */
+/* The largest area the 17-bit offset reaches (generated, sdk.toml); the DSP knows the real size (status 3). */
+#define DL_AREA_BYTES DL_AREA_MAX_BYTES
+/* DL_SLOT_WORDS (generated, sdk.toml [dsp.slots]): window 0 words 0 to DL_SLOT_WORDS - 1 are the slot block, the next word is the first word of the area. */
 #define DL_WINDOW 12u
 #define DL_STALL_FRAMES 900u /* 0.6 s without progress */
 #define DL_END_FRAMES 6u
@@ -72,7 +85,7 @@ typedef struct DlLink {
     u32 dst_off; /* destination, words from the start of _dl_area */
     u32 nwords;
     u32 xid;
-    u32 cap;     /* payload words per chunk (from the frame geometry) */
+    u32 cap; /* payload words per chunk (from the frame geometry) */
     u32 nchunks;
     u32 acked;
     u32 next;
@@ -84,17 +97,21 @@ typedef struct DlLink {
     u32 ending;
     u32 dirty;
     u32 win; /* the window of the transfer (appended: the order of the fields above is read by tests) */
-    u32 pad[2]; /* 80 bytes: the state fills whole 16-byte cache lines, no code shares a line it writes to (flush check) */
+    u32 pad
+        [2]; /* 80 bytes: the state fills whole 16-byte cache lines, no code shares a line it writes to (flush check) */
 } DlLink;
 
 DlLink dl_link __attribute__((aligned(16)));
 
-/* The per-block callback of a probe module (dl_set_tick_cb); 0 = none. */
+/* The per-block callback of a probe module (dk_dsp_link_set_tick); 0 = none. */
 static void (*volatile dl_tick_cb)(const volatile u16 *rec);
 
-void dl_set_tick_cb(void (*cb)(const volatile u16 *rec))
+/* The runtime's feed of the stats pages (dl_stats_hook); 0 = none. */
+static u32 (*volatile dl_stats_cb)(u32 tag, u32 a, u32 b);
+
+void dl_stats_hook(u32 (*cb)(u32, u32, u32))
 {
-    dl_tick_cb = cb;
+    dl_stats_cb = cb;
 }
 
 void dl_tick_cb_drop(u32 lo, u32 hi)
@@ -105,8 +122,10 @@ void dl_tick_cb_drop(u32 lo, u32 hi)
 }
 
 extern char _dl_area[]; /* the DSP object's reserved area (a DSP address) */
-extern volatile u32 dl_tx_lit; /* the literal of the driver's `lea tx_queue,a0`: the queue's address */
-extern volatile u32 dl_rec_lit; /* the literal of the handler's first `pea`: the address of the reply record copy (dl_diag) */
+extern volatile u32
+    dl_tx_lit; /* the literal of the driver's `lea tx_queue,a0`: the queue's address */
+extern volatile u32
+    dl_rec_lit; /* the literal of the handler's first `pea`: the address of the reply record copy (dl_diag) */
 
 static u32 word_at(const u8 *p)
 {
@@ -132,12 +151,18 @@ int dl_send(u32 dst_l2, const void *buf, u32 len)
     u32 st = l->state;
     if (st == DL_BUSY || st == DL_START || l->ending)
         return -1;
-    if ((dst_l2 & 3u) || (len & 3u) || len == 0u || dst_l2 < lo || dst_l2 - lo >= DL_AREA_BYTES ||
-        len > DL_AREA_BYTES - (dst_l2 - lo) || buf == 0)
+    /* window 0 is the slot block (DL_SLOT_WORDS words directly below _dl_area) and then the area; one transfer stays inside one of the two (the DSP refuses a chunk that
+     * crosses word 16) */
+    u32 slots = lo - 4u * DL_SLOT_WORDS;
+    if ((dst_l2 & 3u) || (len & 3u) || len == 0u || dst_l2 < slots || buf == 0)
+        return -2;
+    if (dst_l2 < lo ? len > lo - dst_l2
+                    : dst_l2 - lo >= DL_AREA_BYTES - 4u * DL_SLOT_WORDS ||
+                          len > DL_AREA_BYTES - 4u * DL_SLOT_WORDS - (dst_l2 - lo))
         return -2;
     l->win = 0;
     l->buf = (u32)buf;
-    l->dst_off = (dst_l2 - lo) >> 2;
+    l->dst_off = (dst_l2 - slots) >> 2;
     l->nwords = len >> 2;
     l->err = 0;
     l->acked = 0;
@@ -152,7 +177,8 @@ int dl_send_win(u32 win, u32 dst_word, const void *buf, u32 len)
     u32 st = l->state;
     if (st == DL_BUSY || st == DL_START || l->ending)
         return -1;
-    if (win == 0u || win > 2u || (len & 3u) || len == 0u || dst_word >= DL_AREA_MAX_WORDS || buf == 0)
+    if (win == 0u || win > 3u || (len & 3u) || len == 0u || dst_word >= DL_AREA_MAX_WORDS ||
+        buf == 0)
         return -2;
     l->win = win;
     l->buf = (u32)buf;
@@ -225,7 +251,8 @@ static void write_chunk(DlLink *l, u32 tx, u32 e0, u32 idx, int end)
     if (n > cap)
         n = cap;
     w0 = DL_MAGIC | (idx << 16) | (l->win << 30);
-    w1 = end ? (1u << 26) : ((l->dst_off + first) | (n << 17) | ((idx + 1u == l->nchunks) ? (1u << 25) : 0u));
+    w1 = end ? (1u << 26)
+             : ((l->dst_off + first) | (n << 17) | ((idx + 1u == l->nchunks) ? (1u << 25) : 0u));
     w1 |= l->xid << 27;
     s1 = w0 + w1;
     s2 = w0 + s1;
@@ -252,6 +279,15 @@ void dl_tick(int len, const u16 *src, int reclen, const volatile u16 *rec)
     (void)src;
     if (cb)
         cb(rec);
+    {
+        u32 (*scb)(u32, u32, u32) = dl_stats_cb;
+        if (scb && rec && rec[DL_ACK_OFF / 2u] == DL_STATS_MAGIC) {
+            /* the slot holds a tag and two window words: three 32-bit words, the low half first (like the acknowledgement's) */
+            const volatile u16 *p = rec + DL_ACK_OFF / 2u;
+            scb((u32)p[0] | ((u32)p[1] << 16), (u32)p[2] | ((u32)p[3] << 16),
+                (u32)p[4] | ((u32)p[5] << 16));
+        }
+    }
     if (st != DL_START && st != DL_BUSY && !l->ending && !l->dirty)
         return;
     tx = dl_tx_lit;
@@ -303,7 +339,8 @@ void dl_tick(int len, const u16 *src, int reclen, const volatile u16 *rec)
                 finish(l, DL_ERROR, DL_E_TIMEOUT);
             } else {
                 l->since++;
-                if (l->next > l->acked + DL_WINDOW || (l->next >= l->nchunks && (l->since % 24u) == 23u)) {
+                if (l->next > l->acked + DL_WINDOW ||
+                    (l->next >= l->nchunks && (l->since % 24u) == 23u)) {
                     l->next = l->acked;
                     l->resent++;
                 }
@@ -329,4 +366,23 @@ void dl_tick(int len, const u16 *src, int reclen, const volatile u16 *rec)
         put_word(tx, e0, 0, 0); /* no magic: the DSP sees stock frames again */
         l->dirty = 0;
     }
+}
+
+/* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ---- */
+
+static int dl_token; /* the dk_dsp_link handle: only a token */
+
+int32_t dk_dsp_link_open(dk_module_ctx *ctx, dk_dsp_link **out)
+{
+    if (!ctx || !out)
+        return -48; /* DK_E_CONTRACT */
+    *out = (dk_dsp_link *)&dl_token;
+    return 0;
+}
+
+int32_t dk_dsp_link_set_tick(dk_dsp_link *dl, uint8_t *cb)
+{
+    (void)dl;
+    dl_tick_cb = (void (*)(const volatile u16 *))cb;
+    return 0;
 }

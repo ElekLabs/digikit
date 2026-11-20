@@ -7,15 +7,18 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Measures CPU load (idle-loop counter), the DSP block time (the DSP's own cycle count in its reply) and the firmware heap, for the DIGIKIT HEALTH page (emulator only)"
+summary = "Measures CPU load (idle-loop counter), the DSP block time (the DSP's own cycle count in its reply) and the firmware heap, for the DIGIKIT HEALTH page"
 requires = ["core/runtime"]
 conflicts = []
-ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12"]
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
+# What the module does without on a firmware that lacks the anchor or hook (no DSP: no block interrupt, so no per-block window; the idle count still runs).
+optional_anchors = ["cf.link.site.reply_copy_lit", "cf.link.hook.block_isr", "cf.link.fn.block_isr"]
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.11" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # Three measurements, no DSP patch (finding 41):
 #

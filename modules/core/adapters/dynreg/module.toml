@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Reserves machine, parameter and (Digitone II) page rows that modules loaded at run time by the digikit runtime fill (emulator only)"
+summary = "Reserves machine, parameter and (Digitone II) page rows that modules loaded at run time by the digikit runtime fill"
 requires = ["core/runtime", "core/machines", "core/params"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
@@ -23,14 +23,15 @@ ports = ["dt2-1.17", "dn2-1.12"]
 #   firmware's list, rank and name tables span them; a row whose name is empty is skipped when the list is returned.
 # - `dynreg_copy` retargets the copy at the end of the machine list getter (`std::copy` of the sorted static list into the
 #   returned vector) and leaves out the types whose row is still empty.
-# - `dynreg_info` is the table of addresses and row layout that the runtime's registry reads (core/runtime, optional link).
+# - `dynreg_info` is the table of addresses and row layout that the machines and fx service files read through the image's info table (`[[info]]` below).
 #
 # Digitone II: the same, and a page row per machine: a machine with a page row is its own type for the page and draw code
 # (core/machines), the knobs are the page's columns. Eight page rows are reserved (their `machine` is a value no type has).
 #
-# Archived with hot reload (docs/plans/digikit-hot-reload.md, tag digikit-hot-reload-v1): the view hook (`dynreg_view_hook`, the
-# `cf.dynreg.msv_build` anchor) and the in-use anchors (`cf.dynreg.project`, `kit_of`, `track_type`). At boot the rows are in place
-# before the stock builder reads the list, so nothing rebuilds the view.
+# The view hook (`dynreg_view_hook`, the anchor `cf.machine.fn.view.build`) remembers the machine selection view, which caches the machine list:
+# a reload (docs/plans/extension-model.md E5) rebuilds the view's list through words 48 and 49 of `dynreg_info`. At boot the rows are in place
+# before the stock builder reads the list, so nothing rebuilds the view then. The in-use anchors of hot reload (`cf.dynreg.project`, `kit_of`,
+# `track_type`) stay archived (tag digikit-hot-reload-v1).
 #
 # The runtime fills and clears the rows. With this module the rows read as gap rows (clone of type 0, no name), which is
 # also what a project that names an unloaded run-time machine gets.
@@ -41,7 +42,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 [[gen]]
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID", "DYN_TYPES"]
+uses = ["DEVICE_ID", "DYN_TYPES", "PROFILE_*"]
 
 [[object]]
 path = "build/dynreg-dt2.dko.json"
@@ -64,6 +65,8 @@ _dr_p_row_size = "params.row_size"
 _dr_p_first = "params.first"
 _dr_p_count = "params.count"
 _dr_p_dyn0 = "params.dp0.index"
+dynreg_view_next = "hook.cf.machine.fn.view.build.tail"
+_dr_f_build = "cf.machine.fn.view.build"
 
 
 [[object]]
@@ -91,6 +94,8 @@ _dr_pg_row_size = "pages.row_size"
 _dr_pg_first = "pages.first"
 _dr_pg_dyn0 = "pages.dpg0.index"
 _dr_t_copy = "cf.machine.site.list.copy"
+dynreg_view_next = "hook.cf.machine.fn.view.build.tail"
+_dr_f_build = "cf.machine.fn.view.build"
 
 # the copy at the end of the machine list getter: `jsr copy(begin, end, dest)`, result in d0 = the end of the copy
 [[op]]
@@ -109,6 +114,16 @@ devices = ["dn2"]
 
 [[claim]]
 resource = "cf.machine.site.list.copy"
+
+# the entry of the function that fills the machine selection view's items from the getter (the view caches the list): the hook remembers the view
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.view.build"
+to = "dynreg_view_hook"
+devices = ["dt2", "dn2"]
+
+[[claim]]
+resource = "cf.machine.fn.view.build"
 
 # ---- reserved rows -------------------------------------------------------------------------------------------------------
 
@@ -629,3 +644,26 @@ name = ""
 title = ""
 machine = 0x7fffffff
 devices = ["dn2"]
+
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the machines and fx service files find it by the hash of its name (`CoreApi::info`);
+# the runtime itself does not read it.
+[[info]]
+name = "dynreg_info"
+devices = ["dt2", "dn2"]
+
+# The capacity limits this adapter reserves, as `cap_<kind>` entries of the image's info table (docs/PATCHING.md): each points at the u32 word of the table that holds the limit, so the planner knows the limit before any service file is loaded.
+[[info]]
+name = "cap_machine_rows"
+symbol = "dynreg_info + 32"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "cap_param_rows"
+symbol = "dynreg_info + 104"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "cap_page_rows"
+symbol = "dynreg_info + 216"
+devices = ["dt2", "dn2"]
+

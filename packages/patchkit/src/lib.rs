@@ -21,11 +21,16 @@ pub mod syx;
 
 pub use error::{Error, Result};
 pub mod abigen;
+pub mod addrmap;
 pub mod apply;
 pub mod bootrom;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod budget_cli;
 pub mod build;
-pub mod desc;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod coverage_cli;
 pub mod dkm;
+pub mod dkm_identity;
 pub mod dkmdsp;
 pub mod dkmsynth;
 pub mod dko;
@@ -34,16 +39,30 @@ pub mod dspscan;
 pub mod explain;
 pub mod expr;
 pub mod fit;
+pub mod fwnames;
 pub mod link;
 pub mod live;
+pub mod major3;
 pub mod modgen;
 pub mod module;
+pub mod objdiff;
+pub mod owners;
+pub mod pack;
 pub mod port;
+pub mod portfile;
 pub mod preflight;
 pub mod prim;
+pub mod protect;
 pub mod record;
+#[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
+pub mod record_rules;
+pub mod records_cli;
 pub mod register;
 pub mod sdkgen;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod services;
+pub mod svccheck;
 pub mod typed;
+pub mod uses;
 pub mod verify;
 pub mod wasm;

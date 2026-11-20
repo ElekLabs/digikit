@@ -1,5 +1,5 @@
-// test/dyn-fx-hang: an effect of the FX contract (<dk/fx.h>) that stops the SHARC on purpose. The process routine copies its input to its output, stores
-// the module step 1 (entered) and 2 (copied) in `DK_STEP` (sdk/asm/dk_trace.inc) and counts its calls in state word 0.
+// test/dyn-fx-hang: an effect of the FX contract (<dk/fx/fx.h>) that stops the SHARC on purpose. The process routine copies its input to its output, stores
+// the module step 1 (entered) and 2 (copied) in `DK_STEP` (sdk/dsp/contract/dk_trace.inc) and counts its calls in state word 0.
 // From the HANG_AFTER-th call on it stores step 3 and enters an endless loop: the core is halted for the engine, the heartbeats freeze, and the fault
 // table in the reply record holds the site (FX send), the row, the core step CALL and the module step 2: the step of the last block that ended (the block tail
 // copies `_dk_step` into the record), because the step 3 of the call that stops the core is lost with it.
@@ -40,12 +40,11 @@ _hf_spin:
     JUMP _hf_spin;
 
 .SECTION/DM seg_dmda;
-// dk_fx_desc: magic, contract, n_params, state_bytes, max_cycles_block, max_call_depth, stack_bytes.
+// dk_fx_desc: magic, contract, n_params, state_bytes, max_call_depth, stack_bytes.
 .GLOBAL _hf_desc;
 .VAR _hf_desc = DK_FX_MAGIC;
 .VAR _hf_desc1 = DK_FX_V1;
 .VAR _hf_desc2 = 1;
 .VAR _hf_desc3 = 4;
-.VAR _hf_desc4 = 220;
+.VAR _hf_desc4 = 0;
 .VAR _hf_desc5 = 0;
-.VAR _hf_desc6 = 0;

@@ -47,6 +47,13 @@ pub const CINT: u32 = EDMA_BASE + 0x1C;
 pub const INTH: u32 = EDMA_BASE + 0x20;
 pub const INTL: u32 = EDMA_BASE + 0x24;
 pub const CERR: u32 = EDMA_BASE + 0x1D;
+/// Enable request registers (RM 19.4.3 p.370-371): ERQH is channels 32..63 at +0x08, ERQL channels 0..31 at +0x0C.
+pub const ERQH: u32 = EDMA_BASE + 0x08;
+pub const ERQL: u32 = EDMA_BASE + 0x0C;
+/// Error status (RM 19.4.2 p.369), error and interrupt latches (p.380-383).
+pub const ES: u32 = EDMA_BASE + 0x04;
+pub const ERRH: u32 = EDMA_BASE + 0x28;
+pub const ERRL: u32 = EDMA_BASE + 0x2C;
 pub const SSRT: u32 = EDMA_BASE + 0x1E;
 pub const CDNE: u32 = EDMA_BASE + 0x1F;
 
@@ -347,5 +354,526 @@ impl TxChannel {
         self.bytes = r.u64()?;
         self.transfers = r.u64()?;
         Ok(())
+    }
+}
+
+/// EDMA_ES bits (RM Table 19-4 p.369). Bus errors (SBE, DBE) and configuration errors are different bits: an access that no slave answers
+/// is a bus error, a misaligned address or offset is a configuration error.
+pub mod es {
+    pub const VLD: u32 = 1 << 31;
+    pub const SAE: u32 = 1 << 7;
+    pub const SOE: u32 = 1 << 6;
+    pub const DAE: u32 = 1 << 5;
+    pub const DOE: u32 = 1 << 4;
+    pub const NCE: u32 = 1 << 3;
+    pub const SGE: u32 = 1 << 2;
+    pub const SBE: u32 = 1 << 1;
+    pub const DBE: u32 = 1 << 0;
+}
+
+/// Transfer size in bytes of a TCDn_ATTR SSIZE/DSIZE code (RM Table 19-21 p.385): 0 is 8-bit, 1 16-bit, 2 32-bit, 4 16-byte. The other
+/// codes are reserved and cause a configuration error.
+pub fn transfer_size(code: u16) -> Option<u32> {
+    match code & 7 {
+        0 => Some(1),
+        1 => Some(2),
+        2 => Some(4),
+        4 => Some(16),
+        _ => None,
+    }
+}
+
+/// Guest memory as a software-started transfer sees it: one byte at a time, `None`/`false` when no slave answers (a bus error).
+pub trait SoftBus {
+    fn read_byte(&mut self, addr: u32) -> Option<u8>;
+    fn write_byte(&mut self, addr: u32, value: u8) -> bool;
+}
+
+/// The descriptor fields a software-started transfer needs, raw as the guest wrote them (`citer`, `biter` keep their E_LINK bit).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SoftTcd {
+    pub saddr: u32,
+    pub attr: u16,
+    pub soff: i16,
+    pub nbytes: u32,
+    pub slast: i32,
+    pub daddr: u32,
+    pub citer: u16,
+    pub doff: i16,
+    /// DLAST_SGA: an offset added to the destination, or with E_SG the address of the next descriptor.
+    pub dlast_sga: u32,
+    pub biter: u16,
+    pub csr: u16,
+}
+
+/// What a software start did, for the owner to write back.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SoftOutcome {
+    /// The channel stopped with an error: `es` has the error bits (the owner adds VLD and ERRCHN). The descriptor keeps the state at the
+    /// point of the fault (RM p.368): current addresses and iteration count, no DONE.
+    Fault {
+        es: u32,
+        saddr: u32,
+        daddr: u32,
+        citer: u16,
+    },
+    /// The major loop finished. `next` is the descriptor loaded when E_SG is set (it replaces the channel's TCD, so `saddr`, `daddr`,
+    /// `citer` and `csr` are only for the case without it). `interrupt` asks for the channel's INTH/INTL bit, `clear_request` for
+    /// its ERQ bit to clear (D_REQ). `es` is a configuration error found at major loop completion (an unaligned scatter/gather address):
+    /// the data moved, the descriptor was not loaded.
+    Done {
+        saddr: u32,
+        daddr: u32,
+        citer: u16,
+        csr: u16,
+        next: Option<[u8; 32]>,
+        interrupt: bool,
+        clear_request: bool,
+        es: u32,
+    },
+}
+
+/// Most bytes a software-started transfer may move in one call.
+pub const MAX_SOFT_BYTES: u64 = 1 << 26;
+
+/// Runs a software-started (SSRT) transfer whole: the model has no bus contention. Checks the configuration as RM 19.4.2 lists it (reserved
+/// transfer sizes, alignment of addresses and offsets, NBYTES a multiple of both sizes), then moves `nbytes` per minor loop for the
+/// iteration count. NBYTES = 0 is a 4 GiB transfer (RM p.386), above `MAX_SOFT_BYTES`: refused with NCE. The major loop adds SLAST to the
+/// source and, without E_SG, DLAST_SGA to the destination; with E_SG, DLAST_SGA is the address of the next descriptor (32-byte aligned,
+/// RM p.388) and is read from memory.
+pub fn software_start(t: &SoftTcd, bus: &mut impl SoftBus) -> SoftOutcome {
+    let count_mask = if t.citer & 0x8000 != 0 { 0x1ff } else { 0x7fff };
+    let loops = u32::from(t.citer & count_mask);
+    let config = |es: u32| SoftOutcome::Fault {
+        es,
+        saddr: t.saddr,
+        daddr: t.daddr,
+        citer: t.citer,
+    };
+    // Every configuration error that applies is reported together (RM 19.4.2 p.366-367, p.370).
+    let mut bits = 0;
+    // CITER = 0, or CITER[E_LINK] != BITER[E_LINK] (p.370).
+    if loops == 0 || (t.citer ^ t.biter) & 0x8000 != 0 {
+        bits |= es::NCE;
+    }
+    let ssize = transfer_size(t.attr >> 8);
+    let dsize = transfer_size(t.attr);
+    // A reserved size code is a configuration error; the manual names no bit, so it is the address error of its side.
+    if ssize.is_none() {
+        bits |= es::SAE;
+    }
+    if dsize.is_none() {
+        bits |= es::DAE;
+    }
+    let nbytes = if t.nbytes == 0 {
+        1u64 << 32
+    } else {
+        u64::from(t.nbytes)
+    };
+    if let (Some(ssize), Some(dsize)) = (ssize, dsize) {
+        if !nbytes.is_multiple_of(u64::from(ssize)) || !nbytes.is_multiple_of(u64::from(dsize)) {
+            bits |= es::NCE;
+        }
+        if !t.saddr.is_multiple_of(ssize) {
+            bits |= es::SAE;
+        }
+        if !(t.soff.unsigned_abs() as u32).is_multiple_of(ssize) {
+            bits |= es::SOE;
+        }
+        if !t.daddr.is_multiple_of(dsize) {
+            bits |= es::DAE;
+        }
+        if !(t.doff.unsigned_abs() as u32).is_multiple_of(dsize) {
+            bits |= es::DOE;
+        }
+    }
+    // The model has no bus contention and runs the transfer inside one host call, so a transfer above MAX_SOFT_BYTES (NBYTES = 0 is
+    // 4 GiB) is refused as an NBYTES/CITER configuration error instead of hanging the host: nothing moves, the TCD is unchanged. No
+    // firmware transfer is near this size (the largest is a few KiB).
+    if nbytes.saturating_mul(u64::from(loops)) > MAX_SOFT_BYTES {
+        bits |= es::NCE;
+    }
+    if bits != 0 {
+        return config(bits);
+    }
+    let (Some(ssize), Some(dsize)) = (ssize, dsize) else {
+        return config(es::SAE);
+    };
+    let (mut src, mut dst) = (t.saddr, t.daddr);
+    // A chunk is the larger transfer size: whole elements on both sides.
+    let chunk = ssize.max(dsize);
+    let mut buf = [0u8; 16];
+    for done in 0..loops {
+        let fault = |es: u32, src: u32, dst: u32| SoftOutcome::Fault {
+            es,
+            saddr: src,
+            daddr: dst,
+            citer: (t.citer & !count_mask) | (loops - done) as u16,
+        };
+        let mut left = nbytes;
+        while left > 0 {
+            for i in 0..chunk / ssize {
+                for k in 0..ssize {
+                    match bus.read_byte(src.wrapping_add(k)) {
+                        Some(v) => buf[(i * ssize + k) as usize] = v,
+                        None => return fault(es::SBE, src, dst),
+                    }
+                }
+                src = src.wrapping_add_signed(i32::from(t.soff));
+            }
+            for i in 0..chunk / dsize {
+                for k in 0..dsize {
+                    if !bus.write_byte(dst.wrapping_add(k), buf[(i * dsize + k) as usize]) {
+                        return fault(es::DBE, src, dst);
+                    }
+                }
+                dst = dst.wrapping_add_signed(i32::from(t.doff));
+            }
+            left -= u64::from(chunk);
+        }
+    }
+    let biter_count = u32::from(t.biter & if t.biter & 0x8000 != 0 { 0x1ff } else { 0x7fff });
+    let interrupt = t.csr & CSR_INT_MAJOR != 0 || (t.csr & CSR_INT_HALF != 0 && biter_count >= 2);
+    let clear_request = t.csr & CSR_D_REQ != 0;
+    let csr = (t.csr & !(CSR_START | CSR_ACTIVE)) | CSR_DONE;
+    src = src.wrapping_add_signed(t.slast);
+    let mut outcome = SoftOutcome::Done {
+        saddr: src,
+        daddr: dst,
+        citer: t.biter,
+        csr,
+        next: None,
+        interrupt,
+        clear_request,
+        es: 0,
+    };
+    if t.csr & CSR_E_SG == 0 {
+        if let SoftOutcome::Done { daddr, .. } = &mut outcome {
+            *daddr = dst.wrapping_add_signed(t.dlast_sga as i32);
+        }
+        return outcome;
+    }
+    if !t.dlast_sga.is_multiple_of(32) {
+        if let SoftOutcome::Done { es, .. } = &mut outcome {
+            *es = es::SGE;
+        }
+        return outcome;
+    }
+    let mut raw = [0u8; 32];
+    for (i, byte) in raw.iter_mut().enumerate() {
+        match bus.read_byte(t.dlast_sga.wrapping_add(i as u32)) {
+            Some(v) => *byte = v,
+            None => {
+                return SoftOutcome::Fault {
+                    es: es::SBE,
+                    saddr: src,
+                    daddr: dst,
+                    citer: t.biter,
+                };
+            }
+        }
+    }
+    if let SoftOutcome::Done { next, .. } = &mut outcome {
+        *next = Some(raw);
+    }
+    outcome
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 256 bytes of memory at 0x1000; every other address is a bus error.
+    struct Mem(Vec<u8>);
+
+    impl SoftBus for Mem {
+        fn read_byte(&mut self, addr: u32) -> Option<u8> {
+            self.0.get(addr.checked_sub(0x1000)? as usize).copied()
+        }
+        fn write_byte(&mut self, addr: u32, value: u8) -> bool {
+            match addr
+                .checked_sub(0x1000)
+                .and_then(|a| self.0.get_mut(a as usize))
+            {
+                Some(b) => {
+                    *b = value;
+                    true
+                }
+                None => false,
+            }
+        }
+    }
+
+    fn mem() -> Mem {
+        Mem((0..=255).collect())
+    }
+
+    /// 2 loops of 8 bytes, 32-bit elements, 0x1000 to 0x1080.
+    fn tcd() -> SoftTcd {
+        SoftTcd {
+            saddr: 0x1000,
+            attr: 0x0202,
+            soff: 4,
+            nbytes: 8,
+            slast: -16,
+            daddr: 0x1080,
+            citer: 2,
+            doff: 4,
+            dlast_sga: 0,
+            biter: 2,
+            csr: 0,
+        }
+    }
+
+    #[test]
+    fn an_unanswered_access_is_a_bus_error_with_the_tcd_at_the_fault_point() {
+        let mut m = mem();
+        let t = SoftTcd {
+            daddr: 0x10fc,
+            ..tcd()
+        };
+        // The second 32-bit write of the first loop leaves the mapped bytes: DBE (bit 0), not the alignment error DAE.
+        assert_eq!(
+            software_start(&t, &mut m),
+            SoftOutcome::Fault {
+                es: es::DBE,
+                saddr: 0x1008,
+                daddr: 0x1100,
+                citer: 2
+            }
+        );
+        let t = SoftTcd {
+            saddr: 0x2000,
+            ..tcd()
+        };
+        assert_eq!(
+            software_start(&t, &mut m),
+            SoftOutcome::Fault {
+                es: es::SBE,
+                saddr: 0x2000,
+                daddr: 0x1080,
+                citer: 2
+            }
+        );
+        // NBYTES = 0 is a 4 GiB transfer: refused at once (NCE, nothing moves), even with SOFF = DOFF = 0 in mapped memory.
+        let before = m.0.clone();
+        let t = SoftTcd {
+            nbytes: 0,
+            soff: 0,
+            doff: 0,
+            ..tcd()
+        };
+        let start = std::time::Instant::now();
+        assert!(matches!(
+            software_start(&t, &mut m),
+            SoftOutcome::Fault { es: es::NCE, .. }
+        ));
+        assert!(start.elapsed().as_secs() < 1);
+        assert_eq!(m.0, before);
+    }
+
+    #[test]
+    fn every_configuration_error_that_applies_is_reported() {
+        let mut m = mem();
+        let run = |t: SoftTcd, m: &mut Mem| match software_start(&t, m) {
+            SoftOutcome::Fault { es, .. } => es,
+            other => panic!("{other:?}"),
+        };
+        // CITER = 0 and an E_LINK mismatch are NBYTES/CITER errors (RM p.370).
+        assert_eq!(run(SoftTcd { citer: 0, ..tcd() }, &mut m), es::NCE);
+        assert_eq!(
+            run(
+                SoftTcd {
+                    citer: 0x8002,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::NCE
+        );
+        // A misaligned address and offset on the same side are both reported.
+        assert_eq!(
+            run(
+                SoftTcd {
+                    saddr: 0x1002,
+                    soff: 2,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::SAE | es::SOE
+        );
+        assert_eq!(
+            run(
+                SoftTcd {
+                    daddr: 0x1081,
+                    doff: 1,
+                    nbytes: 6,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::DAE | es::DOE | es::NCE
+        );
+        assert_eq!(
+            run(
+                SoftTcd {
+                    attr: 0x0303,
+                    ..tcd()
+                },
+                &mut m
+            ),
+            es::SAE | es::DAE
+        );
+    }
+
+    #[test]
+    fn configuration_errors_are_recorded_and_move_nothing() {
+        let before = mem().0;
+        let cases = [
+            (
+                SoftTcd {
+                    attr: 0x0302,
+                    ..tcd()
+                },
+                es::SAE,
+            ), // reserved SSIZE 3
+            (
+                SoftTcd {
+                    attr: 0x0205,
+                    ..tcd()
+                },
+                es::DAE,
+            ), // reserved DSIZE 5
+            (SoftTcd { nbytes: 6, ..tcd() }, es::NCE),
+            (
+                SoftTcd {
+                    saddr: 0x1002,
+                    ..tcd()
+                },
+                es::SAE,
+            ),
+            (SoftTcd { soff: 2, ..tcd() }, es::SOE),
+            (
+                SoftTcd {
+                    daddr: 0x1082,
+                    ..tcd()
+                },
+                es::DAE,
+            ),
+            (SoftTcd { doff: 6, ..tcd() }, es::DOE),
+        ];
+        for (t, want) in cases {
+            let mut m = mem();
+            let SoftOutcome::Fault {
+                es,
+                saddr,
+                daddr,
+                citer,
+            } = software_start(&t, &mut m)
+            else {
+                panic!("{t:?} must fault");
+            };
+            assert_eq!(es, want, "{t:?}");
+            assert_eq!((saddr, daddr, citer), (t.saddr, t.daddr, t.citer));
+            assert_eq!(m.0, before);
+        }
+        // 16-byte elements and unequal sizes are legal.
+        let mut m = mem();
+        let t = SoftTcd {
+            attr: 0x0401,
+            nbytes: 16,
+            soff: 16,
+            doff: 2,
+            citer: 1,
+            biter: 1,
+            slast: 0,
+            ..tcd()
+        };
+        assert!(matches!(
+            software_start(&t, &mut m),
+            SoftOutcome::Done { .. }
+        ));
+        assert_eq!(m.0[0x80..0x84], [0, 1, 2, 3]);
+        assert_eq!(m.0[0x8e..0x90], [14, 15]);
+    }
+
+    #[test]
+    fn the_major_loop_ends_with_interrupt_request_clear_and_descriptor_load() {
+        // Plain end: SLAST and DLAST_SGA are address offsets; INT_HALF needs BITER >= 2.
+        let mut m = mem();
+        let t = SoftTcd {
+            dlast_sga: 0x20,
+            csr: CSR_START | CSR_D_REQ | CSR_INT_HALF,
+            ..tcd()
+        };
+        let SoftOutcome::Done {
+            saddr,
+            daddr,
+            citer,
+            csr,
+            next,
+            interrupt,
+            clear_request,
+            es,
+        } = software_start(&t, &mut m)
+        else {
+            panic!("done");
+        };
+        assert_eq!((saddr, daddr, citer), (0x1000, 0x1080 + 16 + 0x20, 2));
+        assert_eq!(csr, CSR_D_REQ | CSR_INT_HALF | CSR_DONE);
+        assert!(next.is_none() && interrupt && clear_request);
+        assert_eq!(es, 0);
+        assert_eq!(m.0[0x80..0x90], (0..16).collect::<Vec<u8>>()[..]);
+        let t = SoftTcd {
+            csr: CSR_INT_HALF,
+            biter: 1,
+            citer: 1,
+            ..tcd()
+        };
+        let SoftOutcome::Done { interrupt, .. } = software_start(&t, &mut mem()) else {
+            panic!("done");
+        };
+        assert!(!interrupt, "no half-way point with one iteration");
+        // E_SG: DLAST_SGA names the next descriptor; DADDR is not adjusted.
+        let t = SoftTcd {
+            dlast_sga: 0x1040,
+            csr: CSR_E_SG | CSR_INT_MAJOR,
+            ..tcd()
+        };
+        let SoftOutcome::Done {
+            daddr,
+            next,
+            interrupt,
+            ..
+        } = software_start(&t, &mut m)
+        else {
+            panic!("done");
+        };
+        assert_eq!(daddr, 0x1090);
+        assert_eq!(next.unwrap()[..4], [0x40, 0x41, 0x42, 0x43]);
+        assert!(interrupt);
+        // An unaligned or unreadable descriptor address is an error.
+        let t = SoftTcd {
+            dlast_sga: 0x1044,
+            csr: CSR_E_SG,
+            ..tcd()
+        };
+        let SoftOutcome::Done { es, next, .. } = software_start(&t, &mut m) else {
+            panic!("done");
+        };
+        assert_eq!((es, next), (self::es::SGE, None));
+        let t = SoftTcd {
+            dlast_sga: 0x3000,
+            csr: CSR_E_SG,
+            ..tcd()
+        };
+        assert!(matches!(
+            software_start(&t, &mut m),
+            SoftOutcome::Fault {
+                es: self::es::SBE,
+                ..
+            }
+        ));
     }
 }

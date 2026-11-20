@@ -1,11 +1,11 @@
-/* The timers behind dk_ui_tick (<dk/ui.h>): a small table and its due check, with no firmware and no runtime call, so the host can test it
+/* The timers behind dk_ui_tick (<dk/platform/ui.h>): a small table and its due check, with no firmware and no runtime call, so the host can test it
    (modules/core/adapters/ui/host/tests/tick.rs). ui.c owns the table, feeds it the runtime's block clock and calls `ui_ticks_run` from its
    one function of dkrt_poll_add. Times are counted in clock units: `per_s` units make a second (blocks 1500, or UI-loop passes 120 when the
    runtime has no block clock). A period is rounded up to whole units and is at least one. The clock may wrap. */
 #ifndef DK_UI_TICK_H
 #define DK_UI_TICK_H
 #include <stdint.h>
-#include <dk/ui.h>
+#include <dk/platform/ui.h>
 
 #define UI_TICKS 4u
 /* Longest period; a longer one is cut. */
@@ -14,6 +14,7 @@
 typedef struct ui_tick {
     dk_ui_tick_fn *fn; /* 0: free */
     void *ctx;
+    uintptr_t owner; /* the module that set it: its timers go when it unloads */
     uint32_t ms;
     uint32_t last; /* clock value of the last call, or of the start */
 } ui_tick;
@@ -32,8 +33,9 @@ static inline uint32_t ui_ticks_active(const ui_ticks *ts)
 }
 
 /* Set, change or remove the timer of (fn, ctx): `ms` 0 removes it (0 even when there is none). A new or changed timer first fires one period
-   after `now`. -1 when fn is 0 or the table is full. */
-static inline int ui_ticks_set(ui_ticks *ts, dk_ui_tick_fn *fn, void *ctx, uint32_t ms, uint32_t now)
+   after `now`. A new timer belongs to `owner` (a changed one keeps its owner). -1 when fn is 0 or the table is full. */
+static inline int ui_ticks_set(ui_ticks *ts, uintptr_t owner, dk_ui_tick_fn *fn, void *ctx,
+                               uint32_t ms, uint32_t now)
 {
     uint32_t i;
     ui_tick *free_slot = 0;
@@ -61,9 +63,22 @@ static inline int ui_ticks_set(ui_ticks *ts, dk_ui_tick_fn *fn, void *ctx, uint3
         return -1;
     free_slot->fn = fn;
     free_slot->ctx = ctx;
+    free_slot->owner = owner;
     free_slot->ms = ms;
     free_slot->last = now;
     return 0;
+}
+
+/* Remove every timer of `owner` (the module unloads). Returns how many were removed. */
+static inline uint32_t ui_ticks_remove_owner(ui_ticks *ts, uintptr_t owner)
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < UI_TICKS; i++)
+        if (ts->t[i].fn && ts->t[i].owner == owner) {
+            ts->t[i].fn = 0;
+            n++;
+        }
+    return n;
 }
 
 /* Call every timer that is due at clock value `now`. A callback may set or remove timers, its own included. Returns the timers left. */

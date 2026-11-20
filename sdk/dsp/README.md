@@ -1,14 +1,24 @@
 # SDK DSP kernel library
 
-Small SHARC+ kernels for module authors. A module includes the file it needs with `#include "dsp/<name>.inc"`; there is
-no shared copy at run time, the text is assembled into each module. The module build finds `sdk/` in its include path.
+Small SHARC+ kernels for module authors. A module includes the file it needs with `#include "dsp/<concept>/<name>.inc"`; there is
+no shared copy at run time, the text is assembled into each module. The module build has `sdk/` and `sdk/dsp/contract/` in its SHARC+
+include path: the files of the concept folders (`osc/`, `filter/`, `dynamics/`, `delay/`, `util/`, `sample/`) are included by their
+`dsp/<concept>/<name>.inc` path. `contract/` holds the call convention (`dsp/contract/call.inc`), the includes generated from
+`sdk/sdk.toml` (`dk_machine.inc`, `dk_fx.inc`, `dk_sample_pool.inc`) and `dk_trace.inc`; the last four are included by bare name.
 
 Two forms:
 
-- Step macros (this directory, now): one sample of a kernel, for a module's own block loop.
-- Block routines (`call.inc`, `biquad.inc`): whole-block routines on the stock C convention.
+- Step macros (the `.inc` files in the concept folders, table under Macros): one sample of a kernel, for a module's own block loop.
+- Block routines (`contract/call.inc`, `filter/biquad.inc`, `filter/svf.inc`, `filter/rbank.inc`): whole-block routines on the stock C convention.
 
 Style: [docs/sharc/style.md](../../docs/sharc/style.md), in particular section 5a (rules from the manuals).
+
+## Build rules for DSP sources
+
+- **Data sections are 32-bit words.** `.SECTION/DM name;` is assembled as `.SECTION/DM/BW name;`. The assembler (the Selache fork) lays out a plain `/DM` section in 40-bit words (five bytes for each `.VAR`, symbols counted in words). A module stores 32-bit words in memory order: four little-endian bytes for each `.VAR`, symbols counted in bytes. `/BW` gives this layout. Write `.SECTION/DM name;` as before; `patchkit` makes the change (`byte_addressed_data` in `packages/patchkit/src/build/sharc_obj.rs`). A section that already names `BW` or `DOUBLE32` is not changed.
+- **DO loops have no fast-loop bit.** The assembler can set the F1-active bit of a `DO` opcode by itself; `patchkit` turns this off. Write `(F)` on a `DO` that needs the bit.
+- **Names must be defined or declared.** A word that is not an instruction, register or label of the source is taken as an external symbol. The object build fails for a relocation against a name that is neither defined in the source nor declared with `.EXTERN` (for example a register that SHARC+ does not have). The error gives the line.
+- **`Rn = Fm` is not a plain transfer.** Write `Rn = PASS Fm` (the ALU PASS, which sets the ASTAT flags) or use R registers (`Rn = Rm` is a Ureg transfer and leaves ASTAT alone).
 
 ## Register rule for macros
 
@@ -34,21 +44,24 @@ Rules that apply to the loop around a macro (style.md 5a):
 
 | File | Macro | Instructions per sample | Notes |
 | --- | --- | --- | --- |
-| `gain.inc` | `DK_GAIN_STEP(OUT, IN1, GN)` | 1 | y = x g |
-| `gain.inc` | `DK_MIX_STEP(OUT, IA, IB, MIXV, TMP)` | 3 | y = a + m (b - a) |
-| `ramp.inc` | `DK_RAMP_SETUP(STEP, CUR, TGT, INVN)` | 2 per block | step = (target - cur) / 32 |
-| `ramp.inc` | `DK_RAMP_STEP(CUR, STEP)` | 1 | cur = cur + step |
-| `onepole.inc` | `DK_ONEPOLE_STEP(OUT, IN1, COEF, TMP)` | 3 | y = y + a (x - y) |
-| `sat.inc` | `DK_SAT_STEP(OUT, IN1, ONE, HALF, K15, TMP)` | 5 | cubic soft clip, \|y\| <= 1 |
-| `recip.inc` | `DK_RECIP(OUT, IN1, TWO, TMP)` | 7 | 1 / x, 2 Newton steps |
-| `recip.inc` | `DK_DIV(QUO, NUM, DEN, TWO, TMP, TMP2)` | 8 | n / d |
-| `recip.inc` | `DK_RSQRT(OUT, IN1, HALF, K15, TMP, TMP2)` | 16 | 1 / sqrt(x), 3 Newton steps |
-| `noise.inc` | `DK_XORSHIFT32_STEP(STATE, TMP, RIGHT)` | 6 | unsigned xorshift32; RIGHT holds -17 |
-| `noise.inc` | `DK_XORSHIFT32_LOAD_STEP(STATE, TMP)` | 7 | same recurrence, retains BD's inline shift load |
-| `oscillator.inc` | `DK_SINE_POLY_STEP(OUT, X, SQUARE, COEF, OUT_BITS, COEF_BITS)` | 16 | BD/PD polynomial on already folded phase, -0.25 to +0.25 |
-| `sample.inc` | `DK_SAMPLE_CURSOR_STEP(INDEX, FRAC, HI, LO, MASK, TMP, CARRY)` | 5 | exact split integer/fraction update for signed Q16.16 rate |
-| `sample_pcm16_fetch.inc` | `DK_SAMPLE_PCM16_FETCH_WORDS(BASE, INDEX_A, INDEX_B, WORD_A, WORD_B, ADDR, DAG)` | 8 per pair | raw packed containing words; caller-owned protection and validated scalar addressing |
-| `sample_track.inc` | `DK_STRACK_CHECK_ADMISSION`, `_CHECK_EPOCH`, `_LATCH_EPOCH`, `_ACQUIRE`, `_RELEASE`, `_FAIL_CLOSED`, `_POISON_COUNT` | as `sample_bank.inc` | the bank macros for one of the 16 track records of `<dk/sample_track.h>`: the record and the control set are addressed through two I registers instead of fixed symbols |
+| `dynamics/gain.inc` | `DK_GAIN_STEP(OUT, IN1, GN)` | 1 | y = x g |
+| `dynamics/gain.inc` | `DK_MIX_STEP(OUT, IA, IB, MIXV, TMP)` | 3 | y = a + m (b - a) |
+| `util/ramp.inc` | `DK_RAMP_SETUP(STEP, CUR, TGT, INVN)` | 2 per block | step = (target - cur) / 32 |
+| `util/ramp.inc` | `DK_RAMP_STEP(CUR, STEP)` | 1 | cur = cur + step |
+| `filter/onepole.inc` | `DK_ONEPOLE_STEP(OUT, IN1, COEF, TMP)` | 3 | y = y + a (x - y) |
+| `dynamics/sat.inc` | `DK_SAT_STEP(OUT, IN1, ONE, HALF, K15, TMP)` | 5 | cubic soft clip, \|y\| <= 1 |
+| `util/exp2.inc` | `DK_EXP2(OUT, IN1, NI, T, CR, CF)` | 20 | 2^x, degree-5 polynomial and SCALB, relative error 2.3e-7 over \|x\| <= 30; constants are inline immediates |
+| `util/tan.inc` | `DK_TAN(OUT, FN, A, B, D, CR, CF)` | 33 | tan(pi x) for x = f / fs in [0, 0.45], half-angle polynomial and DK_RECIP, relative error 1.2e-6 |
+| `filter/svf.inc` | `DK_SVF_COEFS(KA1, E1, A2D, KA2, A3D, G, K, KS, T1, T2, CR, CF)` | 20 per band, per block | the coefficient record of one TPT state-variable band from g = tan(pi f / fs), k = 1 / Q and ks = k times the output gain |
+| `util/recip.inc` | `DK_RECIP(OUT, IN1, TWO, TMP)` | 7 | 1 / x, 2 Newton steps |
+| `util/recip.inc` | `DK_DIV(QUO, NUM, DEN, TWO, TMP, TMP2)` | 8 | n / d |
+| `util/recip.inc` | `DK_RSQRT(OUT, IN1, HALF, K15, TMP, TMP2)` | 16 | 1 / sqrt(x), 3 Newton steps |
+| `osc/noise.inc` | `DK_XORSHIFT32_STEP(STATE, TMP, RIGHT)` | 6 | unsigned xorshift32; RIGHT holds -17 |
+| `osc/noise.inc` | `DK_XORSHIFT32_LOAD_STEP(STATE, TMP)` | 7 | same recurrence, retains BD's inline shift load |
+| `osc/oscillator.inc` | `DK_SINE_POLY_STEP(OUT, X, SQUARE, COEF, OUT_BITS, COEF_BITS)` | 16 | BD/PD polynomial on already folded phase, -0.25 to +0.25 |
+| `sample/float.inc` | `DK_SAMPLE_CURSOR_STEP(INDEX, FRAC, HI, LO, MASK, TMP, CARRY)` | 5 | exact split integer/fraction update for signed Q16.16 rate |
+| `sample/pcm16_fetch.inc` | `DK_SAMPLE_PCM16_FETCH_WORDS(BASE, INDEX_A, INDEX_B, WORD_A, WORD_B, ADDR, DAG)` | 8 per pair | raw packed containing words; caller-owned protection and validated scalar addressing |
+| `sample/pool.inc` | `DK_SAMPLE_POOL_CHECK_ADMISSION`, `_CHECK_EPOCH`, `_LATCH_EPOCH`, `_ACQUIRE`, `_RELEASE`, `_FAIL_CLOSED`, `_POISON_COUNT` | as `sample/bank.inc` | the bank macros for one of the 16 pool records of `<dk/sample/pool.h>`: the record and the control set are addressed through two I registers instead of fixed symbols |
 
 Each file has a header with the maths, the arguments, the instruction count and the accuracy. The float32 reference
 models are in `tools/patchkit/dsp_ref.py`; the tests are in `tests/patchkit/test_dsp_kernels.py`.
@@ -68,43 +81,45 @@ hand; the block routines (below) do this inside.
 ## Block routines
 
 A block routine processes one block of `DK_BLOCK` (32) samples and uses the stock / selcc C convention, so assembly modules
-and `selcc`-compiled C call it the same way. `call.inc` has the macros and the full contract; the points that matter:
+and `selcc`-compiled C call it the same way. `contract/call.inc` has the macros and the full contract; the points that matter:
 
 - Arguments R4, R8, R12; no result. Normal-word DM addresses (a C caller passes them as `int`; selcc's byte-address pointers do
   not match). The caller sets up M5 = 0, M6 = 1, M7 = -1, M14 = 1 as the module contract already guarantees.
-- A caller assumes R0, R1, R2, R4, R8, R12, I4, I12, MR and ASTAT are clobbered. R3, R5-R7, R9-R11, R13-R15, I0-I3, I5, M1-M3
-  and B3 are kept. I6 and I7 are restored by the routine's `RFRAME`.
+- The register classes of a module are in [REGISTERS.md](REGISTERS.md). A caller of a block routine assumes R0, R1, R2, R4, R8,
+  R12, I4, I12, MR and ASTAT are clobbered. R3, R5-R7, R9-R11, R13-R15, I0-I3, I5, M1-M3 and B3 are kept. I6 and I7 are
+  restored by the routine's `RFRAME`.
 - Stack: `DK_CALL(fn, return_label)` (`CJUMP` plus two pushes) builds the frame, `DK_ENTER(N)` reserves N save slots at `[I6 - 2]` downward, and
   `DK_LEAVE` returns and runs `RFRAME`.
 - Every call supplies a continuation label unique within the assembled object, including repeated calls to the same routine.
   The macro defines that label and pushes its relocated address minus one through an immediate Type16a store.
   The former one-argument form is unsupported; storing the PC UREG produced an invalid manual return frame.
 - Cost of a call with S saved registers: 2 S + 7 instructions on top of the work.
-- Symbols: `_dk_<name>` for assembly, `dk_<name>.` for selcc C. Include `dsp/call.inc` once, then the routine files.
+- Symbols: `_dk_<name>` for assembly, `dk_<name>.` for selcc C. Include `call.inc` (from `dsp/contract/`) once, then the routine files.
 
 `DK_CALL` uses the CJUMP ABI; the machine adapter enters a module with JUMP and a different return contract.
 A module calling a block routine must preserve its adapter-return registers I12/I13 and restore its exact entry I7.
 Entry I7 is an exclusive stack boundary: reserve space below it before constructing the CJUMP frame, so no store
-overwrites the adapter's context. The [sample-proof fixture](../../tests/fixtures/modules/sample-proof/README.md)
-contains a tested bridge for both adapters; this fixture does not define a general module-call API.
+overwrites the adapter's context. This does not define a general module-call API.
 
 | File | Routine | Instructions per sample | Per call (32 samples, with `DK_CALL`) | Notes |
 | --- | --- | --- | --- | --- |
-| `biquad.inc` | `_dk_biquad` | 5 | 203 | transposed direct form II; R12 = 7 words b0, b1, b2, a1, a2, s1, s2; in place allowed; reads only the input block |
-| `delay.inc` | `_dk_delay` | 4 | 175 | linearly interpolated delay, hardware circular ring; R12 = 4 words ring base, ring length L (>= 34), write offset w, delay d (float, 1 <= d <= L - 2); in place allowed; L1 and L2 are 0 on return |
-| `halfband.inc` | `_dk_halfband_down` | 20 per output (2 inputs) | 701 | 2x decimator, 23-tap half-band (Kaiser window), 64 inputs to 32 outputs; R12 = 2 words history ring base (32 words), offset (unchanged by a call); coefficient table 2 c_j in DM (`.SECTION/DM`); L1 is 0 on return |
-| `gain_ramp.inc` | `_dk_gain_ramp_stereo` | 7 | ceiling 254 including three argument loads | in-place gain ramp on two 32-float buffers; R12 = pair [start, step]; writes the reached gain back to pair[0] |
-| `sample.inc` | `_dk_sample_linear` | path-dependent | ceiling 1,380 including three argument loads | bounded mono float32 view; split cursor, clamped linear interpolation, zero tail and completion |
-| `sample_pcm16.inc` | `_dk_sample_pcm16_linear` | path-dependent | ceiling 2,148 including three argument loads | packed signed PCM16 view; same cursor, interpolation and completion |
-| `sample_pcm16_stereo.inc` | `_dk_sample_pcm16_stereo_linear` | path-dependent | ceiling 4,396 including three argument loads | two packed PCM16 planes, one shared cursor, separate 32-float outputs |
+| `filter/biquad.inc` | `_dk_biquad` | 5 | 203 | transposed direct form II; R12 = 7 words b0, b1, b2, a1, a2, s1, s2; in place allowed; reads only the input block |
+| `filter/svf.inc` | `_dk_svf_bp` | 6 in the band loop (6 multiplies, 6 adds) | 252 | one TPT state-variable band, bandpass with unity peak gain, added into the output block; R4 = band record of 8 words (ic1, ic2, ka1, e1, a2d, ka2, a3d), R8 = args (input block, output block), R12 unused; the band loop `_dk_svf_band` is shared with `_dk_rbank` |
+| `filter/rbank.inc` | `_dk_rbank` | 8 bands | 2,489 steady, 2,582 first block | resonator bank: 8 bandpass bands summed; R4 = state block of 104 words (zero it, or set word 0 to 0, to restart), R8 = args (input block, output block; must not overlap), R12 = 3 knob words FREQ, SPRD, Q (`DK_P_PERCENT`); FREQ 20 Hz .. 5 kHz, SPRD 0 .. 2 octaves, Q 0.7 .. 50; knobs smoothed with a 2 ms one-pole per block; output scaled by 1 / S (overlap sum at the middle band), peak gain about 1; a band above 0.45 fs is clamped to it; needs exp2.inc, tan.inc, recip.inc and svf.inc included first; tests `sdk/tests/dsp/rbank.rig.test.ts` |
+| `delay/delay.inc` | `_dk_delay` | 4 | 175 | linearly interpolated delay, hardware circular ring; R12 = 4 words ring base, ring length L (>= 34), write offset w, delay d (float, 1 <= d <= L - 2); in place allowed; L1 and L2 are 0 on return |
+| `filter/halfband.inc` | `_dk_halfband_down` | 20 per output (2 inputs) | 701 | 2x decimator, 23-tap half-band (Kaiser window), 64 inputs to 32 outputs; R12 = 2 words history ring base (32 words), offset (unchanged by a call); coefficient table 2 c_j in DM (`.SECTION/DM`); L1 is 0 on return |
+| `dynamics/gain_ramp.inc` | `_dk_gain_ramp_stereo` | 7 | ceiling 254 including three argument loads | in-place gain ramp on two 32-float buffers; R12 = pair [start, step]; writes the reached gain back to pair[0] |
+| `sample/float.inc` | `_dk_sample_linear` | path-dependent | ceiling 1,380 including three argument loads | bounded mono float32 view; split cursor, clamped linear interpolation, zero tail and completion |
+| `sample/pcm16.inc` | `_dk_sample_pcm16_linear` | path-dependent | ceiling 2,148 including three argument loads | packed signed PCM16 view; same cursor, interpolation and completion |
+| `sample/pcm16_stereo.inc` | `_dk_sample_pcm16_stereo_linear` | path-dependent | 1,625 in range, worst measured 5,152, bound 5,428 including three argument loads | two packed PCM16 planes, one shared cursor, separate 32-float outputs; one pass for both planes, hardware loop, block cut at the end or wrap frame |
 
 For the older block kernels, consult their headers and `tests/patchkit/test_dsp_kernels.py` for the distinction
 between static instruction counts and measured counts. The sample reader's measured evidence is described below.
 
 ## Numerical sample reader
 
-`sample.inc` provides numerical playback only: it does not load files, allocate sample memory or define a sample
-resource ABI. Include `dsp/call.inc` first. Pass normal-word DM addresses in R4 (source), R8 (32-float output) and
+`sample/float.inc` provides numerical playback only: it does not load files, allocate sample memory or define a sample
+resource ABI. Include `dsp/contract/call.inc` first. Pass normal-word DM addresses in R4 (source), R8 (32-float output) and
 R12 (six integer state words): `start`, exclusive `end`, `index`, `fraction`, signed Q16.16 `rate`, `done`.
 Initialize forward playback at `(start, 0)`, reverse at `(end - 1, 0)`, and clear `done`. A zero rate holds position.
 
@@ -120,13 +135,13 @@ Tests compare against an independent combined-position oracle and watch for out-
 harness measured 557–2,231 instructions across its cases, below its 2,761-instruction ceiling. These are concrete-core
 instruction counts, not hardware cycles or a speedup claim. This first implementation is sequential and has no
 anti-alias filter or boundary fades; only the PCM16 readers have a loop option (bit 1 of cursor word 5, see
-`sample_pcm16.inc`). Float32 input is a numerical view, not a decision to store
+`sample/pcm16.inc`). Float32 input is a numerical view, not a decision to store
 all transferred PCM as float32. Resource ownership and stereo playback remain separate work.
 
 
-`sample_pcm16.inc` adds `_dk_sample_pcm16_linear` (`dk_sample_pcm16_linear.` for C).
-Include `dsp/call.inc`, then `dsp/sample.inc` for its shared cursor macro, then
-`dsp/sample_pcm16.inc`. It uses the same six integer state words and calling
+`sample/pcm16.inc` adds `_dk_sample_pcm16_linear` (`dk_sample_pcm16_linear.` for C).
+Include `dsp/contract/call.inc`, then `dsp/sample/float.inc` for its shared cursor macro, then
+`dsp/sample/pcm16.inc`. It uses the same six integer state words and calling
 convention. R4 addresses immutable packed normal-word DM: frame `i` is in
 `base + floor(i/2)`, with even frames in the low 16 bits and odd frames in the
 high 16 bits. Little-endian transport bytes store each frame's low byte first.
@@ -145,35 +160,42 @@ odd boundaries, extreme rates, repeated calls, preserved registers and stack
 boundaries, guarded source reads and completion immediately after output 31.
 The ceiling above counts instructions, not hardware cycles.
 
-`sample_pcm16_stereo.inc`, included after the mono reader, composes that reader
-for two channel planes. R4 points to `[left_source, right_source]`, R8 to
+`sample/pcm16_stereo.inc` is a stand-alone kernel (it needs only `dsp/contract/call.inc`) for
+two channel planes. R4 points to `[left_source, right_source]`, R8 to
 `[left_output, right_output]`, and R12 to the same six-word cursor. Each output
-contains 32 floats. Both channels start from the same cursor; the public cursor
-advances once. Source pointers may be equal for mono-to-stereo playback. Output
-buffers must be separate; all other source, output, descriptor, cursor and stack
+contains 32 floats. Both channels share the cursor, which advances once. The result is bit-identical to running the mono reader once per
+channel. Source pointers may be equal for mono-to-stereo playback: that case reads one plane and writes both outputs.
+Output buffers must be separate; all other source, output, descriptor, cursor and stack
 ranges must be disjoint and the sources/descriptors immutable during the call.
-The wrapper uses ten local stack words; with its nested mono call, the deepest
-write is word slot 25 below entry I6 and the deepest stack pointer is slot 26. The adapters give a
-byte-alias I6 (a word is 4 bytes) and the wrapper finds its cursor copy at I6 − 44 bytes; a normal-word
-I6 is not supported (finding 111). The calling convention
-and mono reader's numerical bounds still apply. This is a correctness baseline,
-not a measured optimization or a stereo machine-output ABI. Assembled coverage is
-in `tests/patchkit/test_dsp_sample_stereo_kernels.py`; actual memory ownership and
+It computes the index, the neighbor index and the fraction once per frame for both planes and runs the
+frames in a hardware loop without range checks. A bisection over the constant block rate finds the frame where the cursor
+leaves `[start, end)`; the loop renders up to that frame, then the end rule (voice done, rest of the block zero) or the loop
+rule (wrap once by the region length, see `sample/pcm16.inc`) runs and the next segment starts. The forward neighbor at end-1 is a conditional move, not a branch.
+Each sample is one sign-extending short-word load (`SWSE`, byte address space, modifier M4 scaled by 2): once per block the
+normal-word plane bases become byte addresses (a plane whose first frame is in the NW32 DDR alias `0x10000000` to `0x17ffffff` is read at `4 * word + 0x40000000`,
+any other plane at `4 * word`, which holds for the L2 window and the L1 normal-word windows (`0x00090000` to `0x000e7fff`, data sheet tables 2 and 3), so DDR, L1 and L2 planes all work; the window at `0x04000000` is not mapped). The float arithmetic uses the multifunction
+forms, and the stores and the M4 moves ride in compute instructions. A frame costs 19 instructions (14 mono-to-stereo, one plane read; 47 and 32 before
+`SWSE`), a block that stays inside the region 747 (586) including the call, each crossing about 130 more.
+M4 is clobbered (a caller-saved register of `call.inc`).
+The routine writes 20 save slots (word slots 2 to 21 below entry I6, no nested call). The adapters give a
+byte-alias I6 (a word is 4 bytes); a normal-word I6 is not supported (finding 111). The calling convention
+and the mono reader's numerical bounds still apply. This is not a stereo machine-output ABI. Assembled coverage is
+in `tests/patchkit/test_dsp_sample_stereo_kernels.py` (including the loop option and blocks that cross several times); actual memory ownership and
 stereo routing through each device's stock processing remain adapter obligations.
 
 ## Block gain ramp and stock level
 
-The sample kernels apply no gain and no fades. `gain_ramp.inc` provides `_dk_gain_ramp_stereo` (`dk_gain_ramp_stereo.` for C)
+The sample kernels apply no gain and no fades. `dynamics/gain_ramp.inc` provides `_dk_gain_ramp_stereo` (`dk_gain_ramp_stereo.` for C)
 for that: R4 and R8 address the left and right buffers (32 floats each), R12 addresses the pair `[start, step]`. Each
 sample of both buffers is multiplied by a running gain that starts at `start` and decreases by `step` after every sample.
 Step 0 is a constant gain; `start` to 0 is an end fade. The routine writes the gain it reached (`start - 32 * step`) back
 to `pair[0]`, so the next block can continue the ramp. It does not clamp; the caller chooses the step. It needs only
-`dsp/call.inc`. `sample.inc` defines `DK_SAMPLE_STOCK_GAIN` (float32 bits of 0.4045, the DC gain of the stock one-shot
+`dsp/contract/call.inc`. `sample/float.inc` defines `DK_SAMPLE_STOCK_GAIN` (float32 bits of 0.4045, the DC gain of the stock one-shot
 interpolator, -7.86 dB); use it as `start` to match the stock level.
 
 ## Raw packed PCM16 fetch
 
-`sample_pcm16_fetch.inc` exposes only a caller-owned raw-word primitive. It reads
+`sample/pcm16_fetch.inc` exposes only a caller-owned raw-word primitive. It reads
 `BASE+floor(INDEX_A/2)` then `BASE+floor(INDEX_B/2)` as two full NW32 words, without
 selecting halves or converting/interpolating samples. Raw normal-word addressing
 is the SHARC backend implementation behind this SDK primitive; it adds no resource,
@@ -192,7 +214,7 @@ For example, after validating R7 and clamping its neighbor into R12, with R4
 holding the source base and protection already held:
 
 ```asm
-#include "dsp/sample_pcm16_fetch.inc"
+#include "dsp/sample/pcm16_fetch.inc"
 DK_SAMPLE_PCM16_FETCH_WORDS(R4, R7, R12, R8, R0, R1, I4);
 // R8/R0 now hold the two raw packed words; keep/copy them before clobbering.
 ```
@@ -212,7 +234,7 @@ and stereo block kernels are unchanged.
 
 ## Sample-bank lifecycle
 
-`sample_bank.inc` supplies small inline lifecycle operations with no storage,
+`sample/bank.inc` supplies small inline lifecycle operations with no storage,
 labels or externs. Every state address, state offset, R/I register and branch
 target is a caller operand; the caller retains control-flow order. Its include
 guard permits multiple consumers in one translation unit. It defines no sample

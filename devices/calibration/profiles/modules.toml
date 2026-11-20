@@ -1,0 +1,14 @@
+schema = "dk.calprofile/1"
+name = "modules"
+description = "The stock case with no module loaded, then one case per module that ships a calibration.toml in its own directory (the calibration modules: machines tb303, pluck, analog, shot, bd and the freqshift effect), each with only that module loaded. The machine cases put the module's machine on track 1 with SETUP (the debug module) and put a stock machine back afterwards (module_teardown); the effect case is skipped until an effect can be set up."
+warmup_s = 2
+capture_s = 5
+repeats = 3
+discover = "modules"
+teardown = { steps = "release-notes", args = { tracks = "1" } }
+module_teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "stock"
+steps = "hold-note"
+args = { tracks = "1" }
