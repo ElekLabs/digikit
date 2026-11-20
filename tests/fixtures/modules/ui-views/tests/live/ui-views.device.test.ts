@@ -136,6 +136,8 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   const fw = firmware(rt);
   await expectRuntimeReady(session);
   const tap = tapOf(rt);
+  const stackOfLength = (length: number, message: string) =>
+    pollEmulated(session, () => fw.vptrs(), (v) => v.length === length, { emulatedMs: 10_000, message });
   const stockRows = async () => {
     await tap('SETTINGS');
     const n = await fw.topMenuItems();
@@ -169,9 +171,10 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   // YES in the view opens the stock text input (another top view); NO leaves it without a call of `done`.
   await tap('YES');
   await until(rt, (r) => r.keyPresses === 1, 'the view got no key press');
-  const withInput = await fw.vptrs();
-  expect(withInput.length, 'the naming screen is one more view').toBe(withView.length + 1);
+  // core/ui pushes the naming screen after the release of YES (the screen acts on a release: pushed at once it would take the release of this press as its own YES)
+  const withInput = await stackOfLength(withView.length + 1, 'the naming screen was not pushed after the release of YES');
   expect(withInput.slice(1), 'under it the view and the stack are as before').toEqual(withView);
+  expect((await report(rt)).doneCalls, 'the release of the YES that opened the screen did not answer it').toBe(0);
   await tap('NO');
   expect(await fw.vptrs(), 'NO took the naming screen off the stack').toEqual(withView);
   expect((await report(rt)).doneCalls, 'NO on the text input calls nothing').toBe(0);
@@ -188,7 +191,9 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await tap('NO');
   const closed = await until(rt, (r) => r.closedFull === 1, 'NO in the view did not close it');
   expect(closed.fullOpen).toBe(0);
-  expect(await fw.vptrs(), 'the view left the stack').toEqual(withView.slice(1));
+  // the release of that NO went to our view, not to the SETTINGS menu below it: SETTINGS is still there
+  await stackOfLength(mainStack.length + 1, 'the view did not leave the stack, or SETTINGS left with it');
+  expect(await fw.vptrs(), 'the view left the stack and SETTINGS stayed').toEqual(withView.slice(1));
 
   // The overlay: the second row, a top view, closed by the module.
   await leave(rt);
@@ -252,8 +257,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open for the text input case');
   await tap('YES');
   await until(rt, (r) => r.keyPresses === 1, 'the view got no key press');
-  const inputUp = await fw.vptrs();
-  expect(inputUp.length, 'the naming screen is on the stack').toBe(mainStack.length + 3);
+  const inputUp = await stackOfLength(mainStack.length + 3, 'the naming screen is not on the stack');
   await unload('the unload with a view and a text input open');
   const left = await pollEmulated(session, () => fw.vptrs(), (v) => v.length === mainStack.length + 2, {
     emulatedMs: 10_000,

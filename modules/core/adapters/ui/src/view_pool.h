@@ -2,7 +2,8 @@
    life. It holds no firmware: everything that touches a firmware View goes through `ui_view_fw`, which ui.c implements and the host test fakes
    (modules/core/adapters/ui/host/tests/views.rs).
 
-   Life of a slot: FREE, then OPEN (the firmware view is on the stack), then CLOSING (a close was asked, the firmware has not removed the view yet: it only
+   Life of a slot: FREE, then OPEN (the firmware view is on the stack; OPENING first when a key callback opened it: the push waits for the key release, see
+   key_defer.h), then CLOSING (a close was asked, the firmware has not removed the view yet: it only
    flags it and a sweep removes it later), then FREE again when the firmware reports the view gone (`ui_views_gone`). A slot is not reused before that,
    because the firmware may still call draw or key of the view until the sweep.
    A handle is the slot number plus a count that changes at every reuse, so a handle that is closed already, or one that a unload closed, does nothing.
@@ -12,6 +13,7 @@
 #include <stdint.h>
 #include <dk/platform/ui.h>
 #include <dk/gen/keys.h>
+#include "key_defer.h"
 
 /* What the pool asks of the firmware. `fw` is passed back to each call. */
 typedef struct ui_view_fw {
@@ -28,7 +30,7 @@ typedef struct ui_view_fw {
     void (*invalidate)(void *fw, uint32_t view);
 } ui_view_fw;
 
-enum { UI_VIEW_FREE, UI_VIEW_OPEN, UI_VIEW_CLOSING };
+enum { UI_VIEW_FREE, UI_VIEW_OPENING, UI_VIEW_OPEN, UI_VIEW_CLOSING };
 
 typedef struct ui_view {
     uint8_t state;
@@ -41,15 +43,17 @@ typedef struct ui_view {
 typedef struct ui_views {
     ui_view v[DK_UI_VIEWS];
     const ui_view_fw *fw;
+    ui_defer *defer; /* the actions that wait for a key release, shared with the text input */
 } ui_views;
 
-void ui_views_init(ui_views *p, const ui_view_fw *fw);
+void ui_views_init(ui_views *p, const ui_view_fw *fw, ui_defer *defer);
 
-/* Open a view for `owner`. The handle (never 0), or 0 when the desc is wrong (no desc, no draw, unknown flags) or no slot is free or the firmware
+/* Open a view for `owner`. In a key callback (a press) the view is opened when the key is released: the handle is valid at once (`closed` runs if the push then
+   fails, or if the handle is closed before the push) and the slot is taken. The handle (never 0), or 0 when the desc is wrong (no desc, no draw, unknown flags) or no slot is free or the firmware
    could not make the view. */
 uintptr_t ui_views_open(ui_views *p, uintptr_t owner, const dk_ui_view_desc *d);
 
-/* Ask for the close of an open view. No effect on a handle that is closed or not valid. `closed` of the desc runs later, from ui_views_gone. */
+/* Ask for the close of an open view; in a key callback (a press) it happens when the key is released. No effect on a handle that is closed or not valid. `closed` of the desc runs later, from ui_views_gone. */
 void ui_views_close(ui_views *p, uintptr_t handle);
 
 /* The owner unloads: close each of its views and call nothing of its desc any more (not draw, key or closed). Returns how many were closed. */

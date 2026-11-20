@@ -660,13 +660,13 @@ int32_t dkrt_poll_add(uintptr_t f);
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
 void dkrt_poll_remove(uintptr_t f);
 
-/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The runtime says only that the owner is gone, and the observer ends what it holds for that owner: core/ui closes the module views of the owner, removes its SETTINGS rows, drops its `dk_ui_tick` timers and its pending text input. The code and memory of the module are still there during the call, so an observer may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. core/ui uses it to close the views, SETTINGS rows and timers of the owner. */
+/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. */
 int32_t dkrt_unload_observer_add(uintptr_t f);
 
 /* Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table. */
 void dkrt_unload_observer_remove(uintptr_t f);
 
-/* What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init` (core/ui: dk_ui_settings_row, DK_E_CONTEXT). UI task. */
+/* What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init`. UI task. */
 uint32_t dkrt_phase(void);
 
 /* The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded content module (a service file has a context too, but its record is never given out: the observers are for content modules). */

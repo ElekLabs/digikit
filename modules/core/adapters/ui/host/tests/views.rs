@@ -17,6 +17,12 @@ extern "C" {
     fn vw_poll();
     fn vw_set_key_result(r: c_int);
     fn vw_fail_push(on: c_int);
+    fn vw_set_key_mode(mode: c_int);
+    fn vw_set_self(h: usize);
+    fn vw_opened() -> usize;
+    fn vw_set_key_down(on: c_int);
+    fn vw_defer_poll();
+    fn vw_defer_pending() -> u32;
     fn vw_fail_poll(on: c_int);
     fn vw_poll_starts() -> c_int;
     fn vw_used() -> u32;
@@ -293,4 +299,157 @@ fn a_view_whose_poll_cannot_start_is_not_opened_and_its_closed_never_runs() {
         assert_ne!(open(1, 0, i as c_int), 0, "slot {i}");
     }
     assert_eq!(unsafe { vw_poll_starts() } as usize, 1 + VIEWS);
+}
+
+const PRESS: u32 = 1; // DK_UI_KEY_DOWN
+const RELEASE: u32 = 0x10; // a release event: bit 0 clear
+
+#[test]
+fn a_view_opened_in_a_key_press_is_pushed_after_the_release_which_the_old_view_takes() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    unsafe { vw_set_key_down(1) };
+    assert_eq!(
+        unsafe { vw_key(slot(a), NAMED, PRESS) },
+        0,
+        "the module did not use the key"
+    );
+    let b = unsafe { vw_opened() };
+    assert_ne!(b, 0, "the handle is given at once");
+    assert_eq!(count(PUSHES, 0), 1, "only the first view is on the stack");
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(PUSHES, 0), 1, "the key is still down");
+    // the release event goes to the view that is on top: it takes it, though the module says 0
+    unsafe { vw_set_key_mode(0) };
+    assert_eq!(unsafe { vw_key(slot(a), NAMED, RELEASE) }, 1);
+    assert_eq!(count(PUSHES, 0), 1);
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(PUSHES, 0), 2, "pushed after the release");
+    assert_eq!(unsafe { vw_defer_pending() }, 0);
+    unsafe { vw_draw(slot(b)) };
+    assert_eq!(count(DRAWS, 5), 1, "and drawn");
+}
+
+#[test]
+fn a_view_that_waits_for_its_push_is_not_drawn_or_polled_and_takes_no_key() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    unsafe { vw_key(slot(a), NAMED, PRESS) };
+    let b = unsafe { vw_opened() };
+    unsafe { vw_draw(slot(b)) };
+    assert_eq!(count(DRAWS, 5), 0);
+    assert_eq!(unsafe { vw_key(slot(b), NAMED, PRESS) }, 0);
+    unsafe { vw_poll() };
+    assert_eq!(count(INVALIDATES, 0), 1, "only the open view is redrawn");
+    assert_eq!(unsafe { vw_used() }, 2, "but its slot is taken");
+}
+
+#[test]
+fn closing_a_view_in_a_key_press_waits_for_the_release_too() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_self(a) };
+    unsafe { vw_set_key_mode(2) };
+    unsafe { vw_set_key_down(1) };
+    assert_eq!(unsafe { vw_key(slot(a), NAMED, PRESS) }, 0);
+    assert_eq!(count(CLOSES, 0), 0, "the view stays on the stack");
+    unsafe { vw_set_key_mode(0) };
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(CLOSES, 0), 0, "key down");
+    assert_eq!(
+        unsafe { vw_key(slot(a), NAMED, RELEASE) },
+        1,
+        "the release does not reach the view below"
+    );
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(CLOSES, 0), 1);
+    assert_eq!(unsafe { vw_close_owner(1) }, 0);
+}
+
+#[test]
+fn a_close_outside_a_key_press_is_at_once() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_close(a) };
+    assert_eq!(count(CLOSES, 0), 1);
+}
+
+#[test]
+fn without_a_release_event_the_key_state_ends_the_wait() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    unsafe { vw_set_key_down(1) };
+    unsafe { vw_key(slot(a), NAMED, PRESS) };
+    unsafe { vw_defer_poll() };
+    unsafe { vw_set_key_down(0) };
+    unsafe { vw_defer_poll() };
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(PUSHES, 0), 1, "the key must stay up for three polls");
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(PUSHES, 0), 2);
+}
+
+#[test]
+fn closing_a_handle_that_waits_for_its_push_ends_it_with_closed_and_no_push() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    unsafe { vw_key(slot(a), NAMED, PRESS) };
+    let b = unsafe { vw_opened() };
+    unsafe { vw_close(b) };
+    assert_eq!(count(CLOSED, 5), 1);
+    assert_eq!(unsafe { vw_defer_pending() }, 0);
+    unsafe { vw_key(slot(a), NAMED, RELEASE) };
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(PUSHES, 0), 1, "nothing was pushed");
+    assert_eq!(unsafe { vw_used() }, 1);
+}
+
+#[test]
+fn an_owner_that_unloads_while_its_view_waits_for_the_push_drops_it() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    unsafe { vw_key(slot(a), NAMED, PRESS) };
+    assert_eq!(unsafe { vw_defer_pending() }, 1);
+    unsafe { vw_close_owner(1) };
+    assert_eq!(unsafe { vw_defer_pending() }, 0);
+    unsafe { vw_set_key_mode(0) };
+    unsafe { vw_key(slot(a), NAMED, RELEASE) };
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(PUSHES, 0), 1, "no push for the unloaded owner");
+    assert_eq!(count(CLOSED, 5), 0, "and nothing of its code is called");
+    unsafe { vw_gone(slot(a)) };
+    assert_eq!(unsafe { vw_used() }, 0, "all slots free");
+}
+
+#[test]
+fn a_deferred_push_that_fails_tells_the_module_with_closed() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    unsafe { vw_key(slot(a), NAMED, PRESS) };
+    unsafe { vw_fail_push(1) };
+    unsafe { vw_key(slot(a), NAMED, RELEASE) };
+    unsafe { vw_defer_poll() };
+    assert_eq!(count(CLOSED, 5), 1);
+    assert_eq!(unsafe { vw_used() }, 1, "the slot is free again");
+}
+
+#[test]
+fn a_full_queue_refuses_the_open_and_takes_no_slot() {
+    let _g = fresh();
+    let a = open(1, 0, 0);
+    unsafe { vw_set_key_mode(1) };
+    // the pool has room for four views: the first is open, the key opens three more, then the pool is full, not the queue
+    for _ in 0..3 {
+        unsafe { vw_key(slot(a), NAMED, PRESS) };
+        assert_ne!(unsafe { vw_opened() }, 0);
+    }
+    unsafe { vw_key(slot(a), NAMED, PRESS) };
+    assert_eq!(unsafe { vw_opened() }, 0, "no slot left");
+    assert_eq!(unsafe { vw_used() }, VIEWS as u32);
 }

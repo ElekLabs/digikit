@@ -7,6 +7,11 @@
 #define TAGS 8
 
 static ui_views pool;
+static ui_defer defer;
+static int defer_starts, key_is_down;
+static int
+    key_mode; /* what the key callback does on a press: 0 nothing, 1 open a view (tag 5), 2 close the view `self_handle` */
+static uintptr_t self_handle, opened_handle;
 static ui_view_fw fake;
 static int draws[TAGS], keys[TAGS], closed[TAGS];
 static uint32_t last_key[TAGS], last_flags[TAGS];
@@ -23,6 +28,13 @@ static uint32_t last_canvas_w;
 dk_key ui_key_of_code(uint32_t code)
 {
     return code == 100 ? 1 : code == 101 ? 2 : DK_KEY_NONE;
+}
+
+static int32_t defer_start(void *ctx)
+{
+    (void)ctx;
+    defer_starts++;
+    return 0;
 }
 
 static int32_t f_poll_start(void *fw)
@@ -61,12 +73,22 @@ static void d_draw(void *arg, const dk_canvas *c)
     draws[(intptr_t)arg]++;
     last_canvas_w = c->width;
 }
+static void d_closed(void *arg);
+static void d_draw(void *arg, const dk_canvas *c);
 static int32_t d_key(void *arg, dk_key key, uint32_t flags)
 {
     int t = (int)(intptr_t)arg;
     keys[t]++;
     last_key[t] = key;
     last_flags[t] = flags;
+    if (flags & DK_UI_KEY_DOWN) {
+        if (key_mode == 1) {
+            dk_ui_view_desc nd = {0, d_draw, 0, d_closed, (void *)(intptr_t)5};
+            opened_handle = ui_views_open(&pool, 1, &nd);
+        } else if (key_mode == 2) {
+            ui_views_close(&pool, self_handle);
+        }
+    }
     return key_result;
 }
 static dk_ui_view_desc reopen_desc;
@@ -95,7 +117,11 @@ void vw_reset(void)
     fake.close = f_close;
     fake.invalidate = f_invalidate;
     memset(&pool, 0, sizeof pool);
-    ui_views_init(&pool, &fake);
+    memset(&defer, 0, sizeof defer);
+    defer.start = defer_start;
+    defer_starts = key_is_down = key_mode = 0;
+    self_handle = opened_handle = 0;
+    ui_views_init(&pool, &fake, &defer);
 }
 
 /* with_key: the desc has a key function; with_closed: a closed function. tag identifies the view in the counters. */
@@ -151,6 +177,37 @@ void vw_poll(void)
 void vw_set_key_result(int r)
 {
     key_result = r;
+}
+/* the key callback of a full-screen view: mode 1 opens a view, mode 2 closes `self_handle` */
+void vw_set_key_mode(int mode)
+{
+    key_mode = mode;
+}
+void vw_set_self(uintptr_t h)
+{
+    self_handle = h;
+}
+uintptr_t vw_opened(void)
+{
+    return opened_handle;
+}
+static int is_down(void *k, uint32_t code)
+{
+    (void)k;
+    (void)code;
+    return key_is_down;
+}
+void vw_set_key_down(int on)
+{
+    key_is_down = on;
+}
+void vw_defer_poll(void)
+{
+    ui_defer_poll(&defer, is_down, 0);
+}
+uint32_t vw_defer_pending(void)
+{
+    return ui_defer_pending(&defer);
 }
 void vw_fail_poll(int on)
 {

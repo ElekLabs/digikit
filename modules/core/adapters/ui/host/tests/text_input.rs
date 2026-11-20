@@ -4,6 +4,10 @@ use std::ffi::{c_char, c_int, CStr, CString};
 
 extern "C" {
     fn ti_check(what: c_int, max_len: u32, screen_max: u32) -> i32;
+    fn ti_open_in_key(owner: usize, tag: c_int, max_len: u32, code: u32) -> i32;
+    fn ti_release(code: u32);
+    fn ti_defer_poll();
+    fn ti_defer_pending() -> u32;
     fn ti_reset();
     fn ti_set_push_result(r: c_int);
     fn ti_open(owner: usize, tag: c_int, max_len: u32) -> i32;
@@ -206,5 +210,72 @@ fn dropping_an_owner_without_an_open_input_does_nothing() {
         assert_eq!(ti_open(1, 0, 8), 0);
         yes("A");
         assert_eq!(ti_done_calls(0), 1);
+    }
+}
+
+#[test]
+fn an_input_opened_in_a_key_press_is_pushed_after_the_release() {
+    let _g = fresh();
+    unsafe {
+        assert_eq!(ti_open_in_key(1, 0, 8, 10), 0);
+        assert_eq!(
+            ti_pushes(),
+            0,
+            "the screen would take the release of the key as its YES"
+        );
+        assert_eq!(ti_open(2, 1, 8), E_BUSY, "but the input is taken");
+        ti_release(10);
+        assert_eq!(ti_pushes(), 0);
+        ti_defer_poll();
+        assert_eq!(ti_pushes(), 1);
+        assert_eq!(
+            CStr::from_ptr(ti_pushed_initial()).to_str().unwrap(),
+            "KICK"
+        );
+        yes("OK");
+        assert_eq!((ti_done_calls(0), text_of(0)), (1, "OK".to_string()));
+    }
+}
+
+#[test]
+fn the_desc_may_be_gone_before_the_deferred_push() {
+    let _g = fresh();
+    // ti_open builds its desc on the stack of the call: it is gone when the push runs
+    unsafe {
+        assert_eq!(ti_open_in_key(1, 0, 8, 10), 0);
+        ti_release(10);
+        ti_defer_poll();
+        assert_eq!(
+            CStr::from_ptr(ti_pushed_initial()).to_str().unwrap(),
+            "KICK"
+        );
+    }
+}
+
+#[test]
+fn an_owner_that_unloads_while_its_input_waits_for_the_push_frees_the_input() {
+    let _g = fresh();
+    unsafe {
+        assert_eq!(ti_open_in_key(1, 0, 8, 10), 0);
+        ti_drop(1);
+        assert_eq!(ti_defer_pending(), 0);
+        ti_release(10);
+        ti_defer_poll();
+        assert_eq!(ti_pushes(), 0, "no screen for an unloaded module");
+        assert_eq!(ti_open(2, 1, 8), 0, "the input is free");
+    }
+}
+
+#[test]
+fn a_deferred_push_that_fails_frees_the_input() {
+    let _g = fresh();
+    unsafe {
+        assert_eq!(ti_open_in_key(1, 0, 8, 10), 0);
+        ti_set_push_result(E_NOMEM);
+        ti_release(10);
+        ti_defer_poll();
+        assert_eq!(ti_done_calls(0), 0);
+        ti_set_push_result(0);
+        assert_eq!(ti_open(1, 0, 8), 0);
     }
 }

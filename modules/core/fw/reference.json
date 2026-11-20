@@ -488,7 +488,8 @@
       "subsystem": "input",
       "users": [
         "core/runtime",
-        "core/services/machines"
+        "core/services/machines",
+        "core/ui"
       ],
       "was": []
     },

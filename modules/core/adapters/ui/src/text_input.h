@@ -6,6 +6,7 @@
 #define DK_UI_TEXT_INPUT_H
 #include <stdint.h>
 #include <dk/platform/ui.h>
+#include "key_defer.h"
 
 /* DK_OK, or DK_E_CONTRACT: no desc, no `done`, no `title`, or `max_len` 0, above DK_UI_TEXT_INPUT_MAX or above `screen_max` (how many characters the
    firmware's screen takes). */
@@ -24,10 +25,17 @@ typedef struct ui_text_fw {
 
 typedef struct ui_text_input {
     const ui_text_fw *fw;
+    ui_defer *
+        defer; /* a press callback that opens the input: the screen is pushed after the key release (key_defer.h) */
     void (*done)(void *arg, const char *text); /* 0 once the owner is gone */
     void *arg;
     uintptr_t owner;
-    uint32_t open; /* serial of the open input, 0: none */
+    uint32_t open;   /* serial of the open input, 0: none */
+    uint8_t pending; /* the push waits for the key release */
+    /* the desc as copied at the call (it may be on the caller's stack): kept while the push is pending */
+    char title[DK_UI_ROW];
+    char initial[DK_UI_TEXT_INPUT_MAX + 1];
+    uint32_t max_len;
     uint32_t serial;
 } ui_text_input;
 

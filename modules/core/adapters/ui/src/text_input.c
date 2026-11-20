@@ -26,31 +26,70 @@ void ui_text_input_initial(char out[DK_UI_TEXT_INPUT_MAX + 1], const dk_ui_text_
     out[i] = 0;
 }
 
+static void copy_text(char *out, uint32_t cap, const char *in)
+{
+    uint32_t i = 0;
+    while (in && in[i] && i + 1 < cap) {
+        out[i] = in[i];
+        i++;
+    }
+    out[i] = 0;
+}
+
+/* The firmware screen is pushed from the state kept in the owner object. */
+static int32_t push_now(ui_text_input *t)
+{
+    dk_ui_text_input_desc d = {t->title, t->initial, t->max_len, t->done, t->arg};
+    int32_t r = t->fw->push(t->fw->fw, &d, t->initial, t->open);
+    if (r != DK_OK) {
+        t->open = 0;
+        t->done = 0;
+        t->pending = 0;
+    }
+    return r;
+}
+
+static void push_deferred(void *ctx, uint32_t serial)
+{
+    ui_text_input *t = ctx;
+    if (t->open == serial && t->pending) {
+        t->pending = 0;
+        push_now(t);
+    }
+}
+
 int32_t ui_text_open(ui_text_input *t, uintptr_t owner, const dk_ui_text_input_desc *d,
                      uint32_t screen_max)
 {
-    char initial[DK_UI_TEXT_INPUT_MAX + 1];
     int32_t r = ui_text_input_check(d, screen_max);
     if (r != DK_OK)
         return r;
     if (t->open)
         return DK_E_BUSY;
-    ui_text_input_initial(initial, d);
     do
         t->serial++;
     while (t->serial == 0);
     /* the state first: the firmware may call back as soon as the screen is on the stack */
+    copy_text(t->title, sizeof t->title, d->title);
+    ui_text_input_initial(t->initial, d);
+    t->max_len = d->max_len;
     t->done = d->done;
     t->arg = d->arg;
     t->owner = owner;
     t->open = t->serial;
-    r = t->fw->push(t->fw->fw, d, initial, t->serial);
-    if (r != DK_OK) {
-        t->open = 0;
-        t->done = 0;
-        return r;
+    t->pending = 0;
+    if (ui_defer_active(t->defer)) {
+        /* a key callback on a press: the screen would take the release of the key as its own YES; it comes after the release */
+        r = ui_defer_add(t->defer, owner, push_deferred, t, t->open);
+        if (r != DK_OK) {
+            t->open = 0;
+            t->done = 0;
+            return r;
+        }
+        t->pending = 1;
+        return DK_OK;
     }
-    return DK_OK;
+    return push_now(t);
 }
 
 void ui_text_done(ui_text_input *t, const char *text)
@@ -73,6 +112,13 @@ void ui_text_gone(ui_text_input *t, uint32_t serial)
 
 void ui_text_drop_owner(ui_text_input *t, uintptr_t owner)
 {
-    if (t->open && t->owner == owner)
-        t->done = 0;
+    if (!t->open || t->owner != owner)
+        return;
+    if (t->pending) {
+        /* not on the screen yet: nothing to leave, the input is free */
+        ui_defer_cancel(t->defer, push_deferred, t, t->open);
+        t->pending = 0;
+        t->open = 0;
+    }
+    t->done = 0;
 }

@@ -35,6 +35,7 @@ void ti_initial(const char *initial, int has_initial, uint32_t max_len, char *ou
 /* ---- the owner object over a fake of the firmware's naming screen ---- */
 #define TAGS 4
 static ui_text_input input;
+static ui_defer defer;
 static ui_text_fw fake;
 static int done_calls[TAGS];
 static char done_text[TAGS][16];
@@ -74,7 +75,9 @@ void ti_reset(void)
     memset(pushed_initial, 0, sizeof pushed_initial);
     fake.fw = 0;
     fake.push = f_push;
+    memset(&defer, 0, sizeof defer);
     input.fw = &fake;
+    input.defer = &defer;
 }
 void ti_set_push_result(int r)
 {
@@ -120,4 +123,32 @@ const char *ti_done_text(int tag)
 const char *ti_pushed_initial(void)
 {
     return pushed_initial;
+}
+
+/* the same call from a key callback on a press of `code` */
+int32_t ti_open_in_key(uintptr_t owner, int tag, uint32_t max_len, uint32_t code)
+{
+    int32_t r;
+    ui_defer_enter(&defer, code);
+    r = ti_open(owner, tag, max_len);
+    ui_defer_leave(&defer);
+    return r;
+}
+void ti_release(uint32_t code)
+{
+    ui_defer_released(&defer, code);
+}
+static int never_down(void *k, uint32_t code)
+{
+    (void)k;
+    (void)code;
+    return 0;
+}
+void ti_defer_poll(void)
+{
+    ui_defer_poll(&defer, never_down, 0);
+}
+uint32_t ti_defer_pending(void)
+{
+    return ui_defer_pending(&defer);
 }

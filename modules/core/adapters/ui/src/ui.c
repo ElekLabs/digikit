@@ -30,6 +30,7 @@
 #include "view_pool.h"
 #include "canvas_map.h"
 #include "text_input.h"
+#include "key_defer.h"
 #include "dkrt.h"
 #include "dk_fw_mem.h"
 #include "dk_fw_string.h"
@@ -38,6 +39,7 @@
 #include "dk_fw_window.h"
 #include "dk_fw_text.h"
 #include "dk_fw_draw.h"
+#include "dk_fw_input.h"
 
 /* The control-block vtables of the two make_shared window types (data anchors; the address is the vtable). */
 extern const uint8_t fw_confirm_cb_vt __asm__("cf.window.site.confirm_cb_vptr_lit");
@@ -972,6 +974,7 @@ static uint32_t tick_clock(uint32_t *per_s)
 
 static void ui_poll(void);
 static ui_views g_views;
+static ui_defer g_defer;
 static ui_settings_rows g_rows;
 static ui_text_input g_text;
 
@@ -991,13 +994,21 @@ static int poll_start(void)
     return 0;
 }
 
+/* The key state for the actions that wait for a release: the firmware's key_down takes the code of the key event. */
+static int key_is_down(void *unused, uint32_t code)
+{
+    (void)unused;
+    return dk_fw_input_key_down(code) != 0;
+}
+
 static void ui_poll(void)
 {
     uint32_t per_s, now = tick_clock(&per_s);
     uint32_t timers = ui_ticks_run(&g_ticks, now, per_s);
+    ui_defer_poll(&g_defer, key_is_down, 0);
     if (g_views.fw)
         ui_views_poll(&g_views);
-    if (timers == 0 && views_used() == 0 && g_polling) {
+    if (timers == 0 && views_used() == 0 && ui_defer_pending(&g_defer) == 0 && g_polling) {
         dkrt_poll_remove((uintptr_t)ui_poll);
         g_polling = 0;
     }
@@ -1026,6 +1037,7 @@ static void ui_owner_gone(uint32_t owner)
     ui_rows_remove_owner(&g_rows, key);
     ui_views_close_owner(&g_views, key);
     ui_ticks_remove_owner(&g_ticks, key);
+    ui_defer_drop_owner(&g_defer, key);
     ui_text_drop_owner(&g_text, key);
 }
 
@@ -1205,10 +1217,23 @@ static int32_t fwv_poll_start(void *fw)
 
 static const ui_view_fw g_view_fw = {0, fwv_poll_start, fwv_push, fwv_close, fwv_invalidate};
 
+/* The queue of actions that wait for a key release starts the per-pass poll when it gets one. */
+static int32_t defer_start(void *unused)
+{
+    (void)unused;
+    return poll_start();
+}
+
+static void defer_init(void)
+{
+    g_defer.start = defer_start;
+}
+
 dk_ui_view *dk_ui_view_open(dk_ui *ui, const dk_ui_view_desc *d)
 {
+    defer_init();
     if (!g_views.fw)
-        ui_views_init(&g_views, &g_view_fw);
+        ui_views_init(&g_views, &g_view_fw, &g_defer);
     return (dk_ui_view *)ui_views_open(&g_views, owner_of(ui), d);
 }
 
@@ -1270,8 +1295,11 @@ static const ui_text_fw g_text_fw = {0, fwt_push};
 
 int32_t dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *d)
 {
-    if (!g_text.fw)
+    defer_init();
+    if (!g_text.fw) {
         g_text.fw = &g_text_fw;
+        g_text.defer = &g_defer;
+    }
     return ui_text_open(&g_text, owner_of(ui), d, NAME_SCREEN_MAX);
 }
 
