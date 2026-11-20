@@ -234,7 +234,7 @@ Order: runtime safety items first, then the Nx cache gap, speed, restructure, de
 
 ### Hardware bring-up (branch `st/peer-pack`)
 
-State on Em's unit: the `device-peer` image and the repaired full `device` image boot. Section 7 packing and MAIN's unpack run on the hardware ([finding 151](../findings/151-syntakt-section7-pack.md)). The runtime, the digikit menu and HEALTH run. Where the card store lives and how it is checked is in [finding 154](../findings/154-syntakt-card-capacity-store.md); that check is not yet confirmed on the unit.
+State on Em's unit: the `device-peer` image and the repaired full `device` image boot. Section 7 packing and MAIN's unpack run on the hardware ([finding 151](../findings/151-syntakt-section7-pack.md)). The runtime, the digikit menu and HEALTH run. Where the card store lives and how it is checked is in [finding 154](../findings/154-syntakt-card-capacity-store.md); the store and a content module are proven on the unit (finding 154 section 6): INFO `card_state` 1, `store put`, `ls` and `rm`, and `digikit/remote` loaded from the store with working keys.
 
 - [x] Section 7 packed by patchkit (`[container] repack`), unpacked in MAIN by `core/peer-image`; verify checks a packed section; the image fits the OS-upgrade limit.
 - [x] Bootstrap MAIN stage at 0x40200000 (`[patch] main_stage`) and the in-place margin guard: patchkit refuses an image whose margin is below the floor, and prints the budget ([finding 152](../findings/152-syntakt-bootstrap-main-stage.md)).
@@ -244,7 +244,7 @@ State on Em's unit: the `device-peer` image and the repaired full `device` image
 - [x] HEALTH shows the card capacity (INFO `card_sectors`, `card_state`); the runtime refuses a card whose capacity is unknown.
 - [x] The store at 0x200000..0x300000 of the second ColdFire's flash window, checked against the driver's capacity ([finding 154](../findings/154-syntakt-card-capacity-store.md)).
 - [x] The site publishes only the devices of `SITE_DEVICES` (`apps/web/src/data/site-devices.mjs`): the build, the pages, the gallery and the emulator page follow it.
-- [ ] Confirm the store area and the card capacity on the unit (INFO `card_sectors`).
+- [x] The store area and a content module on the unit: INFO `card_state` 1 and `free_bytes` 536851968, the first upload writes the headers, HEALTH STORE USED 1 KB and FREE 511.9 MB, `digikit/remote` installed, selected, applied and restarted, the Remote pane's keys work (finding 154 section 6). INFO `card_sectors` 3817472 (0x3a4000, the 0x15 `4FTE4R` part with the enhanced area set) covers the store area.
 - [ ] The stock Data API write guard: Transfer must not write samples or sounds into the stock slots (design in progress). Until it lands, back up the +Drive card and do not use Transfer for them.
 - [ ] CPU REL without a DSP (design in the `core/health` README).
 - [ ] A kept Syntakt emulator test for `core/peer-image`: the packed boot, and a corrupted stream refused.
