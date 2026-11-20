@@ -32,6 +32,8 @@
         "{workspaceRoot}/tests/fixtures/modules/**/build/gen/**/*",
         "{workspaceRoot}/modules/core/adapters/dsp-voice/**/*",
         "{workspaceRoot}/modules/core/adapters/fx/**/*",
+        "{workspaceRoot}/modules/core/services/machines/dks/dsp/**/*",
+        "{workspaceRoot}/modules/core/services/fx/dks/dsp/**/*",
         "{workspaceRoot}/modules/core/adapters/machines/types.toml",
         "{workspaceRoot}/sdk/dsp/**/*",
         "{workspaceRoot}/sdk/sdk.toml",

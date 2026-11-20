@@ -95,6 +95,33 @@ def test_key_follows_the_flags_the_build_runs_with(tmp_path: Path) -> None:
     assert key(repo, moved) == base
 
 
+def instrument_plan(tmp_path: Path, lane: str) -> core_store.Plan:
+    """An instrumented-library plan as built in lane LANE: the raw dir and the target dir are lane paths."""
+    plan = make_plan(tmp_path)
+    target = tmp_path / lane / "target"
+    raw = target / "profraw"
+    plan.argv[-1] = str(target)
+    plan.env = {"RUSTFLAGS": f"-Cprofile-generate={raw}"}
+    plan.instrument = raw
+    return plan
+
+
+def test_the_instrumented_key_is_the_same_in_every_lane(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    one = instrument_plan(tmp_path, "lane-a")
+    two = instrument_plan(tmp_path, "lane-b")
+    assert one.env != two.env
+    assert key(repo, one) == key(repo, two)
+    assert key(repo, one) != key(
+        repo, make_plan(tmp_path)
+    )  # not the plain library's key
+    before = key(repo, one)
+    (one.gen / "new.rs").write_text(
+        ""
+    )  # both plans share this gen dir: compare one plan's key before and after
+    assert key(repo, one) != before  # a changed gen file is another key
+
+
 class Stand:
     """A stand-in library build over a changing key."""
 

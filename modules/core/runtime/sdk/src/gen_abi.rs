@@ -94,7 +94,7 @@ pub const CARD_BLANK: u32 = 2;
 pub const CARD_FOREIGN: u32 = 3;
 /// DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, so it never writes the card.
 pub const CARD_UNREADABLE: u32 = 4;
-/// DkrtDiag.card_state: the card is smaller than the store area (its last sector cannot be read): there is no store.
+/// DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store.
 pub const CARD_TOO_SMALL: u32 = 5;
 /// DkrtDiag.magic, "DIAG".
 pub const DIAG_MAGIC: u32 = 0x44494147;
@@ -242,12 +242,12 @@ const _: () = assert!(offset_of!(DkrtDevice, dsp_block_cycles) == 48, "DkrtDevic
 const _: () = assert!(offset_of!(DkrtDevice, dyn_type_first) == 52, "DkrtDevice.dyn_type_first");
 const _: () = assert!(offset_of!(DkrtDevice, dyn_types) == 56, "DkrtDevice.dyn_types");
 
-/// dkrt_health result (finding 41). The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000).
+/// dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000).
 #[repr(C)]
 pub struct DkrtHealth {
     /// HEALTH_MAGIC
     pub magic: u32,
-    /// 3
+    /// 4
     pub version: u32,
     /// HEALTH_*
     pub flags: u32,
@@ -294,8 +294,12 @@ pub struct DkrtHealth {
     pub store_used: u32,
     /// KiB a new file may still take in all (the room for the table's next entry kept back; not one contiguous piece)
     pub store_free: u32,
+    /// the card's capacity in 512-byte sectors as the firmware's eMMC driver reports it; 0xFFFFFFFF while the driver is not ready
+    pub card_sectors: u32,
+    /// the card check's state (DKRT_CARD.state): 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small
+    pub card_state: u32,
 }
-const _: () = assert!(size_of::<DkrtHealth>() == 108, "DkrtHealth size");
+const _: () = assert!(size_of::<DkrtHealth>() == 116, "DkrtHealth size");
 const _: () = assert!(offset_of!(DkrtHealth, magic) == 0, "DkrtHealth.magic");
 const _: () = assert!(offset_of!(DkrtHealth, version) == 4, "DkrtHealth.version");
 const _: () = assert!(offset_of!(DkrtHealth, flags) == 8, "DkrtHealth.flags");
@@ -323,6 +327,8 @@ const _: () = assert!(offset_of!(DkrtHealth, dsp_area_largest) == 92, "DkrtHealt
 const _: () = assert!(offset_of!(DkrtHealth, store_total) == 96, "DkrtHealth.store_total");
 const _: () = assert!(offset_of!(DkrtHealth, store_used) == 100, "DkrtHealth.store_used");
 const _: () = assert!(offset_of!(DkrtHealth, store_free) == 104, "DkrtHealth.store_free");
+const _: () = assert!(offset_of!(DkrtHealth, card_sectors) == 108, "DkrtHealth.card_sectors");
+const _: () = assert!(offset_of!(DkrtHealth, card_state) == 112, "DkrtHealth.card_state");
 
 /// A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes.
 #[repr(C)]

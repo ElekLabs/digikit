@@ -270,6 +270,7 @@ _fx_go:
     R5 = 4;                               // `last`: the core is about to call the module; the module step is cleared
     R6 = 0;
     CALL _fx_mark;
+    DK_SPAN_BEGIN(_fx_sp0, _fx_diag + 28, R3, I1);   // the module's span (profiling 13.1): R3 and I1 are free here
     R4 = DM(FX_STATE, I4);
     R8 = _fx_in;
     R12 = I4;
@@ -285,6 +286,7 @@ _fx_ret:
     R5 = 5;                               // `last`: the module returned (its step stays)
     R6 = -1;
     CALL _fx_mark;
+    DK_SPAN_END(_fx_sp1, _fx_diag + 28, R3, I1);
     R0 = DM(_fx_c + 12);
     R0 = PASS R0;
     IF LT JUMP _fx_fault;                 // a negative result

@@ -2,7 +2,7 @@
 //! this file first.
 //!
 //! - Range: a write outside the store area of this device (`[card.store]`, `store::layout()`) is refused (`E_RANGE`) and counted.
-//! - Size: the card must reach the end of the area (the last sector reads); a smaller card has **no store** (`CARD_TOO_SMALL`): nothing is read or
+//! - Size: the card must reach the end of the area (its capacity, from the firmware's driver, is at least `first + sectors`); a smaller card has **no store** (`CARD_TOO_SMALL`): nothing is read or
 //!   written there, uploads answer `E_NOSTORE`, the boot goes on.
 //! - Ownership: before the first write the runtime has looked at its area on this card (`check`, at boot, or at the first write when no
 //!   boot hook ran). The area is **ours** when store header A or B is a valid header, or a selection copy is valid. Otherwise the sectors that
@@ -11,11 +11,12 @@
 //!   runtime: every write is refused (`E_CARD_RO`), the boot counter is not raised (so there is no safe mode by counter), uploads answer
 //!   `E_INUSE`, and ABOUT says so. The area is up to 22 GiB: the rest of it is not scanned (**[O]**: finding 59).
 //! - Claiming: a write that touches only the store's header sectors or the selection record is itself a mark of ours, so it needs nothing
-//!   first. A write of data or a table into a blank range (an upload's staging) first writes an empty store header pair, so a power cut
+//!   first. The boot's own record write (the boot counter) is such a write, so on a device a blank card is marked ours by the first boot and the claim
+//!   below is rarely reached (a write of data into a blank range before any record was written). A write of data or a table into a blank range (an upload's staging) first writes an empty store header pair, so a power cut
 //!   in the middle of an upload leaves a card the next boot calls ours, not a card with unexplained data in it.
 //!
 //! The check reads the start of the area only on a card where none of our structures is present (a fresh card): `BLANK_SECTORS` in 64 KiB reads,
-//! stopping at the first sector that is not blank. A card that is ours costs five sector reads.
+//! stopping at the first sector that is not blank. A card that is ours costs four sector reads (the capacity comes from the driver).
 //!
 //! The reads go through the staging buffer (`DKRT_STAGE`), so `check` must not run while a module file is staged: the boot hook runs it first.
 use crate::dlog;
@@ -38,6 +39,8 @@ pub struct CardInfo {
     pub checked: u32,
     pub claims: u32,
     pub writes: u32,
+    /// The card's capacity in sectors as the driver reported it at the check (0xFFFFFFFF: not ready then; 0: not asked).
+    pub sectors: u32,
 }
 
 #[no_mangle]
@@ -51,7 +54,14 @@ pub static mut DKRT_CARD: CardInfo = CardInfo {
     checked: 0,
     claims: 0,
     writes: 0,
+    sectors: 0,
 };
+
+/// `CARD_REFUSED` reason: the firmware's driver has not reported a capacity yet, so nothing is decided (the write is refused this time).
+pub const REFUSE_NOT_READY: u32 = 5;
+/// The not-ready CARD_CHECK and the first refused write of the period were logged (one event each; the refusals are all counted).
+static mut NOT_READY_LOGGED: bool = false;
+static mut NOT_READY_REFUSAL_LOGGED: bool = false;
 
 #[repr(C, align(16))]
 struct Sec([u8; 512]);
@@ -176,9 +186,23 @@ pub unsafe fn check_with<P: Platform>(p: &P) {
         c.state = CARD_TOO_SMALL;
         return;
     }
+    // the card's capacity from the firmware's driver (no card access): 0xFFFFFFFF while the driver is not ready (0 is no capacity either), then nothing is
+    // decided and nothing is read, and the next write asks again
+    c.sectors = p.card_sectors();
+    if c.sectors == u32::MAX || c.sectors == 0 {
+        c.checked = 0;
+        // one CARD_CHECK for the whole wait (the state stays unknown); every refused write says why (reason `REFUSE_NOT_READY`)
+        if !NOT_READY_LOGGED {
+            NOT_READY_LOGGED = true;
+            report();
+        }
+        return;
+    }
+    NOT_READY_LOGGED = false;
+    NOT_READY_REFUSAL_LOGGED = false;
     let l = lay();
-    // the card must reach the end of the area: the firmware's block read refuses a start at or past the card's capacity
-    if p.block_read(l.first + l.sectors - 1, 512, stage()) != 0 {
+    // the card must reach the end of the area
+    if c.sectors < l.first + l.sectors {
         c.state = CARD_TOO_SMALL;
         report();
         return;
@@ -227,7 +251,7 @@ unsafe fn report() {
     dlog::ev(
         logk::CARD_CHECK,
         if bad { logk::F_ERROR } else { dlog::INFO },
-        [c.state, c.first_nonblank, c.hash, c.read_errors, 0],
+        [c.state, c.first_nonblank, c.hash, c.read_errors, c.sectors],
     );
 }
 
@@ -271,7 +295,7 @@ enum Gate {
     Claim,
     /// The card was not checked yet: run `check`, then decide again.
     Check,
-    /// Refuse with this reason (1 range, 2 foreign or unreadable, 4 too small).
+    /// Refuse with this reason (1 range, 2 foreign or unreadable, 4 too small, 5 driver not ready).
     Refuse(u32),
 }
 
@@ -307,6 +331,16 @@ pub unsafe fn admit_with<P: Platform>(p: &P, sector: u32, bytes: u32) -> i32 {
     if g == Gate::Check {
         check_with(p);
         g = gate(&lay(), state(), sector, bytes);
+        if g == Gate::Check {
+            // the driver reported no capacity yet: refused this time, asked again at the next write; every refusal is counted, the first one is logged
+            let c = info();
+            c.refused = c.refused.wrapping_add(1);
+            if !NOT_READY_REFUSAL_LOGGED {
+                NOT_READY_REFUSAL_LOGGED = true;
+                dlog::ev(logk::CARD_REFUSED, logk::F_ERROR, [sector, bytes, REFUSE_NOT_READY, c.state, 0]);
+            }
+            return E_CARD_RO;
+        }
     }
     if g == Gate::Allow {
         return OK;

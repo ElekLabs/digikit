@@ -4,6 +4,7 @@
 use crate::dsp::Stream;
 use crate::error::*;
 use crate::firmware::Firmware;
+use crate::module::Library;
 use crate::port::Registry;
 use crate::record::{self, Record};
 use crate::syx;
@@ -21,6 +22,8 @@ pub struct Report {
     pub sections: Vec<(u32, u64, u64)>,
     pub record: Option<Record>,
     pub port: Option<String>,
+    /// The bootstrap budget of the image (verify without `need_base` leaves it out).
+    pub budget: Option<Budget>,
     pub checks: Vec<String>,
 }
 
@@ -105,17 +108,182 @@ pub fn patch_record(syx_bytes: &[u8]) -> Result<Option<Record>> {
     find_record(&Firmware::parse(syx_bytes)?)
 }
 
+fn kb(n: i64) -> String {
+    format!("{:.1} KB", n as f64 / 1024.0)
+}
+
+/// The in-place margin of the stored MAIN stream at the bootstrap's stage (`[patch] main_stage`), refused below `main_margin_min`, and the budget line:
+/// the bootstrap unpacks MAIN over its own staged stream with no bounds check, so a stream whose output overtakes the unread input runs away before MAIN
+/// starts (finding 152). Returns `bootstrap margin 9.1 KB, container 31.4 KB free`.
+pub fn main_budget(fw: &Firmware, container_bytes: u64, container_max: u64) -> Result<Budget> {
+    let main = fw
+        .main()
+        .ok_or_else(|| err!("the image has no MAIN OS section"))?;
+    let (dest, stage, floor) = fw.device.main_unpack();
+    let margin = crate::aplib::inplace_margin(&main.stored, dest, stage)
+        .map_err(|e| err!("MAIN OS stream: {e}"))?;
+    if let Some(m) = margin.filter(|m| *m < floor as i64) {
+        return Err(err!(
+            "the bootstrap would unpack MAIN OS over its own unread stream: in-place margin {m} bytes at the stage {stage:#x} (at least {floor} needed): the unit would hang before MAIN starts"
+        ));
+    }
+    Ok(Budget {
+        margin,
+        stage,
+        container_free: container_max as i64 - container_bytes as i64,
+    })
+}
+
+/// The bootstrap budget of an image: the in-place margin of its MAIN stream at the device's stage (`None`: the unpack stays below the stage) and the
+/// container space left under the limit. `Display` is the line `bootstrap margin 9.1 KB, container 31.4 KB free`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Budget {
+    pub margin: Option<i64>,
+    pub stage: u64,
+    pub container_free: i64,
+}
+
+impl std::fmt::Display for Budget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.margin {
+            Some(m) => write!(
+                f,
+                "bootstrap margin {}, container {} free",
+                kb(m),
+                kb(self.container_free)
+            ),
+            None => write!(
+                f,
+                "bootstrap margin: the unpack stays below the stage {:#x}, container {} free",
+                self.stage,
+                kb(self.container_free)
+            ),
+        }
+    }
+}
+
+/// What the hook of a module that unpacks section `id` relies on, checked from the patch record's `repacks` entry for the section's role: the entry
+/// must name a module of the record, the stream header length and byte sum must hold, the decoded section must be the stock one the entry names
+/// (length and SHA-256), the stream must fit `stage_end - dest`, and the in-place margin must be above 0. With a library the module's own `[[repack]]`
+/// must also say the same (a record that was edited, or a module that changed, is refused).
+fn check_repacked(
+    fw: &Firmware,
+    id: u32,
+    record: Option<&Record>,
+    lib: Option<&Library>,
+) -> Result<()> {
+    let sec = fw.section(id).unwrap();
+    let stored = &sec.stored;
+    let dev = fw.device.short();
+    let be = |b: &[u8]| u32::from_be_bytes(b.try_into().unwrap());
+    if stored.len() < 8 || be(&stored[..4]) as usize + 8 != stored.len() {
+        return Err(err!(
+            "section {id}: the stored stream's header length does not match its size"
+        ));
+    }
+    let sum = stored[8..]
+        .iter()
+        .fold(0u32, |s, &b| s.wrapping_add(b as u32));
+    if sum != be(&stored[4..8]) {
+        return Err(err!("section {id}: the stored stream's byte sum is wrong"));
+    }
+    let role = fw
+        .device
+        .repack_roles()
+        .iter()
+        .find(|r| fw.device.role_section(r) == Some(id))
+        .ok_or_else(|| err!("section {id} cannot be stored packed on {dev}"))?;
+    let entry = record
+        .into_iter()
+        .flat_map(|r| r.repacks.iter().map(move |e| (r, e)))
+        .find(|(_, e)| e.role == *role);
+    let Some((rec, e)) = entry else {
+        return Err(err!(
+            "section {id} is stored packed but the patch record has no repack entry for the {role} section: no module is known to unpack it"
+        ));
+    };
+    if !rec.modules.contains(&e.module) {
+        return Err(err!(
+            "section {id}: the repack entry names {}, which is not a module of the patch record",
+            e.module
+        ));
+    }
+    if sec.data.len() as u64 != e.len as u64 || crate::error::sha256_hex(&sec.data) != e.sha256 {
+        return Err(err!(
+            "section {id} does not decode to the stock section that {} unpacks and checks",
+            e.module
+        ));
+    }
+    let len = stored.len() as u64;
+    let (dest, stage_end) = (e.dest as u64, e.stage_end as u64);
+    if stage_end < dest + len {
+        return Err(err!(
+            "section {id} ({len} bytes) does not fit the buffer {dest:#x}..{stage_end:#x} of {}",
+            e.module
+        ));
+    }
+    let margin = crate::aplib::inplace_margin(stored, dest, stage_end - len)
+        .map_err(|x| err!("section {id}: {x}"))?;
+    if let Some(m) = margin.filter(|m| *m <= 0) {
+        return Err(err!(
+            "section {id}: the in-place unpack of {} has margin {m}: it would overwrite bytes that are not read yet",
+            e.module
+        ));
+    }
+    if let Some(lib) = lib {
+        let same = lib
+            .get(e.module.split('@').next().unwrap_or(&e.module))
+            .is_some_and(|m| {
+                m.manifest.repack.iter().any(|r| {
+                    r.role == e.role
+                        && r.dest == dest
+                        && r.stage_end == stage_end
+                        && r.len == e.len as u64
+                        && r.sha256 == e.sha256
+                        && crate::prim::on(&r.devices, dev)
+                })
+            });
+        if !same {
+            return Err(err!(
+                "section {id}: {} does not declare the repack the patch record names (dest, stage_end, length and hash must match)",
+                e.module
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Verifies an image. A device with read-only sections (`[container] readonly`: bootstrap, FPGA or peer programs) needs `base`, the stock
 /// image, to prove those sections unchanged; without it the call fails, so a damaged read-only section can never pass. The one exception
 /// is an image whose SHA-256 is a known stock image (a port in `reg`): it is the stock image, so its read-only sections are stock.
 pub fn verify(syx_bytes: &[u8], reg: Option<&Registry>, base: Option<&[u8]>) -> Result<Report> {
-    check(syx_bytes, reg, base, true)
+    check(syx_bytes, reg, base, true, None, true)
+}
+
+/// `verify` for an image made without a patch record (oracles, tests): a packed section has no repack entry to check, so only its decoded bytes are.
+pub fn verify_unrecorded(
+    syx_bytes: &[u8],
+    reg: Option<&Registry>,
+    base: Option<&[u8]>,
+) -> Result<Report> {
+    check(syx_bytes, reg, base, true, None, false)
+}
+
+/// `verify` with the module library: besides the patch record's repack entry (which `verify` checks alone), the claiming module's manifest must declare
+/// the same layout and stock section.
+pub fn verify_with_library(
+    syx_bytes: &[u8],
+    reg: Option<&Registry>,
+    base: Option<&[u8]>,
+    lib: &Library,
+) -> Result<Report> {
+    check(syx_bytes, reg, base, true, Some(lib), true)
 }
 
 /// Decodes and checks an image like `verify` but does not require the stock base: for identifying a file (what device, which record),
 /// never as a proof that the image is safe to flash.
 pub fn inspect(syx_bytes: &[u8], reg: Option<&Registry>) -> Result<Report> {
-    check(syx_bytes, reg, None, false)
+    check(syx_bytes, reg, None, false, None, true)
 }
 
 fn check(
@@ -123,8 +291,11 @@ fn check(
     reg: Option<&Registry>,
     base: Option<&[u8]>,
     need_base: bool,
+    lib: Option<&Library>,
+    recorded: bool,
 ) -> Result<Report> {
     let mut checks = vec![];
+    let mut budget: Option<Budget> = None;
     let msgs = syx::messages(syx_bytes)?;
     if msgs.len() < 3 || msgs[0].len() != 16 || msgs[msgs.len() - 1].len() != 16 {
         return Err(err!("missing framing messages"));
@@ -256,6 +427,12 @@ fn check(
         ));
     }
     checks.push("size limits".into());
+    if need_base {
+        // `inspect` only identifies a file; a proof for flashing also holds the bootstrap's in-place unpack to its margin
+        let b = main_budget(&fw, total as u64, container_max as u64)?;
+        checks.push(b.to_string());
+        budget = Some(b);
+    }
 
     if base.is_none() && need_base && port.is_none() && !fw.device.readonly_sections().is_empty() {
         let ids: Vec<String> = fw
@@ -274,9 +451,16 @@ fn check(
     }
     if let Some(base_bytes) = base {
         let b = Firmware::parse(base_bytes)?;
+        let mut repacked: Vec<u32> = vec![];
         for &id in fw.device.readonly_sections() {
             match (b.section(id), fw.section(id)) {
                 (Some(x), Some(y)) if x.stored == y.stored && x.dest == y.dest => {}
+                // a section that a module unpacks may be stored packed: what the image decodes to is still the stock bytes
+                (Some(x), Some(y))
+                    if fw.device.is_repackable(id) && x.data == y.data && x.dest == y.dest =>
+                {
+                    repacked.push(id)
+                }
                 (None, None) => {}
                 _ => {
                     return Err(err!(
@@ -298,12 +482,28 @@ fn check(
             .device
             .readonly_sections()
             .iter()
+            .filter(|i| !repacked.contains(i))
             .map(|i| i.to_string())
             .collect();
         checks.push(format!(
             "read-only sections {} identical to the stock image",
             ids.join(", ")
         ));
+        for id in repacked {
+            if recorded {
+                check_repacked(&fw, id, record.as_ref(), lib)?;
+            }
+            checks.push(format!(
+                "section {id} is stored packed and decodes to the stock bytes{}",
+                if !recorded {
+                    " (the image has no patch record: not checked against one)"
+                } else if lib.is_some() {
+                    " (the record is consistent with it, and its module declares the same layout)"
+                } else {
+                    " (the record is consistent with it; MAIN's hook constants are not read)"
+                }
+            ));
+        }
     }
     if let Some(pid) = &port_id
         && let Some(p) = reg.and_then(|r| r.by_id(pid))
@@ -331,6 +531,7 @@ fn check(
             .collect(),
         record,
         port: port_id,
+        budget,
         checks,
     })
 }

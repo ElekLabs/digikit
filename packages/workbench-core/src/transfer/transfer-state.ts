@@ -31,7 +31,7 @@ export function createTransferState({
   storage,
   jobs,
 }: {
-  env: Pick<TransferEnv, 'extras'>;
+  env: Pick<TransferEnv, 'extras' | 'libraryDevices'>;
   storage: KeyValue;
   jobs: JobsApp;
 }) {
@@ -58,7 +58,7 @@ export function createTransferState({
 
   /** The device whose library the list shows while no device answers (the site). */
   const [browseDevice, setBrowseDevice] = remembered<string>(storage, 'digikit.transferBrowseDevice', (v) =>
-    v !== null && isDeviceId(v) ? v : (runtimeDeviceIds[0] ?? ''),
+    v !== null && isDeviceId(v) ? v : ((env.libraryDevices ?? runtimeDeviceIds)[0] ?? ''),
   );
   /** The list shows the library alone, with no device behind it. */
   const [browsing, setBrowsing] = createSignal(false);

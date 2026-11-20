@@ -6,7 +6,6 @@ import { describe, expect, test } from 'vitest';
 import { bootInfo, buildCard, E_NOSTORE, statusOf } from '@digi/regression/runtime/card-kit.ts';
 import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { E_SET_OFF, sectorOf, settingsMailbox, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import {
@@ -14,7 +13,6 @@ import {
   DELAY_MS,
   E_BAD_STORE,
   MODULE,
-  MODULE_PATH,
   padded,
   PATTERN,
   ROUTE,
@@ -74,18 +72,19 @@ for (const device of DEVICES) {
     });
 
     test('oldcard: a card with the older header B at sectors - 3 boots, keeps its selection and repairs the header copy on an upload', async () => {
+      const mod = kit.mod(MODULE); // the module in the store's kind layout (the path the card rig writes)
       const dir = path.join(kit.artifacts, 'newlayout');
       fs.mkdirSync(dir, { recursive: true });
       const newLayout = await buildCard(device, {
         dir,
-        modules: [{ name: MODULE_PATH, file: moduleArtifact(device, MODULE) }],
-        selection: [MODULE_PATH],
+        modules: [mod],
+        selection: [mod.name],
       });
       const hdrA = sectorOf(newLayout, first);
       // the card as an older runtime left it: header A and a copy of it at sectors - 3 (the old header B), nothing at today's header B
       const rt = await kit.load('oldcard', {
         modules: [MODULE],
-        selection: [MODULE_PATH],
+        selection: [mod.name],
         foreign: { [headerB]: Buffer.alloc(SECTOR), [first + sectors - 3]: hdrA },
       });
       const { session } = rt;
@@ -103,7 +102,7 @@ for (const device of DEVICES) {
       expect(
         (await usb((dk) => dk.list())).map((e) => e.path),
         'the store reports its file',
-      ).toEqual([MODULE_PATH]);
+      ).toEqual([mod.name]);
       await settingsMailbox(session, kit.plan).put(ROUTE, byte(1));
       await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
       expect(
@@ -123,13 +122,13 @@ for (const device of DEVICES) {
       expect(hb.subarray(0, 4).toString(), 'header B at the new place').toBe('DKST');
       expect(hb.subarray(24, 28).equals(ha.subarray(24, 28)), 'a header of the same seq as A').toBe(true);
       expect((await usb((dk) => dk.list())).map((e) => e.path).sort(), 'the store lists both files').toEqual(
-        [MODULE_PATH, 't.bin'].sort(),
+        [mod.name, 't.bin'].sort(),
       );
       const d = await dumpJson(after);
       expect(d.store.files.map((f: { path: string }) => f.path).sort(), 'two files').toEqual(
-        [MODULE_PATH, 't.bin'].sort(),
+        [mod.name, 't.bin'].sort(),
       );
-      expect(d.selection.a.paths, 'the selection kept').toEqual([MODULE_PATH]);
+      expect(d.selection.a.paths, 'the selection kept').toEqual([mod.name]);
       expect(d.settings.active, 'the key in settings copy A').toBe('A');
       kit.allowStoreWrites(await written());
     });

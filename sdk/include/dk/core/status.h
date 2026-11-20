@@ -76,7 +76,7 @@
 #define DK_E_READ_PROTO (-58) /* the firmware's block read failed */
 #define DK_E_NOFILE (-59) /* that path is not in the store */
 #define DK_E_PROTO (-60) /* unknown protocol version, command or option */
-#define DK_E_NOSTORE (-61) /* the store header is unreadable (CLEAR still works) */
+#define DK_E_NOSTORE (-61) /* the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then) */
 #define DK_E_INUSE (-62) /* the card's store area is not ours and not blank */
 #define DK_E_PEEK (-63) /* PEEK range not allowed, or length 0 or over 512 */
 #define DK_E_CMD_RANGE (-64) /* command range not reserved, taken, or empty */

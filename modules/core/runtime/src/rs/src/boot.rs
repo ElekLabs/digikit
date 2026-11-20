@@ -131,8 +131,7 @@ pub unsafe extern "C" fn dkrt_boot() {
         if seen.found != 0 && seen.stable != 0 {
             // the crashed boot had already cleared its counter: count it as bad now, and keep that one count until a boot with no crash
             // behind it has run 30 s (`ui_pass`)
-            r.boot_counter = r.boot_counter.wrapping_add(1);
-            LATE_FLOOR = 1;
+            LATE_FLOOR = crate::safe_mode::count_late_crash(&mut r);
         }
     }
     b.seq = if valid { r.seq } else { 0 };
@@ -159,7 +158,7 @@ pub unsafe extern "C" fn dkrt_boot() {
     } else if fault::seen().panic != 0 {
         // the boot before panicked (a panic record): one panic is enough, like a stop
         SAFE_PANIC
-    } else if r.boot_counter >= SAFE_AFTER {
+    } else if crate::safe_mode::counter_is_safe(&r) {
         SAFE_COUNTER
     } else {
         SAFE_NONE
@@ -191,12 +190,10 @@ pub unsafe extern "C" fn dkrt_boot() {
         states().skip_all(r.count as usize);
         return;
     }
-    // raise the counter before anything of a module runs; the first UI-loop pass clears it. On a card the runtime does not write there is no
-    // counter, so no safe mode by counter (ABOUT says so).
-    if (r.count != 0 || r.boot_counter != 0) && card::writable() {
-        r.boot_counter = r.boot_counter.wrapping_add(1);
-        update(r, copy, valid);
-    }
+    // raise the counter before anything of a module runs; the stable period clears it. This counts from the first boot: with no record
+    // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
+    // (ABOUT says so).
+    r = crate::safe_mode::count_boot_with(&crate::PLATFORM, r, copy, valid, card::writable());
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them

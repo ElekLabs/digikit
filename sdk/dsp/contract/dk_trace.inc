@@ -6,6 +6,8 @@
 // last block that ended if the module faults or hangs ("FX SEND STEP 3"); a step stored in the call that stops the DSP is lost with the core. SHARC+ cannot store an immediate to memory, so the macro needs a register that is free at that point.
 // `patchkit pack --trace` defines DK_TRACE. Without it DK_STEP expands to nothing: no instruction, no import, the same object.
 // The caller writes the trailing ";". Include this file once per module, before the routine files.
+#ifndef DK_TRACE_INC
+#define DK_TRACE_INC
 
 #ifdef DK_TRACE
 .EXTERN _dk_step;
@@ -16,55 +18,56 @@
 #define DK_STEP(N, REG) ;
 #endif
 
-// ---- spans (docs/plans/sdk.md section 9, docs/plans/profiling.md section 7) ----
+// ---- spans (docs/plans/sdk.md section 9, docs/plans/profiling.md 13.1) ----
 //
-// DK_SPAN_BEGIN(SKIP, RA, RB);        reads the cycle counter into the word `_dk_span_t0`, when a stats window is registered.
-// DK_SPAN_END(SKIP, ROW, RA, RB, RC); reads it again and hands (ROW, cycles) to the stub's `_dk_span_add`.
+// What a span is: the call of the module's own routine, nothing else. In the machines service one span covers each call of the module's note_on and each call of its render (the contract
+// adapter's work around them, the guard and idle or disabled voices are outside), in the fx service the call of the effect's process routine. A voice that is idle or whose type is disabled
+// takes no span, so a row's calls are the module's real calls on both devices. A row of the old form (a routine with no note_on) is not measured.
 //
-// Only the dispatchers of the image's stub use these, around the call of a module's entry (never a content module: `mise run check:layers`, rule spans). They are always
-// assembled in. With no window (`_dk_stats_ptr` is 0) each costs three instructions, a load, a compare and a jump, and nothing else runs: the counter is not read
-// (reading EMUCLK takes the emulator out of the fast tiers, `UNSAFE_READ_NAMES` of tools/sharc_dev/sharc_rsgen.py). The two macros take a label SKIP of their own and
-// the scratch registers RA, RB (RC in END), which the stub's caller must be free to lose. One `_dk_span_t0`: spans do not nest.
+// DK_SPAN_BEGIN(SKIP, PTR, RP, IX);   reads the cycle counter into the window's span word, when the stats window is on.
+// DK_SPAN_END(SKIP, PTR, RP, IX);     reads it again and adds the span to the row `DK_SPAN_ROW_CODE` names.
 //
-// `_dk_span_add` (the stub's accumulator, R0 = row number 0 .. DK_STATS_ROWS-1, R1 = cycles; it clobbers R0 to R3, I0 and the flags) adds to the row `ROW`
-// of the window `_dk_stats_ptr` points to: calls + 1, cycles summed, largest span kept.
+// Only the dispatch code of the services (machines, fx) uses these, around the call of a module's entry (never a content module: `mise run check:layers`, rule
+// spans). They are always assembled in. PTR is a DM word that holds the window's byte address while stats are on and 0 while they are off: core/dsp-link writes
+// it (`_dv_diag` word 31 for the machines, `_fx_diag` word 7 for the effects), so that the service imports nothing new. With stats off each macro is a load, a
+// compare and a jump (three instructions) and nothing else runs: the counter is not read (reading EMUCLK takes the emulator out of the fast tiers,
+// `UNSAFE_READ_NAMES` of tools/sharc_dev/sharc_rsgen.py). RP must be R3 and IX I1, both free at the site; they are lost when stats are on. The routines the
+// macros call (dk_span.inc, included once into the object) save and restore R0 to R2 in the window's private words.
 //
-// The window (the same numbers as <dk/core/trace.h> for the ColdFire side): word DK_STATS_W_MAGIC .. DK_STATS_W_BLOCKS, then DK_STATS_ROWS rows of DK_STATS_ROW_WORDS
-// words in the order owner row, calls, cycles, largest. Words are 32-bit and wrap; the reader takes differences.
-#define DK_STATS_MAGIC 0x444b5357
-#define DK_STATS_VERSION 1
-#define DK_STATS_W_MAGIC 0
-#define DK_STATS_W_VERSION 1
-#define DK_STATS_W_ROWS 2
-#define DK_STATS_W_BLOCKS 3
+// The window (the same numbers as <dk/core/trace.h> for the ColdFire side), in words: a header of DK_STATS_HEAD_WORDS (blocks, largest stock block delta,
+// overruns, the start of the running span), then DK_STATS_ROWS rows of DK_STATS_ROW_WORDS in the order calls, cycles low, cycles high, largest call, largest
+// block, the sum of the running block; then DK_STATS_PRIV_WORDS private words. Sums are 64-bit; core/dsp-link folds each block.
+#define DK_STATS_VERSION 2
 #define DK_STATS_HEAD_WORDS 4
-#define DK_STATS_ROW_WORDS 4
+#define DK_STATS_ROW_WORDS 6
 #define DK_STATS_ROWS 16
-#define DK_STATS_ROW_OWNER 0
-#define DK_STATS_ROW_CALLS 1
-#define DK_STATS_ROW_CYCLES 2
+#define DK_STATS_WORDS 100
+#define DK_STATS_W_BLOCKS 0
+#define DK_STATS_W_STOCK 1
+#define DK_STATS_W_OVERRUNS 2
+#define DK_STATS_W_T0 3
+#define DK_STATS_ROW_CALLS 0
+#define DK_STATS_ROW_CYCLES 1
+#define DK_STATS_ROW_CYCLES_HI 2
 #define DK_STATS_ROW_LARGEST 3
+#define DK_STATS_ROW_BLOCK 4
+#define DK_STATS_ROW_SUM 5
+#define DK_STATS_PRIV 100
 
-#define DK_SPAN_BEGIN(SKIP, RA, RB) \
-    .EXTERN _dk_stats_ptr; \
-    .EXTERN _dk_span_t0; \
-    RA = DM(_dk_stats_ptr); \
-    RA = PASS RA; \
+#define DK_SPAN_BEGIN(SKIP, PTR, RP, IX) \
+    RP = DM(PTR); \
+    RP = PASS RP; \
     IF EQ JUMP SKIP; \
-    RB = EMUCLK; \
-    DM(_dk_span_t0) = RB; \
+    IX = RP; \
+    CALL _dk_span_begin; \
     SKIP:
 
-#define DK_SPAN_END(SKIP, ROW, RA, RB, RC) \
-    .EXTERN _dk_stats_ptr; \
-    .EXTERN _dk_span_t0; \
-    .EXTERN _dk_span_add; \
-    RA = DM(_dk_stats_ptr); \
-    RA = PASS RA; \
+#define DK_SPAN_END(SKIP, PTR, RP, IX) \
+    RP = DM(PTR); \
+    RP = PASS RP; \
     IF EQ JUMP SKIP; \
-    RB = EMUCLK; \
-    RC = DM(_dk_span_t0); \
-    R1 = RB - RC; \
-    R0 = ROW; \
-    CALL _dk_span_add; \
+    IX = RP; \
+    CALL _dk_span_end; \
     SKIP:
+
+#endif

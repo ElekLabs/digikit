@@ -109,6 +109,7 @@ files = [
     "tools/emulator/live_audio.py",
     "tools/sharc_dev/sharc.py",
     "tools/sharc_dev/sharc_core",
+    "tools/sharc_dev/sharc_cost.py",
     "tools/sharc_dev/sharc_dac.py",
     "tools/sharc_dev/sharc_diff.py",
     "tools/sharc_dev/sharc_disasm.py",

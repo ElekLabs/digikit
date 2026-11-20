@@ -592,6 +592,14 @@ pub extern "C" fn dl_diag(_: *mut u32, _: u32) -> i32 {
     0
 }
 
+// core/dsp-link's feed of the stats pages, a no-op in this host fixture.
+#[no_mangle]
+pub extern "C" fn dl_stats_hook(feed: usize) {
+    STATS_HOOK.store(feed, core::sync::atomic::Ordering::SeqCst);
+}
+/// The feed `dl_tick` would call now (0: none).
+pub(crate) static STATS_HOOK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
 // core/sdhc-large, absent in this host fixture.
 #[no_mangle]
 pub extern "C" fn sdhc_large_range(_: u32, _: u32) {}
@@ -704,6 +712,11 @@ pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
 /// The image's info table: a function here, not a table with the magic, so every lookup through the real platform is null.
 #[no_mangle]
 pub extern "C" fn dkrt_info_table() {}
+
+#[export_name = "cf.storage.fn.capacity"]
+pub extern "C" fn card_capacity() -> u32 {
+    crate::host_io::card_capacity()
+}
 
 #[export_name = "cf.storage.fn.block.read"]
 pub extern "C" fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {

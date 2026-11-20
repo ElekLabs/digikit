@@ -53,6 +53,7 @@
 #include "adapter-dn2.inc"
 #include "dk_machine.inc"
 #include "dk_stub.inc"
+#include "dk_trace.inc"
 
 .SECTION/PM seg_pmco;
 .GLOBAL _dv_run;
@@ -594,9 +595,11 @@ _dv_cnoclr:
     I12 = R0;                             // the note_on pc
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp0, _dv_diag + 124, R3, I1);   // the module's note_on (profiling 13.1): R3 and I1 are free here
     I13 = _dv_nback;
     JUMP (M13, I12);
 _dv_nback:
+    DK_SPAN_END(_dv_sp1, _dv_diag + 124, R3, I1);
     R0 = PASS R0;
     IF LT JUMP _dv_nfault;
 _dv_crender:
@@ -607,9 +610,11 @@ _dv_crender:
     R4 = DM(_dv_c + 28);
     R8 = _dv_in;
     R12 = _dv_call_params;
+    DK_SPAN_BEGIN(_dv_sp2, _dv_diag + 124, R3, I1);   // the module's render
     I13 = _dv_rback;
     JUMP (M13, I12);
 _dv_rback:
+    DK_SPAN_END(_dv_sp3, _dv_diag + 124, R3, I1);
     R1 = DK_STEREO;                       // contract 1.2: the stereo bit goes to _gs_post, the rest is the status
     R2 = R0 AND R1;
     DM(_dv_c + 48) = R2;
@@ -735,3 +740,19 @@ _dv_cz:
 _dv_gdz: DM(I0, M6) = R3;
     JUMP _dv_back;
 
+// The stats rows of the spans (sdk/dsp/contract/dk_span.inc): the machine row of the voices registry (24 words each; the last stats row takes the rest).
+#define DK_SPAN_PTR_WORD _dv_diag + 124
+#define DK_SPAN_ROW_CODE \
+    R2 = DM(_dv_row); \
+    R0 = _dv_table; \
+    R2 = R2 - R0; \
+    R0 = 96; \
+    R2 = R2 - R0; \
+    R0 = LSHIFT R2 BY 3; \
+    R0 = R0 + R2; \
+    R2 = LSHIFT R2 BY 1; \
+    R2 = R0 + R2; \
+    R2 = LSHIFT R2 BY -10; \
+    R0 = 7; \
+    R2 = MIN(R2, R0);
+#include "dk_span.inc"

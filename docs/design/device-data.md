@@ -30,8 +30,13 @@ What a device file contains decides what the tools do with the device:
 `[capabilities]` says what the device has: `dsp` (`sharc` | `none`), `seal` (`hmac` | `none`), `sample_pool` (`stock` |
 `ddr` | `none`) and `card` (`path-fs` | `slots` | `none` | `unknown`). Code branches on these values, not on device names.
 `[container]` names the role of each syx section (`main`, `dsp`, `cf2`, `fpga`) and lists the `readonly` sections that are never
-written; a section may have a role and be read-only, but `main` may not be read-only. `devdata.rs` `validate` checks that
+written; a section may have a role and be read-only, but `main` may not be read-only. `repack` lists roles of read-only sections that a module may store packed
+when it declares that it unpacks them (`[[repack]]` of its `module.toml`, [PATCHING.md](../PATCHING.md) "Repacking a read-only section"); each must be a role with a read-only section. `devdata.rs` `validate` checks that
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
+`[patch] main_dest`, `main_stage`, `main_margin_min`, `boot_load`: where the bootstrap unpacks MAIN OS to (`main_dest`, 0x40000400), where it first stages the packed MAIN (`main_stage`: 0x40400000
+on the Digitakt II and Digitone II, 0x40200000 on the Syntakt), the least in-place margin an image may have there (`main_margin_min`, bytes of unread stream ahead of the output, default 8192) and the
+address the bootstrap is loaded at (`boot_load`, used by `tools/firmware/aplib_check.py`). patchkit stores MAIN with a literal tail when needed and refuses an image below the floor (finding 152).
+`main_staged_max` is a different bound: the decoded MAIN may not reach the next 4 MiB boundary.
 `[storage]` names the backend of each kind of content (`samples`: `stock-rpc`, `digikit` or `stock-slots`; `modules`: `digikit`); `@digi/devices` reads it, the samples code of the apps and `wb` branch on it, never on a device name. `[storage.slots]` (`stock-slots` only): `path`, `count`, `bytes_max` (audio bytes of one sample), `rate`, `channels`, `bits`, `byte_order`, `apply` (`restart`: the device reads the slots only at start).
 
 Readers: Rust embeds the files (`packages/patchkit/build.rs`, `packages/emulator/device-profile`); TS and Nx use `@digi/devices`
@@ -52,7 +57,7 @@ each reads the tables it needs and checks those.
 Faceplates and LED maps are not device-file tables. The web app and the workbench pair files by the stem of the device file
 (`devices/<stem>.toml`): the faceplate is `apps/web/src/data/faceplates/<stem>.toml`, the LED map `devices/<stem>-leds.toml`. A
 device has a faceplate when its faceplate file exists; the LED map is optional. The LED maps carry no `[device]` table, so
-readers that scan `devices/` skip them. The public site offers only the faceplates of runtime targets.
+readers that scan `devices/` skip them. Which devices the public site offers is not a device fact: `SITE_DEVICES` in `apps/web/src/data/site-devices.mjs` is the one list that its pages, gallery, emulator pick and Transfer library follow.
 
 ## Where each fact lives
 
@@ -114,6 +119,12 @@ files and `types.toml`; `gen --check` fails when one is stale. The kinds (`packa
 - `sharc`: `#define` lines, one file per device, for DSP sources (`#include "device-dt2.inc"`). Each note is on its own line:
   the assembler's preprocessor keeps a trailing comment in a macro body, which swallows the rest of a line that uses the macro.
   `.PKBSS name, MACRO;` takes a `#define`d number as its size (`packages/patchkit/src/build/sharc_obj.rs`).
+
+A module that reads a table of the device file declares it in `[module] needs_device` (dotted paths, for example `["input.view_keys"]` for `core/ui`, whose
+`ui-<dev>.inc` holds the key ids and flag bits). Every device file with a patch set that includes the module (as a root or through `requires`; a device with no
+`[digikit]` too) must have the table, or `patchkit gen`, `patchkit build`, `patchkit pack` and the module's own generator refuse, naming the device, the patch
+set, the module and the table. A module id in a patch set that the library lacks is an error. `[input.view_keys]`: `yes`, `no`, `right`, an optional `yes2` (a
+second YES key; absent: none, generated as 0xffffffff), and the bit numbers `move_flag` and `act_flag` (0 to 31) of the key event's flags word.
 
 The runtime object is built once and used on every device, so it has no device value in its code: what differs between devices is data of
 `dkrt_dev` (and of the other per-device symbols of `device.s`: `dkrt_device_id`, `dkrt_store_*`, `dkrt_peek_*`), which the runtime reads through

@@ -118,8 +118,10 @@ Filter machines:
 - The stock loader keeps 0..5 (and 0xff) and resets any other value to 0. A stored type of 6 or more on stock code shows the last machine's
   knobs, the name "ERROR" and no knob slots, with no fault.
 - New filter types can use 16..31: positive as a signed byte, never 0xff, above the stock range, inside the MIDI value and the 32-word SHARC table.
-- DSP: the filter type goes to the SHARC as one frame word per track; one converter function indexes a 32-word table with it and keeps only
-  the result. What the result selects is open (E0a). The "five filter routines" of findings 06 and 53 are stages of one function.
+- DSP: the filter type goes to the SHARC as one frame word per track; the SHARC converter maps the type to S3; the stock
+  filter is two table jumps on S3 (a coefficient stage per voice per block that receives the cutoff with the filter envelope and key tracking
+  added, and a process stage that filters the voice's 32-sample block in place), both skip S3 of 7 and above; types 16..31 currently play
+  unfiltered. Details in the filter machines finding. The "five filter routines" of findings 06 and 53 are stages of one function.
 - Hook budget: with the port file, `BIND` items leave the services, so no per-file limit applies. `install_sites` 48 bounds the installed hook sites
   overall. `machines.dks` declares 13 hooks (DT2 binds 7, DN2 10); six filter hooks give 19.
 
@@ -389,12 +391,9 @@ one PR unless it says otherwise. Every PR gets an independent review before merg
 Payoff: decides E5 details, E6 and E7. Confidence of an answer: high.
 
 E0a Filter DSP experiment (emulator, one run, about 10 minutes; needs Em's go before it runs).
-- The static half is done (E0b): the ColdFire frame builder sends the filter type as TX word `0xb4 + 2 * track`; on the SHARC one converter
-  function indexes the 32-word table at DM `0x2567a0` with it and stores only the result in the track record.
-- On DT2 1.17: dump DM `0x2567a0..0x2567df` after boot. Then one track, steady noise input, the existing DSP PC histogram; write sound+0xa3 to
-  0..7, one segment each. Record which SHARC routines change with the filter type and what the table result selects.
-- Answer: whether the filter stage is a per-voice dispatch (a stub plus a slot as in R12-8) or inline stock code, and the site to hook.
-- Parked after a first attempt (finding 148 "The decisive check still open"): the run read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
+- The static read of 2026-11-20 answered the dispatch question (table dispatch, stub sites in the filter machines finding). E0a is now a
+  confirmation run (type 16 unfiltered, record words of knobs 4-6, run-time 0x2567a0), which can be the first dk:dev iteration of E7.
+- Parked after a first attempt (finding 148 "What the emulator still has to show"): the first attempt read the DSP table (types 0-5 map to S3 1, 3, 2, 4, 5,
   6), but a raw byte write did not reach the DSP, and the profile counted nothing because the daemon was built without a generated DSP core
   (a plain `cargo build` without `SHARC_GEN_DIR`: the stub traps on every instruction, `native-trap: no decoded instruction`).
   `sharc.profile` counts the native tier. The retry needs: the daemon built with
@@ -962,25 +961,28 @@ Refactors with no behaviour change, proven by objdiff of the built objects:
 
 ### E7 Filter machines
 
-Only if E0a finds a usable DSP site. E0b bounded the ColdFire side: six hook sites on DT2, the same shape on DN2.
+The SHARC side has a usable site: the stock filter is a table dispatch on S3 (filter machines finding). E0b bounded the ColdFire side: six hook sites on DT2, the same shape on DN2.
 
 What:
 1. `dk_module_ctx_add_filter(ctx, index, name, short)` returns a typed `dk_filter *`. Page and param calls take a `dk_filter *` through
    their own typed entry points (`dk_filter_add_page`), implemented by the machines service with the same code as machines. The typed handle
    costs nothing and stops a track's machine and filter from being mixed up in C.
 2. The machines service gains the filter table family (3.2), six sites per device (addresses in the filter machines finding): the list
-   builder (append the new ids), the accessor (return the service's row for 16..31), the graph switch (replace the default branch for 16..31;
-   the service draws through an overlay canvas), the name function, the loader bound, and an extension of the existing
+   builder (append the new ids), the accessor (return the service's row for 16..31), the graph switch (the stock rectangle, x 21..71, y 7..23,
+   51 x 17 px, stays blank for our types, so the service draws its graph there with no masking), the name function, the loader bound, and an extension of the existing
    `cf.machine.hook.param_code.args` hook for the per-type knob slots. New filter type numbers are 16..31, assigned by the sticky allocator
    (E3); they never index a stock table. Chooser rows are text only, so a filter has a name and no glyph.
 3. A filter page has at most three own knobs (descriptor fields 4-6); a fourth is refused with `DK_E_PAGE_FULL`. FLTR1 and FLTR2 are a fixed
    global page set, so a second filter page is refused the same way (rule 2).
 4. Stored value (rule 7): the stock loader resets 16..31 to 0, so the choice lives in digikit's store per sound and the sound holds the stock
    filter the module names as its fallback. The loader-bound hook restores the choice from the store when a kit loads (O6).
-5. DSP: a stub at the filter-type site with a slot, dispatch in the `machines.dks` DSP section (R12-8 pattern). Filter DSP is a new contract
-   in `sdk/dsp/contract/` (input and output buffers per voice, state per voice).
+5. DSP: three SHARC sites per device: the converter (types 16..31 get S3 7 and up), the coefficient dispatch and the process dispatch (range
+   check, then the module's entries; R12-8 stub pattern, dispatch code in `machines.dks`). Filter DSP is a new contract in
+   `sdk/dsp/contract/` with two entries: `coef(state, cutoff, params)` once per voice per block, where cutoff is the stock normalized cutoff
+   0..1 with the filter envelope, key tracking, LFO and MIDI modulation already in it, and `process(state, buffer, n)` in place on the
+   voice's 32-sample block. Hook count: 3 SHARC sites per device on top of the six ColdFire sites.
 6. Hook budget: the six new hooks go through the port file ([port-file.md](port-file.md)). `machines.dks` declares 13 hooks; `BIND` items leave the services with the port file, so no per-file limit applies. The runtime's `install_sites` 48 still bounds the
-   installed hook sites: 18 are taken on DT2 and 22 on DN2 today (table in port-file.md section 5), and E7 adds at most 6 per device, which gives 24 and 28.
+   installed hook sites: 18 are taken on DT2 and 22 on DN2 today (table in port-file.md section 5), and E7 adds at most 6 per device, which gives 24 and 28. The three SHARC sites per device (converter, coefficient dispatch, process dispatch) are stubs in the image with slots in the dsp-link block, as R12-8 placed its stubs (4 of 16 slots used today); whether they also count against `install_sites` is open, so check it before E7 starts.
 7. Template `sdk/templates/filter/` and a fixture `tests/fixtures/modules/test/filter-gain`.
 8. The filter response graph reuses the Bitmap and tile helpers of the shared crate (E6e), and the filter knob ranges are rows of the machines service (the rows its builder calls write), so they need no range call.
 
@@ -990,8 +992,8 @@ assembly (filter fixture loads); device (one test per device: select the filter,
 Done when: a module adds a filter that appears in FUNC+SYN on the FLTR page, shows its knobs, draws its graph and filters audio, on DT2
 (and DN2 if E0b item 5 shows the same shape).
 
-Estimate: 3-5 days. Payoff: proves the "table row" shape for a second table family. Confidence: medium until E0a (ColdFire side known).
-Depends on: E0a; E3; E4; E5 (MISSING placeholder for filters); R12-8; the port file (its six new hooks go through it).
+Estimate: 3-5 days. Payoff: proves the "table row" shape for a second table family. Confidence: medium-high (both sides read statically; E0a confirms).
+Depends on: E0a confirmation (can be its first dk:dev iteration); E3; E4; E5 (MISSING placeholder for filters); R12-8; the port file (its six new hooks go through it).
 
 ### E8 Top-level lift and names
 
@@ -1028,7 +1030,7 @@ runtime-and-services.md.
 | # | Item | Depends on | Device runs | Status |
 | --- | --- | --- | --- | --- |
 | 1 | E0b static spikes (extended) | - | none | done: findings 147, 148, 149; 135, 02, 06, 53 corrected (branch e0b/findings) |
-| 1 | E0a filter DSP experiment | daemon with a generated core and `sharc-profile`; UI chooser | one, about 10 min | parked: the first attempt ran on a daemon without a generated core (finding 148); retry before E7 |
+| 1 | E0a filter DSP experiment | daemon with a generated core and `sharc-profile`; UI chooser | one, about 10 min | static half answered 2026-11-20 (filter machines finding: table dispatch, stub sites); confirmation run folded into E7's first dk:dev iteration |
 | 1 | E0c daemon hardening | - | none | done: PR #615 |
 | 2 | E1 proof coverage check | - | none | done: keep `file-catalog-proof`, move in E8 |
 | 2 | E2 boilerplate codegen | - | none; objdiff | done: PR #608 (objects byte-identical by objdiff) |
@@ -1052,7 +1054,7 @@ runtime-and-services.md.
 | 8 | E6c WAVE maximum as a row write | E6, E5 | lfo device tests (below) | done: branch e6c/row-write (host checks; the lfo device tests below are not run yet) |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
-| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8, port file | filter test plus subset | todo |
+| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8, port file | filter test plus subset | active: P0 on branch e7/p0-static (fw.py cost, finding 148 DSP section); bank DSP P2 on branch e7/p2-rbank |
 | 10 | E8 top-level lift and names (taxonomy tree, roles, requires edges, patch-set lists, byte-manifest tool; 10-14 h agent editing time) | E1, port-file stack, E5c/E5b, open branches merged | byte manifest, host stage, `test:plan`, gate-smoke, one device test per device; the rest in the next batch's full run | todo |
 | 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | PR1 done (PR #621); PR2 and PR3 done (device: providers incl. the port file, live, reload, store-format, transfer-live, fixtures, machines, lfo, shot, refusal, capacity, service-commands, fx-contract, settings-api, file-write, usb-bulk, safe-mode, needs, fits, gate-smoke, gate-pins on DT2 and DN2); PR4 done on the host (branch port/pr4-lfo: one lfo.dks, device mask in the SLOTS flags; device proof not run) |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
@@ -1078,7 +1080,6 @@ not the screen; PCM pins set from a numeric report. Before a device run, list th
 | Risk | Effect | Stop rule or fallback |
 | --- | --- | --- |
 | A stock reader of the LFO wave that E0b missed does not clamp | a fault on stock code with a saved extended wave | E6 device test loads a saved project without the module and in safe mode |
-| E0a finds the filter stage inline in stock code with no per-type dispatch | E7 needs a new DSP hook design | stop E7 after E0a and report payoff and cost; E1-E6 are unaffected |
 | A filter-type reader E0b missed indexes a table by the raw value | wrong data for 16..31 | E7 device test walks every filter page and the chooser with a custom filter selected |
 | A gap row plays type 0's sound (DT2 sample renderer, DN2 FM TONE) | sound in the reload window | the MISSING placeholder is made silent (E5 item 7); on DT2 the silent routine is checked on the rig first |
 | `machines.dks` is near the 65536-byte staging limit (the file was about 65.5 KB before E5 and is about 61 KB on DT2 after BUILD is zero-initialised) | E7's filter code may not fit | measure the file before E7 starts; move code out of the service or raise the staging limit (a runtime change) before the filter code lands; stop E7 if neither is possible |

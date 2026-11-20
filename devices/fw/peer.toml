@@ -1,0 +1,47 @@
+# peer: the second ColdFire CPU (Syntakt): the thread that reads its program (container section 7) from the NOR flash into the transmit buffer.
+# Names follow <cpu>.<subsystem>.<kind>.<name>. Only the Syntakt has these (docs/findings/151-syntakt-section7-pack.md); no other device file lists a rule.
+
+[[fn]]
+name = "cf.peer.fn.nor_read"
+cpu = "cf"
+sig = "void (u32 src, u32 len, u8 *dst)"
+rule.st = { kind = "cf_func", hash = "7def601760b343ae9bcc13670bbe4763", offset = 0x0, len = 4 }
+mark = "O"
+users = ["core/peer-image"]
+doc = "st-1.42 0x40116d7a: the NOR flash read `void f(u32 src, u32 len, u8 *dst)` (byte loop on the SPI controller, takes the NOR mutex). The peer thread calls it for the section 6 and section 7 payloads; core/peer-image forwards the section 6 call to it."
+
+[[fn]]
+name = "cf.peer.fn.depack"
+cpu = "cf"
+sig = "u32 (const u8 *src, u8 *dst)"
+rule.st = { kind = "cf_func", hash = "44162d8e3387fa97fb434c4045475ee2", offset = 0x0, len = 4 }
+mark = "O"
+users = ["core/peer-image"]
+doc = "st-1.42 0x401181ec: the container section depacker. It skips the 8-byte stream header, has no output bound and returns the output length in D0."
+
+[[site]]
+name = "cf.peer.site.nor_read_lea"
+cpu = "cf"
+rule.st = { kind = "cf_words", as = "code", words = [0x70ef7210, 0x4fefffdc, 0x48d71c0c, 0x260f0683, 0x00000014, "*", "*", "*", "*", "*"], offset = 0x20, len = 6 }
+mark = "O"
+users = ["core/peer-image"]
+doc = "st-1.42 0x40082c24: the 6-byte `lea <NOR read>.l,A2` in the peer thread (entry 0x40082c04, no function of the database). A2 is used only by the two `jsr (a2)` calls that read the section 6 and section 7 payloads. Found by the words of the thread's first 40 bytes."
+
+[[site]]
+name = "cf.peer.site.status_fail"
+cpu = "cf"
+rule.st = { kind = "cf_words", as = "code", words = [0x70ef7210, 0x4fefffdc, 0x48d71c0c, 0x260f0683, 0x00000014, "*", "*", "*", "*", "*"], offset = 0x280, len = 2 }
+mark = "O"
+users = ["core/peer-image"]
+doc = "st-1.42 0x40082e84: the code the peer thread takes when the section 7 directory entry is missing: it stores status 1 (DSP BOOT FAILURE) and waits. The DMA is not armed then, so the second CPU gets no bytes."
+
+[[hook]]
+name = "cf.peer.hook.nor_read_lea"
+site = "cf.peer.site.nor_read_lea"
+cpu = "cf"
+devices = ["st"]
+mode = "replace"
+regs = { in = [], clobbers = ["a2", "ccr"] }   # the displaced `lea ...,A2` writes A2; the flags are dead before the next `move.b`
+mark = "O"
+users = ["core/peer-image"]
+doc = "The `lea <NOR read>,A2` of the peer thread; the hook loads A2 with the wrapper that has the same stack signature and continues after the site."

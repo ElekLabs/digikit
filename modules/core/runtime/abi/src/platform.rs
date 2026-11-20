@@ -157,6 +157,8 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     // ---- the card --------------------------------------------------------------------------------------------------------
     /// Read `bytes` (a multiple of 512) from `sector` into `buf`; 0 or a negative error.
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32;
+    /// The card's capacity in 512-byte sectors as the firmware's eMMC driver reports it (`cf.storage.fn.capacity`); `0xFFFFFFFF` while the driver is not ready.
+    fn card_sectors(&self) -> u32;
     /// The firmware's block write, ungated. Only the one gated write (`platform::block_write`) and the card claim call it.
     unsafe fn block_write_raw(&self, sector: u32, bytes: u32, buf: *const u8) -> i32;
 

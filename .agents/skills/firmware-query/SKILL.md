@@ -55,6 +55,7 @@ Order of work:
    each with a provenance and confidence. Build with `uv run python -m tools.coldfire.atlas build dt2-1.17`.
 2. `search TERM` (names, strings, decompiled C, atlas; `--in names,strings,decomp,atlas`).
 3. `fn`, `class`, `callers`, `callees`, `xref`, `path`, `decomp`, `disasm` on what the search found.
+3b. `cost ADDR [--vars R2=32 | R2@FN=32] [--vars-all R2=32]` (SHARC): static instruction count with DO-loop trip counts and callees; see "DSP (SHARC) catalog".
 4. `port NAME --from dt2-1.16 --to dt2-1.17` carries a function between versions (cfmatch matches).
 5. `sql "SELECT ..."` (read-only) only when none of these fits. Tables: functions, edges, datarefs, strings,
    symbols, typeinfos, vtables, matches (cfdb); functions, edges, insn, literals, ptr (sharcdb).
@@ -110,6 +111,8 @@ Without Claude's database, Keep/Later/Skip uses per-image browser storage, with 
     fw.py catalog -i dt2-1.17 --cpu sharc --grade --top 20
 
 Needs `out/sharcdb/<image>.sqlite` (also of the old image, for `stable`). Writes `out/atlas/<image>-dsp.sqlite` (tables `catalog`, `catalog_groups`), `<image>-dsp-catalog.tsv`, `<image>-dsp-catalog-groups.tsv` and `<image>-dsp-catalog-graph.json`. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints or tags.
+
+`fw.py cost ADDR [--vars R2=32] [--vars-all R2=32]` gives a static instruction count with DO-loop trip counts (literal or symbolic) and callees. It is an upper bound over all paths with no stall model, and the unit of `dsp_cost_voice` and `patchkit budget`. Trip symbols name the register and the function that reads it, `R2@1cd286`: a callee's R2 is not the caller's. `--vars NAME=V` sets the entry function's register, `NAME@FN=V` one function's, `--vars-all NAME=V` every function's; an unknown name is an error that lists the symbols present. Jumps to another function (conditional too) count as tail calls whose targets are summed (upper bound); with `--vars` the output also gives the tighter total taking the largest target. A zero or missing DO count is `trip?@fn`; notes list what was not handled.
 
 ### From a candidate to a declaration
 

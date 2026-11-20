@@ -3,8 +3,8 @@
     .equ DEVICE_NAME_WORD, 0x73740000    /* [digikit] name, NUL padded, as a big-endian word */
     .equ SAMPLES_IN_STORE, 0x1    /* [capabilities] card = "slots": the samples are files of the digikit store */
     .equ SAMPLE_PATH_MAX, 0x97    /* [digikit] sample_path_max */
-    .equ STORE_FIRST, 0x800000    /* [card.store] first_sector (0: no store) */
-    .equ STORE_SECTORS, 0x261a000    /* [card.store] end_sector - first_sector (0: no store) */
+    .equ STORE_FIRST, 0x200000    /* [card.store] first_sector (0: no store) */
+    .equ STORE_SECTORS, 0x100000    /* [card.store] end_sector - first_sector (0: no store) */
     .equ DSP_HEADROOM, 0x0    /* DSP instructions per block left for modules: the block at 85 percent (projected with the high cycle factor) less the stock firmware's load (devices/cycle-factors.json, dkprof::budget) */
     .equ DSP_VOICES, 0x0    /* [adapter.machine] voices: the voices a machine's per-voice DSP cost counts for */
     .equ PEEK_N, 0x2    /* [digikit] peek: number of ranges */

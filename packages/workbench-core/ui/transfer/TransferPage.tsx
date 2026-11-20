@@ -63,7 +63,7 @@ async function read(app: TransferApp): Promise<void> {
   }
   if (!current()) return;
   setBrowsing(false);
-  setBrowseDevice(isDeviceId(v.device) ? v.device : (runtimeDeviceIds[0] ?? ''));
+  setBrowseDevice(isDeviceId(v.device) ? v.device : ((env.libraryDevices ?? runtimeDeviceIds)[0] ?? ''));
   setLastView(v);
   applyPendingAdd(app, v);
   const name = await env.deviceName(v.device);

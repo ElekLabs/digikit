@@ -42,6 +42,8 @@ struct Doc {
     input: Option<InputDoc>,
     panel: Option<PanelDoc>,
     fx: Option<FxDoc>,
+    #[serde(default)]
+    patch_sets: BTreeMap<String, Vec<String>>,
 }
 /// `[fx]`: the facts of the effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
 /// effect values, which of them the firmware does not use (effect row k owns `value_indices[8k .. 8k + 8]`), the page numbering and the stock
@@ -88,7 +90,26 @@ struct FxDoc {
 #[derive(Deserialize)]
 struct InputDoc {
     backend: String,
+    #[serde(default)]
+    view_keys: Option<ViewKeysDoc>,
 }
+/// `[input.view_keys]`: the key ids of the firmware's key events (the id the views' key handlers get at +0xc of the event), which are the firmware's
+/// key indices and differ from the panel codes on some devices (the Syntakt's decoder table is not the identity, finding 138 "Safe key"). core/ui reads
+/// them to tell YES, NO and RIGHT in its list views. `yes2` is a second key that acts as YES; absent: none (generated as `UI_NO_KEY`, which is no key id).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ViewKeysDoc {
+    yes: u64,
+    yes2: Option<u64>,
+    no: u64,
+    right: u64,
+    /// The bit of the key event's flags word (+0x10) that the move keys (RIGHT here) act on, and the bit that YES and NO act on: read from the firmware's own key handler.
+    move_flag: u64,
+    act_flag: u64,
+}
+/// The value of `UI_KEY_YES2` on a device with no second YES key: no firmware key id (they are small numbers), so the comparison in core/ui never matches.
+const UI_NO_KEY: u64 = 0xFFFF_FFFF;
+
 /// `[panel]`: the key codes: codes 1 to 8 * `linear_channels` are linear (code = channel * 8 + bit + 1), `[panel.exceptions]` lists the others as
 /// code = [channel, bit]. Only these numbers are generated; the groups are for hosts that draw the panel.
 #[derive(Deserialize)]
@@ -215,6 +236,16 @@ struct Store {
 #[derive(Debug, Default)]
 pub struct Facts {
     docs: BTreeMap<String, Entry>,
+    /// Every device file (a runtime target or not): the tables a module's `needs_device` can name, and the patch sets.
+    devices: BTreeMap<String, DeviceTables>,
+}
+
+#[derive(Debug)]
+struct DeviceTables {
+    /// The tables of the device file as dotted paths (`input`, `input.view_keys`).
+    tables: std::collections::BTreeSet<String>,
+    /// `[patch_sets]`: the root modules of each named set.
+    patch_sets: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -338,6 +369,8 @@ struct InputF {
     encoders: u64,
     /// (code, channel, bit)
     exceptions: Vec<[u64; 3]>,
+    /// The key ids of the firmware's key events (yes, yes2, no, right) and the flag bits of the move and act keys.
+    view_keys: [u64; 6],
 }
 #[derive(Debug)]
 struct SamplePoolF {
@@ -415,6 +448,7 @@ struct StoreF {
 impl Facts {
     pub fn from_texts<'a>(texts: impl IntoIterator<Item = &'a str>) -> Result<Facts> {
         let mut docs = BTreeMap::new();
+        let mut devices = BTreeMap::new();
         let texts: Vec<&str> = texts.into_iter().collect();
         let models = crate::typed::Models::from_texts(texts.iter().copied())?;
         for t in texts {
@@ -425,6 +459,18 @@ impl Facts {
             }
             let d: Doc = toml::from_str(t)?;
             let short = d.device.short.clone();
+            if devices
+                .insert(
+                    short.clone(),
+                    DeviceTables {
+                        tables: table_paths(&table),
+                        patch_sets: d.patch_sets.clone(),
+                    },
+                )
+                .is_some()
+            {
+                return Err(err!("two device files describe {short}"));
+            }
             // only a runtime target (a file with [digikit]) has shared constants; an identity-only or patch-only device is skipped
             let Some(k) = d.digikit else {
                 continue;
@@ -567,7 +613,7 @@ impl Facts {
                 return Err(err!("two device files describe {short}"));
             }
         }
-        Ok(Facts { docs })
+        Ok(Facts { docs, devices })
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -766,7 +812,39 @@ fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<
         }
         exceptions.push([code, *ch, *bit]);
     }
+    if let Some(k) = &i.view_keys {
+        for (what, bit) in [("move_flag", k.move_flag), ("act_flag", k.act_flag)] {
+            if bit >= 32 {
+                return Err(err!(
+                    "{short}: [input.view_keys] {what} = {bit}: a bit number of the 32-bit flags word, 0 to 31"
+                ));
+            }
+        }
+        for (what, id) in [
+            ("yes", Some(k.yes)),
+            ("yes2", k.yes2),
+            ("no", Some(k.no)),
+            ("right", Some(k.right)),
+        ] {
+            if id.is_some_and(|v| v >= UI_NO_KEY) {
+                return Err(err!(
+                    "{short}: [input.view_keys] {what}: a key id below {UI_NO_KEY:#x}"
+                ));
+            }
+        }
+    }
+    let view_keys = i.view_keys.map_or([0, UI_NO_KEY, 0, 0, 0, 0], |k| {
+        [
+            k.yes,
+            k.yes2.unwrap_or(UI_NO_KEY),
+            k.no,
+            k.right,
+            k.move_flag,
+            k.act_flag,
+        ]
+    });
     Ok(InputF {
+        view_keys,
         backend: backend as u64 + 1,
         linear_channels: p.linear_channels,
         button_channels: p.button_channels,
@@ -1348,6 +1426,27 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         "[panel] button_channels (the button decoder's tables: a key channel is below it)",
     ));
     v.push(c("PANEL_ENCODERS", inp.encoders, "[panel] encoders"));
+    for (name, value, what) in [
+        ("UI_KEY_YES", inp.view_keys[0], "yes"),
+        ("UI_KEY_YES2", inp.view_keys[1], "yes2"),
+        ("UI_KEY_NO", inp.view_keys[2], "no"),
+        ("UI_KEY_RIGHT", inp.view_keys[3], "right"),
+        ("UI_KEYFL_MOVE", inp.view_keys[4], "move"),
+        ("UI_KEYFL_ACT", inp.view_keys[5], "act"),
+    ] {
+        v.push(c(
+            name,
+            value,
+            match what {
+                "yes" => "[input.view_keys] yes (the key id of YES in a key event)",
+                "yes2" => "[input.view_keys] yes2 (a second YES key; 0xffffffff: none, no key id)",
+                "no" => "[input.view_keys] no (the key id of NO)",
+                "right" => "[input.view_keys] right (the key id of RIGHT)",
+                "move" => "[input.view_keys] move_flag (the flags bit the move keys act on)",
+                _ => "[input.view_keys] act_flag (the flags bit YES and NO act on)",
+            },
+        ));
+    }
     v.push(c(
         "PANEL_EXC_N",
         inp.exceptions.len() as u64,
@@ -1811,6 +1910,26 @@ fn c_shared(module: &str) -> String {
     )
 }
 
+/// The `[[repack]]` entries of a module as C macros (`REPACK_<ROLE>_DEST`, `_STAGE_END`, `_LEN` and `_SHA256`, an initializer list of 32 bytes): the layout
+/// that patchkit checks the stored stream against is the one the module's code uses, from one source.
+fn c_repack(module: &str, repacks: &[crate::module::RepackDef]) -> Result<String> {
+    if repacks.is_empty() {
+        return Err(err!("{module}: a `c-repack` gen needs a [[repack]]"));
+    }
+    let mut s = format!("/* {module}: {NOTE}. The [[repack]] of module.toml. */\n");
+    for r in repacks {
+        let role = r.role.to_ascii_uppercase();
+        let sha = crate::error::unhex(&r.sha256)
+            .map_err(|_| err!("{module}: [[repack]] sha256 is not hex"))?;
+        let bytes: Vec<String> = sha.iter().map(|b| format!("{b:#04x}")).collect();
+        let _ = writeln!(s, "#define REPACK_{role}_DEST {:#x}u", r.dest);
+        let _ = writeln!(s, "#define REPACK_{role}_STAGE_END {:#x}u", r.stage_end);
+        let _ = writeln!(s, "#define REPACK_{role}_LEN {}u", r.len);
+        let _ = writeln!(s, "#define REPACK_{role}_SHA256 {{ {} }}", bytes.join(", "));
+    }
+    Ok(s)
+}
+
 fn gas(module: &str, dev: &str, cs: &[C], emit: Option<&[&str]>) -> String {
     let mut s = format!("/* {module} on {dev}: {NOTE}. */\n");
     for k in cs
@@ -1938,7 +2057,7 @@ fn check_sources(
     ))
 }
 
-/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-`; a module that lists neither is for every device.
+/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-` (TODO: the port file format, devices/ports/, has no device field; the prefix is the identity, as in apps/web/src/data/modules.ts; finding 153); a module that lists neither is for every device.
 fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     let prefix = format!("{short}-");
     let listed = m.module.ports.iter().chain(m.targets.keys());
@@ -1952,11 +2071,84 @@ fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     !any
 }
 
-/// The files a module asks for with `[[gen]]` (empty: it asks for none).
+/// The tables of a device file as dotted paths (`input`, `input.view_keys`).
+fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
+    fn walk(t: &toml::Table, prefix: &str, out: &mut std::collections::BTreeSet<String>) {
+        for (k, v) in t {
+            if let toml::Value::Table(sub) = v {
+                let path = if prefix.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{prefix}.{k}")
+                };
+                out.insert(path.clone());
+                walk(sub, &path, out);
+            }
+        }
+    }
+    let mut out = std::collections::BTreeSet::new();
+    walk(t, "", &mut out);
+    out
+}
+
+/// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.view_keys`): every device (runtime target or not)
+/// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
+/// module should run on. This whole-library check (`patchkit gen`) also refuses a module id of a patch set that the library does not have.
+pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
+    for (dev, e) in &facts.devices {
+        for (set, roots) in &e.patch_sets {
+            let (ids, _) = lib
+                .with_requires(roots)
+                .map_err(|x| err!("{dev}: patch set {set}: {x}"))?;
+            for id in ids {
+                let m = lib
+                    .get(&id)
+                    .ok_or_else(|| err!("{dev}: patch set {set}: unknown module {id}"))?;
+                check_needs(dev, set, &id, &m.manifest.module.needs_device, e)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The same check for one module and the tables it declares (`needs`), for the generator of the module, `build` and `pack`. A device is checked when a patch set
+/// lists the module; a set that cannot be resolved in this library (`pack --manifest`: no core modules) counts when the module is one of its roots, and is skipped
+/// otherwise. Other modules are not looked at, so a device without a table never stops the build of a module that does not need it.
+pub fn check_module_tables(lib: &Library, facts: &Facts, id: &str, needs: &[String]) -> Result<()> {
+    if needs.is_empty() {
+        return Ok(());
+    }
+    for (dev, e) in &facts.devices {
+        for (set, roots) in &e.patch_sets {
+            let includes = match lib.with_requires(roots) {
+                Ok((ids, _)) => ids.iter().any(|i| i == id),
+                Err(_) => roots.iter().any(|r| r == id),
+            };
+            if includes {
+                check_needs(dev, set, id, needs, e)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_needs(dev: &str, set: &str, id: &str, needs: &[String], e: &DeviceTables) -> Result<()> {
+    for need in needs {
+        if !e.tables.contains(need) {
+            return Err(err!(
+                "{dev}: patch set {set} includes {id}, which needs [{need}] in the device file"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The files a module asks for with `[[gen]]` (empty: it asks for none). A module with `needs_device` is first checked against every device that patches it in.
 pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFile>> {
     let m = lib
         .get(module)
         .ok_or_else(|| err!("unknown module {module}"))?;
+    check_module_tables(lib, facts, module, &m.manifest.module.needs_device)?;
     if m.manifest.gens.is_empty() {
         return Ok(vec![]);
     }
@@ -2037,6 +2229,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), rust_profiles(module, lib, &facts.docs)?));
+            }
+            "c-repack" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `c-repack` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), c_repack(module, &m.manifest.repack)?));
             }
             "c-shared" => {
                 if g.path.contains("{dev}") {

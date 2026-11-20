@@ -36,6 +36,7 @@
 //! instructions at a `watch` pc as `[pc, address, width]` in execution order, addresses as for `stores`. It is a read analogue of
 //! `watch`: the runtime records the loads (`St::read_log_on`), which takes the plain-RAM fast path of the call off; a call without
 //! the option pays nothing and has no `loads` key.
+//! EMUCLK and EMUCLK2 read the number of instructions the core has executed (its diagnostic instruction clock), so that a span counts instructions.
 //! A call with `"profile": true` also answers `profile`: one `[pc, count]` row per pc the call executed, in pc order (the counts
 //! add up to `instructions`; no key without the option, and the loop only counts when it is on).
 //!
@@ -475,6 +476,9 @@ fn peek_word(e: &Engine, word_address: u32) -> Option<u32> {
     }
 }
 
+const R_EMUCLK: usize = 105;
+const R_EMUCLK2: usize = 106;
+
 /// Run one call. The loop is the interpreter's own (`decode_at`, then `exec_insn`, as `Engine::step` does for one
 /// instruction); it stops at the return point and the breaks before an instruction is decoded.
 pub fn run_call(
@@ -523,6 +527,11 @@ pub fn run_call(
         if call.profile {
             *profile.entry(pc).or_default() += 1;
         }
+        // EMUCLK and EMUCLK2 are the engine's diagnostic instruction clock (one tick per instruction, the core's own `instruction_clock`): the
+        // cycle counter a span reads (sdk/dsp/contract/dk_trace.inc) counts instructions here, as it does in the emulator.
+        let tick = e.s.icount;
+        e.s.r[R_EMUCLK] = V::c((tick as u32) as Int);
+        e.s.r[R_EMUCLK2] = V::c((tick >> 32) as Int);
         let done = exec_insn(&mut e.s, insn);
         let log = e.s.probe.take();
         if call.loads {

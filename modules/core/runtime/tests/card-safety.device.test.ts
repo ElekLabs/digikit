@@ -6,6 +6,7 @@ import {
   cardInfo,
   claimHeader,
   bootInfo,
+  currentRecord,
   E_CARD_RO,
   E_INUSE,
   E_NOSTORE,
@@ -15,10 +16,11 @@ import {
   setSelection,
   statusOf,
 } from '@digi/regression/runtime/card-kit.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { NONE, opStatuses } from '@digi/regression/runtime/debug-kit.ts';
 import { openAbout } from '@digi/regression/runtime/flows/menu.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
+import type { Session } from '@digi/test-support';
 import { logEvents, ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 
 /**
@@ -34,6 +36,18 @@ const MOD = 'modules/a.dkm';
 const STRAY = 100; // relative sector of the foreign bytes
 const PAT = Buffer.from(Array.from({ length: 512 }, (_, i) => (i * 7 + 3) & 0xff)); // neither all 0x00 nor all 0xFF
 const BOOT_OK = { safe: 0, count: 0, uiReached: 1 };
+
+/**
+ * What the boot counter has done by now, read while the run is paused: the stable flag, the record the next boot would use and the card writes.
+ * The stable-period clear lands at an emulated time the test does not control, so the expected values are exact functions of the stable flag read
+ * with them (`stable` is 0 or 1): the boot raises the counter (one write), the clear lowers it (one more write and one more sequence number).
+ */
+async function counterState(h: CardRig, session: Session) {
+  const stable = (await bootInfo(session, h.plan)).stable;
+  const rec = currentRecord(await h.records());
+  const writes = (await cardInfo(session, h.plan)).writes;
+  return { stable, rec, writes };
+}
 
 cardRigs(
   'card safety',
@@ -53,13 +67,22 @@ cardRigs(
       async () => {
         const { session } = h.runtime;
         const check = async () => cardInfo(session, h.plan);
-        expect(await check(), 'the check finds the range blank; nothing refused, claimed or written').toMatchObject({
-          stateName: 'blank',
+        // The boot counts itself from the first boot: on a blank card it writes selection copy A (the write marks the area ours, no header claim).
+        const boot = await check();
+        expect(boot, 'the check found the range blank; the boot then marked it ours with its record, nothing refused or claimed').toMatchObject({
+          stateName: 'ours',
           firstNonblank: NONE,
           refused: 0,
           claims: 0,
-          writes: 0,
         });
+        const s0 = await counterState(h, session);
+        expect(s0.rec, 'the boot created the record: seq 1, counter 1 (seq 2 and counter 0 once the stable period cleared it), no selection').toMatchObject({
+          seq: 1 + s0.stable,
+          counter: 1 - s0.stable,
+          flags: 0,
+          paths: [],
+        });
+        expect(s0.writes, 'one write for the boot, one more for the clear').toBe(1 + s0.stable);
         const bad: [number, number][] = [
           [first - 1, 512],
           [end, 512],
@@ -73,22 +96,30 @@ cardRigs(
         const results: number[] = [];
         for (const [sector, n] of bad) results.push(await probeWrite(session, h.plan, sector, n));
         expect(results, 'every write outside the range is E_RANGE, whatever its size').toEqual(bad.map(() => E_RANGE));
-        expect(await check(), 'the refusals are counted and nothing was written').toMatchObject({
+        expect(await check(), 'the refusals are counted').toMatchObject({
           refused: bad.length,
           refusedRange: bad.length,
-          writes: 0,
-          stateName: 'blank',
+          stateName: 'ours',
         });
+        const s1 = await counterState(h, session);
+        expect(
+          [s1.rec?.seq, s1.rec?.counter, s1.writes],
+          'the refusals wrote nothing: the record and the write count are the boot counter\'s alone',
+        ).toEqual([1 + s1.stable, 1 - s1.stable, 1 + s1.stable]);
 
         expect(await setSelection(session, h.plan, [MOD])).toBe(0);
         const recs = await h.records();
         expect(recs[0], 'two record sectors are written, no store header').not.toBeNull();
         expect(recs[0]).toEqual(recs[1]);
-        expect(await check(), 'the area is ours from then on').toMatchObject({
-          stateName: 'ours',
-          claims: 0,
-          writes: 2,
-        });
+        const s2 = await counterState(h, session);
+        // the selection write takes the next sequence number and keeps the counter; it writes both copies (two writes)
+        expect(s2.rec, 'the selection is in the record').toMatchObject({ paths: [MOD], flags: 0 });
+        expect([s2.rec?.seq, s2.rec?.counter, s2.writes], 'seq, counter and writes after the selection write').toEqual([
+          2 + s2.stable,
+          1 - s2.stable,
+          3 + s2.stable,
+        ]);
+        expect(await check(), 'the area is ours, no claim').toMatchObject({ stateName: 'ours', claims: 0 });
 
         const events = await logEvents(h.runtime, h.plan);
         const checks = ofKind(events, LOG_KIND.CARD_CHECK);
@@ -122,8 +153,14 @@ cardRigs(
         expect(ci.stateName, 'the card counts as ours').toBe('ours');
         expect(await opStatuses(rt.dk, ['begin', 'delete', 'list'])).toEqual([E_NOSTORE, E_NOSTORE, E_NOSTORE]);
         await rt.dk.request(CMD.DATA, Buffer.alloc(14)); // DATA with no upload open: E_STATE, nothing staged
-        expect(await h.storeWrites(), 'nothing was written to the store range').toEqual([]);
-        expect((await cardInfo(rt.session, h.plan)).writes).toBe(0);
+        // The card holds a record (seq 1, counter 0): the boot raises it into copy B (seq 2, counter 1) and the stable-period clear writes copy A (seq 3,
+        // counter 0). Those are the only writes: no header, no data.
+        const { selA, selB } = cardStore(h.device);
+        const st = await counterState(h, rt.session);
+        expect([st.rec?.seq, st.rec?.counter, st.writes]).toEqual([2 + st.stable, 1 - st.stable, 1 + st.stable]);
+        expect(await h.storeWrites(), 'nothing was written to the store range besides the selection record').toEqual(
+          st.stable ? [selA, selB] : [selB],
+        );
       },
     );
 
@@ -135,8 +172,9 @@ cardRigs(
         await pokeKnob(rt.session, h.plan, 'DKRT_UPLOAD_CUT', 1);
         // three DATA chunks: the second write is refused
         expect(await statusOf(() => rt.dk.put('modules/c.dkm', blob(70_000, 9))), 'the cut upload failed').not.toBe(0);
-        expect(await cardInfo(rt.session, h.plan), 'the first data write claimed the range').toMatchObject({
-          claims: 1,
+        // The boot's record write already marked the area ours, so the first data write needs no claim of the empty header pair.
+        expect(await cardInfo(rt.session, h.plan), 'the area was ours before the first data write: no claim').toMatchObject({
+          claims: 0,
           stateName: 'ours',
         });
 
@@ -216,9 +254,15 @@ cardRigs('card safety: torn sectors', { dsp: 'zero', uploads: true, roots: RT, s
     async () => {
       const rt = await h.boot(await h.card({ foreign: { [headerB]: torn } }));
       await h.ready();
-      expect((await cardInfo(rt.session, h.plan)).stateName).toBe('blank');
+      // The check read the area blank (the torn header B counts as blank); the boot then wrote its record, so the area is ours. The torn header is
+      // still no store: the upload answers E_NOSTORE and no header or data sector is written (only the selection record the boot counts in).
+      expect((await cardInfo(rt.session, h.plan)).stateName).toBe('ours');
       expect(await statusOf(() => rt.dk.put('modules/b.dkm', blob(3_000, 31)))).toBe(E_NOSTORE);
-      expect(await h.storeWrites(), 'nothing written in the store range').toEqual([]);
+      const { selA, selB } = cardStore(h.device);
+      const st = await counterState(h, rt.session);
+      expect(await h.storeWrites(), 'nothing written in the store range besides the selection record (A by the boot, B by the stable clear)').toEqual(
+        st.stable ? [selA, selB] : [selA],
+      );
       expect(await statusOf(() => rt.dk.clear()), 'CLEAR').toBe(0);
       expect(await statusOf(() => rt.dk.put('modules/b.dkm', blob(3_000, 31))), 'the next upload commits').toBe(0);
       expect((await rt.dk.list()).map((e) => e.path)).toContain('modules/b.dkm');

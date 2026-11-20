@@ -12,6 +12,15 @@ users = ["core/digikit-menu", "core/runtime", "core/sdhc-large"]
 doc = "The firmware's eMMC block read: int f(u32 sector, u32 bytes, void *buf), 0 = ok (finding 23 S6)."
 
 [[fn]]
+name = "cf.storage.fn.capacity"
+cpu = "cf"
+sig = "u32 ()"
+rule = { kind = "cf_func", hash = "f196b9622c5a75d17f04db1f85c8e6d9", offset = 0x0, len = 4 }
+mark = "O"
+users = ["core/runtime"]
+doc = "The eMMC driver's capacity getter (20 bytes): the card's capacity in 512-byte sectors, 0xFFFFFFFF while the driver is not ready (DT2 1.17 FUN_4012ddd6, DN2 1.12 0x4012c49a, Syntakt 1.42 0x4010f232; one hash on all three). The firmware's block read refuses a start at or past it."
+
+[[fn]]
 name = "cf.storage.fn.block.write"
 was = ["cf.storage.fn.block_write", "dkrt.fw.block_write"]
 cpu = "cf"

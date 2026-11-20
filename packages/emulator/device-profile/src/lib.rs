@@ -138,6 +138,9 @@ pub struct ContainerProfile {
     pub fpga: Option<u32>,
     #[serde(default)]
     pub readonly: Vec<u32>,
+    /// Roles of read-only sections that a module may store packed (patchkit `[container] repack`).
+    #[serde(default)]
+    pub repack: Vec<String>,
 }
 
 /// `[acceptance]`: the firmware version, ready-snapshot directory and sample-card need of the device's acceptance tests.

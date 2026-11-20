@@ -17,6 +17,7 @@ conflicts = []
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # A run-time module (`.dkm`, `patchkit pack digikit/debug --device dt2`), built from C. `init` registers the debug range of sdk/sdk.toml (LOG, PEEK, LOGCFG)
 # with `dk_host_register` and sets the runtime's log sink (`dk_debug_log_sink_set`). The 512-event ring is a static array, so the arena need is what `dkneeds` reads from

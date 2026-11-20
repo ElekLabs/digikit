@@ -15,6 +15,7 @@ ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
 
 # The panel MCU sends 2-byte packets on UART8 (key: 0x20 | channel and the 8-bit mask; encoder: 0x30 | (encoder - 1) and a signed delta); the firmware
 # decodes them with two plain C functions. This module calls those (docs/findings/58-panel-input-path.md, docs/plans/remote-control.md). Which

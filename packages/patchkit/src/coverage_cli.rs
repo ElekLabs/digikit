@@ -228,6 +228,22 @@ pub fn run_imports(rest: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Names a service file (`.dks`) links besides the SDK surface; sdk.toml does not list them, so they are not "unknown". Any other unknown name stays an error.
+const SERVICE_LINK_PREFIXES: &[&str] = &[
+    "dkc_",      // the core calls of interface C (`SVC_IMPORTS`, svc_imports.rs)
+    "dk_fw_",    // names of the firmware, resolved from the port file
+    "dk_exit_",  // exits of a raw hook, `dk_exit_<hash>_<n>`
+    "dk_tail_",  // tail calls into the firmware, from the port file
+    "dk_ret_",   // return points in the firmware, from the port file
+    "dk_stock_", // stock firmware routines, from the port file
+];
+/// The one import only a service file makes besides the prefixed families (`SVC_IMPORTS`).
+const SERVICE_LINK_NAMES: &[&str] = &["dk_service_declare_row"];
+
+fn is_service_link_name(n: &str) -> bool {
+    SERVICE_LINK_PREFIXES.iter().any(|p| n.starts_with(p)) || SERVICE_LINK_NAMES.contains(&n)
+}
+
 /// `patchkit coverage --sdk sdk/sdk.toml [--allow FILE] [--json] FILE.dkm...`; exit 1 (an error) when an import is uncovered.
 pub fn run_coverage(rest: &[String]) -> Result<()> {
     let sdk_path = flag(rest, "--sdk").ok_or_else(|| {
@@ -244,9 +260,13 @@ pub fn run_coverage(rest: &[String]) -> Result<()> {
         return Err(err!("coverage: no .dkm files"));
     }
     let mods = load(&paths)?;
+    let known: BTreeSet<&str> = sdk.iter().map(|i| i.name.as_str()).collect();
     let mut linked: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (p, _, imps) in &mods {
         for i in imps {
+            if p.ends_with(".dks") && !known.contains(i.as_str()) && is_service_link_name(i) {
+                continue;
+            }
             linked.entry(i.clone()).or_default().insert(p.clone());
         }
     }

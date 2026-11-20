@@ -2,9 +2,10 @@
 //! if a write is cut. The record is the only thing the runtime writes to the card here, through `block_write`.
 
 use crate::dlog;
-use crate::platform::block_read;
-use crate::block_write;
+use crate::block_write_with;
 use crate::card;
+use crate::PLATFORM;
+use dkrt_abi::platform::Platform;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{self, Record};
 use dkrt_sdk::*;
@@ -74,9 +75,9 @@ fn first_write(c: &Choice) -> u32 {
 }
 
 /// Read one copy (0 = A, 1 = B).
-unsafe fn read_copy(i: u32) -> CopyRead {
+unsafe fn read_copy<P: Platform>(p: &P, i: u32) -> CopyRead {
     let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
-    if block_read(sector, 512, secbuf()) != 0 {
+    if p.block_read(sector, 512, secbuf()) != 0 {
         return CopyRead::ReadError;
     }
     parse_copy(&*(secbuf() as *const [u8; 512]))
@@ -92,9 +93,14 @@ fn parse_copy(b: &[u8; 512]) -> CopyRead {
 
 /// The record in use, read from both copies.
 pub(crate) unsafe fn current() -> Choice {
+    current_with(&PLATFORM)
+}
+
+/// `current` over a platform (the host tests drive it with `FakePlatform`).
+pub(crate) unsafe fn current_with<P: Platform>(p: &P) -> Choice {
     // the card's state first (reads only): a card too small has no store, which is an empty record and not a read failure
-    card::check();
-    current_on(card::state() == CARD_TOO_SMALL, |i| read_copy(i))
+    card::check_with(p);
+    current_on(card::state() == CARD_TOO_SMALL, |i| read_copy(p, i))
 }
 
 /// `current` with the card state and the copy reader given: no store means `Empty` with no read.
@@ -108,11 +114,11 @@ fn current_on(no_store: bool, mut read: impl FnMut(u32) -> CopyRead) -> Choice {
 }
 
 /// Write `r` to copy `i`. Only these two sectors are ever written.
-unsafe fn write_copy(i: u32, r: &Record) -> i32 {
+unsafe fn write_copy<P: Platform>(p: &P, i: u32, r: &Record) -> i32 {
     let sector = if i == 0 { crate::store::layout().sel_a() } else { crate::store::layout().sel_b() };
     let b = &mut *(secbuf() as *mut [u8; 512]);
     sel::encode(r, b);
-    let e = block_write(sector, 512, secbuf());
+    let e = block_write_with(p, sector, 512, secbuf());
     if e == E_CARD_RO || e == E_RANGE {
         return e;
     }
@@ -175,11 +181,11 @@ pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
     let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
     dlog::ev(logk::MENU, dlog::INFO, [logk::MENU_SELECT, s.count, 0, 0, 0]);
     let first = first_write(&choice);
-    let e = write_copy(first, &r);
+    let e = write_copy(&PLATFORM, first, &r);
     if e != OK {
         return e;
     }
-    write_copy(1 - first, &r)
+    write_copy(&PLATFORM, 1 - first, &r)
 }
 
 /// `CMD_SELECT_ONE`: write copy `i` only, with `seq + 1` (the state of a power cut between the two writes).
@@ -195,15 +201,20 @@ pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
         Choice::Unreadable => return E_READ,
     };
     let r = sel::next_record(&cur, s.flags, s.count, &s.paths);
-    write_copy(i, &r)
+    write_copy(&PLATFORM, i, &r)
 }
 
 /// Write the record with a changed counter/flags into the copy that is not the current one (the current one stays valid if
 /// the write is cut).
-pub(crate) unsafe fn update(mut r: Record, current_copy: u32, valid: bool) -> i32 {
+pub(crate) unsafe fn update(r: Record, current_copy: u32, valid: bool) -> i32 {
+    update_with(&PLATFORM, r, current_copy, valid)
+}
+
+/// `update` over a platform (the host tests drive it with `FakePlatform`).
+pub(crate) unsafe fn update_with<P: Platform>(p: &P, mut r: Record, current_copy: u32, valid: bool) -> i32 {
     r.seq = if valid { r.seq.wrapping_add(1) } else { 1 };
     let target = if valid { 1 - current_copy } else { 0 };
-    let e = write_copy(target, &r);
+    let e = write_copy(p, target, &r);
     if e == OK {
         REC = r;
         REC_VALID = true;

@@ -48,12 +48,24 @@ cardRigs(
           seq: 1,
         });
 
+        // The card's record is seq 1, counter 0, no selection. The boot raised the counter into copy B (seq 2, counter 1); the stable period (300 blocks
+        // here) then wrote the clear into copy A (seq 3, counter 0). Wait until that has landed, then the record is known exactly.
+        await pollUntil(rt.clock, () => bootInfo(session, h.plan), (info) => info.stable === 1, {
+          withinMs: UI_WITHIN_MS,
+          message: 'the first boot ends its stable period',
+        });
+        const before = await h.records();
+        expect(
+          before.map((r) => r && [r.seq, r.counter, r.paths.length]),
+          'A holds the cleared counter (seq 3), B the raised one (seq 2)',
+        ).toEqual([[3, 0, 0], [2, 1, 0]]);
+
         expect(await setSelection(session, h.plan, paths), 'the mailbox selection answers 0').toBe(0);
         const recs = await h.records();
         expect(recs[0], 'both copies hold the selection').not.toBeNull();
         expect(recs[0], 'the same sequence number: the copies are equal').toEqual(recs[1]);
         expect(recs[0]?.paths).toEqual(paths);
-        expect(recs[0]?.seq).toBe(2);
+        expect([recs[0]?.seq, recs[0]?.counter], 'the selection write took seq 4 and kept the cleared counter').toEqual([4, 0]);
 
         /** `dkrt_restart` (mailbox command), then the emulator's soft reset; returns when the new boot has read the record's sequence number and its stable period has ended (`stable`, set in the branch that clears the boot counter). */
         const restart = async () => {
@@ -72,8 +84,8 @@ cardRigs(
         const b1 = await restart();
         expect(b1, `the next boot loads it (results ${b1.results.join(',')})`).toMatchObject({
           loaded: mods.length,
-          seq: 2,
         });
+        expect(b1.seq, 'and starts from the record the selection write left').toBe(4);
         expect(b1.results, 'every module result is 0').toEqual(Array(mods.length).fill(0));
         const rows = (await voiceRows(session, h.plan)).filter(([type]) => type !== FREE_TYPE);
         expect(rows.length, `its voice rows are claimed: ${JSON.stringify(rows)}`).toBe(VOICES[h.device]);

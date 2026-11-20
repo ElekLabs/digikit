@@ -103,6 +103,7 @@ CMD_SELECT = 0x30
 CMD_RESTART = 0x31
 
 SERVICE_CMD: dict[str, int] = {
+    "PROFILE_DSP": 0x1B,
     "PROFILE_STATE": 0x1E,
     "PROFILE_READ": 0x1F,
     "LOG": 0x20,
@@ -127,7 +128,10 @@ STATUS: dict[int, tuple[str, str]] = {
     -58: ("E_READ", "the firmware's block read failed"),
     -59: ("E_NOFILE", "that path is not in the store"),
     -60: ("E_PROTO", "unknown protocol version, command or option"),
-    -61: ("E_NOSTORE", "the store header is unreadable (CLEAR still works)"),
+    -61: (
+        "E_NOSTORE",
+        "the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)",
+    ),
     -62: ("E_INUSE", "the card's store area is not ours and not blank"),
     -63: ("E_PEEK", "PEEK range not allowed, or length 0 or over 512"),
     -64: ("E_CMD_RANGE", "command range not reserved, taken, or empty"),
@@ -298,6 +302,7 @@ CAP: dict[str, int] = {
 RANGES: dict[str, tuple[int, int]] = {
     "debug": (0x20, 0x22),
     "debug_profile": (0x1E, 0x1F),
+    "debug_profile_dsp": (0x1B, 0x1B),
     "entry_demo_test": (0x1C, 0x1D),
     "file_write_test": (0x24, 0x27),
     "file_write_test_b": (0x28, 0x2B),

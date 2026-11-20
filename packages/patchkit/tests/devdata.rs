@@ -583,7 +583,7 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    // the runtime, what it stands on, the DIGIKIT menu (core/digikit-menu on core/ui) and the panel modules; no DSP, machine or effect module
+    // the runtime, what it stands on, the DIGIKIT menu (core/digikit-menu on core/ui), the panel modules and the peer image (the second CPU's section stored packed); no DSP, machine or effect module
     for dev in devdata::all()
         .iter()
         .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "none")
@@ -591,6 +591,11 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
         for (set, roots) in &dev.patch_sets {
             let (mut all, _) = lib.with_requires(roots).unwrap();
             all.sort();
+            // a Syntakt's optional first flash (`device-peer`) is the peer image alone: no runtime, menu or panel module
+            if set == "device-peer" {
+                assert_eq!(all, ["core/peer-image"], "{} set {set}", dev.short);
+                continue;
+            }
             assert_eq!(
                 all,
                 [
@@ -598,6 +603,7 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
                     "core/expansion",
                     "core/health",
                     "core/input",
+                    "core/peer-image",
                     "core/platform",
                     "core/runtime",
                     "core/ui"
@@ -806,4 +812,117 @@ fn only_runtime_targets_enter_the_shared_constants() {
     assert!(Facts::from_texts([ident]).is_ok());
     let half = "[device]\nname = \"X\"\nshort = \"x\"\n[digikit]\nid = 9\nname = \"x\"\n";
     assert!(Facts::from_texts([half]).is_err());
+}
+
+#[test]
+fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    // every device of the repository has the tables of the modules in its patch sets
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+    // core/ui declares `input.view_keys`: a device file without it is refused, naming the table, the set and the module
+    let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
+    let start = dt2
+        .find("[input.view_keys]")
+        .expect("the device file has the table");
+    let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
+    let without = format!("{}{}", &dt2[..start], &dt2[end..]);
+    let facts = Facts::from_texts([without.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("needs [input.view_keys]") && e.contains("core/ui"),
+        "{e}"
+    );
+    // the generator of the module alone refuses the same device, and a patch set that names a module the library lacks is an error
+    let e = devgen::generate(&lib, &facts, "core/ui").unwrap_err().0;
+    assert!(e.contains("needs [input.view_keys]"), "{e}");
+    let bare = r#"[device]
+short = "xx"
+name = "Bare"
+[patch_sets]
+device = ["core/ui"]
+"#;
+    let facts = Facts::from_texts([bare]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("xx: patch set device includes core/ui"),
+        "a device file without [digikit] is checked too: {e}"
+    );
+    let ghost = bare.replace("core/ui", "core/no-such-module");
+    let facts = Facts::from_texts([ghost.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("core/no-such-module"), "{e}");
+}
+
+#[test]
+fn view_keys_flag_bits_are_range_checked_and_the_second_yes_key_is_optional() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    let bad = st.replace("act_flag = 4", "act_flag = 32");
+    let e = Facts::from_texts([bad.as_str()])
+        .err()
+        .expect("32 is refused")
+        .0;
+    assert!(e.contains("act_flag = 32"), "{e}");
+    // no yes2: the generated constant is no key id
+    let none = st.replace("yes2 = 48\n", "");
+    let facts = Facts::from_texts([none.as_str()]).unwrap();
+    let files = devgen::generate(&lib, &facts, "core/ui").unwrap();
+    let inc = files
+        .iter()
+        .find(|(p, _)| p.ends_with("ui-st.inc"))
+        .expect("ui-st.inc");
+    assert!(inc.1.contains("UI_KEY_YES2, 0xffffffff"), "{}", inc.1);
+}
+
+#[test]
+fn a_module_is_checked_against_its_own_tables_in_any_library() {
+    // `pack --manifest` loads a library without the core modules: the patch sets of the repository's devices cannot resolve in it
+    let manifest = root().join("tests/fixtures/modules/c-demo/module.toml");
+    let defines: Vec<String> = vec![];
+    let only = vec!["test/c-demo".to_string()];
+    let build = patchkit::module::Build {
+        root: &root(),
+        only: Some(&only),
+        defines: &defines,
+    };
+    let lib =
+        Library::from_manifests(build, &[manifest], true, &only).expect("the fixture library");
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    let need = vec!["input.view_keys".to_string()];
+    // the repository's devices have the table, whatever the library can resolve
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
+    assert!(
+        devgen::check_device_tables(&lib, &facts).is_err(),
+        "the whole-library check reports the unresolved roots"
+    );
+    // a device without the table that lists the module as a root of a set that cannot resolve here is refused ...
+    let bare = r#"[device]
+short = "xx"
+[patch_sets]
+device = ["core/ui", "test/c-demo"]
+"#;
+    let facts = Facts::from_texts([bare]).unwrap();
+    let e = devgen::check_module_tables(&lib, &facts, "test/c-demo", &need)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("xx: patch set device includes test/c-demo") && e.contains("input.view_keys"),
+        "{e}"
+    );
+    // ... a module that needs nothing is not stopped by it, and a set that cannot resolve and does not list the module is skipped
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &[]).unwrap();
+    let other = bare.replace(", \"test/c-demo\"", "");
+    let facts = Facts::from_texts([other.as_str()]).unwrap();
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
 }

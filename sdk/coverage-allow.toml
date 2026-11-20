@@ -25,25 +25,22 @@ reason = "linked from libgcc into the module, not imported (test/c-demo divides 
 name = "__umoddi3"
 reason = "linked from libgcc into the module, not imported (test/c-demo takes 64-bit remainders)"
 
-# A service module declares what it provides with these calls, and the runtime compares them with the KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES entries
-# of the header table at the commit. No manifest field writes those entries yet, so a packed module that calls one is refused with E_DECL_KIND.
+# Services declare what they provide with dk_service_declare_*; the packed services link kind, slot, hook and export. No manifest field writes a RESOURCES
+# header entry yet, so a packed module that calls resource is refused with E_DECL_KIND.
 # modules/core/runtime/src/rs/src/collect/tests.rs covers the declare check.
-[[allow]]
-name = "dk_service_declare_kind"
-reason = "needs a KINDS header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"
-
-[[allow]]
-name = "dk_service_declare_slot"
-reason = "needs a SLOTS header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"
-
-[[allow]]
-name = "dk_service_declare_hook"
-reason = "needs a HOOKS header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"
-
-[[allow]]
-name = "dk_service_declare_export"
-reason = "needs an EXPORTS header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"
-
 [[allow]]
 name = "dk_service_declare_resource"
 reason = "needs a RESOURCES header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"
+
+# Provided by a service file for the runtime's own handlers (sdk.toml `internal = true`): the runtime calls them by name, no module imports them.
+[[allow]]
+name = "dk_fx_routes_entry"
+reason = "provided by fx.dks, called by the runtime's FX ROUTES page handler (handlers.rs); no module imports it"
+
+[[allow]]
+name = "dk_machines_guard_state"
+reason = "provided by machines.dks, called by the runtime's MODULES reply (handlers.rs); no module imports it"
+
+[[allow]]
+name = "dk_machines_owned_ids"
+reason = "provided by machines.dks, called by the runtime's MODULES reply (handlers.rs); no module imports it"

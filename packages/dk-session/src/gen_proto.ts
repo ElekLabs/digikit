@@ -84,6 +84,7 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
+  PROFILE_DSP: 0x1b,
   PROFILE_STATE: 0x1e,
   PROFILE_READ: 0x1f,
   LOG: 0x20,
@@ -109,7 +110,11 @@ export const STATUS: [number, string, string][] = [
   [-58, 'E_READ', "the firmware's block read failed"],
   [-59, 'E_NOFILE', 'that path is not in the store'],
   [-60, 'E_PROTO', 'unknown protocol version, command or option'],
-  [-61, 'E_NOSTORE', 'the store header is unreadable (CLEAR still works)'],
+  [
+    -61,
+    'E_NOSTORE',
+    'the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)',
+  ],
   [-62, 'E_INUSE', "the card's store area is not ours and not blank"],
   [-63, 'E_PEEK', 'PEEK range not allowed, or length 0 or over 512'],
   [-64, 'E_CMD_RANGE', 'command range not reserved, taken, or empty'],
@@ -250,6 +255,7 @@ export const CAP = {
 export const RANGES = {
   debug: [0x20, 0x22],
   debug_profile: [0x1e, 0x1f],
+  debug_profile_dsp: [0x1b, 0x1b],
   entry_demo_test: [0x1c, 0x1d],
   file_write_test: [0x24, 0x27],
   file_write_test_b: [0x28, 0x2b],
@@ -349,7 +355,7 @@ export const LOG_KIND = {
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
 export const LOG_KINDS: Record<number, [string, [string, string, string, string, string]]> = {
   1: ['BOOT_START', ['runtime', 'device', 'stable_blocks', 'record_seq', 'boot_counter']],
-  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', '-']],
+  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', 'sectors']],
   3: ['SAFE', ['reason', 'boot_counter', 'record_seq', '-', '-']],
   4: ['BOOT_RECORD', ['seq', 'copy', 'boot_counter', 'selected', 'flags']],
   5: ['MOD_LOAD', ['index', 'result', 'name0', 'name1', 'name2']],
