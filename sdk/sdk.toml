@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.1"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -15,7 +15,7 @@ version = "0.10.1"  # 0.x (stable is 1.0.0): a MINOR may break (an import change
 # The opaque handle types of the service imports (`dk_module_ctx *ctx`, `dk_settings **out`). `patchkit gen` writes `typedef struct <name> <name>;` for each into
 # sdk/include/dk/gen/imports.h; in Rust a handle is a `u8` pointer. The runtime, or the provider module, gives one out in `init`.
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event"]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event"]
 services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
@@ -50,6 +50,8 @@ ui_confirm_fn = "void (void *arg, i32 yes)"
 ui_choice_fn = "void (void *arg, i32 index)"
 # A UI-task timer (`dk_ui_tick`): short, it runs between key events and must not wait.
 ui_tick_fn = "void (void *arg)"
+# The action of a module's SETTINGS row (`dk_ui_settings_row`), in the UI task, when the user presses YES on the row.
+ui_settings_open_fn = "void (void *arg)"
 # The click of a machine parameter's knob (`dk_param_on_click`), in the UI task, when the knob is clicked on the machine's page (release without a turn): `track` is the track of the page.
 # Replaces `void FN(uint32_t track)` of DK_PARAM_ACTION; `arg` is the pointer given to `dk_param_on_click`.
 param_click_fn = "void (void *arg, u32 track)"
@@ -298,6 +300,48 @@ since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_ui *ui, ui_tick_fn fn, void *arg, u32 period_ms)"
 doc = "Call `fn(arg)` about every `period_ms` in the UI task (period 0 removes the timer of the pair `fn`, `arg`). 0 when set or removed, a negative code when it cannot be (table full). Rules in <dk/platform/ui.h>."
+requires = "core/ui"
+absent = "-1"
+
+[[import]]
+name = "dk_ui_settings_row"
+service = "ui"
+since = "0.10.2"
+context = "init"
+sig = "i32 (dk_ui *ui, const char *text, ui_settings_open_fn open, void *arg)"
+doc = "Add a row `text` at the end of the SETTINGS list; `open(arg)` runs on YES. The row goes away when the module unloads. 0 when added, DK_E_CONTRACT (no text or open) or DK_E_NOMEM (no room). Rules in <dk/platform/ui.h>."
+requires = "core/ui"
+absent = "-1"
+
+[[import]]
+name = "dk_ui_view_open"
+service = "ui"
+since = "0.10.2"
+context = "ui"
+sig = "dk_ui_view *(dk_ui *ui, const void *desc)"
+doc = "Open a screen the module draws from a `dk_ui_view_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype); NULL when the desc is wrong or the pool is full. Closed for the module when it unloads."
+kind = "helper"
+requires = "core/ui"
+absent = "0"
+
+[[import]]
+name = "dk_ui_view_close"
+service = "ui"
+since = "0.10.2"
+context = "ui"
+sig = "void (dk_ui_view *view)"
+doc = "Close a screen opened with `dk_ui_view_open`. A handle that is closed already does nothing."
+requires = "core/ui"
+absent = "void"
+
+[[import]]
+name = "dk_ui_text_input"
+service = "ui"
+since = "0.10.2"
+context = "ui"
+sig = "i32 (dk_ui *ui, const void *desc)"
+doc = "Open the stock naming screen from a `dk_ui_text_input_desc` (declared in <dk/platform/ui.h>, which also has the typed prototype): `done(arg, text)` runs on YES only. 0 when shown, a negative code when not (DK_E_CONTRACT: the desc is wrong)."
+kind = "helper"
 requires = "core/ui"
 absent = "-1"
 
