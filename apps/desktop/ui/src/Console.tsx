@@ -12,7 +12,17 @@ import {
   type RuntimeSnapshot,
   type RuntimeUpdate,
 } from '@digi/workbench-core/runtime/runtime.ts';
-import { booting as startBoot, bootingScreen, bootingStatus, loadFailure, type Booting } from './boot-core';
+import {
+  booting as startBoot,
+  bootingScreen,
+  bootingStatus,
+  bootOnEmulatorPage,
+  keepDeferredBoot,
+  emulatorStatus,
+  loadFailure,
+  shouldBootOnStart,
+  type Booting,
+} from './boot-core';
 import { bumpCardRefresh, cardRefresh } from './card-state';
 import CardPanel from './CardPanel';
 import { pageFor, type Page } from './page-core';
@@ -187,6 +197,19 @@ export default function Console(props: { host: Host }) {
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
   createEffect(() => {
     setPage(pageFor(page(), target(), runtimeHere()));
+  });
+  // The "Load on start" boot that the start deferred because the target was a device.
+  const [deferredBoot, setDeferredBoot] = createSignal<string>();
+  createEffect(() => {
+    const path = deferredBoot();
+    if (path && !keepDeferredBoot(!!status(), !!booting())) {
+      setDeferredBoot(undefined);
+      return;
+    }
+    if (path && bootOnEmulatorPage(true, page(), target().kind, !!status(), !!booting())) {
+      setDeferredBoot(undefined);
+      void bootPath(path, 'Loaded at');
+    }
   });
 
   const update = (event: RuntimeUpdate) => {
@@ -538,13 +561,19 @@ export default function Console(props: { host: Host }) {
           if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
           return;
         }
-        // The app opens empty; a command-line file, else the last opened file when "Load on start" is ticked, boots now.
-        const path = launch.syx ?? (loadOnStart() ? readPref(LAST_FIRMWARE_KEY) : null);
-        if (path)
-          await bootPath(path, 'Loaded at', {
-            runtime: launch.runtime ?? undefined,
-            card: launch.card ?? undefined,
-          });
+        // The app opens empty; a command-line file, else the last opened file when "Load on start" is ticked and the target is the emulator,
+        // boots now. With a device as target the last file waits for the first visit of the Emulator page (the effect below).
+        const last = readPref(LAST_FIRMWARE_KEY);
+        if (shouldBootOnStart(launch.syx, loadOnStart(), target().kind)) {
+          const path = launch.syx ?? last;
+          if (path)
+            await bootPath(path, 'Loaded at', {
+              runtime: launch.runtime ?? undefined,
+              card: launch.card ?? undefined,
+            });
+        } else if (loadOnStart() && last) {
+          setDeferredBoot(last);
+        }
       })();
       timers.push(window.setInterval(() => void pollSource(), 1000));
       timers.push(window.setInterval(() => void pollAudio(), 1000));
@@ -1174,13 +1203,16 @@ export default function Console(props: { host: Host }) {
       <footer class="statusbar">
         <span>
           <i class="dot" classList={{ paused: paused() || !status() || !!booting() }} />
-          {booting()
-            ? bootingStatus(booting()!)
-            : !status()
-              ? 'no firmware'
-              : paused()
-                ? 'paused'
-                : phase() || 'running'}
+          {emulatorStatus(
+            booting()
+              ? bootingStatus(booting()!)
+              : !status()
+                ? 'no firmware'
+                : paused()
+                  ? 'paused'
+                  : phase() || 'running',
+            target().kind,
+          )}
         </span>
         <Show when={audio()?.output_device}>
           <span>

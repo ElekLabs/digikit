@@ -387,10 +387,10 @@ fn the_digitakt_and_digitone_device_images_have_no_literal_tail() {
     }
 }
 
-/// The key ids of the Syntakt's key events that core/ui compares (`[input.view_keys]`) are the entries of the firmware's decoder table at 0x401d7a48 for the
+/// The key ids of the Syntakt's key events that core/ui compares (`[input.keys]`) are the entries of the firmware's decoder table at 0x401d7a48 for the
 /// wire positions of YES, NO, RIGHT and the second YES key (panel codes 39, 28, 31 and 49: wire position = code - 1 = channel * 8 + bit; finding 153).
 #[test]
-fn the_syntakt_view_keys_are_the_decoder_table_entries() {
+fn the_syntakt_input_keys_are_the_decoder_table_entries() {
     let Some(raw) = image() else { return };
     let fw = Firmware::parse(&raw).unwrap();
     let main = fw.main().unwrap();
@@ -400,11 +400,11 @@ fn the_syntakt_view_keys_are_the_decoder_table_entries() {
     };
     let text = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
     let doc: toml::Value = toml::from_str(&text).unwrap();
-    let keys = &doc["input"]["view_keys"];
+    let keys = &doc["input"]["keys"];
     let get = |k: &str| keys[k].as_integer().unwrap() as u64;
-    assert_eq!(get("yes"), table(39 - 1));
-    assert_eq!(get("no"), table(28 - 1));
-    assert_eq!(get("right"), table(31 - 1));
+    assert_eq!(get("YES"), table(39 - 1));
+    assert_eq!(get("NO"), table(28 - 1));
+    assert_eq!(get("RIGHT"), table(31 - 1));
     // the second YES key is the LEVEL push, panel code 49 (channel 6, bit 0: wire position 48)
-    assert_eq!(get("yes2"), table(49 - 1));
+    assert_eq!(get("LEVEL_PUSH"), table(49 - 1));
 }

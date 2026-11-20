@@ -73,6 +73,114 @@ void ua_disconnect(void)
     ((void (*)(void))ua_stock_disconnect)();
 }
 
+/* Windows binds WinUSB to interface 5 through three control requests (docs/plans/usb-winusb.md). the stub ua_setup_hook sits on the entry of the EP0 setup dispatcher and calls
+ * ua_setup_handle. In USB AUDIO/MIDI with our interface attached it answers the three requests below through the firmware's EP0 send; the stub then returns to the USB interrupt.
+ * Everything else runs the stock dispatcher from its first instruction. No runtime calls. */
+/* bRequest of the vendor request that returns the descriptor set; free in the stock firmware */
+#define UA_MSOS_VENDOR_CODE 0x44u
+#define UA_MSOS_INDEX 7u /* wIndex of that request: MS_OS_20_DESCRIPTOR_INDEX */
+#define UA_PORT_AUDIO 5u
+#define UA_DEV_BYTES 18u
+#define UA_BOS_BYTES 33u
+#define UA_SET_BYTES 178u
+
+/* firmware */
+extern u8 usb_setup[];       /* the 8 setup bytes, wire order */
+extern u8 usb_active_port[]; /* u32 in RAM */
+extern void ep0_send(int len, const u8 *data);
+
+/* an ASCII character as a UTF-16LE code unit */
+#define U16(c) (c), 0x00
+
+/* the descriptor tables keep one field a line, as in the spec tables */
+/* clang-format off */
+/* BOS: the platform capability that tells Windows to ask for the descriptor set with vendor code 0x44. Windows reads it once after enumeration. */
+static const u8 ua_bos[] = {
+    0x05, 0x0F, 0x21, 0x00, 0x01, /* BOS header: wTotalLength 0x21, one capability */
+    0x1C, 0x10, 0x05, 0x00,       /* platform capability, 28 bytes */
+    0xDF, 0x60, 0xDD, 0xD8, 0x89, 0x45, 0xC7, 0x4C, 0x9C, 0xD2, 0x65, 0x9D, 0x9E, 0x64, 0x8A, 0x9F, /* MS OS 2.0 UUID */
+    0x00, 0x00, 0x03, 0x06,       /* dwWindowsVersion 8.1 */
+    0xB2, 0x00,                   /* wMSOSDescriptorSetTotalLength */
+    UA_MSOS_VENDOR_CODE, 0x00,    /* bMS_VendorCode, bAltEnumCode */
+};
+
+/* MS OS 2.0 descriptor set: function subset for interface 5 with compatible ID WINUSB and the interface GUID. Windows reads it with the vendor request after the BOS. */
+static const u8 ua_set[] = {
+    0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x06, 0xB2, 0x00, /* set header, wTotalLength 0xB2 */
+    0x08, 0x00, 0x01, 0x00, 0x00, 0x00, 0xA8, 0x00,             /* configuration subset: value 0, length 0xA8 */
+    0x08, 0x00, 0x02, 0x00, 0x05, 0x00, 0xA0, 0x00,             /* function subset: bFirstInterface 5, length 0xA0 */
+    0x14, 0x00, 0x03, 0x00, 'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00, /* compatible ID */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,             /* sub-compatible ID */
+    0x84, 0x00, 0x04, 0x00, 0x07, 0x00, 0x2A, 0x00,             /* registry property, REG_MULTI_SZ, name length 0x2A */
+    U16('D'), U16('e'), U16('v'), U16('i'), U16('c'), U16('e'), U16('I'), U16('n'), U16('t'), U16('e'),
+    U16('r'), U16('f'), U16('a'), U16('c'), U16('e'), U16('G'), U16('U'), U16('I'), U16('D'), U16('s'),
+    0x00, 0x00,                                                 /* name NUL */
+    0x50, 0x00,                                                 /* data length 0x50 */
+    U16('{'), U16('7'), U16('F'), U16('4'), U16('5'), U16('7'), U16('3'), U16('9'), U16('F'), U16('-'),
+    U16('0'), U16('5'), U16('6'), U16('3'), U16('-'), U16('4'), U16('5'), U16('C'), U16('1'), U16('-'),
+    U16('8'), U16('2'), U16('3'), U16('A'), U16('-'), U16('4'), U16('3'), U16('A'), U16('1'), U16('4'),
+    U16('A'), U16('D'), U16('7'), U16('F'), U16('7'), U16('4'), U16('5'), U16('}'),
+    0x00, 0x00, 0x00, 0x00,                                     /* string NUL and list-ending NUL */
+};
+
+/* clang-format on */
+
+/* the length fields above are the numbers 0xB2, 0xA8, 0xA0, 0x84, 0x2A, 0x50, 0x21 and 0x44; these checks tie them to the real sizes */
+_Static_assert(sizeof ua_bos == UA_BOS_BYTES && UA_BOS_BYTES == 0x21, "BOS size");
+_Static_assert(sizeof ua_set == UA_SET_BYTES && UA_SET_BYTES == 0xB2, "descriptor set size");
+_Static_assert(UA_BOS_BYTES == 5 + 28, "BOS: header and platform capability");
+_Static_assert(UA_SET_BYTES == 10 + 8 + 8 + 20 + 132,
+               "set: header, subsets, compatible ID, property");
+_Static_assert(0xA0 == 8 + 20 + 132 && 0xA8 == 8 + 0xA0 && UA_SET_BYTES == 10 + 0xA8,
+               "subset lengths");
+_Static_assert(132 == 0x84 && 0x84 == 2 + 2 + 2 + 2 + 0x2A + 2 + 0x50 && 0x2A == 20 * 2 + 2 &&
+                   0x50 == 38 * 2 + 2 + 2,
+               "property lengths");
+_Static_assert(UA_MSOS_VENDOR_CODE == 0x44, "vendor code");
+
+static u8 ua_dev[UA_DEV_BYTES];
+
+/* wLength, clamped: the number of bytes to send */
+static int ua_clamp(u32 have, u32 want)
+{
+    return (int)(want < have ? want : have);
+}
+
+/* Called by the stub at the entry of the setup dispatcher. Returns 1 if the request was answered, 0 if the stock dispatcher must run. */
+int ua_setup_handle(void)
+{
+    const volatile u8 *s = (const volatile u8 *)usb_setup;
+    u32 type = s[0], req = s[1], vlo = s[2], vhi = s[3];
+    u32 index = (u32)s[4] | ((u32)s[5] << 8);
+    u32 wlen = (u32)s[6] | ((u32)s[7] << 8);
+    if (usb_bulk_audio_state == 1u && *(volatile u32 *)usb_active_port == UA_PORT_AUDIO) {
+        if (type == 0x80u && req == 6u && vlo == 0u && vhi == 1u) {
+            /* GET_DESCRIPTOR device: port 5's own descriptor with bcdUSB 2.01 (so the host asks for the BOS) and bcdDevice 1.01 (a fresh Windows cache key) */
+            const u8 *src = (const u8 *)((u32 *)(usb_port_table + UA_ENTRY * PORT_ENTRY_BYTES))[2];
+            u32 i;
+            for (i = 0; i < UA_DEV_BYTES; i++)
+                ua_dev[i] = src[i];
+            ua_dev[2] = 0x01;
+            ua_dev[3] = 0x02;
+            ua_dev[12] = 0x01;
+            ua_dev[13] = 0x01;
+            ep0_send(ua_clamp(UA_DEV_BYTES, wlen), ua_dev);
+            return 1;
+        }
+        if (type == 0x80u && req == 6u && vlo == 0u && vhi == 0x0Fu) {
+            /* GET_DESCRIPTOR BOS: stock gives no answer */
+            ep0_send(ua_clamp(UA_BOS_BYTES, wlen), ua_bos);
+            return 1;
+        }
+        if (type == 0xC0u && req == UA_MSOS_VENDOR_CODE && index == UA_MSOS_INDEX) {
+            /* vendor request: the MS OS 2.0 descriptor set */
+            ep0_send(ua_clamp(UA_SET_BYTES, wlen), ua_set);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Make entry 5 ours (see above). ISR-safe and idempotent; never stops or restarts the controller. */
 void ua_prepare(void)
 {

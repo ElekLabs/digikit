@@ -34,6 +34,7 @@ shared = [
   "dkrt::worker",
   "dkrt::speed",
   "dkrt::debug_selected_params",
+  "dkrt::selected_track",
 ]
 
 "S:lfo" = ["dkrt_svc_lfo"]

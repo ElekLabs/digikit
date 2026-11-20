@@ -1010,7 +1010,50 @@
       "subsystem": "input",
       "users": [
         "core/runtime",
-        "core/services/machines"
+        "core/services/machines",
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4011de30"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4011e110"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011c79c"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The routine decides. Consume: `moveq #1,%d0; rts` (the event reaches no view and no release callback; the runner's idle reset and the Brain+0x94 listeners already ran). Pass: the displaced `lea; movem` and a jump to the end of the site (the tail). Strict liveness at the tail: only the flags (N, Z, V, C) are dead; D0, D1, A0 and A1 are live (the stock code calls a function that may read them), so a routine saves them; D2 and A2 are saved by the displaced `movem` itself.",
+      "file": "devices/fw/input.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.input.hook.key_event",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.input.site.key_event_walk",
+      "subsystem": "input",
+      "users": [
+        "core/services/shortcuts"
       ],
       "was": []
     },
@@ -1073,6 +1116,51 @@
         "cf.input.site.key_mask_lit",
         "input.fw.key_mask_lit"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4011de30",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4011e110",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011c79c",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Entry of `bool f(ViewController *vc, KeyEvent *ev)`, the walker every key event passes: it runs the release callbacks of the key code, then offers the event to the views top down. DT2 0x4011c79c, DN2 0x4011e110. `lea (-0x60,SP),SP; movem.l {D2-D7 A2-A6},(SP)` (8 bytes, no PC-relative form). 4(SP) = vc, 8(SP) = KeyEvent (+0xc code, +0x10 flags, bit 0 set on a press).",
+      "file": "devices/fw/input.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.input.site.key_event_walk",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "input",
+      "users": [
+        "core/services/shortcuts"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -16449,6 +16537,55 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x40291c3c",
+            "len": 20
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4029217c",
+            "len": 20
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x402a764c",
+            "len": 20
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_text_font_large",
+        "rust": "dkfw::text::FONT_LARGE"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The large ROM font (FontData header, 20 bytes): box height 15, glyph widths 2 to 8, two bytes for each glyph column; it has A to Z, 0 to 9, the space and `~!@#$%^&()_+-=`. The header words are 7, 0x0002000f and three pointers (width table, glyph offset table in columns, glyph data); the header is unique in the image. Finding 155 section 5.",
+      "file": "devices/fw/text.toml",
+      "kind": "data",
+      "mark": "V",
+      "name": "cf.text.data.font_large",
+      "rule": {
+        "dn2": {
+          "kind": "cf_words"
+        },
+        "dt2": {
+          "kind": "cf_words"
+        }
+      },
+      "subsystem": "text",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x401153f4",
             "len": 4
           }
@@ -16622,6 +16759,86 @@
         }
       },
       "sig": "i32 (u8 *bitmap, u8 *font, i32 x, i32 y, u32 flags, const char *fmt, ...)",
+      "subsystem": "text",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40115d0e",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40115fee",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011467a",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_text_width",
+        "rust": "dkfw::text::width"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Pixel width of a COW `std::string` (pointer to the one-word object) in a FontData; `maxlen` -1 for all characters. DT2 0x4011467a, DN2 0x40115fee.",
+      "file": "devices/fw/text.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.text.fn.width",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "i32 (u8 *fontdata, i32 maxlen, const u32 *str)",
+      "subsystem": "text",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "bindings": {
+        "c": "FontData",
+        "gas": "FontData_size",
+        "rust": "FontData"
+      },
+      "cpu": "cf",
+      "doc": "The ROM font header. Word 0 is not the glyph width (the stock font's widths reach 5 with word 0 = 3): its meaning is open. +6 is the glyph box height (6 for the stock font, 15 for the large one), checked by a second agent.",
+      "fields": [
+        {
+          "name": "height",
+          "off": 6,
+          "type": "u16"
+        }
+      ],
+      "file": "devices/fw/text.toml",
+      "kind": "struct",
+      "mark": "D",
+      "name": "cf.text.struct.FontData",
+      "size": 20,
       "subsystem": "text",
       "users": [
         "core/ui"
@@ -17150,6 +17367,50 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x40005ff6"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40005ff6"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40005ff6"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Entry of the EP0 setup dispatcher; the stub answers a request or continues in the displaced `movea.w`.",
+      "file": "devices/fw/usb.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.usb.hook.setup_dispatch",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.usb.fn.setup_dispatch",
+      "subsystem": "usb",
+      "users": [
+        "core/usb-bulk-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x40006c52",
             "len": 6
           }
@@ -17251,7 +17512,8 @@
       },
       "subsystem": "usb",
       "users": [
-        "core/usb-bulk"
+        "core/usb-bulk",
+        "core/usb-bulk-audio"
       ],
       "was": []
     },
@@ -17542,10 +17804,10 @@
         "rust": "dkfw::view::invalidate"
       },
       "cpu": "cf",
-      "doc": "`View::invalidate(View *)`: asks for a redraw of the view.",
+      "doc": "`View::invalidate(View *)`, DT2 0x4011b126, DN2 0x4011ca9a (34 bytes): when +0x17 is clear sets +0x14 and tail-jumps through the manager (+0x2c) to set the redraw flag VC+0x20. The render draws only when that flag is set, from the topmost opaque view up.",
       "file": "devices/fw/view.toml",
       "kind": "fn",
-      "mark": "D",
+      "mark": "V",
       "name": "cf.view.fn.invalidate",
       "rule": {
         "dn2": {
@@ -17567,7 +17829,8 @@
       "sig": "void (u8 *view)",
       "subsystem": "view",
       "users": [
-        "core/digikit-menu"
+        "core/digikit-menu",
+        "core/ui"
       ],
       "was": [
         "cf.menu.fn.invalidate"
@@ -17696,6 +17959,60 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4011c702",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4011c9e2",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011b06e",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_view_view_ctor",
+        "rust": "dkfw::view::view_ctor"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "`View::View(this, name)`: DT2 0x4011b06e, DN2 0x4011c9e2. Builds the handler bases and secondary vptrs, stores `name` (not copied) at +0x28 and the View vptr at +0, zeroes +0x1c..+0x24, +0x2c and +0x34..+0x48. It does not clear +0x14, +0x16, +0x17 or +0x30: allocate zeroed.",
+      "file": "devices/fw/view.toml",
+      "kind": "fn",
+      "mark": "V",
+      "name": "cf.view.fn.view_ctor",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *this, const char *name)",
+      "subsystem": "view",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4011c8be",
             "len": 4
           }
@@ -17803,6 +18120,55 @@
       "subsystem": "view",
       "users": [
         "core/platform"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401d9890",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401d9ca0",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401f1130",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The control block vptr of `_Sp_counted_ptr<View*>`, the immediate of `move.l #vptr,(a0)` in `cf.string.fn.shared_ptr.make` (DT2 0x401f1130, DN2 0x401d9ca0): its dispose calls the View's deleting destructor (slot 1). The make_shared (inplace) blocks differ: their dispose calls slot 0 and the block's destroy frees the memory. The offset is that of the 4-byte immediate (the opcode is 2 bytes before it).",
+      "file": "devices/fw/view.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.view.site.sp_view_cb_vptr_lit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 4,
+          "offset": 46
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 4,
+          "offset": 46
+        }
+      },
+      "subsystem": "view",
+      "users": [
+        "core/ui"
       ],
       "was": []
     },
@@ -17931,17 +18297,86 @@
       ]
     },
     {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x402074ec",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x402079a4",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4021dfd8",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The View primary vptr that the ctor stores (DT2 0x4021dfd8, DN2 0x402079a4); the 17 slots start here and the header (offset_to_top, typeinfo) is the 8 bytes before. A module copies 19 words from vptr - 8 and replaces slot 2 (key) and 4 (draw). Slot 0 is the complete destructor (no free) and slot 1 the deleting one (destructor, then free).",
+      "file": "devices/fw/view.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.view.site.view_vptr_lit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 4,
+          "offset": 56
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 4,
+          "offset": 56
+        }
+      },
+      "subsystem": "view",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
       "bindings": {
         "c": "View",
         "gas": "View_size",
         "rust": "View"
       },
       "cpu": "cf",
-      "doc": "View (finding 71 section 2, \"View vtable\"): the vptr at +0, the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. The fields are [D] (finding 71); the size is [O]: derived windows start their own fields at +0x4c.",
+      "doc": "View (finding 71 section 2, \"View vtable\"): the vptr at +0, the redraw flag at +0x14, the opaque byte at +0x16 (the relayout draws from the topmost opaque view up and sets +0x17 on the views below it), the name C string pointer at +0x28 (not copied), the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. Size 0x4c, +0x14, +0x16, +0x17 and +0x2c checked by a second agent on both devices; +0x28 is [D].",
       "fields": [
         {
           "name": "vptr",
           "off": 0,
+          "type": "ptr"
+        },
+        {
+          "name": "dirty",
+          "off": 20,
+          "type": "u8"
+        },
+        {
+          "name": "opaque",
+          "off": 22,
+          "type": "u8"
+        },
+        {
+          "name": "blocked",
+          "off": 23,
+          "type": "u8"
+        },
+        {
+          "name": "name",
+          "off": 40,
           "type": "ptr"
         },
         {
@@ -17952,12 +18387,13 @@
       ],
       "file": "devices/fw/view.toml",
       "kind": "struct",
-      "mark": "O",
+      "mark": "D",
       "name": "cf.view.struct.View",
       "size": 76,
       "subsystem": "view",
       "users": [
-        "core/digikit-menu"
+        "core/digikit-menu",
+        "core/ui"
       ],
       "was": []
     },
@@ -18077,6 +18513,60 @@
         }
       },
       "sig": "void (u8 *this, const u32 *items_vector, const u32 *title, const std_function *cb, u8 vertical)",
+      "subsystem": "window",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40119156",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40119436",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40117ac2",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_window_name_ctor",
+        "rust": "dkfw::window::name_ctor"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "`NameView(this, prompt, initial, number, maxlen, show_number, number_fmt, done)`: DT2 0x40117ac2, DN2 0x40119436. The strings are pointers to COW `std::string` (copied); `done` is a `std::function<void(std::string, int)>` cloned to +0x7c; on YES it runs before the close with (storage, std::string *, number), NO closes without calling it. An empty text is refused unless byte +0x94 is set. Size 0xa0 (the View is at +0). The 7-argument wrapper (hash 0e537b985689c8d97a905c64f74eb485) omits number_fmt.",
+      "file": "devices/fw/window.toml",
+      "kind": "fn",
+      "mark": "V",
+      "name": "cf.window.fn.name_ctor",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *this, const u32 *prompt, const u32 *initial, i32 number, i32 maxlen, u8 show_number, const u32 *number_fmt, const std_function *done)",
       "subsystem": "window",
       "users": [
         "core/ui"
@@ -18437,6 +18927,55 @@
       "was": []
     },
     {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401e0bc8",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401e0fd8",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401ef190",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The 4-byte vtable literal of the `_Sp_counted_ptr_inplace<NameView>` control block (DT2 0x401ef190, DN2 0x401e0fd8): the immediate of `move.l #vptr,(a5)` in the function at DT2 0x4007f086 / DN2 0x400795ba; the anchor is that vtable. Block: vptr, use 1, weak 1, object pointer (block+0x10).",
+      "file": "devices/fw/window.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.window.site.name_cb_vptr_lit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 4,
+          "offset": 282
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 4,
+          "offset": 282
+        }
+      },
+      "subsystem": "window",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
       "bindings": {
         "c": "ConfirmWindow",
         "gas": "ConfirmWindow_size",
@@ -18537,6 +19076,72 @@
       "mark": "D",
       "name": "cf.window.struct.MultiChoiceWindow",
       "size": 216,
+      "subsystem": "window",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "bindings": {
+        "c": "NameView",
+        "gas": "NameView_size",
+        "rust": "NameView"
+      },
+      "cpu": "cf",
+      "doc": "NameView (View at +0, own fields from +0x4c). Prompt, number, show_number, number_fmt, text, maxlen, done and allow_empty checked by a second agent on both devices.",
+      "fields": [
+        {
+          "name": "view",
+          "off": 0,
+          "type": "View"
+        },
+        {
+          "name": "prompt",
+          "off": 76,
+          "type": "ptr"
+        },
+        {
+          "name": "number",
+          "off": 80,
+          "type": "u32"
+        },
+        {
+          "name": "show_number",
+          "off": 84,
+          "type": "u8"
+        },
+        {
+          "name": "number_fmt",
+          "off": 88,
+          "type": "ptr"
+        },
+        {
+          "name": "text",
+          "off": 96,
+          "type": "ptr"
+        },
+        {
+          "name": "maxlen",
+          "off": 108,
+          "type": "u32"
+        },
+        {
+          "name": "done",
+          "off": 124,
+          "type": "std_function"
+        },
+        {
+          "name": "allow_empty",
+          "off": 148,
+          "type": "u8"
+        }
+      ],
+      "file": "devices/fw/window.toml",
+      "kind": "struct",
+      "mark": "D",
+      "name": "cf.window.struct.NameView",
+      "size": 160,
       "subsystem": "window",
       "users": [
         "core/ui"
@@ -24205,7 +24810,7 @@
       "name": "filter"
     },
     {
-      "count": 4,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/input.toml",
       "meaning": "key and encoder decoding",
@@ -24317,28 +24922,28 @@
       "name": "test"
     },
     {
-      "count": 3,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/text.toml",
       "meaning": "fonts and text drawing",
       "name": "text"
     },
     {
-      "count": 12,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/usb.toml",
       "meaning": "the USB device engine: port table, connect and disconnect callbacks, endpoint queues, mode switch",
       "name": "usb"
     },
     {
-      "count": 11,
+      "count": 14,
       "cpu": "cf",
       "file": "devices/fw/view.toml",
       "meaning": "Brain, ViewController, View, redraw, the UI loop",
       "name": "view"
     },
     {
-      "count": 10,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/window.toml",
       "meaning": "popups and dialogs",
