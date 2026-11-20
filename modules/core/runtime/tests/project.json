@@ -83,6 +83,19 @@
       },
       {
         "files": ["fault-trace.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
+        "modules": [
+          "digikit/debug",
+          "test/dyn-fx-gain-send",
+          "test/dyn-fx-hang",
+          "test/dyn-fx-nan",
+          "core/services/machines",
+          "core/services/fx"
+        ]
+      },
+      {
+        "files": ["fault-trace-dt2.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",
         "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
@@ -90,9 +103,6 @@
           "digikit/debug",
           "test/dyn-crash",
           "test/dyn-dsp-hang",
-          "test/dyn-fx-gain-send",
-          "test/dyn-fx-hang",
-          "test/dyn-fx-nan",
           "core/services/machines",
           "core/services/fx"
         ]

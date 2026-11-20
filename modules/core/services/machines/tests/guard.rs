@@ -317,3 +317,22 @@ fn a_reset_of_the_service_clears_the_rows_and_the_guard_memory() {
     assert_eq!(vrows().row_owner[1], 0);
     assert_eq!(vrows().row_type[1], dkrt_abi::dsp::FREE_TYPE);
 }
+
+#[test]
+fn without_the_table_of_the_dsp_the_service_has_no_voice_rows_and_the_table_still_checks() {
+    let lock = locked();
+    rows::reset();
+    let core = FakeCore::new();
+    unsafe {
+        assert!(dkrt_svc_machines::dsp::dyndsp(&core).is_null());
+        assert_eq!(dkrt_svc_machines::dsp::rows_counts(&core), (0, 0));
+    }
+    assert_eq!(check(&core, 0).0, 0);
+    // a table of another kind of image (no magic) is no table
+    let mut other = FakeCore::new();
+    other
+        .info_tables
+        .push((dkneeds::keys::name_hash("dyndsp_info"), vec![0u32; 16]));
+    unsafe { assert!(dkrt_svc_machines::dsp::dyndsp(&other).is_null()) };
+    drop(lock);
+}

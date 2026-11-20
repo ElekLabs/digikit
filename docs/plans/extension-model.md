@@ -35,7 +35,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
 
 - The `Service<C: CoreApi>` trait (`modules/core/runtime/abi/src/service.rs:436`). The four services implement it (machines, fx, lfo,
   samples: `modules/core/services/*/src/records.rs`): `declare`, `check`, `apply`, `apply_record`, `remove(owner)`, `cap`, `attribute`,
-  `on_loaded`, `tick`, `module_begin`, `module_commit`, `settle` (E3 removed `guard_state`, `fx_entry` and `owned_ids`: see 4.3).
+  `on_loaded`, `tick`, `module_begin`, `module_commit`, `settle` (E3 removed `guard_state`, `fx_entry` and `owned_ids`: see 4.3; R12-8 step 7 added `diag` and `table_check`).
 - `[records.kinds]` in `sdk/sdk.toml` maps each record kind to its owning service. machines owns PARAM, MACHINE, PAGE, ACTION,
   NATIVE_PAGE and NATIVE_PAGE_V2; fx owns EFFECT; lfo owns LFO_SHAPE (`generic = true`). A kind is added there and in its service only.
 - The runtime names no kind: registry walker (`registry.rs`), collector (`collect.rs`), boot planner (`plan.rs`). Layercheck `kind-free`
@@ -84,7 +84,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
   `[[export]]` in `dks/module.toml` (12 in machines, with `dk_param_get` and `dk_param_set`), `MACHINE_BUILDERS` and `FX_BUILDERS` in
   `loader/tests/assembly_tests.rs:768,780`, and the builder names in `RT_KIND_FREE` (`layercheck.py:965`).
 - Kind-specific methods were on the generic `Service` trait: `fx_entry` (effects for DIGIKIT > FX ROUTES), `guard_state` (machine types),
-  `owned_ids` (machine type numbers for the MODULES reply). E3 made them `internal` exports found by name (`dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`).
+  `owned_ids` (machine type numbers for the MODULES reply). E3 made them `internal` exports found by name; R12-8 step 7 merged the two machines exports into `dk_machines_module_info` (with `dk_fx_routes_entry`).
 - "Adapter" covers two things: the firmware half of a service (reserved rows, stubs, slots, info tables) and the runtime's own platform code.
   `modules/core/adapters/` holds 25 folders of both.
 - Proof adapters: three firmware experiments that back findings, in no patch set and required by no module. An image holds one only when a test
@@ -240,7 +240,8 @@ pub struct Fixture {
     pub a2: Module,                // the keys of A, other content in every table the service fills (names, defaults, DSP fields)
     pub enable: &'static [(u32, u32, u32)], // link words that turn a DSP row off: (window, word, off value)
     pub kept: fn(&FakeCore, u32, u32) -> bool, // (address, value): a memory word that may differ from the start after a release, with the value it may hold
-    pub kept_dsp: fn(usize, u8) -> bool,       // the same for a DSP state byte (offset, value)
+    pub kept_dsp: fn(usize, u8) -> bool,       // the same for a byte of the loader's DSP state (offset, value)
+    pub rows: Rows,                // the service's own row tables (`DKRT_VROWS`, `DKRT_FROWS`): bytes, reset, `kept` (offset, value) and the placeholder views (`Rows::NONE` for a service without)
     pub live: Option<fn(&FakeCore)>,           // queues live values for the loaded module's rows, as a knob turn does
     pub salt_same: &'static [(&'static str, &'static str)], // areas where A and a2 may be equal, each with its reason
     pub bad: Module,               // a module the service must refuse at the commit
@@ -253,9 +254,9 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) { /* cases below */ }
 A shared lifecycle driver in test-support (`Lifecycle`) runs a module the way the loader does: `settle`, DSP admit and claim, `module_begin`, the
 init calls, `module_commit` (PREPARE, WRITE), the registry check (the layout by `dkrt_abi::regcheck::check_layout`, the function the runtime's walker
 calls, then the service's check steps), DECLARE, apply, row publication, and on unload `dsp_clear`, `remove` and DSP release. Its state snapshot is
-`FakeCore.mem` (non-zero words), the whole DSP state (`DspState` bytes), the last non-zero word on each link slot, the link queue (live values, queued
+`FakeCore.mem` (non-zero words), the loader's DSP state (`DspState` bytes), the bytes of the service's own row tables (`Fixture::rows`: `DKRT_VROWS`, `DKRT_FROWS`, with the guard memory reset by the same call), the last non-zero word on each link slot, the link queue (live values, queued
 requests), the last word at each `Fixture::enable` word, the settings store, `cap` counts and the service's own view (`Fixture::state`:
-`fxpage::page_owner`, `owned_ids`, `tracks::has`). A module gets DSP rows whose fields follow `Dsp::salt`, so two modules with the same keys and other
+`fxpage::page_owner`, `types_of`, `tracks::has`). A module gets DSP rows whose fields follow `Dsp::salt`, so two modules with the same keys and other
 salts claim the same rows with other contents.
 
 Cases:
@@ -363,7 +364,7 @@ Module ids keep the word they have (`core/dynreg` and so on); only folders, role
 ### 4.3 Service trait
 
 - `fx_entry`, `guard_state` and `owned_ids` leave the trait (rule 12). They become service exports found by name hash
-  (the handover's deferred item): `dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`. They are `[[import]]` entries of
+  (the handover's deferred item): `dk_fx_routes_entry`, and (since R12-8 step 7) `dk_machines_module_info`, which answers the machines of a module in one call. They are `[[import]]` entries of
   `sdk/sdk.toml` with `provided`, `wrapper = "rt"` and `internal = true` (in the export list and `gen_exports.rs`, in no header, document or module import
   table). `handlers::exports` looks them up with `find_export(name)` over the loader's export table; the menu and the MODULES reply keep their
   behaviour when the file is not loaded. The runtime's `kind-free` rule then also holds for the trait.
@@ -516,7 +517,7 @@ What, as separate commits:
    source. The lfo service keeps `id != 0`. The fixture `lfo-shape-dup` is deleted (it only repeated shape id 7); the lfo
    and refusal device tests make the second owner of a key by renaming a copy of the `lfo-shape` file.
 6. Trait (4.3), last and on its own: `fx_entry`, `guard_state`, `owned_ids` leave `Service`, `ServiceRow` and the thunks. Each service
-   declares an export (`dk_fx_routes_entry`, `dk_machines_guard_state`, `dk_machines_owned_ids`, in `dks/src/rt.rs`): a plain `extern "C"` function with no core
+   declares an export (`dk_fx_routes_entry`, `dk_machines_module_info`, in `dks/src/rt.rs`): a plain `extern "C"` function with no core
    argument (the `.dks` code reaches the core through `ImportCore`, as the builder exports do). The runtime adds `find_export(name)` over
    `Loader.exports.resolve`; `dkrt_fx` (menu FX ROUTES) and the MODULES reply call it and keep their behaviour when the export is absent
    (`E_NOT_FOUND`, 0, none). `SVC_ABI` changes once; every `.dks` and the runtime object rebuild (`objects-check`).
@@ -570,8 +571,8 @@ machines writers on the device path; the device subset of E3 or E5 covers it). D
 
 This is hot reload S1 (code-only modules) and S4 (machine and fx modules) of [digikit-hot-reload.md](digikit-hot-reload.md), for reload
 (3.6), scoped to day-to-day machine work: the module's code, DSP and keys change; its menus and its own effect routes do not. It starts
-after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6, 2.7) and moves
-DSP row state into the services (step 7). The two-block DSP wait is new work, done here. Menus, fx reload, the workbench key check and the
+after R12-8 merges: R12-8 builds the shared unload lifecycle and late teardown in the same `Loader` code (r12-8 sections 2.6, 2.7) and, in step 7, moved
+the DSP row state into the services (`DKRT_VROWS`, `DKRT_FROWS`). The two-block DSP wait is new work, done here. Menus, fx reload, the workbench key check and the
 cleanup of the old duplicate checks was E5b.
 
 Before E5 starts (about 2 hours, no code): map which code of the archive tag `digikit-hot-reload-v1` carries over to the R12-8 layout
@@ -618,7 +619,7 @@ What:
      longer holds is freed. A placeholder row uses one of the 16 type rows for as long as its number is in the map and no real load needs the row (E5d: a real load takes it, `dsp::make_room`).
    One rig case on each device proves it: a row with word 10 pre-set to its type renders silence from a routine that sounds, without a fault
    (`modules/core/adapters/dsp-voice/tests/dsp-guard.rig.test.ts` for the Digitakt II dispatch, `dsp-voice-dn2.rig.test.ts` for the Digitone II one). The machines
-   contract lists the placeholder values in `kept`, `kept_dsp` and `kept_caps`, and the `disabled` words of the rows that count as off.
+   contract lists the placeholder values in `kept`, `rows.kept` and `kept_caps`, and the `disabled` words of the rows that count as off.
 8. Numbering: re-run `settle` over the live set plus the candidate, after the old module is torn down and the new file's header table is kept in its slot
    (`Loader::reload_load`; the keys of every loaded module and of the new file, in selection order). Live modules keep their numbers (rule 1) and new keys
    take free numbers; `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent: contract case 9 (`settle_over_the_live_set_changes_nothing`).

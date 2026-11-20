@@ -1,20 +1,16 @@
-import fs from 'node:fs';
-import { button, emulatorClock, waitClock } from '@digi/test-support';
+import { emulatorClock, waitClock } from '@digi/test-support';
 import { decodeFault, readSettingsRecord, settingsValue } from '@digi/dk-session';
-import { CAP, CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
+import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession, TestRuntime } from '@digi/regression/support.ts';
 import { openSafeAbout } from '@digi/regression/runtime/flows/menu.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
-import { DEBUG_MODULE, installWithDebug, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { BOOT_FIELDS, expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
-import {
-  readCrashSeen,
-  readSmallRing,
-  RING_SYMBOLS,
-} from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { pollEmulated, withEmulatedProbe } from '@digi/regression/runtime/waits.ts';
+import { installWithDebug } from '@digi/regression/runtime/install.ts';
+import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { readCrashSeen, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
+import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { pollEmulated } from '@digi/regression/runtime/waits.ts';
+import { expectNoDebugModule, waitForSafeMode, waitForSafeUi } from './fault-trace-support.ts';
 
 const SOURCE_SHIFT = 8;
 /** The watch declares a stop after 4500 blocks (3 s) without a heartbeat; the daemon emulates the DSP far slower than 1500 blocks a second. */
@@ -24,49 +20,10 @@ const BLOCKS_PAST_THE_LIMIT = 9000;
 async function waitFrames({ session }: PatchedSession, blocks: number): Promise<void> {
   await waitClock(emulatorClock(session), blocks / 1.5);
 }
-const SITE_VOICE = 1;
 const SITE_FX_SEND = 3;
 const STAGE_CALL = 4;
 const SAFE_DSP = 4;
 const SAFE_PANIC = 5;
-
-/** Wait for the device to restart itself into safe mode (the hang record is written about 20 s after the DSP stopped). */
-async function waitForSafeMode({ session, dk }: PatchedSession): Promise<void> {
-  await pollEmulated(session, async () => (await withEmulatedProbe(session, (q) => dk.info(q))).safe_mode, Boolean, {
-    emulatedMs: 180_000,
-    intervalMs: 2000,
-    retry: true,
-    message: 'safe mode after the stop',
-  });
-}
-
-/** Wait until the safe boot has reached the UI loop: DKRT_BOOT has `safe` set and `ui_reached` raised (the first UI pass). The main OS starts the UI
- * loop after the boot intro, and the boot hook has already kept `dk/fault` and the log events by then. The wait is in emulated time. */
-async function waitForSafeUi({ session }: PatchedSession, plan: Awaited<ReturnType<typeof prepareRuntimePlan>>): Promise<void> {
-  const base = planSymbol(plan, 'DKRT_BOOT');
-  await pollEmulated(
-    session,
-    async () => {
-      const [safe, ui] = await Promise.all([
-        session.client.memPeek(base + BOOT_FIELDS.safe),
-        session.client.memPeek(base + BOOT_FIELDS.ui_reached),
-      ]);
-      return safe === 1 && ui === 1;
-    },
-    Boolean,
-    { emulatedMs: 180_000, intervalMs: 1000, retry: true, message: 'the safe boot reached the UI loop' },
-  );
-}
-
-/** After a stop or a crash the boot is safe mode: INFO has no LOG capability (the debug module is not loaded). Returns the runtime's own ring. */
-async function expectNoDebugModule(runtime: PatchedSession, plan: Awaited<ReturnType<typeof prepareRuntimePlan>>) {
-  const { session, dk } = runtime;
-  const info = await withEmulatedProbe(session, (q) => dk.info(q));
-  expect(info.safe_mode).toBe(true);
-  expect(info.caps !== null && (info.caps >>> CAP.LOG) & 1, 'no LOG capability without the debug module').toBe(0);
-  expect((await withEmulatedProbe(session, (q) => dk.request(SERVICE_CMD.LOG, Uint8Array.of(0, 0, 0, 0), q))).status).toBe(-60);
-  return readSmallRing(session, plan);
-}
 
 /** An effect on the send route stops the DSP: the next boot is safe mode, and ABOUT, dk/fault and the log name the module, the site and the step. */
 async function expectFxHang(runtime: TestRuntime): Promise<void> {
@@ -117,39 +74,6 @@ async function expectFxHang(runtime: TestRuntime): Promise<void> {
   await session.expectNoFault('fx hang');
 }
 
-/** A machine whose render never returns: the DT2 voice site. The machine is put on track 1 through the SRC list (the first run-time machine is the 8th row). */
-async function expectVoiceHang(runtime: TestRuntime): Promise<void> {
-  const { session, dk } = runtime;
-  await expectRuntimeReady(session);
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DKRT_BOOT']);
-  await installWithDebug(runtime, 'test/dyn-dsp-hang');
-  const { ui } = runtime;
-  // input order is the firmware's: each key ends when the firmware took it
-  await ui.tap('SRC', { held: 'FUNC', until: { drained: true } });
-  for (let i = 0; i < 12; i++) await ui.tap('UP', { until: { drained: true } });
-  for (let i = 0; i < 7; i++) await ui.tap('DOWN', { until: { drained: true } });
-  await ui.tap('YES', { until: { drained: true } });
-  await ui.tap('YES', { until: { drained: true } });
-  await pollEmulated(
-    session,
-    async () =>
-      (await withEmulatedProbe(session, (q) => dk.readLog(q))).some(
-        (e) =>
-          e.kind === LOG_KIND.MACHINE_CHANGE && e.args[0] === 0 && (e.args[2] ?? 0) >= 7 && e.args[2] !== 0xffffffff,
-      ),
-    Boolean,
-    { emulatedMs: 180_000, intervalMs: 2000, message: 'the run-time machine is on track 1' },
-  );
-  await session.client.inputButton(button('TRIG 1'), true); // the render hangs on the third block of the note
-  await waitForSafeMode(runtime);
-  await waitForSafeUi(runtime, plan);
-
-  const fault = decodeFault(settingsValue(await readSettingsRecord(dk), 'dk/fault') ?? new Uint8Array());
-  expect(fault).toMatchObject({ kind: 'dsp', site: SITE_VOICE, stage: STAGE_CALL, step: 0, module: 'dyn-dsp-hang' });
-  expect(fault!.id, 'a run-time machine type').toBeGreaterThanOrEqual(7);
-  await session.expectNoFault('voice hang');
-}
-
 /** A send effect that faults in every block: FX_FAULT and FX_DISABLED, tagged with the module's source, and no stop. */
 async function expectFxFaultEvents(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
@@ -193,33 +117,6 @@ async function expectNoFalseStop(runtime: PatchedSession): Promise<void> {
   await session.expectNoFault('no false stop');
 }
 
-/** A module that raises a CPU exception: the next boot keeps dk/fault with kind CPU crash and the PC. */
-async function expectCpuCrashFault(runtime: PatchedSession): Promise<void> {
-  const { session, dk } = runtime;
-  await expectRuntimeReady(session);
-  // the daemon stops the run at a CPU exception unless the guest's handler (the runtime's crash capture) is to run
-  await session.client.call('cpu.exceptions', { deliver: true });
-  const cfg = Uint8Array.of(0, 0, 0x0b, 0xb8, 0); // 3000 blocks (2 s) after the first tick, an illegal instruction
-  await dk.put('cfg/crash-after.bin', cfg);
-  const device = session.options.device;
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', 'DKRT_BOOT', ...RING_SYMBOLS]);
-  for (const id of [DEBUG_MODULE, 'test/dyn-crash']) {
-    await dk.put(`modules/${id.split('/')[1]}.dkm`, fs.readFileSync(moduleArtifact(device, id)));
-  }
-  await dk.select(['modules/debug.dkm', 'modules/dyn-crash.dkm']);
-  await dk.restart();
-  // the module crashes this boot and the next one; the third boot is safe mode (two bad boots)
-  await waitForSafeMode(runtime);
-  await waitForSafeUi(runtime, plan);
-  const fault = decodeFault(settingsValue(await readSettingsRecord(dk), 'dk/fault') ?? new Uint8Array());
-  expect(fault).toMatchObject({ kind: 'cpu', module: 'dyn-crash' });
-  // the safe boot has no debug module: the runtime's own ring has the crash event, and the record's tail came from that ring
-  const log = await expectNoDebugModule(runtime, plan);
-  const crash = log.find((e) => e.kind === LOG_KIND.CRASH_FOUND);
-  expect(fault!.at, 'the PC of the crash record').toBe(crash!.args[0]);
-  expect((await readCrashSeen(session, plan)).tail, 'the last events before the crash').toBeGreaterThan(0);
-}
-
 /** A panic of the runtime (CMD_FAULT, a failed bounds check) writes a panic record and resets: the next boot is safe mode and ABOUT, dk/fault and the log name it. */
 async function expectRuntimePanic(runtime: TestRuntime): Promise<void> {
   const { session, dk } = runtime;
@@ -256,12 +153,8 @@ async function expectRuntimePanic(runtime: TestRuntime): Promise<void> {
 
 runtimeTests('an effect that stops the DSP gives safe mode and names the module, site and step', expectFxHang, { dsp: 'sharc',
 });
-runtimeTests('a machine that stops the DSP gives safe mode and names the module and the voice site', expectVoiceHang, { dsp: 'sharc',
-  devices: ['dt2'],
-});
 runtimeTests('effect faults are logged with the module as source', expectFxFaultEvents, { dsp: 'sharc' });
 runtimeTests('a normal effect is no stop', expectNoFalseStop, { dsp: 'sharc' });
-runtimeTests('a CPU crash is kept as the last fault', expectCpuCrashFault, { devices: ['dt2'] });
 runtimeTests('a panic of the runtime gives safe mode and names the runtime', expectRuntimePanic, {
   dsp: 'sharc',
 });
