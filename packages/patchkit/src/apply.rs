@@ -1246,7 +1246,13 @@ pub fn apply_with(
         selected.push(EXPANSION.to_string());
     }
     if let Some(info) = crate::devdata::by_short(&dev) {
-        crate::devgen::check_needed_when(lib, &dev, &info.switches, &selected, "the module selection")?;
+        crate::devgen::check_needed_when(
+            lib,
+            &dev,
+            &info.switches,
+            &selected,
+            "the module selection",
+        )?;
     }
     let order = order_modules(lib, &selected)?;
     for id in &order {

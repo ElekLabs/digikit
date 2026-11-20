@@ -526,7 +526,12 @@ impl Facts {
                     "{short}: [digikit] needs [board], [limits] and [capabilities] (a runtime target)"
                 ));
             };
-            let guard = d.card.as_ref().map(|c| guard_facts(&short, c)).transpose()?.flatten();
+            let guard = d
+                .card
+                .as_ref()
+                .map(|c| guard_facts(&short, c))
+                .transpose()?
+                .flatten();
             let s = d.card.and_then(|c| c.store);
             let dsp = cap.dsp == "sharc";
             let dsp_facts = [
@@ -1090,7 +1095,14 @@ fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
 /// The most rows of the card guard's allow-list (the generated table has this many slots).
 pub const GUARD_MAX: usize = 8;
 const GUARD_FIRST: [&str; GUARD_MAX] = [
-    "CG_FIRST_0", "CG_FIRST_1", "CG_FIRST_2", "CG_FIRST_3", "CG_FIRST_4", "CG_FIRST_5", "CG_FIRST_6", "CG_FIRST_7",
+    "CG_FIRST_0",
+    "CG_FIRST_1",
+    "CG_FIRST_2",
+    "CG_FIRST_3",
+    "CG_FIRST_4",
+    "CG_FIRST_5",
+    "CG_FIRST_6",
+    "CG_FIRST_7",
 ];
 const GUARD_END: [&str; GUARD_MAX] = [
     "CG_END_0", "CG_END_1", "CG_END_2", "CG_END_3", "CG_END_4", "CG_END_5", "CG_END_6", "CG_END_7",
@@ -1135,8 +1147,16 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
     };
     let mut rows: Vec<GuardRow> = if g.row.is_empty() {
         vec![
-            GuardRow { who: Who::Stock, first: 0, end: store.first_sector },
-            GuardRow { who: Who::Runtime, first: store.first_sector, end: store.end_sector },
+            GuardRow {
+                who: Who::Stock,
+                first: 0,
+                end: store.first_sector,
+            },
+            GuardRow {
+                who: Who::Runtime,
+                first: store.first_sector,
+                end: store.end_sector,
+            },
         ]
     } else {
         let mut v = vec![];
@@ -1146,7 +1166,11 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
                 "runtime" => Who::Runtime,
                 other => return bad(format!("row who = {other:?} is \"stock\" or \"runtime\"")),
             };
-            v.push(GuardRow { who, first: r.first, end: r.end });
+            v.push(GuardRow {
+                who,
+                first: r.first,
+                end: r.end,
+            });
         }
         v
     };
@@ -1157,7 +1181,10 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
     // merge touching or overlapping rows of one class
     let mut merged: Vec<GuardRow> = vec![];
     for r in rows {
-        match merged.iter_mut().find(|m| m.who == r.who && r.first <= m.end && m.first <= r.end) {
+        match merged
+            .iter_mut()
+            .find(|m| m.who == r.who && r.first <= m.end && m.first <= r.end)
+        {
             Some(m) => {
                 m.first = m.first.min(r.first);
                 m.end = m.end.max(r.end);
@@ -1167,7 +1194,9 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
     }
     merged.sort_by_key(|r| (r.first, r.end));
     if merged.len() > GUARD_MAX {
-        return bad(format!("at most {GUARD_MAX} rows (after merging touching rows of one class)"));
+        return bad(format!(
+            "at most {GUARD_MAX} rows (after merging touching rows of one class)"
+        ));
     }
     let (store_first, store_end) = (store.first_sector, store.end_sector);
     let runtime: Vec<&GuardRow> = merged.iter().filter(|r| r.who == Who::Runtime).collect();
@@ -1186,7 +1215,10 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
             }
         }
         if a.who == Who::Stock && a.end > store_first && a.first < store_end {
-            return bad(format!("the stock row [{:#x}, {:#x}) reaches the store", a.first, a.end));
+            return bad(format!(
+                "the stock row [{:#x}, {:#x}) reaches the store",
+                a.first, a.end
+            ));
         }
     }
     let stock: Vec<&GuardRow> = merged.iter().filter(|r| r.who == Who::Stock).collect();
@@ -1199,7 +1231,11 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
         items.push(("table_sector".into(), t, t + 1));
     }
     for (name, p) in &card.pools {
-        items.push((format!("pools.{name}"), p.base_sector, p.base_sector + p.slots * p.stride_sectors));
+        items.push((
+            format!("pools.{name}"),
+            p.base_sector,
+            p.base_sector + p.slots * p.stride_sectors,
+        ));
     }
     for (i, r) in card.regions.iter().enumerate() {
         items.push((format!("regions[{i}]"), r.sector, r.sector + r.sectors));
@@ -1214,17 +1250,36 @@ fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
             ));
         }
     }
-    Ok(Some(GuardF { enabled: g.enabled, rows: merged }))
+    Ok(Some(GuardF {
+        enabled: g.enabled,
+        rows: merged,
+    }))
 }
 
 /// The `CG_*` constants of one device (core/card-guard): the rows, 0 in the slots that are not used.
 fn guard_constants(g: &GuardF) -> Vec<C> {
-    let mut v = vec![c("CG_N", g.rows.len() as u64, "[card.guard] rows after merging")];
+    let mut v = vec![c(
+        "CG_N",
+        g.rows.len() as u64,
+        "[card.guard] rows after merging",
+    )];
     for i in 0..GUARD_MAX {
         let r = g.rows.get(i);
-        v.push(c(GUARD_FIRST[i], r.map_or(0, |r| r.first), "row first sector"));
-        v.push(c(GUARD_END[i], r.map_or(0, |r| r.end), "row end sector (exclusive)"));
-        v.push(c(GUARD_WHO[i], r.map_or(0, |r| r.who as u64), "row writer class: 0 stock, 1 runtime"));
+        v.push(c(
+            GUARD_FIRST[i],
+            r.map_or(0, |r| r.first),
+            "row first sector",
+        ));
+        v.push(c(
+            GUARD_END[i],
+            r.map_or(0, |r| r.end),
+            "row end sector (exclusive)",
+        ));
+        v.push(c(
+            GUARD_WHO[i],
+            r.map_or(0, |r| r.who as u64),
+            "row writer class: 0 stock, 1 runtime",
+        ));
     }
     v
 }
@@ -2316,7 +2371,13 @@ pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
                     .ok_or_else(|| err!("{dev}: patch set {set}: unknown module {id}"))?;
                 check_needs(dev, set, &id, &m.manifest.module.needs_device, e)?;
             }
-            check_needed_when(lib, dev, &e.switches, &ids_of(lib, roots)?, &format!("patch set {set}"))?;
+            check_needed_when(
+                lib,
+                dev,
+                &e.switches,
+                &ids_of(lib, roots)?,
+                &format!("patch set {set}"),
+            )?;
         }
     }
     Ok(())
@@ -2559,11 +2620,9 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                 }
                 for dev in &devs {
                     let e = &facts.docs[*dev];
-                    let gf = e
-                        .guard
-                        .as_ref()
-                        .filter(|g| g.enabled)
-                        .ok_or_else(|| err!("{module}: {dev} has no [card.guard] with enabled = true"))?;
+                    let gf = e.guard.as_ref().filter(|g| g.enabled).ok_or_else(|| {
+                        err!("{module}: {dev} has no [card.guard] with enabled = true")
+                    })?;
                     out.push((
                         g.path.replace("{dev}", dev),
                         gas(module, dev, &guard_constants(gf), None),
@@ -2662,7 +2721,9 @@ mod guard_tests {
     use super::*;
 
     fn device_card(file: &str) -> Card {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../devices").join(file);
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../devices")
+            .join(file);
         let text = std::fs::read_to_string(&path).unwrap();
         let t: toml::Table = toml::from_str(&text).unwrap();
         t["card"].clone().try_into().unwrap()
@@ -2673,13 +2734,20 @@ mod guard_tests {
     }
 
     fn row(who: &str, first: u64, end: u64) -> GuardRowDoc {
-        GuardRowDoc { who: who.into(), first, end }
+        GuardRowDoc {
+            who: who.into(),
+            first,
+            end,
+        }
     }
 
     /// The Syntakt card with its guard rows replaced.
     fn st_with(rows: Vec<GuardRowDoc>) -> Card {
         let mut c = device_card("syntakt.toml");
-        c.guard = Some(GuardDoc { enabled: true, row: rows });
+        c.guard = Some(GuardDoc {
+            enabled: true,
+            row: rows,
+        });
         c
     }
 
@@ -2689,19 +2757,43 @@ mod guard_tests {
 
     #[test]
     fn the_syntakt_rows_are_the_tight_stock_window_and_the_store() {
-        let g = guard_facts("st", &device_card("syntakt.toml")).unwrap().unwrap();
+        let g = guard_facts("st", &device_card("syntakt.toml"))
+            .unwrap()
+            .unwrap();
         assert!(g.enabled);
-        assert_eq!(rows(&g), [(Who::Stock, 0, 0x18_0000), (Who::Runtime, 0x20_0000, 0x30_0000)]);
+        assert_eq!(
+            rows(&g),
+            [
+                (Who::Stock, 0, 0x18_0000),
+                (Who::Runtime, 0x20_0000, 0x30_0000)
+            ]
+        );
     }
 
     #[test]
     fn a_device_without_rows_gets_the_defaults_and_its_items_fit() {
         // stock = [0, store.first), runtime = the store; the +Drive of the DT2 ends at path_fs.end_sector, below the store
-        let dt2 = guard_facts("dt2", &device_card("digitakt-ii.toml")).unwrap().unwrap();
+        let dt2 = guard_facts("dt2", &device_card("digitakt-ii.toml"))
+            .unwrap()
+            .unwrap();
         assert!(!dt2.enabled);
-        assert_eq!(rows(&dt2), [(Who::Stock, 0, 0x2df_1000), (Who::Runtime, 0x2df_1000, 0x2e1_a000)]);
-        let dn2 = guard_facts("dn2", &device_card("digitone-ii.toml")).unwrap().unwrap();
-        assert_eq!(rows(&dn2), [(Who::Stock, 0, 0x80_0000), (Who::Runtime, 0x80_0000, 0x2e1_a000)]);
+        assert_eq!(
+            rows(&dt2),
+            [
+                (Who::Stock, 0, 0x2df_1000),
+                (Who::Runtime, 0x2df_1000, 0x2e1_a000)
+            ]
+        );
+        let dn2 = guard_facts("dn2", &device_card("digitone-ii.toml"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            rows(&dn2),
+            [
+                (Who::Stock, 0, 0x80_0000),
+                (Who::Runtime, 0x80_0000, 0x2e1_a000)
+            ]
+        );
     }
 
     #[test]
@@ -2714,20 +2806,41 @@ mod guard_tests {
     #[test]
     fn a_stock_row_that_is_too_tight_for_a_card_item_is_refused() {
         // the project pool ends at 0x180000: one sector less and the last project slot is outside
-        let e = err_of(&st_with(vec![row("stock", 0, 0x17_ffff), row("runtime", 0x20_0000, 0x30_0000)]));
-        assert!(e.contains("pools.projects") && e.contains("not inside one stock row"), "{e}");
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x17_ffff),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(
+            e.contains("pools.projects") && e.contains("not inside one stock row"),
+            "{e}"
+        );
         // a row that starts above the header sector
-        let e = err_of(&st_with(vec![row("stock", 1, 0x18_0000), row("runtime", 0x20_0000, 0x30_0000)]));
+        let e = err_of(&st_with(vec![
+            row("stock", 1, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
         assert!(e.contains("header_sector"), "{e}");
     }
 
     #[test]
     fn rows_may_not_reach_the_store_overlap_or_leave_the_store_partly_open() {
-        let e = err_of(&st_with(vec![row("stock", 0, 0x20_0001), row("runtime", 0x20_0000, 0x30_0000)]));
-        assert!(e.contains("overlap") || e.contains("reaches the store"), "{e}");
-        let e = err_of(&st_with(vec![row("stock", 0, 0x18_0000), row("runtime", 0x20_0000, 0x2f_0000)]));
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x20_0001),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(
+            e.contains("overlap") || e.contains("reaches the store"),
+            "{e}"
+        );
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x2f_0000),
+        ]));
         assert!(e.contains("runtime rows must together be the store"), "{e}");
-        let e = err_of(&st_with(vec![row("stock", 0, 0x18_0000), row("runtime", 0x20_0000, 0x30_0001)]));
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0001),
+        ]));
         assert!(e.contains("runtime rows must together be the store"), "{e}");
         let e = err_of(&st_with(vec![row("stock", 0, 0x18_0000)]));
         assert!(e.contains("runtime rows must together be the store"), "{e}");
@@ -2737,21 +2850,32 @@ mod guard_tests {
             row("stock", 0x28_0000, 0x29_0000),
             row("runtime", 0x20_0000, 0x30_0000),
         ]));
-        assert!(e.contains("overlap") || e.contains("reaches the store"), "{e}");
+        assert!(
+            e.contains("overlap") || e.contains("reaches the store"),
+            "{e}"
+        );
     }
 
     #[test]
     fn rows_are_checked_for_their_shape() {
-        let e = err_of(&st_with(vec![row("host", 0, 0x18_0000), row("runtime", 0x20_0000, 0x30_0000)]));
+        let e = err_of(&st_with(vec![
+            row("host", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
         assert!(e.contains("\"stock\" or \"runtime\""), "{e}");
-        let e = err_of(&st_with(vec![row("stock", 0x18_0000, 0x18_0000), row("runtime", 0x20_0000, 0x30_0000)]));
+        let e = err_of(&st_with(vec![
+            row("stock", 0x18_0000, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
         assert!(e.contains("first < end"), "{e}");
         let mut c = device_card("syntakt.toml");
         c.store = None;
         let e = err_of(&c);
         assert!(e.contains("needs [card.store]"), "{e}");
         // nine stock rows that do not touch
-        let mut many: Vec<GuardRowDoc> = (0..9).map(|i| row("stock", i * 0x1_0000, i * 0x1_0000 + 0x8000)).collect();
+        let mut many: Vec<GuardRowDoc> = (0..9)
+            .map(|i| row("stock", i * 0x1_0000, i * 0x1_0000 + 0x8000))
+            .collect();
         many.push(row("runtime", 0x20_0000, 0x30_0000));
         let e = err_of(&st_with(many));
         assert!(e.contains("at most 8 rows"), "{e}");
@@ -2761,20 +2885,41 @@ mod guard_tests {
     fn touching_rows_of_one_class_are_merged() {
         let g = guard_facts(
             "st",
-            &st_with(vec![row("stock", 0x8_0000, 0x18_0000), row("stock", 0, 0x8_0000), row("runtime", 0x20_0000, 0x30_0000)]),
+            &st_with(vec![
+                row("stock", 0x8_0000, 0x18_0000),
+                row("stock", 0, 0x8_0000),
+                row("runtime", 0x20_0000, 0x30_0000),
+            ]),
         )
         .unwrap()
         .unwrap();
-        assert_eq!(rows(&g), [(Who::Stock, 0, 0x18_0000), (Who::Runtime, 0x20_0000, 0x30_0000)]);
+        assert_eq!(
+            rows(&g),
+            [
+                (Who::Stock, 0, 0x18_0000),
+                (Who::Runtime, 0x20_0000, 0x30_0000)
+            ]
+        );
     }
 
     #[test]
     fn the_constants_hold_the_rows_and_zero_the_unused_slots() {
-        let g = guard_facts("st", &device_card("syntakt.toml")).unwrap().unwrap();
-        let v: BTreeMap<&str, i64> = guard_constants(&g).into_iter().map(|k| (k.name, k.value)).collect();
+        let g = guard_facts("st", &device_card("syntakt.toml"))
+            .unwrap()
+            .unwrap();
+        let v: BTreeMap<&str, i64> = guard_constants(&g)
+            .into_iter()
+            .map(|k| (k.name, k.value))
+            .collect();
         assert_eq!(v["CG_N"], 2);
-        assert_eq!((v["CG_FIRST_0"], v["CG_END_0"], v["CG_WHO_0"]), (0, 0x18_0000, 0));
-        assert_eq!((v["CG_FIRST_1"], v["CG_END_1"], v["CG_WHO_1"]), (0x20_0000, 0x30_0000, 1));
+        assert_eq!(
+            (v["CG_FIRST_0"], v["CG_END_0"], v["CG_WHO_0"]),
+            (0, 0x18_0000, 0)
+        );
+        assert_eq!(
+            (v["CG_FIRST_1"], v["CG_END_1"], v["CG_WHO_1"]),
+            (0x20_0000, 0x30_0000, 1)
+        );
         assert_eq!((v["CG_FIRST_2"], v["CG_END_2"], v["CG_WHO_7"]), (0, 0, 0));
         assert_eq!(v.len(), 1 + 3 * GUARD_MAX);
     }

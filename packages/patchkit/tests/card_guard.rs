@@ -32,7 +32,8 @@ fn plan_of(raw: &[u8], set: &str) -> serde_json::Value {
 }
 
 #[test]
-fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_instructions_and_tails() {
+fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_instructions_and_tails()
+ {
     let Some(raw) = image() else { return };
     if Library::scan_repo_or_skip(&root()).is_none() {
         return;
@@ -40,7 +41,11 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
     for set in ["device", "emulator"] {
         let plan = plan_of(&raw, set);
         let hooks = plan["hooks"].as_array().unwrap();
-        let sym = |name: &str| plan["symbols"][format!("core/card-guard@0.1.0:{name}")].as_u64().unwrap_or(0);
+        let sym = |name: &str| {
+            plan["symbols"][format!("core/card-guard@0.1.0:{name}")]
+                .as_u64()
+                .unwrap_or(0)
+        };
         let hook = |anchor: &str| {
             hooks
                 .iter()
@@ -53,22 +58,40 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
                 "cf.storage.site.block_write.entry",
                 0x4010f7f8u64,
                 "dkcg_write_hook",
-                ["4fefffec  lea.l (-0x14,a7),a7", "48d7043c  movem.l {d2 d3 d4 d5 a2},(a7)"],
+                [
+                    "4fefffec  lea.l (-0x14,a7),a7",
+                    "48d7043c  movem.l {d2 d3 d4 d5 a2},(a7)",
+                ],
             ),
             (
                 "cf.storage.site.block_erase.entry",
                 0x4010f52a,
                 "dkcg_erase_hook",
-                ["4feffff4  lea.l (-0xc,a7),a7", "48d7040c  movem.l {d2 d3 a2},(a7)"],
+                [
+                    "4feffff4  lea.l (-0xc,a7),a7",
+                    "48d7040c  movem.l {d2 d3 a2},(a7)",
+                ],
             ),
         ];
         for (anchor, entry, shim, displaced) in rows {
             let h = hook(anchor);
             assert_eq!(h["module"], "core/card-guard@0.1.0");
-            assert_eq!(h["addr"].as_u64(), Some(entry), "{set} {anchor}: the firmware entry (offset 0)");
+            assert_eq!(
+                h["addr"].as_u64(),
+                Some(entry),
+                "{set} {anchor}: the firmware entry (offset 0)"
+            );
             assert_eq!(h["site_len"].as_u64(), Some(8));
-            assert_eq!(h["ret"].as_u64(), Some(entry + 8), "{set} {anchor}: the tail returns after the eight displaced bytes");
-            assert_eq!(h["to"].as_u64(), Some(sym(shim)), "{set} {anchor}: the jump goes to {shim}");
+            assert_eq!(
+                h["ret"].as_u64(),
+                Some(entry + 8),
+                "{set} {anchor}: the tail returns after the eight displaced bytes"
+            );
+            assert_eq!(
+                h["to"].as_u64(),
+                Some(sym(shim)),
+                "{set} {anchor}: the jump goes to {shim}"
+            );
             assert_ne!(sym(shim), 0, "{shim} is placed");
             let insns: Vec<String> = h["displaced_insns"]
                 .as_array()
@@ -76,22 +99,46 @@ fn the_entry_hooks_are_installed_at_the_firmware_entries_with_their_displaced_in
                 .iter()
                 .map(|i| i.as_str().unwrap().split_once("  ").unwrap().1.to_string())
                 .collect();
-            assert_eq!(insns, displaced, "{set} {anchor}: the displaced instructions");
-            assert_ne!(h["tail"].as_u64(), Some(0), "{set} {anchor}: the tail is placed");
+            assert_eq!(
+                insns, displaced,
+                "{set} {anchor}: the displaced instructions"
+            );
+            assert_ne!(
+                h["tail"].as_u64(),
+                Some(0),
+                "{set} {anchor}: the tail is placed"
+            );
         }
         // the adapter's other exports and the runtime's trampoline label are placed (the object links)
-        for name in ["dkcg_write", "dkcg_erase", "dkcg_stats", "dkcg_rows", "dkcg_row_n"] {
+        for name in [
+            "dkcg_write",
+            "dkcg_erase",
+            "dkcg_stats",
+            "dkcg_rows",
+            "dkcg_row_n",
+        ] {
             assert_ne!(sym(name), 0, "{set}: {name}");
         }
-        let raw_ret = plan["symbols"]["core/runtime@0.9.0:dkrt_raw_write_ret"].as_u64().unwrap_or(0);
-        let raw_write = plan["symbols"]["core/runtime@0.9.0:dkrt_raw_block_write"].as_u64().unwrap_or(0);
-        assert!(raw_write != 0 && raw_ret > raw_write && raw_ret < raw_write + 32, "{set}: the label follows the jsr of the trampoline");
+        let raw_ret = plan["symbols"]["core/runtime@0.9.0:dkrt_raw_write_ret"]
+            .as_u64()
+            .unwrap_or(0);
+        let raw_write = plan["symbols"]["core/runtime@0.9.0:dkrt_raw_block_write"]
+            .as_u64()
+            .unwrap_or(0);
+        assert!(
+            raw_write != 0 && raw_ret > raw_write && raw_ret < raw_write + 32,
+            "{set}: the label follows the jsr of the trampoline"
+        );
         // the return address of the stock write's own recursive call (the adapter's `cg_write_split_ret`) is the instruction after the `jsr (A2)` at entry + 0x34
         let reg = registry();
         let port = reg.ports.iter().find(|p| p.port.device == "st").unwrap();
         let (entry, split) = (
-            port.anchor("cf.storage.site.block_write.entry").unwrap().addr,
-            port.anchor("cf.storage.site.block_write.split_ret").unwrap().addr,
+            port.anchor("cf.storage.site.block_write.entry")
+                .unwrap()
+                .addr,
+            port.anchor("cf.storage.site.block_write.split_ret")
+                .unwrap()
+                .addr,
         );
         assert_eq!(split, entry + 0x36, "{set}");
     }
@@ -110,9 +157,13 @@ fn a_set_with_the_runtime_and_without_the_guard_is_refused_by_apply() {
         .unwrap();
     let (mut ids, _) = lib.with_requires(&st.patch_sets["device"]).unwrap();
     ids.retain(|i| i != "core/card-guard");
-    let e = apply::apply(&raw, &reg, &lib, &ids).err().expect("refused").0;
+    let e = apply::apply(&raw, &reg, &lib, &ids)
+        .err()
+        .expect("refused")
+        .0;
     assert!(
-        e.contains("includes core/runtime but not core/card-guard") && e.contains("card.guard.enabled"),
+        e.contains("includes core/runtime but not core/card-guard")
+            && e.contains("card.guard.enabled"),
         "{e}"
     );
     // the same selection without the runtime is fine (the optional first flash holds neither)

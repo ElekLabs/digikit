@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn no_guard_in_the_image_reports_zeros_and_raises_nothing() {
-        let f = FakePlatform::new(profiles::DT2);
+        let f = FakePlatform::new(profiles::ALL[0]);
         let mut seen = 0u32;
         unsafe {
             assert_eq!(stats(&f), Stats::default());
@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn the_words_are_the_adapters_in_the_adapters_order() {
-        let f = FakePlatform::new(profiles::DT2);
+        let f = FakePlatform::new(profiles::ALL[0]);
         f.guard_stats.set([1, 3, 2, 0x200000, 8, 0x101]);
         let s = unsafe { stats(&f) };
         assert_eq!((s.version, s.refused_writes, s.refused_erases), (1, 3, 2));
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn a_refusal_raises_one_event_with_the_last_request_and_the_totals() {
         let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let f = FakePlatform::new(profiles::DT2);
+        let f = FakePlatform::new(profiles::ALL[0]);
         let mut seen = 0u32;
         let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };
         let last = || unsafe { (*core::ptr::addr_of!(dlog::DKRT_LOG))[(events() as usize - 1) % dlog::RING] };

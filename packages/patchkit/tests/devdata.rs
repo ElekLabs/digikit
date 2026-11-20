@@ -956,14 +956,19 @@ fn a_device_that_turns_the_card_guard_on_needs_it_in_every_set_with_the_runtime(
             .unwrap_err()
             .0;
         assert!(
-            e.contains(&format!("st: patch set {set} includes core/runtime but not core/card-guard"))
-                && e.contains("card.guard.enabled"),
+            e.contains(&format!(
+                "st: patch set {set} includes core/runtime but not core/card-guard"
+            )) && e.contains("card.guard.enabled"),
             "{set}: {e}"
         );
     }
     // a set without the runtime (device-peer) needs no guard
-    let facts = Facts::from_texts([syntakt_with("device-peer = [\"core/peer-image\"]", "device-peer = [\"core/peer-image\"]").as_str()])
-        .unwrap();
+    let facts = Facts::from_texts([syntakt_with(
+        "device-peer = [\"core/peer-image\"]",
+        "device-peer = [\"core/peer-image\"]",
+    )
+    .as_str()])
+    .unwrap();
     patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
 }
 
@@ -972,19 +977,27 @@ fn the_card_guard_module_is_refused_where_the_switch_is_off() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    let off = syntakt_with("[card.guard]\nenabled = true", "[card.guard]\nenabled = false");
+    let off = syntakt_with(
+        "[card.guard]\nenabled = true",
+        "[card.guard]\nenabled = false",
+    );
     let facts = Facts::from_texts([off.as_str()]).unwrap();
     let e = patchkit::devgen::check_device_tables(&lib, &facts)
         .unwrap_err()
         .0;
     assert!(
-        e.contains("includes core/card-guard, but the device file does not turn [card.guard.enabled] on"),
+        e.contains(
+            "includes core/card-guard, but the device file does not turn [card.guard.enabled] on"
+        ),
         "{e}"
     );
     // a device file without the table is refused by `needs_device` first
     let st = syntakt_with("\n[card.guard]\n", "\n[card.guard]\n");
     let (head, rest) = st.split_once("\n[card.guard]\n").unwrap();
-    let tail = rest.split_once("# Board facts that only the emulator uses").unwrap().1;
+    let tail = rest
+        .split_once("# Board facts that only the emulator uses")
+        .unwrap()
+        .1;
     let none = format!("{head}\n# Board facts that only the emulator uses{tail}");
     let facts = Facts::from_texts([none.as_str()]).unwrap();
     let e = patchkit::devgen::check_device_tables(&lib, &facts)
@@ -1009,7 +1022,15 @@ fn the_resolved_selection_of_apply_is_checked_the_same_way() {
     check(&on, &["core/peer-image"]).unwrap();
     check(&off, &["core/runtime"]).unwrap();
     let e = check(&on, &["core/runtime", "core/ui"]).unwrap_err().0;
-    assert!(e.contains("st: the module selection includes core/runtime but not core/card-guard"), "{e}");
-    let e = check(&off, &["core/runtime", "core/card-guard"]).unwrap_err().0;
-    assert!(e.contains("includes core/card-guard, but the device file does not turn"), "{e}");
+    assert!(
+        e.contains("st: the module selection includes core/runtime but not core/card-guard"),
+        "{e}"
+    );
+    let e = check(&off, &["core/runtime", "core/card-guard"])
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("includes core/card-guard, but the device file does not turn"),
+        "{e}"
+    );
 }

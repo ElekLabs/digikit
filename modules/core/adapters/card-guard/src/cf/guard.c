@@ -11,7 +11,8 @@
 
 extern const uint32_t dkcg_row_n;
 extern const cg_row dkcg_rows[]; /* device.s */
-extern char dkrt_raw_write_ret[]; /* core/runtime tramp.s: the label after the `jsr` of its raw block write */
+extern char dkrt_raw_write_ret
+    []; /* core/runtime tramp.s: the label after the `jsr` of its raw block write */
 extern char cg_write_split_ret[]; /* anchor cf.storage.site.block_write.split_ret */
 
 /* [0] refused writes, [1] refused erases, [2] sector, [3] sectors, [4] class and kind of the last refusal (class | kind << 8; kind 0 write, 1 erase).
@@ -33,7 +34,8 @@ static void note(uint32_t kind, uint32_t sector, const cg_verdict *v)
 int32_t dkcg_write(uint32_t sector, uint32_t bytes, uint32_t ret)
 {
     cg_verdict v;
-    int32_t e = cg_check_write(dkcg_rows, dkcg_row_n, (uint32_t)(uintptr_t)dkrt_raw_write_ret, (uint32_t)(uintptr_t)cg_write_split_ret, ret, sector, bytes, &v);
+    int32_t e = cg_check_write(dkcg_rows, dkcg_row_n, (uint32_t)(uintptr_t)dkrt_raw_write_ret,
+                               (uint32_t)(uintptr_t)cg_write_split_ret, ret, sector, bytes, &v);
     if (e)
         note(0, sector, &v);
     return e;
