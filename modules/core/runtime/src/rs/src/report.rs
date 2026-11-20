@@ -23,6 +23,11 @@ pub(crate) unsafe extern "C" fn debug_speed_flags(clear: u32, set: u32) -> u32 {
     speed::update(clear, set)
 }
 
+/// Import `dk_device_track_count`: the tracks of the device, from its profile (the device object's `tracks`); 0 when the device file gives none.
+pub(crate) extern "C" fn device_track_count() -> u32 {
+    platform::profile().tracks
+}
+
 /// Import `dk_debug_peek`: how many RAM ranges the device file allows PEEK to read; for `i` below that, range `i` as `lo, hi` into `out`.
 pub(crate) unsafe extern "C" fn debug_peek(i: u32, out: *mut u32) -> u32 {
     let n = read_volatile(addr_of!(dkrt_peek_n)).min(4);
@@ -359,5 +364,20 @@ mod cap_tests {
         let l = limits(&c);
         assert_eq!(l[0], (12, 2), "the service's answer wins and owns used");
         assert_eq!(l[1], (16, 0), "a kind the service does not count comes from the info entry");
+    }
+}
+
+#[cfg(test)]
+mod device_import_tests {
+    use super::*;
+    use dkrt_abi::profiles;
+
+    /// `dk_device_track_count` answers with the device's `tracks`, and 0 for a device file that gives none.
+    #[test]
+    fn the_track_count_import_reads_the_device_profile() {
+        let p = profiles::ALL[0];
+        assert_eq!(p.tracks, 16);
+        platform::with_profile(p, || assert_eq!(device_track_count(), 16));
+        platform::with_profile(dkrt_abi::platform::DeviceProfile { tracks: 0, ..p }, || assert_eq!(device_track_count(), 0));
     }
 }

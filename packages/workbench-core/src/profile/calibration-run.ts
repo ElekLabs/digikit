@@ -108,18 +108,25 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
     else signal?.addEventListener('abort', () => resolve(), { once: true });
   });
   // The first wait after Stop throws, which ends the case (its teardown still plays); later waits return at once so the teardown is not held up.
+  const stoppable = async (wait: Promise<void>): Promise<void> => {
+    if (tripped) return;
+    if (!signal?.aborted) {
+      const done = Symbol();
+      const r = await Promise.race([wait.then(() => done), aborted.then(() => 'abort' as const)]);
+      if (r === done) return;
+    }
+    tripped = true;
+    throw new Stopped();
+  };
   const clock: Clock = {
     ...base,
-    async pause(ms) {
-      if (tripped) return;
-      if (!signal?.aborted) {
-        const done = Symbol();
-        const r = await Promise.race([base.pause(ms).then(() => done), aborted.then(() => 'abort' as const)]);
-        if (r === done) return;
-      }
-      tripped = true;
-      throw new Stopped();
-    },
+    pause: (ms) => (tripped ? Promise.resolve() : stoppable(base.pause(ms))),
+    ...(base.pauseEmulated
+      ? {
+          pauseEmulated: (ms: number, hangMs?: number) =>
+            tripped ? Promise.resolve() : stoppable(base.pauseEmulated!(ms, hangMs)),
+        }
+      : {}),
   };
 
   const names = new Map<number, string>();

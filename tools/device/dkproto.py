@@ -41,6 +41,7 @@ RECORD_KIND: dict[str, int] = {
     "NATIVE_PAGE": 6,
     "NATIVE_PAGE_V2": 7,
     "LFO_SHAPE": 8,
+    "SHORTCUT": 9,
 }
 
 # the resources of a module's uses ([records.resources])
@@ -311,6 +312,7 @@ RANGES: dict[str, tuple[int, int]] = {
     "probe": (0x32, 0x35),
     "remote": (0x38, 0x3D),
     "remote_state": (0x3E, 0x3F),
+    "ui_views_test": (0x0F, 0x0F),
     "usb_echo_test": (0x2C, 0x2F),
     "usb_fast": (0x36, 0x37),
 }

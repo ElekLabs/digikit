@@ -1035,6 +1035,19 @@ pub mod test {
 }
 
 pub mod text {
+    /// The ROM font header. Word 0 is not the glyph width (the stock font's widths reach 5 with word 0 = 3): its meaning is open. +6 is the glyph box height (6 for the stock font, 15 for the large one), checked by a second agent.
+    #[repr(C)]
+    pub struct FontData {
+        pub _pad0: [u8; 6],
+        pub height: u16,
+        pub _pad1: [u8; 12],
+    }
+    #[cfg(target_arch = "m68k")]
+    const _: () = {
+        assert!(core::mem::size_of::<FontData>() == 0x14);
+        assert!(core::mem::offset_of!(FontData, height) == 0x6);
+    };
+
     unsafe extern "C" {
         /// Draws the plain string `s` at x, y: a 36-byte wrapper of the text routine 0x40113a84 with flags 0. Returns the advance. `maxw` is the fifth argument of the wrapper; its exact meaning is not read.
         #[link_name = "cf.text.fn.draw"]
@@ -1051,6 +1064,18 @@ pub mod text {
         /// Draws printf-formatted text (vsnprintf into 128 bytes) and returns the advance. `flags`: bit 0 proportional path, 1 centre, 2 right-align, 3 outline after, 4 clear box before (bits 3 and 4 = 0x18), 5 centre vertically, 6 bottom-align, 7 translate (finding 71 section 3).
         #[link_name = "cf.text.fn.draw_fmt"]
         pub fn draw_fmt(bitmap: *mut u8, font: *mut u8, x: i32, y: i32, flags: u32, fmt: *const u8, ...) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Pixel width of a COW `std::string` (pointer to the one-word object) in a FontData; `maxlen` -1 for all characters. DT2 0x4011467a, DN2 0x40115fee.
+        #[link_name = "cf.text.fn.width"]
+        pub fn width(fontdata: *mut u8, maxlen: i32, str: *const u32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// The large ROM font (FontData header, 20 bytes): box height 15, glyph widths 2 to 8, two bytes for each glyph column; it has A to Z, 0 to 9, the space and `~!@#$%^&()_+-=`. The header words are 7, 0x0002000f and three pointers (width table, glyph offset table in columns, glyph data); the header is unique in the image. Finding 155 section 5.
+        #[link_name = "cf.text.data.font_large"]
+        pub static FONT_LARGE: u8;
     }
 }
 
@@ -1120,18 +1145,28 @@ pub mod usb {
 }
 
 pub mod view {
-    /// View (finding 71 section 2, "View vtable"): the vptr at +0, the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. The fields are [D] (finding 71); the size is [O]: derived windows start their own fields at +0x4c.
+    /// View (finding 71 section 2, "View vtable"): the vptr at +0, the redraw flag at +0x14, the opaque byte at +0x16 (the relayout draws from the topmost opaque view up and sets +0x17 on the views below it), the name C string pointer at +0x28 (not copied), the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. Size 0x4c, +0x14, +0x16, +0x17 and +0x2c checked by a second agent on both devices; +0x28 is [D].
     #[repr(C)]
     pub struct View {
         pub vptr: u32,
-        pub _pad0: [u8; 40],
+        pub _pad0: [u8; 16],
+        pub dirty: u8,
+        pub _pad1: [u8; 1],
+        pub opaque: u8,
+        pub blocked: u8,
+        pub _pad2: [u8; 16],
+        pub name: u32,
         pub mgr: u32,
-        pub _pad1: [u8; 28],
+        pub _pad3: [u8; 28],
     }
     #[cfg(target_arch = "m68k")]
     const _: () = {
         assert!(core::mem::size_of::<View>() == 0x4c);
         assert!(core::mem::offset_of!(View, vptr) == 0x0);
+        assert!(core::mem::offset_of!(View, dirty) == 0x14);
+        assert!(core::mem::offset_of!(View, opaque) == 0x16);
+        assert!(core::mem::offset_of!(View, blocked) == 0x17);
+        assert!(core::mem::offset_of!(View, name) == 0x28);
         assert!(core::mem::offset_of!(View, mgr) == 0x2c);
     };
 
@@ -1154,7 +1189,7 @@ pub mod view {
     }
 
     unsafe extern "C" {
-        /// `View::invalidate(View *)`: asks for a redraw of the view.
+        /// `View::invalidate(View *)`, DT2 0x4011b126, DN2 0x4011ca9a (34 bytes): when +0x17 is clear sets +0x14 and tail-jumps through the manager (+0x2c) to set the redraw flag VC+0x20. The render draws only when that flag is set, from the topmost opaque view up.
         #[link_name = "cf.view.fn.invalidate"]
         pub fn invalidate(view: *mut u8);
     }
@@ -1169,6 +1204,12 @@ pub mod view {
         /// `ViewController::push(mgr, shared_ptr<View> *, exclusive)`.
         #[link_name = "cf.view.fn.view_controller_push"]
         pub fn view_controller_push(mgr: *mut u8, sp: *const crate::string::shared_ptr, exclusive: u32) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// `View::View(this, name)`: DT2 0x4011b06e, DN2 0x4011c9e2. Builds the handler bases and secondary vptrs, stores `name` (not copied) at +0x28 and the View vptr at +0, zeroes +0x1c..+0x24, +0x2c and +0x34..+0x48. It does not clear +0x14, +0x16, +0x17 or +0x30: allocate zeroed.
+        #[link_name = "cf.view.fn.view_ctor"]
+        pub fn view_ctor(this: *mut u8, name: *const u8);
     }
 
     unsafe extern "C" {
@@ -1239,6 +1280,39 @@ pub mod window {
         assert!(core::mem::offset_of!(MultiChoiceWindow, vertical) == 0xac);
     };
 
+    /// NameView (View at +0, own fields from +0x4c). Prompt, number, show_number, number_fmt, text, maxlen, done and allow_empty checked by a second agent on both devices.
+    #[repr(C)]
+    pub struct NameView {
+        pub view: crate::view::View,
+        pub prompt: u32,
+        pub number: u32,
+        pub show_number: u8,
+        pub _pad0: [u8; 3],
+        pub number_fmt: u32,
+        pub _pad1: [u8; 4],
+        pub text: u32,
+        pub _pad2: [u8; 8],
+        pub maxlen: u32,
+        pub _pad3: [u8; 12],
+        pub done: crate::string::std_function,
+        pub _pad4: [u8; 8],
+        pub allow_empty: u8,
+        pub _pad5: [u8; 11],
+    }
+    #[cfg(target_arch = "m68k")]
+    const _: () = {
+        assert!(core::mem::size_of::<NameView>() == 0xa0);
+        assert!(core::mem::offset_of!(NameView, view) == 0x0);
+        assert!(core::mem::offset_of!(NameView, prompt) == 0x4c);
+        assert!(core::mem::offset_of!(NameView, number) == 0x50);
+        assert!(core::mem::offset_of!(NameView, show_number) == 0x54);
+        assert!(core::mem::offset_of!(NameView, number_fmt) == 0x58);
+        assert!(core::mem::offset_of!(NameView, text) == 0x60);
+        assert!(core::mem::offset_of!(NameView, maxlen) == 0x6c);
+        assert!(core::mem::offset_of!(NameView, done) == 0x7c);
+        assert!(core::mem::offset_of!(NameView, allow_empty) == 0x94);
+    };
+
     unsafe extern "C" {
         /// `ConfirmWindow(this, title, text, cb, flag)`: `title` and `text` point at COW `std::string`s (each cut to 80 chars; an empty `text` gives one line), `cb` is a `std::function<void(bool)>` that the constructor clones into +0x5c, `flag` is stored at +0x6c (0: the TRIG keys 0x19 to 0x28 are swallowed). The key handler (0x401114f0) closes the window on press of key 10 (YES) and calls cb(true), on key 12 (NO) and calls cb(false); it sets +0x4c to 1 or 2, and every other key is handled (modal). Allocate 0x8c bytes as a make_shared block: 0x10 control block, then the object at +0x10; push with `cf.view.fn.view_controller_push(brain view manager, &sp, 0)` (as the stock call sites that use 0x4011c08a do) or with `cf.view.fn.view_push` on a view that is on the stack. The shared_ptr is {object, control block}; release your own count after the push (`cf.string.fn.shared_ptr.release`). core/ui does the first.
         #[link_name = "cf.window.fn.confirm_ctor"]
@@ -1249,6 +1323,12 @@ pub mod window {
         /// `MultiChoiceWindow(this, items, title, cb, vertical)`: `items` points at a vector of COW `std::string` (begin, end, capacity; copied), `title` at a `std::string` (split at line breaks into the title lines at +0x80), `cb` is a `std::function<void(int)>` cloned into +0x8c, `vertical` is stored at +0xac (nonzero: items stacked and UP 11 / DOWN 14 move the selection; 0: items side by side and LEFT 13 / RIGHT 15). The selection index is at +0x9c. The key handler (0x40116e44) calls cb(index) and closes on press of key 10 (YES) or 0x31, and closes without a callback on key 12 (NO). The window is 0x40 x 0x20 pixels before sizing. Allocate 0xe8 bytes as a make_shared block (0x10 control block, object at +0x10); push with `cf.view.fn.view_push`.
         #[link_name = "cf.window.fn.multichoice_ctor"]
         pub fn multichoice_ctor(this: *mut u8, items_vector: *const u32, title: *const u32, cb: *const crate::string::std_function, vertical: u8);
+    }
+
+    unsafe extern "C" {
+        /// `NameView(this, prompt, initial, number, maxlen, show_number, number_fmt, done)`: DT2 0x40117ac2, DN2 0x40119436. The strings are pointers to COW `std::string` (copied); `done` is a `std::function<void(std::string, int)>` cloned to +0x7c; on YES it runs before the close with (storage, std::string *, number), NO closes without calling it. An empty text is refused unless byte +0x94 is set. Size 0xa0 (the View is at +0). The 7-argument wrapper (hash 0e537b985689c8d97a905c64f74eb485) omits number_fmt.
+        #[link_name = "cf.window.fn.name_ctor"]
+        pub fn name_ctor(this: *mut u8, prompt: *const u32, initial: *const u32, number: i32, maxlen: i32, show_number: u8, number_fmt: *const u32, done: *const crate::string::std_function);
     }
 
     // cf.window.fn.popup_make: no sig yet

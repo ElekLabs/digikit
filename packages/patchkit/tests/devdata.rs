@@ -65,23 +65,29 @@ fn the_runtime_constants_are_the_device_files_numbers() {
     let common = [
         "0x444b4456", // magic
         "0x1",        // version
-        "0x3c",       // size
-        "0xf",        // caps: DSP, store, eSDHC, safe key
+        "0x150", // size: the header words, the facts, `tracks`, the 64 key codes and the four key flag bits
+        "0xf",   // caps: DSP, store, eSDHC, safe key
         "0xec070000", // console UART
         "0x48000000", // uncached alias
         "0x40000000", // cached base
-        "0x8000000",  // DDR bytes
+        "0x8000000", // DDR bytes
         "0xfc0cc000", // eSDHC
-        "0x13",       // safe key
+        "0x13",  // safe key
         "0x47fe0000", // keep base
-        "0x1000",     // keep bytes
-        "0xa2c2b",    // DSP cycles in a block
-        "0x10",       // first run-time machine type
-        "0x8",        // run-time machine types
+        "0x1000", // keep bytes
+        "0xa2c2b", // DSP cycles in a block
+        "0x10",  // first run-time machine type
+        "0x8",   // run-time machine types
+        "0x10",  // tracks
     ];
-    // both devices have the same numbers today
+    // both devices have the same numbers today (the key codes after them differ: `the_key_map_...`)
     assert_eq!(objects.len(), 2);
-    assert!(objects.iter().all(|o| o == &common), "{objects:?}");
+    assert!(
+        objects
+            .iter()
+            .all(|o| o.len() == 0x150 / 4 && o[..common.len()] == common),
+        "{objects:?}"
+    );
     let offsets = get("build/gen/dkdv-offsets.inc");
     for want in [
         ".equ DKDV_CAPS, 12",
@@ -814,6 +820,161 @@ fn only_runtime_targets_enter_the_shared_constants() {
     assert!(Facts::from_texts([half]).is_err());
 }
 
+/// The words of a device's `dkrt_dev` as generated for `core/runtime`.
+fn device_object(facts: &Facts, dev: &str) -> Vec<u64> {
+    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
+    let files = devgen::generate(&lib, facts, "core/runtime").unwrap();
+    let text = &files
+        .iter()
+        .find(|f| f.0 == format!("build/gen/dkdv-{dev}.inc"))
+        .unwrap()
+        .1;
+    text.lines()
+        .filter_map(|l| l.trim().strip_prefix(".long "))
+        .map(|l| {
+            let w = l.split_whitespace().next().unwrap();
+            u64::from_str_radix(w.trim_start_matches("0x"), 16).unwrap()
+        })
+        .collect()
+}
+
+#[test]
+fn the_logical_keys_are_numbered_with_the_trig_keys_in_a_row() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let names = facts.key_names().unwrap();
+    let number = |n: &str| names.iter().position(|x| x == n).unwrap() + 1;
+    for n in 1..=16 {
+        assert_eq!(number(&format!("TRIG{n}")), number("TRIG1") + n - 1);
+    }
+    let h = devgen::keys_h(&facts).unwrap();
+    assert!(h.contains("#define DK_KEY_NONE 0\n"), "{h}");
+    assert!(
+        h.contains(&format!("#define DK_KEY_TRK {}\n", number("TRK"))),
+        "{h}"
+    );
+    assert!(
+        h.contains("#define DK_KEY_TRIG(n) ((dk_key)(DK_KEY_TRIG1 + (n) - 1))"),
+        "{h}"
+    );
+    assert!(
+        h.contains(&format!("#define DK_KEY_COUNT {} ", names.len())),
+        "{h}"
+    );
+}
+
+#[test]
+fn the_key_map_gives_each_device_its_codes_and_a_missing_key_is_zero() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let names = facts.key_names().unwrap();
+    let number = |n: &str| names.iter().position(|x| x == n).unwrap() + 1;
+    // the words of the object: 15 fields, `tracks`, then the key codes indexed by the key's number, then the four key flag bits
+    let (tracks, keys) = (15, 16);
+    let (d, n) = (device_object(&facts, "dt2"), device_object(&facts, "dn2"));
+    let key = |o: &[u64], name: &str| o[keys + number(name)];
+    for o in [&d, &n] {
+        assert_eq!(o[tracks], 16);
+        assert_eq!(o[keys], 0, "entry 0 is DK_KEY_NONE");
+        assert_eq!(key(o, "TRK"), 16);
+        assert_eq!(key(o, "YES"), 10);
+        assert_eq!(key(o, "TRIG10"), 34);
+        assert_eq!(key(o, "ENC3"), 43);
+    }
+    // code 2 is one logical key on both devices (the DN2 panel prints SYN)
+    assert_eq!((key(&d, "SRC"), key(&n, "SRC")), (2, 2));
+}
+
+#[test]
+fn the_profile_has_the_same_key_codes_as_the_device_object() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let profiles = &files
+        .iter()
+        .find(|f| f.0.ends_with("profiles.rs"))
+        .unwrap()
+        .1;
+    for dev in ["dt2", "dn2"] {
+        let obj = device_object(&facts, dev);
+        let from = profiles
+            .find(&format!("pub const {}:", dev.to_uppercase()))
+            .unwrap();
+        let rest = &profiles[from..];
+        let list = rest
+            .split("key_codes: [")
+            .nth(1)
+            .unwrap()
+            .split(']')
+            .next()
+            .unwrap();
+        let codes: Vec<u64> = list
+            .split(',')
+            .filter_map(|c| c.trim().parse().ok())
+            .collect();
+        assert_eq!(codes.len(), 64, "{dev}");
+        assert_eq!(codes[..], obj[obj.len() - 68..obj.len() - 4], "{dev}");
+        let bits: Vec<u64> = rest
+            .split("key_flags: KeyFlagBits {")
+            .nth(1)
+            .unwrap()
+            .split('}')
+            .next()
+            .unwrap()
+            .split(',')
+            .filter_map(|f| f.split(':').nth(1)?.trim().parse().ok())
+            .collect();
+        assert_eq!(bits[..], obj[obj.len() - 4..], "{dev}: the key flag bits");
+    }
+}
+
+#[test]
+fn a_key_table_with_a_clash_or_a_bad_name_is_refused() {
+    let (dt2, dn2) = device_texts();
+    for (what, from, to, want) in [
+        ("clash", "TRK = 16", "TRK = 17", "same code"),
+        ("lower case", "TRK = 16", "trk = 16", "capital letters"),
+        ("zero", "TRK = 16", "TRK = 0", "1 to 255"),
+        ("too big", "TRK = 16", "TRK = 256", "1 to 255"),
+    ] {
+        let bad = dt2.replace(from, to);
+        assert_ne!(bad, dt2, "{what}: the text did not change");
+        let e = Facts::from_texts([bad.as_str(), dn2.as_str()])
+            .unwrap_err()
+            .0;
+        assert!(e.contains(want), "{what}: {e}");
+    }
+    // a name that is not in `[keys] order` of sdk/sdk.toml
+    let bad = dt2.replace("TRK = 16", "TRK = 16\nNOT_A_KEY = 100");
+    let e = Facts::from_texts([bad.as_str(), dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap_err()
+        .0;
+    assert!(e.contains("NOT_A_KEY") && e.contains("[keys] order"), "{e}");
+}
+
+#[test]
+fn the_logical_key_numbers_are_the_order_of_the_sdk_list_and_do_not_depend_on_the_device_files() {
+    let (dt2, dn2) = device_texts();
+    let all = Facts::from_texts([dt2.as_str(), dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap();
+    let one = Facts::from_texts([dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap();
+    assert_eq!(all, one);
+    assert_eq!(all.first().map(String::as_str), Some("PAGE_TRIG"));
+    assert_eq!(
+        all.iter().position(|n| n == "TRK"),
+        Some(15),
+        "the number of a name is fixed by the list (append only)"
+    );
+}
+
 #[test]
 fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
@@ -822,10 +983,10 @@ fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
     // every device of the repository has the tables of the modules in its patch sets
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
     patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
-    // core/ui declares `input.view_keys`: a device file without it is refused, naming the table, the set and the module
+    // core/ui declares `input.keys`: a device file without it is refused, naming the table, the set and the module
     let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
     let start = dt2
-        .find("[input.view_keys]")
+        .find("[input.keys]")
         .expect("the device file has the table");
     let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
     let without = format!("{}{}", &dt2[..start], &dt2[end..]);
@@ -834,12 +995,12 @@ fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
         .unwrap_err()
         .0;
     assert!(
-        e.contains("needs [input.view_keys]") && e.contains("core/ui"),
+        e.contains("needs [input.keys]") && e.contains("core/ui"),
         "{e}"
     );
     // the generator of the module alone refuses the same device, and a patch set that names a module the library lacks is an error
     let e = devgen::generate(&lib, &facts, "core/ui").unwrap_err().0;
-    assert!(e.contains("needs [input.view_keys]"), "{e}");
+    assert!(e.contains("needs [input.keys]"), "{e}");
     let bare = r#"[device]
 short = "xx"
 name = "Bare"
@@ -862,27 +1023,105 @@ device = ["core/ui"]
     assert!(e.contains("core/no-such-module"), "{e}");
 }
 
+/// The ui constants of a device, generated for `core/ui`.
+fn ui_constants(lib: &Library, facts: &Facts, file: &str) -> String {
+    devgen::generate(lib, facts, "core/ui")
+        .unwrap()
+        .into_iter()
+        .find(|(p, _)| p.ends_with(file))
+        .unwrap_or_else(|| panic!("{file}"))
+        .1
+}
+
+/// core/ui's four keys come from `[input.keys]` by name: YES, LEVEL_PUSH (the second YES), NO and RIGHT, each device with its own ids.
 #[test]
-fn view_keys_flag_bits_are_range_checked_and_the_second_yes_key_is_optional() {
+fn the_ui_keys_are_resolved_by_name_from_the_input_keys() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    for (file, yes, yes2, no, right) in [
+        ("ui-dt2.inc", "0xa", "0x31", "0xc", "0xf"),
+        ("ui-dn2.inc", "0xa", "0x31", "0xc", "0xf"),
+        // the Syntakt's key indices are not the panel codes (finding 153)
+        ("ui-st.inc", "0xc", "0x30", "0xd", "0x11"),
+    ] {
+        let inc = ui_constants(&lib, &facts, file);
+        for (name, value) in [
+            ("UI_KEY_YES", yes),
+            ("UI_KEY_YES2", yes2),
+            ("UI_KEY_NO", no),
+            ("UI_KEY_RIGHT", right),
+        ] {
+            assert!(
+                inc.contains(&format!(".equ {name}, {value} ")),
+                "{file}: {name}\n{inc}"
+            );
+        }
+    }
+}
+
+/// A device that names keys but lacks one of core/ui's four is refused at generate, naming the key.
+#[test]
+fn a_device_without_one_of_the_ui_keys_is_refused() {
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    for name in ["YES", "NO", "RIGHT", "LEVEL_PUSH"] {
+        let line = st
+            .lines()
+            .find(|l| l.starts_with(&format!("{name} = ")))
+            .unwrap();
+        let bad = st.replace(&format!("{line}\n"), "");
+        assert_ne!(bad, st);
+        let e = Facts::from_texts([bad.as_str()])
+            .err()
+            .unwrap_or_else(|| panic!("{name}: refused"))
+            .0;
+        assert!(
+            e.contains(&format!("has no {name}")) && e.contains("core/ui"),
+            "{name}: {e}"
+        );
+    }
+}
+
+/// `[input.key_flags]` names the bits of a key event's flags word by meaning: it is generated for core/ui and the device object, range checked, distinct and required.
+#[test]
+fn the_key_flag_table_is_generated_and_checked() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
     let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
-    let bad = st.replace("act_flag = 4", "act_flag = 32");
+    let facts = Facts::from_texts([st.as_str()]).unwrap();
+    // core/ui reads the press and release bits; the device object has all four (after the key codes)
+    let inc = ui_constants(&lib, &facts, "ui-st.inc");
+    for (name, value) in [("KEY_FLAG_PRESS", "0x0"), ("KEY_FLAG_RELEASE", "0x4")] {
+        assert!(
+            inc.contains(&format!(".equ {name}, {value} ")),
+            "{name}\n{inc}"
+        );
+    }
+    let object = device_object(&facts, "st");
+    assert_eq!(
+        object[object.len() - 4..],
+        [0, 1, 3, 4],
+        "press, func, repeat, release"
+    );
+    let bad = st.replace("release = 4", "release = 32");
     let e = Facts::from_texts([bad.as_str()])
         .err()
         .expect("32 is refused")
         .0;
-    assert!(e.contains("act_flag = 32"), "{e}");
-    // no yes2: the generated constant is no key id
-    let none = st.replace("yes2 = 48\n", "");
-    let facts = Facts::from_texts([none.as_str()]).unwrap();
-    let files = devgen::generate(&lib, &facts, "core/ui").unwrap();
-    let inc = files
-        .iter()
-        .find(|(p, _)| p.ends_with("ui-st.inc"))
-        .expect("ui-st.inc");
-    assert!(inc.1.contains("UI_KEY_YES2, 0xffffffff"), "{}", inc.1);
+    assert!(e.contains("release = 32"), "{e}");
+    let bad = st.replace("release = 4", "release = 3");
+    let e = Facts::from_texts([bad.as_str()]).err().expect("a clash").0;
+    assert!(e.contains("release and repeat are both bit 3"), "{e}");
+    let start = st.find("[input.key_flags]").unwrap();
+    let end = st[start..].find("\n\n").map_or(st.len(), |n| start + n);
+    let without = format!("{}{}", &st[..start], &st[end..]);
+    let e = Facts::from_texts([without.as_str()])
+        .err()
+        .expect("required")
+        .0;
+    assert!(e.contains("[input.key_flags]"), "{e}");
 }
 
 #[test]
@@ -899,7 +1138,7 @@ fn a_module_is_checked_against_its_own_tables_in_any_library() {
     let lib =
         Library::from_manifests(build, &[manifest], true, &only).expect("the fixture library");
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    let need = vec!["input.view_keys".to_string()];
+    let need = vec!["input.keys".to_string()];
     // the repository's devices have the table, whatever the library can resolve
     devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
     assert!(
@@ -917,7 +1156,7 @@ device = ["core/ui", "test/c-demo"]
         .unwrap_err()
         .0;
     assert!(
-        e.contains("xx: patch set device includes test/c-demo") && e.contains("input.view_keys"),
+        e.contains("xx: patch set device includes test/c-demo") && e.contains("input.keys"),
         "{e}"
     );
     // ... a module that needs nothing is not stopped by it, and a set that cannot resolve and does not list the module is skipped

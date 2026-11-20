@@ -10,6 +10,8 @@ export const WALL_POLL_MS = 500;
 export interface Clock {
   now(): Promise<number>;
   pause(ms: number): Promise<void>;
+  /** Waits until `ms` of emulated time have passed (a clock that has none lacks it); `hangMs`: the wall ms the clock may stand still before it throws. */
+  pauseEmulated?(ms: number, hangMs?: number): Promise<void>;
   /** What the source reports (mode, CPU state, ...): added to the message of a stuck clock. */
   describe?(): Promise<string>;
   /** Movement other than `now` (a cold boot moves counters while `now` stands still), as a token of the last reading; a changed token counts as movement. */

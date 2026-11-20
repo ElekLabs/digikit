@@ -708,7 +708,7 @@ pub struct ModuleInfo {
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]
     pub dynamic: bool,
-    /// Tables of the device file that the module reads, as dotted paths (`input.view_keys`). Every device whose patch sets include the module must have them
+    /// Tables of the device file that the module reads, as dotted paths (`input.keys`). Every device whose patch sets include the module must have them
     /// (`devgen::check_device_tables` for `patchkit gen`, `devgen::check_module_tables` for the generator of the module, `build` and `pack`); the module's `[[gen]]` constants come from them.
     #[serde(default)]
     pub needs_device: Vec<String>,
@@ -1543,5 +1543,22 @@ mod manifest_tests {
         let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n").unwrap_err();
         assert!(e.to_string().contains("declared twice"), "{e}");
         assert!(load("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp-up\"\n").is_ok());
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod runtime_version_tests {
+    /// The runtime has one version: the manifest of `core/runtime` says the SDK runtime version that INFO reports (`sdk/sdk.toml` [runtime]), so
+    /// the patch line (`core/runtime@x`), the flash question and the check after the restart name the same number.
+    #[test]
+    fn the_runtime_manifest_version_is_the_sdk_runtime_version() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../modules/core/runtime/module.toml");
+        let manifest: toml::Table = std::fs::read_to_string(path).unwrap().parse().unwrap();
+        let version = manifest["module"]["version"].as_str().unwrap();
+        assert_eq!(
+            version,
+            crate::dkm::fmt_runtime(crate::dkm::runtime_version())
+        );
     }
 }

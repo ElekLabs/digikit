@@ -20,7 +20,7 @@ A unit reported `CARD_TOO_SMALL` for the store of the first Syntakt build (the D
 
 The identity table (st 0x402d5adc, 7 rows of 32 bytes; DT2 0x402b4a24) lists the parts the maker ships: manufacturer 0x11 (four `004G90`-class names): capacity 0x760000, or 0x3b0000 with the enhanced area set; 0x15
 `4FTE4R`: 0x748000 / 0x3a4000; 0x70 `TS0A32`, `TX2932`: 0x3a4a000 / 0x2e1a000. **The result of the check is not enforced at boot on the Syntakt**: the boot thread stores the answer in a word that only the self-test reads
-(on the DT2 it gates the mount). The pSLC conversion (enhanced user area) is made only by the self-test. Which part a given unit has: read it with INFO `card_sectors` (**[O]** until read).
+(on the DT2 it gates the mount). The pSLC conversion (enhanced user area) is made only by the self-test. Which part a given unit has: read it with INFO `card_sectors`; Em's unit reads 0x3a4000 (section 6).
 
 ## 3. The stock sector map (512-byte sectors) [D]
 
@@ -56,8 +56,14 @@ sectors below 0x180000. Whether a later firmware uses more is **[O]**.
 | **The stock Data API overrun** (a host-declared size written upward from a sample slot, checked only against the capacity, finding 145) | **not excluded by the placement**; the write guard stays open (plan: "Store write safety") |
 | Anchor drift | patchkit resolves by hash and refuses an image where it is missing; the hash is the same on four images |
 
+## 6. The store on the unit [D]
+
+Measured once on Em's Syntakt (st 1.42, `device` set): INFO reports `card_state` 1 (ours), `card_read_only` false and `free_bytes` 536851968 (the whole 512 MiB area) on a freshly flashed unit with no upload yet. The first `store put`
+(49 bytes) writes the header pair; `store ls` and `store rm` work. HEALTH then shows STORE USED 1 KB and STORE FREE 511.9 MB. A content module runs end to end: `digikit/remote` installed from the workbench Transfer page into the
+store, selected in MODULES, applied, restarted; the Remote pane's keys work. Before the first upload the store has no headers, so INFO reports the whole area free while MODULES and HEALTH showed no store.
+INFO `card_sectors` is 3817472 (0x3a4000): the 0x15 `4FTE4R` row of the identity table with the enhanced area set, 1.82 GiB, which covers the store area (end 0x300000).
+
 ## Open
 
-- **[O]** The part and capacity of Em's unit (INFO `card_sectors`).
 - **[O]** Whether the emulator should model a card capacity (today it ignores the size of `--card-image`).
 - **[O]** The write guard against the Data API overrun.

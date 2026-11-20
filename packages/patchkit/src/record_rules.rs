@@ -14,6 +14,7 @@ type Rule = fn(u32, &[&[u8]], &mut dyn FnMut(Problem));
 fn owner_rule(owner: &str) -> Option<Rule> {
     match owner {
         "lfo" => Some(dkrt_svc_lfo::records::Lfo::validate),
+        "shortcuts" => Some(dkrt_svc_shortcuts::records::ShortcutsService::validate),
         "fx" => Some(dkrt_svc_fx::records::Fx::validate),
         "machines" => Some(dkrt_svc_machines::records::Machines::validate),
         _ => None,

@@ -4,11 +4,12 @@ import {
   fmtVersion,
   hasCap,
   PROVIDER_IDX,
+  type Clock,
   type DkLogEvent,
   type DkSession,
 } from '@digi/dk-session';
 import { LOAD_STATUS, LOG_KIND } from '@digi/dk-session/gen_proto';
-import { emulatorClock, pollUntil, type Session } from '@digi/test-support';
+import { emulatorClock, pollUntil, waitClock, type Session } from '@digi/test-support';
 import type { PatchedSession } from '../support.ts';
 import { record } from './artifacts.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
@@ -118,6 +119,52 @@ export async function moduleRingEvents(
   kind: keyof typeof LOG_KIND,
 ): Promise<DkLogEvent[]> {
   return (await ringEvents(session, plan, kind)).filter((e) => e.args[0] !== PROVIDER_IDX);
+}
+
+/**
+ * A cursor over the runtime's small ring for a test that waits on events without the debug module (a card rig's runtime has none: the log commands exist only while
+ * digikit/debug is loaded). `next` waits in emulated time (the memory reads step nothing; `clock` steps a paused daemon) for the next event of `kind` that `match` accepts
+ * after the ones the cursor has passed; `none` fails when such an event comes within `withinMs`. The ring keeps 32 events, so a wait polls every 100 ms. Needs `RING_SYMBOLS`
+ * in the runtime plan (`CARD_SYMBOLS` of card-rig.ts has them). Starts after the newest event unless `fromBoot`.
+ */
+export async function ringWatch(
+  rt: { session: Session; clock: Clock },
+  plan: RuntimePlan,
+  { fromBoot = false }: { fromBoot?: boolean } = {},
+) {
+  const { session, clock } = rt;
+  let after = fromBoot ? 0 : await word(session, planSymbol(plan, 'DKRT_LOG_COUNT'));
+  const find = async (kind: keyof typeof LOG_KIND, match: (e: DkLogEvent) => boolean) =>
+    (await readSmallRing(session, plan)).find((e) => e.seq > after && e.kind === LOG_KIND[kind] && match(e));
+  return {
+    async next(
+      kind: keyof typeof LOG_KIND,
+      match: (e: DkLogEvent) => boolean = () => true,
+      withinMs = 10_000,
+    ): Promise<DkLogEvent> {
+      const e = await pollUntil(
+        clock,
+        () => find(kind, match),
+        (found) => found !== undefined,
+        {
+          withinMs,
+          intervalMs: 100,
+          message: `the log event ${kind}`,
+        },
+      );
+      after = e!.seq;
+      return e!;
+    },
+    async none(
+      kind: keyof typeof LOG_KIND,
+      match: (e: DkLogEvent) => boolean = () => true,
+      withinMs = 300,
+    ): Promise<void> {
+      await waitClock(clock, withinMs);
+      const e = await find(kind, match);
+      if (e) throw new Error(`unexpected log event ${kind}: ${JSON.stringify(e)}`);
+    },
+  };
 }
 
 /** Every event the device's log holds: over SysEx while the debug module is loaded, else the runtime's own small ring from memory. */

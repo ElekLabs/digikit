@@ -81,7 +81,7 @@ impl Sysex {
                 if self.short.len() == want {
                     done.push(std::mem::take(&mut self.short));
                 }
-            } else if b >= 0xF1 && b < 0xF8 {
+            } else if (0xF1..0xF8).contains(&b) {
                 self.short.clear();
             }
         }
