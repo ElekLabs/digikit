@@ -14006,10 +14006,10 @@
         "rust": "dkfw::storage::block_erase"
       },
       "cpu": "cf",
-      "doc": "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156).",
+      "doc": "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. A second agent checked hash, size, address, displaced bytes and the st-1.42 callers against the image bytes **[V]**; most callers test the result, five st-1.42 sites ignore it (finding 156 section 3). Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156).",
       "file": "devices/fw/storage.toml",
       "kind": "fn",
-      "mark": "O",
+      "mark": "V",
       "name": "cf.storage.fn.block.erase",
       "rule": {
         "dn2": {
@@ -15469,7 +15469,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "Before the block write's own code: the hook may return to the caller itself (rts with D0 = an error code) instead of continuing in the tail; the stock code has taken no lock and changed no state at the entry.",
+      "doc": "Before the block write's own code: the hook may return to the caller itself (rts with D0 = an error code) instead of continuing in the tail; the stock code has taken no lock and changed no state at the entry. The behaviour at the callers of dt2-1.17 and dn2-1.12 was not read **[O]**.",
       "file": "devices/fw/storage.toml",
       "kind": "hook",
       "mark": "O",
@@ -15619,7 +15619,7 @@
       "doc": "Entry of the block erase, `lea (-0xc,SP),SP; movem.l {D2 D3 A2},(SP)`. At the entry 0(SP) = return address, 4(SP) = sector, 8(SP) = count.",
       "file": "devices/fw/storage.toml",
       "kind": "site",
-      "mark": "O",
+      "mark": "V",
       "name": "cf.storage.site.block_erase.entry",
       "rule": {
         "dn2": {
@@ -15899,7 +15899,7 @@
       "doc": "Entry of the block write, `lea (-0x14,SP),SP; movem.l {D2 D3 D4 D5 A2},(SP)`. At the entry 0(SP) = return address, 4(SP) = sector, 8(SP) = bytes, 12(SP) = buffer.",
       "file": "devices/fw/storage.toml",
       "kind": "site",
-      "mark": "O",
+      "mark": "V",
       "name": "cf.storage.site.block_write.entry",
       "rule": {
         "dn2": {
@@ -15955,7 +15955,7 @@
       "doc": "The instruction after the block write's own `jsr (A2)` (`lea (0xc,SP),SP`): the return address of the nested call that a write of more than 64 KiB makes for each 64 KiB piece. The address, not code to patch.",
       "file": "devices/fw/storage.toml",
       "kind": "site",
-      "mark": "O",
+      "mark": "V",
       "name": "cf.storage.site.block_write.split_ret",
       "rule": {
         "dn2": {

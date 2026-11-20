@@ -1,16 +1,19 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, test } from 'vitest';
-import { cardCacheRoot, repoRoot, type Device } from '@digi/test-support';
+import { cardCacheRoot, repoRoot, stockImage, type Device } from '@digi/test-support';
 import { claimDir, newestFirst, pruneKeyDirs, type RunDirClaim } from './run-claim.ts';
 
+/** What a file without `devices` runs on: the devices with a ready snapshot. A device with a cold boot only (`st`) is named by the file. */
 const ALL_DEVICES: readonly Device[] = ['dt2', 'dn2'];
+const KNOWN_DEVICES: readonly Device[] = ['dt2', 'dn2', 'st'];
 
 /** `list` (default: both devices) narrowed to `DIGI_DEVICE` (`dt2` or `dn2`) when it is set. Every device loop of a device test goes through here. */
 export function selectDevices(list: readonly Device[] = ALL_DEVICES): Device[] {
   const only = process.env.DIGI_DEVICE;
   if (only === undefined || only === '') return [...list];
-  if (!ALL_DEVICES.includes(only as Device)) throw new Error(`DIGI_DEVICE must be dt2 or dn2, got '${only}'`);
+  if (!KNOWN_DEVICES.includes(only as Device)) throw new Error(`DIGI_DEVICE must be one of ${KNOWN_DEVICES.join(', ')}, got '${only}'`);
   return list.filter((device) => device === only);
 }
 
@@ -34,7 +37,7 @@ export function describeOn(device: Device, name: string, define: () => void, ski
   }
 }
 
-export const FIRMWARE = { dt2: '1.17', dn2: '1.12' } as const;
+export const FIRMWARE = { dt2: '1.17', dn2: '1.12', st: '1.42' } as const;
 
 const claimedRunDirs = new Map<Device, { dir: string; snapshotDir: string }>();
 
@@ -121,11 +124,32 @@ export function claimRunDir(device: Device): RunDirClaim | undefined {
   return claim;
 }
 
+const coldDaemons = new Map<Device, string>();
+
+/**
+ * The daemon of a device that boots cold (no ready snapshot, so no entry in `dist/daemons.json`): the plain build of `tools.emulator.native_emu --daemon --build-only`
+ * on its stock image (a cargo no-op when nothing changed). Its last output line is the binary.
+ */
+function coldDaemon(device: Device): string {
+  const known = coldDaemons.get(device);
+  if (known) return known;
+  const out = execFileSync('uv', ['run', 'python', '-m', 'tools.emulator.native_emu', '--daemon', '--build-only', stockImage(device)], {
+    cwd: repoRoot(),
+    encoding: 'utf8',
+    timeout: 3_600_000,
+  });
+  const binary = out.trim().split('\n').at(-1)!;
+  if (!fs.existsSync(binary)) throw new Error(`the ${device} daemon build printed no binary: ${out.slice(-300)}`);
+  coldDaemons.set(device, binary);
+  return binary;
+}
+
 /** The device daemon: `DIGI_EMUD_<DEV>`, else the same key in `dist/daemons.json` (written by `digi-control:daemons`). */
 export function daemonBinary(device: Device): string {
   const key = `DIGI_EMUD_${device.toUpperCase()}`;
   const fromEnv = process.env[key];
   if (fromEnv) return fromEnv;
+  if (!ALL_DEVICES.includes(device)) return coldDaemon(device);
   const file = path.join(repoRoot(), 'dist/daemons.json');
   if (fs.existsSync(file)) {
     const value = (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key];

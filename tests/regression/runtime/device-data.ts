@@ -51,7 +51,7 @@ export interface PortFile {
   anchor?: { name: string; addr?: number }[];
 }
 
-const PROFILES: Record<Device, string> = { dt2: 'digitakt-ii', dn2: 'digitone-ii' };
+const PROFILES: Record<Device, string> = { dt2: 'digitakt-ii', dn2: 'digitone-ii', st: 'syntakt' };
 
 const readToml = <T>(...parts: string[]) =>
   parse(fs.readFileSync(path.join(repoRoot(), 'devices', ...parts), 'utf8')) as T;

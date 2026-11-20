@@ -10,7 +10,7 @@ import {
 import { parse as parseToml } from 'smol-toml';
 import { resolveTiers } from './emulator-config.ts';
 
-export type Device = 'dt2' | 'dn2';
+export type Device = 'dt2' | 'dn2' | 'st';
 
 // (device, version) -> base .syx and ready dir. The ready dirs are `[acceptance] ready_dir` of the device files,
 // like FIRMWARE in tools/patchkit/pk_harness.py.
@@ -30,6 +30,8 @@ function firmwareTable(): Record<string, { syx: string; ready: string }> {
   return {
     'dt2 1.17': { syx: STOCK_SYX.dt2, ready: ready('dt2') },
     'dn2 1.12': { syx: STOCK_SYX.dn2, ready: ready('dn2') },
+    // a device with no `[acceptance]` has no ready snapshot: its sessions boot the stock image cold (`dsp: 'cold'`)
+    'st 1.42': { syx: 'Syntakt_OS1.42.syx', ready: ready('st') },
   };
 }
 
@@ -74,6 +76,7 @@ export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
 
 /** The stock .syx of a device on its analysis version (the file `wb transfer install` binds services to). */
 export function stockImage(device: Device, env: NodeJS.ProcessEnv = process.env): string {
+  if (device === 'st') return path.join(firmwareDir(env), 'Syntakt_OS1.42.syx');
   return stockImageOf(device, repoRoot(), env);
 }
 
@@ -89,6 +92,11 @@ export function resolveInputs(device: Device, firmware: string): ReadyInputs {
     readyDir = env ?? path.join(root, spec.ready);
   } else {
     throw new Error(`no firmware entry for ${device} ${firmware}`);
+  }
+  // no ready dir (a device without `[acceptance]`): the stock image alone, for a cold boot
+  if (!spec.ready) {
+    if (!fs.existsSync(syx)) throw new Error(`${syx} is missing`);
+    return { syx, readyDir: '', cfSnapshot: '', dspImage: '', dspState: '' };
   }
   const ready = {
     syx,
@@ -132,6 +140,7 @@ export function validatePreparedRuntimeImage(image: PreparedRuntimeImage, stockS
 
 /** Runtime boots require ready inputs from this stock image, without forced interrupt state. */
 export function validateRuntimeInputs(inputs: ReadyInputs): void {
+  if (!inputs.readyDir) return; // a cold boot has no ready provenance
   const source = JSON.parse(fs.readFileSync(path.join(inputs.readyDir, 'SOURCE.json'), 'utf8'));
   const sha256 = createHash('sha256').update(fs.readFileSync(inputs.syx)).digest('hex');
   if (source.syx_sha256 !== sha256 || source.intc_force !== false) {

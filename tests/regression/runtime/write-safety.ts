@@ -13,7 +13,7 @@ const RECORD = 8 + 64 + SECTOR;
 // Sectors of one settings copy (tools/device/dkproto.py SETTINGS_SECTORS).
 const SETTINGS_SECTORS = 16;
 // Kit-library sector ranges of the firmware (hi exclusive), allowed by the fx-kit and fx-routes policies.
-export const KIT_AREAS: Record<Device, [number, number][]> = { dt2: [[0x16000, 0x17000]], dn2: [[0x2000, 0x2100]] };
+export const KIT_AREAS: Record<Device, [number, number][]> = { dt2: [[0x16000, 0x17000]], dn2: [[0x2000, 0x2100]], st: [] };
 
 export type SafetyPolicy = 'default' | 'fx-kit' | 'fx-routes';
 

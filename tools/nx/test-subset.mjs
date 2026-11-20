@@ -28,7 +28,7 @@ const stemOf = (file) =>
     .split('/')
     .at(-1)
     .replace(/\.device\.test\.ts$/, '');
-const DEVICES = ['dt2', 'dn2'];
+const DEVICES = ['dt2', 'dn2', 'st'];
 
 // Whether a changed file is production source of the project at `root`: below it, and not a test file, a Markdown file or its project.json.
 const isSource = (file, root) =>
