@@ -14,10 +14,8 @@ use std::sync::Mutex;
 /// The binding table is a static of the crate: the profile loop runs one device at a time here.
 static LOCK: Mutex<()> = Mutex::new(());
 
-/// The logical keys of the fixtures (numbers of keys.h that every profile may or may not map: the service stores the numbers).
-const TRK: u32 = 48;
-const YES: u32 = 50;
-const NO: u32 = 18;
+/// The logical keys of the fixtures: the generated numbers of `[keys] order` (sdk/sdk.toml), as `<dk/gen/keys.h>` has them.
+use dkrt_sdk::keys::{NO, TRK, YES};
 /// The suite loads a module at 0x4000 with an image of 0x4000 bytes.
 const BASE: usize = 0x4000;
 

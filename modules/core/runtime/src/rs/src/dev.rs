@@ -89,12 +89,20 @@ pub fn dyn_types() -> u32 {
 
 /// The tracks of the device (0: the device file gives none).
 pub fn tracks() -> u32 {
-    d().tracks
+    if valid() {
+        d().tracks
+    } else {
+        0
+    }
 }
 
-/// The panel code of each logical key, as the profile carries them (a code that does not fit a byte is 0).
+/// The panel code of each logical key, as the profile carries them (`patchkit gen` writes 1 to 255, or 0 for a key the device lacks). An object this runtime cannot read has none.
 pub fn key_codes() -> [u8; dkrt_abi::platform::KEY_SLOTS] {
-    core::array::from_fn(|i| u8::try_from(d().key_codes[i]).unwrap_or(0))
+    if valid() {
+        core::array::from_fn(|i| d().key_codes[i] as u8)
+    } else {
+        [0; dkrt_abi::platform::KEY_SLOTS]
+    }
 }
 
 /// Is `t` one of the run-time machine types?

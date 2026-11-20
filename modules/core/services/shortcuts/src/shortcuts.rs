@@ -30,8 +30,6 @@ pub struct Shortcuts {
     table: BindingTable,
     /// The binding that is active (its `on` ran, no key of it has been released since): its index in `table` plus 1; 0 when none (so all-zero bytes are the initial state).
     active: usize,
-    /// The logical keys whose press was swallowed and whose release is still to come, as a bit set: their release and repeats are swallowed too.
-    swallowed: u64,
 }
 
 /// No binding is active.
@@ -43,7 +41,6 @@ impl Shortcuts {
             held: KeyState::new(),
             table: BindingTable::new(),
             active: NONE,
-            swallowed: 0,
         }
     }
 
@@ -55,7 +52,9 @@ impl Shortcuts {
         &mut self.table
     }
 
-    /// Drop the bindings of `owner` (its module unloads). An active binding of the owner ends first, without calling `off`: its code is going away.
+    /// Drop the bindings of `owner` (its module unloads). An active binding of the owner ends first, without calling `off`: its code is going away. The key state stays as it is,
+    /// because the keys are still physically down: the first key stays held (a binding added later completes with it), and the press of the second key stays swallowed, so its release is
+    /// swallowed once (the stock firmware never saw the press).
     pub fn remove(&mut self, owner: u8) {
         if let Some(b) = self.active() {
             if b.owner == owner {
@@ -63,14 +62,6 @@ impl Shortcuts {
             }
         }
         self.table.remove(owner);
-    }
-
-    fn mark(key: u32) -> u64 {
-        if key == 0 || key >= 64 {
-            0
-        } else {
-            1u64 << key
-        }
     }
 
     /// One key event of the panel: `code` is the device's panel code, `flags` are [`key_flags`]. A code that no logical key of the device has passes.
@@ -82,15 +73,13 @@ impl Shortcuts {
         if key == 0 {
             return Verdict::Pass;
         }
-        let mark = Shortcuts::mark(key);
         if flags & key_flags::RELEASE != 0 {
             self.held.release(key);
-            let verdict = if self.swallowed & mark != 0 {
+            let verdict = if self.held.take_swallowed(key) {
                 Verdict::Swallow
             } else {
                 Verdict::Pass
             };
-            self.swallowed &= !mark;
             if let Some(b) = self.active().copied() {
                 if u32::from(b.keys[0]) == key || u32::from(b.keys[1]) == key {
                     self.active = NONE;
@@ -102,7 +91,7 @@ impl Shortcuts {
             return verdict;
         }
         if flags & key_flags::REPEAT != 0 {
-            return if self.swallowed & mark != 0 {
+            return if self.held.is_swallowed(key) {
                 Verdict::Swallow
             } else {
                 Verdict::Pass
@@ -114,7 +103,7 @@ impl Shortcuts {
             if let Some(i) = self.table.completed(key, |k| held.is_held(k)) {
                 if let Some(b) = self.table.get(i).copied() {
                     self.active = i + 1;
-                    self.swallowed |= mark;
+                    self.held.swallow(key);
                     if let Some(on) = b.on {
                         on(b.arg);
                     }

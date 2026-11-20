@@ -1352,6 +1352,14 @@ sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"
 doc = "Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>."
 
 [[import]]
+name = "dk_selected_track"
+service = "runtime"
+since = "0.10.2"
+context = "ui"
+sig = "i32 ()"
+doc = "The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet."
+
+[[import]]
 name = "dk_debug_log_sink_set"
 service = "runtime"
 since = "0.7.0"
@@ -1665,6 +1673,13 @@ args = ["blocks", "-", "-", "-", "-"]
 id = 52
 name = "SHORTCUT_CLASH"
 args = ["module", "owner", "key0", "key1", "-"]
+
+# a shortcut was added disabled because a key of it has no panel code on this device (warn level; it never keeps its key pair from another module's binding): the module's record
+# index + 1 and the two logical keys (`dk_key`).
+[[log.kind]]
+id = 53
+name = "SHORTCUT_INACTIVE"
+args = ["module", "key0", "key1", "-", "-"]
 
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)

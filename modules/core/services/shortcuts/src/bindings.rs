@@ -18,8 +18,10 @@ pub struct Binding {
     pub owner: u8,
     /// Hold `keys[0]`, press `keys[1]`.
     pub keys: [u8; 2],
-    /// Another owner's binding of the same keys is enabled: this one does nothing.
+    /// The binding does nothing: another owner's binding of the same keys is enabled, or `inactive`.
     pub disabled: bool,
+    /// A key of the binding has no panel code on this device. Such a binding is never the keeper of its key pair and stays disabled for good.
+    pub inactive: bool,
     pub on: Option<Callback>,
     pub off: Option<Callback>,
     pub arg: *mut c_void,
@@ -34,6 +36,7 @@ impl Binding {
             owner: 0,
             keys: [0; 2],
             disabled: false,
+            inactive: false,
             on: None,
             off: None,
             arg: core::ptr::null_mut(),
@@ -50,6 +53,8 @@ pub enum Added {
     Enabled,
     /// Another owner keeps the same keys: the binding is in the table but disabled. `owner` is that owner.
     Disabled { owner: u8 },
+    /// A key has no code on this device: the binding is in the table, disabled, and keeps nothing.
+    Inactive,
     /// No room.
     Full,
 }
@@ -81,11 +86,19 @@ impl BindingTable {
 
     /// Add a binding (`b.owner` is not 0). The first owner of the key pair keeps it: a later binding of the same pair is added disabled.
     pub fn add(&mut self, b: Binding) -> Added {
-        let keeper = self.keeper(b.keys);
+        let keeper = if b.inactive {
+            None
+        } else {
+            self.keeper(b.keys)
+        };
         let mut i = 0;
         while i < MAX_BINDINGS {
             if self.items[i].owner == 0 {
                 self.items[i] = b;
+                if b.inactive {
+                    self.items[i].disabled = true;
+                    return Added::Inactive;
+                }
                 return match keeper {
                     Some(k) => {
                         self.items[i].disabled = true;
@@ -115,7 +128,7 @@ impl BindingTable {
         }
         i = 0;
         while i < MAX_BINDINGS {
-            if self.items[i].owner != 0 && self.items[i].disabled {
+            if self.items[i].owner != 0 && self.items[i].disabled && !self.items[i].inactive {
                 let keys = self.items[i].keys;
                 if self.keeper(keys).is_none() {
                     self.items[i].disabled = false;

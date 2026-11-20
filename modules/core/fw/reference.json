@@ -496,6 +496,48 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4011de30"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4011e110"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011c79c"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The routine decides. Consume: `moveq #1,%d0; rts` (the event reaches no view and no release callback; the runner's idle reset and the Brain+0x94 listeners already ran). Pass: the displaced `lea; movem` and a jump to the end of the site (the tail). Strict liveness at the tail: only the flags (N, Z, V, C) are dead; D0, D1, A0 and A1 are live (the stock code calls a function that may read them), so a routine saves them; D2 and A2 are saved by the displaced `movem` itself.",
+      "file": "devices/fw/input.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.input.hook.key_event",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.input.site.key_event_walk",
+      "subsystem": "input",
+      "users": [
+        "core/services/shortcuts"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4011f9bc",
             "len": 4
           }
@@ -551,6 +593,51 @@
         "cf.input.site.key_mask_lit",
         "input.fw.key_mask_lit"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4011de30",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4011e110",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4011c79c",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Entry of `bool f(ViewController *vc, KeyEvent *ev)`, the walker every key event passes: it runs the release callbacks of the key code, then offers the event to the views top down. DT2 0x4011c79c, DN2 0x4011e110. `lea (-0x60,SP),SP; movem.l {D2-D7 A2-A6},(SP)` (8 bytes, no PC-relative form). 4(SP) = vc, 8(SP) = KeyEvent (+0xc code, +0x10 flags, bit 0 set on a press).",
+      "file": "devices/fw/input.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.input.site.key_event_walk",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "input",
+      "users": [
+        "core/services/shortcuts"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -22881,7 +22968,7 @@
       "name": "draw"
     },
     {
-      "count": 4,
+      "count": 6,
       "cpu": "cf",
       "file": "devices/fw/input.toml",
       "meaning": "key and encoder decoding",

@@ -219,14 +219,37 @@ fn removing_the_owner_of_the_active_binding_ends_it_without_calling_its_code() {
     s.remove(1);
     assert!(s.active().is_none() && s.table().len() == 0);
     assert_eq!(*log, ["on"], "the module's code is gone: no `off`");
+    // the key state stays (the keys are still down): the second key's release is swallowed once, as the stock firmware never saw the press
+    assert_eq!(key(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
     assert_eq!(
         key(&mut s, &p, C_YES, RELEASE),
-        Verdict::Swallow,
-        "the stock firmware never saw the press"
+        Verdict::Pass,
+        "swallowed once"
     );
-    // nothing is bound now
-    key(&mut s, &p, C_YES, 0);
+    // the first key is still held: a binding that a module adds now completes with it
+    let mut log2 = Box::new(Log::new());
+    s.table_mut().add(binding(2, [TRK, YES], &mut log2));
+    assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Swallow);
+    assert_eq!(*log2, ["on"]);
+    // nothing is bound once that module is gone too
+    s.remove(2);
+    assert_eq!(key(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
     assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Pass);
+}
+
+#[test]
+fn a_binding_that_is_not_active_is_not_ended_by_another_owner_leaving() {
+    let p = device();
+    let mut log = Box::new(Log::new());
+    let mut s = Shortcuts::new();
+    s.table_mut().add(binding(1, [TRK, YES], &mut log));
+    s.table_mut().add(binding(2, [TRK, OTHER], &mut log));
+    key(&mut s, &p, C_TRK, 0);
+    key(&mut s, &p, C_YES, 0);
+    s.remove(2);
+    assert!(s.active().is_some_and(|b| b.owner == 1));
+    key(&mut s, &p, C_YES, RELEASE);
+    assert_eq!(*log, ["on", "off"]);
 }
 
 #[test]

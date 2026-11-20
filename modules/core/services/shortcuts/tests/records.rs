@@ -20,10 +20,8 @@ type Svc = ShortcutsService;
 
 const BASE: u32 = 0x4000;
 const IMAGE: u32 = 0x1000;
-/// The logical keys of these tests.
-const TRK: u32 = 1;
-const YES: u32 = 2;
-const OTHER: u32 = 3;
+/// The logical keys of these tests: the generated numbers of `[keys] order` (sdk/sdk.toml).
+use dkrt_sdk::keys::{NO as OTHER, TRK, YES};
 
 /// An address of the module image that stands for a callback (never called here).
 fn code(offset: u32) -> Option<Callback> {
@@ -64,7 +62,13 @@ fn hint() -> ShortcutDef {
 
 fn fresh() -> (MutexGuard<'static, ()>, FakeCore) {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let core = FakeCore::new();
+    let mut core = FakeCore::new();
+    // a device that has the keys of these tests
+    core.device = ALL
+        .iter()
+        .find(|p| [TRK, YES, OTHER].iter().all(|k| p.key_code(*k) != 0))
+        .expect("a profile with key names")
+        .id;
     for owner in 0..=8u8 {
         unsafe { <Svc as Service<FakeCore>>::remove(&core, owner) };
     }
@@ -464,5 +468,50 @@ fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
     // a device the table does not know passes everything
     core.device = 999;
     assert_eq!(unsafe { on_key(&core, p.key_code(yes), 0) }, Verdict::Pass);
+    unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
+}
+
+#[test]
+fn a_binding_with_a_key_the_device_lacks_is_disabled_and_never_keeps_the_pair() {
+    let (_g, mut core) = fresh();
+    let rec = one_record(&core, &hint());
+    // a device with no key names: the keys have no panel code
+    let bare = ALL
+        .iter()
+        .find(|p| p.key_code(TRK) == 0)
+        .expect("a profile without key names");
+    core.device = bare.id;
+    assert_eq!(apply(&core, 1, &rec), OK, "the module loads");
+    let b = state().table().get(0).unwrap();
+    assert!(b.disabled && b.inactive);
+    let logs = |core: &FakeCore| -> Vec<(u16, [u32; 5])> {
+        core.calls()
+            .into_iter()
+            .filter_map(|c| match c {
+                Call::Log { kind, args } => Some((kind, args)),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        logs(&core),
+        [(logk::SHORTCUT_INACTIVE, [1, TRK, YES, 0, 0])]
+    );
+    // a device that has the keys: a later binding of the same pair is the keeper, not a clash with the inactive one
+    let full = ALL
+        .iter()
+        .find(|p| p.key_code(TRK) != 0 && p.key_code(YES) != 0)
+        .expect("a profile with key names");
+    core.device = full.id;
+    assert_eq!(apply(&core, 2, &rec), OK);
+    let t = state().table();
+    assert!(!t.get(1).unwrap().disabled, "the later binding works");
+    assert!(
+        logs(&core).iter().all(|l| l.0 != logk::SHORTCUT_CLASH),
+        "no clash is logged for the inactive binding"
+    );
+    // removing the keeper does not enable the inactive binding
+    unsafe { <Svc as Service<FakeCore>>::remove(&core, 2) };
+    assert!(state().table().get(0).unwrap().disabled);
     unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
 }

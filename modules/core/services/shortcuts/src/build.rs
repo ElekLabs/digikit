@@ -140,6 +140,7 @@ fn body(it: &Item, base: u32) -> [u8; BODY_LEN] {
     b[at::LABEL..at::LABEL + LABEL_BYTES].copy_from_slice(&it.label);
     be(&mut b, at::KEY0, it.keys[0]);
     be(&mut b, at::KEY1, it.keys[1]);
+    // offset 0 means no callback: it is the module header, never code
     let off = |a: usize| {
         if a == 0 {
             0

@@ -1354,6 +1354,11 @@ fn rust(sdk: &Sdk) -> String {
     s.push_str("/// The record kinds of the `register` section and the resources of `uses` (`[records]`).\npub mod records {\n");
     s.push_str(&records_consts(sdk, "    "));
     s.push_str("}\n\n");
+    s.push_str("/// The logical keys (`[keys] order`), numbered as `dk_key` of <dk/gen/keys.h> is: `NONE` is 0, the names follow from 1.\npub mod keys {\n    pub const NONE: u32 = 0;\n");
+    for (i, n) in sdk.keys.order.iter().enumerate() {
+        let _ = writeln!(s, "    pub const {n}: u32 = {};", i + 1);
+    }
+    s.push_str("}\n\n");
     s.push_str(&rust_sample_pool(sdk));
     s.push_str(&rust_settings(sdk));
     s.push_str("\npub mod proto {\n");

@@ -593,19 +593,20 @@ impl Facts {
                 ));
             }
         }
-        if names.len() >= KEY_SLOTS {
+        let slots = key_slots()?;
+        if names.len() >= slots {
             return Err(err!(
-                "[keys] order of sdk/sdk.toml lists {} names, the tables hold {} (KEY_SLOTS of devgen.rs and DEV_KEYS of core/runtime/abi.toml)",
+                "[keys] order of sdk/sdk.toml lists {} names, the tables hold {} (DEV_KEYS of core/runtime/abi.toml)",
                 names.len(),
-                KEY_SLOTS - 1
+                slots - 1
             ));
         }
         Ok(names)
     }
 
-    /// The panel code of each logical key of `dev`, indexed by the key's number (`KEY_SLOTS` entries; a key the device lacks is 0).
-    fn key_codes(&self, dev: &str) -> Result<[u64; KEY_SLOTS]> {
-        let mut out = [0; KEY_SLOTS];
+    /// The panel code of each logical key of `dev`, indexed by the key's number (`DEV_KEYS` entries; a key the device lacks is 0).
+    fn key_codes(&self, dev: &str) -> Result<Vec<u64>> {
+        let mut out = vec![0; key_slots()?];
         if let Some(e) = self.docs.get(dev) {
             for (i, n) in self.key_names()?.iter().enumerate() {
                 out[i + 1] = e.keys.get(n).copied().unwrap_or(0);
@@ -797,8 +798,13 @@ fn key_facts(short: &str, keys: Option<&BTreeMap<String, u64>>) -> Result<BTreeM
     Ok(keys.clone())
 }
 
-/// A device's numbers for the logical key names: the number of names the shared header can hold (index 0 is `DK_KEY_NONE`).
-pub const KEY_SLOTS: usize = 64;
+/// The entries of the key table: index 0 is `DK_KEY_NONE`, then one for each logical key name (`DEV_KEYS` of core/runtime/abi.toml: the one definition).
+fn key_slots() -> Result<usize> {
+    abi_consts()?
+        .get("DEV_KEYS")
+        .map(|v| *v as usize)
+        .ok_or_else(|| err!("core/runtime/abi.toml has no DEV_KEYS"))
+}
 
 fn input_facts(short: &str, i: Option<InputDoc>, p: Option<PanelDoc>) -> Result<InputF> {
     let Some(i) = i else {
@@ -1829,7 +1835,7 @@ const DKDV_VALUE: [(&str, &str); 12] = [
 const DKDV_KEY_CODES: &str = "key_codes";
 
 /// The device object of one device (`gas-dkdv`): `dkrt_dev`, the struct `DkrtDevice` as `.long` words.
-fn gas_dkdv(module: &str, dev: &str, cs: &[C], key_codes: &[u64; KEY_SLOTS]) -> Result<String> {
+fn gas_dkdv(module: &str, dev: &str, cs: &[C], key_codes: &[u64]) -> Result<String> {
     let abi = abi_consts()?;
     let fields = dkdv_fields()?;
     let value = |name: &str| {
@@ -1844,9 +1850,10 @@ fn gas_dkdv(module: &str, dev: &str, cs: &[C], key_codes: &[u64; KEY_SLOTS]) -> 
     s.push_str("    .balign 4\n    .globl dkrt_dev\ndkrt_dev:\n");
     for (f, len) in &fields {
         if f == DKDV_KEY_CODES {
-            if *len != KEY_SLOTS {
+            if *len != key_codes.len() {
                 return Err(err!(
-                    "{module}: DkrtDevice.{f} has {len} words, devgen KEY_SLOTS is {KEY_SLOTS}"
+                    "{module}: DkrtDevice.{f} has {len} words, the key table has {}",
+                    key_codes.len()
                 ));
             }
             for (i, code) in key_codes.iter().enumerate() {

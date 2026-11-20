@@ -4,7 +4,7 @@
 use crate::platform::cstr_eq;
 use crate::state::log_at;
 use crate::{arena, aux, collect, dlog, entry, hash32, intro, io, worker};
-use crate::debug_selected_params;
+use crate::{debug_selected_params, selected_track};
 use crate::health::dkrt_blocks;
 use crate::report::{device_track_count, debug_peek, debug_poll, debug_span_clock, debug_speed_flags, debug_track_type};
 
@@ -131,6 +131,7 @@ import_table! {
     ("dk_debug_track_type", debug_track_type),
     ("dk_debug_selected_params", debug_selected_params),
     ("dk_device_track_count", device_track_count),
+    ("dk_selected_track", selected_track),
     ("dk_debug_log_sink_set", dlog::dk_debug_log_sink_set),
     ("dk_debug_speed_flags", debug_speed_flags),
 }
@@ -189,6 +190,7 @@ const _: dkrt_sdk::api::DkDebugPollFn = debug_poll;
 const _: dkrt_sdk::api::DkDebugTrackTypeFn = debug_track_type;
 const _: dkrt_sdk::api::DkDebugSelectedParamsFn = debug_selected_params;
 const _: dkrt_sdk::api::DkDeviceTrackCountFn = device_track_count;
+const _: dkrt_sdk::api::DkSelectedTrackFn = selected_track;
 const _: dkrt_sdk::api::DkDebugLogSinkSetFn = dlog::dk_debug_log_sink_set;
 const _: dkrt_sdk::api::DkDebugSpeedFlagsFn = debug_speed_flags;
 

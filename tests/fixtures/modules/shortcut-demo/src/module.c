@@ -1,21 +1,20 @@
-/* test/shortcut-demo: one shortcut, hold [TRK] and press [YES] (dk_shortcut_add). The `shortcuts` service owns the kind. `on` and `off` count in the statics below, so a
-   test (or a debugger) reads them. */
+/* test/shortcut-demo: one shortcut, hold [TRK] and press [YES] (dk_shortcut_add). The `shortcuts` service owns the kind. `on` and `off` log one error-level event each
+   (an error is kept even when debug is off): "on" with the selected track (dk_selected_track, 0 to 15) as the value, "off" with 0, so a device test observes the calls and
+   the track that was selected when the combination completed. */
 #include <dk/core/module.h>
+#include <dk/core/log.h>
 #include <dk/platform/shortcuts.h>
-
-static volatile uint32_t on_calls;
-static volatile uint32_t off_calls;
 
 static void on(void *arg)
 {
     (void)arg;
-    on_calls++;
+    dk_log(0, "on", (uint32_t)dk_selected_track());
 }
 
 static void off(void *arg)
 {
     (void)arg;
-    off_calls++;
+    dk_log(0, "off", 0);
 }
 
 static int32_t init(dk_module_ctx *ctx)

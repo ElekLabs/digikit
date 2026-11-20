@@ -1039,13 +1039,17 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let module = table_of(&packed(*dev, SHORTCUT_DEMO.leaf, "dkm", SHORTCUT_DEMO.nx));
         let needs: Vec<(u32, bool)> = Keys::parse(&module).unwrap().needs().map(|n| (n.service, n.hard)).collect();
-        assert_eq!(needs, [(name_hash("shortcuts"), true)], "{}: the module's needs", dev.name);
+        // a hard need on the service of its builder call; the other need is the runtime (the module calls `dk_selected_track`, an import of the runtime that the fixture logs)
+        assert!(needs.contains(&(name_hash("shortcuts"), true)), "{}: the module's needs {needs:?}", dev.name);
+        assert!(needs.iter().all(|n| n.0 == name_hash("shortcuts") || n.0 == name_hash("runtime")), "{}: the module's needs {needs:?}", dev.name);
         let owner = service_file(*dev, "shortcuts", "core/services/shortcuts");
         let t = table_of(&owner);
         let keys = Keys::parse(&t).unwrap();
         let kinds: Vec<u32> = (0..keys.count(tag::KINDS)).map(|i| keys.words(tag::KINDS, i).unwrap().0).collect();
         assert_eq!(kinds, [dkrt_sdk::records::KIND_SHORTCUT], "{}: the kinds shortcuts.dks declares", dev.name);
-        assert_eq!(keys.count(tag::HOOKS), 0, "{}: shortcuts.dks takes no hook yet", dev.name);
+        // the one hook it takes: the entry of the key walker (devices/fw/input.toml), listed by the port file of the device and present on it
+        let hooks: Vec<u32> = (0..keys.count(tag::HOOKS)).map(|i| keys.words(tag::HOOKS, i).unwrap().0).collect();
+        assert_eq!(hooks, [name_hash("cf.input.hook.key_event")], "{}: the hooks shortcuts.dks declares", dev.name);
         let image = Image::read(*dev, "emulator");
         unsafe {
             // with the file on the card the module is accepted and the file is the provider that loads, and its builder import is one of its exports
@@ -1054,6 +1058,10 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
             assert!(found(&l, &plan).contains("services/shortcuts.dks"), "{}", dev.name);
             l.load_providers(&plan);
             l.settle(&mut plan, 1);
+            // the hook site is one `jmp` at the walker entry of the device's firmware
+            let binds = binds_of(*dev, &l, &plan);
+            assert_eq!(binds.len(), 1, "{}: the sites shortcuts.dks installs", dev.name);
+            assert_eq!(binds[0].0, name_hash("cf.input.hook.key_event"), "{}", dev.name);
             assert!(l.exports.resolve(name_hash("dk_shortcut_add")).is_some(), "{}: dk_shortcut_add is no export of shortcuts.dks", dev.name);
             let listed: Vec<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
             assert_eq!(listed, [name_hash("dk_shortcut_add")], "{}: the header table's exports", dev.name);

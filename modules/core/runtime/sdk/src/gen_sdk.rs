@@ -52,6 +52,7 @@ pub mod logk {
     pub const DSP_LINK: u16 = 46;
     pub const FW_READY: u16 = 47;
     pub const SHORTCUT_CLASH: u16 = 52;
+    pub const SHORTCUT_INACTIVE: u16 = 53;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;
@@ -171,6 +172,60 @@ pub mod records {
         (RES_DSP_COST_VOICE, "dsp_cost_voice"),
         (RES_DSP_COST_FX, "dsp_cost_fx"),
     ];
+}
+
+/// The logical keys (`[keys] order`), numbered as `dk_key` of <dk/gen/keys.h> is: `NONE` is 0, the names follow from 1.
+pub mod keys {
+    pub const NONE: u32 = 0;
+    pub const PAGE_TRIG: u32 = 1;
+    pub const SRC: u32 = 2;
+    pub const FLTR: u32 = 3;
+    pub const AMP: u32 = 4;
+    pub const FX: u32 = 5;
+    pub const MOD: u32 = 6;
+    pub const PRESET: u32 = 7;
+    pub const SETTINGS: u32 = 8;
+    pub const TEMPO: u32 = 9;
+    pub const YES: u32 = 10;
+    pub const UP: u32 = 11;
+    pub const NO: u32 = 12;
+    pub const LEFT: u32 = 13;
+    pub const DOWN: u32 = 14;
+    pub const RIGHT: u32 = 15;
+    pub const TRK: u32 = 16;
+    pub const FUNC: u32 = 17;
+    pub const KEYBOARD: u32 = 18;
+    pub const RECORD: u32 = 19;
+    pub const PLAY: u32 = 20;
+    pub const STOP: u32 = 21;
+    pub const PAGE: u32 = 22;
+    pub const PTN: u32 = 23;
+    pub const SONG: u32 = 24;
+    pub const TRIG1: u32 = 25;
+    pub const TRIG2: u32 = 26;
+    pub const TRIG3: u32 = 27;
+    pub const TRIG4: u32 = 28;
+    pub const TRIG5: u32 = 29;
+    pub const TRIG6: u32 = 30;
+    pub const TRIG7: u32 = 31;
+    pub const TRIG8: u32 = 32;
+    pub const TRIG9: u32 = 33;
+    pub const TRIG10: u32 = 34;
+    pub const TRIG11: u32 = 35;
+    pub const TRIG12: u32 = 36;
+    pub const TRIG13: u32 = 37;
+    pub const TRIG14: u32 = 38;
+    pub const TRIG15: u32 = 39;
+    pub const TRIG16: u32 = 40;
+    pub const ENC1: u32 = 41;
+    pub const ENC2: u32 = 42;
+    pub const ENC3: u32 = 43;
+    pub const ENC4: u32 = 44;
+    pub const ENC5: u32 = 45;
+    pub const ENC6: u32 = 46;
+    pub const ENC7: u32 = 47;
+    pub const ENC8: u32 = 48;
+    pub const LEVEL_PUSH: u32 = 49;
 }
 
 /// The sample pool layout (`[sample]`): entries, word offsets of an entry and of a control set.
@@ -529,7 +584,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 122] = [
+    pub const IMPORT_NAMES: [&str; 123] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -650,12 +705,13 @@ pub mod api {
         "dk_debug_selected_params",
         "dk_device_track_count",
         "dk_shortcut_add",
+        "dk_selected_track",
         "dk_debug_log_sink_set",
         "dk_debug_speed_flags",
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`, and not provided by a service file.
-    pub const BUILTIN_NAMES: [&str; 60] = [
+    pub const BUILTIN_NAMES: [&str; 61] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -714,6 +770,7 @@ pub mod api {
         "dk_debug_track_type",
         "dk_debug_selected_params",
         "dk_device_track_count",
+        "dk_selected_track",
         "dk_debug_log_sink_set",
         "dk_debug_speed_flags",
     ];
@@ -1084,6 +1141,9 @@ pub mod api {
 
     /// `dk_shortcut_add`: Bind a key combination: while `def->keys[0]` is held, pressing `def->keys[1]` calls `def->on(arg)` and the press is not passed to the stock views; releasing either key calls `def->off(arg)`. The keys are logical (`dk_key`, <dk/gen/keys.h>); a key the device lacks makes the shortcut inactive. `id` (unique in the module, at most 15 characters) and `label` (at most 23) are copied. Returns 0, or DK_E_FORMAT (a missing or repeated id or label, a key that is DK_KEY_NONE or the same twice, no `on`) or DK_E_DECL_FULL (more than 4 shortcuts in the module); the commit refuses the module for the first error. A second module that binds the same two keys is loaded with its shortcut disabled. See <dk/platform/shortcuts.h>.
     pub type DkShortcutAddFn = unsafe extern "C" fn(ctx: *mut u8, def: *const u8) -> i32;
+
+    /// `dk_selected_track`: The selected track, 0 to `dk_device_track_count()` - 1, from the firmware's own project accessors (read-only: the same read as `dk_debug_selected_params`); -2 when there is no project yet.
+    pub type DkSelectedTrackFn = unsafe extern "C" fn() -> i32;
 
     /// `dk_debug_log_sink_set`: Set (or, with 0, clear) the one log sink and its tick: `void sink(const dk_log_ev *e)` receives every event the runtime logs, before any filter, in whatever task logs, with interrupts masked. `tick` runs once per UI pass (0: none).
     pub type DkDebugLogSinkSetFn = unsafe extern "C" fn(sink: *mut u8, tick: *mut u8);

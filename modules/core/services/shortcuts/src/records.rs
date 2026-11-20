@@ -62,7 +62,7 @@ fn text<const N: usize>(body: *const u8, off: usize) -> [u8; N] {
     out
 }
 
-/// A callback address of the module at `base`: the record holds an offset, 0 for none.
+/// A callback address of the module at `base`: the record holds an offset, 0 for none (offset 0 is the module header, never code).
 fn callback(base: u32, offset: u32) -> Option<Callback> {
     if offset == 0 {
         None
@@ -147,10 +147,16 @@ impl<C: CoreApi> Service<C> for ShortcutsService {
             rd32(body.add(at::KEY0)) as u8,
             rd32(body.add(at::KEY1)) as u8,
         ];
+        // a key the device lacks (no panel code): the binding can never complete, and it must not keep the pair from a later binding that can
+        let inactive = match DeviceProfile::by_id(core.device_id()) {
+            Some(p) => p.key_code(u32::from(keys[0])) == 0 || p.key_code(u32::from(keys[1])) == 0,
+            None => true,
+        };
         let b = Binding {
             owner: c.owner,
             keys,
             disabled: false,
+            inactive,
             on: callback(c.base, rd32(body.add(at::ON))),
             off: callback(c.base, rd32(body.add(at::OFF))),
             arg: rd32(body.add(at::ARG)) as usize as *mut c_void,
@@ -169,6 +175,20 @@ impl<C: CoreApi> Service<C> for ShortcutsService {
                         u32::from(owner),
                         u32::from(keys[0]),
                         u32::from(keys[1]),
+                        0,
+                    ],
+                );
+                OK
+            }
+            Added::Inactive => {
+                core.log(
+                    logk::SHORTCUT_INACTIVE,
+                    LOG_WARN,
+                    [
+                        u32::from(c.owner),
+                        u32::from(keys[0]),
+                        u32::from(keys[1]),
+                        0,
                         0,
                     ],
                 );

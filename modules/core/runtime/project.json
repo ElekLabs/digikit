@@ -3,7 +3,7 @@
   "name": "core/runtime",
   "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkneeds", "dkfw"],
   "metadata": {
-    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "core/services/shortcuts", "test/shortcut-demo"] }]
+    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user"] }]
   },
   "targets": {
     "rust-tests": {

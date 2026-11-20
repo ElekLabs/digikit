@@ -930,16 +930,30 @@ fn a_key_table_with_a_clash_or_a_bad_name_is_refused() {
     }
     // a name that is not in `[keys] order` of sdk/sdk.toml
     let bad = dt2.replace("TRK = 16", "TRK = 16\nNOT_A_KEY = 100");
-    let e = Facts::from_texts([bad.as_str(), dn2.as_str()]).unwrap().key_names().unwrap_err().0;
+    let e = Facts::from_texts([bad.as_str(), dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap_err()
+        .0;
     assert!(e.contains("NOT_A_KEY") && e.contains("[keys] order"), "{e}");
 }
 
 #[test]
 fn the_logical_key_numbers_are_the_order_of_the_sdk_list_and_do_not_depend_on_the_device_files() {
     let (dt2, dn2) = device_texts();
-    let all = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap().key_names().unwrap();
-    let one = Facts::from_texts([dn2.as_str()]).unwrap().key_names().unwrap();
+    let all = Facts::from_texts([dt2.as_str(), dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap();
+    let one = Facts::from_texts([dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap();
     assert_eq!(all, one);
     assert_eq!(all.first().map(String::as_str), Some("PAGE_TRIG"));
-    assert_eq!(all.iter().position(|n| n == "TRK"), Some(15), "the number of a name is fixed by the list (append only)");
+    assert_eq!(
+        all.iter().position(|n| n == "TRK"),
+        Some(15),
+        "the number of a name is fixed by the list (append only)"
+    );
 }
