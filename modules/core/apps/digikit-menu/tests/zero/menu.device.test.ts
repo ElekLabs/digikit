@@ -35,7 +35,7 @@ runtimeTests(
     await press('DOWN');
     await ui.tap('YES', { until: { state: peek('DK_LOAD_N'), done: (n) => n === 1, what: 'MODULES page rows' } });
     expect(await word(session, planSymbol(plan, 'DK_LOAD_N'))).toBe(1);
-    expect(await readTextRows(session, planSymbol(plan, 'DK_LOAD'), 1, 24)).toEqual(['NO STORE']);
+    expect(await readTextRows(session, planSymbol(plan, 'DK_LOAD'), 1, 24)).toEqual(['NO MODULES ON CARD']);
 
     await press('NO');
     await press('UP');

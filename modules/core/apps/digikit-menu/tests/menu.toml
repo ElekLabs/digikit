@@ -1,7 +1,7 @@
 # SETTINGS > DIGIKIT: the entry is the ninth row of SETTINGS and opens the menu (ABOUT, HEALTH, MEMORY, MODULES); MODULES opens the list (the
-# harness card has no store: NO STORE); ABOUT shows the runtime; MEMORY shows the capacity; NO leaves. The entry, the menu and the MEMORY page are pinned as frames
+# harness card is fresh and has no store header, an empty store: NO MODULES ON CARD); ABOUT shows the runtime; MEMORY shows the capacity; NO leaves. The entry, the menu and the MEMORY page are pinned as frames
 # (hashes in tests/patchkit/smoke/goldens.json): the pages have no glyphs, and MEMORY (a text page) has no highlighted row. ABOUT is checked by the rows the menu keeps in
-# DK_ABOUT, MEMORY also by those in DK_MEM, MODULES by the store state of its list (2 = no store, no rows). A key on a text page must not fault, and one DOWN must not change
+# DK_ABOUT, MEMORY also by those in DK_MEM, MODULES by the store state of its list (1 = a store, here with no rows). A key on a text page must not fault, and one DOWN must not change
 # the frame (the cursor moves, unseen).
 [test]
 name = "menu"
@@ -73,7 +73,7 @@ tap = "YES"
 [[step]]
 wait_ms = 800
 [[step]]
-expect_mem = {symbol = "STORE", module = "core/digikit-menu", eq = 2}
+expect_mem = {symbol = "STORE", module = "core/digikit-menu", eq = 1}
 [[step]]
 expect_mem = {symbol = "NENT", module = "core/digikit-menu", eq = 0}
 [[step]]

@@ -83,6 +83,39 @@ pub unsafe fn open_in(scratch: *mut u8, buf: *mut u8, cap: usize) -> Result<Tabl
     Ok(t)
 }
 
+/// The one rule of "store, empty store or no store" that the INFO and upload steps, the module list and the HEALTH figures all use: `open_in`, and a
+/// card that is ours (or blank) with no store header is an empty store (`seq` 0) when both header sectors are blank (or hold a store of another version): a fresh card is
+/// ours after the boot's selection record, and the first upload writes the headers. Bytes in a header sector that are not a store header are
+/// somebody's data (finding 46): no store. A card too small for the area has no store. Other errors are `open_in`'s (`E_BAD_STORE`, `E_READ`).
+pub unsafe fn open_or_empty_in(scratch: *mut u8, buf: *mut u8, cap: usize) -> Result<Table, i32> {
+    match open_in(scratch, buf, cap) {
+        Err(E_NOT_FOUND) if empty_possible() && headers_blank(scratch) => {
+            Ok(Table { h: Hdr::empty(&layout()), copy: 0, agree: true })
+        }
+        r => r,
+    }
+}
+
+/// May a card without a store header hold an empty store? Only when the runtime may write the card (ours, blank, or not decided yet): a foreign,
+/// refused or too small card has none.
+fn empty_possible() -> bool {
+    crate::card::writable()
+}
+
+/// Does each header sector (A, B) read all 0x00 or all 0xFF, or hold a store header of another version? A sector that cannot be read is not free.
+unsafe fn headers_blank(scratch: *mut u8) -> bool {
+    let l = layout();
+    let mut k = 0;
+    while k < 2 {
+        let rel = if k == 0 { 0 } else { l.header_b() };
+        if block_read(l.first + rel, 512, scratch) != 0 || !(crate::card::blank(scratch) || store::old_header(scratch)) {
+            return false;
+        }
+        k += 1;
+    }
+    true
+}
+
 /// `open_in` with the runtime's own buffers (the staging buffer and the peek sector).
 pub unsafe fn open() -> Result<Table, i32> {
     open_in(scratch(), stage(), STAGE_BYTES)
@@ -217,6 +250,7 @@ pub unsafe fn seen() -> Option<(u32, u32)> {
                 let pick = if store::prefer_b(a.as_ref(), b.as_ref()) { b } else { a };
                 pick.map(|h| (h.used / 2, store::free_sectors(&lay, &h) / 2))
             }
+            Err(E_NOT_FOUND) if empty_possible() && headers_blank(scratch()) => Some((0, store::free_sectors(&lay, &Hdr::empty(&lay)) / 2)),
             Err(_) => None,
         };
         super::lock::unlock();
@@ -276,7 +310,7 @@ unsafe fn list_unlocked(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -
         plen += 1;
     }
     let r = store::stable(&io, &lay, fp, || {
-        let t = open()?;
+        let t = open_or_empty_in(scratch(), stage(), STAGE_BYTES)?;
         let mut n = 0u32;
         let r = store::scan(&io, &lay, &t.h, stage(), STAGE_BYTES, |_, e| {
             if !listed(e, prefix, plen, Filter::Modules) {

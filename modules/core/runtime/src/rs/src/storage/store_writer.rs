@@ -309,41 +309,10 @@ pub fn pe(e: i32) -> i32 {
     }
 }
 
-/// Read the current store: the headers (the table is checked once per header: `crate::store::open_in`), through `b`. A card with nothing in
-/// the area is an empty store (`seq` 0). `Err(E_NOSTORE)`: a header is there but no copy is usable, or the card is too small, or the area is somebody's.
+/// Read the current store: the one view of `crate::store::open_or_empty_in` (an ours-but-headerless card is an empty store, `seq` 0), through `b`.
+/// `Err(E_NOSTORE)`: a header is there but no copy is usable, or the card is too small, or the area is somebody's.
 pub unsafe fn state(b: &Bufs) -> Result<Table, i32> {
-    if card::state() == CARD_TOO_SMALL {
-        return Err(E_NOSTORE);
-    }
-    match crate::store::open_in(b.scr, b.tin, TBL_CAP) {
-        Ok(t) => Ok(t),
-        Err(e) => {
-            if e == E_NOT_FOUND {
-                // "No store" is an empty area (or one with only a selection record, which also makes the card ours), or a store of another version.
-                // Bytes in a header sector that are not a store header are somebody's data: a write would overwrite them, so refuse (finding 46).
-                if !header_sectors_free(b.scr) {
-                    return Err(E_NOSTORE);
-                }
-                Ok(Table { h: Hdr::empty(&lay()), copy: 0, agree: true })
-            } else {
-                Err(E_NOSTORE)
-            }
-        }
-    }
-}
-
-/// Does each header sector (A, B) read all 0x00 or all 0xFF, or hold a store header of another version? A sector that cannot be read is not free.
-unsafe fn header_sectors_free(scratch: *mut u8) -> bool {
-    let l = lay();
-    let mut k = 0;
-    while k < 2 {
-        let rel = if k == 0 { 0 } else { l.header_b() };
-        if block_read(l.first + rel, 512, scratch) != 0 || !(card::blank(scratch) || dkrt_sdk::store::old_header(scratch)) {
-            return false;
-        }
-        k += 1;
-    }
-    true
+    crate::store::open_or_empty_in(b.scr, b.tin, TBL_CAP).map_err(|_| E_NOSTORE)
 }
 
 /// The only place the write path writes the card.
