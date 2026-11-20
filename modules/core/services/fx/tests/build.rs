@@ -2,7 +2,6 @@
 //! effects' lines of `tests/fixtures/records/lowered.golden`, recorded before the collect moved into the services), the effect ids of the loaded modules and the two passes of
 //! `module_commit`.
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::F_FIRST;
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink, Service};
 use dkrt_sdk::*;
@@ -192,9 +191,10 @@ const FIRST_ROW: u32 = 6;
 
 /// A core whose `dynfx_info` says the effect table starts at row `FIRST_ROW`, with effect row 1 claimed by module record `REC` (the row the effect of ordinal 0 declares to).
 fn core() -> FakeCore {
+    dkrt_svc_fx::rows::reset();
     let mut core = FakeCore::new();
-    core.fx_table[F_FIRST] = FIRST_ROW;
-    let d = core.dsp();
+    core.set_dynfx(FIRST_ROW, 4);
+    let d = dkrt_svc_fx::rows::frows();
     d.fx_owner[1] = REC as u8 + 1;
     core
 }
@@ -249,10 +249,10 @@ fn the_commit_measures_then_writes_and_declares_the_effects_row() {
     assert_eq!((out.count, out.at, out.rows), (1, measured.at, [0; 3]));
     assert_eq!(rd(&buf, 16), KIND_EFFECT);
     // nothing of the DSP row is declared before the declare pass (the walker's check comes in between)
-    assert_eq!(core.dsp().fx_flags[1], 0);
+    assert_eq!(dkrt_svc_fx::rows::frows().fx_flags[1], 0);
     assert_eq!(commit(&core, REC, commit_phase::DECLARE, &k, &mut out), OK);
     // the effect's DSP row has the route flags and the knob default of the builder calls
-    let d = core.dsp();
+    let d = dkrt_svc_fx::rows::frows();
     assert_eq!(
         (d.fx_flags[1], f32::from_bits(d.fx_par[1][0])),
         (0b101, 0.5)

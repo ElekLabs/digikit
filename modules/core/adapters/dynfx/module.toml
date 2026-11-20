@@ -23,7 +23,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 #   holds pc 0xffffffff, which the adapter skips. The runtime claims one for an effect: it writes the parameter words, desc, state and
 #   `enabled`, then the pc (one word per transfer through window 2 of core/dsp-link), so the chain never sees a half-written row. It frees a
 #   row the other way round (the pc to 0xffffffff first).
-# - `dynfx_info` is the table the runtime reads (core/runtime, optional link): the rows of the chain (= window 2), the index of the first free
+# - `dynfx_info` is the table the fx service reads (the image's info table): the rows of the chain (= window 2), the index of the first free
 #   row, the number of free rows and the words of a row.
 #
 # The free rows are listed in the registry in module order (the registry's limit is `fx_slots`); no other module adds a patch-time row.
@@ -77,6 +77,12 @@ id = "df2"
 pc = 0xffffffff
 desc = 0
 state = 0
+
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the fx service finds it by the hash of its name (`CoreApi::info`); the runtime
+# does not read it.
+[[info]]
+name = "dynfx_info"
+devices = ["dt2", "dn2"]
 
 # The capacity limits this adapter reserves, as `cap_<kind>` entries of the image's info table (docs/PATCHING.md): each points at the u32 word of the table that holds the limit, so the planner knows the limit before any service file is loaded.
 [[info]]

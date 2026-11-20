@@ -71,7 +71,7 @@ fn a_module_without_a_track_table_is_not_the_services_business() {
         // a section of another version is not checked here
         let sec: DspSec = std::mem::zeroed();
         assert_eq!(
-            <S as Service<FakeCore>>::dsp_check_sections(&core, &sec),
+            <S as Service<FakeCore>>::dsp_check_sections(&core, &sec, &mut job(None)),
             OK
         );
         <S as Service<FakeCore>>::dsp_release(&core, 0);

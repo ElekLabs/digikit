@@ -23,7 +23,7 @@ impl<C: CoreApi> Service<C> for Samples {
         }
     }
 
-    unsafe fn dsp_check_sections(_core: &C, sec: &DspSec) -> i32 {
+    unsafe fn dsp_check_sections(_core: &C, sec: &DspSec, _job: &mut Job) -> i32 {
         dsp::check_sections(sec)
     }
 

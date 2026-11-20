@@ -13,7 +13,7 @@ use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_svc_machines::build;
 use dkrt_svc_machines::records::{owned_ids, rstate, Machines};
 use dkrt_svc_params::dynreg::w;
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Late, Module};
+use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Late, Module, Rows};
 use dkrt_test_support::FakeCore;
 
 /// The first run-time machine type (the same on both devices of the suite).
@@ -418,6 +418,7 @@ fn fixture(device: u32) -> Fixture {
         parks_rows: true,
         kept,
         kept_dsp,
+        rows: Rows::NONE,
         absent_rows: Some(absent_rows),
         // the machines service queues no live value for its rows
         live: None,
@@ -682,7 +683,7 @@ fn a_removal_writes_missing_only_when_a_voice_row_is_parked_and_a_busy_loader_is
             .borrow()
             .iter()
             .filter_map(|c| match c {
-                dkrt_test_support::Call::Log { kind, args }
+                dkrt_test_support::Call::Log { kind, args, .. }
                     if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
                 {
                     Some(args[2])
@@ -762,7 +763,7 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
         .borrow()
         .iter()
         .filter_map(|c| match c {
-            dkrt_test_support::Call::Log { kind, args }
+            dkrt_test_support::Call::Log { kind, args, .. }
                 if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
             {
                 Some((args[1], args[2]))
@@ -862,7 +863,7 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
             .borrow()
             .iter()
             .filter_map(|c| match c {
-                dkrt_test_support::Call::Log { kind, args }
+                dkrt_test_support::Call::Log { kind, args, .. }
                     if *kind == dkrt_sdk::logk::MACHINE_TYPE_EVICTED =>
                 {
                     Some((args[1], args[2]))

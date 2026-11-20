@@ -11,6 +11,16 @@ use dkrt_svc_fx::records::Fx;
 /// The module record of the service file in these tests.
 const FILE_REC: usize = 7;
 
+/// The fx service's effect rows (the service's own static, not the loader's state): a host test of the core's cleanup or invariants seeds and reads them here.
+pub(crate) fn frows() -> &'static mut dkrt_svc_fx::rows::FxRows {
+    dkrt_svc_fx::rows::frows()
+}
+
+/// Back to the start state (all rows free).
+pub(crate) fn reset_rows() {
+    dkrt_svc_fx::rows::reset()
+}
+
 pub(crate) struct LoadedFx;
 
 impl LoadedFx {

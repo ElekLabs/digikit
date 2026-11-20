@@ -5,6 +5,7 @@ use super::*;
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::link::{Owner, Sequence};
 use crate::test_lock::LOCK;
+use crate::handlers::fx_fixture::{frows, reset_rows};
 use std::vec::Vec;
 
 const CF: u32 = 0x8000;
@@ -90,6 +91,22 @@ pub unsafe fn fx_info() -> *const u32 {
         FX_INFO.as_ptr()
     }
 }
+/// The image's info table `name_hash` of the host tests: `dyndsp_info` and `dynfx_info` are the tables of this file (`voice_info`, `fx_info`); none for any other name.
+pub unsafe fn test_info(name_hash: u32) -> Option<*const u32> {
+    if name_hash == dkneeds::keys::name_hash("dyndsp_info") {
+        Some(voice_info())
+    } else if name_hash == dkneeds::keys::name_hash("dynfx_info") {
+        // the table is for the device the test runs on (the service compares the device word with `CoreApi::device_id`)
+        if fx_info().is_null() {
+            return Some(core::ptr::null());
+        }
+        static mut TABLE: [u32; 8] = FX_INFO;
+        TABLE[2] = REAL_CORE.device_id();
+        Some(core::ptr::addr_of!(TABLE) as *const u32)
+    } else {
+        None
+    }
+}
 pub unsafe fn send_word(win: u32, at: u32, buf: *const u32, len: u32) -> i32 {
     assert_eq!(len, 4);
     LINK.tries += 1;
@@ -171,7 +188,7 @@ pub unsafe fn fini(rec: usize, addr: u32) {
     assert_eq!((rec, addr), (0, 1));
     assert!(!entry::has_tick(0), "the tick stops before fini");
     assert_eq!(dsp::ds().row_pub[0], 0);
-    assert_eq!(dsp::ds().fx_pub[0], 0);
+    assert_eq!(frows().fx_pub[0], 0);
     assert_eq!(dsp::ds().mod_len[0], 256); // invalidated but still owned at fini
     LINK.events.push(Event::Fini);
 }
@@ -205,6 +222,7 @@ unsafe fn idle_link() {
 unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) {
     *st() = core::mem::zeroed();
     *dsp::ds() = core::mem::zeroed();
+    reset_rows();
     *boot::info() = core::mem::zeroed();
     crate::loader::test_clear_torn();
     dsp_loading();
@@ -242,11 +260,12 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     d.mod_len[0] = 256;
     d.transfers = 1;
     if fx {
-        d.fx_pc[0] = PUB_PC;
-        d.fx_owner[0] = 1;
-        d.fx_pub[0] = u8::from(published);
-        d.fx_owner[1] = 1; // later row whose transfer fails
-        d.mod_fx[0] = 3;
+        let r = frows();
+        r.fx_pc[0] = PUB_PC;
+        r.fx_owner[0] = 1;
+        r.fx_pub[0] = u8::from(published);
+        r.fx_owner[1] = 1; // later row whose transfer fails
+        r.mod_fx[0] = 3;
         d.step = 18;
     } else {
         d.row_pc[0] = PUB_PC;
@@ -296,7 +315,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert_eq!(d.mod_len[0], 256);
     assert_eq!(d.mod_len[1], 256);
     // Publication metadata is inline now, rather than an arena-allocated step list.
-    assert_eq!(if fx { d.fx_pc[0] } else { d.row_pc[0] }, PUB_PC);
+    assert_eq!(if fx { frows().fx_pc[0] } else { d.row_pc[0] }, PUB_PC);
     assert_eq!(d.nwait, 1);
     assert_eq!(d.waiting[0].send_buf, 0xe000);
     assert_eq!(d.transfers, 1);
@@ -307,7 +326,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert_eq!(st().modules[0].base, CF);
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(512));
     if fx {
-        assert_eq!((d.fx_owner[0], d.fx_pub[0]), (1, 1));
+        assert_eq!((frows().fx_owner[0], frows().fx_pub[0]), (1, 1));
     } else {
         assert_eq!((d.row_owner[0], d.row_pub[0]), (1, 1));
     }
@@ -433,12 +452,12 @@ unsafe fn successful_case(fx: bool, published: bool) {
     assert!(!entry::has_tick(0));
     assert_eq!(st().modules[0].used, 0);
     assert_eq!(dsp::ds().mod_len[0], 0);
-    assert_eq!((dsp::ds().row_owner[0], dsp::ds().fx_owner[0]), (0, 0));
+    assert_eq!((dsp::ds().row_owner[0], frows().fx_owner[0]), (0, 0));
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(0));
     assert!(LINK.events.contains(&Event::Fini));
     assert!(LINK.events.contains(&Event::Registry));
     assert!(LINK.events.contains(&Event::Free(CF)));
-    assert_eq!(if fx { dsp::ds().fx_pc[0] } else { dsp::ds().row_pc[0] }, 0);
+    assert_eq!(if fx { frows().fx_pc[0] } else { dsp::ds().row_pc[0] }, 0);
     assert_eq!(LINK.events.contains(&Event::Free(IMAGE)), !published);
     assert_eq!(dsp::ds().phase, dsp::PH_SEND);
     assert_eq!(dsp::ds().pending.rec, 1);
@@ -529,7 +548,6 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
         log().clear();
         let d = dsp::ds();
         d.row_owner = [0; dsp::MAX_ROWS];
-        d.fx_owner = [0; dsp::MAX_FX];
         d.step = 0; // no row of module 0 in the fake's list: every row is in
         crate::loader::dsp_step_with(TWO);
         // each service hears it once, in list order, and the load is over
@@ -554,15 +572,15 @@ fn attribution_names_the_module_of_every_site_the_watch_reports() {
         let d = dsp::ds();
         d.row_owner[0] = 2;
         d.row_type[0] = 7;
-        d.fx_owner[1] = 3;
+        frows().fx_owner[1] = 3;
         // a voice site: the module that owns the machine type
         assert_eq!(services().attribute(SITE_VOICE, 7), Some(1));
         assert_eq!(services().attribute(SITE_VOICE, 8), None);
-        // every other site is an effect row of the chain's table (first row 0 in the test table)
-        assert_eq!(services().attribute(SITE_FX_MASTER, 1), Some(2));
-        assert_eq!(services().attribute(SITE_FX_SEND, 1), Some(2));
-        assert_eq!(services().attribute(SITE_NONE, 1), Some(2));
-        assert_eq!(services().attribute(9, 1), Some(2));
+        // every other site is an effect row of the chain's table, by the byte offset the DSP reports (96 bytes a row; first row 0 in the test table)
+        assert_eq!(services().attribute(SITE_FX_MASTER, 96), Some(2));
+        assert_eq!(services().attribute(SITE_FX_SEND, 96), Some(2));
+        assert_eq!(services().attribute(SITE_NONE, 96), Some(2));
+        assert_eq!(services().attribute(9, 96), Some(2));
         assert_eq!(services().attribute(SITE_FX_MASTER, 0), None);
     }
 }
@@ -746,7 +764,6 @@ fn a_loaded_dsp_part_makes_its_module_active() {
         idle_link();
         let d = dsp::ds();
         d.row_owner = [0; dsp::MAX_ROWS];
-        d.fx_owner = [0; dsp::MAX_FX];
         d.step = 0;
         dsp_loading();
         crate::loader::dsp_step_with(TWO);

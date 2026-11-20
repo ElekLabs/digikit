@@ -112,10 +112,11 @@ impl CoreApi for RealCore {
     unsafe fn dsp_info(&self) -> *const u32 {
         crate::dsp::info()
     }
-    unsafe fn fx_info(&self) -> *const u32 {
-        crate::dsp::finfo()
-    }
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
+        #[cfg(test)]
+        if let Some(t) = crate::cleanup_tests::test_info(name_hash) {
+            return t;
+        }
         PLATFORM.info(name_hash)
     }
     fn link_set(&self, slot: Slot, value: u32) {

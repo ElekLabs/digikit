@@ -93,8 +93,6 @@ pub trait CoreApi: crate::mem::FwMem {
     fn dsp(&self) -> &'static mut DspState;
     /// The words of `dyndsp_info` (voice rows, the area); null without it.
     unsafe fn dsp_info(&self) -> *const u32;
-    /// The words of `dynfx_info` (effect rows); null without it.
-    unsafe fn fx_info(&self) -> *const u32;
     /// The words of the entry `name_hash` of the image's one table `dkrt_info_table` (`dkneeds::keys::name_hash` of the name that an adapter's `[[info]]` gives): the data
     /// table of an image adapter, such as `fxpages_info`. Null when the image has no such entry or the core does not serve it. The caller checks the words (magic, device).
     /// The core forwards to `Platform::info`; it names no service and no table.

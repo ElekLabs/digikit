@@ -2911,103 +2911,117 @@
    "addend": 0,
    "offset": 44,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9on_loadedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 48,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk6settleNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 52,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk16teardown_refusalNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9on_loadedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 56,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9live_doneNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk6settleNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 60,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12module_beginNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk16teardown_refusalNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 64,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk13module_commitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9live_doneNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 68,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4tickNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12module_beginNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 72,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk18dsp_check_sectionsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk13module_commitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 76,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk14dsp_check_rowsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4tickNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 80,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk15dsp_check_typesNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk18dsp_check_sectionsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 84,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_admitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk14dsp_check_rowsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 88,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk15dsp_check_typesNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 92,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11dsp_releaseNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_admitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 96,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 100,
+   "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11dsp_releaseNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12dsp_row_stepNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
@@ -4418,6 +4432,13 @@
    "align": 2,
    "hex": "4e75",
    "kind": "text",
+   "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "size": 2
+  },
+  {
+   "align": 2,
+   "hex": "4e75",
+   "kind": "text",
    "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk6removeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "size": 2
   },
@@ -4454,6 +4475,13 @@
    "hex": "42804e75",
    "kind": "text",
    "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk16teardown_refusalNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "42804e75",
+   "kind": "text",
+   "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "size": 4
   },
   {
@@ -5200,7 +5228,7 @@
   },
   {
    "align": 2,
-   "hex": "77db6299",
+   "hex": "8ee22920",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -5214,10 +5242,10 @@
   },
   {
    "align": 2,
-   "hex": "0000000000000007000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "00000000000000070000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "size": 104
+   "size": 112
   },
   {
    "align": 2,
@@ -5969,7 +5997,7 @@
    "size": 28
   }
  ],
- "source_sha256": "c0a9287230d03c029e3341100cfd0b7cefe2233b5c280f79cee5516a9d8ca631",
+ "source_sha256": "a0dd4b3c40a860e1130f021c79404d6b881b0d529befda81f60efa8a96ee11bb",
  "symbols": [
   {
    "global": false,
@@ -6465,6 +6493,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12apply_recordNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12apply_recordNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "value": 0
@@ -6515,6 +6549,12 @@
    "global": false,
    "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk3capNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk3capNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
+   "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7records7SamplesECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "value": 0
   },
   {
@@ -7570,8 +7610,8 @@
  ],
  "toolchain": {
   "exports": "dk_module dk_sample_pool_add dk_sample_pool_clear dk_sample_pool_info dk_sample_pool_open dk_sample_pool_path dk_sample_pool_peaks dk_sample_pool_peaks_window dk_sample_pool_set dk_sample_pool_status dk_svc_abi pool_done_fill pool_lost_fill",
-  "instructions_redecoded": "7126",
-  "isa_check": "c4ef7732726fd0abe78e8eb3d37e6104421f286f9c98f14cb24cae4541ad9ad7",
+  "instructions_redecoded": "7129",
+  "isa_check": "961e2cb31088620b3cb71b396f4ea84a65178c2b4afcaf61e9f02b6c1f89580b",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

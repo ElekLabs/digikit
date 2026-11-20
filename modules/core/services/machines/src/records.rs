@@ -5,7 +5,7 @@ use crate::validate::{body_len, Acc};
 use crate::{dsp, nativepage, slots};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::DspSec;
+use dkrt_abi::dsp::{DspSec, Job};
 use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
@@ -252,7 +252,7 @@ impl<C: CoreApi> Service<C> for Machines {
         }
     }
 
-    unsafe fn dsp_check_sections(core: &C, sec: &DspSec) -> i32 {
+    unsafe fn dsp_check_sections(core: &C, sec: &DspSec, _job: &mut Job) -> i32 {
         dsp::check_sections(core, sec)
     }
 

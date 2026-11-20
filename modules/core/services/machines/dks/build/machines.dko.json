@@ -6026,103 +6026,117 @@
    "addend": 0,
    "offset": 44,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9on_loadedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 48,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk6settleNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 52,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk16teardown_refusalNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9on_loadedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 56,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9live_doneNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk6settleNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 60,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12module_beginNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk16teardown_refusalNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 64,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk13module_commitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9live_doneNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 68,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4tickNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12module_beginNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 72,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk18dsp_check_sectionsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk13module_commitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 76,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk14dsp_check_rowsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4tickNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 80,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk15dsp_check_typesNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk18dsp_check_sectionsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 84,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_admitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk14dsp_check_rowsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 88,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk15dsp_check_typesNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 92,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11dsp_releaseNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_admitNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 96,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 100,
+   "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11dsp_releaseNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
+   "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9dsp_clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
    "section": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12dsp_row_stepNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
@@ -8695,6 +8709,13 @@
    "align": 2,
    "hex": "4e75",
    "kind": "text",
+   "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 2
+  },
+  {
+   "align": 2,
+   "hex": "4e75",
+   "kind": "text",
    "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk9on_loadedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "size": 2
   },
@@ -8710,6 +8731,13 @@
    "hex": "42804e75",
    "kind": "text",
    "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk16teardown_refusalNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "42804e75",
+   "kind": "text",
+   "name": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "size": 4
   },
   {
@@ -10037,7 +10065,7 @@
   },
   {
    "align": 2,
-   "hex": "77db6299",
+   "hex": "8ee22920",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -10051,10 +10079,10 @@
   },
   {
    "align": 2,
-   "hex": "0000000000000008000000000000000600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "00000000000000080000000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata._RNvCs8l4SwZCbIH4_21dkrt_svc_machines_dks10DK_SVC_ROW",
-   "size": 104
+   "size": 112
   },
   {
    "align": 2,
@@ -11219,7 +11247,7 @@
    "size": 28
   }
  ],
- "source_sha256": "65411d7bf892929655a4c4e80937ea38d71d16b3944e53a7e17a1267c4dac6ea",
+ "source_sha256": "569a1c61e190b95ecbb35d8355d0025268a999ccf33f1d8c1473963091593c06",
  "symbols": [
   {
    "global": false,
@@ -12177,6 +12205,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk11table_checkNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12apply_recordNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12apply_recordNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "value": 0
@@ -12227,6 +12261,12 @@
    "global": false,
    "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk3capNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk3capNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk4diagNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNtNtCstpYEnbxcXX_17dkrt_svc_machines7records8MachinesECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "value": 0
   },
   {
@@ -14026,8 +14066,8 @@
  ],
  "toolchain": {
   "exports": "MF_TAB dk_machine_add_page dk_machines_guard_state dk_machines_owned_ids dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
-  "instructions_redecoded": "13147",
-  "isa_check": "3074d515b0e40da41c1e89bc04d136eff35d0deaf4b8e1a2b0764a758b6e4913",
+  "instructions_redecoded": "13150",
+  "isa_check": "69d978b08c0254c17da176e1b7249283f847a8472799de9a9c71305ab0cc9a3a",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

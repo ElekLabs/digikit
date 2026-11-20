@@ -27,7 +27,7 @@ use dkrt_abi::regcheck::check_layout;
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
     check_step, commit_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RecordSink,
-    Service, SettleCtx,
+    Service, SettleCtx, TableFault,
 };
 use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
@@ -103,6 +103,27 @@ pub struct Module {
     pub dsp: Dsp,
 }
 
+/// The row tables a service keeps in statics of its own (`DKRT_*`, not in the loader's `DspState`): a view of their bytes for the snapshots, the reset to the start state
+/// that a fresh core has, and the bytes a release leaves other than at the start. A service without row tables has `Rows::NONE`.
+#[derive(Clone, Copy)]
+pub struct Rows {
+    /// The bytes of the service's row tables now.
+    pub bytes: fn() -> Vec<u8>,
+    /// Back to the start state (zero): a core starts with the tables as the static was linked.
+    pub reset: fn(),
+    /// `(byte offset in `bytes`, value)` pairs a release leaves other than at the start, on purpose. Each entry has a reason in the fixture.
+    pub kept: fn(&FakeCore, usize, u8) -> bool,
+}
+
+impl Rows {
+    /// A service with no row tables.
+    pub const NONE: Rows = Rows {
+        bytes: Vec::new,
+        reset: || {},
+        kept: |_, _, _| false,
+    };
+}
+
 /// What a service gives the suite: the profile, the kinds it owns (`[records.kinds]`), the image tables its core has, its modules and a view of its own state.
 pub struct Fixture {
     pub name: &'static str,
@@ -110,7 +131,7 @@ pub struct Fixture {
     pub device: u32,
     /// The record kinds of `[records.kinds]` of the service: (kind, whole record length).
     pub kinds: &'static [(u32, u32)],
-    /// The image's tables of the profile (`info_tables`, `fx_table`, `host`), set before the first module loads.
+    /// The image's tables of the profile (`info_tables`, `host`), set before the first module loads.
     pub image: fn(&mut FakeCore),
     /// What the service keeps that the firmware memory does not show (its tables of owners and ids), as words: its own query functions.
     pub state: fn(&FakeCore) -> Vec<u32>,
@@ -133,6 +154,8 @@ pub struct Fixture {
     pub kept: fn(&FakeCore, u32, u32) -> bool,
     /// The same for the DSP state: `(byte offset in DspState, value)` pairs a release leaves other than at the start, on purpose. Each entry has a reason in the fixture.
     pub kept_dsp: fn(&FakeCore, usize, u8) -> bool,
+    /// The service's row tables (`Rows`), snapshotted with the DSP state and compared the same way.
+    pub rows: Rows,
     /// (placeholder voice rows, numbers the service holds for absent modules) now, for a service with `parks_rows` (`None` otherwise). A placeholder row exists only for a held
     /// number, so every snapshot checks `rows <= held`; the cases that unload a module check that its rows are there.
     pub absent_rows: Option<fn(&FakeCore) -> (usize, usize)>,
@@ -185,6 +208,8 @@ pub struct Late {
 pub struct Snapshot {
     mem: BTreeMap<u32, u32>,
     dsp: Vec<u8>,
+    /// The bytes of the service's own row tables (`Fixture::rows`).
+    rows: Vec<u8>,
     /// The last word written to each (window, word) of the link, where it is not 0 (a word that was never written is 0 in the DSP as well).
     link: BTreeMap<(u32, u32), u32>,
     /// The live values the link queue holds (window, word, value, not yet taken) and the requests queued or in flight.
@@ -277,7 +302,12 @@ impl Snapshot {
 
     /// What `self` wrote and `other` does not hold any more: every word, link word and DSP state byte that is not 0 in `self` and has another value in `other`.
     /// `other` may have more (rows a module cleared hold the service's free values, rows that were never used hold 0). Each area lists its first 8.
-    pub fn lost_in(&self, other: &Snapshot, kept_dsp: &dyn Fn(usize, u8) -> bool) -> String {
+    pub fn lost_in(
+        &self,
+        other: &Snapshot,
+        kept_dsp: &dyn Fn(usize, u8) -> bool,
+        kept_rows: &dyn Fn(usize, u8) -> bool,
+    ) -> String {
         let mut out = String::new();
         let mut n = 0;
         for (k, v) in &self.mem {
@@ -301,6 +331,16 @@ impl Snapshot {
                 out.push_str(&std::format!(
                     "  dsp state byte {i}: {b:#x} -> {:#x}\n",
                     other.dsp[i]
+                ));
+                n += 1;
+            }
+        }
+        let mut n = 0;
+        for (i, b) in self.rows.iter().enumerate() {
+            if *b != 0 && other.rows[i] != *b && !kept_rows(i, other.rows[i]) && n < 8 {
+                out.push_str(&std::format!(
+                    "  row table byte {i}: {b:#x} -> {:#x}\n",
+                    other.rows[i]
                 ));
                 n += 1;
             }
@@ -331,6 +371,7 @@ impl Snapshot {
         end: &Snapshot,
         kept: &dyn Fn(u32, u32) -> bool,
         kept_dsp: &dyn Fn(usize, u8) -> bool,
+        kept_rows: &dyn Fn(usize, u8) -> bool,
     ) -> String {
         let mut out = String::new();
         let mut n = 0;
@@ -368,6 +409,18 @@ impl Snapshot {
                 n += 1;
             }
         }
+        let mut n = 0;
+        for i in 0..end.rows.len() {
+            if end.rows[i] != start.rows[i] && !kept_rows(i, end.rows[i]) && n < 8 {
+                out.push_str(&std::format!(
+                    "  row table byte {i}: start {:#x}, loaded {:#x}, after the unload {:#x}\n",
+                    start.rows[i],
+                    self.rows[i],
+                    end.rows[i]
+                ));
+                n += 1;
+            }
+        }
         if end.settings != start.settings {
             out.push_str("  settings after the unload differ from the start\n");
         }
@@ -380,7 +433,7 @@ impl Snapshot {
         if self.mem != other.mem {
             v.push("memory");
         }
-        if self.dsp != other.dsp {
+        if self.dsp != other.dsp || self.rows != other.rows {
             v.push("dsp");
         }
         if self.settings != other.settings {
@@ -454,6 +507,12 @@ impl Snapshot {
                 .unwrap_or(0);
             out.push_str(&std::format!("  dsp state differs from byte {at}\n"));
         }
+        if self.rows != other.rows {
+            let at = (0..self.rows.len())
+                .find(|i| self.rows[*i] != other.rows[*i])
+                .unwrap_or(0);
+            out.push_str(&std::format!("  row tables differ from byte {at}\n"));
+        }
         if self.settings != other.settings {
             out.push_str(&std::format!(
                 "  settings: {} -> {} entries\n",
@@ -493,6 +552,8 @@ pub struct Lifecycle<'f, S: Service<FakeCore>> {
     f: &'f Fixture,
     /// How many records of the last load were applied (and written) before the walk ended.
     applied: core::cell::Cell<u32>,
+    /// The module records that are loaded now (bit `rec`): what the core's record table says is used when it checks the services' tables.
+    used: core::cell::Cell<u32>,
     /// The step of the last load that refused the module (for the failure messages).
     at: core::cell::Cell<&'static str>,
     /// The last run of the registry check inside a load: the state before and after it, the core calls it made and its answer.
@@ -525,6 +586,8 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
 
     /// `new` with `extra` applied to the core after the fixture's image, before the service's first `remove` and settle.
     pub fn with_image(f: &'f Fixture, extra: impl FnOnce(&mut FakeCore)) -> Self {
+        // a core starts with the service's row tables as linked (zero), as it starts with a zero `DspState`
+        (f.rows.reset)();
         let mut core = FakeCore::new();
         core.device = f.device;
         (f.image)(&mut core);
@@ -533,6 +596,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             core,
             f,
             applied: core::cell::Cell::new(0),
+            used: core::cell::Cell::new(0),
             at: core::cell::Cell::new(""),
             check_run: core::cell::RefCell::new(None),
             _s: core::marker::PhantomData,
@@ -625,6 +689,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
                 .map(|(k, v)| (*k, *v))
                 .collect(),
             dsp,
+            rows: (self.f.rows.bytes)(),
             live,
             reqs,
             enable: self
@@ -638,6 +703,20 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             caps,
             state: (self.f.state)(core),
         }
+    }
+
+    /// The core's check of the services' tables (invariant 3, `Service::table_check`) with the records that are loaded now: the loader runs it at the end of every load
+    /// attempt and every unload, and so does the suite. A mismatch fails the case.
+    fn tables_agree(&self, after: &str) {
+        let mut fault = TableFault::default();
+        let r = unsafe { S::table_check(&self.core, self.used.get(), &mut fault) };
+        assert_eq!(
+            r,
+            0,
+            "{} ({}): the service's tables disagree with the loaded records after {after}: {fault:?}",
+            self.f.name,
+            profile(self.f)
+        );
     }
 
     /// `S::declare`: the kinds it names.
@@ -862,6 +941,14 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         core.boot_index.set(m.sel);
         let r = self.load_inner(rec, m);
         core.boot_index.set(u32::MAX);
+        if r.is_ok() {
+            self.used.set(self.used.get() | 1 << rec);
+        }
+        self.tables_agree(if r.is_ok() {
+            "a load"
+        } else {
+            "a refused load"
+        });
         r
     }
 
@@ -954,6 +1041,8 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             S::remove(core, rec as u8 + 1);
             S::dsp_release(core, rec);
         }
+        self.used.set(self.used.get() & !(1 << rec));
+        self.tables_agree("an unload");
     }
 
     /// At an idle point (the loader idle, the boot over, no load pending) a service that parks the rows of absent modules has one placeholder for each number it holds that no
@@ -1178,9 +1267,11 @@ fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
     // words, DSP state and ids are what is compared, and the capacity counts
     // (a service that parks the rows of an absent module keeps A's row, so B has the next one: B's words are in another row and are not compared)
     if !f.parks_rows {
-        let lost = after_b
-            .by_type()
-            .lost_in(&l.snapshot().by_type(), &|o, v| (f.kept_dsp)(&l.core, o, v));
+        let lost = after_b.by_type().lost_in(
+            &l.snapshot().by_type(),
+            &|o, v| (f.kept_dsp)(&l.core, o, v),
+            &|o, v| (f.rows.kept)(&l.core, o, v),
+        );
         assert!(
             lost.is_empty(),
             "{} ({}): A, unload A, B differs from B\n{lost}",
@@ -1220,7 +1311,11 @@ fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
         f.name
     );
     l.unload(0);
-    let lost = b_alone.lost_in(&l.snapshot(), &|o, v| (f.kept_dsp)(&l.core, o, v));
+    let lost = b_alone.lost_in(
+        &l.snapshot(),
+        &|o, v| (f.kept_dsp)(&l.core, o, v),
+        &|o, v| (f.rows.kept)(&l.core, o, v),
+    );
     assert!(
         lost.is_empty(),
         "{} ({}): A's unload changed what B holds\n{lost}",
@@ -1645,9 +1740,11 @@ fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f:
     (k.kit_reset)();
 }
 
-/// Whether the DSP state bytes of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` names.
+/// Whether the DSP state bytes and the row tables of `end` are those of `start`, but for the bytes the fixture's `kept_dsp` and `rows.kept` name.
 fn dsp_same(f: &Fixture, core: &FakeCore, start: &Snapshot, end: &Snapshot) -> bool {
     (0..start.dsp.len()).all(|i| start.dsp[i] == end.dsp[i] || (f.kept_dsp)(core, i, end.dsp[i]))
+        && (0..start.rows.len())
+            .all(|i| start.rows[i] == end.rows[i] || (f.rows.kept)(core, i, end.rows[i]))
 }
 
 /// Case 6: case 3 ten times: no table grows and no sticky value drifts.
@@ -1751,9 +1848,13 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
         end_a.live,
         end_a.reqs
     );
-    let left = loaded_a.survivors(&start, &end_a, &|a, v| (f.kept)(&l.core, a, v), &|o, v| {
-        (f.kept_dsp)(&l.core, o, v)
-    });
+    let left = loaded_a.survivors(
+        &start,
+        &end_a,
+        &|a, v| (f.kept)(&l.core, a, v),
+        &|o, v| (f.kept_dsp)(&l.core, o, v),
+        &|o, v| (f.rows.kept)(&l.core, o, v),
+    );
     assert!(
         left.is_empty(),
         "{} ({}): the unload of A left what A wrote\n{left}",
@@ -1795,9 +1896,13 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     assert!(wrong.is_empty(), "{} ({}): {wrong:?}", f.name, profile(f));
     l.unload(0);
     let end_a2 = l.snapshot();
-    let left = loaded_a2.survivors(&start, &end_a2, &|a, v| (f.kept)(&l.core, a, v), &|o, v| {
-        (f.kept_dsp)(&l.core, o, v)
-    });
+    let left = loaded_a2.survivors(
+        &start,
+        &end_a2,
+        &|a, v| (f.kept)(&l.core, a, v),
+        &|o, v| (f.kept_dsp)(&l.core, o, v),
+        &|o, v| (f.rows.kept)(&l.core, o, v),
+    );
     assert!(
         left.is_empty(),
         "{} ({}): the unload of a2 left what a2 wrote\n{left}",

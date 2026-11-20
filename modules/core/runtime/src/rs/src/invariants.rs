@@ -9,7 +9,8 @@
 //! 2. the ColdFire ranges of used records are pairwise disjoint, and so are their DSP ranges;
 //! 3. every owned voice row belongs to a used record whose `mod_rows` has the row's bit, and every bit of a used record's `mod_rows`
 //!    is a row it owns; an unused record has no DSP range, no rows and no registry rows, and every registry row has a used owner;
-//!    The effect rows follow the same rule (`mod_fx`, a bit for each row of the chain a record owns).
+//!    the tables of the services agree with the record table (`Service::table_check`: the effect rows follow the same rule, a bit of `mod_fx` for each row of the
+//!    chain a record owns).
 //! 4. no two used records have the same name.
 use crate::{cstr_eq, dlog, dsp, st, ARENA_BYTES, DKRT_ARENA, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut};
@@ -103,25 +104,18 @@ pub unsafe fn check() -> u32 {
         }
         i += 1;
     }
-    // the effect rows the same way: an owned row belongs to a used record whose `mod_fx` has its bit, and every bit is an owned row
-    k = 0;
-    while k < dsp::MAX_FX {
-        let o = d.fx_owner[k];
-        if o != 0 && (o as usize > MAX_MODULES || s.modules[o as usize - 1].used == 0 || d.mod_fx[o as usize - 1] & (1 << k) == 0) {
-            return fail(3, if o != 0 && (o as usize) <= MAX_MODULES { o as usize - 1 } else { 0 }, 0x400 | k as u32, o as u32);
-        }
-        k += 1;
-    }
+    // the tables of the services (effect rows, ...) against the used records
+    let mut used = 0u32;
     i = 0;
     while i < MAX_MODULES {
-        k = 0;
-        while k < 32 {
-            if d.mod_fx[i] & (1 << k) != 0 && (k >= dsp::MAX_FX || s.modules[i].used == 0 || d.fx_owner[k] != i as u8 + 1) {
-                return fail(3, i, 0x400 | k as u32, if k < dsp::MAX_FX { d.fx_owner[k] as u32 } else { 0xff });
-            }
-            k += 1;
+        if s.modules[i].used != 0 {
+            used |= 1 << i;
         }
         i += 1;
+    }
+    let mut fault = dkrt_abi::service::TableFault::default();
+    if crate::handlers::services().table_check(used, &mut fault) != 0 {
+        return fail(3, fault.module as usize, fault.a, fault.b);
     }
     // 4. names are unique
     i = 0;
@@ -161,6 +155,32 @@ mod tests {
             assert_eq!(check(), 3);
             *addr_of_mut!(DKRT_TABLE_BAD) = 0; // a failed check latches the flag for every later test
             d.row_owner[1] = 0;
+        }
+    }
+
+    /// The core runs the table checks of the loaded services with the mask of the used records (`Service::table_check`): an effect row of a record that is not used, and a
+    /// `mod_fx` bit of such a record, are invariant 3 with the numbers the fx service reports; with no service file loaded the effect rows are not the core's to check.
+    #[test]
+    fn the_core_runs_the_table_checks_of_the_services_and_logs_what_they_report() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let reset = || unsafe {
+            *st() = core::mem::zeroed();
+            *dsp::ds() = core::mem::zeroed();
+            crate::handlers::fx_fixture::reset_rows();
+            *addr_of_mut!(DKRT_TABLE_BAD) = 0; // a failed check latches the flag for every later test
+        };
+        unsafe {
+            reset();
+            crate::handlers::fx_fixture::frows().fx_owner[1] = 3; // a record that is not used
+            assert_eq!(check(), 0, "without the fx service file nothing checks the effect rows");
+            let _fx = crate::handlers::fx_fixture::LoadedFx::new();
+            assert_eq!(check(), 3);
+            assert!(bad());
+            reset();
+            crate::handlers::fx_fixture::frows().mod_fx[2] = 1; // a row bit of a record that is not used
+            assert_eq!(check(), 3);
+            reset();
+            assert_eq!(check(), 0);
         }
     }
 }

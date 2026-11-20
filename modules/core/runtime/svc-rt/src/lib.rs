@@ -182,9 +182,6 @@ impl CoreApi for ImportCore {
     unsafe fn dsp_info(&self) -> *const u32 {
         dkc_dsp_info()
     }
-    unsafe fn fx_info(&self) -> *const u32 {
-        dkc_fx_info()
-    }
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         dkc_info(name_hash)
     }

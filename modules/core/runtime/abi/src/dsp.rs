@@ -214,6 +214,8 @@ pub struct Job {
     pub fxs: *const u8,
     pub nfx: u32,
     pub bank: *const u8,
+    /// Bytes of the state blocks of the entries the services own, behind the image and bss (each block rounded to 8): the services add them in `dsp_check_sections`.
+    pub state_bytes: u32,
     pub import_vals: [u32; MAX_IMPORTS as usize],
 }
 
@@ -234,6 +236,7 @@ impl Job {
             fxs: core::ptr::null(),
             nfx: 0,
             bank: core::ptr::null(),
+            state_bytes: 0,
             import_vals: [0; MAX_IMPORTS as usize],
         }
     }

@@ -17,12 +17,8 @@ extern "C" {
 /// Words of the fault table.
 const D_FXLAST: usize = 24;
 const D_STEP: usize = 25;
-const D_FXFAULT: usize = 28;
 const D_REC0: usize = 29;
 const D_REC1: usize = 30;
-const D_FXDIS: usize = 31;
-/// The effect table's row size in bytes.
-const FX_ROW_BYTES: u32 = 96;
 /// Words that count up while the DSP runs and so say nothing when they move: the two beats and the dispatch and return counts. The poll logs the diagnostics
 /// again only when another word changes.
 const DIAG_COUNTERS: [usize; 8] = [1, 2, 15, 16, 26, 27, D_REC0, D_REC1];
@@ -69,9 +65,6 @@ struct Watch {
     nseen: usize,
     /// The breadcrumb (word 14) of the reply that showed the stop.
     stop_crumb: u32,
-    /// Effect faults and the switched-off row already logged (words 28 and 31).
-    fx_faults_seen: u32,
-    fx_disabled_seen: u32,
     /// The hang record: passes left before it is written (0: none pending), and what the replies seen after the stop showed: the module step, the effect `last`
     /// and the voice breadcrumb with a call pending (stage 4). The record of a stopped DSP alternate; the step is in only one of them.
     hang_wait: u32,
@@ -101,8 +94,6 @@ static mut W: Watch = Watch {
     seen: [[0; DIAG_WORDS]; 4],
     nseen: 0,
     stop_crumb: 0,
-    fx_faults_seen: 0,
-    fx_disabled_seen: 0,
     hang_wait: 0,
     m_step: 0,
     m_fx: 0,
@@ -259,7 +250,7 @@ unsafe fn poll_diag(w: &mut Watch, now: u32) {
     w.last = buf;
     if n >= DIAG_WORDS {
         log_guard(w, &buf);
-        log_fx(w, &buf);
+        services().diag(&buf);
     }
     // the words, raw: the first time, when a word other than a counter changed, and every ten seconds
     if !w.logged || differs(&buf, &w.logged_words, n) || due(now, w.next_log) {
@@ -400,7 +391,7 @@ unsafe fn write_hang(w: &mut Watch) {
     let (site, stage, id, last, module) = if w.m_fx != 0 {
         let site = (w.m_fx >> 8) & 0xff;
         let off = w.m_fx >> 16;
-        (site, w.m_fx & 0xff, off, w.m_fx, services().attribute(SITE_FX_MASTER, off / FX_ROW_BYTES))
+        (site, w.m_fx & 0xff, off, w.m_fx, services().attribute(site, off))
     } else if w.m_voice != 0 {
         let ty = w.m_voice >> 16;
         (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, services().attribute(SITE_VOICE, ty))
@@ -410,30 +401,6 @@ unsafe fn write_hang(w: &mut Watch) {
     ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
     crate::settings::flush_if_dirty();
     crate::fault::write_hang(&Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
-}
-
-/// The effect guard's words (28 and 31): a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row.
-unsafe fn log_fx(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
-    let faults = buf[D_FXFAULT] & 0xffff;
-    if faults != w.fx_faults_seen {
-        w.fx_faults_seen = faults;
-        let off = (buf[D_FXFAULT] >> 16).wrapping_sub(1);
-        fx_event(logk::FX_FAULT, off / FX_ROW_BYTES, faults);
-    }
-    if buf[D_FXDIS] != w.fx_disabled_seen {
-        w.fx_disabled_seen = buf[D_FXDIS];
-        if buf[D_FXDIS] != 0 {
-            fx_event(logk::FX_DISABLED, (buf[D_FXDIS] - 1) / FX_ROW_BYTES, faults);
-        }
-    }
-}
-
-unsafe fn fx_event(kind: u16, row: u32, faults: u32) {
-    let src = match services().attribute(dkrt_sdk::fault::SITE_FX_MASTER, row) {
-        Some(m) => (m as u16 + 1) << logk::SOURCE_SHIFT,
-        None => 0,
-    };
-    ev(kind, logk::F_ERROR | src, [row, faults, 0, 0, 0]);
 }
 
 /// The loaded modules, one event each (`logk::MOD_LIST`, an error event when the DSP stopped): index, whether it has a tick, 12 bytes of name.

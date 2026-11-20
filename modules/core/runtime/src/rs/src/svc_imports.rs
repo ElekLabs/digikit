@@ -124,10 +124,6 @@ pub mod shims {
         REAL_CORE.dsp_info()
     }
     #[cfg_attr(test, no_mangle)]
-    pub unsafe extern "C" fn dkc_fx_info() -> *const u32 {
-        REAL_CORE.fx_info()
-    }
-    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_info(name_hash: u32) -> *const u32 {
         REAL_CORE.info(name_hash)
     }
