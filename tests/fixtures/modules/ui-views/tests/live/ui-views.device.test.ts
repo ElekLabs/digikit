@@ -6,7 +6,7 @@ import { parse } from 'smol-toml';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { REDRAW } from '@digi/regression/runtime/fx-live.ts';
-import { installModule, installWithDebug, moduleArtifact, moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 
@@ -128,7 +128,7 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   // the events core/ui logs when a module view is pushed and when it leaves the stack, and for the naming screen: what the test waits on (the firmware's view stack is read only to compare identities)
   // the log commands exist while digikit/debug is loaded: install it first (it is part of the stock rows measured below)
   await installWithDebug(rt);
-  const events = await rt.listen();
+  let events = await rt.listen();
   const opened = (flags: number) => events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === flags, { withinMs: 10_000 });
   const viewClosed = () => events.until('VIEW_CLOSED', undefined, { withinMs: 10_000 });
   const inputOpened = () => events.until('TEXT_INPUT_OPENED', undefined, { withinMs: 10_000 });
@@ -147,7 +147,9 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   const rowsBefore = await stockRows();
   const mainStack = await fw.vptrs();
 
-  await installModule(dk, 'test/ui-views', moduleArtifact(device, 'test/ui-views'), { device, session });
+  // the fixture goes in with the debug module: a selection without it would take the log commands away at the restart
+  await installWithDebug(rt, 'test/ui-views');
+  events = await rt.listen();
   expect(RANGES.ui_views_test, 'reserved command range of the fixture').toEqual([0x1b, 0x1b]);
   const first = await report(rt);
   expect([first.row1, first.row2], 'dk_ui_settings_row in init: both rows added').toEqual([0, 0]);
