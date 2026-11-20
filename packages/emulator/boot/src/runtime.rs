@@ -2355,6 +2355,7 @@ impl Emulator {
                     self.midi.usb.tx_fn,
                     self.midi.usb.ret_pc,
                     self.midi.usb.bulk_queue_fn,
+                    self.midi.usb.ctrl_send,
                 ]
                 .into_iter()
                 .chain(self.midi.usb.trace_pcs.iter().copied())
@@ -3539,6 +3540,77 @@ impl Emulator {
         Ok(self.midi.usb.queue.len())
     }
 
+    /// `usb.ctrl`: one control request on EP0. The 8 setup bytes go to `setup_addr`, then the guest function `call` (the setup handler, no arguments)
+    /// runs at interrupt level; the emulator runs until it has returned (at most 200 M instructions). Each entry to `send` (the guest's EP0 send
+    /// function: length at (4,SP), pointer at (8,SP)) is recorded with `min(length, 0x1000)` bytes, and the function runs on. Returns the entries in
+    /// order and whether a 32-bit write set a stall bit of ENDPTCTRL0 meanwhile. The capture of `send` is armed only during the call; on an error
+    /// the queued call is dropped.
+    pub fn usb_ctrl(
+        &mut self,
+        setup: [u8; 8],
+        setup_addr: u32,
+        call: u32,
+        send: u32,
+    ) -> Result<(Vec<(u32, Vec<u8>)>, bool), String> {
+        use crate::midi::UsbItem;
+        self.enable_usb()?;
+        if self.midi.usb.sys_error.is_some() {
+            return Err("the USB controller is wedged (system error)".into());
+        }
+        let result = self.usb_ctrl_run(setup, setup_addr, call, send);
+        self.midi.usb.ctrl_send = 0;
+        self.rebuild_watch();
+        if result.is_err() {
+            // `active` stays: a call already running in the guest cannot be cut off safely
+            self.midi
+                .usb
+                .queue
+                .retain(|i| !matches!(i, UsbItem::Call(pc, _) if *pc == call));
+            self.midi.usb.ctrl_sent.clear();
+        }
+        result
+    }
+
+    fn usb_ctrl_run(
+        &mut self,
+        setup: [u8; 8],
+        setup_addr: u32,
+        call: u32,
+        send: u32,
+    ) -> Result<(Vec<(u32, Vec<u8>)>, bool), String> {
+        use crate::midi::UsbItem;
+        self.midi.usb.ctrl_send = send;
+        self.midi.usb.ctrl_sent.clear();
+        self.rebuild_watch();
+        self.bus.board.usb_ep0_setup();
+        self.poke_bytes(setup_addr, &setup)?;
+        // a bus event: ahead of the queued input, as the `connect` call of `usb.bulk.in`
+        self.midi.usb.queue.push_front(UsbItem::Call(call, vec![]));
+        self.midi.usb.next_ic = self.cpu.icount;
+        let mut left: u64 = 200_000_000;
+        loop {
+            let snapshot = self.step_chunk(100_000);
+            if let Some(error) = snapshot.status.error {
+                return Err(error);
+            }
+            let queued = self
+                .midi
+                .usb
+                .queue
+                .iter()
+                .any(|i| matches!(i, UsbItem::Call(pc, _) if *pc == call));
+            if !queued && self.midi.usb.active.is_none() {
+                break;
+            }
+            left = left.saturating_sub(100_000);
+            if left == 0 {
+                return Err("usb.ctrl: the setup handler did not return".into());
+            }
+        }
+        let stalled = self.bus.board.usb_ep0_stall_take();
+        Ok((std::mem::take(&mut self.midi.usb.ctrl_sent), stalled))
+    }
+
     /// Start the capture of EP2 IN without queueing input.
     pub fn usb_bulk_watch(&mut self) -> Result<(), String> {
         self.usb_bulk_in(&[], None, None, None).map(|_| ())
@@ -3992,6 +4064,16 @@ impl Emulator {
                 self.cpu.d[0],
                 self.cpu.a[0]
             );
+        }
+        if pc != 0 && pc == self.midi.usb.ctrl_send {
+            // the guest answers a control request: (len, ptr) at (4,SP) and (8,SP); the function returns at once above 0x1000
+            let sp = self.cpu.a[7];
+            let len = self.bus.board.read32(sp.wrapping_add(4)).unwrap_or(0);
+            let ptr = self.bus.board.read32(sp.wrapping_add(8)).unwrap_or(0);
+            let bytes = self
+                .peek_bytes(ptr, len.min(0x1000) as usize)
+                .unwrap_or_default();
+            self.midi.usb.ctrl_sent.push((len, bytes));
         }
         if pc == self.midi.usb.tx_fn {
             let sp = self.cpu.a[7];

@@ -3054,6 +3054,17 @@ mark = "D"
 rule = "fw/usb:cf_ptr"
 
 [[anchor]]
+name = "cf.usb.data.setup"
+cpu = "cf"
+kind = "value"
+addr = 0x4664bf10
+src = 0x40005ffe
+len = 4
+sha256 = "3a8c38f5a20dcc1ba0cdca2c559f06552ab234d3b6b2fee047cc5f02e10856bf"
+mark = "D"
+rule = "fw/usb:cf_literal"
+
+[[anchor]]
 name = "cf.usb.fn.cancel_ep"
 cpu = "cf"
 kind = "code"
@@ -3084,6 +3095,16 @@ mark = "D"
 rule = "fw/usb:cf_func"
 
 [[anchor]]
+name = "cf.usb.fn.ep0_send"
+cpu = "cf"
+kind = "code"
+addr = 0x40005f30
+len = 6
+sha256 = "2e00bf3f6a0d392db77c03fb33873740b6c1471cf16c6783c040fe7f3d4d41f4"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
 name = "cf.usb.fn.queue_td"
 cpu = "cf"
 kind = "code"
@@ -3100,6 +3121,16 @@ kind = "code"
 addr = 0x40006bc6
 len = 4
 sha256 = "d2a3274f519e077bdc41368f9ef7bd475522b70d39f2bc33ec6fc367ca5519b4"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
+name = "cf.usb.fn.setup_dispatch"
+cpu = "cf"
+kind = "code"
+addr = 0x40005ff6
+len = 6
+sha256 = "36a69b6e8ffa2ca7d34acafa606289b82ad5e52feedb03a006f59f1812459b3d"
 mark = "D"
 rule = "fw/usb:cf_func"
 
@@ -4622,6 +4653,12 @@ name = "cf.usb.hook.init"
 site = "cf.usb.site.init"
 mode = "before"
 clobbers = ["ccr"]
+
+[[hook]]
+name = "cf.usb.hook.setup_dispatch"
+site = "cf.usb.fn.setup_dispatch"
+mode = "before"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
 name = "cf.view.hook.ui_loop"

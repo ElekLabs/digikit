@@ -8,3 +8,13 @@
     .globl ua_init_hook
 ua_init_hook:
     dk_fw_usb_init_hook ua_prepare, ua_init_next
+
+/* ua_setup_hook is the hook at the entry of the firmware's EP0 setup dispatcher (a `hook` op; no arguments, d0/d1/a0/a1 dead). The USB interrupt calls the dispatcher with
+ * `jsr`: if ua_setup_handle answered, `rts` returns to the interrupt as the dispatcher would; otherwise setup_next runs the displaced first instruction and the stock dispatcher. */
+    .globl ua_setup_hook
+ua_setup_hook:
+    jsr     ua_setup_handle
+    tst.l   %d0
+    beq.s   1f
+    rts
+1:  jmp     setup_next

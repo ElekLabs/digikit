@@ -17367,6 +17367,50 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x40005ff6"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40005ff6"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40005ff6"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Entry of the EP0 setup dispatcher; the stub answers a request or continues in the displaced `movea.w`.",
+      "file": "devices/fw/usb.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.usb.hook.setup_dispatch",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.usb.fn.setup_dispatch",
+      "subsystem": "usb",
+      "users": [
+        "core/usb-bulk-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x40006c52",
             "len": 6
           }
@@ -17468,7 +17512,8 @@
       },
       "subsystem": "usb",
       "users": [
-        "core/usb-bulk"
+        "core/usb-bulk",
+        "core/usb-bulk-audio"
       ],
       "was": []
     },
@@ -24884,7 +24929,7 @@
       "name": "text"
     },
     {
-      "count": 12,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/usb.toml",
       "meaning": "the USB device engine: port table, connect and disconnect callbacks, endpoint queues, mode switch",

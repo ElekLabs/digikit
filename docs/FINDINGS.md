@@ -140,6 +140,7 @@ with one bounded support/session timing pair. Rust/runtime cache audits and merg
 | [`plans/native-emulator.md`](plans/native-emulator.md) | The native emulator plan (design history) |
 | [`plans/digikit-runtime.md`](plans/digikit-runtime.md) | The digikit runtime plan: modules loaded from the +Drive at run time |
 | [`plans/usb-fast-audio-bulk.md`](plans/usb-fast-audio-bulk.md) | Fast USB in USB AUDIO/MIDI with a bulk OUT endpoint, no mode switch |
+| [`plans/usb-winusb.md`](plans/usb-winusb.md) | WinUSB (MS OS 2.0) descriptors for the Fast USB bulk interface on Windows |
 | [`refs/`](refs/) | Notes on public references (MCF5441x, Linux and QEMU sources, DSPI2/eDMA) |
 | [`INSTRUMENTATION.md`](INSTRUMENTATION.md) | Where run output goes and the diagnostic and tuning switches |
 | [`ADDRMAP.md`](ADDRMAP.md) | The address map: names for code addresses (format, layers, lookup, consumers) |
