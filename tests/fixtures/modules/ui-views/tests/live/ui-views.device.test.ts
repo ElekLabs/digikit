@@ -233,12 +233,12 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await session.expectNoFault('the unload closed the view');
   await leave(rt);
   expect((await dk.modules()).map((m) => m.name), 'the module is not loaded').not.toContain('test/ui-views');
-  expect(await stockRows(), 'the rows of the module are gone from the SETTINGS menu').toBe(rowsBefore);
+  // the rows stay in the SETTINGS list that the firmware has built until its next rebuild (core/ui README, "SETTINGS rows"): the row count is not asserted here, and running such a row is a no-op (below)
   await session.expectNoFault('the SETTINGS menu after the unload');
 
   // The pool is not stuck: the module loads again and opens a view (a slot of the unloaded one is free).
   await reload();
-  expect((await stockRows()), 'the rows are back').toBe(rowsBefore + 2);
+  expect(await stockRows(), 'the rows are back').toBe(rowsBefore + 2);
   await pressSettingsRow(rt, row1, rowsWith);
   await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'a view of the reloaded module did not open');

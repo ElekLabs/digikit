@@ -190,3 +190,4 @@ Rebinding, the shortcut list and help page, clash reports to the user, a names s
 
 - A shortcuts page (DIGIKIT > SHORTCUTS or a module): list from the service's records, rebind, show clashes.
 - `dk_page_canvas_v1` users move to `dk_canvas`.
+- Rebuild the SETTINGS list on module unload (call the stock rebuild; needs a static check of the rebuild entry): today the rows of an unloaded module stay in the built list until the firmware's next rebuild, and running one does nothing.
