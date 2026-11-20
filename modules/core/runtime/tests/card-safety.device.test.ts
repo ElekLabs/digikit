@@ -53,13 +53,17 @@ cardRigs(
       async () => {
         const { session } = h.runtime;
         const check = async () => cardInfo(session, h.plan);
-        expect(await check(), 'the check finds the range blank; nothing refused, claimed or written').toMatchObject({
-          stateName: 'blank',
+        // The boot counts itself from the first boot: on a blank card it writes selection copy A (the write marks the area ours, no header claim). The
+        // stable-period clear may add one write to copy B (timing), so the writes below are a range.
+        const boot = await check();
+        expect(boot, 'the check found the range blank; the boot then marked it ours with its record, nothing refused or claimed').toMatchObject({
+          stateName: 'ours',
           firstNonblank: NONE,
           refused: 0,
           claims: 0,
-          writes: 0,
         });
+        expect(boot.writes, 'the boot wrote copy A (and perhaps the clear into B)').toBeGreaterThanOrEqual(1);
+        expect(boot.writes).toBeLessThanOrEqual(2);
         const bad: [number, number][] = [
           [first - 1, 512],
           [end, 512],
@@ -73,22 +77,23 @@ cardRigs(
         const results: number[] = [];
         for (const [sector, n] of bad) results.push(await probeWrite(session, h.plan, sector, n));
         expect(results, 'every write outside the range is E_RANGE, whatever its size').toEqual(bad.map(() => E_RANGE));
-        expect(await check(), 'the refusals are counted and nothing was written').toMatchObject({
+        const refusedAll = await check();
+        expect(refusedAll, 'the refusals are counted').toMatchObject({
           refused: bad.length,
           refusedRange: bad.length,
-          writes: 0,
-          stateName: 'blank',
+          stateName: 'ours',
         });
+        expect(refusedAll.writes - boot.writes, 'and they wrote nothing (at most the stable-period clear)').toBeLessThanOrEqual(1);
 
         expect(await setSelection(session, h.plan, [MOD])).toBe(0);
         const recs = await h.records();
         expect(recs[0], 'two record sectors are written, no store header').not.toBeNull();
         expect(recs[0]).toEqual(recs[1]);
-        expect(await check(), 'the area is ours from then on').toMatchObject({
-          stateName: 'ours',
-          claims: 0,
-          writes: 2,
-        });
+        // the selection write adds two writes (both copies) to the boot's one or two
+        const done = await check();
+        expect(done, 'the area is ours, no claim').toMatchObject({ stateName: 'ours', claims: 0 });
+        expect(done.writes - refusedAll.writes, 'both record copies were written').toBeGreaterThanOrEqual(2);
+        expect(done.writes - refusedAll.writes).toBeLessThanOrEqual(3);
 
         const events = await logEvents(h.runtime, h.plan);
         const checks = ofKind(events, LOG_KIND.CARD_CHECK);
@@ -122,8 +127,13 @@ cardRigs(
         expect(ci.stateName, 'the card counts as ours').toBe('ours');
         expect(await opStatuses(rt.dk, ['begin', 'delete', 'list'])).toEqual([E_NOSTORE, E_NOSTORE, E_NOSTORE]);
         await rt.dk.request(CMD.DATA, Buffer.alloc(14)); // DATA with no upload open: E_STATE, nothing staged
-        expect(await h.storeWrites(), 'nothing was written to the store range').toEqual([]);
-        expect((await cardInfo(rt.session, h.plan)).writes).toBe(0);
+        // the boot counts itself in the record (copy B, and the stable-period clear into A): those two sectors only, no header, no data
+        const { selA, selB } = cardStore(h.device);
+        expect(
+          (await h.storeWrites()).filter((s) => s !== selA && s !== selB),
+          'nothing was written to the store range besides the selection record',
+        ).toEqual([]);
+        expect((await cardInfo(rt.session, h.plan)).writes, 'the record writes only').toBeLessThanOrEqual(2);
       },
     );
 
@@ -135,8 +145,9 @@ cardRigs(
         await pokeKnob(rt.session, h.plan, 'DKRT_UPLOAD_CUT', 1);
         // three DATA chunks: the second write is refused
         expect(await statusOf(() => rt.dk.put('modules/c.dkm', blob(70_000, 9))), 'the cut upload failed').not.toBe(0);
-        expect(await cardInfo(rt.session, h.plan), 'the first data write claimed the range').toMatchObject({
-          claims: 1,
+        // The boot's record write already marked the area ours, so the first data write needs no claim of the empty header pair.
+        expect(await cardInfo(rt.session, h.plan), 'the area was ours before the first data write: no claim').toMatchObject({
+          claims: 0,
           stateName: 'ours',
         });
 
@@ -216,9 +227,15 @@ cardRigs('card safety: torn sectors', { dsp: 'zero', uploads: true, roots: RT, s
     async () => {
       const rt = await h.boot(await h.card({ foreign: { [headerB]: torn } }));
       await h.ready();
-      expect((await cardInfo(rt.session, h.plan)).stateName).toBe('blank');
+      // The check read the area blank (the torn header B counts as blank); the boot then wrote its record, so the area is ours. The torn header is
+      // still no store: the upload answers E_NOSTORE and no header or data sector is written (only the selection record the boot counts in).
+      expect((await cardInfo(rt.session, h.plan)).stateName).toBe('ours');
       expect(await statusOf(() => rt.dk.put('modules/b.dkm', blob(3_000, 31)))).toBe(E_NOSTORE);
-      expect(await h.storeWrites(), 'nothing written in the store range').toEqual([]);
+      const { selA, selB } = cardStore(h.device);
+      expect(
+        (await h.storeWrites()).filter((s) => s !== selA && s !== selB),
+        'nothing written in the store range besides the selection record',
+      ).toEqual([]);
       expect(await statusOf(() => rt.dk.clear()), 'CLEAR').toBe(0);
       expect(await statusOf(() => rt.dk.put('modules/b.dkm', blob(3_000, 31))), 'the next upload commits').toBe(0);
       expect((await rt.dk.list()).map((e) => e.path)).toContain('modules/b.dkm');

@@ -59,7 +59,9 @@ export function settingsCase(device: Device) {
     // the settings copies and the empty header pair of a claimed blank area
     storeExtra: [...settingsArea, first, first + limit],
   });
-  const written = () => kit.storeWrites();
+  // The boot counts itself in the selection record (a boot writes copy B, the stable-period clear writes A), so the selection sectors are no
+  // evidence about the settings store: these tests look at every other store sector.
+  const written = async () => (await kit.storeWrites()).filter((x) => x !== s.selA && x !== s.selB);
   const dump = async (card: string, ...flags: string[]) =>
     (await patchkit(['store', 'dump', card, ...overlayArgs(card), '--device', device, ...flags])).stdout;
   const dumpJson = async (card: string) => JSON.parse(await dump(card, '--json'));

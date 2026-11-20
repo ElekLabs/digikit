@@ -98,11 +98,14 @@ first UI-loop pass.** A boot that dies earlier (a hang in the UI task stops the 
 leaves the counter raised, so the next boots count it, and the third boot after two such boots is safe mode. A safe boot loads nothing, so
 nothing can be blamed: it clears the counter at its first UI-loop pass as before (`DkrtBootInfo::stable` reports the clearing in both cases).
 
-The counter counts from the first boot, with or without a selection. A fresh device has no record: the first counted boot creates one (copy A,
+**[O]** The counter counts from the first boot, with or without a selection (device proof pending). A fresh device has no record: the first counted boot creates one (copy A,
 `seq` 1, no modules selected) and raises its counter, so a device whose runtime hangs or crash-loops from the first boot on reaches safe mode on
-the third boot like any other. On a card the runtime may not write (a foreign area, state `CARD_RO`) and on a card too small for a store or a
-device without one, nothing is written and nothing counts: such a device never reaches safe mode by counter (the key, the DSP-stop record and the
-panic record still work). Cost: two record-sector writes per boot (the raise, the clear after the stable period) on a device with no selection too.
+the third boot like any other. On a card the runtime may not write (FOREIGN, UNREADABLE or TOO_SMALL, and a device without a store), and
+while the card state is still UNKNOWN and the card driver is not ready (branch `st/peer-pack`: the write is refused and that boot adds no count),
+nothing is written and nothing counts: such a device never reaches safe mode by counter (the key, the DSP-stop record and the
+panic record still work). Cost: two record-sector writes per boot (the raise, the clear after the stable period) on a device with no selection too. A blank card's
+first write is now the record, which marks the area ours, so the empty header pair is claimed by no boot (only by a write of data into a blank
+range that no record marks).
 
 ### The clock: the firmware's block counter **[D]**
 

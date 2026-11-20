@@ -19,7 +19,8 @@ for (const device of DEVICES) {
   describe(suiteName(device), () => {
     const { s, first, limit, kit, written, dumpJson } = settingsCase(device);
 
-    test('blank: the first settings write claims the blank area (the empty header pair) and then writes copy A', async () => {
+    // The boot of a blank card writes its selection record (copy A), which marks the area ours: the settings write needs no claim of the header pair.
+    test('blank: the boot marks the area ours with its record, so the first settings write needs no claim and writes copy A', async () => {
       const rt = await kit.load('blank', {});
       const { session } = rt;
       const ci = await cardInfo(session, kit.plan);
@@ -27,10 +28,10 @@ for (const device of DEVICES) {
       await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
       const w = await written();
       const ci2 = await cardInfo(session, kit.plan);
-      expect([ci.stateName, ci2.stateName, ci2.claims]).toEqual(['blank', 'ours', 1]);
-      expect(w, 'the empty header pair, then copy A').toEqual([first, first + limit, s.setA].sort((a, b) => a - b));
+      expect([ci.stateName, ci2.stateName, ci2.claims]).toEqual(['ours', 'ours', 0]);
+      expect(w, 'copy A only: no header pair was claimed').toEqual([s.setA]);
       const d = await dumpJson(await kit.after('blank', session.cardPath!));
-      expect(d.store.files, 'an empty store (header pair, no file)').toEqual([]);
+      expect(d.store.files, 'an empty store (no file)').toEqual([]);
       expect(d.settings.active).toBe('A');
       expect(d.settings.copies[0].entries[0].key, 'the key in copy A').toBe(ROUTE);
     });

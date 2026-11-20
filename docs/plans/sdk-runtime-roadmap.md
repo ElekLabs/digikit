@@ -126,4 +126,4 @@ Later, only when a feature needs it: the firmware tooling list in [profiling.md]
 - 2026-11-18: B1, RS-S, RS-C and T1i done in one shared gate (transfer-live fails on DT2 and DN2: installer bug already on main, tracked separately); T2 gate-time cuts, DSP-mode scheduling and pyramid moves done; `fx_entry` to `dkrt_export` deferred.
 - 2026-11-17: row E (extension model) added after H; its E5 does H stages S1 and S4.
 - 2026-11-18: row E: E0b-E4 built, E6 active (branch e6/lfo-shapes), E5 scoped smaller to machine reload, with E5b for the rest; E0a retry needs a daemon with a generated core (finding 148).
-- 2026-11-20: row SM-F added: automatic safe mode was unreachable on a fresh flash (no record, no counter); Em approved writing the record on the first counted boot.
+- 2026-11-20: row SM-F added: automatic safe mode was unreachable on a fresh flash (no record, no counter); the record is written on the first counted boot (device tests updated, device proof pending).
