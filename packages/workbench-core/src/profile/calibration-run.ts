@@ -1,7 +1,15 @@
 // One calibration run of the Profile pane: the rig of a session (MIDI, counters, clock, log events, modules), the shared runner
 // (calibration/runner.ts, the code `wb profile calibrate run` plays) and a Stop that ends the run at its next wait and lets the runner's teardown play.
 // No module state: the session, the MIDI sink and the modules are arguments, so a test gives fakes. Host tests: tests/calibration-run.test.ts.
-import { MidiOut, RuntimeEvents, wallClock, type Clock, type DkSession, type MidiSink } from '@digi/dk-session';
+import {
+  MidiOut,
+  RuntimeEvents,
+  trackSetup,
+  wallClock,
+  type Clock,
+  type DkSession,
+  type MidiSink,
+} from '@digi/dk-session';
 import { SPAN_PHASES } from '@digi/dk-session/gen_proto';
 import { registry } from '../data/device-profiles.ts';
 import { restartDevice } from '../modules/dktransfer.ts';
@@ -59,6 +67,9 @@ export interface RunOutcome {
   /** Why the run failed (the captures made before are in `captures`). */
   error?: string;
 }
+
+/** Clock ms a SETUP request may wait for the debug module's track watch to have its baseline (about 2 s of emulated time after a boot). */
+const SETUP_READY_MS = 30_000;
 
 class Stopped extends Error {
   constructor() {
@@ -174,11 +185,34 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         }
       : undefined;
 
+  // SETUP (the debug module): a track's machine or filter type through the firmware's own setter, awaited on its SETUP_DONE. A machine given as a module id is
+  // the first machine type the runtime reports for that module (the MODULES reply, read when the step plays: the types change with every load).
+  const setup: Rig['setup'] = events
+    ? async (what, track, type) => {
+        if (what === 'effect') throw new Error('SETUP sets machine and filter types, not effects');
+        const t = trackSetup(session, events, { ready: { clock, withinMs: SETUP_READY_MS } });
+        if (what === 'filter') {
+          if (typeof type !== 'number') throw new Error('a filter type is a number');
+          await t.setFilter(track - 1, type);
+          return;
+        }
+        let machine: number;
+        if (typeof type === 'number') machine = type;
+        else {
+          const m = (await session.modules()).find((x) => x.name === type);
+          if (!m || m.types.length === 0) throw new Error(`module ${type} is not loaded or has no machine type`);
+          machine = m.types[0]!;
+        }
+        await t.setMachine(track - 1, machine);
+      }
+    : undefined;
+
   const rig: Rig = {
     midi: new MidiOut(deps.sink),
     stats: sessionStatsSource(session, nameOf),
     clock,
     ...(events ? { events } : {}),
+    ...(setup ? { setup } : {}),
     ...(modules ? { modules } : {}),
     ...(drained ? { drained } : {}),
   };
@@ -191,13 +225,13 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   if (info.fw_id) run.firmware_sha256 = info.fw_id;
   if (info.image_id) run.image_id = info.image_id;
 
-  // The cases this rig cannot play, as the runner will decide (it has no panel, no SETUP and no screenshots; waits need what the rig has).
+  // The cases this rig cannot play, as the runner will decide (it has no panel and no screenshots, SETUP sets no effects and needs the debug log; waits need what the rig has).
   const cannot = (ops: Op[], mods: string[]): boolean =>
     mods.length > 0 && !modules
       ? true
       : ops.some(
           (o) =>
-            o.op === 'setup' ||
+            (o.op === 'setup' && (o.what === 'effect' || !events)) ||
             o.op === 'key' ||
             o.op === 'turn' ||
             o.op === 'shot' ||
@@ -210,7 +244,16 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       r ? resolveRef(r, deps.files.steps, ctx('plan')) : [],
     );
     const skipping = profile.cases
-      .filter((c) => cannot([...around, ...resolveRef(c.steps, deps.files.steps, ctx(c.id))], c.modules))
+      .filter((c) =>
+        cannot(
+          [
+            ...around,
+            ...resolveRef(c.steps, deps.files.steps, ctx(c.id)),
+            ...(c.teardown ? resolveRef(c.teardown, deps.files.steps, ctx(c.id)) : []),
+          ],
+          c.modules,
+        ),
+      )
       .map((c) => c.id);
     opts.onEvent?.({ kind: 'plan', skipping });
   } catch {

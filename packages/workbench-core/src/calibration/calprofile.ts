@@ -11,6 +11,8 @@ export interface CalCase {
   steps: StepRef;
   /** The module ids loaded for the case, and nothing else (default: none). A subset of the profile's `modules`. */
   modules: string[];
+  /** Played after the profile's `teardown`, also after a failure (a discovered module case gets the profile's `module_teardown`). */
+  teardown?: StepRef;
 }
 
 export interface CalProfile {
@@ -24,6 +26,8 @@ export interface CalProfile {
   modules: string[];
   setup?: StepRef;
   teardown?: StepRef;
+  /** The teardown of every discovered module case, after `teardown`: puts back what the module's `setup` changed (the stock machine on the track). */
+  module_teardown?: StepRef;
   /** `modules`: the module cases come from the calibration files the modules ship (`dk.calcase/1`), added with `addModuleCases`. */
   discover?: 'modules';
   cases: CalCase[];
@@ -93,6 +97,7 @@ export function parseCalProfile(text: string, file: string): CalProfile {
     'discover',
     'setup',
     'teardown',
+    'module_teardown',
     'case',
   ];
   for (const k of Object.keys(doc)) if (!known.includes(k)) throw new Error(`${file}: unknown key ${k}`);
@@ -145,6 +150,10 @@ export function parseCalProfile(text: string, file: string): CalProfile {
     if (!isTable(doc.teardown)) throw new Error(`${file}: teardown must be a table`);
     out.teardown = ref(file, 'teardown', doc.teardown);
   }
+  if (doc.module_teardown !== undefined) {
+    if (!isTable(doc.module_teardown)) throw new Error(`${file}: module_teardown must be a table`);
+    out.module_teardown = ref(file, 'module_teardown', doc.module_teardown);
+  }
   return out;
 }
 
@@ -177,7 +186,12 @@ export function addModuleCases(profile: CalProfile, found: readonly CalCaseFile[
     if (cases.some((c) => c.id === f.id))
       throw new Error(`calibration case ${f.id} of module ${f.module} repeats a case id`);
     if (!modules.includes(f.module)) modules.push(f.module);
-    cases.push({ id: f.id, steps: f.steps, modules: [f.module] });
+    cases.push({
+      id: f.id,
+      steps: f.steps,
+      modules: [f.module],
+      ...(profile.module_teardown ? { teardown: profile.module_teardown } : {}),
+    });
   }
   return { ...profile, cases, modules };
 }

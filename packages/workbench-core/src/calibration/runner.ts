@@ -31,7 +31,10 @@ export interface Rig {
     tap(key: string | number, holdMs?: number): Promise<void>;
     turn(encoder: string | number, by: number): Promise<void>;
   };
-  /** Machine or filter type through the firmware's setters (the SETUP command of the debug module). */
+  /**
+   * Machine or filter type through the firmware's setters (the SETUP command of the debug module). `track` is 1 to 16; a machine `type` is a number or the id of
+   * the loaded module whose machine it is. Resolves when the firmware has performed the change.
+   */
   setup?: (what: 'machine' | 'filter' | 'effect', track: number, type: number | string) => Promise<void>;
   shot?: (name: string) => Promise<void>;
   /** Returns when the target has taken all queued input. */
@@ -107,8 +110,10 @@ async function withHangGuard<T>(p: Promise<T>, ms: number, what: string): Promis
 /** What a case needs that the rig does not have, or undefined. */
 function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
   for (const o of ops) {
+    if (isSetup(o) && o.what === 'effect')
+      return 'it puts an effect in the chain, which the SETUP command of the debug module cannot do (it sets machine and filter types)';
     if (isSetup(o) && !rig.setup)
-      return 'it sets a machine or filter type, which needs the SETUP command of the debug module (not built yet)';
+      return 'it sets a machine or filter type, which needs the SETUP command of the debug module (the target has no runtime log with it)';
     if ((o.op === 'key' || o.op === 'turn') && !rig.panel)
       return 'it presses keys, and the target has no panel input here';
     if (o.op === 'shot' && !rig.shot) return 'it takes a screenshot, and the target has no screenshot here';
@@ -209,7 +214,11 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   // resolve everything first: a wrong name or a track without a channel fails before anything is played
   const setup = profile.setup ? resolveRef(profile.setup, i.steps, ctx('setup')) : [];
   const teardown = profile.teardown ? resolveRef(profile.teardown, i.steps, ctx('teardown')) : [];
-  const resolved = profile.cases.map((c) => ({ c, ops: resolveRef(c.steps, i.steps, ctx(`case ${c.id}`)) }));
+  const resolved = profile.cases.map((c) => ({
+    c,
+    ops: resolveRef(c.steps, i.steps, ctx(`case ${c.id}`)),
+    after: c.teardown ? resolveRef(c.teardown, i.steps, ctx(`case ${c.id} teardown`)) : [],
+  }));
   for (const { c, ops } of resolved) splitCapture(ops, `case ${c.id}`);
   if (!i.run.firmware_sha256 && !i.allowUnidentifiedFirmware)
     throw new Error(
@@ -230,10 +239,11 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   await rig.stats.stop();
 
   // decide what runs before the target is touched: a skipped case installs and loads nothing
-  const plan = resolved.map(({ c, ops }) => ({
+  const plan = resolved.map(({ c, ops, after }) => ({
     c,
     ops,
-    reason: missing([...setup, ...ops, ...teardown], rig, c.modules),
+    after,
+    reason: missing([...setup, ...ops, ...teardown, ...after], rig, c.modules),
   }));
   const needed = [...new Set(plan.filter((x) => !x.reason).flatMap((x) => x.c.modules))];
   const results: CaseResult[] = [];
@@ -243,7 +253,7 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
       hashes = await rig.modules!.install(needed);
       for (const id of needed) if (!hashes[id]) throw new Error(`module ${id}: no file to install (build it first)`);
     }
-    for (const { c, ops, reason } of plan) {
+    for (const { c, ops, after, reason } of plan) {
       if (reason) {
         log(`case ${c.id}: skipped, ${reason}`);
         const r = { id: c.id, captures: [], skipped: reason };
@@ -251,7 +261,7 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
         await i.onCase?.(r);
         continue;
       }
-      const r = await runCase(i, c, setup, ops, teardown, hashes, caps.dsp, log);
+      const r = await runCase(i, c, setup, ops, [...teardown, ...after], hashes, caps.dsp, log);
       results.push(r);
       await i.onCase?.(r);
     }

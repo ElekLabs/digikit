@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { MidiOut, type Clock } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
-import { parseCalProfile } from '../src/calibration/calprofile';
+import { addModuleCases, parseCalCase, parseCalProfile } from '../src/calibration/calprofile';
 import { runCalibration, splitCapture, type Rig, type RunInput } from '../src/calibration/runner';
 import { parseStepFile, type StepLibrary } from '../src/calibration/steps';
 import type { DspStats, StatsSource } from '../src/calibration/stats';
@@ -24,6 +24,11 @@ const lib: StepLibrary = {
     `schema = "dk.steps/1"\nname = "mach"\n[[step]]\naction = "setup"\ntrack = 1\nmachine = "a/b"\n`,
     'mach',
   ),
+  reset: parseStepFile(
+    `schema = "dk.steps/1"\nname = "reset"\n[[step]]\naction = "setup"\ntrack = 1\nmachine = 0\n`,
+    'reset',
+  ),
+  fx: parseStepFile(`schema = "dk.steps/1"\nname = "fx"\n[[step]]\naction = "setup"\neffect = "a/fx"\n`, 'fx'),
   win: parseStepFile(
     `schema = "dk.steps/1"\nname = "win"\n[[step]]\naction = "capture"\nmark = "start"\n[[step]]\naction = "midi.cc"\ntrack = 1\nparam = "amp_release"\nvalue = 9\n[[step]]\naction = "wait"\nms = 700\n[[step]]\naction = "capture"\nmark = "stop"\n`,
     'win',
@@ -392,4 +397,70 @@ test('a profile with module cases is refused when the target has no DSP stats, b
   g.rig.stats = { ...g.rig.stats, capabilities: async () => ({ dsp: false, spans: true }) };
   const [c] = await run(g.rig, base.replace('repeats = 2', 'repeats = 1') + `[[case]]\nid = "stock"\nsteps = "hold"\n`);
   assert.equal(c!.captures.length, 1);
+});
+
+const withModuleCase = (steps: string) =>
+  addModuleCases(
+    parseCalProfile(
+      base +
+        `discover = "modules"\nteardown = { steps = "off" }\nmodule_teardown = { steps = "reset" }\n[[case]]\nid = "stock"\nsteps = "hold"\n`,
+      'p',
+    ),
+    [parseCalCase(`schema = "dk.calcase/1"\nid = "m"\nmodule = "a/b"\nsteps = "${steps}"\n`, 'm')],
+  );
+
+test('a module case sets its machine through the rig, and its teardown (after the profile teardown) puts the stock machine back, also after a failure', async () => {
+  const f = fake();
+  const calls: unknown[][] = [];
+  f.rig.setup = async (...a) => void (calls.push(a), f.log.push(`setup ${a.join(' ')}`));
+  await runCalibration({
+    profile: withModuleCase('mach'),
+    steps: lib,
+    rig: f.rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+  assert.deepEqual(calls, [
+    ['machine', 1, 'a/b'],
+    ['machine', 1, 0],
+  ]);
+  const at = (l: string) => f.log.lastIndexOf(l);
+  assert.ok(at('midi 128,60,0') < at('setup machine 1 0'), 'the note is released, then the stock machine comes back');
+  // a capture that fails: the teardown still plays
+  const g = fake();
+  const read = g.rig.stats.read;
+  g.rig.stats.read = async () => {
+    if (g.log.includes('select a/b')) throw new Error('the link broke');
+    return read();
+  };
+  g.rig.setup = async (...a) => void g.log.push(`setup ${a.join(' ')}`);
+  await assert.rejects(
+    runCalibration({
+      profile: withModuleCase('mach'),
+      steps: lib,
+      rig: g.rig,
+      midi,
+      run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+      dspUnit: 'insn',
+    }),
+    /the link broke/,
+  );
+  assert.equal(g.log.at(-1), 'setup machine 1 0');
+});
+
+test('SETUP sets no effects: a case that needs one is skipped with that reason even when the rig has a setter', async () => {
+  const f = fake();
+  f.rig.setup = async () => {};
+  const [stock, fx] = await runCalibration({
+    profile: withModuleCase('fx'),
+    steps: lib,
+    rig: f.rig,
+    midi,
+    run: { id: 'r', target: 'tgt', firmware_sha256: 'ff' },
+    dspUnit: 'insn',
+  });
+  assert.equal(stock!.skipped, undefined);
+  assert.match(fx!.skipped!, /effect/);
+  assert.ok(!f.log.includes('select a/b'), 'nothing was loaded for it');
 });

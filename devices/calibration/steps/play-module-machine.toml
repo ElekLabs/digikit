@@ -1,6 +1,6 @@
 schema = "dk.steps/1"
 name = "play-module-machine"
-description = "Set a track to a run-time machine of a loaded module and hold a note. The machine setter is the SETUP command of the debug module, which is not built yet: a runner without it skips the case."
+description = "Set a track to a run-time machine of a loaded module and hold a note. `machine` is the module id: the runner puts the machine type the runtime reports for that module on the track (the SETUP command of the debug module). A runner without SETUP skips the case."
 
 [args]
 track = 1

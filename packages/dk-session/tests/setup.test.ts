@@ -1,7 +1,7 @@
 // SETUP in the pure TypeScript client against a fake debug module: the request is op, track, type; the wait is on SETUP_DONE with the request's seq.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { DkSession, SetupRefused, decode8in7, encode8in7, runtimeEvent, trackSetup } from '@digi/dk-session';
+import { DkError, DkSession, SetupRefused, decode8in7, encode8in7, runtimeEvent, trackSetup } from '@digi/dk-session';
 import { LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const PREFIX = [0xf0, 0x7d, 0x64, 0x6b, 1];
@@ -63,4 +63,35 @@ test('trackSetup waits for the SETUP_DONE of its own seq and throws on a status 
   const t = trackSetup(new DkSession(dev, { timeoutMs: 200 }), events as never);
   assert.deepEqual(await t.setMachine(3, 5), { seq: 1, status: 0 });
   await assert.rejects(t.setFilter(3, 5), (e: unknown) => e instanceof SetupRefused && e.status === -53);
+});
+
+test('with a clock the request is repeated while the module answers E_STATE (its track watch has no baseline yet), then taken', async () => {
+  let refused = 3;
+  const pauses: number[] = [];
+  let now = 0;
+  const clock = {
+    now: async () => now,
+    pause: async (ms: number) => {
+      pauses.push(ms);
+      now += ms;
+    },
+  };
+  const dk = {
+    setup: async () => {
+      if (refused-- > 0) throw new DkError({ error: 'setup: E_STATE', kind: 'device', status: 'E_STATE' });
+      return 4;
+    },
+  };
+  const events = { until: async () => done(4, 0) };
+  const t = trackSetup(dk as never, events as never, { ready: { clock, withinMs: 1000 } });
+  assert.deepEqual(await t.setMachine(0, 1), { seq: 4, status: 0 });
+  assert.deepEqual(pauses, [100, 100, 100]);
+  // another error is not retried, and the time limit ends the retries
+  const other = { setup: async () => Promise.reject(new DkError({ error: 'busy', kind: 'device', status: 'E_BUSY' })) };
+  await assert.rejects(
+    trackSetup(other as never, events as never, { ready: { clock, withinMs: 1000 } }).setMachine(0, 1),
+    /busy/,
+  );
+  refused = 1000;
+  await assert.rejects(t.setMachine(0, 1), /E_STATE/);
 });

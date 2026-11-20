@@ -133,3 +133,39 @@ test('the run says up front which cases it cannot play, and hands over its clock
   assert.equal(out.skipped.length, 1);
   assert.equal(await clock!(), 0);
 });
+
+test('with the debug log a machine step is a SETUP request for the machine type the runtime reports for the module, awaited on SETUP_DONE', async () => {
+  const setups: [string, number, number][] = [];
+  const f = fake();
+  const withMachine = loadCalibrationFiles({
+    profiles: {
+      'p/m.toml': `schema = "dk.calprofile/1"\nname = "m"\nwarmup_s = 0\ncapture_s = 0.1\nrepeats = 1\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "mach"\nsteps = "mach"\n[[case]]\nid = "fx"\nsteps = "fx"\n`,
+    },
+    steps: {
+      'hold.toml': `schema = "dk.steps/1"\nname = "hold"\n[[step]]\naction = "midi.note"\ntrack = 1\nkey = 60\n`,
+      'mach.toml': `schema = "dk.steps/1"\nname = "mach"\n[[step]]\naction = "setup"\ntrack = 3\nmachine = "a/b"\n`,
+      'fx.toml': `schema = "dk.steps/1"\nname = "fx"\n[[step]]\naction = "setup"\neffect = "a/fx"\n`,
+    },
+    cases: {},
+  });
+  const session = f.deps.session as unknown as Record<string, unknown>;
+  session.modules = async () => [{ index: 0, name: 'a/b', types: [17], rows: 1 }];
+  session.logPage = async () => [0, 0, []];
+  session.logConfig = async () => ({ level: 2, modules: [] });
+  session.setLogConfig = async () => ({});
+  session.setup = async (what: string, track: number, type: number) => {
+    setups.push([what, track, type]);
+    return 7;
+  };
+  // the clock moves 1 s per reading, so the wait for SETUP_DONE (which this fake log never holds) ends at once
+  let t = 0;
+  (f.deps.session as unknown as { clock: Clock }).clock.now = async () => (t += 1000);
+  const out = await runCalibrationOnTarget({ ...f.deps, files: withMachine }, { profile: 'm' });
+  // the request was made for the module's own type and the 0-based track, and its SETUP_DONE was awaited
+  assert.deepEqual(setups, [['machine', 2, 17]]);
+  assert.match(out.error ?? '', /SETUP_DONE/);
+  assert.deepEqual(
+    out.skipped.map((x) => x.case),
+    [],
+  );
+});

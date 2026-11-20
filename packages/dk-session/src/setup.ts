@@ -1,7 +1,8 @@
 // The calibration setup of a track on a device with the debug module: its machine or filter type, set through the firmware's own kit commit in the UI task
 // (SETUP, dkupload-core.ts `DkSession.setup`) and awaited on the log event SETUP_DONE, never on a fixed time.
-import type { DkSession } from './dkupload-core.ts';
+import { DkError, type DkSession } from './dkupload-core.ts';
 import type { RuntimeEvents } from './runtime-events.ts';
+import type { Clock } from './waits.ts';
 
 /** What the runner needs: each call returns once the firmware has performed the change, and throws `SetupRefused` when it did not take. */
 export interface TrackSetup {
@@ -36,10 +37,33 @@ export class SetupRefused extends Error {
 export function trackSetup(
   dk: Pick<DkSession, 'setup'>,
   events: Pick<RuntimeEvents, 'until'>,
-  { withinMs = 5000 }: { withinMs?: number } = {},
+  {
+    withinMs = 5000,
+    ready,
+  }: {
+    withinMs?: number;
+    /**
+     * The debug module refuses SETUP with E_STATE until its track watch has its baseline (about 2 s after the first UI pass, so after every restart): with a
+     * clock the request is repeated every 100 ms of it until it is taken or `withinMs` have passed.
+     */
+    ready?: { clock: Clock; withinMs: number };
+  } = {},
 ): TrackSetup {
+  const request = async (what: 'machine' | 'filter', track: number, type: number): Promise<number> => {
+    if (!ready) return dk.setup(what, track, type);
+    const start = await ready.clock.now();
+    for (;;) {
+      try {
+        return await dk.setup(what, track, type);
+      } catch (e) {
+        if (!(e instanceof DkError) || e.status !== 'E_STATE' || (await ready.clock.now()) - start >= ready.withinMs)
+          throw e;
+        await ready.clock.pause(100);
+      }
+    }
+  };
   const run = async (what: 'machine' | 'filter', track: number, type: number): Promise<SetupDone> => {
-    const seq = await dk.setup(what, track, type);
+    const seq = await request(what, track, type);
     const e = await events.until('SETUP_DONE', (x) => x.fields.seq === seq, { withinMs });
     const status = Number(e.fields.status);
     if (status !== 0) throw new SetupRefused(what, track, type, status);
