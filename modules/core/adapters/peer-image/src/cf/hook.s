@@ -1,4 +1,4 @@
-/* core/peer-image: the hook and the wrapper entry (docs/findings/150-syntakt-section7-pack.md). ColdFire, gas syntax, mcpu=54418.
+/* core/peer-image: the hook and the wrapper entry (docs/findings/151-syntakt-section7-pack.md). ColdFire, gas syntax, mcpu=54418.
  *
  * peer_hook replaces the thread's `lea <NOR read>.l,A2` (a `hook` op, nothing displaced): A2 gets peer_read and the thread goes on after the site.
  * The thread calls `jsr (a2)` twice, with the stack [return][src][len][dst] and the caller popping the arguments. peer_read keeps that signature:

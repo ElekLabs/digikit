@@ -10,7 +10,7 @@ Marks: **[V]** checked against image bytes by a second agent. **[D]** read once,
 
 The patched Syntakt image was 32,672 bytes over the 2 MiB OS-upgrade stage limit (`container_max = 0x1FFE00`: container 2,129,312 bytes, limit 2,096,640).
 Elektron stores section 7 (the second CPU's program, 383,760 bytes) raw. Stored packed it is 264,194 bytes. With it packed the `emulator` set builds a container
-of 2,011,488 bytes, 85,152 bytes under the limit (the image of that date; see [151](151-syntakt-bootstrap-main-stage.md): the bootstrap's in-place unpack of MAIN also needs a margin, which the full `device` set only has with a literal tail, and the container is then 2,072,768 bytes). MAIN streams section 7 to the second CPU byte for byte, so MAIN has to unpack it before the stream starts.
+of 2,011,488 bytes, 85,152 bytes under the limit (the image of that date; see [151](152-syntakt-bootstrap-main-stage.md): the bootstrap's in-place unpack of MAIN also needs a margin, which the full `device` set only has with a literal tail, and the container is then 2,072,768 bytes). MAIN streams section 7 to the second CPU byte for byte, so MAIN has to unpack it before the stream starts.
 One hook in the peer thread does that. No other code reads id 7. No new RAM is needed.
 
 1. **Reader [V] for the sequence, [D] for the call chain.** The peer thread, entry 0x40082c04, reads id 7 in a loop. Call chain: boot thread `FUN_40082578`

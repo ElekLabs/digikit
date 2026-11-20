@@ -2,7 +2,7 @@
 //!
 //! usage: depack_check BOOTSTRAP.bin STREAM.bin ENTRY_HEX --stage HEX --base HEX --dest HEX [OUT.bin]
 //!   --stage  where the packed section is staged: the device's `[patch] main_stage` for the MAIN OS (0x40400000 on the Digitakt II and Digitone II, 0x40200000 on the
-//!            Syntakt, finding 151); for another section any address that does not overlap the output
+//!            Syntakt, finding 152); for another section any address that does not overlap the output
 //!   --base   the address section 2 is loaded at: the device's `[patch] boot_load`
 //!   --dest   where the output goes: the device's `[patch] main_dest`
 //!   No defaults: a device's numbers are device data, and a wrong default would make a check pass or fail for the wrong device.

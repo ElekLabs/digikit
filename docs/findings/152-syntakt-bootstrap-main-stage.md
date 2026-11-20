@@ -1,7 +1,7 @@
 # Syntakt bootstrap: MAIN staged at 0x40200000, in-place unpack margin
 
 Date: 2026-11-19. Image: `st-1.42` bootstrap (section 2, loaded at 0x800003ec) and the MAIN streams of the stock image and of patchkit images. Context: [01](01-container-and-patching.md),
-[70](70-syntakt-1-42.md), [150](150-syntakt-section7-pack.md). Marks: **[V]** checked against image bytes by a second agent, **[D]** read or measured once, **[O]** open.
+[70](70-syntakt-1-42.md), [150](151-syntakt-section7-pack.md). Marks: **[V]** checked against image bytes by a second agent, **[D]** read or measured once, **[O]** open.
 
 ## Result
 

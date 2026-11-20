@@ -1,5 +1,5 @@
 # peer: the second ColdFire CPU (Syntakt): the thread that reads its program (container section 7) from the NOR flash into the transmit buffer.
-# Names follow <cpu>.<subsystem>.<kind>.<name>. Only the Syntakt has these (docs/findings/150-syntakt-section7-pack.md); no other device file lists a rule.
+# Names follow <cpu>.<subsystem>.<kind>.<name>. Only the Syntakt has these (docs/findings/151-syntakt-section7-pack.md); no other device file lists a rule.
 
 [[fn]]
 name = "cf.peer.fn.nor_read"

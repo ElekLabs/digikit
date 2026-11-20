@@ -2439,7 +2439,7 @@ pub fn apply_with(
                 lim.main_staged_max
             ));
         }
-        // the bootstrap unpacks MAIN in place over its staged stream with no bounds check: keep the margin its stage needs (finding 151)
+        // the bootstrap unpacks MAIN in place over its staged stream with no bounds check: keep the margin its stage needs (finding 152)
         let (dest, stage, floor) = fw.device.main_unpack();
         let packed = crate::aplib::pack_section_in_place(&mem.main, dest, stage, floor as i64)
             .map_err(|e| err!("MAIN OS: {e}"))?;

@@ -31,7 +31,7 @@ pub const FLAG_BASE: u32 = 0x4800_0000;
 pub const FLASH_SIZE: usize = 0x100_0000;
 pub const CONTAINER_FLASH_OFFSET: usize = 0x8_0000;
 /// MAIN OS is depacked to 0x4000_0400 (`[patch] main_dest` of the Digitakt II file, the device this runner models) and runs below the 4 MiB boundary `MAIN_END`: a pc in
-/// `MAIN_LOAD..MAIN_END` is MAIN. `MAIN_END` is where MAIN's image may end, not the bootstrap's stage (that is `[patch] main_stage`, which differs per device, finding 151); the runner
+/// `MAIN_LOAD..MAIN_END` is MAIN. `MAIN_END` is where MAIN's image may end, not the bootstrap's stage (that is `[patch] main_stage`, which differs per device, finding 152); the runner
 /// stages nothing itself, the bootstrap's own code does. The runner is for the Digitakt II recovery only.
 pub const MAIN_LOAD: u32 = 0x4000_0400;
 pub const MAIN_END: u32 = 0x4040_0000;

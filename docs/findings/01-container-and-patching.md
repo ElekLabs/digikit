@@ -389,7 +389,7 @@ debug-register write) comes from a stage outside section 2, so the model passes 
    chords (tested at 0x80000c2a and 0x80000d92) are evaluated only when the upgrade
    routine 0x80001c48 returned non-zero; with a stock return of 0 only FUNC decides.
 3. 0x80000596 finds section 3 in the flash container table (0x80020 + 0x10*i), copies
-   it to the device's stage (0x40400000 on the Digitakt II and Digitone II; **0x40200000 on the Syntakt**, finding 151), depacks it (0x80000432) to 0x40000400 and 0x80000ef4 calls through
+   it to the device's stage (0x40400000 on the Digitakt II and Digitone II; **0x40200000 on the Syntakt**, finding 152), depacks it (0x80000432) to 0x40000400 and 0x80000ef4 calls through
    the first longword. **Nothing checks a checksum or HMAC of MAIN OS** (the compares in
    0x800053ec are the container magic 'ELE3' and 0x2b, the Digitakt II value; the
    Digitone II bootstrap compares 0x34, `moveq #0x34` at 0x80005424 **[C]**), and a missing section is ignored.
@@ -628,7 +628,7 @@ that DMAs from its region must use the `+0x08000000` alias. Module bss is not
 zeroed by the reset (the region is outside the clear): the loader must do it.
 
 **Staging limit [V].** The bootstrap stages the packed MAIN OS at the device's stage (`[patch] main_stage` of the device file: `0x40400000` on the Digitakt II and
-Digitone II (`pea 0x40400000` at `0x800005c6` and `0x80000636`), `0x40200000` on the Syntakt, finding 151) and unpacks to `0x40000400` in place, so an unpacked image longer
+Digitone II (`pea 0x40400000` at `0x800005c6` and `0x80000636`), `0x40200000` on the Syntakt, finding 152) and unpacks to `0x40000400` in place, so an unpacked image longer
 than the stage minus the load address (`0x3FFC00` = 4,193,280 bytes on the Digitakt II, `0x1FFC00` = 2,096,128 on the Syntakt) writes over the staged stream while it is still
 being read. patchkit refuses an image whose margin is below `main_margin_min` (8 KiB) and stores a literal tail when that is needed. That is harmless while the stream is read ahead of the write point:
 `tools.firmware.aplibpack.inplace_margin(stream)` returns the smallest slack. For a DT2 1.16

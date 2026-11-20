@@ -19,7 +19,7 @@ ports = ["st-1.42"]
 # byte for byte. Elektron stores the section raw; the patched image is 32 KB over the 2 MiB stage of the OS upgrade with it raw and about 85 KB under it
 # with it packed. A hook gives the peer thread a wrapper in place of the NOR read: for section 7 it reads the packed stream into the tail of the transmit
 # buffer, unpacks it forward with the firmware's own depacker, and checks the length and the SHA-256 of the result against the stock section. A failed
-# check takes the thread's own path for a missing section: status 1, nothing streamed (docs/findings/150-syntakt-section7-pack.md).
+# check takes the thread's own path for a missing section: status 1, nothing streamed (docs/findings/151-syntakt-section7-pack.md).
 #
 # [[repack]] makes patchkit store section 7 packed (the device file allows it: [container] repack) and check the result: the decoded section must be
 # the one with this `len` and `sha256`, and the in-place unpack (stream staged to end at `stage_end`, output from `dest`) must keep a margin above 0.

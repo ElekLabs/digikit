@@ -87,7 +87,7 @@ stream_id = 0x11
 # Where the MAIN OS image is loaded (the built-in anchor `cf.main`; the section's destination word, finding 70).
 main_dest = 0x40000400
 # Where the bootstrap stages the packed MAIN OS (section 3): 0x40200000, not the 0x40400000 of the other devices (the stage constant is at 0x800005b2, 0x800005d2,
-# 0x80000622, 0x8000155c and 0x8000157e of section 2, finding 151 **[V]**). The bootstrap unpacks in place with no bounds check, so patchkit refuses an image whose
+# 0x80000622, 0x8000155c and 0x8000157e of section 2, finding 152 **[V]**). The bootstrap unpacks in place with no bounds check, so patchkit refuses an image whose
 # in-place margin at this stage is below main_margin_min (bytes of unread stream kept ahead of the output, default 8192).
 # Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
 boot_load = 0x800003ec
@@ -192,7 +192,7 @@ emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
 [card]
 header_sector = 0x0
-total_sectors = 0x2e1a000   # the card the emulator emulates (the pSLC 32 GB part, finding 14); it holds the store below. A unit's real capacity is read at run time from the driver (finding 153)
+total_sectors = 0x2e1a000   # the card the emulator emulates (the pSLC 32 GB part, finding 14); it holds the store below. A unit's real capacity is read at run time from the driver (finding 154)
 table_sector = 0x800        # the write-protect bitmaps of projects and sounds, 272 bytes
 
 # Projects: FUN_40110746, sector = (slot + 0x40) * 0x2000, 4 MiB per slot.
@@ -220,7 +220,7 @@ role = "working-project"
 sector = 0x7e000
 sectors = 0x2000
 
-# Module store (docs/design/digikit-store.md): a fixed 512 MiB area, 1 GiB .. 1.5 GiB (finding 153). Stock MAIN 1.42 touches only sectors below 0x180000 (the last
+# Module store (docs/design/digikit-store.md): a fixed 512 MiB area, 1 GiB .. 1.5 GiB (finding 154). Stock MAIN 1.42 touches only sectors below 0x180000 (the last
 # is 0x17ffff, the end of the project pool); the area starts 0x80000 sectors (256 MiB) above that. It ends 0xa4000 sectors below the smallest capacity the firmware's
 # card table lists (0x3a4000), so every accepted part holds it. The area is fixed and not computed from the capacity: the tail records (header B, settings, selection)
 # are relative to its end, so a card whose capacity changes must not move them. The runtime reads the capacity from the firmware's driver and refuses the store
@@ -270,7 +270,7 @@ frame_samples = 32
 [input]
 backend = "panel-uart"
 
-# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Syntakt 1.42: the firmware's key indices from the decoder table at 0x401d7a48 (word per wire position channel * 8 + bit; finding 138 "Safe key", finding 152): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17 **[V]**; `yes2` 0x30 = 48 (the LEVEL push, channel 6 bit 0): the compact view's key handler (CompactVerticalMenuView, 0x400f5c82) treats id 0xc and 0x30 alike **[D]**. Flag bits, same handler: the accessors 0x400f97e4 (`and #1`, used for the ids 15, 16 and 17: bit 0 moves) and 0x400f97b4 (`lsr #4; and #1`, used for the ids 12 and 0x30: bit 4 acts) **[D]**; that NO (13) acts on bit 4 too, as on the Digitakt II, is **[O]** (NO leaves a page in the emulator).
+# The key ids of the firmware's key events as core/ui's list views see them (the id at +0xc of the event; not the panel codes) and the bits of the event's flags word (+0x10) that the views' stock key handler tests: `move_flag` (bit number) for the cursor and RIGHT keys, `act_flag` for YES and the second YES key. Syntakt 1.42: the firmware's key indices from the decoder table at 0x401d7a48 (word per wire position channel * 8 + bit; finding 138 "Safe key", finding 153): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17 **[V]**; `yes2` 0x30 = 48 (the LEVEL push, channel 6 bit 0): the compact view's key handler (CompactVerticalMenuView, 0x400f5c82) treats id 0xc and 0x30 alike **[D]**. Flag bits, same handler: the accessors 0x400f97e4 (`and #1`, used for the ids 15, 16 and 17: bit 0 moves) and 0x400f97b4 (`lsr #4; and #1`, used for the ids 12 and 0x30: bit 4 acts) **[D]**; that NO (13) acts on bit 4 too, as on the Digitakt II, is **[O]** (NO leaves a page in the emulator).
 [input.view_keys]
 yes = 12
 yes2 = 48

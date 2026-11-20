@@ -576,13 +576,13 @@ SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 
 manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
 A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
 prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
-([README](../modules/core/adapters/peer-image/README.md), [finding 150](findings/150-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
+([README](../modules/core/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
 
 ### The bootstrap's in-place unpack of MAIN
 
 The bootstrap stages the packed MAIN OS (section 3) at the device's stage (`[patch] main_stage`: 0x40400000 on the Digitakt II and Digitone II, 0x40200000 on the Syntakt) and unpacks it
-from `main_dest` over its own staged stream, with no bounds check ([finding 151](findings/151-syntakt-bootstrap-main-stage.md)). If the output passes the unread part of the stream, the
+from `main_dest` over its own staged stream, with no bounds check ([finding 152](findings/152-syntakt-bootstrap-main-stage.md)). If the output passes the unread part of the stream, the
 decoder runs away before MAIN starts and the unit stays at its logo. The **in-place margin** is the least, over the stream, of the bytes consumed minus the output written past the stage
 (`aplib::inplace_margin`; `tools.firmware.aplibpack.inplace_margin` is the reference).
 
@@ -633,7 +633,7 @@ hardware result.
 ### Flashing a Syntakt
 
 A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the image of each is under the 2 MiB `container_max` only because
-`core/peer-image` stores section 7 packed ([finding 150](findings/150-syntakt-section7-pack.md)). Neither has run on a unit yet; the emulator proof is in the finding.
+`core/peer-image` stores section 7 packed ([finding 151](findings/151-syntakt-section7-pack.md)). Neither has run on a unit yet; the emulator proof is in the finding.
 
 | Set | Modules | Container (OS 1.42) | Flashed by |
 |---|---|---|---|

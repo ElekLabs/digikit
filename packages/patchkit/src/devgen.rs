@@ -2057,7 +2057,7 @@ fn check_sources(
     ))
 }
 
-/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-` (TODO: the port file format, devices/ports/, has no device field; the prefix is the identity, as in apps/web/src/data/modules.ts; finding 152); a module that lists neither is for every device.
+/// Is the module built for the device: a `[targets]` key or a `ports` entry that starts with `<short>-` (TODO: the port file format, devices/ports/, has no device field; the prefix is the identity, as in apps/web/src/data/modules.ts; finding 153); a module that lists neither is for every device.
 fn targets_device(m: &crate::module::Manifest, short: &str) -> bool {
     let prefix = format!("{short}-");
     let listed = m.module.ports.iter().chain(m.targets.keys());

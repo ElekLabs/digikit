@@ -35,7 +35,7 @@ when it declares that it unpacks them (`[[repack]]` of its `module.toml`, [PATCH
 the capabilities agree with the other tables (for example `dsp = "none"` forbids a `[[firmware]].dsp` image and `container.dsp`).
 `[patch] main_dest`, `main_stage`, `main_margin_min`, `boot_load`: where the bootstrap unpacks MAIN OS to (`main_dest`, 0x40000400), where it first stages the packed MAIN (`main_stage`: 0x40400000
 on the Digitakt II and Digitone II, 0x40200000 on the Syntakt), the least in-place margin an image may have there (`main_margin_min`, bytes of unread stream ahead of the output, default 8192) and the
-address the bootstrap is loaded at (`boot_load`, used by `tools/firmware/aplib_check.py`). patchkit stores MAIN with a literal tail when needed and refuses an image below the floor (finding 151).
+address the bootstrap is loaded at (`boot_load`, used by `tools/firmware/aplib_check.py`). patchkit stores MAIN with a literal tail when needed and refuses an image below the floor (finding 152).
 `main_staged_max` is a different bound: the decoded MAIN may not reach the next 4 MiB boundary.
 `[storage]` names the backend of each kind of content (`samples`: `stock-rpc`, `digikit` or `stock-slots`; `modules`: `digikit`); `@digi/devices` reads it, the samples code of the apps and `wb` branch on it, never on a device name. `[storage.slots]` (`stock-slots` only): `path`, `count`, `bytes_max` (audio bytes of one sample), `rate`, `channels`, `bits`, `byte_order`, `apply` (`restart`: the device reads the slots only at start).
 

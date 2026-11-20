@@ -61,7 +61,7 @@ independent checks) or **[O]** (open). The second CPU (section 7) is in
   that feeds PUSHR 0xFC03C034 from buffer 0x80007af0, at 0x80001066 (file offset 0 = 0x800003ec). That buffer is a double-buffered DSPI command
   queue (two halves of 0x830 bytes, frames of 0x8000AAAA .. 0x08005555), not data. Its routines have no static caller **[O]**.
 - Section 7 is not read for the FPGA by MAIN. It holds a second bitstream at 0x40041060 that the peer loads through its own DSPI 0xFC03C000
-  (finding 136). The peer must therefore receive the exact stock bytes ([finding 150](150-syntakt-section7-pack.md)).
+  (finding 136). The peer must therefore receive the exact stock bytes ([finding 151](151-syntakt-section7-pack.md)).
 
 ## Peer link ("DSP boot")
 

@@ -1,4 +1,4 @@
-/* core/peer-image: MAIN unpacks the second CPU's program before it streams it (docs/findings/150-syntakt-section7-pack.md). ColdFire, C.
+/* core/peer-image: MAIN unpacks the second CPU's program before it streams it (docs/findings/151-syntakt-section7-pack.md). ColdFire, C.
  *
  * The peer thread of the stock MAIN reads two NOR payloads through one function, `read(src, len, dst)`: section 6 into the transmit buffer behind
  * the section 6 header, then section 7 (the second CPU's program) to `PEER_DEST`. The stream to the second CPU is the bytes of that buffer, so the

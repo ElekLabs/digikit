@@ -114,7 +114,7 @@ fn kb(n: i64) -> String {
 
 /// The in-place margin of the stored MAIN stream at the bootstrap's stage (`[patch] main_stage`), refused below `main_margin_min`, and the budget line:
 /// the bootstrap unpacks MAIN over its own staged stream with no bounds check, so a stream whose output overtakes the unread input runs away before MAIN
-/// starts (finding 151). Returns `bootstrap margin 9.1 KB, container 31.4 KB free`.
+/// starts (finding 152). Returns `bootstrap margin 9.1 KB, container 31.4 KB free`.
 pub fn main_budget(fw: &Firmware, container_bytes: u64, container_max: u64) -> Result<Budget> {
     let main = fw
         .main()

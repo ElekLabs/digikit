@@ -144,7 +144,7 @@ fn a_buffer_layout_whose_unpack_would_overwrite_unread_stream_bytes_is_refused()
         &claim(&raw, |dest, end, _, _| *end = *dest + stored - 1),
     );
     expect_err(run(&raw, vec![small], false), "does not fit");
-    // the real layout keeps a margin above 0 (finding 150: 9,444 bytes)
+    // the real layout keeps a margin above 0 (finding 151: 9,444 bytes)
     let ok = module("t/ok", &claim(&raw, |_, _, _, _| {}));
     run(&raw, vec![ok], false).unwrap();
 }
@@ -171,7 +171,7 @@ fn the_syntakt_emulator_set_fits_the_flash_container_with_section_7_stored_packe
     assert_eq!(got.section(7).unwrap().data, stock.section(7).unwrap().data);
 }
 
-/// The Rust margin equals the reference `tools.firmware.aplibpack.inplace_margin` on the real stream (9,444 bytes, finding 150).
+/// The Rust margin equals the reference `tools.firmware.aplibpack.inplace_margin` on the real stream (9,444 bytes, finding 151).
 #[test]
 fn the_in_place_margin_of_the_real_section_7_stream_matches_the_python_reference() {
     let Some(raw) = image() else { return };
@@ -351,7 +351,7 @@ fn the_syntakt_device_set_keeps_the_bootstrap_margin_and_fits_the_container() {
             .iter()
             .any(|c| c.starts_with("bootstrap margin "))
     );
-    // the stock image has margin too (finding 151: +96,356 bytes)
+    // the stock image has margin too (finding 152: +96,356 bytes)
     let stock = Firmware::parse(&raw).unwrap();
     let sm = patchkit::aplib::inplace_margin(&stock.main().unwrap().stored, dest, stage).unwrap();
     assert_eq!(sm, Some(96_356));
@@ -388,7 +388,7 @@ fn the_digitakt_and_digitone_device_images_have_no_literal_tail() {
 }
 
 /// The key ids of the Syntakt's key events that core/ui compares (`[input.view_keys]`) are the entries of the firmware's decoder table at 0x401d7a48 for the
-/// wire positions of YES, NO, RIGHT and the second YES key (panel codes 39, 28, 31 and 49: wire position = code - 1 = channel * 8 + bit; finding 152).
+/// wire positions of YES, NO, RIGHT and the second YES key (panel codes 39, 28, 31 and 49: wire position = code - 1 = channel * 8 + bit; finding 153).
 #[test]
 fn the_syntakt_view_keys_are_the_decoder_table_entries() {
     let Some(raw) = image() else { return };

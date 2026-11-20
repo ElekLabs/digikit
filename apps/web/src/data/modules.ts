@@ -116,7 +116,7 @@ const order = siteDevices() as readonly DeviceId[];
 export const modules: ModuleInfo[] = Object.entries(manifests)
   .map(([path, text]) => {
     const { module: m, targets = {}, claim = [] } = parse(text) as unknown as Manifest;
-    // TODO: the device is the prefix of the port name; the port file format (devices/ports/) has no device field (as `targets_device` in devgen.rs; finding 152)
+    // TODO: the device is the prefix of the port name; the port file format (devices/ports/) has no device field (as `targets_device` in devgen.rs; finding 153)
     const named = new Set(Object.keys(targets).map((port) => port.split('-')[0]));
     const dir = path.replace(/^(\.\.\/)+/, '').replace(/\/module\.toml$/, '');
     return {
