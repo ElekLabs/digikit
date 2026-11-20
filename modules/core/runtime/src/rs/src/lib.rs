@@ -94,6 +94,14 @@ extern "C" {
 const SOUND_VT_RECORD: u32 = 0x28;
 const SOUND_WORDS_AT: u32 = 0x14;
 
+/// Import `dk_selected_track`: the selected track, or -2 when there is no project yet. The same read as `debug_selected_params` (`platform::selected_sound`).
+pub(crate) unsafe extern "C" fn selected_track() -> i32 {
+    match platform::selected_sound() {
+        Some((track, _)) => track as i32,
+        None => -2,
+    }
+}
+
 /// Import `dk_debug_selected_params`: the selected track (`view_track` of the project's settings) and the first `n` words of its Sound array, through the firmware's
 /// own accessors, plain reads. The words are big-endian s16 at a byte address that may be odd on the Digitone II (stride 0x48b), so they are read byte by byte.
 /// -2: no project yet; -3: the track has no record (a kit is loading): `out` is not written.

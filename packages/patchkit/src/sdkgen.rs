@@ -35,6 +35,10 @@ pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 pub const C_STATUS_OUT: &str = "sdk/include/dk/core/status.h";
 /// The generated C header of the record kinds, relative to the repository root.
 pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
+/// The runtime log kinds (`[[log.kind]]`) as C `#define`s, for code that logs through `dk_log_event`.
+pub const C_LOG_KINDS_OUT: &str = "sdk/include/dk/gen/log_kinds.h";
+/// The logical key names of the device files (`[input.keys]`), written by `devgen::keys_h`.
+pub const C_KEYS_OUT: &str = "sdk/include/dk/gen/keys.h";
 /// The generated C header of the sample pool numbers, relative to the repository root.
 pub const C_SAMPLE_OUT: &str = "sdk/include/dk/gen/sample.h";
 /// The generated SHARC+ include of the sample pool record layout, relative to the repository root.
@@ -72,6 +76,7 @@ const TS_WIDTH: usize = 120;
 #[serde(deny_unknown_fields)]
 struct Sdk {
     runtime: Runtime,
+    keys: KeysToml,
     machine: Machine,
     fx: Fx,
     log: Log,
@@ -743,6 +748,21 @@ pub fn page_knobs() -> usize {
     page_knobs_of(&parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses"))
 }
 
+/// `[keys]`: the logical key names in the order of their numbers.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeysToml {
+    order: Vec<String>,
+}
+
+/// The logical key names of `[keys] order` of the `sdk/sdk.toml` this crate was built with: the first is `DK_KEY_` number 1.
+pub fn key_order() -> Vec<String> {
+    parse(include_str!("../../../sdk/sdk.toml"))
+        .expect("sdk/sdk.toml parses")
+        .keys
+        .order
+}
+
 /// The contract maxima of the `sdk/sdk.toml` this crate was built with.
 pub fn limits_max() -> LimitsMax {
     parse(include_str!("../../../sdk/sdk.toml"))
@@ -925,6 +945,7 @@ struct Spans {
 #[serde(deny_unknown_fields)]
 struct Log {
     f_error: u16,
+    f_keep: u16,
     level_shift: u16,
     level_mask: u16,
     source_shift: u16,
@@ -1309,6 +1330,7 @@ fn rust(sdk: &Sdk) -> String {
     let l = &sdk.log;
     for (n, v) in [
         ("F_ERROR", l.f_error),
+        ("F_KEEP", l.f_keep),
         ("LEVEL_SHIFT", l.level_shift),
         ("LEVEL_MASK", l.level_mask),
         ("SOURCE_SHIFT", l.source_shift),
@@ -1335,6 +1357,11 @@ fn rust(sdk: &Sdk) -> String {
     s.push_str("}\n\n");
     s.push_str("/// The record kinds of the `register` section and the resources of `uses` (`[records]`).\npub mod records {\n");
     s.push_str(&records_consts(sdk, "    "));
+    s.push_str("}\n\n");
+    s.push_str("/// The logical keys (`[keys] order`), numbered as `dk_key` of <dk/gen/keys.h> is: `NONE` is 0, the names follow from 1.\npub mod keys {\n    pub const NONE: u32 = 0;\n");
+    for (i, n) in sdk.keys.order.iter().enumerate() {
+        let _ = writeln!(s, "    pub const {n}: u32 = {};", i + 1);
+    }
     s.push_str("}\n\n");
     s.push_str(&rust_sample_pool(sdk));
     s.push_str(&rust_settings(sdk));
@@ -1664,8 +1691,8 @@ fn ts_proto(sdk: &Sdk) -> String {
     let l = &sdk.log;
     let _ = write!(
         s,
-        "}};\n\n/** The `flags` word of a LOG event: the error bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */\nexport const LOG_FLAGS = {{\n  ERROR: {},\n  LEVEL_SHIFT: {},\n  LEVEL_MASK: {},\n  SOURCE_SHIFT: {},\n  SOURCE_MASK: {},\n}} as const;\n\n",
-        l.f_error, l.level_shift, l.level_mask, l.source_shift, l.source_mask
+        "}};\n\n/** The `flags` word of a LOG event: the error bit, the keep bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */\nexport const LOG_FLAGS = {{\n  ERROR: {},\n  KEEP: {},\n  LEVEL_SHIFT: {},\n  LEVEL_MASK: {},\n  SOURCE_SHIFT: {},\n  SOURCE_MASK: {},\n}} as const;\n\n",
+        l.f_error, l.f_keep, l.level_shift, l.level_mask, l.source_shift, l.source_mask
     );
     let levels: Vec<String> = LEVELS.iter().map(|n| ts_str(n)).collect();
     let _ = writeln!(
@@ -1793,6 +1820,7 @@ fn python(sdk: &Sdk) -> Result<String> {
     let l = &sdk.log;
     for (n, v) in [
         ("F_ERROR", l.f_error),
+        ("F_KEEP", l.f_keep),
         ("LEVEL_SHIFT", l.level_shift),
         ("LEVEL_MASK", l.level_mask),
         ("SOURCE_SHIFT", l.source_shift),
@@ -3128,6 +3156,23 @@ fn registers_md(sdk: &Sdk) -> String {
     s
 }
 
+/// `sdk/include/dk/gen/log_kinds.h`: the log kinds as `DK_LOG_<NAME>` numbers for `dk_log_event`.
+fn log_kinds_h(sdk: &Sdk) -> String {
+    let mut s = format!(
+        "/* {HEADER} */\n/* sdk/include/dk/gen/log_kinds.h -- the kinds of the runtime's log events (`[[log.kind]]`), for dk_log_event(kind, flags, args). */\n#ifndef DK_GEN_LOG_KINDS_H\n#define DK_GEN_LOG_KINDS_H\n\n"
+    );
+    let _ = writeln!(
+        s,
+        "/* flags bit 4 of dk_log_event: the event is kept in the small ring (the log's `f_keep`). */\n#define DK_LOG_F_KEEP {}\n",
+        sdk.log.f_keep
+    );
+    for k in &sdk.log.kind {
+        let _ = writeln!(s, "#define DK_LOG_{} {}", k.name, k.id);
+    }
+    s.push_str("\n#endif /* DK_GEN_LOG_KINDS_H */\n");
+    s
+}
+
 /// `sdk/include/dk/gen/records.h`: the record kinds (`[records.kinds]`) for `dk_record_add`.
 fn records_h(sdk: &Sdk) -> String {
     let mut s = format!(
@@ -3201,6 +3246,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),
         (C_PAGE_CONSTS_OUT.to_string(), page_consts_h(&sdk)),
         (C_RECORDS_OUT.to_string(), records_h(&sdk)),
+        (C_LOG_KINDS_OUT.to_string(), log_kinds_h(&sdk)),
         (RULES_RS_OUT.to_string(), rules_rs(&sdk)?),
         (REGISTERS_MD_OUT.to_string(), registers_md(&sdk)),
     ])
@@ -3305,5 +3351,11 @@ pub fn generate(root: &std::path::Path) -> Result<Vec<(String, String)>> {
     files.extend(crate::abigen::render(&abi, &abi_inputs(&text)?)?);
     files.push((SVC_ABI_OUT.to_string(), svc_abi_rs(root)?));
     files.extend(gen_exports(&parse(&text)?, root)?);
+    // the device files are read from disk: not in the browser build
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let facts = crate::devgen::Facts::from_dir(&root.join("devices"))?;
+        files.push((C_KEYS_OUT.to_string(), crate::devgen::keys_h(&facts)?));
+    }
     Ok(files)
 }

@@ -3212,7 +3212,7 @@
   },
   {
    "align": 2,
-   "hex": "95bef02b",
+   "hex": "677f8e52",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -3771,7 +3771,7 @@
    "size": 28
   }
  ],
- "source_sha256": "43edae077d1fd8f2d4faab76d9414d270d2d7f07fa95048bdb0b0e46620e5993",
+ "source_sha256": "4a667700b8a51599ebbd77ef71e9eac1495e9ebb3da69d96b995325f50f0a6bf",
  "symbols": [
   {
    "global": false,
@@ -5013,7 +5013,7 @@
  "toolchain": {
   "exports": "DKRT_LFO_FW dk_lfo_eval dk_lfo_graph dk_lfo_name dk_module dk_svc_abi lfo_dn2_read_call lfo_dn2_read_slew lfo_dn2_read_start lfo_dn2_tick_call lfo_dn2_tick_slew lfo_dn2_tick_start lfo_dt2_read_call lfo_dt2_read_slew lfo_dt2_read_start lfo_dt2_tick_call lfo_dt2_tick_slew lfo_dt2_tick_start lfo_ui_graph lfo_ui_name3 lfo_ui_name4",
   "instructions_redecoded": "3972",
-  "isa_check": "0a0ec8058820c2cff790b93e5c6d418a136f8282e02043df7d66caae1b905de6",
+  "isa_check": "c2fe410e12f15763a94da7304c69e4fabeae9ce5b8c4176993aced4f40b6f1bd",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

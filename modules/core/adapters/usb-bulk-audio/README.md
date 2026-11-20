@@ -18,4 +18,9 @@ stop: macOS keeps audio and MIDI, and the host sees one more interface. Plan: `d
   the README of core/usb-bulk.
 - **Exports** (symbols of this module, called by patchkit's link and by tests): `void ua_prepare(void)`, `void ua_connect(void)`, `void ua_disconnect(void)`, `volatile u32 usb_bulk_audio_state`.
   Used from core/usb-bulk (symbols of that module): `usb_bulk_port5_attach`, `usb_bulk_port5_connect`, `usb_bulk_port5_disconnect`. The DDR window and the uncached alias come from the runtime's device object `dkrt_dev`.
+- **Windows (MS OS 2.0).** So that Windows binds WinUSB to interface 5, a second hook (a `before` hook, `cf.usb.hook.setup_dispatch`, claim `cf.usb.fn.setup_dispatch`) sits on the entry of the EP0
+  setup dispatcher: the stub `ua_setup_hook` calls `ua_setup_handle`, and returns to the USB interrupt if it answered, else runs the stock dispatcher from its first instruction. Only when the active port is 5 and `usb_bulk_audio_state` is 1 (attached), it answers three requests through the firmware's EP0 send: GET_DESCRIPTOR
+  device (port 5's descriptor with bcdUSB 0x0201 and bcdDevice 0x0101), GET_DESCRIPTOR BOS (33 bytes), and the vendor request 0xC0, bRequest 0x44 (the vendor code), wIndex 7 (the 178-byte
+  descriptor set: compatible ID WINUSB and interface GUID `{7F45739F-0563-45C1-823A-43A14AD7F745}` for interface 5). Each answer is cut to wLength. Every other request, and every request in
+  another port or when not attached, goes to the stock dispatcher unchanged. No runtime calls. Design and bytes: `docs/plans/usb-winusb.md`; read them back from a device with `dkbulk descriptors`.
 - **Patch sets.** It is in the `device` and `device-introblank` sets (`devices/digitakt-ii.toml`, `devices/digitone-ii.toml`).

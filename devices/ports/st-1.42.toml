@@ -967,6 +967,17 @@ mark = "D"
 rule = "fw/usb:cf_ptr"
 
 [[anchor]]
+name = "cf.usb.data.setup"
+cpu = "cf"
+kind = "value"
+addr = 0x454e4bdc
+src = 0x400062ea
+len = 4
+sha256 = "eb7b9444143096cd581272ce3b894b2eccc22b4a0a93b9ca6c5567bafe937bfe"
+mark = "D"
+rule = "fw/usb:cf_literal"
+
+[[anchor]]
 name = "cf.usb.fn.disconnect"
 cpu = "cf"
 kind = "code"
@@ -977,12 +988,32 @@ mark = "D"
 rule = "fw/usb:cf_func"
 
 [[anchor]]
+name = "cf.usb.fn.ep0_send"
+cpu = "cf"
+kind = "code"
+addr = 0x4000621c
+len = 6
+sha256 = "2e00bf3f6a0d392db77c03fb33873740b6c1471cf16c6783c040fe7f3d4d41f4"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
 name = "cf.usb.fn.restart"
 cpu = "cf"
 kind = "code"
 addr = 0x40006eb2
 len = 4
 sha256 = "ff9c152901d8b5aabca927bb041d3274e443754de3a5082b14c7eb738b3abf14"
+mark = "D"
+rule = "fw/usb:cf_func"
+
+[[anchor]]
+name = "cf.usb.fn.setup_dispatch"
+cpu = "cf"
+kind = "code"
+addr = 0x400062e2
+len = 6
+sha256 = "3634851edaee7e7d3d83aa2134ee8decc928f3ff741aae085c6a917cfaa32a66"
 mark = "D"
 rule = "fw/usb:cf_func"
 
@@ -1067,7 +1098,7 @@ kind = "code"
 addr = 0x400ffe22
 len = 4
 sha256 = "1f6b50a3616f922607a92f5ea30e249ecfae4035c48517445d22acbd059dd2ec"
-mark = "D"
+mark = "V"
 rule = "fw/view:cf_func"
 
 [[anchor]]

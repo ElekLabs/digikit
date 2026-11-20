@@ -28,6 +28,7 @@ pub use gen_sdk::load::*;
 // The import names, their function types and the callback types are written by `patchkit gen` from `[[import]]` and `[handle.callbacks]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `api`).
 pub use gen_sdk::api;
 pub use gen_sdk::api::HostCmdFn;
+pub use gen_sdk::keys;
 pub use gen_sdk::records;
 pub use gen_sdk::sample_pool;
 

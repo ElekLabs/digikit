@@ -54,9 +54,9 @@ was = ["cf.menu.fn.invalidate"]
 cpu = "cf"
 sig = "void (u8 *view)"
 rule = { kind = "cf_func", hash = "06c561b63ac3ef5d6fd66758337bb31f", offset = 0x0, len = 4 }
-mark = "D"
-users = ["core/digikit-menu"]
-doc = "`View::invalidate(View *)`: asks for a redraw of the view."
+mark = "V"
+users = ["core/digikit-menu", "core/ui"]
+doc = "`View::invalidate(View *)`, DT2 0x4011b126, DN2 0x4011ca9a (34 bytes): when +0x17 is clear sets +0x14 and tail-jumps through the manager (+0x2c) to set the redraw flag VC+0x20. The render draws only when that flag is set, from the topmost opaque view up."
 
 [[fn]]
 name = "cf.view.fn.view_controller_push"
@@ -98,11 +98,15 @@ name = "cf.view.struct.View"
 size = 0x4c
 fields = [
   { name = "vptr", off = 0x0, type = "ptr" },
+  { name = "dirty", off = 0x14, type = "u8" },
+  { name = "opaque", off = 0x16, type = "u8" },
+  { name = "blocked", off = 0x17, type = "u8" },
+  { name = "name", off = 0x28, type = "ptr" },
   { name = "mgr", off = 0x2c, type = "ptr" },
 ]
-mark = "O"
-users = ["core/digikit-menu"]
-doc = "View (finding 71 section 2, \"View vtable\"): the vptr at +0, the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. The fields are [D] (finding 71); the size is [O]: derived windows start their own fields at +0x4c."
+mark = "D"
+users = ["core/digikit-menu", "core/ui"]
+doc = "View (finding 71 section 2, \"View vtable\"): the vptr at +0, the redraw flag at +0x14, the opaque byte at +0x16 (the relayout draws from the topmost opaque view up and sets +0x17 on the views below it), the name C string pointer at +0x28 (not copied), the manager (ViewController) at +0x2c, 0 when the view is not on the stack; the fields of derived windows start at +0x4c. Size 0x4c, +0x14, +0x16, +0x17 and +0x2c checked by a second agent on both devices; +0x28 is [D]."
 
 [[hook]]
 name = "cf.view.hook.ui_loop"
@@ -143,3 +147,31 @@ mark = "D"
 users = ["tests/regression"]
 codegen = false
 doc = "The vtable pointer that the MainScreenView constructor (0x40066584 on DT2 1.17) stores at +0 of its object; the anchor is that vtable. A device test knows that the main screen is the top view by it (the [ui.boot_window] main_vptr fact of the device file)."
+
+[[fn]]
+name = "cf.view.fn.view_ctor"
+cpu = "cf"
+sig = "void (u8 *this, const char *name)"
+rule = { kind = "cf_func", hash = "25fcb970d10a1353214d124c7922d34c", offset = 0x0, len = 4 }
+devices = ["dt2", "dn2"]
+mark = "V"
+users = ["core/ui"]
+doc = "`View::View(this, name)`: DT2 0x4011b06e, DN2 0x4011c9e2. Builds the handler bases and secondary vptrs, stores `name` (not copied) at +0x28 and the View vptr at +0, zeroes +0x1c..+0x24, +0x2c and +0x34..+0x48. It does not clear +0x14, +0x16, +0x17 or +0x30: allocate zeroed."
+
+[[site]]
+name = "cf.view.site.view_vptr_lit"
+cpu = "cf"
+rule = { kind = "cf_ptr", hash = "25fcb970d10a1353214d124c7922d34c", offset = 0x38, len = 4 }
+devices = ["dt2", "dn2"]
+mark = "V"
+users = ["core/ui"]
+doc = "The View primary vptr that the ctor stores (DT2 0x4021dfd8, DN2 0x402079a4); the 17 slots start here and the header (offset_to_top, typeinfo) is the 8 bytes before. A module copies 19 words from vptr - 8 and replaces slot 2 (key) and 4 (draw). Slot 0 is the complete destructor (no free) and slot 1 the deleting one (destructor, then free)."
+
+[[site]]
+name = "cf.view.site.sp_view_cb_vptr_lit"
+cpu = "cf"
+rule = { kind = "cf_ptr", hash = "e427a70e2c95815987c648e84eba4737", offset = 0x2e, len = 4 }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/ui"]
+doc = "The control block vptr of `_Sp_counted_ptr<View*>`, the immediate of `move.l #vptr,(a0)` in `cf.string.fn.shared_ptr.make` (DT2 0x401f1130, DN2 0x401d9ca0): its dispose calls the View's deleting destructor (slot 1). The make_shared (inplace) blocks differ: their dispose calls slot 0 and the block's destroy frees the memory. The offset is that of the 4-byte immediate (the opcode is 2 bytes before it)."
