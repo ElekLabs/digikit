@@ -350,12 +350,22 @@ export type RunEvent =
   | { kind: 'skip'; case: string; reason: string }
   /** A case whose capture counted no call of any module row: recorded as failed, the run goes on. */
   | { kind: 'fail'; case: string; reason: string }
+  /** A case needs other modules: the device restarts. */
+  | { kind: 'restart'; case: string }
+  /** The wait for a stable boot before a restart (`waited` and `of` in seconds). */
+  | { kind: 'stable'; waited: number; of: number }
+  /** The case's teardown sets the track's own machine type back. */
+  | { kind: 'restore'; case: string }
   | { kind: 'text'; text: string };
 
 /** The log lines of `runCalibration` (`case ID: capture N of M`, `case ID: skipped, REASON`, `case ID: failed, REASON`); every other line is text. */
 export function parseRunLine(line: string): RunEvent {
   const cap = /^case (\S+): capture (\d+) of (\d+)$/.exec(line);
   if (cap) return { kind: 'capture', case: cap[1]!, n: Number(cap[2]), of: Number(cap[3]) };
+  const restart = /^case (\S+): restarting$/.exec(line);
+  if (restart) return { kind: 'restart', case: restart[1]! };
+  const restore = /^case (\S+): putting the stock machine back$/.exec(line);
+  if (restore) return { kind: 'restore', case: restore[1]! };
   const skip = /^case (\S+): skipped, (.*)$/.exec(line);
   if (skip) return { kind: 'skip', case: skip[1]!, reason: skip[2]! };
   const fail = /^case (\S+): failed, (.*)$/.exec(line);
@@ -379,7 +389,14 @@ export function secondsLeft(p: {
   return Math.ceil(left);
 }
 
-/** `running case lp4 · capture 2/3 · 6 s left` */
+/** `case lp4 · capture 2/3 · 6 s left` */
 export function progressLine(p: { case: string; n: number; of: number; left: number }): string {
-  return `running case ${p.case} · capture ${p.n}/${p.of} · ${p.left} s left`;
+  return `case ${p.case} · capture ${p.n}/${p.of} · ${p.left} s left`;
+}
+
+/** The progress text of the phases between captures: `restarting for case lp4`, `waiting for a stable boot 4 s / 30 s`, `putting the stock machine back`. */
+export function phaseLine(e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string {
+  if (e.kind === 'restart') return `restarting for case ${e.case}`;
+  if (e.kind === 'stable') return `waiting for a stable boot ${e.waited} s / ${e.of} s`;
+  return 'putting the stock machine back';
 }

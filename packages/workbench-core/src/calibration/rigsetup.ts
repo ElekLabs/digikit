@@ -1,6 +1,13 @@
 // The rig's `setup` of a session: SETUP of the debug module (dk-session `trackSetup`), awaited on SETUP_DONE. Shared by `wb profile calibrate run`
 // (tools/devtools/wb_calibrate.mjs) and the Profile pane (profile/calibration-run.ts). Host tests: tests/calibration-run.test.ts.
-import { RuntimeEvents, trackSetup, type Clock, type DkSession } from '@digi/dk-session';
+import {
+  EventTimeout,
+  RuntimeEvents,
+  trackSetup,
+  type Clock,
+  type DkSession,
+  type RuntimeEvent,
+} from '@digi/dk-session';
 import type { Rig } from './runner.ts';
 
 /** Clock ms a SETUP request may wait for the debug module's track watch to have its baseline (about 2 s of emulated time after a boot). */
@@ -57,30 +64,45 @@ const BLOCKS_PER_S = 1500;
 /**
  * Wait until the runtime has called the running boot stable: its STABLE event, or, when the ring dropped that event (counting floods it), an event whose block count is
  * the boot's `stable_blocks` (BOOT_START) past the boot's own. The runtime counts boots that were not stable, and a second one in a row starts in safe mode with no
- * module loaded, so a run that changes the loaded modules by restarts must not restart earlier. The bound is derived from the boot's `stable_blocks` with a margin;
- * when neither comes (no log, or a boot that does not run) it throws, and the run stops instead of restarting into a boot that may be a safe-mode one. The wait reads
- * the log from the start of the boot with a cursor of its own (the runner's waits have consumed earlier events).
+ * module loaded, so a run that changes the loaded modules by restarts must not restart earlier. The wait reads the log from the start of the boot with a cursor of its
+ * own (the runner's waits have consumed earlier events). A device that was up for a long time logs nothing new, so the wait first provokes an event that carries the
+ * device's block count now: the runtime logs every upload command that is not marked quiet (LIST), and that event, compared with BOOT_START, tells the boot's age at once.
+ * A boot younger than `stable_blocks` waits for its STABLE; when none comes in time (no log, or a boot that does not run) it throws, and the run stops instead of
+ * restarting into a boot that may be a safe-mode one. `onWait` gets the seconds waited and the seconds of the stable period once a second.
  */
 export async function untilBootStable(
-  session: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'>,
+  session: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'> &
+    Partial<Pick<DkSession, 'list'>>,
   clock: Clock,
+  onWait?: (waitedS: number, ofS: number) => void,
 ): Promise<void> {
   const events = new RuntimeEvents(session, clock);
   let bootAt: number | undefined;
   let stable = DEFAULT_STABLE_BLOCKS;
   try {
     await events.listen({ fromBoot: true });
-    await events.until(
-      '*',
-      (e) => {
-        if (e.kind === 'BOOT_START') {
-          bootAt = e.blocks;
-          if (Number(e.fields.stable_blocks) > 0) stable = Number(e.fields.stable_blocks);
-        }
-        return e.kind === 'STABLE' || (bootAt !== undefined && e.blocks - bootAt >= stable);
-      },
-      { withinMs: (stable / BLOCKS_PER_S) * 1000 * 1.5 + 5000 },
-    );
+    // the event of this command is stamped with the device's block count now (an idle boot has no newer one)
+    await Promise.resolve(session.list?.()).catch(() => undefined);
+    const match = (e: RuntimeEvent): boolean => {
+      if (e.kind === 'BOOT_START') {
+        bootAt = e.blocks;
+        if (Number(e.fields.stable_blocks) > 0) stable = Number(e.fields.stable_blocks);
+      }
+      return e.kind === 'STABLE' || (bootAt !== undefined && e.blocks - bootAt >= stable);
+    };
+    const start = await clock.now();
+    for (;;) {
+      try {
+        await events.until('*', match, { withinMs: 1000 });
+        return;
+      } catch (e) {
+        if (!(e instanceof EventTimeout)) throw e;
+      }
+      const waited = (await clock.now()) - start;
+      if (waited >= (stable / BLOCKS_PER_S) * 1000 * 1.5 + 5000)
+        throw new Error(`events.until *: not seen within ${waited} ms. Last events:\n${events.seen()}`);
+      onWait?.(Math.round(waited / 1000), Math.round(stable / BLOCKS_PER_S));
+    }
   } catch (e) {
     throw new Error(
       `the boot was not seen stable (${e instanceof Error ? e.message.split('\n')[0] : e}): the run stops here, because a restart now could start a safe-mode boot with no module loaded`,

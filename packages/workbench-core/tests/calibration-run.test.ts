@@ -200,6 +200,47 @@ test('a boot that is not seen stable stops the run with a clear message, and one
   await untilBootStable(log as never, clock);
 });
 
+test('an idle long boot is stable at once: a probe event carries the block count now, with STABLE dropped from the ring; a young boot waits for STABLE', async () => {
+  let t = 0;
+  const clock: Clock = { now: async () => t, pause: async (ms) => void (t += ms) };
+  const events: { seq: number; time: number; kind: number; flags: number; args: number[] }[] = [
+    { seq: 1, time: 100, kind: LOG_KIND.BOOT_START, flags: 2, args: [0x0a04, 1, 3000, 1, 1] },
+  ];
+  let listed = 0;
+  const make = (nowBlocks: number) => ({
+    logPage: async (from: number) => [1, events.length, events.filter((e) => e.seq >= from)] as never,
+    // a command the runtime does not keep quiet logs an event stamped with the block count now
+    list: async () => {
+      listed++;
+      events.push({ seq: events.length + 1, time: nowBlocks, kind: LOG_KIND.UPLOAD, flags: 2, args: [0, 0, 0, 0, 0] });
+      return [];
+    },
+    info: async () => ({ log_sink: true }),
+    logConfig: async () => ({ level: 2, modules: [] }),
+    setLogConfig: async () => ({}),
+    modules: async () => [],
+  });
+  // the boot is 10 minutes old and nothing was logged since: no waiting
+  await untilBootStable(make(100 + 900_000) as never, clock);
+  assert.equal(listed, 1);
+  assert.equal(t, 0);
+  // the boot is 1 s old (1500 blocks of 3000): it waits, reports, and STABLE ends the wait
+  events.length = 1;
+  const waits: [number, number][] = [];
+  const young = make(100 + 1500);
+  const done = untilBootStable(young as never, clock, (w, of) => {
+    waits.push([w, of]);
+    if (waits.length === 2)
+      events.push({ seq: events.length + 1, time: 100 + 3000, kind: LOG_KIND.STABLE, flags: 2, args: [0, 0, 0, 0, 0] });
+  });
+  await done;
+  assert.deepEqual(
+    waits.map((w) => w[1]),
+    [2, 2],
+  );
+  assert.ok(t >= 2000);
+});
+
 test('the machine step remembers the type the firmware reported as the old one and puts it back with `original`', async () => {
   const sent: [string, number, number][] = [];
   const session = {
