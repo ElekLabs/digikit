@@ -577,7 +577,7 @@ manifest, so `flash`, `preflight` and the wasm callers check it; with the librar
 A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
 prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
 ([README](../modules/core/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
-32,672 bytes over `container_max`; with it the container is 2,011,488 bytes.
+over `container_max`; with it the container fits (`flash` and `verify` print the free space).
 
 ### The bootstrap's in-place unpack of MAIN
 
@@ -590,7 +590,7 @@ decoder runs away before MAIN starts and the unit stays at its logo. The **in-pl
   Digitone II images are byte for byte as before), otherwise the same optimal path with the shortest tail written as literals that reaches the floor (the bootstrap reads them like any token). When the tail
   and the container cap cannot both be met, `apply` refuses and says how much the tail costs: trim the runtime or move it out of MAIN.
 - `verify` (with and without a library), `preflight`, `flash` and the workbench path refuse a stored MAIN stream below the floor.
-- They print the budget: `bootstrap margin 8.0 KB, container 23.3 KB free` (`bootstrap margin: the unpack stays below the stage ...` when the output never reaches it).
+- They print the budget: `bootstrap margin 8.0 KB, container 20.3 KB free` (the numbers of the current image) (`bootstrap margin: the unpack stays below the stage ...` when the output never reaches it).
 
 ### Codec and safety rules
 
@@ -633,12 +633,12 @@ hardware result.
 ### Flashing a Syntakt
 
 A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the image of each is under the 2 MiB `container_max` only because
-`core/peer-image` stores section 7 packed ([finding 151](findings/151-syntakt-section7-pack.md)). Neither has run on a unit yet; the emulator proof is in the finding.
+`core/peer-image` stores section 7 packed ([finding 151](findings/151-syntakt-section7-pack.md)). Both images boot on a unit: the `device-peer` image and the full `device` image. Section 7 packing and MAIN's unpack are proven on the hardware. The store area is not yet confirmed on the unit.
 
 | Set | Modules | Container (OS 1.42) | Flashed by |
 |---|---|---|---|
-| `device` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | 2,011,472 bytes | the workbench Firmware page, as on the other devices |
-| `device-peer` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | 1,882,784 bytes | the command line only: an optional first flash |
+| `device` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | under `container_max` | the workbench Firmware page, as on the other devices |
+| `device-peer` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | well under `container_max` | the command line only: an optional first flash |
 
 `device-peer` changes MAIN only at the peer thread's NOR read and the reset-path loader, and section 7 is stored packed: it shows on its own whether the unit boots and
 the second CPU loads the unpacked program. Before any flash: **back up the +Drive card**, keep `Syntakt_OS1.42.syx`, and do not use Transfer to put samples or

@@ -17,7 +17,7 @@ On a Syntakt, DIGIKIT > MODULES showed an empty list ("NO STORE") and no key wor
 
 ## What was built
 
-`[input.view_keys]` of the device file (`yes`, `yes2` (0: none), `no`, `right`, `move_flag`, `act_flag`) holds the key ids; `patchkit gen` writes `build/gen/ui-<dev>.inc`; a small object per device (`core/ui/src/keys/<dev>.s`) holds the six
+`[input.view_keys]` of the device file (`yes`, `yes2` (optional; absent: none, generated as 0xffffffff), `no`, `right`, `move_flag`, `act_flag`) holds the key ids; `patchkit gen` writes `build/gen/ui-<dev>.inc`; a small object per device (`core/ui/src/keys/<dev>.s`) holds the six
 words and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10, 0x31, 12, 15 (as before). Syntakt: 12, 48, 13, 17. The patchkit test
 `the_syntakt_view_keys_are_the_decoder_table_entries` reads the table from the stock image and compares.
 
