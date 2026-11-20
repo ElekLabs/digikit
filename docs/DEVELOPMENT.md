@@ -240,6 +240,8 @@ Usage of the port file (`patchkit port build|check`, `patchkit:ports`): [PATCHIN
 Services and the port file (no binding step; `patchkit port build|check|stock`): [PATCHING.md](PATCHING.md#services-and-the-port-file). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
 Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
 
+Lane SHARC tests check their PGO library before joining the emulator queue ([PGO policy](TESTING.md#core-library-store)).
+
 Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).
 Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `modules/core/runtime/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
 Usage of the SDK-surface coverage (`patchkit imports`, `patchkit coverage`, `patchkit:sdk-coverage`): [TESTING.md](TESTING.md#sdk-surface-coverage).
