@@ -397,9 +397,11 @@
           "offset": 0
         }
       },
+      "sig": "i32 (u32 track_object)",
       "subsystem": "filter",
       "users": [
-        "core/services/machines"
+        "core/services/machines",
+        "core/runtime"
       ],
       "was": []
     },
@@ -547,6 +549,56 @@
       "subsystem": "filter",
       "users": [
         "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40031a56",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40031a56",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4003696e",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_set_kit",
+        "rust": "dkfw::filter::set_kit"
+      },
+      "cpu": "cf",
+      "doc": "The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.set_kit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "i32 (u32 kit, i32 track, i32 ty, i32 flag4, i32 flag5)",
+      "subsystem": "filter",
+      "users": [
+        "core/runtime"
       ],
       "was": []
     },
@@ -3596,6 +3648,56 @@
       "was": [
         "cf.machines.permit"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40031880",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40031880",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40036798",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_machine_set_kit",
+        "rust": "dkfw::machine::set_kit"
+      },
+      "cpu": "cf",
+      "doc": "The KitActive set-machine wrapper the machine chooser commits through: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15, calls the machine setter on the track object (k + 0x6c + track * 0x3c0; the setter checks the permit and sends the change), and updates the mask of tracks that hold the special type. DT2 0x40036798, DN2 0x40031880. Finding 150. The debug module's SETUP command calls it from the UI task.",
+      "file": "devices/fw/machine.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.machine.fn.set_kit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "i32 (u32 kit, i32 track, i32 ty, i32 flag4, i32 flag5)",
+      "subsystem": "machine",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -24096,7 +24198,7 @@
       "name": "draw"
     },
     {
-      "count": 10,
+      "count": 11,
       "cpu": "cf",
       "file": "devices/fw/filter.toml",
       "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",
@@ -24124,7 +24226,7 @@
       "name": "link"
     },
     {
-      "count": 64,
+      "count": 65,
       "cpu": "cf",
       "file": "devices/fw/machine.toml",
       "meaning": "the machine framework: dispatch, names, per-type tables, the run-time registry",

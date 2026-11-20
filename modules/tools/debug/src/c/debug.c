@@ -16,6 +16,10 @@
  *   0x1e PROFILE_STATE  body: u8 op (0 get, 1 start, 2 stop, 3 reset)   reply: u8 state (0 stopped, 1 running), u32 clock Hz, u16 rows, u64 elapsed ticks of the span clock while running since the last reset,
  *                       then the 4 poll slots, each u8 owner (0 empty, 1 + module record, 0xff firmware image) and u32 function address
  *   0x1f PROFILE_READ   body: u16 first row   reply: u16 first, u8 n, then n rows of u32 calls, u64 sum, u32 max (ticks of the span clock; big endian)
+ *   0x0a SETUP          body: u8 op (1 machine type, 2 filter type), u8 track (0 to 15), u8 type   reply: u8 seq (1 to 255, then from 1 again)
+ *                       Queues the request for the next pass of the UI task, which sets the type through the firmware's own kit commit (`dk_debug_setup`, the call a
+ *                       chooser makes) and logs SETUP_DONE: op, track, type, seq and the status (0, or a negative code: the firmware kept the old type, or the type is
+ *                       not one a chooser offers; DK_E_AGAIN: cancelled by fini with the request queued). DK_E_BUSY while a request is queued, DK_E_STATE until the track watch has its baseline.
  * Start sets the span sink and clock (`dk_span_sink_set`); stop, and fini, clear them. The table has one row per module record, per service phase (3) and per poll (4).
  *
  * The tick (once per pass of the UI task, set with the sink) reads the machine type of each of the 16 tracks every 20 ms from the firmware (`dk_debug_track_type`) and logs a change (MACHINE_CHANGE). Each pass it also reads the Sound words of the selected track (`dk_debug_selected_params`) and logs a changed word (PARAM_CHANGE, level 3). The card log decisions run in the module's own tick (`dk_module.tick`, once per UI pass). */
@@ -59,6 +63,9 @@ typedef uint8_t u8;
 #define CMD_LOGCFG 0x22u
 
 /* The profiling commands: the `debug_profile` range of sdk/sdk.toml (PROFILE_STATE, PROFILE_READ). */
+/* SETUP: the `debug_setup` range of sdk/sdk.toml. */
+#define CMD_SETUP 0x0au
+
 #define CMD_PROFILE_FIRST 0x1eu
 #define CMD_PROFILE_COUNT 2u
 #define CMD_PROFILE_STATE 0x1eu
@@ -99,6 +106,7 @@ typedef uint8_t u8;
 #define LEVEL_MAX 4u
 
 #define K_MACHINE_CHANGE 26u
+#define K_SETUP_DONE 49u
 #define K_PARAM_CHANGE 42u
 #define PARAMS                                                                                     \
     101u /* Sound words of the larger device (Digitone II); the runtime zeroes the words a device does not have */
@@ -861,6 +869,62 @@ static int32_t cmd(u32 c, u32 seq, const void *body, u32 len, void *out)
     return E_PROTO;
 }
 
+/* ---- SETUP: a track's machine or filter type, set in the UI task ----------------------------------------------------------------- */
+
+static struct {
+    volatile u8
+        pending; /* set last by the command, cleared by the tick after it logged SETUP_DONE */
+    volatile u8
+        ready; /* the track watch has its baseline: a project exists and was scanned (set by the tick, cleared by fini) */
+    u8 op, track, type, seq;
+} setup;
+
+static int32_t cmd_setup(u32 c, u32 seq, const void *vbody, u32 len, void *vout)
+{
+    const u8 *body = vbody;
+    u8 *out = vout;
+    (void)seq;
+    if (c != CMD_SETUP)
+        return E_PROTO;
+    if (len != 3u)
+        return E_MSG;
+    if (body[0] < 1u || body[0] > 2u || body[1] >= TRACKS)
+        return E_PROTO;
+    if (!setup.ready)
+        return DK_E_STATE; /* the project is not loaded yet: the track watch has not taken its baseline (the first scan, 2 s after the first UI pass) */
+    if (setup.pending)
+        return DK_E_BUSY;
+    setup.op = body[0];
+    setup.track = body[1];
+    setup.type = body[2];
+    setup.seq = (u8)(setup.seq == 255u ? 1u : setup.seq + 1u);
+    setup.pending = 1;
+    out[0] = setup.seq;
+    return 1;
+}
+
+/* SETUP_DONE for the pending request with `r`, then the request is gone. */
+static void setup_done(int32_t r)
+{
+    u32 a[5];
+    a[0] = setup.op;
+    a[1] = setup.track;
+    a[2] = setup.type;
+    a[3] = setup.seq;
+    a[4] = (u32)r;
+    dk_log_event(K_SETUP_DONE, L_INFO << LEVEL_SHIFT, a);
+    setup.pending = 0;
+}
+
+/* The request, in the UI task: the type goes through the firmware's own commit; the log says what came of it. The status is 0, DK_E_RANGE (a type no chooser
+ * offers), or DK_E_STATE: the firmware kept the old type (the machine permit refused it on that track, or the project's settings mode makes the setter skip the
+ * write), the read-back of the type differs from the request, or there is no project. */
+static void setup_run(void)
+{
+    if (setup.pending)
+        setup_done(dk_debug_setup(setup.op, setup.track, setup.type));
+}
+
 /* ---- the track watch (the sink's tick, once per pass of the UI task) ---------------------------------------------------------------- */
 
 static struct {
@@ -914,6 +978,7 @@ static void tick(void)
 {
     u32 t, a[5];
     u32 b = now();
+    setup_run();
     if (!watch.started) {
         watch.started = 1u;
         watch.next = b + TRACKS_FROM;
@@ -938,6 +1003,7 @@ static void tick(void)
         watch.types[t] = ty;
     }
     watch.valid = 1u;
+    setup.ready = 1u;
 }
 
 static int32_t init(dk_module_ctx *ctx)
@@ -959,6 +1025,10 @@ static int32_t init(dk_module_ctx *ctx)
         dk_log(DK_LOG_INFO, "debug: dk_host_register refused (profile dsp)", 0);
         return DK_E_CMD_RANGE;
     }
+    if (dk_host_register(CMD_SETUP, 1u, cmd_setup) != 0) {
+        dk_log(DK_LOG_INFO, "debug: dk_host_register refused (setup)", 0);
+        return DK_E_CMD_RANGE;
+    }
     clk_addr = dk_debug_span_clock(&clk_hz);
     dsp_gen = dk_time_blocks();
     cl_init(ctx);
@@ -970,6 +1040,9 @@ static void fini(dk_module_ctx *ctx)
 {
     (void)ctx;
     dk_debug_log_sink_set(0, 0);
+    setup.ready = 0;
+    if (setup.pending)
+        setup_done(DK_E_AGAIN); /* cancelled: the request never ran */
     if (profiling)
         span_stop();
     if (job_id > 0)

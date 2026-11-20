@@ -1,7 +1,7 @@
 // The calibration runner: plays a profile's cases on a target (an emulator or a device) and captures DSP stats and runtime spans, one `dk.profile/1`
 // per capture. The caller connects and gives the pieces (`Rig`); the runner holds no connection and no module-level state, so `wb profile calibrate run`
 // and the workbench's Profile pane use the same code. Host tests: tests/calibration-runner.test.ts. Format: docs/INSTRUMENTATION.md "Calibration runs".
-import type { Clock, MidiOut, RuntimeEvents } from '@digi/dk-session';
+import { ModuleLoadRefused, type Clock, type MidiOut, type RuntimeEvents } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
 import { buildProfile, type DspRowOut } from '../profile/profile-artifact.ts';
 import { canonicalJson, sha256Hex, STOCK_CASE, type CalCase, type CalProfile } from './calprofile.ts';
@@ -31,7 +31,10 @@ export interface Rig {
     tap(key: string | number, holdMs?: number): Promise<void>;
     turn(encoder: string | number, by: number): Promise<void>;
   };
-  /** Machine or filter type through the firmware's setters (the SETUP command of the debug module). */
+  /**
+   * Machine or filter type through the firmware's setters (the SETUP command of the debug module). `track` is 1 to 16; a machine `type` is a number or the id of
+   * the loaded module whose machine it is. Resolves when the firmware has performed the change.
+   */
   setup?: (what: 'machine' | 'filter' | 'effect', track: number, type: number | string) => Promise<void>;
   shot?: (name: string) => Promise<void>;
   /** Returns when the target has taken all queued input. */
@@ -80,9 +83,14 @@ export interface CaseResult {
   captures: Capture[];
   /** Why the case did not run (the target lacks something it needs). */
   skipped?: string;
+  /** Why the case failed (a module capture without a call of any row): the captures before it are kept, the run goes on with the next case. */
+  failed?: string;
 }
 
 const isSetup = (o: Op) => o.op === 'setup';
+
+/** `E_MISSING` of sdk/sdk.toml `[load.status]`: the service the module imports is not in the image. */
+const E_MISSING = -73;
 
 /** Clock ms the sweep that ends a capture may take (a sweep is 50 blocks, about 33 ms of the device). */
 const SWEEP_WAIT_MS = 5000;
@@ -107,8 +115,10 @@ async function withHangGuard<T>(p: Promise<T>, ms: number, what: string): Promis
 /** What a case needs that the rig does not have, or undefined. */
 function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
   for (const o of ops) {
+    if (isSetup(o) && o.what === 'effect')
+      return 'it puts an effect in the chain, which the SETUP command of the debug module cannot do (it sets machine and filter types)';
     if (isSetup(o) && !rig.setup)
-      return 'it sets a machine or filter type, which needs the SETUP command of the debug module (not built yet)';
+      return 'it sets a machine or filter type, which needs the SETUP command of the debug module (the target has no runtime log with it)';
     if ((o.op === 'key' || o.op === 'turn') && !rig.panel)
       return 'it presses keys, and the target has no panel input here';
     if (o.op === 'shot' && !rig.shot) return 'it takes a screenshot, and the target has no screenshot here';
@@ -120,13 +130,13 @@ function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
   return undefined;
 }
 
-async function play(o: Op, rig: Rig): Promise<void> {
-  await playOp(o, rig);
+async function play(o: Op, rig: Rig, pause?: (ms: number) => Promise<void>): Promise<void> {
+  await playOp(o, rig, pause);
   // a case must not start capturing before the firmware took the notes it was sent
   if (o.op.startsWith('midi.') && rig.drained) await rig.drained();
 }
 
-async function playOp(o: Op, rig: Rig): Promise<void> {
+async function playOp(o: Op, rig: Rig, pause?: (ms: number) => Promise<void>): Promise<void> {
   switch (o.op) {
     case 'midi.note':
       return rig.midi.note(o.ch, o.key, o.velocity);
@@ -151,7 +161,7 @@ async function playOp(o: Op, rig: Rig): Promise<void> {
     case 'capture':
       return;
     case 'wait': {
-      if (o.ms !== undefined) return rig.clock.pause(o.ms);
+      if (o.ms !== undefined) return (pause ?? ((ms) => rig.clock.pause(ms)))(o.ms);
       if (o.drained) return rig.drained!();
       const match = o.match ?? {};
       await rig.events!.until(o.event as never, (e) => Object.entries(match).every(([k, v]) => e.fields[k] === v), {
@@ -161,8 +171,8 @@ async function playOp(o: Op, rig: Rig): Promise<void> {
   }
 }
 
-async function playAll(ops: Op[], rig: Rig): Promise<void> {
-  for (const o of ops) await play(o, rig);
+async function playAll(ops: Op[], rig: Rig, pause?: (ms: number) => Promise<void>): Promise<void> {
+  for (const o of ops) await play(o, rig, pause);
 }
 
 /** Split a case's operations at its `capture start` and `capture stop` markers: before, the measured window, after. Without markers the window is empty. */
@@ -209,7 +219,11 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   // resolve everything first: a wrong name or a track without a channel fails before anything is played
   const setup = profile.setup ? resolveRef(profile.setup, i.steps, ctx('setup')) : [];
   const teardown = profile.teardown ? resolveRef(profile.teardown, i.steps, ctx('teardown')) : [];
-  const resolved = profile.cases.map((c) => ({ c, ops: resolveRef(c.steps, i.steps, ctx(`case ${c.id}`)) }));
+  const resolved = profile.cases.map((c) => ({
+    c,
+    ops: resolveRef(c.steps, i.steps, ctx(`case ${c.id}`)),
+    after: c.teardown ? resolveRef(c.teardown, i.steps, ctx(`case ${c.id} teardown`)) : [],
+  }));
   for (const { c, ops } of resolved) splitCapture(ops, `case ${c.id}`);
   if (!i.run.firmware_sha256 && !i.allowUnidentifiedFirmware)
     throw new Error(
@@ -230,10 +244,11 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
   await rig.stats.stop();
 
   // decide what runs before the target is touched: a skipped case installs and loads nothing
-  const plan = resolved.map(({ c, ops }) => ({
+  const plan = resolved.map(({ c, ops, after }) => ({
     c,
     ops,
-    reason: missing([...setup, ...ops, ...teardown], rig, c.modules),
+    after,
+    reason: missing([...setup, ...ops, ...teardown, ...after], rig, c.modules),
   }));
   const needed = [...new Set(plan.filter((x) => !x.reason).flatMap((x) => x.c.modules))];
   const results: CaseResult[] = [];
@@ -243,7 +258,7 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
       hashes = await rig.modules!.install(needed);
       for (const id of needed) if (!hashes[id]) throw new Error(`module ${id}: no file to install (build it first)`);
     }
-    for (const { c, ops, reason } of plan) {
+    for (const { c, ops, after, reason } of plan) {
       if (reason) {
         log(`case ${c.id}: skipped, ${reason}`);
         const r = { id: c.id, captures: [], skipped: reason };
@@ -251,7 +266,7 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
         await i.onCase?.(r);
         continue;
       }
-      const r = await runCase(i, c, setup, ops, teardown, hashes, caps.dsp, log);
+      const r = await runCase(i, c, setup, ops, teardown, after, hashes, caps.dsp, log);
       results.push(r);
       await i.onCase?.(r);
     }
@@ -282,6 +297,7 @@ async function runCase(
   setup: Op[],
   ops: Op[],
   teardown: Op[],
+  after: Op[],
   hashes: Record<string, string>,
   dsp: boolean,
   log: (l: string) => void,
@@ -299,11 +315,51 @@ async function runCase(
       modules: c.modules,
       setup,
       case: ops,
-      teardown,
+      teardown: [...teardown, ...after],
     }),
   );
   const captures: Capture[] = [];
-  await ensureModules(rig, c.modules, log);
+  try {
+    await ensureModules(rig, c.modules, log);
+  } catch (e) {
+    // the runtime refused the module because the image lacks a core module the case declares it needs: the case cannot run here
+    const declared = c.needs ?? [];
+    const lacking = e instanceof ModuleLoadRefused ? e.needs : undefined;
+    const named = lacking !== undefined && declared.some((n) => n.replace(/^core\//, '') === lacking);
+    // E_MISSING: a service the module imports is not in the image (the module that provides it is not part of it); the case says what it needs
+    const service = e instanceof ModuleLoadRefused && e.result === E_MISSING && declared.length > 0;
+    if (named || service) {
+      const reason = named
+        ? `the image has no core/${lacking}, which the module needs`
+        : `the image lacks a service the module needs (the case declares ${declared.join(', ')})`;
+      log(`case ${c.id}: skipped, ${reason}`);
+      return { id: c.id, captures: [], skipped: reason };
+    }
+    throw e;
+  }
+  // notes with `retrigger_ms` are pressed again during every wait of the capture, so that a voice that ends by itself sounds for the whole window
+  const keepers = [...setup, ...pre].filter(
+    (o): o is Extract<Op, { op: 'midi.note' }> => o.op === 'midi.note' && o.retrigger_ms !== undefined,
+  );
+  const pause = async (ms: number): Promise<void> => {
+    if (keepers.length === 0) return rig.clock.pause(ms);
+    const every = Math.min(...keepers.map((k) => k.retrigger_ms!));
+    let next = every;
+    for (let left = ms; left > 0;) {
+      const slice = Math.min(next, left);
+      await rig.clock.pause(slice);
+      left -= slice;
+      // pressed again only when the wait goes on: a press at its end would start a voice that the next measurement sees from its first block
+      if (left > 0) {
+        // sending the key takes clock time too (the drain wait): the next slice is shorter by it, so the period stays `retrigger_ms`
+        const before = await rig.clock.now();
+        for (const k of keepers) await play(k, rig);
+        next = Math.max(1, every - ((await rig.clock.now()) - before));
+      } else next = every;
+    }
+  };
+  let failed: string | undefined;
+  let stopError: Error | undefined;
   try {
     await playAll(setup, rig);
     await playAll(pre, rig);
@@ -313,10 +369,10 @@ async function runCase(
       let reading: StatsReading;
       try {
         await rig.stats.start();
-        await rig.clock.pause(profile.warmup_s * 1000);
+        await pause(profile.warmup_s * 1000);
         const { generation } = await rig.stats.clear();
-        if (marked) await playAll(body, rig);
-        else await rig.clock.pause(profile.capture_s * 1000);
+        if (marked) await playAll(body, rig, pause);
+        else await pause(profile.capture_s * 1000);
         if (dsp) {
           // the window ends with the first complete sweep of this clear generation that the mirror publishes after it (about 50 blocks): the runtime logs DSP_SWEEP
           await rig.events!.listen();
@@ -336,6 +392,20 @@ async function runCase(
       }
       const dspOut = dspPart(reading, i.dspUnit);
       if (dsp && !dspOut) throw new Error(`case ${c.id}: no complete DSP sweep after the capture`);
+      if (dspOut && c.modules.length > 0) {
+        const busy = dspOut.rows.filter((x) => x.calls > 0);
+        if (busy.length === 0) {
+          // a failure of this case, recorded; the run goes on with the next case
+          failed = `capture ${r} counted no calls of any machine or effect row: nothing of the module sounded in the window (a voice that ends by itself needs retrigger_ms on its note)`;
+          log(`case ${c.id}: failed, ${failed}`);
+          break;
+        }
+        for (const x of busy)
+          if (x.calls < 0.5 * dspOut.header.blocks)
+            log(
+              `case ${c.id}: capture ${r}: row ${x.row} has ${x.calls} calls in ${dspOut.header.blocks} blocks: the voice did not sound the whole window`,
+            );
+      }
       if (c.id === STOCK_CASE && dspOut?.rows.some((x) => x.calls > 0))
         throw new Error(
           `case ${c.id}: the stock case counted module rows (a module is loaded or a module machine plays)`,
@@ -355,14 +425,22 @@ async function runCase(
       captures.push(capture);
       await i.onCapture?.(capture);
     }
-    await playAll(post, rig);
+    if (!failed) await playAll(post, rig);
   } finally {
     // the notes of the case must not hold on into the next one, also after a failure
     await playAll(teardown, rig).catch((e) =>
       log(`case ${c.id}: teardown failed: ${e instanceof Error ? e.message : e}`),
     );
+    // what the case changed on the target (the track's machine type) is put back before the next case loads other modules; a refusal stops the run
+    await playAll(after, rig).catch((e) => {
+      stopError = e instanceof Error ? e : new Error(String(e));
+    });
   }
-  return { id: c.id, captures };
+  if (stopError)
+    throw new Error(
+      `case ${c.id}: putting the track's machine type back failed (${stopError.message}): the run stops before the next case unloads the module, so that no track keeps the machine type of an unloaded module`,
+    );
+  return { id: c.id, captures, ...(failed ? { failed } : {}) };
 }
 
 export type { StepRef };

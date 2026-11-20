@@ -20,6 +20,7 @@
 
 [dt2]
 last = 23
+stock_types = 7   # the stock machine types 0..6: the first number that is not stock (the length of the firmware's machine list table)
 dynamic_first = 16
 
 [dt2.alloc]
@@ -40,6 +41,7 @@ dynamic_first = 16
 
 [dn2]
 last = 23
+stock_types = 5   # the stock machine types 0..4
 dynamic_first = 16
 
 [dn2.alloc]

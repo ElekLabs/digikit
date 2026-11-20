@@ -8,7 +8,8 @@
 // with a run.json that lists them. Exit 1 when a case was skipped (the target lacks something it needs) or the run failed. Use: docs/INSTRUMENTATION.md "Calibration runs".
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { parse as parseToml } from 'smol-toml';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { MidiOut, RuntimeEvents, wallClock } from '../../packages/dk-session/src/index.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
@@ -19,6 +20,7 @@ import {
   parseCalProfile,
 } from '../../packages/workbench-core/src/calibration/calprofile.ts';
 import { runCalibration } from '../../packages/workbench-core/src/calibration/runner.ts';
+import { sessionSetup, untilBootStable } from '../../packages/workbench-core/src/calibration/rigsetup.ts';
 import { sessionStatsSource } from '../../packages/workbench-core/src/calibration/stats.ts';
 import { parseStepFile } from '../../packages/workbench-core/src/calibration/steps.ts';
 import { libraryModule, restartDevice } from '../../packages/workbench-core/src/modules/dktransfer.ts';
@@ -30,7 +32,8 @@ const dirOf = (root) => path.join(root, 'devices/calibration');
 /** The profile named by `--profile`: a file path, or a name in devices/calibration/profiles/. */
 function profileFile(root, spec, fail) {
   if (!spec) fail('profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]');
-  if (existsSync(spec) && !spec.includes('..')) return spec;
+  // a file only: the profile named `modules` must not take the `modules/` folder of the repository
+  if (existsSync(spec) && statSync(spec).isFile() && !spec.includes('..')) return spec;
   const named = path.join(dirOf(root), 'profiles', `${spec}.toml`);
   if (!existsSync(named)) {
     const known = readdirSync(path.join(dirOf(root), 'profiles')).map((f) => f.replace(/\.toml$/, ''));
@@ -49,8 +52,11 @@ function stepLibrary(root) {
   return lib;
 }
 
-/** The `calibration.toml` a module ships in its own directory (modules/machines|fx|tools/NAME/). */
-function moduleCases(root, fail) {
+/**
+ * The `calibration.toml` a module ships in its own directory (modules/machines|fx|tools/NAME/), for the modules whose `module.toml` lists a port of `device` (the id before the version of the INFO port):
+ * a module that is not built for the target has no case on it (the install would refuse it and end the run).
+ */
+function moduleCases(root, fail, device) {
   const found = [];
   for (const kind of ['machines', 'fx', 'tools']) {
     const base = path.join(root, 'modules', kind);
@@ -58,6 +64,8 @@ function moduleCases(root, fail) {
     for (const name of readdirSync(base)) {
       const f = path.join(base, name, 'calibration.toml');
       if (!existsSync(f)) continue;
+      const manifest = parseToml(readFileSync(path.join(base, name, 'module.toml'), 'utf8'));
+      if (!(manifest.module?.ports ?? []).some((p) => p.split('-')[0] === device)) continue;
       try {
         found.push(parseCalCase(readFileSync(f, 'utf8'), path.relative(root, f)));
       } catch (e) {
@@ -78,10 +86,10 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
   }
-  profile = addModuleCases(profile, moduleCases(root, fail));
   const { session } = link;
   // the runtime's INFO names the device by its id (the debug module is needed anyway); the stock Ping can fail on the emulator
   const info = await session.info();
+  profile = addModuleCases(profile, moduleCases(root, fail, info.port.split('-')[0]));
   const record = devices.get(opts.device ?? info.port);
   if (!record.midi) fail(`the ${record.name} device file has no [midi] table`);
   const emu = Boolean(opts.emu);
@@ -106,15 +114,18 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
 
   // modules: the files of the library, the install and selection of `wb transfer install`, the restart of the Transfer pane
   const library = new Map();
+  // the modules that stay loaded whatever the case selects (the debug module, the remote module: no rows and no types), found by their file in the library
+  let keep = [];
   const bootTimeoutMs = emu ? 600_000 : undefined;
   const modules = {
     async install(ids) {
       const info = await session.info();
+      keep = (await session.modules()).filter((m) => m.rows === 0 && m.types.length === 0).map((m) => m.name);
       for (const f of await host.library.scan(info.port)) {
         if (!f.path.endsWith('.dkm')) continue;
         const bytes = new Uint8Array(await host.library.read(info.port, f.path));
         const m = await libraryModule(bytes);
-        if (m && ids.includes(m.id))
+        if (m && (ids.includes(m.id) || keep.includes(m.id)))
           library.set(m.id, { path: m.path, sha256: createHash('sha256').update(bytes).digest('hex') });
       }
       const missingIds = ids.filter((id) => !library.has(id));
@@ -134,9 +145,14 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
       return Object.fromEntries(ids.map((id) => [id, library.get(id).sha256]));
     },
     async select(ids) {
-      await session.select(ids.map((id) => library.get(id).path));
+      // the debug module's log is what the run waits on: it stays selected with the case's modules
+      const stay = keep.filter((id) => library.has(id) && !ids.includes(id));
+      await untilBootStable(session, clock);
+      await session.select([...ids, ...stay].map((id) => library.get(id).path));
       await restartDevice(session, emit, { bootTimeoutMs, loadedTimeoutMs: bootTimeoutMs ? 120_000 : undefined });
       await events.listen({ fromBoot: true });
+      // the runtime's own MOD_LOAD and MOD_DSP events say when every module of the selection is in; a refusal throws ModuleLoadRefused
+      await events.untilModulesActive(ids.length + stay.length);
       await refreshNames();
     },
     // content modules: a service has no rows and no types
@@ -169,6 +185,7 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
     stats: sessionStatsSource(session, nameOf),
     clock,
     events,
+    setup: sessionSetup(session, events, clock),
     modules,
     ...(remote
       ? {
@@ -225,10 +242,10 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
     writeIndex();
   };
   const onCase = (r) => {
-    if (!r.skipped) return;
+    if (!r.skipped && !r.failed) return;
     skipped++;
-    console.log(`  ${r.id}: SKIPPED, ${r.skipped}`);
-    index.push({ case: r.id, skipped: r.skipped });
+    console.log(`  ${r.id}: ${r.skipped ? `SKIPPED, ${r.skipped}` : `FAILED, ${r.failed}`}`);
+    index.push({ case: r.id, ...(r.skipped ? { skipped: r.skipped } : { failed: r.failed }) });
     writeIndex();
   };
   try {

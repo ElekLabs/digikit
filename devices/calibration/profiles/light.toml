@@ -9,4 +9,4 @@ teardown = { steps = "release-notes", args = { tracks = "1" } }
 [[case]]
 id = "stock"
 steps = "hold-note"
-args = { tracks = "1" }
+args = { tracks = "1", retrigger_ms = 1000 }

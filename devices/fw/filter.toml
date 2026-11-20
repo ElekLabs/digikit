@@ -17,10 +17,11 @@ doc = "Filter type to descriptor row (type at 4(sp); d0 and d1 free at the entry
 [[fn]]
 name = "cf.filter.fn.get"
 cpu = "cf"
+sig = "i32 (u32 track_object)"
 rule.dt2 = { kind = "cf_func", hash = "16f610949af3b60dff8fde5f2351de96", offset = 0x0, len = 6 }
 rule.dn2 = { kind = "cf_func", hash = "c43705027173a44cb8708e4f1be3e534", offset = 0x0, len = 6 }
 mark = "D"
-users = ["core/services/machines"]
+users = ["core/services/machines", "core/runtime"]
 doc = "Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store."
 
 [[fn]]
@@ -31,6 +32,16 @@ rule.dn2 = { kind = "cf_func", hash = "837886f42e674306fbe958b59b09106f", offset
 mark = "D"
 users = ["core/services/machines"]
 doc = "Filter type setter, with no range check: it writes the byte and sends param 0xea (type << 7). DT2 FUN_40051886, DN2 FUN_4004cd7c. The service calls it to write the stock fallback type of a track."
+
+[[fn]]
+name = "cf.filter.fn.set_kit"
+cpu = "cf"
+sig = "i32 (u32 kit, i32 track, i32 ty, i32 flag4, i32 flag5)"
+rule.dt2 = { kind = "cf_func", hash = "ce8cf6e5c09f545e970e24bc1ecd373d", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "352724479de405988b1ec2e6145813b5", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150."
 
 [[fn]]
 name = "cf.filter.fn.name"

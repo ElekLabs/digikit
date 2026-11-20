@@ -1,6 +1,6 @@
 schema = "dk.steps/1"
 name = "play-module-effect"
-description = "Put a run-time effect of a loaded module in the chain, open the sends and hold a note. Needs the SETUP command of the debug module (not built yet)."
+description = "Put a run-time effect of a loaded module in the chain, open the sends and hold a note. SETUP sets machine and filter types, not effects: a runner skips the case."
 
 [args]
 track = 1

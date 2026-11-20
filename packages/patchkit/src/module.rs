@@ -574,6 +574,9 @@ pub struct DevAlloc {
     /// First number of the range reserved for run-time modules (`core/dynreg` reserves `dynamic_first ..= last`).
     #[serde(default)]
     pub dynamic_first: Option<i64>,
+    /// How many stock machine types the firmware has (types `0 .. stock_types`; the numbers up to `dynamic_first` that are not stock are built-in or gap rows).
+    #[serde(default)]
+    pub stock_types: Option<i64>,
 }
 
 impl AllocTable {

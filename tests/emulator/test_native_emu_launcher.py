@@ -359,3 +359,28 @@ def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_p
     with pytest.raises(SystemExit, match="cannot tell which device"):
         scope["main"]([str(syx)])
     assert calls == []
+
+
+def test_a_patched_build_keeps_the_audio_state_of_the_firmware_the_snapshot_was_taken_from(
+    tmp_path,
+):
+    """The ready snapshot is valid for one firmware: a patched build (another hash) must not become the audio profile, or the daemon refuses the snapshot."""
+    import hashlib
+    import json
+
+    scope = launcher()
+    stock = tmp_path / "stock.syx"
+    stock.write_bytes(b"stock")
+    patched = tmp_path / "patched.syx"
+    patched.write_bytes(b"patched")
+    snapshot = tmp_path / "digi-audio-m5.snap"
+    paths = {"CF snapshot": snapshot}
+    check = scope["ready_is_of_another_firmware"]
+    assert check(paths, patched) is False, (
+        "a directory that records nothing is not known to differ"
+    )
+    (tmp_path / "SOURCE.json").write_text(
+        json.dumps({"syx_sha256": hashlib.sha256(b"stock").hexdigest()})
+    )
+    assert check(paths, stock) is False
+    assert check(paths, patched) is True

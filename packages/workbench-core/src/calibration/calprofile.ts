@@ -11,6 +11,10 @@ export interface CalCase {
   steps: StepRef;
   /** The module ids loaded for the case, and nothing else (default: none). A subset of the profile's `modules`. */
   modules: string[];
+  /** Core modules the case needs in the image (`core/sample-pool`): a target whose image lacks one skips the case, with that reason, when the runtime refuses the module. */
+  needs?: string[];
+  /** Played after the profile's `teardown`, also after a failure (a discovered module case gets the profile's `module_teardown`). */
+  teardown?: StepRef;
 }
 
 export interface CalProfile {
@@ -24,6 +28,8 @@ export interface CalProfile {
   modules: string[];
   setup?: StepRef;
   teardown?: StepRef;
+  /** The teardown of every discovered module case, after `teardown`: puts back what the module's `setup` changed (the stock machine on the track). */
+  module_teardown?: StepRef;
   /** `modules`: the module cases come from the calibration files the modules ship (`dk.calcase/1`), added with `addModuleCases`. */
   discover?: 'modules';
   cases: CalCase[];
@@ -34,6 +40,8 @@ export interface CalCaseFile {
   id: string;
   module: string;
   steps: StepRef;
+  /** Core modules the case needs in the image (the module's imports from a core module that not every image has). */
+  needs: string[];
 }
 
 const isTable = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -93,6 +101,7 @@ export function parseCalProfile(text: string, file: string): CalProfile {
     'discover',
     'setup',
     'teardown',
+    'module_teardown',
     'case',
   ];
   for (const k of Object.keys(doc)) if (!known.includes(k)) throw new Error(`${file}: unknown key ${k}`);
@@ -145,6 +154,10 @@ export function parseCalProfile(text: string, file: string): CalProfile {
     if (!isTable(doc.teardown)) throw new Error(`${file}: teardown must be a table`);
     out.teardown = ref(file, 'teardown', doc.teardown);
   }
+  if (doc.module_teardown !== undefined) {
+    if (!isTable(doc.module_teardown)) throw new Error(`${file}: module_teardown must be a table`);
+    out.module_teardown = ref(file, 'module_teardown', doc.module_teardown);
+  }
   return out;
 }
 
@@ -160,12 +173,19 @@ export function parseCalCase(text: string, file: string): CalCaseFile {
   }
   if (doc.schema !== CALCASE_SCHEMA) throw new Error(`${file}: schema must be "${CALCASE_SCHEMA}"`);
   for (const k of Object.keys(doc))
-    if (!['schema', 'id', 'module', 'steps', 'args', 'inline'].includes(k))
+    if (!['schema', 'id', 'module', 'needs', 'steps', 'args', 'inline'].includes(k))
       throw new Error(`${file}: unknown key ${k}`);
   if (typeof doc.id !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(doc.id))
     throw new Error(`${file}: id must be lowercase letters, digits, _ and -`);
   if (typeof doc.module !== 'string' || doc.module === '') throw new Error(`${file}: module is missing`);
-  return { id: doc.id, module: doc.module, steps: ref(file, 'case', doc) };
+  return { id: doc.id, module: doc.module, needs: strings(file, 'needs', doc.needs), steps: ref(file, 'case', doc) };
+}
+
+/** The module teardown of a case: its step reference, with the `track` of the case's own arguments (the track the case set up), when it gives one. */
+function teardownOf(t: StepRef, own: StepRef): StepRef {
+  const track = 'args' in own ? own.args?.track : undefined;
+  if (track === undefined || !('steps' in t)) return t;
+  return { ...t, args: { ...t.args, track } };
 }
 
 /** The profile with the discovered module cases added after its own, and their modules in its module list. A profile without `discover` takes none. */
@@ -177,7 +197,13 @@ export function addModuleCases(profile: CalProfile, found: readonly CalCaseFile[
     if (cases.some((c) => c.id === f.id))
       throw new Error(`calibration case ${f.id} of module ${f.module} repeats a case id`);
     if (!modules.includes(f.module)) modules.push(f.module);
-    cases.push({ id: f.id, steps: f.steps, modules: [f.module] });
+    cases.push({
+      id: f.id,
+      steps: f.steps,
+      modules: [f.module],
+      ...(f.needs.length ? { needs: f.needs } : {}),
+      ...(profile.module_teardown ? { teardown: teardownOf(profile.module_teardown, f.steps) } : {}),
+    });
   }
   return { ...profile, cases, modules };
 }

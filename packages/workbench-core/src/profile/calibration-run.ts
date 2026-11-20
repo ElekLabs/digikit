@@ -13,6 +13,7 @@ import {
   type Rig,
   type RigModules,
 } from '../calibration/runner.ts';
+import { sessionSetup, untilBootStable } from '../calibration/rigsetup.ts';
 import { sessionStatsSource } from '../calibration/stats.ts';
 import { resolveRef, type Op } from '../calibration/steps.ts';
 import { runId } from './profile-artifact.ts';
@@ -54,6 +55,8 @@ export interface RunOutcome {
   emulator: boolean;
   captures: Capture[];
   skipped: { case: string; reason: string }[];
+  /** Cases that failed (a capture with no call of any module row); the run went on with the next case. */
+  failed: { case: string; reason: string }[];
   /** The run was stopped by the user. */
   stopped: boolean;
   /** Why the run failed (the captures made before are in `captures`). */
@@ -131,11 +134,14 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   if (deps.modules) {
     const m = deps.modules;
     const byId = new Map<string, { path: string; sha256: string }>();
+    // the modules that stay loaded whatever the case selects (the debug module, the remote module: no rows and no types), found by their file in the library
+    let keep: string[] = [];
     modules = {
       async install(ids) {
         const files = await m.library();
+        keep = (await session.modules()).filter((x) => x.rows === 0 && x.types.length === 0).map((x) => x.name);
         for (const f of files)
-          if (ids.includes(f.id) && !byId.has(f.id))
+          if ((ids.includes(f.id) || keep.includes(f.id)) && !byId.has(f.id))
             byId.set(f.id, {
               path: f.path,
               sha256: hex(await crypto.subtle.digest('SHA-256', f.bytes as Uint8Array<ArrayBuffer>)),
@@ -149,9 +155,16 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         return Object.fromEntries(ids.map((id) => [id, byId.get(id)!.sha256]));
       },
       async select(ids) {
-        await session.select(ids.map((id) => byId.get(id)!.path));
+        // the debug module's log is what the run waits on: it stays selected with the case's modules
+        const stay = keep.filter((id) => byId.has(id) && !ids.includes(id));
+        await untilBootStable(session, clock);
+        await session.select([...ids, ...stay].map((id) => byId.get(id)!.path));
         await restartDevice(session, () => {}, {});
-        if (events) await events.listen({ fromBoot: true });
+        if (events) {
+          await events.listen({ fromBoot: true });
+          // the runtime's own MOD_LOAD and MOD_DSP events say when every module of the selection is in; a refusal throws ModuleLoadRefused
+          await events.untilModulesActive(ids.length + stay.length);
+        }
         await refreshNames();
       },
       // content modules: a service has no rows and no types
@@ -174,11 +187,15 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
         }
       : undefined;
 
+  // SETUP (the debug module): a track's machine or filter type through the firmware's own setter, awaited on its SETUP_DONE
+  const setup = events ? sessionSetup(session, events, clock) : undefined;
+
   const rig: Rig = {
     midi: new MidiOut(deps.sink),
     stats: sessionStatsSource(session, nameOf),
     clock,
     ...(events ? { events } : {}),
+    ...(setup ? { setup } : {}),
     ...(modules ? { modules } : {}),
     ...(drained ? { drained } : {}),
   };
@@ -191,13 +208,13 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   if (info.fw_id) run.firmware_sha256 = info.fw_id;
   if (info.image_id) run.image_id = info.image_id;
 
-  // The cases this rig cannot play, as the runner will decide (it has no panel, no SETUP and no screenshots; waits need what the rig has).
+  // The cases this rig cannot play, as the runner will decide (it has no panel and no screenshots, SETUP sets no effects and needs the debug log; waits need what the rig has).
   const cannot = (ops: Op[], mods: string[]): boolean =>
     mods.length > 0 && !modules
       ? true
       : ops.some(
           (o) =>
-            o.op === 'setup' ||
+            (o.op === 'setup' && (o.what === 'effect' || !events)) ||
             o.op === 'key' ||
             o.op === 'turn' ||
             o.op === 'shot' ||
@@ -210,7 +227,16 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       r ? resolveRef(r, deps.files.steps, ctx('plan')) : [],
     );
     const skipping = profile.cases
-      .filter((c) => cannot([...around, ...resolveRef(c.steps, deps.files.steps, ctx(c.id))], c.modules))
+      .filter((c) =>
+        cannot(
+          [
+            ...around,
+            ...resolveRef(c.steps, deps.files.steps, ctx(c.id)),
+            ...(c.teardown ? resolveRef(c.teardown, deps.files.steps, ctx(c.id)) : []),
+          ],
+          c.modules,
+        ),
+      )
       .map((c) => c.id);
     opts.onEvent?.({ kind: 'plan', skipping });
   } catch {
@@ -218,7 +244,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
   }
   opts.onClock?.(() => base.now());
 
-  const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], stopped: false };
+  const out: RunOutcome = { profile: profile.name, emulator, captures: [], skipped: [], failed: [], stopped: false };
   try {
     await runCalibration({
       profile,
@@ -233,6 +259,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       },
       onCase: (r) => {
         if (r.skipped) out.skipped.push({ case: r.id, reason: r.skipped });
+        if (r.failed) out.failed.push({ case: r.id, reason: r.failed });
         opts.onCase?.(r);
       },
       log: (line) => opts.onEvent?.(parseRunLine(line)),

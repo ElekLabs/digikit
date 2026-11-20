@@ -10,7 +10,7 @@
 //   BOOT_START there is a new boot.
 // - A gap (the oldest kept event is newer than the anchor in the same boot: the ring dropped events we had not read) is reported as `lost`, never thrown.
 import { LOG_KIND } from './gen_proto.ts';
-import type { DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
+import type { DkInfoFull, DkLogEvent, DkSession, Quick } from './dkupload-core.ts';
 import { runtimeEvent, type RuntimeEvent } from './runtime-log.ts';
 import { BOOT_WAIT_MS, type Clock, type WaitRecord } from './waits.ts';
 
@@ -126,6 +126,22 @@ export class LogCursor {
 /** `RuntimeEvents.until` ran out of time: the event was not seen. */
 export class EventTimeout extends Error {}
 
+/** The runtime refused or failed to load the module at `index` of the selection: `result` is its load code (E_IMPORT -7: `needs` names the core module the image lacks). */
+export class ModuleLoadRefused extends Error {
+  readonly index: number;
+  readonly result: number;
+  readonly needs: string | undefined;
+  constructor(index: number, result: number, needs?: string) {
+    super(
+      `module ${index} of the selection did not load: result ${result}${needs ? `, the image lacks core/${needs}` : ''}`,
+    );
+    this.name = 'ModuleLoadRefused';
+    this.index = index;
+    this.result = result;
+    this.needs = needs;
+  }
+}
+
 export interface RuntimeEventsOptions {
   /** Real or clock milliseconds between polls, default 50. */
   pollMs?: number;
@@ -142,7 +158,7 @@ interface WaitOpts {
 }
 
 export class RuntimeEvents {
-  private readonly dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules'>;
+  private readonly dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'>;
   private readonly clock: Clock;
   private readonly cursor: LogCursor;
   private readonly pollMs: number;
@@ -154,7 +170,7 @@ export class RuntimeEvents {
   private recent: RuntimeEvent[] = [];
 
   constructor(
-    dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules'>,
+    dk: Pick<DkSession, 'logPage' | 'logConfig' | 'setLogConfig' | 'modules' | 'info'>,
     clock: Clock,
     opts: RuntimeEventsOptions = {},
   ) {
@@ -176,9 +192,24 @@ export class RuntimeEvents {
   async listen({ fromBoot = false }: { fromBoot?: boolean } = {}): Promise<void> {
     this.queue = [];
     this.recent = [];
+    // every debug-module command (LOG, LOGCFG) answers E_PROTO until the module has registered its range: INFO (a runtime command) says when its sink is set
+    await this.untilDebugModule();
     if (fromBoot) this.cursor.fromBoot();
     else await this.cursor.fromNewest();
     await this.setLevels();
+  }
+
+  /** Waits on INFO flag bit 3 (the debug module's log sink; the module registers its command range before it sets the sink). */
+  private async untilDebugModule(withinMs = 20_000): Promise<void> {
+    const start = await this.clock.now();
+    for (;;) {
+      if (((await this.dk.info()) as Partial<DkInfoFull>).log_sink === true) return;
+      if ((await this.clock.now()) - start >= withinMs)
+        throw new EventTimeout(
+          'the debug module (digikit/debug) did not set its log sink: INFO flag bit 3 stayed clear',
+        );
+      await this.clock.pause(this.pollMs);
+    }
   }
 
   /** The records of `debugModules` that are loaded go to `level`; the other levels stay. */
@@ -201,7 +232,7 @@ export class RuntimeEvents {
   }
 
   async until(
-    kind: LogKindName,
+    kind: LogKindName | LogKindName[] | '*',
     match: (e: RuntimeEvent) => boolean = () => true,
     { withinMs = 2000 }: WaitOpts = {},
   ): Promise<RuntimeEvent> {
@@ -210,7 +241,7 @@ export class RuntimeEvents {
     const done = async (ok: boolean) =>
       this.onWait?.({
         kind: 'event',
-        what: kind,
+        what: Array.isArray(kind) ? kind.join('|') : kind,
         clockMs: (await this.clock.now()) - start,
         wallMs: Date.now() - wallStart,
         ok,
@@ -223,7 +254,9 @@ export class RuntimeEvents {
           return hit;
         }
         if ((await this.clock.now()) - start >= withinMs)
-          throw new EventTimeout(`events.until ${kind}: not seen within ${withinMs} ms. Last events:\n${this.seen()}`);
+          throw new EventTimeout(
+            `events.until ${Array.isArray(kind) ? kind.join('|') : kind}: not seen within ${withinMs} ms. Last events:\n${this.seen()}`,
+          );
         await this.clock.pause(this.pollMs);
       }
     } catch (e) {
@@ -243,6 +276,60 @@ export class RuntimeEvents {
     } catch (e) {
       if (e instanceof EventTimeout) return null;
       throw e;
+    }
+  }
+
+  /**
+   * After a boot or restart of a selection of `count` content modules: wait on the runtime's own events until every module of the selection has its result: MOD_LOAD
+   * with 0, or with 1 and then MOD_DSP with 0 (the DSP part; `dsp: false` for a session without the DSP, where no DSP part completes: the CF part is final). A module
+   * the runtime refused (a negative result) is `ModuleLoadRefused`; E_IMPORT has its MOD_NEEDS right after (the missing core module), which is waited for a moment and
+   * is empty when it does not come. The cursor must be at the start of the boot (`listen({ fromBoot: true })`). Provider files (services) have no index here.
+   */
+  async untilModulesActive(
+    count: number,
+    { withinMs = 120_000, dsp: withDsp = true }: WaitOpts & { dsp?: boolean } = {},
+  ): Promise<void> {
+    if (count < 1)
+      throw new Error(
+        'untilModulesActive: the selection has no module, so the runtime logs no module event: the debug module file (digikit/debug) is missing from the selection or the library',
+      );
+    const E_IMPORT = -7;
+    const result = new Map<number, number>();
+    const dsp = new Set<number>();
+    const needs = new Map<number, string>();
+    const complete = () => {
+      for (let i = 0; i < count; i++) if (!result.has(i) || dsp.has(i)) return false;
+      return true;
+    };
+    await this.until(
+      ['MOD_LOAD', 'MOD_DSP', 'MOD_NEEDS'],
+      (e) => {
+        if (e.fields.provider) return false;
+        const index = Number(e.fields.index);
+        if (index >= count) return false;
+        if (e.kind === 'MOD_LOAD') {
+          const r = Number(e.fields.result);
+          if (r === 1 && withDsp) {
+            result.set(index, r);
+            dsp.add(index);
+          } else result.set(index, r === 1 ? 0 : r);
+        } else if (e.kind === 'MOD_DSP') {
+          dsp.delete(index);
+          result.set(index, Number(e.fields.result));
+        } else needs.set(index, String(e.fields.needs));
+        return complete();
+      },
+      { withinMs },
+    );
+    for (let i = 0; i < count; i++) {
+      const r = result.get(i)!;
+      if (r === 0) continue;
+      if (r === E_IMPORT && !needs.has(i)) {
+        // MOD_NEEDS follows its MOD_LOAD at once
+        const e = await this.tryUntil('MOD_NEEDS', (x) => Number(x.fields.index) === i, { withinMs: 500 });
+        if (e) needs.set(i, String(e.fields.needs));
+      }
+      throw new ModuleLoadRefused(i, r, needs.get(i) ?? (r === E_IMPORT ? '' : undefined));
     }
   }
 
@@ -280,11 +367,18 @@ export class RuntimeEvents {
   }
 
   /** Read what is new and return the first matching event; later events stay queued for the next wait. */
-  private async scan(kind: LogKindName, match: (e: RuntimeEvent) => boolean): Promise<RuntimeEvent | null> {
+  private async scan(
+    kind: LogKindName | LogKindName[] | '*',
+    match: (e: RuntimeEvent) => boolean,
+  ): Promise<RuntimeEvent | null> {
     for (;;) {
       while (this.queue.length > 0) {
         const e = this.queue.shift()!;
-        if (e.kind === kind && match(e)) return e;
+        if (
+          (kind === '*' || (Array.isArray(kind) ? kind.includes(e.kind as LogKindName) : e.kind === kind)) &&
+          match(e)
+        )
+          return e;
       }
       const r = await this.cursor.read();
       if (r.newBoot) {

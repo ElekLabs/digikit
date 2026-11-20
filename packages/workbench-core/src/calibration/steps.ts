@@ -28,7 +28,8 @@ export type StepRef = { steps: string; args?: Args } | { inline: string };
 
 /** A concrete operation: names resolved to numbers for one device, tracks expanded one per operation. */
 export type Op =
-  | { op: 'midi.note'; ch: number; key: number; velocity: number }
+  /** `retrigger_ms`: the runner presses the key again every that many ms of every wait of a capture (a voice that ends by itself keeps sounding for the window). */
+  | { op: 'midi.note'; ch: number; key: number; velocity: number; retrigger_ms?: number }
   | { op: 'midi.note_off'; ch: number; key: number }
   | { op: 'midi.cc'; ch: number; cc: number; value: number }
   | { op: 'midi.nrpn'; ch: number; msb: number; lsb: number; value14: number }
@@ -180,7 +181,7 @@ const int = (v: unknown, name: string, lo: number, hi: number, where: string): n
 };
 
 const FIELDS: Record<string, string[]> = {
-  'midi.note': ['track', 'key', 'velocity'],
+  'midi.note': ['track', 'key', 'velocity', 'retrigger_ms'],
   'midi.note_off': ['track', 'key'],
   'midi.cc': ['track', 'param', 'cc', 'value'],
   'midi.nrpn': ['track', 'param', 'nrpn', 'value', 'value14'],
@@ -241,6 +242,10 @@ function resolveOne(s: Record<string, unknown> & { action: string }, ctx: Resolv
         ch,
         key: int(s.key, 'key', 0, 127, where),
         velocity: int(s.velocity ?? 100, 'velocity', 1, 127, where),
+        // 0: not retriggered
+        ...(int(s.retrigger_ms ?? 0, 'retrigger_ms', 0, 60_000, where) > 0
+          ? { retrigger_ms: int(s.retrigger_ms, 'retrigger_ms', 1, 60_000, where) }
+          : {}),
       }));
     case 'midi.note_off':
       return channelsOf(s, ctx, where).map((ch) => ({

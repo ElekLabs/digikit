@@ -21,6 +21,7 @@ pub const DN2: DeviceProfile = DeviceProfile {
     keep_bytes: 0x1000,
     esdhc_base: 0xfc0cc000,
     dsp_block_cycles: 666667,
+    stock_machine_types: 5,
     dyn_type_first: 16,
     dyn_types: 8,
 };
@@ -43,6 +44,7 @@ pub const DT2: DeviceProfile = DeviceProfile {
     keep_bytes: 0x1000,
     esdhc_base: 0xfc0cc000,
     dsp_block_cycles: 666667,
+    stock_machine_types: 7,
     dyn_type_first: 16,
     dyn_types: 8,
 };
@@ -65,6 +67,7 @@ pub const ST: DeviceProfile = DeviceProfile {
     keep_bytes: 0x1000,
     esdhc_base: 0xfc0cc000,
     dsp_block_cycles: 0,
+    stock_machine_types: 0,
     dyn_type_first: 0,
     dyn_types: 0,
 };

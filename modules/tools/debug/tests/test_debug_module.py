@@ -5,11 +5,18 @@ paging, PEEK's range rules, LOGCFG, the track watch and what fini clears. No fir
 import shutil
 import struct
 import subprocess
+import tomllib
 
 import pytest
 from support.paths import REPO_ROOT
 
 MOD = REPO_ROOT / "modules/tools/debug"
+# the kind the module logs SETUP_DONE with is the one of sdk/sdk.toml (debug.c names it K_SETUP_DONE)
+SETUP_DONE = next(
+    k["id"]
+    for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"]
+    if k["name"] == "SETUP_DONE"
+)
 
 HARNESS = r"""
 #include <stdio.h>
@@ -40,6 +47,12 @@ static void (*the_tick)(void);
 static dk_host_cmd_fn *the_cmd;
 static dk_host_cmd_fn *the_profile;
 static dk_host_cmd_fn *the_dsp;
+static dk_host_cmd_fn *the_setup;
+/* dk_debug_setup as a fake: the calls it got and what it answers (`setupres`); a machine or filter type is "set" when it answers 0 */
+static uint32_t setup_calls, setup_op, setup_track, setup_ty;
+static int32_t setup_result;
+static unsigned setup_reg[2];
+int32_t dk_debug_setup(uint32_t op, uint32_t track, uint32_t ty) { setup_calls++; setup_op = op; setup_track = track; setup_ty = ty; return setup_result; }
 /* the runtime's DSP stats control and mirror, as fakes: the control is the span channel owner's (the sink is set); a sweep is `fake_sweep` (0: none) */
 static unsigned ctl_on, ctl_gen, ctl_calls, fake_sweep;
 int32_t dk_dsp_stats_ctl(uint32_t on, uint32_t clear)
@@ -76,6 +89,7 @@ int32_t dk_debug_selected_params(int16_t *out, uint32_t n)
 void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
 {
     Ev e = { 0, clock_blocks, (u16)kind, (u16)flags, { a[0], a[1], a[2], a[3], a[4] } };
+    if (!the_sink) { printf("late %u %d\n", (unsigned)kind, (int)a[4]); return; } /* after fini: the runtime's own ring */
     the_sink(&e);
 }
 void dk_log(uint32_t level, const char *m, uint32_t v) { (void)level; (void)m; (void)v; }
@@ -101,8 +115,9 @@ int32_t dk_host_register(uint32_t first, uint32_t count, dk_host_cmd_fn *h)
     /* the first range is the log commands, the second the profiling commands; both print as one line */
     if (!the_cmd) { the_cmd = h; reg_first = first; reg_count = count; return 0; }
     if (!the_profile) { the_profile = h; printf("reg %u %u %u %u", reg_first, reg_count, first, count); return 0; }
-    the_dsp = h;
-    printf(" %u %u\n", first, count);
+    if (!the_dsp) { the_dsp = h; printf(" %u %u\n", first, count); return 0; }
+    the_setup = h;
+    setup_reg[0] = first; setup_reg[1] = count;
     return 0;
 }
 
@@ -151,6 +166,12 @@ int main(int argc, char **argv)
             fake_sweep = a;
         } else if (!strncmp(line, "dspctl", 6)) {
             printf("ctl %u %u %u\n", ctl_on, ctl_gen, ctl_calls);
+        } else if (sscanf(line, "setupres %d", &c) == 1) {
+            setup_result = (int32_t)c;
+        } else if (!strncmp(line, "setupreg", 8)) {
+            printf("setupreg %u %u\n", setup_reg[0], setup_reg[1]);
+        } else if (!strncmp(line, "setupcalls", 10)) {
+            printf("setup %u %u %u %u\n", setup_calls, setup_op, setup_track, setup_ty);
         } else if (!strncmp(line, "noproject", 9)) {
             project = 0;
         } else if (!strncmp(line, "project", 7)) {
@@ -164,7 +185,7 @@ int main(int argc, char **argv)
             u32 len = 0, i;
             if (sscanf(line, "cmd %u %2047s", &a, hex) != 2) hex[0] = 0;
             for (i = 0; hex[2 * i] && hex[2 * i + 1]; i++) { unsigned v; sscanf(hex + 2 * i, "%2x", &v); body[len++] = (u8)v; }
-            int32_t r = (a == 0x1bu ? the_dsp : a >= 0x1eu && a <= 0x1fu ? the_profile : the_cmd)(a, 0, body, len, out);
+            int32_t r = (a == 0x0au ? the_setup : a == 0x1bu ? the_dsp : a >= 0x1eu && a <= 0x1fu ? the_profile : the_cmd)(a, 0, body, len, out);
             printf("reply %d ", r);
             for (i = 0; r > 0 && i < (u32)r; i++) printf("%02x", out[i]);
             printf("\n");
@@ -239,8 +260,8 @@ def ev(kind, flags, a=0):
 
 
 def test_init_registers_the_range_and_the_sink_and_fini_clears_it(harness):
-    out = run(harness, ["fini"])
-    assert out == ["reg 32 3 30 2 27 1", "init 0 1", "fini 1 1"]
+    out = run(harness, ["fini", "setupreg"])
+    assert out == ["reg 32 3 30 2 27 1", "init 0 1", "fini 1 1", "setupreg 10 1"]
 
 
 ROWS = 8 + 3 + 4  # module records (limits.max modules), service phases, polls
@@ -689,3 +710,141 @@ def test_profile_dsp_start_gets_the_runtime_busy_code_and_bad_bodies_are_refused
     assert out[5].startswith("reply -50") and out[6].startswith("reply -50"), (
         "a body of another length"
     )
+
+
+READY = [
+    "clock 0",
+    "slot",
+    "clock 3000",
+    "slot",
+]  # the track watch has its baseline: the project is scanned
+
+
+def test_setup_queues_the_request_and_the_ui_pass_performs_it_and_logs_the_result(
+    harness,
+):
+    lines = [
+        *READY,
+        "setupres 0",
+        "cmd 10 010305",  # machine type 5 on track 3
+        "setupcalls",  # not yet: the UI task performs it
+        "clock 3010",
+        "slot",
+        "setupcalls",
+        "cmd 10 020106",  # filter type 6 on track 1: the next request takes the next seq
+        "clock 3020",
+        "slot",
+        "setupcalls",
+        "cmd 32 00000000",
+    ]
+    out = run(harness, lines)
+    assert out[2:7] == [
+        "reply 1 01",
+        "setup 0 0 0 0",
+        "setup 1 1 3 5",
+        "reply 1 02",
+        "setup 2 2 1 6",
+    ]
+    _, _, evs = log(out[-1])
+    done = [e for e in evs if e[2] == SETUP_DONE]
+    assert [(e[4], e[5], e[6], e[7], e[8]) for e in done] == [
+        (1, 3, 5, 1, 0),
+        (2, 1, 6, 2, 0),
+    ]
+    assert [(e[3] >> 1) & 7 for e in done] == [2, 2]  # info
+
+
+def test_setup_refuses_while_one_is_queued_and_takes_the_next_after_the_pass(harness):
+    out = run(
+        harness,
+        [
+            *READY,
+            "cmd 10 010105",
+            "cmd 10 010206",  # queued: refused, and it did not replace the first
+            "slot",
+            "setupcalls",
+            "cmd 10 010206",
+        ],
+    )
+    assert out[2:6] == [
+        "reply 1 01",
+        "reply -12 ",  # DK_E_BUSY
+        "setup 1 1 1 5",
+        "reply 1 02",
+    ]
+
+
+def test_setup_refuses_a_bad_body_op_or_track_and_queues_nothing(harness):
+    out = run(
+        harness,
+        [
+            *READY,
+            "cmd 10",  # empty
+            "cmd 10 0103",  # too short
+            "cmd 10 01030500",  # too long
+            "cmd 10 000305",  # op 0
+            "cmd 10 030305",  # op 3
+            "cmd 10 011005",  # track 16
+            "slot",
+            "setupcalls",
+        ],
+    )
+    assert out[2:9] == [
+        "reply -50 ",
+        "reply -50 ",
+        "reply -50 ",
+        "reply -60 ",
+        "reply -60 ",
+        "reply -60 ",
+        "setup 0 0 0 0",
+    ]
+
+
+def test_setup_logs_the_status_the_runtime_gave_when_it_refuses(harness):
+    out = run(
+        harness,
+        [*READY, "setupres -53", "cmd 10 010101", "slot", "cmd 32 00000000"],
+    )
+    _, _, evs = log(out[-1])
+    done = [e for e in evs if e[2] == SETUP_DONE]
+    assert [(e[4], e[5], e[6], e[7], e[8]) for e in done] == [
+        (1, 1, 1, 1, 0xFFFFFFCB)  # -53, DK_E_STATE
+    ]
+
+
+def test_setup_is_refused_until_the_track_watch_has_its_baseline(harness):
+    out = run(
+        harness,
+        [
+            "noproject",
+            "clock 0",
+            "slot",  # the first pass
+            "cmd 10 010305",  # before anything is scanned
+            "clock 3000",
+            "slot",  # no project yet: no baseline
+            "cmd 10 010305",
+            "project",
+            "clock 3060",
+            "slot",  # the baseline
+            "cmd 10 010305",
+        ],
+    )
+    assert out[2:5] == [
+        "reply -53 ",
+        "reply -53 ",
+        "reply 1 01",
+    ]  # DK_E_STATE, then queued
+
+
+def test_a_request_pending_at_fini_is_logged_as_cancelled_and_never_runs(harness):
+    out = run(
+        harness,
+        [*READY, "cmd 10 010305", "fini", "setupcalls"],
+    )
+    # SETUP_DONE with DK_E_AGAIN (-72) goes to the runtime's ring: the sink is already cleared
+    assert out[2:6] == [
+        "reply 1 01",
+        f"late {SETUP_DONE} -72",
+        "fini 1 1",
+        "setup 0 0 0 0",
+    ]
