@@ -1545,3 +1545,20 @@ mod manifest_tests {
         assert!(load("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp-up\"\n").is_ok());
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod runtime_version_tests {
+    /// The runtime has one version: the manifest of `core/runtime` says the SDK runtime version that INFO reports (`sdk/sdk.toml` [runtime]), so
+    /// the patch line (`core/runtime@x`), the flash question and the check after the restart name the same number.
+    #[test]
+    fn the_runtime_manifest_version_is_the_sdk_runtime_version() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../modules/core/runtime/module.toml");
+        let manifest: toml::Table = std::fs::read_to_string(path).unwrap().parse().unwrap();
+        let version = manifest["module"]["version"].as_str().unwrap();
+        assert_eq!(
+            version,
+            crate::dkm::fmt_runtime(crate::dkm::runtime_version())
+        );
+    }
+}

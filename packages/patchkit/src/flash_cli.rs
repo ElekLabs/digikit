@@ -178,11 +178,10 @@ fn flash_question(p: &Prepared, name: &str) -> String {
     } else if !p.leaves_runtime() {
         "patched, without the digikit runtime".to_string()
     } else {
-        // the runtime that is in the image: the version the `patch` line above lists
-        match &p.runtime {
-            Some(v) => format!("with digikit runtime {v}"),
-            None => "with the digikit runtime".to_string(),
-        }
+        format!(
+            "with digikit runtime {}",
+            p.runtime_text().unwrap_or_default()
+        )
     };
     format!("Flash {name} OS {} {what} now? [y/N] ", p.os)
 }
@@ -1028,7 +1027,6 @@ mod tests {
             device: "dt2".into(),
             os: "1.17".into(),
             image_id: None,
-            runtime: None,
             sha_stock: String::new(),
             sha_image: String::new(),
             restore,
@@ -1049,14 +1047,16 @@ mod tests {
         let mut unknown = prepared(true);
         unknown.device = "xx".into();
         assert_eq!(device_name(&unknown), "xx");
-        // with the runtime: the version of the runtime module in the image (what the patch line lists)
+        // with the runtime: the runtime version INFO reports after the flash, the same value as the summary and the check after the restart
         let mut with_runtime = prepared(false);
         with_runtime.image_id = Some([1; 8]);
-        with_runtime.runtime = Some("0.9.0".into());
+        let version = patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version());
+        assert_eq!(with_runtime.runtime_text(), Some(version.clone()));
+        assert_eq!(with_runtime.summary_json()["runtime"], version);
         let q = flash_question(&with_runtime, "Name");
         assert_eq!(
             q,
-            "Flash Name OS 1.17 with digikit runtime 0.9.0 now? [y/N] "
+            format!("Flash Name OS 1.17 with digikit runtime {version} now? [y/N] ")
         );
         let q = flash_question(&prepared(false), "Name");
         assert_eq!(
