@@ -15,9 +15,9 @@ export const PROBE_EMULATED_MS = 2000;
 const PROBE_WALL_GUARD_MS = 180_000;
 /** Wall ms between clock readings while a probe waits. */
 const PROBE_READ_MS = 100;
-/** Wall ms between status readings while `pause` waits for emulated time (a reading only observes progress). */
+/** Wall ms between status readings while `pauseEmulated` waits for emulated time (a reading only observes progress). */
 const PAUSE_READ_MS = 25;
-/** Wall ms a `pause` of `ms` emulated ms may see no movement of the emulated clock (and no job progress): `PAUSE_STUCK_BASE_MS` plus `PAUSE_STUCK_PER_MS` a ms. */
+/** Wall ms a `pauseEmulated` of `ms` emulated ms may see no movement of the emulated clock (and no job progress): `PAUSE_STUCK_BASE_MS` plus `PAUSE_STUCK_PER_MS` a ms. */
 const PAUSE_STUCK_BASE_MS = 60_000;
 const PAUSE_STUCK_PER_MS = 20;
 
@@ -75,10 +75,14 @@ export function describeEmulator(status: object): string {
 }
 
 /**
- * Free run: `now` is the emulated ms of `status()`. `pause(ms)` returns when the emulated clock has advanced by `ms` (the same ms as `now`), so a
+ * Free run: `now` is the emulated ms of `status()`. `pause(ms)` waits `ms` of wall time through the global timer (vitest fake timers replace it) and reads nothing:
+ * every wait calls `now()` after `pause`, and `now()` updates `progress()`. A clock that drops (reboot, restore) is handled by the waits: they count only forward movement.
+ * No stuck guard in `pause`: `poll`, `waitClock` and the boot wait own one per wait (`stuckGuard`).
+ *
+ * `pauseEmulated(ms, hangMs?)` is the explicit emulated-time wait, for a capture window that must hold the same emulated time on any host speed: it returns when the emulated clock has advanced by `ms` (the same ms as `now`), so a
  * wait or a capture window holds the same emulated time on any host speed; it reads `status()` every few wall ms only to see the progress.
- * A clock that drops (reboot, restore) adds nothing: only forward movement counts. While a job (boot, load) holds the clock still, `pause` returns after a wall interval, so the wait reads the state itself. When the clock stands still (and no job moves) for
- * `hangMs` of the caller or, without one, `PAUSE_STUCK_BASE_MS + PAUSE_STUCK_PER_MS * ms` of wall time (a paused or halted emulator), `pause` throws with the emulator state.
+ * A clock that drops (reboot, restore) adds nothing: only forward movement counts. While a job (boot, load) holds the clock still, `pauseEmulated` returns after a wall interval, so the wait reads the state itself. When the clock stands still (and no job moves) for
+ * `hangMs` of the caller or, without one, `PAUSE_STUCK_BASE_MS + PAUSE_STUCK_PER_MS * ms` of wall time (a paused or halted emulator), `pauseEmulated` throws with the emulator state.
  * The waits (`poll`, `waitClock`, the boot wait) keep their own stuck guards.
  */
 export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
@@ -92,7 +96,10 @@ export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
   };
   return {
     now: async () => emulatedMsOf(await read()),
-    pause: async (ms, hangMs) => {
+    pause: async (ms) => {
+      await new Promise<void>((r) => setTimeout(r, ms));
+    },
+    pauseEmulated: async (ms, hangMs) => {
       if (!(ms > 0)) return;
       let last = emulatedMsOf(await read());
       let waited = 0;
@@ -115,7 +122,7 @@ export function emulatedClock(status: () => Promise<EmuStatus>): Clock {
             (e: unknown) => `status failed: ${String(e)}`,
           );
           throw new Error(
-            `pause(${ms} ms): emulated clock stuck at ${last.toFixed(1)} ms for ${stuckMs} ms of wall time after ${waited.toFixed(1)} ms (a paused or halted emulator?) ${detail}`,
+            `pauseEmulated(${ms} ms): emulated clock stuck at ${last.toFixed(1)} ms for ${stuckMs} ms of wall time after ${waited.toFixed(1)} ms (a paused or halted emulator?) ${detail}`,
           );
         }
       }

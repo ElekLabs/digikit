@@ -307,13 +307,7 @@ for (const { afterEpoch, loaderResult } of [
         const pending = observations++ === 0 ? 1 : 0;
         order.push(pending ? 'pending' : 'drained');
         if (pending) expect(mode).toBe('free');
-        return {
-          epoch: 3,
-          mode,
-          elapsed: observations * 132_000 * 50,
-          cf: { input_pending: pending },
-          scheduled_inputs: pending,
-        };
+        return { epoch: 3, mode, cf: { input_pending: pending }, scheduled_inputs: pending };
       }),
     } as unknown as Session;
     const dk = {

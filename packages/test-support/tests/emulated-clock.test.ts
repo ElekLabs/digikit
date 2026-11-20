@@ -25,19 +25,16 @@ test('steppedClock steps floor(ms * MS) instructions in slices', async () => {
 
 test('emulatorClock steps a paused daemon and waits on a free one', async () => {
   let mode = 'paused';
-  let elapsed = 0;
   const steps: number[] = [];
   const clock = emulatorClock({
-    status: async () => ({ mode, elapsed }),
+    status: async () => ({ mode, elapsed: 0 }),
     client: { step: async (n: number) => void steps.push(n) },
   } as never);
   await clock.pause(2);
   assert.deepEqual(steps, [2 * MS]);
   mode = 'free';
   const free = clock.pause(100);
-  await vi.advanceTimersByTimeAsync(30);
-  elapsed += 100 * MS;
-  await vi.advanceTimersByTimeAsync(30);
+  await vi.advanceTimersByTimeAsync(100);
   await free;
   assert.deepEqual(steps, [2 * MS]);
 });

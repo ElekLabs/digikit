@@ -227,8 +227,8 @@ test('pollEmulated fails after the emulated time, counts a lowered clock as a re
   await expect(
     pollEmulated(clock, async () => false, Boolean, { emulatedMs: 50, intervalMs: 1, message: 'never' }),
   ).rejects.toThrow('never: not seen within 50 ms of emulated time');
-  // the reset to 0 adds nothing: the 50 ms are the forward movements only, so more than the 5 reads of an unbroken clock were needed
-  expect(vi.mocked(clock.status).mock.calls.length).toBeGreaterThan(5);
+  // the clock reads 10, 20, 30 ms, then 0 after the reset (adds nothing), then 10, 20, 30 ms again: 50 ms are counted after 7 reads
+  expect(clock.status).toHaveBeenCalledTimes(7);
   let failures = 2;
   const flaky = async () => {
     if (failures-- > 0) throw new Error('restarting');
