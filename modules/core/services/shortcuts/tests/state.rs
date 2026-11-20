@@ -50,9 +50,16 @@ fn binding(owner: u8, keys: [u8; 2], log: &mut Log) -> Binding {
     b
 }
 
-/// One key event; the verdict.
+/// One key event and the UI pass after it; the verdict. (`event` below does not run the pass.)
 fn key(s: &mut Shortcuts, p: &DeviceProfile, code: u32, flags: u32) -> Verdict {
-    unsafe { s.on_key(p, code, flags) }
+    let v = s.on_key(p, code, flags);
+    unsafe { s.run_pending() };
+    v
+}
+
+/// One key event only: the module's calls wait for the UI pass.
+fn event(s: &mut Shortcuts, p: &DeviceProfile, code: u32, flags: u32) -> Verdict {
+    s.on_key(p, code, flags)
 }
 
 #[test]
@@ -290,4 +297,56 @@ fn all_zero_bytes_are_the_initial_state_of_the_service_static() {
     key(&mut s, &p, C_TRK, 0);
     assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Swallow);
     assert_eq!(*log, ["on"]);
+}
+
+#[test]
+fn the_hook_runs_no_module_code_the_ui_pass_makes_the_calls_in_order() {
+    let p = device();
+    let (mut s, log) = with_shortcut(&p);
+    assert_eq!(event(&mut s, &p, C_TRK, 0), Verdict::Pass);
+    assert_eq!(event(&mut s, &p, C_YES, 0), Verdict::Swallow);
+    assert!(log.is_empty(), "on_key called no module code");
+    assert_eq!(s.pending(), 1);
+    // a fast tap: the release comes before the UI pass; on is still called before off
+    assert_eq!(event(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
+    assert!(log.is_empty());
+    assert_eq!(s.pending(), 2);
+    unsafe { s.run_pending() };
+    assert_eq!(*log, ["on", "off"]);
+    assert_eq!(s.pending(), 0);
+    unsafe { s.run_pending() };
+    assert_eq!(*log, ["on", "off"], "each call is made once");
+}
+
+#[test]
+fn an_unload_drops_the_calls_of_that_owner_that_wait() {
+    let p = device();
+    let mut log = Box::new(Log::new());
+    let mut log2 = Box::new(Log::new());
+    let mut s = Shortcuts::new();
+    s.table_mut().add(binding(1, [TRK, YES], &mut log));
+    s.table_mut().add(binding(2, [TRK, OTHER], &mut log2));
+    event(&mut s, &p, C_TRK, 0);
+    event(&mut s, &p, C_YES, 0);
+    event(&mut s, &p, C_YES, RELEASE);
+    event(&mut s, &p, C_OTHER, 0);
+    assert_eq!(s.pending(), 3);
+    s.remove(1);
+    assert_eq!(s.pending(), 1, "only the calls of owner 2 are left");
+    unsafe { s.run_pending() };
+    assert!(log.is_empty(), "owner 1's code is gone: nothing of it runs");
+    assert_eq!(*log2, ["on"]);
+}
+
+#[test]
+fn a_press_of_a_swallowed_key_is_swallowed_again_and_calls_on_once() {
+    // the firmware may encode a repeat as a plain press
+    let p = device();
+    let (mut s, log) = with_shortcut(&p);
+    key(&mut s, &p, C_TRK, 0);
+    assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Swallow);
+    assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Swallow);
+    assert_eq!(*log, ["on"]);
+    assert_eq!(key(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
+    assert_eq!(*log, ["on", "off"]);
 }

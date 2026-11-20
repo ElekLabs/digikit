@@ -12,7 +12,7 @@ use dkrt_abi::mem::rd32;
 use dkrt_abi::platform::DeviceProfile;
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
-    check_step, ApplyCtx, CheckCtx, Declare, ModuleCommitCtx, Problem, Service,
+    check_step, tick_phase, ApplyCtx, CheckCtx, Declare, ModuleCommitCtx, Problem, Service,
 };
 use dkrt_sdk::records::{KIND_SHORTCUT, LEN_SHORTCUT};
 use dkrt_sdk::*;
@@ -21,6 +21,10 @@ use dkrt_sdk::*;
 const LOG_WARN: u16 = logk::L_WARN << logk::LEVEL_SHIFT;
 
 /// The state: no key held, no binding. All zero bytes, so it is `.bss`.
+///
+/// One task owns it: the UI task. The key hook (the firmware's key walker) and `Service::tick` run in it, and so do the loads, unloads and reloads of modules (`Service::remove`,
+/// `apply_record`): a SysEx command only queues a live job, whose steps run once per UI pass (`reload::poll` in `dkrt_tick`), and the boot's loads and a failed load's removal run
+/// in the UI pass as well. So no lock is needed and `on_key`, `run_pending` and `remove` never overlap.
 static mut STATE: Shortcuts = unsafe { core::mem::zeroed() };
 
 /// The service's one `Shortcuts` (host tests read and drive it).
@@ -28,11 +32,9 @@ pub fn state() -> &'static mut Shortcuts {
     unsafe { &mut *addr_of_mut!(STATE) }
 }
 
-/// One key event of the panel for the dispatch hook: `code` is the device's panel code, `flags` are `shortcuts::key_flags`.
-///
-/// # Safety
-/// The callbacks of the bindings are module code (see `Shortcuts::on_key`).
-pub unsafe fn on_key<C: CoreApi>(core: &C, code: u32, flags: u32) -> Verdict {
+/// One key event of the panel for the dispatch hook: `code` is the device's panel code, `flags` are `shortcuts::key_flags`. It decides and queues the module's calls; it runs no module
+/// code (the UI pass does, `Service::tick`).
+pub fn on_key<C: CoreApi>(core: &C, code: u32, flags: u32) -> Verdict {
     match DeviceProfile::by_id(core.device_id()) {
         Some(p) => state().on_key(&p, code, flags),
         None => Verdict::Pass,
@@ -81,6 +83,13 @@ impl<C: CoreApi> Service<C> for ShortcutsService {
 
     unsafe fn declare(d: &mut Declare) {
         d.kind(KIND_SHORTCUT, LEN_SHORTCUT);
+    }
+
+    /// The UI pass: make the `on` and `off` calls that the key hook queued, in order.
+    unsafe fn tick(_core: &C, phase: u32) {
+        if phase == tick_phase::EARLY {
+            state().run_pending();
+        }
     }
 
     unsafe fn module_begin(_core: &C, rec: usize) {

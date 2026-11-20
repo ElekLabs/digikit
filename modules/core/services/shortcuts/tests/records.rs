@@ -452,22 +452,31 @@ fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
     b.on = Some(on);
     b.off = Some(off);
     state().table_mut().add(b);
-    unsafe {
-        assert_eq!(on_key(&core, p.key_code(trk), 0), Verdict::Pass);
-        assert_eq!(on_key(&core, p.key_code(yes), 0), Verdict::Swallow);
-        assert_eq!(
-            on_key(&core, p.key_code(yes), key_flags::RELEASE),
-            Verdict::Swallow
-        );
-        assert_eq!(
-            on_key(&core, p.key_code(trk), key_flags::RELEASE),
-            Verdict::Pass
-        );
-    }
+    let pass = |phase: u32| unsafe { <Svc as Service<FakeCore>>::tick(&core, phase) };
+    assert_eq!(on_key(&core, p.key_code(trk), 0), Verdict::Pass);
+    assert_eq!(on_key(&core, p.key_code(yes), 0), Verdict::Swallow);
+    assert!(
+        CALLS.lock().unwrap().is_empty(),
+        "the hook runs no module code"
+    );
+    // the UI pass makes the calls (the early phase)
+    pass(dkrt_abi::service::tick_phase::LAST);
+    assert!(CALLS.lock().unwrap().is_empty());
+    pass(dkrt_abi::service::tick_phase::EARLY);
+    assert_eq!(*CALLS.lock().unwrap(), ["on"]);
+    assert_eq!(
+        on_key(&core, p.key_code(yes), key_flags::RELEASE),
+        Verdict::Swallow
+    );
+    assert_eq!(
+        on_key(&core, p.key_code(trk), key_flags::RELEASE),
+        Verdict::Pass
+    );
+    pass(dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on", "off"]);
     // a device the table does not know passes everything
     core.device = 999;
-    assert_eq!(unsafe { on_key(&core, p.key_code(yes), 0) }, Verdict::Pass);
+    assert_eq!(on_key(&core, p.key_code(yes), 0), Verdict::Pass);
     unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
 }
 

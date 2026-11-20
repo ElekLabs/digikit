@@ -135,7 +135,7 @@ kind = "code"
 addr = 0x4011de30
 len = 8
 sha256 = "3d25d06bf11f3a7bccef894d0016b52adbb4ae468a0f475dd497d7b5966e2694"
-mark = "V"
+mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]

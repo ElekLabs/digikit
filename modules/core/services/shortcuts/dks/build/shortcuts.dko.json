@@ -669,6 +669,27 @@
   },
   {
    "addend": 0,
+   "offset": 10,
+   "section": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE4tickCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "symbol": "_RNvNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records5STATE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE4tickCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "symbol": "_RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts11run_pending",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk4tickNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records16ShortcutsServiceECslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "symbol": ".sec..text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE4tickCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 112,
    "section": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE5checkCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
    "symbol": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtBM_16ShortcutsServiceINtNtB4_7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE5check0ECslpS34BCfq18_22dkrt_svc_shortcuts_dks",
@@ -767,7 +788,7 @@
   },
   {
    "addend": 0,
-   "offset": 26,
+   "offset": 28,
    "section": ".text.dk_shortcuts_key",
    "symbol": ".sec..text._RINvNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records6on_keyNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECslpS34BCfq18_22dkrt_svc_shortcuts_dks",
    "type": "cf.32"
@@ -1165,6 +1186,20 @@
    "type": "cf.32"
   },
   {
+   "addend": 64,
+   "offset": 78,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts11run_pending",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts11run_pending",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
    "offset": 38,
    "section": ".text._RNvMs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8bindingsNtB4_12BindingTable3add",
@@ -1243,37 +1278,58 @@
   },
   {
    "addend": 0,
-   "offset": 224,
+   "offset": 206,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
+   "symbol": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts5defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 238,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
+   "symbol": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts4keysNtB2_8KeyState12is_swallowed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 266,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
    "symbol": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts4keysNtB2_8KeyState5press",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 294,
+   "offset": 314,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
    "symbol": ".sec..text._RINvMs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8bindingsNtB5_12BindingTable9completedNCNvMNtB7_9shortcutsNtB1m_9Shortcuts6on_key0EB7_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 324,
+   "offset": 344,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
    "symbol": ".sec..text._RNvMs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8bindingsNtB4_12BindingTable3get",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 338,
+   "offset": 358,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
    "symbol": ".sec..text._RNvMs1_NtCs6uNbiqmv1Ak_4core6optionINtB5_6OptionRNtNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8bindings7BindingE6copiedBP_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 394,
+   "offset": 440,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
    "symbol": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts4keysNtB2_8KeyState7swallow",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 464,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
+   "symbol": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts5defer",
    "type": "cf.32"
   },
   {
@@ -1299,16 +1355,44 @@
   },
   {
    "addend": 0,
-   "offset": 6,
+   "offset": 18,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
    "symbol": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6active",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 42,
+   "offset": 50,
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
    "symbol": ".sec..text._RNvMs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8bindingsNtB4_12BindingTable6remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 136,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 258,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 270,
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
@@ -2010,13 +2094,6 @@
    "align": 2,
    "hex": "4e75",
    "kind": "text",
-   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk4tickNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records16ShortcutsServiceECslpS34BCfq18_22dkrt_svc_shortcuts_dks",
-   "size": 2
-  },
-  {
-   "align": 2,
-   "hex": "4e75",
-   "kind": "text",
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk6settleNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records16ShortcutsServiceECslpS34BCfq18_22dkrt_svc_shortcuts_dks",
    "size": 2
   },
@@ -2253,6 +2330,20 @@
   },
   {
    "align": 2,
+   "hex": "4aaf000867024e754879000000004eb900000000588f60ee",
+   "kind": "text",
+   "name": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE4tickCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "size": 24
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00082f2f00084eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk4tickNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreNtNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records16ShortcutsServiceECslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "size": 18
+  },
+  {
+   "align": 2,
    "hex": "4e56ffa82f02202e000c7205b28067127207b280670000aa4280242effa44e5e4e7541eeffb4200e0680ffffffdc20bc0000000142a800045088b08866f042aeffdc42aeffe041eeffdc2d48ffe443eeffb42d49ffe8202e00102d40ffec41eeffe02d48fff0486effe422402f114eb900000000202effdc508f7205b2806402700542aefff441eefff42d48fff8487900000000486efff82f00486effb44eb900000000202efff44fef00104a806600ff6a202effe06000ff6270f26000ff5c42aefffc486efffc226e00102f114eb900000000202efffc2d40ffb041f9000000002d48ffa8243c00000000508f42aeffac601e2f2e00084eb900000000588f4a00671891c87380603841e8003ab48867e24a1067f452aeffac60ee91c8202effb0d0aeffac90887210b280658c42806000fee85288703ad1aeffa8b4aeffa867dc226effa87191b08166ea60e6",
    "kind": "text",
    "name": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE5checkCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
@@ -2295,10 +2386,10 @@
   },
   {
    "align": 2,
-   "hex": "202f000844c06b1e46807201c0812f002f2f0008487800014eb9000000004fef000c71804e75700260e4",
+   "hex": "202f000808000000671ee4887202c0812f002f2f0008487800014eb9000000004fef000c71804e75700160e4",
    "kind": "text",
    "name": ".text.dk_shortcuts_key",
-   "size": 42
+   "size": 44
   },
   {
    "align": 2,
@@ -2477,6 +2568,13 @@
   },
   {
    "align": 2,
+   "hex": "2f02226f0008222f00104a81673020290444740fb4806526d0a90440c082740a4c020800204041e803a0d1c92081216f00140004116f000f000852a90444241f4e75",
+   "kind": "text",
+   "name": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts5defer",
+   "size": 66
+  },
+  {
+   "align": 2,
    "hex": "206f000c226f00102008d089b0886542b0af0008623cd1ef00044281600c200152804a301800670c2200b28966f0428191c860222008d08943f0180060084a8967144a196606b08966f4600a428191c86004428191c820084e75",
    "kind": "text",
    "name": ".text._RNvNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8validate4text",
@@ -2540,6 +2638,13 @@
   },
   {
    "align": 2,
+   "hex": "2f0a2f02246f000c226a04444a89674e222a0440700fb0816532700a4c010800204041e803a0d1ca2010206800045281740fc481254204405389254904444a8067c62f0820404e90588f60bc487900000000487800102f014eb900000000241f245f4e75",
+   "kind": "text",
+   "name": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts11run_pending",
+   "size": 100
+  },
+  {
+   "align": 2,
    "hex": "4fefffe048d7440424482c6f0024206f002814280038664e716800342f002f0e41ef00224eb9000000003f6f0022001a2f6f0024001c508f43ee0036220e0681000003d64a11672a43e9003ab28966f442017003148015410001200a4cd744044fef00204e7542af001442413f41001260c643e9ffca2f49000e4878003a2f2f002c2f2f00164eb9000000004fef000c4a02664c4a6f0012660e4200206f000e11400037420160ac7001206f000e11400037700fb0af00146512202f0014723a4c0108001236083670016088487900000000487800102f2f001c4eb9000000007001206f000e11400037420170026000ff64",
    "kind": "text",
    "name": ".text._RNvMs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts8bindingsNtB4_12BindingTable3add",
@@ -2554,17 +2659,17 @@
   },
   {
    "align": 2,
-   "hex": "206f0004226803b04a8967104869ffff2f084eb900000000508f4e75428060fa",
+   "hex": "206f0004226804584a8967104869ffff2f084eb900000000508f4e75428060fa",
    "kind": "text",
    "name": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6active",
    "size": 32
   },
   {
    "align": 2,
-   "hex": "4e56ff602f2e00102f2e000c4eb9000000002d40ff60508f4a80670000d4202e0014080000006624080000016700009e2f2eff60206e0008486803a04eb900000000508f1d40ff67600000ac206e000841e803a02d48ff642f2eff602f084eb9000000002f2eff602f2eff644eb9000000001d40ff672f2e00084eb9000000002e8041eeff764eb9000000004fef001471aeffae7202b280675c322effaa71c1e088b0aeff6067087381b2aeff606646206effa2202effa6226e000842a903b04a8867322f004e90588f602a206e000841e803a02d48ff642f2eff602f084eb900000000508f226e00084aa903b0671242001d40ff67102eff677201c0814e5e4e75206e0008202803a0222803a42d40ffb02d41ffb4486effb02f2eff602f0841eefffa4eb9000000004fef000c4a6efffa67bc226efffc2d49ff682f092f2e00084eb900000000508f2f0041eeffc04eb900000000588f71aefff87202b280678e206effe82d48ff6c226efff02d49ff70226eff685289206e0008214903b02f2eff602f2eff644eb900000000508f4aaeff6c670c2f2eff70206eff6c4e90588f70011d40ff676000ff4c",
+   "hex": "4e56ff5c2f2e00102f2e000c4eb9000000002d40ff5e508f4a806700015a202e001408000000662408000001670000ac2f2eff5e206e0008486804484eb900000000508f1d40ff6560000132206e000841e804482d48ff622f2eff5e2f084eb9000000002f2eff5e2f2eff624eb9000000001d40ff652f2e00084eb9000000002e8041eeff764eb9000000004fef001471aeffae7202b280670000e2302effaa73c0e089b2aeff5e670a7180b0aeff5e660000ca206e000842a804582f2effa62f2effa271aeffac2f002f084eb9000000004fef0010600000a4206e000841e804482d48ff622f2eff5e2f084eb900000000508f4a00670870011d40ff65607c2f2eff5e2f2eff624eb900000000508f206e00084aa80458665c202804482228044c2d40ffb02d41ffb4486effb02f2eff5e2f0841eefffa4eb9000000004fef000c4a6efffa672e202efffc2d40ff662f002f2e00084eb900000000508f2f0041eeffc04eb900000000588f71aefff87202b280661242001d40ff65102eff657201c0814e5e4e75122efff61d41ff6b206effe82d48ff6c202efff02d40ff70202eff665280206e0008214004582f2eff5e2f2eff624eb9000000002f2eff702f2eff6c71aeff6b2f002f2e00084eb9000000004fef00186000ff1e",
    "kind": "text",
    "name": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6on_key",
-   "size": 428
+   "size": 476
   },
   {
    "align": 2,
@@ -2575,10 +2680,10 @@
   },
   {
    "align": 2,
-   "hex": "2f2f00044eb900000000588f4a80670e204073a8003671af000bb081671471af000b2f002f2f00084eb900000000508f4e75206f000442a803b060e2",
+   "hex": "4e56ff4048d7007c1a2e000f2f2e00084eb900000000588f4a80670c204073a800367185b081674a71852f002f2e00084eb900000000262e00080683000003a0487800a02f03486eff564eb900000000206e0008242804444fef00144a82671c206e0008222804402c01dc8242827b85603a206e000842a8045860ac487800a0486eff562f034eb900000000206e000842a80440214204444fef000c4cee007cff404e5e4e755281bc8167d0700fc081780a4c040800204041e803a0d1ee000822482d59fff62d59fffa3d51fffe102800087980ba8467ce780fb88265221d40fffe700a4c02080041f6080041e8ff5620eefff620eefffa30aefffe528260a6487900000000487800102f024eb900000000",
    "kind": "text",
    "name": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6remove",
-   "size": 60
+   "size": 274
   },
   {
    "align": 2,
@@ -2704,7 +2809,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss._RNvNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7records5STATE",
-   "size": 948
+   "size": 1116
   },
   {
    "align": 2,
@@ -3043,7 +3148,7 @@
    "size": 28
   }
  ],
- "source_sha256": "e906aabfc9e64b8a9b8a89e2d5b67634615ca212984d68d08bcbb1ae6fbebed8",
+ "source_sha256": "16351a40534f6a50a8b58de31a51bf230f76f60d9eca729a1e18c04f068c5f39",
  "symbols": [
   {
    "global": false,
@@ -3515,6 +3620,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts5defer",
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts5defer",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6active",
    "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts6active",
    "value": 0
@@ -3677,6 +3788,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE4tickCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "section": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE4tickCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE5checkCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
    "section": ".text._RNvXs_NtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts7recordsNtB4_16ShortcutsServiceINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreE5checkCslpS34BCfq18_22dkrt_svc_shortcuts_dks",
    "value": 0
@@ -3769,6 +3886,12 @@
    "global": false,
    "name": "_RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile8key_code",
    "section": ".text._RNvMNtCs4NVp4pdP0rZ_8dkrt_abi8platformNtB2_13DeviceProfile8key_code",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts11run_pending",
+   "section": ".text._RNvMNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts9shortcutsNtB2_9Shortcuts11run_pending",
    "value": 0
   },
   {
@@ -4044,8 +4167,8 @@
  ],
  "toolchain": {
   "exports": "dk_module dk_shortcut_add dk_shortcuts_key dk_svc_abi shortcuts_key_hook",
-  "instructions_redecoded": "3599",
-  "isa_check": "14a94a8820af0f3219e3963f0b6eb5bb1da3bce85a51f79f01a0fe55995fb498",
+  "instructions_redecoded": "3742",
+  "isa_check": "dd2e27d65a2060d5d6a9f3d32dff325fe019d605d930c9e2b65b5499f66b65c5",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
