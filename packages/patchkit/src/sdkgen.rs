@@ -35,6 +35,8 @@ pub const C_LIMITS_OUT: &str = "sdk/include/dk/gen/limits.h";
 pub const C_STATUS_OUT: &str = "sdk/include/dk/core/status.h";
 /// The generated C header of the record kinds, relative to the repository root.
 pub const C_RECORDS_OUT: &str = "sdk/include/dk/gen/records.h";
+/// The runtime log kinds (`[[log.kind]]`) as C `#define`s, for code that logs through `dk_log_event`.
+pub const C_LOG_KINDS_OUT: &str = "sdk/include/dk/gen/log_kinds.h";
 /// The logical key names of the device files (`[panel.keys]`), written by `devgen::keys_h`.
 pub const C_KEYS_OUT: &str = "sdk/include/dk/gen/keys.h";
 /// The generated C header of the sample pool numbers, relative to the repository root.
@@ -3151,6 +3153,18 @@ fn registers_md(sdk: &Sdk) -> String {
     s
 }
 
+/// `sdk/include/dk/gen/log_kinds.h`: the log kinds as `DK_LOG_<NAME>` numbers for `dk_log_event`.
+fn log_kinds_h(sdk: &Sdk) -> String {
+    let mut s = format!(
+        "/* {HEADER} */\n/* sdk/include/dk/gen/log_kinds.h -- the kinds of the runtime's log events (`[[log.kind]]`), for dk_log_event(kind, flags, args). */\n#ifndef DK_GEN_LOG_KINDS_H\n#define DK_GEN_LOG_KINDS_H\n\n"
+    );
+    for k in &sdk.log.kind {
+        let _ = writeln!(s, "#define DK_LOG_{} {}", k.name, k.id);
+    }
+    s.push_str("\n#endif /* DK_GEN_LOG_KINDS_H */\n");
+    s
+}
+
 /// `sdk/include/dk/gen/records.h`: the record kinds (`[records.kinds]`) for `dk_record_add`.
 fn records_h(sdk: &Sdk) -> String {
     let mut s = format!(
@@ -3224,6 +3238,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (C_IMPORTS_OUT.to_string(), imports_h(&sdk)?),
         (C_PAGE_CONSTS_OUT.to_string(), page_consts_h(&sdk)),
         (C_RECORDS_OUT.to_string(), records_h(&sdk)),
+        (C_LOG_KINDS_OUT.to_string(), log_kinds_h(&sdk)),
         (RULES_RS_OUT.to_string(), rules_rs(&sdk)?),
         (REGISTERS_MD_OUT.to_string(), registers_md(&sdk)),
     ])

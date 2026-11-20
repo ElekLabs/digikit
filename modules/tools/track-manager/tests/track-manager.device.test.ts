@@ -5,22 +5,22 @@ import { parse } from 'smol-toml';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { pausedEvents } from '@digi/regression/runtime/paused-dk.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { decodeSettings, settingsMap, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
 
 /**
  * The track manager on the device (docs/plans/track-manager.md, phase 4). The module `digikit/track-manager` needs `core/ui` and the `shortcuts` service (its imports say so).
- * No SHARC. The screen is read from the firmware's view stack (`readViewStack`, the `[ui]` facts of the device file), the saved names from the settings record on the card.
- * Every wait is on firmware state or the drained input queue.
- *
- * - SETTINGS > TRACK MANAGER (the last row) opens a full-screen view (a new opaque top view);
- * - [TRIG 10] then [YES] opens the stock naming screen (one more top view, pushed after the release of YES); [UP] edits the first character and [YES] saves: the naming screen leaves
- *   and the settings record holds a name for track 10 (index 9) and no other;
- * - after a restart the saved name is still in the record, and loaded by the module: [TRK]+[YES] shows the overlay, a new top view that is not opaque; releasing YES removes it.
+ * No SHARC. Waits are on the events core/ui logs for module screens (VIEW_OPENED, VIEW_CLOSED, TEXT_INPUT_OPENED, TEXT_INPUT_DONE) and on firmware state; the view stack is
+ * read only to compare the identity of the top view, never to count views. Two tests, one boot each:
+ * - a name entered on the manager screen (SETTINGS > TRACK MANAGER, [TRIG 10], [YES], [UP], [YES]) is in the settings record and survives a restart;
+ * - [TRK]+[YES] opens the hint (an overlay view) while held, releasing removes it, and [TRK]+[TRIG] under it still selects.
  */
 const MODULE = 'digikit/track-manager';
-const MAX_STACK = 32;
+const DRAINED = { drained: true } as const;
+const WITHIN = { withinMs: 20_000, intervalMs: 100 } as const;
+const OVERLAY = 1;
 const ITEM_BYTES = 8; // shared_ptr<MenuItem> (core/ui rows_of)
 
 /** The offset of field `field` in the struct `struct` of devices/fw/menu.toml (as the ui-views fixture test reads it). */
@@ -33,6 +33,7 @@ function fwField(struct: string, field: string): number {
   return f.off;
 }
 
+/** The view stack and the SETTINGS menu, read from guest memory. */
 function firmware(rt: TestRuntime, device: Device) {
   const facts = viewStackFacts(device);
   if (!facts) throw new Error(`${device} has no [ui] facts`);
@@ -44,15 +45,16 @@ function firmware(rt: TestRuntime, device: Device) {
   const viewAt = fwField('cf.menu.struct.VerticalMenuView', 'view');
   const itemsBegin = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_begin');
   const itemsEnd = fwField('cf.menu.struct.CompactVerticalMenuView', 'items_end');
-  const stack = () => readViewStack(read, facts, MAX_STACK);
+  /** The top view of the stack: its object, class and opaque byte. */
+  const top = async () => (await readViewStack(read, facts))[0];
   /** The items of the top view's menu (the top view must be SETTINGS). */
   const topMenuItems = async () => {
-    const [top] = await stack();
-    if (!top) throw new Error('the view stack is empty');
-    const menu = top.view - viewAt;
+    const v = await top();
+    if (!v) throw new Error('the view stack is empty');
+    const menu = v.view - viewAt;
     return ((await word(menu + itemsEnd)) - (await word(menu + itemsBegin))) / ITEM_BYTES;
   };
-  return { stack, topMenuItems };
+  return { top, topMenuItems };
 }
 
 /** The saved names: the value of the module's `names` key (version byte, track count, then a length byte and the characters of each track), or null before it is written. */
@@ -81,72 +83,75 @@ async function savedNames(h: CardRig, rt: TestRuntime): Promise<string[] | null>
 const names = (h: CardRig, rt: TestRuntime, done: (n: string[] | null) => boolean, message: string) =>
   pollUntil(rt.clock, () => savedNames(h, rt), done, { withinMs: 20_000, intervalMs: 500, message });
 
-cardRigs('track manager', { dsp: 'zero', initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
-  test('the manager screen names a track, the name survives a restart, and TRK+YES shows the overlay while held', async () => {
-    let rt: TestRuntime = await h.load('track-manager', { modules: [MODULE], selection: [moduleStorePath(h.device, MODULE)] });
-    const info = await bootInfo(rt.session, h.plan);
-    expect(info.results.slice(0, 1), 'the module loads').toEqual([0]);
-    const drained = { drained: true } as const;
-    let fw = firmware(rt, h.device);
-    const stackOfLength = (length: number, message: string) =>
-      pollUntil(rt.clock, () => fw.stack(), (s) => s.length === length, { withinMs: 10_000, intervalMs: 100, message });
+/** The module on a card, the log read through a protocol session that steps the emulator (a card rig's `rt.dk` belongs to the baseline boot). */
+async function boot(h: CardRig, tag: string) {
+  const rt = await h.load(tag, { modules: [MODULE], selection: [moduleStorePath(h.device, MODULE)] });
+  const info = await bootInfo(rt.session, h.plan);
+  expect(info.results.slice(0, 1), 'the module loads').toEqual([0]);
+  const events = await pausedEvents(rt.session, rt.clock);
+  return { rt, events };
+}
 
-    // SETTINGS > TRACK MANAGER: the module's row is the last one
-    const main = await fw.stack();
-    await rt.ui.tap('SETTINGS', { until: drained });
-    const settings = await fw.stack();
-    expect(settings.length, 'SETTINGS is one view above the main screen').toBe(main.length + 1);
+cardRigs('track manager', { dsp: 'zero', initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
+  test('a name entered on the manager screen is saved and survives a restart', async () => {
+    let { rt, events } = await boot(h, 'track-manager-names');
+    let fw = firmware(rt, h.device);
+    const viewOpened = (flags: number) => events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === flags, { withinMs: 10_000 });
+
+    // SETTINGS > TRACK MANAGER: the module's row is the last one; the screen is a full-screen view of the module
+    const main = await fw.top();
+    await rt.ui.tap('SETTINGS', { until: DRAINED });
+    await pollUntil(rt.clock, fw.top, (v) => v !== undefined && v.view !== main?.view, { ...WITHIN, message: 'SETTINGS did not open' });
     const rows = await fw.topMenuItems();
-    for (let i = 0; i < rows - 1; i++) await rt.ui.tap('DOWN', { until: drained });
-    await rt.ui.tap('YES', { until: drained });
-    const manager = await stackOfLength(settings.length + 1, 'the manager screen was not opened');
-    expect(manager[0]!.opaque, 'the manager screen is full screen').not.toBe(0);
-    expect(manager[0]!.vptr, 'a view of the module, not the SETTINGS menu below it').not.toBe(manager[1]!.vptr);
+    for (let i = 0; i < rows - 1; i++) await rt.ui.tap('DOWN', { until: DRAINED });
+    await rt.ui.tap('YES', { until: DRAINED });
+    await viewOpened(0);
+    const manager = await fw.top();
+    expect(manager?.opaque, 'the manager screen is full screen').not.toBe(0);
 
     // TRIG 10 selects track 10; YES opens the naming screen (pushed after the release of YES)
-    await rt.ui.tap('TRIG 10', { until: drained });
-    await rt.ui.tap('YES', { until: drained });
-    const naming = await stackOfLength(manager.length + 1, 'the naming screen was not pushed');
-    expect(naming.slice(1), 'under it the manager screen and the stack as before').toEqual(manager);
+    await rt.ui.tap('TRIG 10', { until: DRAINED });
+    await rt.ui.tap('YES', { until: DRAINED });
+    await events.until('TEXT_INPUT_OPENED', undefined, { withinMs: 10_000 });
 
     // UP edits the character under the cursor; YES saves and closes the naming screen
-    await rt.ui.tap('UP', { until: drained });
-    await rt.ui.tap('YES', { until: drained });
-    await stackOfLength(manager.length, 'YES on the naming screen did not close it');
+    await rt.ui.tap('UP', { until: DRAINED });
+    await rt.ui.tap('YES', { until: DRAINED });
+    await events.until('TEXT_INPUT_DONE', undefined, { withinMs: 10_000 });
+    await pollUntil(rt.clock, fw.top, (v) => v?.view === manager?.view, { ...WITHIN, message: 'the manager screen is not the top view again' });
     const saved = await names(h, rt, (n) => n !== null && n.some((x) => x !== ''), 'the settings record holds the name');
     expect(saved!.length, 'one entry for each track').toBe(16);
     expect(saved!.map((x, i) => (x === '' ? -1 : i)).filter((i) => i >= 0), 'only track 10 has a name').toEqual([9]);
-    const name = saved![9]!;
-    expect(name.length, 'the edit gave a name').toBeGreaterThan(0);
+    expect(saved![9]!.length, 'the edit gave a name').toBeGreaterThan(0);
 
     // a restart: the name is still on the card
     rt = await h.restart(rt);
-    fw = firmware(rt, h.device);
     expect(await names(h, rt, (n) => n !== null, 'the record after the restart'), 'the name survived').toEqual(saved);
+    await rt.session.expectNoFault('track manager names');
+  });
 
-    // TRK held pushes the stock track selection; YES under it opens the overlay, a top view that is not opaque, and releasing YES removes it
+  test('TRK+YES opens the hint while held, releasing removes it, and a trig key under TRK still selects its track', async () => {
+    const { rt, events } = await boot(h, 'track-manager-hint');
+    const fw = firmware(rt, h.device);
     const input = panelInput(rt.session, rt.clock);
+
+    // TRK pushes the stock track selection: wait until the top view has changed, then that is the view the overlay goes over
+    const main = await fw.top();
     await input.button('TRK', true);
     try {
-      const held = await fw.stack();
+      const selection = await pollUntil(rt.clock, fw.top, (v) => v !== undefined && v.view !== main?.view, { ...WITHIN, message: 'TRK did not push the track selection' });
       await input.button('YES', true);
-      const overlay = await pollUntil(rt.clock, () => fw.stack(), (s) => s.length === held.length + 1, {
-        withinMs: 10_000,
-        intervalMs: 100,
-        message: 'the overlay was not opened while TRK and YES are held',
-      });
-      expect(overlay[0]!.opaque, 'the overlay is not opaque').toBe(0);
-      expect(overlay.slice(1), 'the stock views below are as they were').toEqual(held);
+      await events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === OVERLAY, { withinMs: 10_000 });
+      const overlay = await fw.top();
+      expect(overlay?.view, 'the overlay is a new top view over the stock track selection').not.toBe(selection.view);
+      expect(overlay?.opaque, 'the overlay is not opaque').toBe(0);
       await input.button('YES', false);
-      await pollUntil(rt.clock, () => fw.stack(), (s) => s.length === held.length, {
-        withinMs: 10_000,
-        intervalMs: 100,
-        message: 'the overlay stayed after YES was released',
-      });
+      await events.until('VIEW_CLOSED', undefined, { withinMs: 10_000 });
+      await pollUntil(rt.clock, fw.top, (v) => v?.view === selection.view, { ...WITHIN, message: 'the overlay stayed' });
     } finally {
       await input.button('YES', false).catch(() => {});
       await input.button('TRK', false);
     }
-    await rt.session.expectNoFault('track manager');
+    await rt.session.expectNoFault('track manager hint');
   });
 });

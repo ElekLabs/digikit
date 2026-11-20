@@ -42,6 +42,22 @@ static char done_text[TAGS][16];
 static int pushes, push_result;
 static uint32_t pushed_serial;
 static char pushed_initial[16];
+static int opened_events, done_events;
+
+static void f_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a)
+{
+    (void)fw;
+    (void)owner;
+    (void)a;
+    if (kind == DK_LOG_TEXT_INPUT_OPENED)
+        opened_events++;
+    else if (kind == DK_LOG_TEXT_INPUT_DONE)
+        done_events++;
+}
+int ti_events(int kind)
+{
+    return kind ? done_events : opened_events;
+}
 
 static int32_t f_push(void *fw, const dk_ui_text_input_desc *d, const char *initial,
                       uint32_t serial)
@@ -75,6 +91,8 @@ void ti_reset(void)
     memset(pushed_initial, 0, sizeof pushed_initial);
     fake.fw = 0;
     fake.push = f_push;
+    fake.emit = f_emit;
+    opened_events = done_events = 0;
     memset(&defer, 0, sizeof defer);
     input.fw = &fake;
     input.defer = &defer;

@@ -235,6 +235,13 @@
   },
   {
    "addend": 0,
+   "offset": 42,
+   "section": ".text.fwv_emit",
+   "symbol": "dk_log_event",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 8,
    "section": ".text.inv_view_detached",
    "symbol": ".sec..bss.g_views",
@@ -1099,6 +1106,13 @@
    "offset": 188,
    "section": ".text.inv_act",
    "symbol": ".sec..text.value_changed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.fwt_emit",
+   "symbol": "dk_log_event",
    "type": "cf.32"
   },
   {
@@ -2097,6 +2111,13 @@
   },
   {
    "addend": 0,
+   "offset": 8,
+   "section": ".rodata.g_text_fw",
+   "symbol": ".sec..text.fwt_emit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 4,
    "section": ".rodata.g_view_fw",
    "symbol": ".sec..text.fwv_poll_start",
@@ -2121,6 +2142,13 @@
    "offset": 16,
    "section": ".rodata.g_view_fw",
    "symbol": ".sec..text.fwv_invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".rodata.g_view_fw",
+   "symbol": ".sec..text.fwv_emit",
    "type": "cf.32"
   },
   {
@@ -2561,6 +2589,13 @@
   },
   {
    "align": 2,
+   "hex": "4e56ffec2d6e0010ffec486effec42a742aefff842aefffc2f2e000c2d6e0014fff02d6e0018fff44eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.fwv_emit",
+   "size": 54
+  },
+  {
+   "align": 2,
    "hex": "206f00042f104879000000004eb900000000508f4e75",
    "kind": "text",
    "name": ".text.inv_view_detached",
@@ -2778,6 +2813,13 @@
   },
   {
    "align": 2,
+   "hex": "4e56ffec2d6e0010ffec486effec42a742aefff442aefff842aefffc2f2e000c2d6e0014fff04eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.fwt_emit",
+   "size": 52
+  },
+  {
+   "align": 2,
    "hex": "4e56ffc4203c000000002f022f2e000c487800182d40ffd0203c00000000240e0682ffffffe82f022d40ffd442aeffd82d6e0010ffc842aeffdc42aeffe442aeffe02d6e0014ffcc4eb900000000487800544eb9000000004fef00102d40ffc44a80672e486effd841f9000000002f280002486effc82f022f004eb9000000002f2effc42f2e00084eb9000000004fef001c242effc04e5e4e75",
    "kind": "text",
    "name": ".text.dk_ui_stock_row",
@@ -2967,17 +3009,17 @@
   },
   {
    "align": 2,
-   "hex": "0000000000000000",
+   "hex": "000000000000000000000000",
    "kind": "data",
    "name": ".rodata.g_text_fw",
-   "size": 8
+   "size": 12
   },
   {
    "align": 2,
-   "hex": "0000000000000000000000000000000000000000",
+   "hex": "000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.g_view_fw",
-   "size": 20
+   "size": 24
   },
   {
    "align": 2,
@@ -3128,10 +3170,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffff0720148d71c04202f00182400eb8a266f0014206b0080c2b3280c2f012f002f10206800084e904fef000c278028084a8066241780280042b3280c42b3281042b3281442b3281842b3281c42804cd71c044fef00104e75720270011781280060ec",
+   "hex": "4feffff0700148d71c04242f0018266f0014eb8a206b008045f32800c0aa000c49ea000c2f002f2f001c2f10206800084e904fef000c254000084a806622178028004280429442aa001042aa001442aa001842aa001c4cd71c044fef00104e75700217802800206b00802f2f00182f142f2a0004487800362f10206800144e904fef0014700160ce",
    "kind": "text",
    "name": ".text.push_slot",
-   "size": 100
+   "size": 136
   },
   {
    "align": 2,
@@ -3198,10 +3240,10 @@
   },
   {
    "align": 2,
-   "hex": "202f00087203b280653ceb88206f0004d1c04a106730226800182028001c421042a8000842a8000442a8000c42a8001042a8001442a8001842a8001c4a8967062f4000044ed14e75",
+   "hex": "518f2f0b70032f0a222f0018206f0014b081656e2001eb8845f008004a126762202a001c226a0018206800802f40000c42a72f012f2a00044878003747ea00042f10206800142f49001c4e90421242aa00084fef0014226f0008429342aa000c42aa001042aa001442aa001842aa001c4a89670e2f6f000c0014245f265f508f4ed1245f265f508f4e75",
    "kind": "text",
    "name": ".text.ui_views_gone",
-   "size": 72
+   "size": 138
   },
   {
    "align": 2,
@@ -3352,10 +3394,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffec206e0008226e0008202e000806800000003141e800192d48ffec20512d690042fff42d690008fff82d40fff02d69000cfffc2f2900142f00486effec2f10206800044e904fef00104a8067124201226e000842a9001442a90008134100184e5e4e75",
+   "hex": "4e56ffe8206e0008226e0008202e000806800000003141e800192d48ffec20512d690042fff42d690008fff82d40fff02d69000cfffc2f2900142f00486effec2f10206800044e904fef0010226e00084a806712420142a9001442a90008134100184e5e4e7520512f2900422f290010487800382f10206800082d40ffe84e904fef0010202effe860d8",
    "kind": "text",
    "name": ".text.push_now",
-   "size": 102
+   "size": 138
   },
   {
    "align": 2,
@@ -3380,10 +3422,10 @@
   },
   {
    "align": 2,
-   "hex": "206f0004222f0008226800082028000c42a8001442a800084a89670a2f4100082f4000044ed14e75",
+   "hex": "4feffff42f0a206f00142f6f0018000c42a800142468000c2268000842a8000820102f4a000842a72f2800104878003920402f10206800082f4900144e904fef0010226f00044a8967142f6f000c00182f6f00080014245f4fef000c4ed1245f4fef000c4e75",
    "kind": "text",
    "name": ".text.ui_text_done",
-   "size": 40
+   "size": 102
   },
   {
    "align": 2,
@@ -3400,7 +3442,7 @@
    "size": 72
   }
  ],
- "source_sha256": "7a7fbf59f100da6eba86a1c65d2bbd8b758340e5dbf68bde5dc50318439b4537",
+ "source_sha256": "b7de991280bf575cb2bcda7457ede286f9a17f70f281cd8a240a427e15e7e3d6",
  "symbols": [
   {
    "global": false,
@@ -3668,6 +3710,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text.fwt_emit",
+   "section": ".text.fwt_emit",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.fwt_push",
    "section": ".text.fwt_push",
    "value": 0
@@ -3676,6 +3724,12 @@
    "global": false,
    "name": ".sec..text.fwv_close",
    "section": ".text.fwv_close",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwv_emit",
+   "section": ".text.fwv_emit",
    "value": 0
   },
   {
@@ -4220,6 +4274,12 @@
   },
   {
    "global": true,
+   "name": "dk_log_event",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dk_make_sp",
    "section": ".text",
    "value": 0
@@ -4460,6 +4520,12 @@
   },
   {
    "global": false,
+   "name": "fwt_emit",
+   "section": ".text.fwt_emit",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "fwt_push",
    "section": ".text.fwt_push",
    "value": 0
@@ -4468,6 +4534,12 @@
    "global": false,
    "name": "fwv_close",
    "section": ".text.fwv_close",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwv_emit",
+   "section": ".text.fwv_emit",
    "value": 0
   },
   {
@@ -5027,8 +5099,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3555",
-  "isa_check": "f24551025abb18a676b582d51b5a43c5eb83c5e1e536acea22f47846b8cff375",
+  "instructions_redecoded": "3643",
+  "isa_check": "911be137ad18e968ac675a7f864dac26f977bf01b60014f06cb4c07bfd0d7dc2",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

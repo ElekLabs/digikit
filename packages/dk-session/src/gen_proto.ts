@@ -348,6 +348,10 @@ export const LOG_KIND = {
   FW_READY: 47,
   SHORTCUT_CLASH: 52,
   SHORTCUT_INACTIVE: 53,
+  VIEW_OPENED: 54,
+  VIEW_CLOSED: 55,
+  TEXT_INPUT_OPENED: 56,
+  TEXT_INPUT_DONE: 57,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -401,6 +405,10 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
   52: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
   53: ['SHORTCUT_INACTIVE', ['module', 'key0', 'key1', '-', '-']],
+  54: ['VIEW_OPENED', ['owner', 'flags', 'slot', '-', '-']],
+  55: ['VIEW_CLOSED', ['owner', 'slot', '-', '-', '-']],
+  56: ['TEXT_INPUT_OPENED', ['owner', 'max_len', '-', '-', '-']],
+  57: ['TEXT_INPUT_DONE', ['owner', '-', '-', '-', '-']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

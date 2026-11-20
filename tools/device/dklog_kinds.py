@@ -59,6 +59,10 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     47: ("FW_READY", ("blocks", "-", "-", "-", "-")),
     52: ("SHORTCUT_CLASH", ("module", "owner", "key0", "key1", "-")),
     53: ("SHORTCUT_INACTIVE", ("module", "key0", "key1", "-", "-")),
+    54: ("VIEW_OPENED", ("owner", "flags", "slot", "-", "-")),
+    55: ("VIEW_CLOSED", ("owner", "slot", "-", "-", "-")),
+    56: ("TEXT_INPUT_OPENED", ("owner", "max_len", "-", "-", "-")),
+    57: ("TEXT_INPUT_DONE", ("owner", "-", "-", "-", "-")),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

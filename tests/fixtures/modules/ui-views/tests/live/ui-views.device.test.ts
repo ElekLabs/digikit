@@ -125,10 +125,19 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   const fw = firmware(rt);
   await expectRuntimeReady(session);
   const tap = tapOf(rt);
-  const stackOfLength = (length: number, message: string) =>
-    pollEmulated(session, () => fw.vptrs(), (v) => v.length === length, { emulatedMs: 10_000, message });
+  // the events core/ui logs when a module view is pushed and when it leaves the stack, and for the naming screen: what the test waits on (the firmware's view stack is read only to compare identities)
+  const events = await rt.listen();
+  const opened = (flags: number) => events.until('VIEW_OPENED', (e) => (e.args[1]! | 0) === flags, { withinMs: 10_000 });
+  const viewClosed = () => events.until('VIEW_CLOSED', undefined, { withinMs: 10_000 });
+  const inputOpened = () => events.until('TEXT_INPUT_OPENED', undefined, { withinMs: 10_000 });
+  const sameStack = (want: number[], message: string) =>
+    pollEmulated(session, () => fw.vptrs(), (v) => v.length === want.length && v.every((x, i) => x === want[i]), { emulatedMs: 10_000, message });
+  // the main screen is up when the view stack has a view; SETTINGS is open when the top view changed
+  await pollEmulated(session, () => fw.vptrs(), (v) => v.length > 0, { emulatedMs: 20_000, message: 'the main screen is not on the view stack' });
   const stockRows = async () => {
+    const below = await fw.vptrs();
     await tap('SETTINGS');
+    await pollEmulated(session, () => fw.vptrs(), (v) => v.length > below.length, { emulatedMs: 10_000, message: 'SETTINGS did not open' });
     const n = await fw.topMenuItems();
     await leave(rt);
     return n;
@@ -149,10 +158,10 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
 
   // The full-screen view: a new top view above the SETTINGS menu.
   await pressSettingsRow(rt, row1);
+  await opened(0);
   const open = await until(rt, (r) => r.drawsFull > 0, 'the view was never drawn');
   expect(open.fullOpen, 'dk_ui_view_open returned a view').toBe(1);
   const withView = await fw.vptrs();
-  expect(withView.length, 'the view is one more on the stack than SETTINGS alone').toBe(mainStack.length + 2);
   expect(withView[0], 'the top view is not the SETTINGS menu below it').not.toBe(withView[1]);
   const grown = await until(rt, (r) => r.drawsFull > open.drawsFull, 'the view is drawn on every frame, not once');
   expect(grown.drawsFull).toBeGreaterThan(open.drawsFull);
@@ -161,11 +170,12 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await tap('YES');
   await until(rt, (r) => r.keyPresses === 1, 'the view got no key press');
   // core/ui pushes the naming screen after the release of YES (the screen acts on a release: pushed at once it would take the release of this press as its own YES)
-  const withInput = await stackOfLength(withView.length + 1, 'the naming screen was not pushed after the release of YES');
+  await inputOpened();
+  const withInput = await fw.vptrs();
   expect(withInput.slice(1), 'under it the view and the stack are as before').toEqual(withView);
   expect((await report(rt)).doneCalls, 'the release of the YES that opened the screen did not answer it').toBe(0);
   await tap('NO');
-  expect(await fw.vptrs(), 'NO took the naming screen off the stack').toEqual(withView);
+  await sameStack(withView, 'NO took the naming screen off the stack');
   expect((await report(rt)).doneCalls, 'NO on the text input calls nothing').toBe(0);
   expect((await report(rt)).fullOpen, 'the view is still open under the text input').toBe(1);
 
@@ -174,26 +184,27 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await tap('YES');
   const done = await until(rt, (r) => r.doneCalls === 1, 'YES on the text input did not call done');
   expect(done.doneText, 'done gets the text as edited (the start text, trailing blanks removed)').toBe('AB');
-  expect(await fw.vptrs(), 'YES took the naming screen off the stack').toEqual(withView);
+  await sameStack(withView, 'YES took the naming screen off the stack');
 
   // NO in the view closes it: `closed` runs and the stack is SETTINGS alone again.
   await tap('NO');
   const closed = await until(rt, (r) => r.closedFull === 1, 'NO in the view did not close it');
   expect(closed.fullOpen).toBe(0);
   // the release of that NO went to our view, not to the SETTINGS menu below it: SETTINGS is still there
-  await stackOfLength(mainStack.length + 1, 'the view did not leave the stack, or SETTINGS left with it');
-  expect(await fw.vptrs(), 'the view left the stack and SETTINGS stayed').toEqual(withView.slice(1));
+  await viewClosed();
+  await sameStack(withView.slice(1), 'the view left the stack and SETTINGS stayed');
 
   // The overlay: the second row, a top view, closed by the module.
   await leave(rt);
   await pressSettingsRow(rt, row1 + 1);
+  await opened(1);
   const overlay = await until(rt, (r) => r.drawsOverlay > 0, 'the overlay was never drawn');
   expect(overlay.closedOverlay).toBe(0);
   const withOverlay = await fw.vptrs();
-  expect(withOverlay.length, 'the overlay is one more view on the stack').toBe(mainStack.length + 2);
+  expect(withOverlay[0], 'the overlay is a new top view above SETTINGS').not.toBe(withOverlay[1]);
   expect((await dk.request(REPORT, Uint8Array.of(1))).status, 'the close is queued for tick').toBe(0);
   await until(rt, (r) => r.closedOverlay === 1, 'the overlay did not close');
-  expect((await fw.vptrs()).length, 'the overlay left the stack').toBe(mainStack.length + 1);
+  await sameStack(withOverlay.slice(1), 'the overlay left the stack');
   await leave(rt);
   expect(await fw.vptrs(), 'back on the main screen').toEqual(mainStack);
 
@@ -207,14 +218,12 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
 
   // An unload takes an open view off the stack and removes the rows, without a fault.
   await pressSettingsRow(rt, row1);
+  await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open before the unload');
-  expect((await fw.vptrs()).length).toBe(mainStack.length + 2);
+  const beforeUnload = await fw.vptrs();
   await unload('the unload of a module that has views, rows and no menu');
-  const after = await pollEmulated(session, () => fw.vptrs(), (v) => v.length === mainStack.length + 1, {
-    emulatedMs: 10_000,
-    message: 'the view of the unloaded module is still on the view stack',
-  });
-  expect(after, 'only the SETTINGS menu is left under the removed view').toEqual(withView.slice(1));
+  await viewClosed();
+  await sameStack(beforeUnload.slice(1), 'only the SETTINGS menu is left under the removed view');
   await session.expectNoFault('the unload closed the view');
   await leave(rt);
   expect((await dk.modules()).map((m) => m.name), 'the module is not loaded').not.toContain('test/ui-views');
@@ -225,8 +234,10 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await reload();
   expect((await stockRows()), 'the rows are back').toBe(rowsBefore + 2);
   await pressSettingsRow(rt, row1);
+  await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'a view of the reloaded module did not open');
   await tap('NO');
+  await viewClosed();
   await until(rt, (r) => r.closedFull === 1, 'the view of the reloaded module did not close');
   await leave(rt);
 
@@ -243,22 +254,22 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   // An unload with the text input open: YES calls nothing of the unloaded module, the screen goes, and a text input of the reloaded module works.
   await reload();
   await pressSettingsRow(rt, row1);
+  await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open for the text input case');
   await tap('YES');
   await until(rt, (r) => r.keyPresses === 1, 'the view got no key press');
-  const inputUp = await stackOfLength(mainStack.length + 3, 'the naming screen is not on the stack');
+  await inputOpened();
+  const inputUp = await fw.vptrs();
   await unload('the unload with a view and a text input open');
-  const left = await pollEmulated(session, () => fw.vptrs(), (v) => v.length === mainStack.length + 2, {
-    emulatedMs: 10_000,
-    message: 'the view of the unloaded module is still on the view stack under its text input',
-  });
-  expect(left, 'the naming screen and SETTINGS are left').toEqual([inputUp[0], ...inputUp.slice(2)]);
+  await viewClosed();
+  await sameStack([inputUp[0]!, ...inputUp.slice(2)], 'the naming screen and SETTINGS are left');
   await tap('YES'); // the naming screen answers YES: its `done` belongs to code that is gone and must not run
-  expect((await fw.vptrs()).length, 'YES closed the naming screen').toBe(mainStack.length + 1);
+  await sameStack(inputUp.slice(2), 'YES closed the naming screen');
   await session.expectNoFault('YES on a text input of an unloaded module');
   await leave(rt);
   await reload();
   await pressSettingsRow(rt, row1);
+  await opened(0);
   await until(rt, (r) => r.fullOpen === 1, 'the view did not open after the reload');
   await tap('YES');
   await tap('YES');

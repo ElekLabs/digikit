@@ -23,6 +23,9 @@ static int close_n;
 static int reopen_tag = -1;
 static uintptr_t reopened;
 static uint32_t last_canvas_w;
+/* the log events the pool asked for: (kind, owner, a, b) in order */
+static uint32_t ev[16][4];
+static int ev_n;
 
 /* Panel codes 100 and 101 have names (1 and 2); every other code has none. */
 dk_key ui_key_of_code(uint32_t code)
@@ -61,6 +64,18 @@ static void f_close(void *fw, uint32_t view)
     if (close_n < 16)
         close_log[close_n++] = view;
 }
+static void f_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b)
+{
+    (void)fw;
+    if (ev_n < 16) {
+        ev[ev_n][0] = kind;
+        ev[ev_n][1] = (uint32_t)owner;
+        ev[ev_n][2] = a;
+        ev[ev_n][3] = b;
+        ev_n++;
+    }
+}
+
 static void f_invalidate(void *fw, uint32_t view)
 {
     (void)fw;
@@ -116,6 +131,8 @@ void vw_reset(void)
     fake.push = f_push;
     fake.close = f_close;
     fake.invalidate = f_invalidate;
+    fake.emit = f_emit;
+    ev_n = 0;
     memset(&pool, 0, sizeof pool);
     memset(&defer, 0, sizeof defer);
     defer.start = defer_start;
@@ -255,6 +272,14 @@ uint32_t vw_pushed_overlay(void)
 uint32_t vw_closed_view(int i)
 {
     return close_log[i];
+}
+int vw_events(void)
+{
+    return ev_n;
+}
+uint32_t vw_event(int i, int field)
+{
+    return ev[i][field];
 }
 uint32_t vw_canvas_width(void)
 {

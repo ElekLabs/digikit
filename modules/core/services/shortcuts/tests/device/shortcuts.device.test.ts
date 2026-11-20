@@ -1,27 +1,28 @@
-import { emulatorRead, readViewStack, viewStackFacts } from '@digi/test-support';
+import { emulatorRead, pollUntil, readViewStack, viewStackFacts } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import type { RuntimeEvent } from '@digi/dk-session';
+import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
-import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
-import type { RuntimeEvent } from '@digi/dk-session';
+import { pausedEvents } from '@digi/regression/runtime/paused-dk.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
 
 /**
  * The `shortcuts` service on the device (docs/plans/track-manager.md, phase 3): the key hook at the entry of the firmware's key walker.
+ * Only what the firmware shows is asserted here; the swallow and release rules are unit tests of the crate (`tests/state.rs`).
  * The fixture `test/shortcut-demo` binds [TRK]+[YES]; its `on` logs "on" with the selected track as the value (`dk_selected_track`), its `off` logs "off" (error-level MOD_LOG events).
- * No SHARC: the keys are ColdFire work. Every wait is on the log events or on the drained input queue; "no event" is checked with a bounded wait in emulated time.
- * The screen is read from the firmware's view stack (`readViewStack`, the `[ui]` facts of the device file), never from pixels.
+ * No SHARC. Waits are on log events, on the drained input queue and on the identity of the top view of the firmware's view stack (`readViewStack`); never a count of views.
  *
- * One boot of the runtime with the fixture, with SETTINGS open (YES on its first row opens a submenu, a visible effect of a YES that reaches the view):
- * - [TRK]+[YES]: `on` runs once, the view stack is what it was (YES did not reach SETTINGS), and the release of YES calls `off` once;
- * - [YES] alone passes: no call, and the stack grew (the submenu opened);
- * - on the main screen [TRK]+[TRIG 3] still selects track 3 (a trig key under [TRK] passes): the next [TRK]+[YES] logs track 2 (0-based).
+ * One boot with the fixture, with SETTINGS open (YES on its first row opens a submenu):
+ * - [TRK]+[YES] calls `on` and `off`, and SETTINGS stays the top view: YES did not reach it;
+ * - [YES] alone passes to SETTINGS (a submenu opens) and calls nothing;
+ * - on the main screen [TRK]+[TRIG 3] still selects track 3: the next [TRK]+[YES] logs track 2 (0-based).
  */
 const FIXTURE = 'test/shortcut-demo';
 const WORD_ON = 0x6f6e0000; // "on\0\0": the first word of the MOD_LOG message
 const WORD_OFF = 0x6f666600; // "off\0"
 const DRAINED = { drained: true } as const;
+const WITHIN = { withinMs: 10_000, intervalMs: 100 } as const;
 
 const isCall = (word: number) => (e: RuntimeEvent) => (e.args[0]! | 0) === word;
 
@@ -33,36 +34,43 @@ async function boot(h: CardRig): Promise<TestRuntime> {
 }
 
 cardRigs('shortcuts: the key hook', { dsp: 'zero', initial: () => ({}), uploads: true, relaxFs: true }, (h) => {
-  test('TRK+YES calls on once and off on release and swallows YES; YES alone passes; a trig key under TRK still selects its track', async () => {
+  test('TRK+YES calls on and off and SETTINGS does not get the YES; YES alone does; a trig key under TRK still selects its track', async () => {
     const rt = await boot(h);
-    const events = await rt.listen();
+    // a card rig's `rt.dk` belongs to the baseline boot: the log is read through a protocol session that steps the paused emulator (`pausedEvents`, as `h.usb` does)
+    const events = await pausedEvents(rt.session, rt.clock);
     const facts = viewStackFacts(h.device);
     if (!facts) throw new Error(`${h.device} has no [ui] facts`);
     const read = emulatorRead(rt.session);
-    const stack = () => readViewStack(read, facts);
+    /** The top view of the stack: its object and class. */
+    const top = async () => (await readViewStack(read, facts))[0];
+    const topIs = (view: number | undefined) => (v: Awaited<ReturnType<typeof top>>) => v?.view === view;
     const anyCall = (e: RuntimeEvent) => isCall(WORD_ON)(e) || isCall(WORD_OFF)(e);
-    const none = async (why: string) =>
-      expect(events.until('MOD_LOG', anyCall, { withinMs: 300 }), why).rejects.toThrow();
+    const none = (why: string) => expect(events.until('MOD_LOG', anyCall, { withinMs: 300 }), why).rejects.toThrow();
 
-    // SETTINGS is the top view
+    // SETTINGS is open when the top view is not the main screen's
+    const main = await top();
     await rt.ui.tap('SETTINGS', { until: DRAINED });
-    const settings = await stack();
-    expect(settings.length, 'SETTINGS is on the stack').toBeGreaterThan(0);
+    const settings = await pollUntil(rt.clock, top, (v) => v !== undefined && v.view !== main?.view, {
+      ...WITHIN,
+      message: 'SETTINGS did not open',
+    });
 
-    // TRK+YES: `on` runs; the stack is as it was, so SETTINGS did not get YES (the same views, the same top view); the release of YES (part of the tap) calls `off`
-    await rt.ui.tap('YES', { until: { event: 'MOD_LOG', match: isCall(WORD_ON), withinMs: 3000 }, held: 'TRK' });
-    await rt.ui.wait(DRAINED);
-    expect(await stack(), 'the stock views did not get YES: the stack is what it was').toEqual(settings);
+    // TRK+YES: `on` and `off` run; when both keys are up the top view is the same SETTINGS view (the stock track selection that TRK pushed is gone again)
+    await rt.ui.tap('YES', { until: DRAINED, held: 'TRK' });
+    await events.until('MOD_LOG', isCall(WORD_ON), { withinMs: 3000 });
     await events.until('MOD_LOG', isCall(WORD_OFF), { withinMs: 3000 });
     await none('one on and one off, no more');
+    await pollUntil(rt.clock, top, topIs(settings!.view), { ...WITHIN, message: 'SETTINGS is not the top view again' });
+    expect(await top(), 'YES did not reach SETTINGS: no submenu opened').toEqual(settings);
 
-    // YES alone is not bound: it passes to SETTINGS, which opens a submenu (a new top view), and the service calls nothing
+    // YES alone is not bound: it reaches SETTINGS, which opens a submenu (another top view), and the service calls nothing
     await rt.ui.tap('YES', { until: DRAINED });
-    const opened = await stack();
-    expect(opened.length, 'YES alone opened a submenu above SETTINGS').toBeGreaterThan(settings.length);
+    await pollUntil(rt.clock, top, (v) => v !== undefined && v.view !== settings!.view, { ...WITHIN, message: 'YES alone did not open the submenu' });
     await none('YES alone calls nothing');
     await rt.ui.tap('NO', { until: DRAINED });
+    await pollUntil(rt.clock, top, topIs(settings!.view), { ...WITHIN, message: 'NO did not close the submenu' });
     await rt.ui.tap('NO', { until: DRAINED });
+    await pollUntil(rt.clock, top, topIs(main?.view), { ...WITHIN, message: 'NO did not leave SETTINGS' });
 
     // TRK+TRIG 3 selects track 3 as stock; the next TRK+YES logs the selected track (0-based)
     await rt.ui.tap('TRIG 3', { until: DRAINED, held: 'TRK' });

@@ -9,6 +9,7 @@ extern "C" {
     fn ti_defer_poll();
     fn ti_defer_pending() -> u32;
     fn ti_reset();
+    fn ti_events(kind: c_int) -> c_int;
     fn ti_set_push_result(r: c_int);
     fn ti_open(owner: usize, tag: c_int, max_len: u32) -> i32;
     fn ti_yes(text: *const c_char);
@@ -122,6 +123,7 @@ fn no_calls_nothing_and_frees_the_input() {
     unsafe {
         assert_eq!(ti_open(1, 0, 8), 0);
         ti_no();
+        assert_eq!(ti_events(1), 0, "NO is no TEXT_INPUT_DONE");
         assert_eq!(ti_done_calls(0), 0);
         assert_eq!(ti_open(1, 1, 8), 0, "free again after NO");
     }
@@ -226,13 +228,17 @@ fn an_input_opened_in_a_key_press_is_pushed_after_the_release() {
         assert_eq!(ti_open(2, 1, 8), E_BUSY, "but the input is taken");
         ti_release(10);
         assert_eq!(ti_pushes(), 0);
+        assert_eq!(ti_events(0), 0, "no event before the screen is pushed");
         ti_defer_poll();
         assert_eq!(ti_pushes(), 1);
+        assert_eq!(ti_events(0), 1, "TEXT_INPUT_OPENED when it was pushed");
         assert_eq!(
             CStr::from_ptr(ti_pushed_initial()).to_str().unwrap(),
             "KICK"
         );
+        assert_eq!(ti_events(1), 0);
         yes("OK");
+        assert_eq!(ti_events(1), 1, "TEXT_INPUT_DONE on YES");
         assert_eq!((ti_done_calls(0), text_of(0)), (1, "OK".to_string()));
     }
 }

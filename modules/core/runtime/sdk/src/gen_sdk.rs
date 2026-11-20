@@ -53,6 +53,10 @@ pub mod logk {
     pub const FW_READY: u16 = 47;
     pub const SHORTCUT_CLASH: u16 = 52;
     pub const SHORTCUT_INACTIVE: u16 = 53;
+    pub const VIEW_OPENED: u16 = 54;
+    pub const VIEW_CLOSED: u16 = 55;
+    pub const TEXT_INPUT_OPENED: u16 = 56;
+    pub const TEXT_INPUT_DONE: u16 = 57;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;

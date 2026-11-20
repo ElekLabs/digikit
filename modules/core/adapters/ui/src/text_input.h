@@ -6,6 +6,7 @@
 #define DK_UI_TEXT_INPUT_H
 #include <stdint.h>
 #include <dk/platform/ui.h>
+#include <dk/gen/log_kinds.h>
 #include "key_defer.h"
 
 /* DK_OK, or DK_E_CONTRACT: no desc, no `done`, no `title`, or `max_len` 0, above DK_UI_TEXT_INPUT_MAX or above `screen_max` (how many characters the
@@ -21,6 +22,8 @@ typedef struct ui_text_fw {
     /* Build and push the naming screen for `d` with the start text `initial`; the screen calls ui_text_done on YES and ui_text_gone(serial) when it left the stack.
        0 when shown, else a negative code (the screen is not shown and calls nothing). */
     int32_t (*push)(void *fw, const dk_ui_text_input_desc *d, const char *initial, uint32_t serial);
+    /* A log event (`DK_LOG_TEXT_INPUT_OPENED` or `DK_LOG_TEXT_INPUT_DONE` of <dk/gen/log_kinds.h>) with the owner handle and a word. */
+    void (*emit)(void *fw, uint32_t kind, uintptr_t owner, uint32_t a);
 } ui_text_fw;
 
 typedef struct ui_text_input {

@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <dk/platform/ui.h>
 #include <dk/gen/keys.h>
+#include <dk/gen/log_kinds.h>
 #include "key_defer.h"
 
 /* What the pool asks of the firmware. `fw` is passed back to each call. */
@@ -28,6 +29,8 @@ typedef struct ui_view_fw {
     void (*close)(void *fw, uint32_t view);
     /* Ask for a redraw of the view. */
     void (*invalidate)(void *fw, uint32_t view);
+    /* A log event (`DK_LOG_VIEW_OPENED` or `DK_LOG_VIEW_CLOSED` of <dk/gen/log_kinds.h>) with the owner handle and two words. */
+    void (*emit)(void *fw, uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b);
 } ui_view_fw;
 
 enum { UI_VIEW_FREE, UI_VIEW_OPENING, UI_VIEW_OPEN, UI_VIEW_CLOSING };

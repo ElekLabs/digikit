@@ -31,7 +31,20 @@ extern "C" {
     fn vw_pushed_overlay() -> u32;
     fn vw_closed_view(i: c_int) -> u32;
     fn vw_canvas_width() -> u32;
+    fn vw_events() -> c_int;
+    fn vw_event(i: c_int, field: c_int) -> u32;
 }
+
+/// The log events the pool asked for, as (kind, owner, a, b).
+fn events() -> Vec<(u32, u32, u32, u32)> {
+    (0..unsafe { vw_events() })
+        .map(|i| unsafe { (vw_event(i, 0), vw_event(i, 1), vw_event(i, 2), vw_event(i, 3)) })
+        .collect()
+}
+
+// the kinds of sdk/sdk.toml `[[log.kind]]`
+const VIEW_OPENED: u32 = 54;
+const VIEW_CLOSED: u32 = 55;
 
 const OVERLAY: u32 = 1;
 const VIEWS: usize = 4;
@@ -318,6 +331,7 @@ fn a_view_opened_in_a_key_press_is_pushed_after_the_release_which_the_old_view_t
     let b = unsafe { vw_opened() };
     assert_ne!(b, 0, "the handle is given at once");
     assert_eq!(count(PUSHES, 0), 1, "only the first view is on the stack");
+    assert_eq!(events().len(), 1, "and only that one was logged");
     unsafe { vw_defer_poll() };
     assert_eq!(count(PUSHES, 0), 1, "the key is still down");
     // the release event goes to the view that is on top: it takes it, though the module says 0
@@ -326,6 +340,7 @@ fn a_view_opened_in_a_key_press_is_pushed_after_the_release_which_the_old_view_t
     assert_eq!(count(PUSHES, 0), 1);
     unsafe { vw_defer_poll() };
     assert_eq!(count(PUSHES, 0), 2, "pushed after the release");
+    assert_eq!(events().len(), 2, "logged when it was pushed, not when it was asked for");
     assert_eq!(unsafe { vw_defer_pending() }, 0);
     unsafe { vw_draw(slot(b)) };
     assert_eq!(count(DRAWS, 5), 1, "and drawn");
@@ -452,4 +467,16 @@ fn a_full_queue_refuses_the_open_and_takes_no_slot() {
     unsafe { vw_key(slot(a), NAMED, PRESS) };
     assert_eq!(unsafe { vw_opened() }, 0, "no slot left");
     assert_eq!(unsafe { vw_used() }, VIEWS as u32);
+}
+
+#[test]
+fn the_pool_logs_when_a_view_is_pushed_and_when_it_leaves_the_stack() {
+    let _g = fresh();
+    let h = open(7, OVERLAY, 0);
+    let s = slot(h);
+    assert_eq!(events(), [(VIEW_OPENED, 7, OVERLAY, s)], "pushed: owner, flags, slot");
+    unsafe { vw_close(h) };
+    assert_eq!(events().len(), 1, "a close request is no event: the view is still on the stack");
+    unsafe { vw_gone(s) };
+    assert_eq!(events()[1], (VIEW_CLOSED, 7, s, 0), "the firmware removed it");
 }

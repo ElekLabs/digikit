@@ -1215,7 +1215,26 @@ static int32_t fwv_poll_start(void *fw)
     return poll_start();
 }
 
-static const ui_view_fw g_view_fw = {0, fwv_poll_start, fwv_push, fwv_close, fwv_invalidate};
+/* A runtime log event of a module screen (`dk_log_event`); the owner handle is the first word. */
+static void emit_event(uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b)
+{
+    uint32_t args[5] = {(uint32_t)owner, a, b, 0, 0};
+    dk_log_event(kind, 0, args);
+}
+
+static void fwv_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a, uint32_t b)
+{
+    (void)fw;
+    emit_event(kind, owner, a, b);
+}
+
+static void fwt_emit(void *fw, uint32_t kind, uintptr_t owner, uint32_t a)
+{
+    (void)fw;
+    emit_event(kind, owner, a, 0);
+}
+
+static const ui_view_fw g_view_fw = {0, fwv_poll_start, fwv_push, fwv_close, fwv_invalidate, fwv_emit};
 
 /* The queue of actions that wait for a key release starts the per-pass poll when it gets one. */
 static int32_t defer_start(void *unused)
@@ -1291,7 +1310,7 @@ static int32_t fwt_push(void *fw, const dk_ui_text_input_desc *d, const char *in
     return push_shared(blk) ? 0 : DK_E_NOMEM;
 }
 
-static const ui_text_fw g_text_fw = {0, fwt_push};
+static const ui_text_fw g_text_fw = {0, fwt_push, fwt_emit};
 
 int32_t dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *d)
 {

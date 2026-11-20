@@ -1725,6 +1725,31 @@ id = 53
 name = "SHORTCUT_INACTIVE"
 args = ["module", "key0", "key1", "-", "-"]
 
+# core/ui, module screens (docs/plans/track-manager.md): a module's full-screen view or overlay was pushed on the firmware's view stack (after the release of the key
+# that asked for it, when a key callback did), and when it left the stack. `owner` is the module's owner handle (module record index + 2: the handle value core/ui keeps;
+# 0xffffffff for a core module), `flags` the DK_UI_VIEW_* flags of the desc (1: overlay), `slot` the pool slot.
+[[log.kind]]
+id = 54
+name = "VIEW_OPENED"
+args = ["owner", "flags", "slot", "-", "-"]
+
+[[log.kind]]
+id = 55
+name = "VIEW_CLOSED"
+args = ["owner", "slot", "-", "-", "-"]
+
+# the stock naming screen opened for a module by dk_ui_text_input was pushed (after the key release when a key callback asked), and its YES was pressed (`done` is about to be called):
+# `owner` as above, `max_len` the length of the desc.
+[[log.kind]]
+id = 56
+name = "TEXT_INPUT_OPENED"
+args = ["owner", "max_len", "-", "-", "-"]
+
+[[log.kind]]
+id = 57
+name = "TEXT_INPUT_DONE"
+args = ["owner", "-", "-", "-", "-"]
+
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
 polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
