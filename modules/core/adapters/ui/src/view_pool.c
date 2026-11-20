@@ -123,7 +123,7 @@ void ui_views_draw(ui_views *p, uint32_t slot, const dk_canvas *c)
 int ui_views_key(ui_views *p, uint32_t slot, uint32_t code, uint32_t flags)
 {
     ui_view *v;
-    uint32_t key;
+    dk_key key;
     if (slot >= DK_UI_VIEWS)
         return 0;
     v = &p->v[slot];
@@ -132,7 +132,7 @@ int ui_views_key(ui_views *p, uint32_t slot, uint32_t code, uint32_t flags)
     if (v->state == UI_VIEW_CLOSING || !v->desc.key)
         return 1;
     key = ui_key_of_code(code);
-    if (key == UI_KEY_NONE)
+    if (key == DK_KEY_NONE)
         return 1; /* a full-screen view covers the screen: a key it cannot name must not act on the stock screen below */
     return v->desc.key(v->desc.arg, key, flags) ? 1 : 0;
 }

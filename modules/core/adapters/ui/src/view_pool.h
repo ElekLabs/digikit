@@ -11,6 +11,7 @@
 #define DK_UI_VIEW_POOL_H
 #include <stdint.h>
 #include <dk/platform/ui.h>
+#include <dk/gen/keys.h>
 
 /* What the pool asks of the firmware. `fw` is passed back to each call. */
 typedef struct ui_view_fw {
@@ -68,8 +69,7 @@ void ui_views_poll(const ui_views *p);
 /* Views that are OPEN or CLOSING. */
 uint32_t ui_views_used(const ui_views *p);
 
-/* The logical key for a panel code (<dk/gen/keys.h>), or UI_KEY_NONE for a code that has no name. Defined in panel_keys.c (the host test has its own). */
-#define UI_KEY_NONE 0xffffffffu
-uint32_t ui_key_of_code(uint32_t code);
+/* The logical key for a panel code, or DK_KEY_NONE for a code that has no name. Defined in panel_keys.c (the host test has its own). */
+dk_key ui_key_of_code(uint32_t code);
 
 #endif

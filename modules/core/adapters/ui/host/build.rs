@@ -44,6 +44,7 @@ fn main() {
     for f in [
         "settings_rows.c",
         "view_pool.c",
+        "key_map.c",
         "canvas_map.c",
         "text_input.c",
     ] {

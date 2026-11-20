@@ -1,10 +1,11 @@
-/* The translation of a panel code to a logical key for module views (view_pool.h). */
+/* The translation of a panel code to a logical key for module views (view_pool.h): the reverse of the device's key map. */
 #include "view_pool.h"
+#include "key_map.h"
+#include "dkrt.h"
 
-/* TODO(track-manager B1, branch feat/track-manager, sdk/include/dk/gen/keys.h): map the panel code of the firmware's key event (KeyEvent +0xc) to
-   the logical key through the device's `[panel]` table. Until that table exists no code has a name, so a full-screen view gets no key. */
-uint32_t ui_key_of_code(uint32_t code)
+extern const DkrtDevice dkrt_dev;
+
+dk_key ui_key_of_code(uint32_t code)
 {
-    (void)code;
-    return UI_KEY_NONE;
+    return ui_key_from_codes(dkrt_dev.key_codes, DKRT_DEV_KEYS, code);
 }

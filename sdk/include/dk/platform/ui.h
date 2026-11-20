@@ -47,6 +47,7 @@
 #include <stdint.h>
 #include <dk/gen/imports.h>
 #include <dk/platform/canvas.h>
+#include <dk/gen/keys.h>
 
 /* Bytes of row text, terminator included. Longer text is cut. */
 #define DK_UI_ROW 24
@@ -117,7 +118,9 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
    - `dk_ui_view_close` with the handle closes the view. Closing a handle twice, or after `closed`, does nothing. A view is closed for you when its module unloads
      (without a `closed` call, as the module is gone), so a module with views stays unloadable.
    - `desc` is copied. `arg` is kept: static or module memory, never the stack. Callbacks run in the UI task and must be short.
-   `key` gets the logical key and the event flags (TODO: the names of the keys and flags come with <dk/gen/keys.h>; until then the key is the raw word). */
+   `key(arg, key, flags)` gets the logical key (<dk/gen/keys.h>) and the event flags: DK_UI_KEY_DOWN is set for a press and clear for a release; the other bits
+   are reserved. A key the device gives no name is not passed to the view and does not act on the stock screen. */
+#define DK_UI_KEY_DOWN 1u
 enum {
     DK_UI_VIEW_OVERLAY = 1,
 };
@@ -126,8 +129,8 @@ enum {
 typedef struct dk_ui_view_desc {
     uint32_t flags; /* DK_UI_VIEW_* */
     void (*draw)(void *arg, const dk_canvas *canvas);
-    int32_t (*key)(void *arg, uint32_t key, uint32_t flags); /* full screen only; 1 = used */
-    void (*closed)(void *arg);                               /* 0 or a function */
+    int32_t (*key)(void *arg, dk_key key, uint32_t flags); /* full screen only; 1 = used */
+    void (*closed)(void *arg);                             /* 0 or a function */
     void *arg;
 } dk_ui_view_desc;
 

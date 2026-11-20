@@ -20,9 +20,9 @@ static uintptr_t reopened;
 static uint32_t last_canvas_w;
 
 /* Panel codes 100 and 101 have names (1 and 2); every other code has none. */
-uint32_t ui_key_of_code(uint32_t code)
+dk_key ui_key_of_code(uint32_t code)
 {
-    return code == 100 ? 1 : code == 101 ? 2 : UI_KEY_NONE;
+    return code == 100 ? 1 : code == 101 ? 2 : DK_KEY_NONE;
 }
 
 static uint32_t f_push(void *fw, uint32_t slot, int overlay)
@@ -54,7 +54,7 @@ static void d_draw(void *arg, const dk_canvas *c)
     draws[(intptr_t)arg]++;
     last_canvas_w = c->width;
 }
-static int32_t d_key(void *arg, uint32_t key, uint32_t flags)
+static int32_t d_key(void *arg, dk_key key, uint32_t flags)
 {
     int t = (int)(intptr_t)arg;
     keys[t]++;

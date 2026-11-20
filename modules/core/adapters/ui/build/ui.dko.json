@@ -1550,6 +1550,20 @@
    "type": "cf.32"
   },
   {
+   "addend": 64,
+   "offset": 10,
+   "section": ".text.ui_key_of_code",
+   "symbol": "dkrt_dev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.ui_key_of_code",
+   "symbol": "ui_key_from_codes",
+   "type": "cf.32"
+  },
+  {
    "addend": 0,
    "offset": 2,
    "section": ".text.c_text_width",
@@ -2225,10 +2239,10 @@
   },
   {
    "align": 2,
-   "hex": "2f0b72032f0a202f0010246f000cb28064084280245f265f4e75eb881232080067f0d5c07001c0aa000c4a8066e4738155814a816604700160da47ea00144a9367f42f2f00144eb900000000588f72ffb28067e22f2f00182f002f2a001c20534e904fef000c4a8056c07100448060a4",
+   "hex": "2f0b72032f0a202f0010246f000cb28064084280245f265f4e75eb881232080067f0d5c07001c0aa000c4a8066e4738155814a816604700160da47ea00144a9367f42f2f00144eb900000000588f4a8067e42f2f00182f002f2a001c20534e904fef000c4a8056c07100448060a6",
    "kind": "text",
    "name": ".text.ui_views_key",
-   "size": 112
+   "size": 110
   },
   {
    "align": 2,
@@ -2253,10 +2267,17 @@
   },
   {
    "align": 2,
-   "hex": "70ff4e75",
+   "hex": "2f2f0004487800404879000000004eb9000000004fef000c4e75",
    "kind": "text",
    "name": ".text.ui_key_of_code",
-   "size": 4
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "222f000c206f00044a8167087001b0af0008650442804e75b2b00c0067f8528060ec",
+   "kind": "text",
+   "name": ".text.ui_key_from_codes",
+   "size": 34
   },
   {
    "align": 2,
@@ -2329,7 +2350,7 @@
    "size": 52
   }
  ],
- "source_sha256": "9f944c673d62981fe4057cee2fcd7191f4589b2a2ff2171833a0c5a465bdf8f6",
+ "source_sha256": "1dcc3ec4a723fe8848d543175f78ab35b51e1bdada3b961497cb5a8129b8359a",
  "symbols": [
   {
    "global": false,
@@ -3071,6 +3092,12 @@
   },
   {
    "global": true,
+   "name": "dkrt_dev",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dkrt_menu_built",
    "section": null,
    "value": 0
@@ -3335,6 +3362,12 @@
   },
   {
    "global": true,
+   "name": "ui_key_from_codes",
+   "section": ".text.ui_key_from_codes",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "ui_key_of_code",
    "section": ".text.ui_key_of_code",
    "value": 0
@@ -3464,8 +3497,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "2688",
-  "isa_check": "9238de7317c02c888cfb30b823cf286b8f7279afbd90f2c0db0f15d533ac883a",
+  "instructions_redecoded": "2704",
+  "isa_check": "b4b00c8a1b715862b46f7e2227f423bfbdc9ccea830d666d7d96d5258590b748",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }
