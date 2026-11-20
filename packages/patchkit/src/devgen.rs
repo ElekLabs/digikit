@@ -2093,14 +2093,18 @@ fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
 
 /// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.view_keys`): every device (runtime target or not)
 /// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
-/// module should run on. A module id of a patch set that the library does not have is an error. `only`: check the devices for this module only (the generator of
-/// one module, `pack`); `None`: every module of every patch set (`patchkit gen`).
+/// module should run on. A module id of a patch set that the library does not have is an error (the whole-library checks, `only` = `None`: `patchkit gen`, `build`).
+/// `only`: check the devices for this module only (the generator of one module, `pack`); a patch set that cannot be resolved in a library without the core modules
+/// is then skipped unless the module is one of its roots.
 pub fn check_device_tables(lib: &Library, facts: &Facts, only: Option<&str>) -> Result<()> {
     for (dev, e) in &facts.devices {
         for (set, roots) in &e.patch_sets {
-            let (ids, _) = lib
-                .with_requires(roots)
-                .map_err(|x| err!("{dev}: patch set {set}: {x}"))?;
+            let ids = match lib.with_requires(roots) {
+                Ok((ids, _)) => ids,
+                // a library without the core modules (`pack --manifest`): only the sets that name the module checked here matter
+                Err(_) if only.is_some_and(|o| !roots.iter().any(|r| r == o)) => continue,
+                Err(x) => return Err(err!("{dev}: patch set {set}: {x}")),
+            };
             for id in ids {
                 if only.is_some_and(|o| o != id) {
                     continue;

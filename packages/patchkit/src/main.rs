@@ -295,9 +295,7 @@ fn run(a: Args) -> Result<()> {
         #[cfg(not(target_arch = "wasm32"))]
         "build" => {
             // a module that needs device tables is not built for a device that lacks them (the objects hold the generated constants)
-            if flag(rest, "--tree").is_none()
-                && !rest.iter().any(|a| a == "--status" || a == "--paths")
-            {
+            if !rest.iter().any(|a| a == "--status" || a == "--paths") {
                 let lib = selected_library(&a.root, &selected_source(rest)?, true, &[], &[])?;
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
                 patchkit::devgen::check_device_tables(&lib, &facts, None)?;
@@ -778,6 +776,14 @@ plan.json {}",
             }
             if ids.is_empty() {
                 return Err(Error(USAGE.into()));
+            }
+            {
+                // the same device-table check as `pack`, for each module of the batch
+                let lib = selected_library(&a.root, &library_source(&[]), true, &[], &[])?;
+                let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
+                for id in &ids {
+                    patchkit::devgen::check_device_tables(&lib, &facts, Some(id))?;
+                }
             }
             std::fs::create_dir_all(&out).map_err(|e| Error(format!("{}: {e}", out.display())))?;
             let mut failed = false;

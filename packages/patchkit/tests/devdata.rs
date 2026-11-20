@@ -884,3 +884,22 @@ fn view_keys_flag_bits_are_range_checked_and_the_second_yes_key_is_optional() {
         .expect("ui-st.inc");
     assert!(inc.1.contains("UI_KEY_YES2, 0xffffffff"), "{}", inc.1);
 }
+
+#[test]
+fn a_library_from_manifests_checks_only_the_patch_sets_that_name_the_module() {
+    // `pack --manifest` loads a library without the core modules: the patch sets of the repository's devices cannot resolve in it
+    let manifest = root().join("tests/fixtures/modules/c-demo/module.toml");
+    let defines: Vec<String> = vec![];
+    let only = vec!["test/c-demo".to_string()];
+    let build = patchkit::module::Build {
+        root: &root(),
+        only: Some(&only),
+        defines: &defines,
+    };
+    let lib =
+        Library::from_manifests(build, &[manifest], true, &only).expect("the fixture library");
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    devgen::check_device_tables(&lib, &facts, Some("test/c-demo")).unwrap();
+    // the whole-library check does report the unresolved roots
+    assert!(devgen::check_device_tables(&lib, &facts, None).is_err());
+}
