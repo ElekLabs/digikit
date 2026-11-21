@@ -109,6 +109,12 @@ impl Slot {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LiveOp {
+    Check,
+    Load,
+}
+
 /// The module lifecycle: stage, check, place, init, commit (and DSP) with an undo for each step, and the boot's planning tables. One zero-initialised static
 /// (`LOADER`); its methods take `&mut self`.
 ///
@@ -1287,7 +1293,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX || self.selection.read(|keys| keys.table_len[k] == 0) {
             return E_NOT_FOUND;
         }
-        self.check_live_file(k, path, Slot::Module(rec), caps)
+        self.run_live_file(k, path, Slot::Module(rec), caps, LiveOp::Check)
     }
 
     /// The planner over the live set with the header table `new` at selection index `k` (the old module's slot for a reload, the index of a load): `OK`, or the refusal of
@@ -1396,7 +1402,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX {
             return E_NOT_FOUND;
         }
-        self.load_live_file(k, path, Slot::Module(rec), caps)
+        self.run_live_file(k, path, Slot::Module(rec), caps, LiveOp::Load)
     }
 
     /// Check a first load at a free selection index before taking a record. The plan runs before import checks so a
@@ -1405,7 +1411,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if k >= SEL_MAX {
             return E_SEL_COUNT;
         }
-        self.check_live_file(k, path, Slot::Free, caps)
+        self.run_live_file(k, path, Slot::Free, caps, LiveOp::Check)
     }
 
     /// Parse the candidate against the original selection. A reload compares with the old table before installing the
@@ -1450,72 +1456,71 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         Ok(new)
     }
 
-    unsafe fn check_live_file(&mut self, k: usize, path: *const u8, slot: Slot, caps: &[DkrtCap]) -> i32 {
+    /// Load a new file into the first free record at selection index `k`.
+    pub unsafe fn live_load(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        if k >= SEL_MAX {
+            return E_SEL_COUNT;
+        }
+        self.run_live_file(k, path, Slot::Free, caps, LiveOp::Load)
+    }
+
+    /// Check or load a candidate against the live set. Only an accepted plan gets a preview.
+    #[inline(never)]
+    unsafe fn run_live_file(&mut self, k: usize, path: *const u8, slot: Slot, caps: &[DkrtCap], op: LiveOp) -> i32 {
+        let loading = op == LiveOp::Load;
         self.missing = [0; NEEDS_LEN];
+        if loading {
+            self.decl_diff = (0, 0);
+        }
         let staged = match self.m.stage(path) {
             Ok(s) => s,
             Err(e) => return e,
         };
         let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
         let candidate = self.live_candidate(k, file, slot);
-        let was = read_volatile(addr_of!(BOOT_IDX));
-        crate::selection::BOOT_IDX = k as u32;
-        let mut c = Checked::empty();
-        let r = match candidate {
-            Ok(new) => {
-                let planned = self.live_plan(k, new, caps);
-                if planned == OK {
-                    self.with_candidate_file(k, path, file, false, |l, staged| l.check_staged(staged, slot, &mut c, OK))
-                } else if slot == Slot::Free {
-                    self.staged_head(staged).map_or_else(|e| e, |_| planned)
-                } else {
-                    self.check_staged(staged, slot, &mut c, planned)
-                }
+        let mut was = if loading { 0 } else { Self::set_boot_index(k) };
+        let plan = candidate.map(|new| self.live_plan(k, new, caps));
+        if loading {
+            match plan {
+                Ok(OK) => {}
+                Ok(e) | Err(e) => return self.staged_head(staged).map_or_else(|h| h, |_| e),
             }
+            was = Self::set_boot_index(k);
+            self.phase = Phase::Live;
+        }
+
+        let r = match plan {
+            Ok(OK) => self.with_candidate_file(k, path, file, loading, |l, staged| match op {
+                LiveOp::Check => l.check_live_staged(staged, slot, OK),
+                LiveOp::Load => l.load_staged_file(path, slot, Some(staged)),
+            }),
+            Ok(e) if slot == Slot::Free => self.staged_head(staged).map_or_else(|h| h, |_| e),
+            Ok(e) => self.check_live_staged(staged, slot, e),
             Err(E_LOADED) => E_LOADED,
-            Err(candidate_error) => {
-                let checked = self.check_staged(staged, slot, &mut c, OK);
-                if checked == OK { candidate_error } else { checked }
+            Err(e) => {
+                let checked = self.check_live_staged(staged, slot, OK);
+                if checked == OK { e } else { checked }
             }
         };
-        crate::selection::BOOT_IDX = was;
-        r
-    }
-
-    /// Load a new file into the first free record at selection index `k`.
-    pub unsafe fn live_load(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
-        if k >= SEL_MAX {
-            return E_SEL_COUNT;
+        if loading {
+            self.phase = Phase::Closed;
         }
-        self.load_live_file(k, path, Slot::Free, caps)
-    }
-
-    unsafe fn load_live_file(&mut self, k: usize, path: *const u8, slot: Slot, caps: &[DkrtCap]) -> i32 {
-        self.missing = [0; NEEDS_LEN];
-        self.decl_diff = (0, 0);
-        let staged = match self.m.stage(path) {
-            Ok(s) => s,
-            Err(e) => return e,
-        };
-        let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
-        let planned = match self.live_candidate(k, file, slot) {
-            Ok(new) => self.live_plan(k, new, caps),
-            Err(e) => e,
-        };
-        if planned != OK {
-            return self.staged_head(staged).map_or_else(|e| e, |_| planned);
-        }
-
-        let was = read_volatile(addr_of!(BOOT_IDX));
-        crate::selection::BOOT_IDX = k as u32;
-        self.phase = Phase::Live;
-        let r = self.with_candidate_file(k, path, file, true, |l, staged| l.load_staged_file(path, slot, Some(staged)));
-        self.phase = Phase::Closed;
         crate::selection::BOOT_IDX = was;
-        if slot == Slot::Free && r != OK && r != LOADING {
+        if loading && slot == Slot::Free && r != OK && r != LOADING {
             self.retire_index(k);
         }
         r
+    }
+
+    unsafe fn set_boot_index(k: usize) -> u32 {
+        let was = read_volatile(addr_of!(BOOT_IDX));
+        crate::selection::BOOT_IDX = k as u32;
+        was
+    }
+
+    #[inline(never)]
+    unsafe fn check_live_staged(&mut self, staged: Staged, slot: Slot, plan_result: i32) -> i32 {
+        self.check_staged(staged, slot, &mut Checked::empty(), plan_result)
     }
 
     /// Preview callbacks can read the card and reuse the staging buffer. Both check and load
