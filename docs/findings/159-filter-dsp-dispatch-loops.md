@@ -20,3 +20,5 @@ The two stock filter stages use different loop registers on the two devices. Cal
 ## Emulator observation still needed
 
 Use the `emulator` base set and `--store 'test/filter-gain*'` with `dk:dev`. The trailing star includes the fixture in the card's saved boot selection. Check that the fixture loaded, select its filter, and change GAIN (knob 2) while holding cutoff fixed. Compare the record around the coefficient hook before and after that change. Record the process buffer and both loop indices for the same voice before wiring dispatch. **[O]**
+
+**[D]** On DN2 1.12 and DT2 1.17 the selected fixture faults during emulator boot with `UnsupportedGuestPc(0x00000000)`. On DN2, repeating the same command with `--store 'test/filter-gain'` (fixture installed, saved selection empty) reaches the boot screen. The selected DN2 card manifest lists the fixture, machines service and port file. This isolates a selection-dependent boot failure on DN2. It happens before the chooser or knob can be observed. **[O]** Identify the ColdFire call site before resuming the control measurement.
