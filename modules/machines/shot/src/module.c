@@ -38,6 +38,7 @@ static int32_t init(dk_module_ctx *ctx)
 {
     dk_sample_pool *pool;
     dk_files *files;
+    dk_settings *settings;
     int32_t r;
 
     dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_SHOT, "SHOT", "SHT");
@@ -76,9 +77,11 @@ static int32_t init(dk_module_ctx *ctx)
     if (r != DK_OK)
         return r;
     sample_view_init(&shot_samples, pool);
-    /* the picker is optional: when it cannot start, a click on SMP does nothing */
+    /* the picker is optional: when it cannot start, a click on SMP does nothing. Without settings it does not keep the pool list. */
+    if (dk_settings_open(ctx, &settings) != DK_OK)
+        settings = 0;
     if (dk_files_open(ctx, &files) == DK_OK && dk_ui_open(ctx, &g_ui) == DK_OK)
-        dk_sample_picker_init(pool, files, g_ui);
+        dk_sample_picker_init(pool, files, g_ui, settings);
     return DK_OK;
 }
 

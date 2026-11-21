@@ -10,6 +10,11 @@ extern "C" {
     fn pf_open_pool(current: c_int, with_pick: c_int);
     fn pf_fini();
     fn pf_init_with(pool: c_int, files: c_int, ui: c_int) -> c_int;
+    fn pf_init_stored() -> c_int;
+    fn pf_store(key: *const c_char, value: *const c_char);
+    fn pf_stored(key: *const c_char) -> *const c_char;
+    fn pf_put_result(rc: c_int);
+    fn pf_removes() -> c_int;
     fn pf_add(path: *const c_char, dir: c_int, size: u32);
     fn pf_finish();
     fn pf_partial();
@@ -704,6 +709,110 @@ fn clear_removes_the_entry_with_one_press_and_leaves_a_hole() {
     assert_eq!(unsafe { pf_clears() }, 1);
     assert_eq!(entry(2), "02 -");
     assert_eq!(entry(3), "03 B M 0.0s", "the next entry keeps its index");
+}
+
+fn stored(key: &str) -> Option<String> {
+    let p = unsafe { pf_stored(c(key).as_ptr()) };
+    (!p.is_null()).then(|| unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned())
+}
+fn store(key: &str, value: &str) {
+    unsafe { pf_store(c(key).as_ptr(), c(value).as_ptr()) }
+}
+
+#[test]
+fn a_loaded_entry_is_kept_in_the_settings_and_a_cleared_one_is_removed() {
+    let _g = session();
+    unsafe {
+        pf_reset();
+        assert_eq!(pf_init_stored(), 0);
+        pf_open_pool(0, 1);
+    }
+    browse_slot(5, &[("DRUMS", true, 0)]);
+    press_yes(1);
+    add("KICK_01", false, 1024);
+    unsafe { pf_finish() };
+    press_yes(1);
+    assert_eq!(stored("pool.5").as_deref(), Some("DRUMS/KICK_01"));
+    assert_eq!(stored("pool.0"), None);
+    unsafe { pf_open_pool(5, 1) };
+    press_right(5);
+    choose_panel_row(0);
+    assert_eq!(stored("pool.5"), None);
+    assert_eq!(unsafe { pf_removes() }, 1);
+}
+
+#[test]
+fn a_refused_settings_write_leaves_the_entry_loaded_and_the_key_absent() {
+    let _g = session();
+    unsafe {
+        pf_reset();
+        pf_init_stored();
+        pf_store(c("pool.0").as_ptr(), c("A").as_ptr());
+        pf_put_result(-67); // E_SET_FULL
+        pf_open_pool(0, 1);
+    }
+    browse(&[("B", false, 1024)]);
+    press_yes(1);
+    assert_eq!(unsafe { pf_picks() }, 1, "the pick went through");
+    assert_eq!(unsafe { pf_sets() }, 1);
+    assert_eq!(
+        stored("pool.0"),
+        None,
+        "the old path A is not left under the key"
+    );
+    assert_eq!(toasts(), vec!["SETTINGS FULL"]);
+}
+
+#[test]
+fn a_full_record_shows_one_toast_per_streak() {
+    let _g = session();
+    unsafe {
+        pf_reset();
+        pf_init_stored();
+        pf_put_result(-67);
+        pf_open_pool(0, 1);
+    }
+    browse(&[("A", false, 1024)]);
+    press_yes(1);
+    unsafe { pf_open_pool(0, 1) };
+    browse(&[("B", false, 1024)]);
+    press_yes(1);
+    assert_eq!(toasts(), vec!["SETTINGS FULL"]);
+}
+
+#[test]
+fn init_sets_the_stored_entries_and_clears_the_rest() {
+    let _g = session();
+    unsafe {
+        pf_reset();
+        // an older list is still in the pool: entry 1 (not stored) and entry 3 (stored again)
+        track(1, READY, "OLD/ONE", 100, 48000, 1);
+        track(3, READY, "OLD/THREE", 100, 48000, 1);
+    }
+    store("pool.3", "NEW/THREE");
+    store("pool.7", "NEW/SEVEN");
+    unsafe {
+        assert_eq!(pf_init_stored(), 0);
+        assert_eq!(pf_sets(), 2);
+        assert_eq!(pf_clears(), 1, "only the entry without a key");
+        assert_eq!(pf_last_index(), 7);
+        pf_open_pool(-1, 1);
+    }
+    assert_eq!(entry(1), "01 -");
+    assert_eq!(entry(3), "03 THREE QUEUED");
+    assert_eq!(entry(7), "07 SEVEN QUEUED");
+    assert_eq!(entry(0), "00 -");
+}
+
+#[test]
+fn without_a_settings_handle_init_changes_nothing_in_the_pool() {
+    let _g = session();
+    unsafe {
+        pf_reset();
+        track(1, READY, "A", 100, 48000, 1);
+        assert_eq!(pf_init(1), 0);
+        assert_eq!((pf_sets(), pf_clears()), (0, 0));
+    }
 }
 
 #[test]

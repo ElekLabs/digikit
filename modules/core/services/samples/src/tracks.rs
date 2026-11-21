@@ -1,7 +1,7 @@
 //! Per-module stereo sample pool of 16 entries (docs/design/sample-api-1.5.md). The state machine is
 //! `dkrt_sdk::sample_tracks` (device-neutral, host-tested); this file binds it to the runtime:
 //! the imports `dk_sample_pool_add`, `_set`, `_clear`, `_status`, `_info` and `_path`, the backing adapter's calls (`pool.rs`, plug-in point `dkrt_pool.h`, version 1)
-//! and the events adapters call (`dkrt_pool_done`, `dkrt_pool_lost`, `dkrt_project_changed`).
+//! and the events adapters call (`dkrt_pool_done`, `dkrt_pool_lost`).
 //! No firmware address and no `cf.*` anchor is used here. Without the backing adapter every
 //! `sample_pool_add` returns E_CONTRACT.
 //!
@@ -20,8 +20,10 @@
 //! guard of `sample_tracks` ends the request; a publish stays unpublished, `ready` = 0, the track plays silence).
 //! A sticky DSP FAULT (poisoned COUNT, CLOSED = 1) is never cleared by the runtime: that track stays silent until the module reloads.
 //!
-//! TODO (not wired yet): persistence of the selections to the digikit store (they live in memory per project now); a request mailbox
-//! so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
+//! The pool list is not kept here: the module keeps it in its settings (the picker, sdk/src/sample/picker.c), and the settings are per project
+//! while the `project` service is loaded.
+//!
+//! TODO (not wired yet): a request mailbox so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::dsp::PH_IDLE;
@@ -36,10 +38,9 @@ use dkrt_sdk::{logk, E_CONTRACT, E_DSP_XFER, E_NOT_FOUND, E_SEL_PATH};
 
 pub(crate) const CLIENTS: usize = 2;
 const ENTRIES: usize = 16;
-const PROJECTS: usize = 4;
 
 /// Zero-initialised (a `.bss` of the service file: 35 KB of initial bytes would be in the file); `core_` starts it on first use.
-static mut CORE: Core<CLIENTS, ENTRIES, PROJECTS> = Core::zeroed();
+static mut CORE: Core<CLIENTS, ENTRIES> = Core::zeroed();
 static mut CORE_STARTED: bool = false;
 /// Module record of the owner of each client slot (`usize::MAX` = free), its local id, the L2 byte addresses of its 16 records and 16
 /// control sets, and whether its DSP image is in (table writes may start).
@@ -54,7 +55,7 @@ static mut LIVE: [bool; CLIENTS] = [false; CLIENTS];
 /// writes are dropped. Other clients are stepped normally meanwhile.
 static mut FORCE: usize = usize::MAX;
 
-pub(crate) unsafe fn core_() -> &'static mut Core<CLIENTS, ENTRIES, PROJECTS> {
+pub(crate) unsafe fn core_() -> &'static mut Core<CLIENTS, ENTRIES> {
     if !read_volatile(addr_of!(CORE_STARTED)) {
         (*addr_of_mut!(CORE)).start();
         *addr_of_mut!(CORE_STARTED) = true;

@@ -3,6 +3,7 @@
    Everything here runs in the UI task, so the statics need no lock. */
 #include <dk/chooser/chooser.h>
 #include <dk/platform/files.h>
+#include <dk/platform/settings.h>
 #include <dk/sample/picker.h>
 #include <dk/sample/pool.h>
 #include <dk/chooser/logic.h>
@@ -13,6 +14,9 @@
 
 static dk_sample_pool *g_pool;
 static dk_ui *g_ui;
+static dk_settings
+    *g_settings;           /* the module's settings: the pool list is kept in them; 0: not kept */
+static int g_full_told;    /* the SETTINGS FULL toast was shown and no put has succeeded since */
 static dk_ui_menu *g_info; /* the INFO page of a pool entry */
 static int g_info_at;
 static char g_path[DK_CHOOSER_PATH]; /* scratch: a pool path */
@@ -40,6 +44,71 @@ static const dk_chooser_desc pool_desc = {.title = "SAMPLES",
                                           .error_text = pool_error,
                                           .panel = pool_panel,
                                           .done = pool_done};
+
+/* The settings key of pool entry t: "pool.0" to "pool.15" (a key holds no "/"). The value is the path without a terminating NUL. */
+static void entry_key(char *key, uint32_t t)
+{
+    char num[12];
+    dk_text_utoa(num, t);
+    dk_text_cat(key, 8, "pool.", num);
+}
+
+/* Keeps the path of a set entry, or forgets the entry (path 0). A refused put (E_SET_FULL, E_SET_OFF) leaves an earlier value under the key, so
+   the key is removed: the entry stays set for this session and is empty, not the old file, after the next load. A full record shows one toast
+   until a put succeeds again. */
+static void entry_keep(uint32_t t, const char *path)
+{
+    char key[8];
+    int32_t rc;
+    if (!g_settings)
+        return;
+    entry_key(key, t);
+    if (!path) {
+        (void)dk_settings_remove(g_settings, key);
+        return;
+    }
+    rc = dk_settings_put(g_settings, key, path, dk_text_len(path));
+    if (rc >= 0) {
+        g_full_told = 0;
+        return;
+    }
+    (void)dk_settings_remove(g_settings, key);
+    if (rc == DK_E_SET_FULL && !g_full_told) {
+        g_full_told = 1;
+        (void)dk_ui_toast(g_ui, "SETTINGS FULL");
+    }
+}
+
+/* The stored path of entry t into g_path: 1 when there is one. */
+static int entry_stored(uint32_t t)
+{
+    char key[8];
+    int32_t n;
+    entry_key(key, t);
+    n = dk_settings_get(g_settings, key, g_path, sizeof g_path - 1);
+    if (n <= 0)
+        return 0;
+    g_path[n] = 0;
+    return 1;
+}
+
+/* The pool list of the settings into the pool, in the order of docs/design/sample-api-1.5.md section 3: every stored entry is set at its index
+   first, then the entries without a key are cleared (close, drain, unref). A live reload tears the module's pool down before init, so after a project
+   change every sample is loaded again from the card. A hole stays a hole: an SMP value
+   saved in a project still points at the same file. A file that is gone shows as the entry's error. */
+static void restore_pool(void)
+{
+    uint32_t t;
+    uint32_t stored = 0;
+    for (t = 0; t < TRACKS; t++)
+        if (entry_stored(t)) {
+            stored |= 1u << t;
+            (void)dk_sample_pool_set(g_pool, t, g_path);
+        }
+    for (t = 0; t < TRACKS; t++)
+        if (!(stored & (1u << t)) && dk_sample_pool_status(g_pool, t) != DK_SAMPLE_UNUSED)
+            (void)dk_sample_pool_clear(g_pool, t);
+}
 
 static const char *entry_path(int t)
 {
@@ -80,7 +149,10 @@ static int32_t pool_fill(void *arg, int32_t slot, const char *path)
     int32_t rc;
     (void)arg;
     rc = dk_sample_pool_set(g_pool, (uint32_t)slot, path);
-    return rc < 0 ? rc : slot;
+    if (rc < 0)
+        return rc;
+    entry_keep((uint32_t)slot, path);
+    return slot;
 }
 
 static void pool_error(void *arg, int32_t code, char *text)
@@ -105,7 +177,8 @@ static void pool_done(void *arg, int32_t slot)
 static void clear_cb(void *arg, int32_t t)
 {
     (void)arg;
-    dk_sample_pool_clear(g_pool, (uint32_t)t);
+    if (dk_sample_pool_clear(g_pool, (uint32_t)t) >= 0)
+        entry_keep((uint32_t)t, 0);
     dk_chooser_refresh();
 }
 
@@ -172,11 +245,14 @@ static void fill_info(dk_ui_menu *m, void *arg)
 
 /* ---- the module's calls ---- */
 
-int32_t dk_sample_picker_init(dk_sample_pool *pool, dk_files *files, dk_ui *ui)
+int32_t dk_sample_picker_init(dk_sample_pool *pool, dk_files *files, dk_ui *ui,
+                              dk_settings *settings)
 {
     int32_t r;
     g_pool = 0;
     g_ui = 0;
+    g_settings = 0;
+    g_full_told = 0;
     if (!pool || !files || !ui)
         return DK_E_MISSING;
     r = dk_chooser_init(files, ui);
@@ -184,6 +260,9 @@ int32_t dk_sample_picker_init(dk_sample_pool *pool, dk_files *files, dk_ui *ui)
         return r;
     g_pool = pool;
     g_ui = ui;
+    g_settings = settings;
+    if (settings)
+        restore_pool();
     return DK_OK;
 }
 
@@ -204,5 +283,6 @@ void dk_sample_picker_fini(void)
     dk_chooser_fini();
     g_pool = 0;
     g_ui = 0;
+    g_settings = 0;
     g_pick = 0;
 }
