@@ -537,12 +537,12 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | Item or step | Status | Commits, PR |
 | --- | --- | --- |
 | RC0 Plan and baseline | done | `57b861aaa` (finding 158), `3d6a6bc49` (plan, baseline); approved by Em 2026-11-22 |
-| RC1 Contract and fixtures | active | lane `fx-route-policy` |
+| RC1 Contract and fixtures | done (not merged) | lane `fx-route-policy`, `dd211d711`..`a4d2ecfcb` |
 | RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | `dd211d711` |
 | RC1b crate `dkrt-lifecycle` (`runtime/core/lifecycle`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | done | `65bb121db` |
 | RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-lifecycle`) | done | `4b48e0de9` |
 | RC1f rename `dkrt-packages` to `dkrt-lifecycle` (`runtime/core/lifecycle`): the crate holds the lifecycle logic, RC2's `PackageManager` included | done | `1066f6351` |
-| RC1d `PackageGraph::from_tables` over the existing header table (NEEDS, PROVIDES; shared `dkneeds` parser); `[[service.resource]]` and `[[service.record]]` parsed and validated in patchkit, not packed (packing is RC3; entries keep `[[hook]]` and `[[fill]]`); the `local-ping` fixtures extended (second consumer, incompatible consumer); one host test that packs them and checks bring-up and take-down orders (a newer provider minor is a `from_tables` unit test) | done | commit "Build the package graph from packed header tables" (hash in the next progress update) |
+| RC1d `PackageGraph::from_tables` over the existing header table (NEEDS, PROVIDES; shared `dkneeds` parser); `[[service.resource]]` and `[[service.record]]` parsed and validated in patchkit, not packed (packing is RC3; entries keep `[[hook]]` and `[[fill]]`); the `local-ping` fixtures extended (second consumer, incompatible consumer); one host test that packs them and checks bring-up and take-down orders (a newer provider minor is a `from_tables` unit test) | done | `a4d2ecfcb` (objects refreshed in `890092c7d`) |
 | RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | done | `b62328998` |
 | RC2 One lifecycle | todo | |
 | RC3 Service contract v2 | todo | |
