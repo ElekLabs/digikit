@@ -476,6 +476,14 @@ fn key_mismatch(d: &Side, m: &Side) -> Option<String> {
     None
 }
 
+/// Largest relative difference of calls per block that still pairs. A device capture runs a few
+/// blocks longer than an emulator capture; a different number of calls per block is a different case.
+const CALLS_PER_BLOCK_TOLERANCE: f64 = 0.01;
+
+fn calls_per_block_differ(a: f64, b: f64) -> bool {
+    (a - b).abs() > CALLS_PER_BLOCK_TOLERANCE * a.max(b)
+}
+
 fn dsp_pairs(case: &str, d: &Side, m: &Side, raw: &mut Vec<Raw>, refused: &mut Vec<Refused>) {
     for (row, dr) in &d.rows {
         let id = format!("row {row}");
@@ -502,17 +510,18 @@ fn dsp_pairs(case: &str, d: &Side, m: &Side, raw: &mut Vec<Raw>, refused: &mut V
             );
             continue;
         }
-        // equal calls per block: dc/db == mc/mb
-        if u128::from(dr.calls) * u128::from(m.blocks)
-            != u128::from(mr.calls) * u128::from(d.blocks)
-        {
+        let (dcb, mcb) = (
+            dr.calls as f64 / d.blocks as f64,
+            mr.calls as f64 / m.blocks as f64,
+        );
+        if calls_per_block_differ(dcb, mcb) {
             refuse(
                 refused,
                 "dsp",
                 case,
                 &id,
                 format!(
-                    "call-count mismatch: device {} calls in {} blocks, model {} calls in {} blocks",
+                    "call-count mismatch: device {} calls in {} blocks ({dcb:.4} per block), model {} calls in {} blocks ({mcb:.4} per block)",
                     dr.calls, d.blocks, mr.calls, m.blocks
                 ),
             );
@@ -608,14 +617,23 @@ fn cf_pairs(case: &str, d: &Side, m: &Side, raw: &mut Vec<Raw>, refused: &mut Ve
             );
             continue;
         }
-        if ds.calls != ms.calls {
+        let per_block = d.blocks > 0 && m.blocks > 0;
+        let (dc, mc) = if per_block {
+            (
+                ds.calls as f64 / d.blocks as f64,
+                ms.calls as f64 / m.blocks as f64,
+            )
+        } else {
+            (ds.calls as f64, ms.calls as f64)
+        };
+        if calls_per_block_differ(dc, mc) {
             refuse(
                 refused,
                 "cf",
                 case,
                 &id,
                 format!(
-                    "call-count mismatch: device {} calls, model {}",
+                    "call-count mismatch: device {} calls ({dc:.4}), model {} calls ({mc:.4})",
                     ds.calls, ms.calls
                 ),
             );
@@ -1205,6 +1223,17 @@ mod tests {
         d["dsp"]["blocks"] = json!(10);
         d["dsp_rows"][0]["calls"] = json!(20);
         d["dsp_rows"][0]["sum_cycles"] = json!(20 * 200);
+        let c = fit(&req(vec![d], vec![m])).unwrap();
+        assert!(c.refused.is_empty(), "{:?}", c.refused);
+    }
+
+    #[test]
+    fn a_small_difference_in_calls_per_block_still_pairs() {
+        let (mut d, mut m) = pair_for(2.0, "c", &[(0, 100, 100)]);
+        d["dsp"]["blocks"] = json!(22_653);
+        d["dsp_rows"][0]["calls"] = json!(22_516);
+        m["dsp"]["blocks"] = json!(22_553);
+        m["dsp_rows"][0]["calls"] = json!(22_416);
         let c = fit(&req(vec![d], vec![m])).unwrap();
         assert!(c.refused.is_empty(), "{:?}", c.refused);
     }

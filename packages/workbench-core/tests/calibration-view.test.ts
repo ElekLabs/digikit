@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   captureSetFile,
+  expandCaptures,
   fitRequest,
   groupByCase,
   fitView,
@@ -17,7 +18,29 @@ import {
   type CalProfileDoc,
 } from '../src/profile/calibration-view';
 import { runCalibration } from '../src/calibration/runner';
+
 import { MidiOut, type Clock } from '@digi/dk-session';
+
+test('a fit input file expands to its captures: a calcaptures file to its list, a profile to itself', () => {
+  const a = { schema: 'dk.profile/1', run: { case_id: 'a' } };
+  const b = { schema: 'dk.profile/1', run: { case_id: 'b' } };
+  assert.deepEqual(expandCaptures({ schema: 'dk.calcaptures/1', captures: [a, b] }), [a, b]);
+  assert.deepEqual(expandCaptures(a), [a]);
+  assert.throws(() => expandCaptures({ schema: 'dk.calcaptures/1' }), /without captures/);
+});
+
+test('a calcaptures file of the wrong side or with a malformed capture is refused naming the file', () => {
+  const a = { schema: 'dk.profile/1', run: { case_id: 'a' } };
+  assert.throws(
+    () => expandCaptures({ schema: 'dk.calcaptures/1', side: 'emu', captures: [a] }, 'dev', 'x.json'),
+    /x\.json holds the emulator side; pass it with --model/,
+  );
+  assert.deepEqual(expandCaptures({ schema: 'dk.calcaptures/1', side: 'dev', captures: [a] }, 'dev', 'x.json'), [a]);
+  assert.throws(
+    () => expandCaptures({ schema: 'dk.calcaptures/1', captures: [null] }, 'dev', 'y.json'),
+    /y\.json: capture 0/,
+  );
+});
 
 const cap = (unit: 'insn' | 'cycles', caseId: string, rows: [number, number, number][]): CalProfileDoc => ({
   schema: 'dk.profile/1',
