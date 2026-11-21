@@ -1057,6 +1057,7 @@
   "tools/firmware/plusdrive.py": 12,
   "tools/firmware/plusdrive_check.py": 17,
   "tools/gate/card/project.json": 4,
+  "tools/gate/device-smoke/project.json": 18,
   "tools/gate/fast-roots/project.json": 9,
   "tools/gate/pins/project.json": 5,
   "tools/gate/smoke/project.json": 3,
