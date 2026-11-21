@@ -23,7 +23,7 @@
 //!   (one owner each).
 //! - `HOOKS` (8): u32 hook site, u32 entry (image offset): the hook sites the module takes (one owner each).
 //! - `EXPORTS` (8): u32 name hash, u32 entry (image offset): the functions the module offers to other modules. Bit 31 of the entry makes the export
-//!   visible only to a consumer that declares the service as its owner in `SERVICE_IMPORTS`.
+//!   visible only to a consumer that declares the service as its owner in `SERVICE_IMPORTS`. Bit 30 with bit 31 marks a resident-only query facet.
 //! - `RESOURCES` (8): u32 resource id, u32 limit: the resources a service module adds.
 //! - `PROVIDES` (8, version 2): u32 service name hash, u32 version: the services the module provides.
 //! - `BIND` (`count` items of u32 site hash, u32 firmware address, u32 stock length, u32 trampoline offset (image offset), then the stock
@@ -84,6 +84,9 @@ pub const SITE_BYTES: usize = 20;
 pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
 /// Bit 31 of an `EXPORTS` entry limits it to consumers that specify its provider.
 pub const EXPORT_BOUND: u32 = 1 << 31;
+/// Bit 30 explicitly identifies the resident query facet, never a card import.
+pub const EXPORT_QUERY: u32 = 1 << 30;
+pub const EXPORT_FLAGS: u32 = EXPORT_BOUND | EXPORT_QUERY;
 /// Bit 0 of the flags of a `FWNAMES` or `SITES` item: the name or hook is absent on this firmware.
 pub const FLAG_ABSENT: u8 = 1;
 /// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).

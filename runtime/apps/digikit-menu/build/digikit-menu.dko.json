@@ -508,63 +508,49 @@
   },
   {
    "addend": 0,
-   "offset": 36,
+   "offset": 30,
    "section": ".text.read_fx",
    "symbol": ".sec..bss.g_fx_n",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 54,
+   "offset": 48,
    "section": ".text.read_fx",
    "symbol": ".sec..bss.g_fx",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 106,
-   "section": ".text.read_fx",
-   "symbol": ".sec..bss.g_fx_slots",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
    "section": ".text.read_fx",
-   "symbol": "dkrt_fx",
+   "symbol": ".sec..bss.g_fx",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 18,
    "section": ".text.read_fx",
-   "symbol": ".sec..bss.g_fx",
+   "symbol": ".sec..bss.g_fx_saved",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 24,
    "section": ".text.read_fx",
-   "symbol": ".sec..bss.g_fx_saved",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 30,
-   "section": ".text.read_fx",
    "symbol": ".sec..bss.DK_FXR_PEND",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 82,
+   "offset": 58,
    "section": ".text.read_fx",
-   "symbol": "dkrt_capacity",
+   "symbol": "dkrt_fx",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 122,
+   "offset": 80,
    "section": ".text.read_fx",
    "symbol": ".sec..bss.g_fx_n",
    "type": "cf.32"
@@ -931,6 +917,216 @@
    "offset": 76,
    "section": ".text.arow",
    "symbol": "dk_ui_menu_add_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 22,
+   "section": ".text.legacy_route_choices",
+   "symbol": ".sec..bss.g_fx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.legacy_route_choices",
+   "symbol": ".sec..bss.DK_FXR_PEND",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text.legacy_route_choices",
+   "symbol": ".sec..bss.g_fx_n",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": ".text.legacy_route_choices",
+   "symbol": "dkrt_capacity",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_lq_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.NENT",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_route_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 204,
+   "section": ".text.panel_route",
+   "symbol": ".sec..rodata.panel_route.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 226,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 282,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_row_fx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_fx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_FXR_PEND",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_fx_n",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.panel_route",
+   "symbol": "dkrt_service_query",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
+   "section": ".text.panel_route",
+   "symbol": ".sec..text.legacy_route_choices",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 198,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 210,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.items.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 232,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_ITEM",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 250,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 258,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.items.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 5,
+   "offset": 266,
+   "section": ".text.panel_route",
+   "symbol": ".sec..rodata.panel_route.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 276,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_ITEM",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 292,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 304,
+   "section": ".text.panel_route",
+   "symbol": ".sec..text.route_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 312,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.items.2",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 318,
+   "section": ".text.panel_route",
+   "symbol": ".sec..rodata.panel_route.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 324,
+   "section": ".text.panel_route",
+   "symbol": ".sec..bss.g_ui",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 330,
+   "section": ".text.panel_route",
+   "symbol": "dk_ui_choice",
    "type": "cf.32"
   },
   {
@@ -1470,174 +1666,6 @@
    "offset": 98,
    "section": ".text.show_tick",
    "symbol": "dk_ui_menu_refresh",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 14,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_lq_state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 30,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.NENT",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 56,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_route_row",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 68,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_N",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 76,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_fx",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 122,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_fx_slots",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 132,
-   "section": ".text.panel_route",
-   "symbol": ".sec..rodata.panel_route.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 140,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.items.2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 146,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_N",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 152,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_ITEM",
-   "type": "cf.32"
-  },
-  {
-   "addend": 5,
-   "offset": 172,
-   "section": ".text.panel_route",
-   "symbol": ".sec..rodata.panel_route.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 198,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_N",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 40,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_row_fx",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 90,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_FXR_PEND",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 106,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_fx_n",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 166,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_N",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 178,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.items.2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 192,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_ITEM",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 208,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.DK_ROUTE_N",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 220,
-   "section": ".text.panel_route",
-   "symbol": ".sec..text.route_done",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 228,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.items.2",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 234,
-   "section": ".text.panel_route",
-   "symbol": ".sec..rodata.panel_route.str1.1",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 240,
-   "section": ".text.panel_route",
-   "symbol": ".sec..bss.g_ui",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 246,
-   "section": ".text.panel_route",
-   "symbol": "dk_ui_choice",
    "type": "cf.32"
   },
   {
@@ -6915,10 +6943,10 @@
   },
   {
    "align": 2,
-   "hex": "4feffea8428048d75c0c4df90000000045f90000000047f90000000049f90000000023c0000000007203b2806518723c4c0018000681000000002f012f004e96508f4a806732487800144def001c2f0e4eb900000000508f428122404200b3c166324a006602428223c2000000004cd75c0c4fef01584e75203900000000723c4c0018002232181017810800198108005280608e760eb69666067001242e000452814dee001060b6",
+   "hex": "4feffff0428048d73c0047f90000000049f9000000004bf90000000023c0000000007203b280651c723c4c0018000681000000002f012f004eb900000000508f4a80670a4cd73c004fef00104e75203900000000723c4c00180022331810198108001b810800528060b2",
    "kind": "text",
    "name": ".text.read_fx",
-   "size": 168
+   "size": 106
   },
   {
    "align": 2,
@@ -6975,6 +7003,27 @@
    "kind": "text",
    "name": ".text.arow",
    "size": 80
+  },
+  {
+   "align": 2,
+   "hex": "4feffeb0703c222f015448d7401c4c0108002040d1fc00000000241008020001673a41f90000000071b0180055804a80672a22390000000042804283b0816628487800144def00142f0e4eb900000000508f4281b081662270fdc48020024cd7401c4fef01504e7579b0080022447802b88966025283528060c2780eb8966606b6ae000465d652814dee001060c6",
+   "kind": "text",
+   "name": ".text.legacy_route_choices",
+   "size": 142
+  },
+  {
+   "align": 1,
+   "hex": "53454e44004d415354455200524f55544500",
+   "kind": "data",
+   "name": ".rodata.panel_route.str1.1",
+   "size": 18
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffec202e000c2f0a2f024a39000000006600016c4a806d000166b0b9000000006c00015c41f900000000733008002d41ffec4a816d00014823c000000000743c20014c02080041f90000000042b90000000042aefffc45f90000000043f008002039000000002d51fff82d40fff04280b0aefff0660000dc48780004486efff448780008486efff848780001487808032f3c4d22c7334eb9000000004fef001c72b7b280660000d22f2effec4eb900000000588f2d40fff4222efff408010001672c203900000000243c0000000041f90000000021820c0074022040528823c80000000041f9000000001182080008010000672c7401203900000000220041f900000000528143f90000000021890c0041f90000000023c100000000118208002039000000004a80675442a74879000000002f004879000000004879000000002f39000000004eb9000000004fef0018602c73b2080055814a81661222507203b289650a72012409e5a983aefffc528041e8003c6000fefa4a806700ff3c242effe4246effe84e5e4e75",
+   "kind": "text",
+   "name": ".text.panel_route",
+   "size": 396
   },
   {
    "align": 2,
@@ -7059,20 +7108,6 @@
    "kind": "text",
    "name": ".text.show_tick",
    "size": 110
-  },
-  {
-   "align": 1,
-   "hex": "53454e44004d415354455200524f55544500",
-   "kind": "data",
-   "name": ".rodata.panel_route.str1.1",
-   "size": 18
-  },
-  {
-   "align": 2,
-   "hex": "4feffff048d7041c202f00184a3900000000660000ea4a806d0000e4b0b9000000006c0000da41f900000000733008004a816d0000ca23c000000000703c4c01080042b9000000002040d1fc00000000261008030001674445f90000000071b2180055804a806718227900000000428091c8b3c066000092b1f900000000641c7402203c00000000720123c00000000023c10000000013c20000000008030000672c7401203900000000283c0000000041f9000000002200528121840c0041f90000000023c100000000118208002039000000004a80672642a74879000000002f004879000000004879000000002f39000000004eb9000000004fef00184cd7041c4fef00104e75b081670c75b2080055824a826602528852806000ff56",
-   "kind": "text",
-   "name": ".text.panel_route",
-   "size": 286
   },
   {
    "align": 1,
@@ -7932,13 +7967,6 @@
    "align": 2,
    "hex": "",
    "kind": "bss",
-   "name": ".bss.g_fx_slots",
-   "size": 4
-  },
-  {
-   "align": 2,
-   "hex": "",
-   "kind": "bss",
    "name": ".bss.g_fx_n",
    "size": 4
   },
@@ -8209,7 +8237,7 @@
    "size": 4
   }
  ],
- "source_sha256": "cf17a758e4359dea949d09195e8ca0e79831a143619f4237bed03ccc92eb9159",
+ "source_sha256": "dd2f3984f4f9407d83c1ddd14358c8c818a8f274f811703e2ae222754b462e92",
  "symbols": [
   {
    "global": false,
@@ -8461,12 +8489,6 @@
    "global": false,
    "name": ".sec..bss.g_fx_saved",
    "section": ".bss.g_fx_saved",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..bss.g_fx_slots",
-   "section": ".bss.g_fx_slots",
    "value": 0
   },
   {
@@ -9079,6 +9101,12 @@
    "global": false,
    "name": ".sec..text.leaf_is",
    "section": ".text.leaf_is",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.legacy_route_choices",
+   "section": ".text.legacy_route_choices",
    "value": 0
   },
   {
@@ -9875,6 +9903,12 @@
   },
   {
    "global": true,
+   "name": "dkrt_service_query",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dkrt_settings_flush",
    "section": null,
    "value": 0
@@ -10003,12 +10037,6 @@
    "global": false,
    "name": "g_fx_saved",
    "section": ".bss.g_fx_saved",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": "g_fx_slots",
-   "section": ".bss.g_fx_slots",
    "value": 0
   },
   {
@@ -10261,6 +10289,12 @@
    "global": false,
    "name": "leaf_is",
    "section": ".text.leaf_is",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "legacy_route_choices",
+   "section": ".text.legacy_route_choices",
    "value": 0
   },
   {
@@ -10706,8 +10740,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "4156",
-  "isa_check": "b8b9ca4b38ea1b801e1988ce70b10e566dfb804b9a6e252cce5b8d8f301d552a",
+  "instructions_redecoded": "4212",
+  "isa_check": "a85a44a0090b5c96b9292768c645d3d59eec19117fc62ffe226fc1f8b000400f",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

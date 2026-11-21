@@ -195,7 +195,7 @@ pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loade
     while from < d.n {
         let mut it = d.items[from];
         if it.tag == tag::EXPORTS {
-            it.b &= !dkneeds::keys::EXPORT_BOUND;
+            it.b &= !dkneeds::keys::EXPORT_FLAGS;
         }
         from += 1;
         if it.tag == tag::SLOTS {
@@ -238,8 +238,12 @@ unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
     l.provs[idx].callback_order = keys.words(tag::CALLBACK_ORDER, 0).map(|w| w.1);
     // the exports are image offsets
     let mut i = 0;
-    while let Some(w) = keys.words(tag::EXPORTS, i) {
-        if w.1 & !dkneeds::keys::EXPORT_BOUND >= a.image_size {
+    let query_hash = dkneeds::keys::name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
+    while let Some((name, entry, _)) = keys.words(tag::EXPORTS, i) {
+        if entry & !dkneeds::keys::EXPORT_FLAGS >= a.image_size
+            || (entry & dkneeds::keys::EXPORT_QUERY != 0
+                && (name != query_hash || entry & dkneeds::keys::EXPORT_BOUND == 0))
+        {
             return E_FORMAT;
         }
         i += 1;
@@ -346,10 +350,13 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
         Err(_) => return E_FORMAT,
     };
     let mut i = 0;
+    let mut query_v1 = 0;
     while let Some(w) = keys.words(tag::EXPORTS, i) {
         let bound = w.1 & dkneeds::keys::EXPORT_BOUND != 0;
-        let addr = base.wrapping_add(w.1 & !dkneeds::keys::EXPORT_BOUND);
-        if let Err(e) = l.exports.publish_with_scope(rec, w.0, addr, bound) {
+        let addr = base.wrapping_add(w.1 & !dkneeds::keys::EXPORT_FLAGS);
+        if w.1 & dkneeds::keys::EXPORT_QUERY != 0 {
+            query_v1 = addr;
+        } else if let Err(e) = l.exports.publish_with_scope(rec, w.0, addr, bound) {
             return e;
         }
         i += 1;
@@ -400,7 +407,10 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
     }
     let cf = CfItems { hooks: &hooks[..nh], image_base: base, image_size: pr.image_size, slots: &slots[..ns] };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
-        Ok(()) => OK,
+        Ok(()) => {
+            l.provs[index_of(rec)].query_v1 = query_v1;
+            OK
+        }
         Err(e) => {
             Backend::restore(&mut l.dsp_install, &l.p, rec as u8);
             e

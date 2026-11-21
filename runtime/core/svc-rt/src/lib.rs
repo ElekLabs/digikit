@@ -344,6 +344,16 @@ pub fn set_init_ctx(ctx: *mut u8) {
 /// The `tick` of a service file: called once per UI pass with the module context, as the `tick` of a module (`ModuleDef::tick`).
 pub type TickFn = unsafe extern "C" fn(*mut u8);
 
+/// Declare the optional resident query entry after the service's normal exports.
+#[doc(hidden)]
+pub unsafe fn declare_resident_query(ctx: *mut u8, entry: dkrt_sdk::ResidentQueryV1) -> i32 {
+    dk_service_declare_export(
+        ctx,
+        name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY),
+        entry as *const u8,
+    )
+}
+
 /// The device filter of one hook entry of `service!`: none (every device), `dt2` or `dn2`.
 #[doc(hidden)]
 #[macro_export]
@@ -364,7 +374,8 @@ macro_rules! hook_device {
 ///
 /// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]`, `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
 /// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name) and `tick = f` (`unsafe extern "C" fn(*mut u8)`, the file's `tick`: once per UI pass, with the module context; only after `exports`), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
-/// of `init` without `setup` (the host test of the assembly runs it and compares the result with the header table).
+/// of `init` without `setup` (the host test of the assembly runs it and compares the result with the header table). Both exports forms
+/// accept `query = dk_service_query_v1` after `exports` for the typed resident query entry declared in the manifest.
 ///
 /// The symbols are `no_mangle` on the ColdFire only: a host test links the service crates of all three files into one binary.
 #[macro_export]
@@ -378,22 +389,22 @@ macro_rules! service {
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*]) => {
         $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports), tick = None);
     };
-    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = None);
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*] $(, query = $query:path)?) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = None $(, query = $query)?);
     };
-    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*], tick = $tick:path) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = Some($tick as $crate::TickFn));
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*] $(, query = $query:path)?, tick = $tick:path) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = Some($tick as $crate::TickFn) $(, query = $query)?);
     };
-    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = None);
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr $(, query = $query:path)?) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = None $(, query = $query)?);
     };
-    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr, tick = $tick:path) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = Some($tick as $crate::TickFn));
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr $(, query = $query:path)?, tick = $tick:path) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = Some($tick as $crate::TickFn) $(, query = $query)?);
     };
     (@emit $svc:ty, $name:literal, $kinds:expr, setup = $setup:expr,
      hooks = [$(($site:literal, $entry:path $(, $dev:ident)?)),* $(,)?],
      fills = [$(($slot:literal, $fill:path $(, $fdev:ident)?)),* $(,)?],
-     exports = $exports:expr, tick = $tick:expr) => {
+     exports = $exports:expr, tick = $tick:expr $(, query = $query:path)?) => {
         static DK_SVC_ROW: $crate::dkrt_abi::service::ServiceRow =
             $crate::dkrt_abi::service::ServiceRow::of::<$svc, $crate::ImportCore>($name, $kinds);
 
@@ -402,7 +413,13 @@ macro_rules! service {
         /// # Safety
         /// `ctx` is the module context of a collection; the entries are addresses of the file.
         pub unsafe fn dk_svc_declare(ctx: *mut u8, device: fn() -> u32) -> i32 {
-            $crate::declare(ctx, &DK_SVC_ROW, dk_svc_init as usize as *const u8, device, &$crate::service!(@hooks $(($site, $entry $(, $dev)?)),*), &$crate::service!(@hooks $(($slot, $fill $(, $fdev)?)),*), &$exports)
+            let result = $crate::declare(ctx, &DK_SVC_ROW, dk_svc_init as usize as *const u8, device, &$crate::service!(@hooks $(($site, $entry $(, $dev)?)),*), &$crate::service!(@hooks $(($slot, $fill $(, $fdev)?)),*), &$exports);
+            $(
+                if result == 0 {
+                    return $crate::declare_resident_query(ctx, $query);
+                }
+            )?
+            result
         }
 
         unsafe extern "C" fn dk_svc_init(ctx: *mut u8) -> i32 {

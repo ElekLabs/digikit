@@ -19,7 +19,7 @@ Firmware: DT2 1.17 and DN2 1.12 (the same sites and helpers, found by function h
 
 ## The interface to the runtime
 
-The module `requires` `core/runtime` and `core/ui`. The runtime's exported C functions (`runtime/core/include/dkrt.h`, written by `patchkit gen` from `runtime/core/abi.toml`) are undefined symbols that patchkit links: `dkrt_scan`, `dkrt_scan_reads` and `dkrt_fit` (the store and what fits), `dkrt_selection_get` and `_set`, `dkrt_restart`, `dkrt_settings_put` and `_flush`, `dkrt_boot_info`, `dkrt_status`, `dkrt_module` and `dkrt_fx` (the loaded modules and their effects), `dkrt_capacity`, `dkrt_health`, `dkrt_blocks`, `dkrt_poll_add`, `dkrt_poll_remove`, `dkrt_diag`, `dkrt_debug_set` and `dkrt_module_header` (INFO's version). The UI calls are `dk_ui_*` of `core/ui`.
+The module `requires` `core/runtime` and `core/ui`. The runtime's exported C functions (`runtime/core/include/dkrt.h`, written by `patchkit gen` from `runtime/core/abi.toml`) are undefined symbols that patchkit links: `dkrt_scan`, `dkrt_scan_reads` and `dkrt_fit` (the store and what fits), `dkrt_selection_get` and `_set`, `dkrt_restart`, `dkrt_settings_put` and `_flush`, `dkrt_boot_info`, `dkrt_status`, `dkrt_module` and `dkrt_fx` (the loaded modules and their effects), `dkrt_capacity`, `dkrt_health`, `dkrt_blocks`, `dkrt_poll_add`, `dkrt_poll_remove`, `dkrt_diag`, `dkrt_debug_set` and `dkrt_module_header` (INFO's version). The UI calls are `dk_ui_*` of `core/ui`. The route picker calls `dk_fx_route_choices` through the [resident service query](../../../docs/ARCHITECTURE.md#choosing-an-api), passing its pending send choices to the FX provider.
 
 ## Notes
 

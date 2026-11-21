@@ -11,6 +11,7 @@ use dkrt_svc_fx::records::Fx;
 mod gen_exports;
 mod hooks;
 mod rt;
+pub use rt::dk_service_query_v1;
 
 dkrt_svc_rt::service!(
     Fx,
@@ -29,5 +30,6 @@ dkrt_svc_rt::service!(
         ("cf.page.hook.sound_load_exit", hooks::fxp_sound),
     ],
     fills = [],
-    exports = gen_exports::exports()
+    exports = gen_exports::exports(),
+    query = rt::dk_service_query_v1
 );

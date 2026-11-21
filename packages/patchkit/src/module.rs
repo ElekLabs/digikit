@@ -65,7 +65,7 @@ pub struct Manifest {
     /// first word of the record's body. The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
     #[serde(default, rename = "record")]
     pub records: Vec<RecordKey>,
-    /// A service outside sdk/sdk.toml declares its exported functions as `[[export]]`. Their hashes and entry offsets go in `EXPORTS`.
+    /// A service outside sdk/sdk.toml declares its exported functions as `[[export]]`. Any service can declare a resident query. Their hashes and entry offsets go in `EXPORTS`.
     #[serde(default, rename = "export")]
     pub exports: Vec<ExportDef>,
     /// A consumer declares the provider and minimum version of each locally defined service API it links.
@@ -228,8 +228,13 @@ impl Manifest {
                 "{id}: the id's last part {leaf:?} must equal the provided service {service:?} (the file is `{service}.dks`: the runtime finds a provider by its file name)"
             ));
         }
-        let exports = if sdk_service {
-            if let Some(e) = self.exports.first() {
+        let query_name = dkrt_sdk::RESIDENT_QUERY_ENTRY;
+        let query_count = self.exports.iter().filter(|e| e.name == query_name).count();
+        if query_count > 1 {
+            return Err(err!("{id}: the service declares {query_name} twice"));
+        }
+        let mut exports = if sdk_service {
+            if let Some(e) = self.exports.iter().find(|e| e.name != query_name) {
                 return Err(err!(
                     "{id}: [[export]] {:?} is not read: the exports of a service file are the `provided = true` imports of its service in sdk/sdk.toml",
                     e.name
@@ -242,11 +247,16 @@ impl Manifest {
                     "{id}: a service outside sdk/sdk.toml needs at least one [[export]]"
                 ));
             }
-            for e in &self.exports {
+            let mut local = vec![];
+            for e in self.exports.iter().filter(|e| e.name != query_name) {
                 validate_local_import(id, &e.name)?;
+                local.push(e.name.clone());
             }
-            self.exports.iter().map(|e| e.name.clone()).collect()
+            local
         };
+        if query_count != 0 {
+            exports.push(query_name.into());
+        }
         let mut hooks: Vec<(String, String, Vec<String>)> = vec![];
         for h in &self.hooks {
             if h.name.is_empty() || h.entry.is_empty() {

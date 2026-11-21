@@ -19,10 +19,11 @@
 #include <dk/platform/ui.h>
 #include <dk_ui_core.h>
 #include <dk/gen/limits.h>
+#include <dk/fx/route-query.h>
 #include "dkrt.h"
 
 #define MAX_ENT DKRT_SCAN_MAX
-#define MAX_FXR 4
+#define MAX_FXR DK_MAX_FX
 #define ROUTE_MASTER 1
 #define ROUTE_SEND 2
 #define NAME_COLS 12
@@ -83,7 +84,7 @@ static DkrtFitOut g_fit;
 static DkrtSelection g_sel;
 static DkrtBootInfo g_boot;
 static DkrtFx g_fx[MAX_FXR];
-static uint32_t g_fx_n, g_fx_slots;
+static uint32_t g_fx_n;
 static uint8_t g_fx_saved[MAX_FXR];
 static int8_t g_row_fx[MAX_ENT]; /* the first effect of a loaded row's module, -1: none */
 static uint8_t g_saved[MAX_ENT];
@@ -584,7 +585,7 @@ static void map_boot_names(void)
     }
 }
 
-/* The loaded effects, the routes the settings give them and the send slots; the pending routes start as the saved ones. */
+/* The loaded effects and the routes the settings give them. Pending routes start as the saved ones. */
 static void read_fx(void)
 {
     g_fx_n = 0;
@@ -593,12 +594,6 @@ static void read_fx(void)
         DK_FXR_PEND[g_fx_n] = (uint8_t)g_fx[g_fx_n].saved;
         g_fx_n++;
     }
-    DkrtCap caps[DKRT_CAP_MAX];
-    uint32_t n = dkrt_capacity(caps, DKRT_CAP_MAX);
-    g_fx_slots = 0;
-    for (uint32_t i = 0; i < n; i++)
-        if (caps[i].kind == DKRT_CAPK_SEND_SLOTS)
-            g_fx_slots = caps[i].limit;
 }
 
 static int same_text(const uint8_t *a, const uint8_t *b, int max)
@@ -672,15 +667,6 @@ static void refit(void)
 static int wont(int i)
 {
     return g_fit.rows[i].wont != 0;
-}
-
-static uint32_t sends_except(int skip)
-{
-    uint32_t n = 0;
-    for (uint32_t j = 0; j < g_fx_n; j++)
-        if ((int)j != skip && DK_FXR_PEND[j] == ROUTE_SEND)
-            n++;
-    return n;
 }
 
 /* Changes since the saved state: rows checked or unchecked, effects with another route, and safe mode (a restart leaves it). */
@@ -1346,7 +1332,25 @@ static void route_done(void *ctx, int32_t index)
             DK_FXR_PEND[k] = DK_ROUTE_ITEM[index];
 }
 
-/* ROUTE...: SEND and MASTER, limited to the routes the effect allows and to the send slots that are free. */
+/* Preserve editing with a provider that predates the resident query. */
+static uint32_t legacy_route_choices(int j)
+{
+    uint32_t allowed = g_fx[j].allowed;
+    if (!(allowed & ROUTE_SEND) || DK_FXR_PEND[j] == ROUTE_SEND)
+        return allowed;
+    uint32_t sends = 0;
+    for (uint32_t k = 0; k < g_fx_n; k++)
+        if (DK_FXR_PEND[k] == ROUTE_SEND)
+            sends++;
+    DkrtCap caps[DKRT_CAP_MAX];
+    uint32_t n = dkrt_capacity(caps, DKRT_CAP_MAX);
+    for (uint32_t k = 0; k < n; k++)
+        if (caps[k].kind == DKRT_CAPK_SEND_SLOTS && sends < caps[k].limit)
+            return allowed;
+    return allowed & ~ROUTE_SEND;
+}
+
+/* ROUTE...: the provider decides the options. The menu supplies its uncommitted choices. */
 static void panel_route(void *ctx, int32_t row)
 {
     (void)ctx;
@@ -1358,12 +1362,21 @@ static void panel_route(void *ctx, int32_t row)
     static const char *items[2];
     DK_ROUTE_N = 0;
     g_route_row = row;
-    if ((g_fx[j].allowed & ROUTE_SEND) &&
-        (DK_FXR_PEND[j] == ROUTE_SEND || sends_except(j) < g_fx_slots)) {
+    DkFxRouteChoicesV1 request = {g_fx[j].row, 0};
+    for (uint32_t k = 0; k < g_fx_n; k++)
+        if (DK_FXR_PEND[k] == ROUTE_SEND && g_fx[k].row < MAX_FXR)
+            request.pending_sends |= 1u << g_fx[k].row;
+    uint32_t allowed;
+    int32_t result = dk_fx_route_choices(&request, &allowed);
+    if (result == DKRT_E_MISSING)
+        allowed = legacy_route_choices(j);
+    else if (result != DKRT_OK)
+        return;
+    if (allowed & ROUTE_SEND) {
         items[DK_ROUTE_N] = "SEND";
         DK_ROUTE_ITEM[DK_ROUTE_N++] = ROUTE_SEND;
     }
-    if (g_fx[j].allowed & ROUTE_MASTER) {
+    if (allowed & ROUTE_MASTER) {
         items[DK_ROUTE_N] = "MASTER";
         DK_ROUTE_ITEM[DK_ROUTE_N++] = ROUTE_MASTER;
     }

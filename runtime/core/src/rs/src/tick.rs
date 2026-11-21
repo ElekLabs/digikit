@@ -32,6 +32,7 @@ pub(crate) unsafe fn poll_all() {
 /// event. Registers d0, d1, a0, a1 are saved by the hook. Polls the mailbox, then calls the tick of every module.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_tick() {
+    crate::resident_query::note_ui_task();
     init_once();
     let s = st();
     s.ticks = s.ticks.wrapping_add(1);

@@ -658,6 +658,9 @@ int32_t dkrt_module(uint32_t index, DkrtModule *out);
 /* The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end. */
 int32_t dkrt_fx(uint32_t index, DkrtFx *out);
 
+/* Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call. */
+int32_t dkrt_service_query(uint32_t provider, uint32_t minimum, uint32_t op, const uint8_t *request, uint32_t request_size, uint8_t *reply, uint32_t reply_size);
+
 /* CPU load, the DSP's block time, the heap, the arena and the DSP area (finding 41). The heap walk is bounded: ask twice a second at most. */
 void dkrt_health(DkrtHealth *out);
 

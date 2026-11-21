@@ -65,6 +65,7 @@ the DSP section (16-byte aligned), padding to 16, then the image.
   references between the module's own sections are resolved by the packer (the base cancels), and a PC-relative reference to an
   import is refused by the packer (the distance to the firmware would depend on where the module is loaded).
 - **Header table** (`table_off`, layout in `sdk/sdk.toml` `[limits.format]` and `packages/dkneeds/src/keys.rs`): magic `DKTB`, a version, then tagged entries: NEEDS (services and versions), USES (`(resource id, count)`: the `[uses]` lines of `module.toml` for this device and `record_bytes`), KEYS (`(kind, n, keys)`), and the entries of a service module (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES). The machine and effect keys are hashes the packer computes from the packed name and the id (`register.rs`: `machine_key`, `effect_id`). The machine, parameter, page and effect records are not in the file: `init` declares them and the runtime builds them at commit (`docs/design/digikit-registry.md`).
+  In a service's `EXPORTS` entry, bit 31 of the image offset marks an owner-bound export. Bit 30 together with bit 31 identifies the reserved `dk_service_query_v1` entry. The latter stays outside card import resolution, and the packer records runtime 0.11.2 as a hard minimum. Legacy bound exports have bit 30 clear.
 - **Image**: the linked bytes at base 0; every word named by a relocation holds `S + A` (symbol offset plus addend) for kind 0 and
   `A` for kind 1.
 

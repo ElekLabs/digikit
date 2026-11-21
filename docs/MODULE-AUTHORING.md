@@ -735,7 +735,9 @@ wait. The request body is at most 160 bytes. The reply body is at most 879 bytes
 
 #### Card services with a local API
 
-A service and its consumers can share an API without adding SDK entries. The provider uses
+[Freqshift](../modules/fx/digikit/freqshift/src/module.c) uses the SDK's FX builders, whose implementation lives in the FX provider. A service can publish its own API when its author owns the function contracts and their compatibility. See [Choosing an API](ARCHITECTURE.md#choosing-an-api) for the public SDK, provider-defined imports and optional resident app queries.
+
+The provider uses
 `role = "service"` and `service = "my-service"` in `[module]`. Its module ID ends in
 `/my-service`, and it installs as `services/my-service.dks`. Choose an unreserved name of at
 most 50 lowercase ASCII letters, digits, hyphens or underscores. The module version is the version
@@ -771,8 +773,8 @@ an order follows the explicitly ordered services. The six shipped services carry
 through 600. Metadata-less copies of those six retain their previous positions.
 
 Pack the service with `patchkit pack test/local-ping --device dn2 -o /tmp/local-ping.dks`.
-The working provider and consumer are under `tests/fixtures/modules/local-ping` and
-`tests/fixtures/modules/local-ping-user`. Use `patchkit services --device dn2 FILE.dkm`
+See the working [local-ping provider](../tests/fixtures/modules/local-ping/module.toml)
+and [consumer](../tests/fixtures/modules/local-ping-user/module.toml). Use `patchkit services --device dn2 FILE.dkm`
 to show the providers a packed consumer needs. Add `--pack-dir DIR` to pack those providers and
 their dependencies for a fresh card. For a repo service under `services/`,
 `mise run module:check service/NAME` checks the crate and its declarations.

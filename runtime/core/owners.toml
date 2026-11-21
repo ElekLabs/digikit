@@ -24,6 +24,7 @@ shared = [
   "dkrt::dev",         # the device object `dkrt_dev`: the reader behind RealPlatform
   "dkrt::mailbox",
   "dkrt::handlers",
+  "dkrt::resident_query",
   "dkrt::gen_services",
   "dkrt::imports",
   "dkrt::svc_imports", # the `dkc_*` shims of a service file: one function per CoreApi method

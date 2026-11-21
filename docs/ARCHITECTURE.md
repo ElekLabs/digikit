@@ -75,13 +75,25 @@ Callback order governs the walk of registered service rows. It is independent of
 
 A local API can add a provider and ColdFire function exports without a central SDK entry. SDK-wide imports and record kinds still use the SDK contract. A provider that registers a row must match the runtime's service ABI. Discovery and admission use bounded tables, with eight provider slots in the boot plan, including the port when needed. Service and port replacement take effect on restart. For the manifest and working provider/consumer example, see [card services with a local API](MODULE-AUTHORING.md#card-services-with-a-local-api).
 
+### Choosing an API
+
+The SDK defines shared public contracts and their generated C and Rust bindings and packaging metadata. For example, a module's `dk_fx_routes` builder call comes from `sdk/sdk.toml`. Its implementation and route policy run in `fx.dks`. Add a public SDK import or record definition when the project will maintain its compatibility, bindings and conventions as part of the shared SDK. A provider can support several consumers through its own versioned API.
+
+A service can define a narrower API in its own headers and export it from its `.dks`. The `local-ping` fixture and its consumer illustrate this path. The consumer declares `[[service_import]]` with the provider name, minimum compatible version and symbols. The packer records the hard need, and the loader links only to the matching provider. Card modules use these declared imports or SDK imports.
+
+A patched-in resident app can query an optional card provider through `dkrt_service_query` (runtime 0.11.2). The provider declares one `[[export]]` named `dk_service_query_v1`, and passes its implementation as `query = path::dk_service_query_v1` to `service!`. The glue checks the entry against the fixed C signature `ResidentQueryV1`. Patchkit marks the export as a resident query and adds the 0.11.2 runtime minimum. The loader activates it with its owning provider and withdraws it when the provider is retired. Each call checks the provider identity, compatible version and live entry. The entry stays private to the broker.
+
+The provider owns operation numbers, typed request and reply layouts, validation and status codes. Publish the wrapper with the provider contract and use a new operation number for a changed layout. Operations run synchronously in the UI task, read state without blocking, and must return before any UI or loader work resumes. They cannot recurse, retain the buffers or publish service addresses. `DKRT_E_MISSING` reports an absent provider or facet. The caller chooses the fallback. A runtime change is needed for a new shared mechanism or lifecycle rule. New operations within this query contract add code to their provider and caller.
+
+The menu keeps pending FX route choices and asks the FX provider which routes fit. The typed wrapper is [dk/fx/route-query.h](../sdk/include/dk/fx/route-query.h). The FX provider reads its effect rows and send-slot capacity. Existing `dkrt_fx` enumeration keeps the same layout and empty-list behavior, and the menu falls back to the previous picker rule with older FX providers. The existing machines query, `dk_machines_module_info`, is another synchronous read of provider-owned state. Its request names the module owner and its reply carries voice rows, types and guard counts. The MODULES wire reply and machines implementation still use that call.
+
 ### Shipped services
 
 | Service | Callback order | Owns | Optional facets used |
 | --- | --- | --- | --- |
 | [samples](../services/samples/dks/module.toml) | 100 | Per-module sample pools, track state and peak windows | Sample-pool API, pool completion/loss fills, DSP track-table parts |
 | [machines](../services/machines/dks/module.toml) | 200 | Machine types, parameters and pages, native pages, sticky type assignment | Record handlers and builders, module diagnostics, ColdFire hooks, DN2 frame-type fill and DSP voice dispatch |
-| [fx](../services/fx/dks/module.toml) | 300 | Effect records, pages, parameters, kit values and routes | Record handler and builders, route enumeration, ColdFire page hooks and DSP dispatch fills |
+| [fx](../services/fx/dks/module.toml) | 300 | Effect records, pages, parameters, kit values and routes | Record handler and builders, route enumeration and choices, ColdFire page hooks and DSP dispatch fills |
 | [lfo](../services/lfo/dks/module.toml) | 400 | LFO shape records, numbering and wave bounds | Record handler, six interrupt fills per device and MOD UI hooks |
 | [shortcuts](../services/shortcuts/dks/module.toml) | 500 | Shortcut records and dispatch | Record handler, shortcut builder and a port-resolved key-walker hook |
 | [project](../services/project/dks/module.toml) | 600 | `.dkp` files and project-scoped module settings | Project API, settings overlay, tick and port-resolved project hooks |

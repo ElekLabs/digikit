@@ -54,10 +54,9 @@ unsafe fn reset(now: u32, step: u32) {
         (*addr_of_mut!(DKRT_POLLS))[i] = 0;
         i += 1;
     }
-    let mut rec = 0;
-    while rec < crate::state::MAX_MODULES {
+    // Other loader tests use synthetic tick addresses for both content modules and providers.
+    for rec in 0..crate::state::REC_MAX {
         entry::publish_tick(rec, 0);
-        rec += 1;
     }
     // A test before may have left the channel owned by another module (E_BUSY): clear it, not ask.
     dlog::test_reset_sinks();

@@ -716,6 +716,9 @@ pub mod sig {
     /// The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end.
     pub type dkrt_fx = unsafe extern "C" fn(index: u32, out: *mut DkrtFx) -> i32;
 
+    /// Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call.
+    pub type dkrt_service_query = unsafe extern "C" fn(provider: u32, minimum: u32, op: u32, request: *const u8, request_size: u32, reply: *mut u8, reply_size: u32) -> i32;
+
     /// CPU load, the DSP's block time, the heap, the arena and the DSP area (finding 41). The heap walk is bounded: ask twice a second at most.
     pub type dkrt_health = unsafe extern "C" fn(out: *mut DkrtHealth);
 
