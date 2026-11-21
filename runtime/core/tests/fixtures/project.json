@@ -4,6 +4,7 @@
   "tags": ["test-only"],
   "implicitDependencies": ["core/runtime"],
   "metadata": {
+    "mergeTests": ["module-load.device.test.ts"],
     "runtimeAcceptance": [
       {
         "files": ["module-load.device.test.ts"],

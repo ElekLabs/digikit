@@ -84,17 +84,21 @@ afterEach(async () => {
   await new Promise<void>((resolve) => setImmediate(resolve));
 });
 
-function imageConsumer(): string {
-  return Object.entries(workspace.nodes).find(
-    ([, node]) => node.data.root.startsWith('modules/machine/') && node.data.targets['test-conformance'],
-  )![0];
+function machineLoads(graph: TaskGraph) {
+  return Object.keys(graph.tasks)
+    .filter((id) => {
+      const { project, target } = graph.tasks[id].target;
+      return workspace.nodes[project].data.tags?.includes('type:machine') && target.startsWith('test-conformance');
+    })
+    .sort();
 }
 
-function otherImageConsumer(): string {
-  return Object.entries(workspace.nodes).find(
-    ([id, node]) =>
-      id !== imageConsumer() && node.data.root.startsWith('modules/machine/') && node.data.targets['test-conformance'],
-  )![0];
+function expectFixtureLoad(graph: TaskGraph) {
+  const fixture = 'core/runtime-fixture-tests';
+  const halves = Object.keys(workspace.nodes[fixture].data.targets).filter((name) => name.startsWith('test-device--'));
+  expect(halves).toHaveLength(2);
+  for (const half of halves) expect(graph.tasks[`${fixture}:${half}`]).toBeDefined();
+  expect(machineLoads(graph)).toEqual([]);
 }
 
 it('keeps every gated runtime device file in exactly one owner command', () => {
@@ -183,10 +187,10 @@ it('forms explicit manifest libraries from selected modules and transitive requi
 
 describe('workspace selection', () => {
   it('retains core manifest selection for producers and their image consumers', () => {
-    const graph = selected('runtime/core/module.toml', 'build-objects,test-conformance');
+    const graph = selected('runtime/core/module.toml', 'build-objects,test-device,test-conformance');
     expect(graph.tasks['core/runtime:build-objects']).toBeDefined();
-    expect(graph.tasks[`${imageConsumer()}:test-conformance`]).toBeDefined();
-    expect(graph.tasks[`${otherImageConsumer()}:test-conformance`]).toBeDefined();
+    expect(graph.tasks['digikit/debug:test-conformance']).toBeDefined();
+    expectFixtureLoad(graph);
   }, 660_000);
 
   it('packs affected modules without device tests through the default gate', () => {
@@ -205,7 +209,7 @@ describe('workspace selection', () => {
   it('selects image consumers when ui.c changes', () => {
     const graph = selected('runtime/platform/ui/src/ui.c', 'test-device,test-conformance');
     expect(graph.tasks['core/runtime-tests:test-device']).toBeDefined();
-    expect(graph.tasks[`${imageConsumer()}:test-conformance`]).toBeDefined();
+    expectFixtureLoad(graph);
   }, 660_000);
 
   it('selects hermetic Rust tests when the release profile digest recipe changes', () => {
@@ -254,25 +258,27 @@ describe('workspace selection', () => {
     660_000,
   );
 
-  it('routes a module DSP edit to its own DSP tests', () => {
+  it('routes a module DSP edit to its own DSP tests and emulator load', () => {
     const project = workspace.nodes['digikit/pluck'].data;
-    const graph = selected(`${project.root}/src/dsp/pluck.s`, 'pack,test-dsp,test-dsp-conformance');
+    const graph = selected(`${project.root}/src/dsp/pluck.s`, 'pack,test-dsp,test-dsp-conformance,test-conformance');
     expect(
       Object.keys(graph.tasks)
         .filter((id) => /:test-dsp(-conformance)?$/.test(id))
         .sort(),
     ).toEqual(['digikit/pluck:test-dsp', 'digikit/pluck:test-dsp-conformance']);
     expect(graph.tasks['digikit/pluck:pack']).toBeDefined();
+    expect(machineLoads(graph)).toEqual(['digikit/pluck:test-conformance', 'digikit/pluck:test-conformance-all']);
   }, 660_000);
 
   it('keeps shared SDK contract edits on the SDK host, pack, runtime device and conformance selection', () => {
     const graph = selected('sdk/include/dk/core/module.h', 'test-host,pack,test-device,test-conformance');
     for (const target of [
       'sdk:test-host',
-      `${imageConsumer()}:pack`,
+      'digikit/pluck:pack',
       'core/runtime-tests:test-device',
-      `${imageConsumer()}:test-conformance`,
+      'digikit/debug:test-conformance',
     ])
       expect(graph.tasks[target], target).toBeDefined();
+    expectFixtureLoad(graph);
   }, 660_000);
 });

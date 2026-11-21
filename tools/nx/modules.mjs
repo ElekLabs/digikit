@@ -6,8 +6,17 @@
 // device-test-keys.mjs, and the shape of device, conformance and test-only targets in device-tests.mjs.
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { read, records, mergeTests, packDevices, isUploadable, isFixture } from './module-manifests.mjs';
+import {
+  read,
+  records,
+  mergeTests,
+  manifestClosure,
+  packDevices,
+  isUploadable,
+  isFixture,
+} from './module-manifests.mjs';
 import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
+import { packSourceInputs } from './pack-inputs.mjs';
 import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
 import { serviceLeaves, serviceIds } from './device-test-keys.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
@@ -154,8 +163,18 @@ export const createNodesV2 = [
       if (rigTests.length) targets['test-dsp'] = rigTarget(root, rig?.soundInputs);
       if (rig) targets[DSP_CONFORMANCE] = rig.target;
       if (uploadable) {
-        targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
         targets['test-conformance-all'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs, true);
+        // Shared machine loader changes are exercised by core/runtime-fixture-tests. A change to a shipped
+        // dynamic machine's pack inputs schedules its existing emulator conformance task.
+        targets['test-conformance'] =
+          m.type === 'machine' && m.dynamic === true && m.category !== 'core'
+            ? {
+                executor: 'nx:noop',
+                cache: false,
+                inputs: packSourceInputs(ctx.workspaceRoot, byId, manifestClosure(byId, [m.id]), { privateOnly: true }),
+                dependsOn: [{ target: 'test-conformance-all', params: 'forward' }],
+              }
+            : conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
       }
       if (Object.keys(targets).length) project.targets = targets;
       return [f, { projects: { [root]: project } }];

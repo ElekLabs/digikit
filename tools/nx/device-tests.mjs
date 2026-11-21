@@ -244,6 +244,7 @@ export const conformanceTarget = (workspaceRoot, root, m, f, importInputs, full 
   cache: true,
   inputs: [
     ...DEVICE_INPUTS,
+    { env: 'DIGI_DEVICE' },
     'production',
     ...builtSourceExclusions(root, workspaceRoot),
     ...((imports) => (full ? imports : withoutDriver(imports)))(
