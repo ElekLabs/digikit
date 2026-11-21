@@ -11,3 +11,7 @@ MF_TAB:
     .long   0, _mf_pgrows, _mf_pgn
     .long   0, 0, 0, 0             | words 16 to 19: the native page calls of the registry (unbound here)
     .long   0                      | word 20: native filter graph (unbound here)
+
+| The service assembles its shared and device hooks in one translation unit.
+    .include "tests/fixtures/machines-hooks.s"
+    .include "services/machines/dks/src/hooks-dn2.s"

@@ -19,7 +19,6 @@ SYX = config.stock("Digitakt_II_OS1.17.syx")
 SRC = (
     ROOT / "image-modules" / "points" / "machines" / "src" / "cf" / "dn2" / "machines.s"
 )
-HOOKS = ROOT / "services" / "machines" / "dks" / "src" / "hooks-dn2.s"
 TAB = ROOT / "tests" / "fixtures" / "machines-info-dn2.s"
 # the stock tail the port file makes, by hook: what the type maps continue in
 TAILS = {
@@ -130,7 +129,7 @@ def unit():
     sym.update({f"mf_rc{i}": a for i, a in enumerate(RC)})
     return pk_cfunit.CfUnit(
         SYX,
-        [SRC, HOOKS, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
+        [SRC, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
         STUBS,
         sym,
         [
@@ -328,7 +327,7 @@ def unit_pg():
     sym.update({f"mf_rc{i}": a for i, a in enumerate(RC)})
     return pk_cfunit.CfUnit(
         SYX,
-        [SRC, HOOKS, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
+        [SRC, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
         STUBS,
         sym,
         ["mf_typemap0", "mf_typemap1", "mf_typemap2", "mf_reader"],

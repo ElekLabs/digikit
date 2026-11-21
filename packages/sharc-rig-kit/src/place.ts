@@ -74,6 +74,7 @@ export interface Range {
 }
 
 interface DataLayout {
+  localSymbols: Record<string, number>[];
   data: Record<string, number>;
   inits: Init[];
   /** per object: its data runs */
@@ -85,6 +86,7 @@ interface DataLayout {
 export function placeData(objs: SharcObject[], start: number): DataLayout {
   let addr = start;
   const data: Record<string, number> = {};
+  const localSymbols: Record<string, number>[] = [];
   const inits: Init[] = [];
   const own: Range[][] = [];
   for (const o of objs) {
@@ -96,9 +98,12 @@ export function placeData(objs: SharcObject[], start: number): DataLayout {
       own.at(-1)!.push({ address: addr, bytes: bytes.length });
       addr += (bytes.length + 3) & ~3;
     }
-    for (const [name, { section, offset }] of Object.entries(o.dataSymbols)) data[name] = where[section]! + offset;
+    const local: Record<string, number> = {};
+    for (const [name, { section, offset }] of Object.entries(o.dataSymbols)) local[name] = where[section]! + offset;
+    localSymbols.push(local);
+    Object.assign(data, local);
   }
-  return { data, inits, own, end: addr };
+  return { data, localSymbols, inits, own, end: addr };
 }
 
 /** The base of each object's code: one after the other, each rounded up to 0x100 short words. Returns the bases and the end. */
@@ -116,13 +121,14 @@ function linkAll(
   objs: SharcObject[],
   bases: number[],
   externs: Record<string, number>,
+  localSymbols: Record<string, number>[],
 ): { linked: Linked[]; symbols: Record<string, number> } {
   const symbols: Record<string, number> = {};
   objs.forEach((o, i) => {
     for (const [name, offset] of Object.entries(o.symbols)) symbols[name] = bases[i]! + offset;
   });
   const ext = { ...externs, ...symbols };
-  return { linked: objs.map((o, i) => link(o, bases[i]!, ext)), symbols };
+  return { linked: objs.map((o, i) => link(o, bases[i]!, { ...ext, ...localSymbols[i] })), symbols };
 }
 
 /** The directories of an object of module MODDIR: its own and the shared ones, then the source's directory. */
@@ -229,7 +235,7 @@ function buildMachineUncached(sp: MachineSpec, withoutSpans: boolean): MachineBu
     throw new ConformError(
       `${sp.module}: code ends at 0x${end.toString(16)}, past the stand-ins at 0x${STOCK_BP.toString(16)}`,
     );
-  const { linked, symbols } = linkAll(objs, bases, { ...externsFixed(sp.device), ...data });
+  const { linked, symbols } = linkAll(objs, bases, { ...externsFixed(sp.device), ...data }, layout.localSymbols);
   return {
     linked,
     data,
@@ -318,7 +324,7 @@ function buildFxUncached(sources: readonly string[], device: 'dt2' | 'dn2', with
   };
   const { bases, end } = placeCode(objs);
   if (end > STOCK_BP) throw new ConformError(`code ends at 0x${end.toString(16)}, past the stand-ins`);
-  const { linked, symbols } = linkAll(objs, bases, externs);
+  const { linked, symbols } = linkAll(objs, bases, externs, layout.localSymbols);
   return {
     linked,
     data,

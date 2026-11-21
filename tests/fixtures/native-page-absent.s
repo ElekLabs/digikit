@@ -34,3 +34,6 @@ mf_native_remove:
 mf_native_turn:
     moveq #0,%d0
     rts
+    .globl mf_native_filter_graph
+mf_native_filter_graph:
+    rts

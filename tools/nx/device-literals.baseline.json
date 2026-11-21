@@ -158,7 +158,7 @@
   "image-modules/points/machines/README.md": 3,
   "image-modules/points/machines/module.toml": 29,
   "image-modules/points/machines/src/cf/native-page.c": 1,
-  "image-modules/points/machines/tests/test_pk_machines_fw.py": 7,
+  "image-modules/points/machines/tests/test_pk_machines_fw.py": 6,
   "image-modules/points/machines/types.toml": 10,
   "image-modules/points/params/module.toml": 14,
   "image-modules/points/params/tests/test_pk_params_fw.py": 4,

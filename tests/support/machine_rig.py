@@ -144,6 +144,13 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_fw_release_latch": dv.RELEASE,
         "_fw_unpack": dv.UNPACK_BP,
         "_dv_table": dv.TABLE,
+        # The machine rig links the filter hooks without running their stock continuations.
+        "_dl_filter_rows": 0x2009E000,
+        "_flt_convert_next": dv.STOCK_BP,
+        "_flt_coef_next": dv.STOCK_BP,
+        "_flt_coef_skip": dv.STOCK_BP,
+        "_flt_proc_next": dv.STOCK_BP,
+        "_flt_proc_skip": dv.STOCK_BP,
     }
     fixed["_dl_slots"] = (
         dv.SLOTS
@@ -189,6 +196,7 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
     # data symbols: one 4-byte aligned run per section, in L2 above the stand-ins
     addr = DATA_BASE
     data: dict[str, int] = {}
+    local_data: list[dict[str, int]] = []
     inits: list[tuple[int, bytes, bool]] = []
     own: list[
         list[tuple[int, int]]
@@ -201,8 +209,11 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
             inits.append((addr, raw, is_bss))
             own[-1].append((addr, len(raw)))
             addr += (len(raw) + 3) & ~3
-        for name, (sec, off, _g) in o.data_symbols.items():
-            data[name] = where[sec] + off
+        placed = {
+            name: where[sec] + off for name, (sec, off, _g) in o.data_symbols.items()
+        }
+        local_data.append(placed)
+        data.update(placed)
     # a contract voice: the module's description, and its state blocks behind the data symbols (what the runtime reserves at load)
     desc: tuple[int, ...] = ()
     state = stride = clear = 0
@@ -237,7 +248,11 @@ def _build(sp: pk_conform.MachineSpec) -> _Built:
     for o, b in zip(objs, bases, strict=True):
         syms.update({n: b + off for n, (off, _g) in o.symbols.items()})
     ext = {**externs, **syms}
-    linked = [pk_sharc.link(o, b, ext) for o, b in zip(objs, bases, strict=True)]
+    # The filter hooks and callbacks each own a separate _flt_mode word.
+    linked = [
+        pk_sharc.link(o, b, {**ext, **placed})
+        for o, b, placed in zip(objs, bases, local_data, strict=True)
+    ]
     code = tuple(
         (b, b + len(o.section) // 2)
         for o, b in zip(objs[nwrap:], bases[nwrap:], strict=True)

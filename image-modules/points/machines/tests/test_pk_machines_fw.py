@@ -21,8 +21,7 @@ SYX = config.stock("Digitakt_II_OS1.17.syx")
 SRC = (
     ROOT / "image-modules" / "points" / "machines" / "src" / "cf" / "dt2" / "machines.s"
 )
-# the hooks of the machines service file (the image keeps the table builder, dispatch, list entry and rank) and the table they read
-HOOKS = ROOT / "services" / "machines" / "dks" / "src" / "hooks-dt2.s"
+# The fixture assembles the service hooks with the table they read.
 TAB = ROOT / "tests" / "fixtures" / "machines-info-dt2.s"
 ROWSIZE = 64
 FIRST = 7
@@ -103,7 +102,7 @@ def tables():
 def unit():
     return pk_cfunit.CfUnit(
         SYX,
-        [SRC, HOOKS, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
+        [SRC, TAB, ROOT / "tests/fixtures/native-page-absent.s"],
         STUBS,
         {
             "_mf_first": FIRST,

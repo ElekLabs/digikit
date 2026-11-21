@@ -4416,15 +4416,6 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
 
 [[hook]]
-name = "cf.input.hook.key_event"
-site = "cf.input.site.key_event_walk"
-mode = "replace"
-clobbers = ["ccr"]
-len = 8
-kind = "tail"
-check = "3d25d06bf11f3a7b"
-
-[[hook]]
 name = "cf.filter.hook.accessor"
 site = "cf.filter.fn.accessor"
 mode = "replace"
@@ -4468,6 +4459,15 @@ clobbers = ["d0", "d1", "ccr"]
 len = 6
 kind = "tail"
 check = "ee3af96091c4b93c"
+
+[[hook]]
+name = "cf.input.hook.key_event"
+site = "cf.input.site.key_event_walk"
+mode = "replace"
+clobbers = ["ccr"]
+len = 8
+kind = "tail"
+check = "3d25d06bf11f3a7b"
 
 [[hook]]
 name = "cf.lfo.hook.graph_vec"
