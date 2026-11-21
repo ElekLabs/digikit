@@ -76,7 +76,7 @@ Status: `todo`, `active`, `done`, `parked`.
 | Any | T-AB | A/B of two firmware images: `coupled_ab --image LABEL=SYX` | - | done | PR 484 |
 | Any | P5 | Track A: host profiles named from sharcdb (emulator host speed), in a lane | - | parked | |
 | Any | SM-F | Safe mode from the first boot: the boot counter counts with no selection record too (the first counted boot creates the record), so a hang or crash loop on a fresh flash reaches safe mode; host tests in `safe_mode.rs` | - | active | `rt/safe-mode-fresh`; device proof pending: needs the full tier (the fresh-card test is in the full-tier `safe mode` rig, `core/runtime-tests:test-device-all--safe-mode`) |
-| 6 | RC | Runtime contract and package lifecycle ([runtime-contract-and-lifecycle.md](runtime-contract-and-lifecycle.md)): one lifecycle for modules and services (load, unload, reload, orphans, pins), provider-owned records and resources, tagged service parts, two installers, ColdFire points into their services, `image-modules/` removed, a size gate per item. RC0 to RC6; RC-D deferred. Replaces H | E (for RC2, RC3) | active (RC0) | lane fx-route-policy |
+| 6 | RC | Runtime contract and package lifecycle ([runtime-contract-and-lifecycle.md](runtime-contract-and-lifecycle.md)): one lifecycle for modules and services (load, unload, reload, orphans, pins), provider-owned records and resources, tagged service parts, two installers, ColdFire points into their services, `image-modules/` removed, a size gate per item. RC0 to RC6; RC-D deferred. Replaces H | E (for RC2, RC3) | active (RC1) | lane fx-route-policy |
 
 Until P9, cycle budgets use emulator instruction counts with a margin. P9 replaces the margin with a measured factor; the contract field
 does not change.

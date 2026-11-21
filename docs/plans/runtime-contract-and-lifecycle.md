@@ -1,6 +1,6 @@
 # Runtime contract and package lifecycle
 
-Date: 2026-11-22. Status: **draft for Em's review.** Items: **RC0** to **RC6**, plus the deferred **RC-D** (DSP-side installer).
+Date: 2026-11-22. Status: **approved by Em 2026-11-22; RC1 active.** Items: **RC0** to **RC6**, plus the deferred **RC-D** (DSP-side installer).
 
 This plan replaces the open parts of [runtime-and-services.md](runtime-and-services.md) and the "Remaining ownership work" of [ARCHITECTURE.md](../ARCHITECTURE.md). Where it disagrees with older docs, this plan wins and the older text is overwritten when the item lands. The static evidence is [finding 158](../findings/158-service-entry-survey.md) (service entries) and [finding 147](../findings/147-syntakt-flash-image-size.md) (Syntakt image size).
 
@@ -481,6 +481,25 @@ Each item is one PR or a small stack, lands green and merges before the next sta
 | **RC-D DSP-side installer** (deferred) | A resident DSP installer that patches sites at block tail; `SharcInstaller` v2; SHARC slots leave the image | Static design, emulator, one hardware test | the image shrinks | 2-4 days, low-medium |
 
 Before RC2 and RC3 start: state payoff and confidence again with the RC1 results, and stop if they are weak.
+
+### Progress
+
+Status: `todo`, `active`, `done`. An item or step is marked in the commit that finishes it.
+
+| Item or step | Status | Commits, PR |
+| --- | --- | --- |
+| RC0 Plan and baseline | done | `57b861aaa` (finding 158), `3d6a6bc49` (plan, baseline); approved by Em 2026-11-22 |
+| RC1 Contract and fixtures | active | lane `fx-route-policy` |
+| RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | todo | |
+| RC1b crate `dkrt-packages` (`runtime/core/packages`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | todo | |
+| RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-packages`) | todo | |
+| RC1d manifest schema in patchkit (`[[service.resource]]`, `[[service.record]]`, `[[entry]]`, derived `[[need]]`, selection `pin`) and the `ref-*` fixtures; `PackageGraph::from_tables` over the packed fixtures | todo | |
+| RC2 One lifecycle | todo | |
+| RC3 Service contract v2 | todo | |
+| RC4 Installers and ColdFire points | todo | |
+| RC5 Remove image-modules | todo | |
+| RC6 Runtime size | todo | |
+| RC-D DSP-side installer | todo (deferred) | |
 
 ## 14. Size baseline (RC0)
 
