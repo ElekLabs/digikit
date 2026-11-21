@@ -70,7 +70,7 @@ export interface DkTransport {
   readonly dataDepth?: number;
   /**
    * Make the link usable again after an exchange failed, for example a device that re-enumerated on USB: reopen what the transport holds.
-   * Must not throw when the device is not back yet; the next failure calls it again.
+   * Must not throw when the device is not back yet; the next failure calls it again. Does nothing after close().
    */
   recover?(): Promise<void>;
   /** Let go of the link. */
@@ -1115,6 +1115,14 @@ export class DkSession {
     } catch (e) {
       const failure =
         probe && probe.signal.aborted && !signal.aborted && e instanceof DkError && e.kind === 'cancelled' ? lost() : e;
+      if (failure !== e) {
+        // the probe saw the device gone: reopen the link before the next request
+        try {
+          await this.t.recover?.();
+        } catch {
+          // the device may not be back yet; the next failure calls recover again
+        }
+      }
       if (!(failure instanceof DkError && failure.kind === 'cancelled'))
         this.onLink?.(false, failure instanceof Error ? failure.message : String(failure));
       throw failure;

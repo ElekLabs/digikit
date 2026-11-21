@@ -79,6 +79,7 @@ export class WebMidiTransport implements DkTransport {
   private queue: Uint8Array[] = [];
   private waiter: { resolve: (m: Uint8Array | null) => void; reject: (e: Error) => void } | null = null;
   private lost: Error | null = null;
+  private closed = false;
   private onLost: ((e: Error) => void) | undefined;
   private previousState: MidiAccessLike['onstatechange'];
 
@@ -107,7 +108,7 @@ export class WebMidiTransport implements DkTransport {
    */
   async recover(): Promise<void> {
     const access = this.access;
-    if (!access) return;
+    if (!access || this.closed) return;
     try {
       const { inputs, outputs } = listPorts(access);
       const input = inputs.find((p) => (p.name ?? p.id) === this.portName);
@@ -198,6 +199,7 @@ export class WebMidiTransport implements DkTransport {
     });
   }
   async close(): Promise<void> {
+    this.closed = true;
     this.input.onmidimessage = null;
     if (this.access) this.access.onstatechange = this.previousState ?? null;
     await Promise.resolve(this.input.close?.()).catch(() => {});

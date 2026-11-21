@@ -5,6 +5,8 @@ import type { DkTransport } from '@digi/dk-session';
 import type { MidiHost } from './host';
 
 export class MidiPortTransport implements DkTransport {
+  private closed = false;
+
   /** `port` is the name of a port that is already open on `midi` (`open` does both). */
   constructor(
     private readonly midi: MidiHost,
@@ -36,6 +38,7 @@ export class MidiPortTransport implements DkTransport {
 
   /** Open the same port again: the handle goes stale when the device restarts and re-enumerates. The native open keeps the old connection until the new one is open. */
   async recover(): Promise<void> {
+    if (this.closed) return;
     try {
       await this.midi.open(this.port);
     } catch {
@@ -44,6 +47,7 @@ export class MidiPortTransport implements DkTransport {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
     await this.midi.close();
   }
 }

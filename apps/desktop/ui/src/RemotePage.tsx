@@ -221,7 +221,13 @@ export default function RemotePage(props: {
               />
             </div>
           </main>
-          <SidePanels host={props.host} visible session={session} where={() => targetLabel(target())} track={target} />
+          <SidePanels
+            host={props.host}
+            visible={!noEmulator()}
+            session={session}
+            where={() => targetLabel(target())}
+            track={target}
+          />
         </div>
       </div>
     </section>

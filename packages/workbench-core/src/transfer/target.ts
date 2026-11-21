@@ -70,8 +70,8 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
    * The links in use, each made once and instrumented once. The emulator's link is made at the first use. There is at most one MIDI link (the
    * MidiHost has one slot): `{ port, transport }` of the port opened last. Each transport owns its open, recover and close.
    */
-  let emulatorLink: DkTransport | undefined;
-  let midiLink: { port: string; transport: DkTransport } | undefined;
+  let emulatorLink: Promise<DkTransport> | undefined;
+  let midiLink: { port: string; transport: Promise<DkTransport> } | undefined;
 
   /** Start on this target without opening it or keeping the choice (the site picks its first target when the ports are known). */
   function startOn(t: Target): void {
@@ -81,36 +81,50 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
   }
 
   /** Let go of the MIDI link and forget its session (the next use opens the port again). Errors of the close are ignored. */
-  async function dropMidi(): Promise<void> {
+  function dropMidi(): Promise<void> {
     const old = midiLink;
-    if (!old) return;
+    if (!old) return Promise.resolve();
+    // forgotten at once (not after an await), so a caller that comes next opens a new link
     midiLink = undefined;
-    sessions.drop(targetKey({ kind: 'midi', port: old.port }));
-    try {
-      await old.transport.close?.();
-    } catch {
-      // the link is gone anyway
-    }
+    const key = targetKey({ kind: 'midi', port: old.port });
+    // requests still waiting on the dropped link end as cancelled
+    sessions.cancel(key);
+    sessions.drop(key);
+    return old.transport
+      .then((t) => t.close?.())
+      .catch(() => {
+        // the link is gone anyway
+      });
   }
 
   /**
    * The link of the target, opened if it is not. Another MIDI port replaces the MIDI link: the old one is closed first, because the host's MIDI
    * slot is shared (closing it after the new port opened would close the new one).
    */
-  async function linkOf(t: Target): Promise<DkTransport> {
+  function linkOf(t: Target): Promise<DkTransport> {
     if (t.kind === 'midi') {
       if (midiLink?.port === t.port) return midiLink.transport;
-      await dropMidi();
-      const transport = instrument(await env.targets.open(t));
-      midiLink = { port: t.port, transport };
-      return transport;
+      // the entry is kept before anything is awaited, so a concurrent caller of the same port shares the open in progress
+      const closing = dropMidi();
+      const entry = { port: t.port, transport: closing.then(() => env.targets.open(t)).then(instrument) };
+      midiLink = entry;
+      entry.transport.catch(() => {
+        if (midiLink === entry) midiLink = undefined;
+      });
+      return entry.transport;
     }
-    emulatorLink ??= instrument(await env.targets.open(t));
+    if (!emulatorLink) {
+      const opening = env.targets.open(t).then(instrument);
+      emulatorLink = opening;
+      opening.catch(() => {
+        if (emulatorLink === opening) emulatorLink = undefined;
+      });
+    }
     return emulatorLink;
   }
 
-  /** The link of the selected target if it is open. */
-  const selectedLink = (): DkTransport | undefined => {
+  /** The link of the selected target if it is open (or opening). */
+  const selectedLink = (): Promise<DkTransport> | undefined => {
     const t = target();
     return t.kind === 'midi' ? (midiLink?.port === t.port ? midiLink.transport : undefined) : undefined;
   };
@@ -123,8 +137,8 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
   /** Change the target: the next request uses the session of the new one (and opens the port). A MIDI port that cannot be opened leaves the old target. */
   async function selectTarget(next: Target): Promise<void> {
     if (sameTarget(next, target())) return;
-    // before the links change: a request that waits on the link being closed ends as cancelled
-    cancelPending();
+    // A dropped MIDI link cancels its own waiting requests (dropMidi). The emulator's link stays open, so its waiting requests are cancelled here.
+    if (target().kind !== 'midi') cancelPending();
     if (next.kind === 'midi') await linkOf(next);
     else await dropMidi();
     if (next.kind === 'midi') {
@@ -185,7 +199,8 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
 
   /** Make the selected target's link usable again (a device that re-enumerated). The emulator has no port to reopen: nothing happens. */
   async function reconnect(): Promise<void> {
-    await selectedLink()?.recover?.();
+    const l = selectedLink();
+    if (l) await (await l).recover?.();
   }
 
   /**
@@ -196,7 +211,7 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     const t = target();
     if (t.kind !== 'midi') throw new Error('No MIDI port is selected.');
     await sessionOf(t);
-    return (midiLink as { transport: DkTransport }).transport;
+    return (midiLink as { transport: Promise<DkTransport> }).transport;
   }
 
   /** Let go of the selected MIDI port (the device restarts): the next request opens it again, and fails while it is not there. */

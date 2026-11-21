@@ -4,9 +4,15 @@ import { test } from 'vitest';
 import { createDefaultModules } from '../src/firmware/default-modules-state.ts';
 import type { FirmwareEnv } from '../src/firmware/env.ts';
 import { memoryKeyValue, remembered } from '../src/storage.ts';
-import { createFakeSessions, createFakeTransferApp, silentTransport } from '../src/transfer/fake-app.ts';
+import { DkSession, type DkTransport } from '@digi/dk-session';
+import {
+  createFakeSessions,
+  createFakeTransferApp,
+  silentTransport,
+  type FakeSessions,
+} from '../src/transfer/fake-app.ts';
 import type { TransferEnv } from '../src/transfer/env.ts';
-import type { SessionHubOptions } from '../src/transfer/session-core.ts';
+import { createSessionHub, type SessionHubOptions } from '../src/transfer/session-core.ts';
 
 const opened: string[] = [];
 const closed: string[] = [];
@@ -101,6 +107,39 @@ test('a released port is closed, and the next request opens it again with a new 
   assert.deepEqual(closed, ['Port A']);
   assert.notEqual(await app.target.session(), before);
   assert.deepEqual(opened, ['Port A', 'Port A']);
+});
+
+test('two concurrent session calls on a MIDI target open the port once', async () => {
+  opened.length = closed.length = 0;
+  const app = createFakeTransferApp({
+    env: { targets: targets() },
+    storage: memoryKeyValue({ 'digikit.target': JSON.stringify({ kind: 'midi', port: 'Port A' }) }),
+  });
+  await Promise.all([app.target.session(), app.target.session()]);
+  assert.deepEqual(opened, ['Port A']);
+});
+
+test('releasePort cancels a pending request of the session and the closed link is not recovered', async () => {
+  const events: string[] = [];
+  const transport: DkTransport = {
+    send: () => {},
+    recv: (_ms, signal) =>
+      new Promise((resolve) => signal?.addEventListener('abort', () => resolve(null), { once: true })),
+    recover: async () => void events.push('recover'),
+    close: async () => void events.push('close'),
+  };
+  const hub = createSessionHub((t, opts) => new DkSession(t, { timeoutMs: 60_000, ...opts }));
+  const real = createFakeTransferApp({
+    env: { targets: { ...targets(), open: async () => transport } },
+    sessions: hub as unknown as FakeSessions,
+  });
+  await real.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  const session = await real.target.session();
+  const pending = session.info();
+  await new Promise((r) => setTimeout(r, 0));
+  await real.target.releasePort();
+  await assert.rejects(pending, (e: unknown) => (e as { kind?: string }).kind === 'cancelled');
+  assert.deepEqual(events, ['close']);
 });
 
 test('switching to another MIDI port closes the old link and drops its session', async () => {

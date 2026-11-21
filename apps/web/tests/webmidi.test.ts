@@ -132,6 +132,18 @@ test('recover with the port still missing does not throw and the transport stays
   assert.throws(() => t.send(Uint8Array.of(0xf0, 1, 0xf7)), /disconnected/);
 });
 
+test('recover after close does nothing', async () => {
+  const f = fake();
+  const t = await WebMidiTransport.open(f.input, f.output, f.access);
+  await t.close();
+  const input: MidiInputLike = { id: 'in2', name: f.input.name, state: 'connected', onmidimessage: null };
+  const output: MidiOutputLike = { id: 'out2', name: f.output.name, state: 'connected', send: () => {} };
+  f.access.inputs = [['in2', input]];
+  f.access.outputs = [['out2', output]];
+  await t.recover();
+  assert.equal(input.onmidimessage, null);
+});
+
 const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
 afterEach(() => {
   if (nav) Object.defineProperty(globalThis, 'navigator', nav);
