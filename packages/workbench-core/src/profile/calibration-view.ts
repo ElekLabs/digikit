@@ -189,6 +189,21 @@ export function captureSetFile(set: { profile: string; captures: readonly Pick<C
   };
 }
 
+/** The captures a fit input file stands for: a `dk.calcaptures/1` file gives its captures, any other document stands for itself. */
+export function expandCaptures(doc: unknown, expected?: Side, file = 'input'): unknown[] {
+  const o = doc as { schema?: string; captures?: unknown; side?: unknown } | null;
+  if (o?.schema !== CAPTURES_SCHEMA) return [doc];
+  if (!Array.isArray(o.captures)) throw new Error(`${file}: ${CAPTURES_SCHEMA} without captures`);
+  if (expected !== undefined && o.side !== undefined && o.side !== expected) {
+    const name = (s: unknown): string => (s === 'dev' ? 'device' : 'emulator');
+    throw new Error(
+      `${file} holds the ${name(o.side)} side; pass it with ${expected === 'dev' ? '--model' : '--device'}`,
+    );
+  }
+  o.captures.forEach((c, i) => checkCapture(c, `${file}: capture ${i}`));
+  return o.captures;
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
 
@@ -373,33 +388,90 @@ export function parseRunLine(line: string): RunEvent {
   return { kind: 'text', text: line };
 }
 
-/** Seconds left of a run: the rest of this capture, the other captures of this case and every later case (module loads and restarts not counted). */
-export function secondsLeft(p: {
+/** A restart (to change the loaded modules) and the 30 s stable wait the runtime needs before the next restart, seconds. */
+export const RESTART_S = 40;
+
+const runnable = (profile: CalProfile, skipping?: readonly string[]) =>
+  profile.cases.filter((c) => !skipping?.includes(c.id));
+
+/** Whether a case needs a restart: its modules differ from those of the case before it. */
+const modulesChange = (before: readonly string[], modules: readonly string[]): boolean =>
+  [...modules].sort().join('\n') !== [...before].sort().join('\n');
+
+/**
+ * The captures of a run: every case that is not skipped (module-free cases like `stock` and the `rest` cases included) times the repeats.
+ * `dropped` maps a case the run stopped early (it failed) to the captures it completed; the rest of its repeats do not count.
+ */
+export function captureTotal(
+  profile: CalProfile,
+  skipping?: readonly string[],
+  dropped?: ReadonlyMap<string, number>,
+): number {
+  let total = 0;
+  for (const c of runnable(profile, skipping)) total += dropped?.has(c.id) ? dropped.get(c.id)! : profile.repeats;
+  return total;
+}
+
+/** How long a run takes before it starts: every capture at warm-up plus window, and `RESTART_S` for each case whose modules differ from the case before it (the first is compared with no module). */
+export function estimateSeconds(profile: CalProfile, skipping?: readonly string[]): number {
+  let before: string[] = [];
+  let restarts = 0;
+  for (const c of runnable(profile, skipping)) {
+    if (modulesChange(before, c.modules)) restarts++;
+    before = c.modules;
+  }
+  return captureTotal(profile, skipping) * (profile.warmup_s + profile.capture_s) + restarts * RESTART_S;
+}
+
+/**
+ * Seconds left of a run, from the position alone (no elapsed time): the captures left at warm-up plus window, and `RESTART_S` for each later
+ * case whose modules differ from the case before it. The captures left are the rest of the current case (`n` finished, one more under way
+ * when `capturing`; the part of that capture already gone is ignored) and the repeats of every later case. A dropped case has none left.
+ * Without a current case (before the first capture): the static estimate.
+ */
+export function remainingSeconds(p: {
   profile: CalProfile;
-  case: string;
-  n: number;
-  intoCaptureS: number;
-  /** Cases that will be skipped: they take no time. */
   skipping?: readonly string[];
+  caseId?: string;
+  n: number;
+  capturing: boolean;
+  dropped?: ReadonlyMap<string, number>;
 }): number {
-  const per = p.profile.warmup_s + p.profile.capture_s;
-  const at = p.profile.cases.findIndex((c) => c.id === p.case);
-  const later = at < 0 ? 0 : p.profile.cases.slice(at + 1).filter((c) => !p.skipping?.includes(c.id)).length;
-  const left = Math.max(0, per - p.intoCaptureS) + (p.profile.repeats - p.n) * per + later * p.profile.repeats * per;
-  return Math.ceil(left);
+  const cases = runnable(p.profile, p.skipping);
+  const at = p.caseId === undefined ? -1 : cases.findIndex((c) => c.id === p.caseId);
+  if (at < 0) return Math.ceil(estimateSeconds(p.profile, p.skipping));
+  let left = p.dropped?.has(p.caseId!) ? 0 : Math.max(0, p.profile.repeats - p.n - (p.capturing ? 1 : 0));
+  let restarts = 0;
+  for (let i = at + 1; i < cases.length; i++) {
+    left += p.profile.repeats;
+    if (modulesChange(cases[i - 1]!.modules, cases[i]!.modules)) restarts++;
+  }
+  return Math.ceil(left * (p.profile.warmup_s + p.profile.capture_s) + restarts * RESTART_S);
 }
 
-/** `case lp4 · capture 2/3 · 6 s left` */
-export function progressLine(p: { case: string; n: number; of: number; left: number }): string {
-  return `case ${p.case} · capture ${p.n}/${p.of} · ${p.left} s left`;
+/** `capture 7 / 33`: the captures done so far, one more while a capture is under way. */
+export function captureCounter(p: { done: number; total: number; capturing: boolean }): string {
+  return `capture ${Math.min(p.total, p.done + (p.capturing ? 1 : 0))} / ${p.total}`;
 }
 
-/** The progress text of the phases between captures: `restarting for case lp4`, `waiting for a stable boot 4 s / 30 s`, `putting the stock machine back`. */
-export function phaseLine(e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string {
-  if (e.kind === 'restart') return `restarting for case ${e.case}`;
+/** `45 s`, or `2 min` (rounded up) from one minute on. */
+export const fmtLeft = (s: number): string => (s < 60 ? `${s} s` : `${Math.ceil(s / 60)} min`);
+
+/** `capture 7 / 33 · mem · 2 min left` */
+export function progressLine(p: { counter: string; case: string; left: number }): string {
+  return `${p.counter} · ${p.case} · ${fmtLeft(p.left)} left`;
+}
+
+/** The text of the phases between captures: `restarting for mem`, `waiting for a stable boot 4 s / 30 s`, `putting the stock machine back`. */
+export function phaseText(e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string {
+  if (e.kind === 'restart') return `restarting for ${e.case}`;
   if (e.kind === 'stable') return `waiting for a stable boot ${e.waited} s / ${e.of} s`;
   return 'putting the stock machine back';
 }
+
+/** The progress line of a phase: the counter, then the phase text (`capture 7 / 33 · restarting for mem`). */
+export const phaseLine = (counter: string, e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string =>
+  `${counter} · ${phaseText(e)}`;
 
 /** The note before Run: which tracks a run takes over, and that it leaves them on the stock machine (the run starts from the stock machine, it restores nothing). */
 export function trackNote(tracks: readonly number[]): string {

@@ -152,11 +152,7 @@ export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEn
       async open(t: Target) {
         if (t.kind === 'emulator') return new EmuUsbTransport(host.rpc);
         if (t.kind === 'none') throw new Error('No MIDI port.');
-        await host.ports.midi.open(t.port);
-        return new MidiPortTransport(host.ports.midi);
-      },
-      async close(t: Target) {
-        if (t.kind === 'midi') await host.ports.midi.close();
+        return MidiPortTransport.open(host.ports.midi, t.port);
       },
       async preflight(t: Target) {
         if (t.kind === 'emulator' && (await emulatorMode(host.rpc)) === 'paused') throw new Error(PAUSED);

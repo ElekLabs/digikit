@@ -227,8 +227,7 @@ export default function CalibrationSection(props: {
         />
       </div>
       <span class="foot">
-        A run plays the profile on the target and captures DSP stats and spans. Fit pairs an emulator run with a device
-        run of the same profile (dk.calibration/1).
+        A run measures the profile on the target. Fit pairs an emulator run with a device run of the same profile.
       </span>
     </div>
   );

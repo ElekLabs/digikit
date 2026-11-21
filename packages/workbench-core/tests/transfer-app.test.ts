@@ -4,8 +4,15 @@ import { test } from 'vitest';
 import { createDefaultModules } from '../src/firmware/default-modules-state.ts';
 import type { FirmwareEnv } from '../src/firmware/env.ts';
 import { memoryKeyValue, remembered } from '../src/storage.ts';
-import { createFakeSessions, createFakeTransferApp, silentTransport } from '../src/transfer/fake-app.ts';
+import { DkSession, type DkTransport } from '@digi/dk-session';
+import {
+  createFakeSessions,
+  createFakeTransferApp,
+  silentTransport,
+  type FakeSessions,
+} from '../src/transfer/fake-app.ts';
 import type { TransferEnv } from '../src/transfer/env.ts';
+import { createSessionHub, type SessionHubOptions } from '../src/transfer/session-core.ts';
 
 const opened: string[] = [];
 const closed: string[] = [];
@@ -13,11 +20,14 @@ const targets = (): TransferEnv['targets'] => ({
   emulator: true,
   ports: async () => ['Digitakt II'],
   async open(t) {
-    opened.push(t.kind === 'midi' ? t.port : t.kind);
-    return silentTransport();
-  },
-  async close(t) {
-    closed.push(t.kind === 'midi' ? t.port : t.kind);
+    const name = t.kind === 'midi' ? t.port : t.kind;
+    opened.push(name);
+    return {
+      ...silentTransport(),
+      async close() {
+        closed.push(name);
+      },
+    };
   },
 });
 
@@ -87,15 +97,109 @@ test('a port that cannot be opened leaves the old target and keeps nothing', asy
   assert.equal(app.storage.data.size, 0);
 });
 
-test('a lost port is opened again by the next request', async () => {
-  opened.length = 0;
+test('a released port is closed, and the next request opens it again with a new session', async () => {
+  opened.length = closed.length = 0;
   const sessions = createFakeSessions();
   const app = createFakeTransferApp({ env: { targets: targets() }, sessions });
-  await app.target.selectTarget({ kind: 'midi', port: 'Digitakt II' });
+  await app.target.selectTarget({ kind: 'midi', port: 'Port A' });
   const before = await app.target.session();
-  app.target.portLost('Digitakt II');
+  await app.target.releasePort();
+  assert.deepEqual(closed, ['Port A']);
   assert.notEqual(await app.target.session(), before);
-  assert.deepEqual(opened, ['Digitakt II', 'Digitakt II']);
+  assert.deepEqual(opened, ['Port A', 'Port A']);
+});
+
+test('two concurrent session calls on a MIDI target open the port once', async () => {
+  opened.length = closed.length = 0;
+  const app = createFakeTransferApp({
+    env: { targets: targets() },
+    storage: memoryKeyValue({ 'digikit.target': JSON.stringify({ kind: 'midi', port: 'Port A' }) }),
+  });
+  await Promise.all([app.target.session(), app.target.session()]);
+  assert.deepEqual(opened, ['Port A']);
+});
+
+test('releasePort cancels a pending request of the session and the closed link is not recovered', async () => {
+  const events: string[] = [];
+  const transport: DkTransport = {
+    send: () => {},
+    recv: (_ms, signal) =>
+      new Promise((resolve) => signal?.addEventListener('abort', () => resolve(null), { once: true })),
+    recover: async () => void events.push('recover'),
+    close: async () => void events.push('close'),
+  };
+  const hub = createSessionHub((t, opts) => new DkSession(t, { timeoutMs: 60_000, ...opts }));
+  const real = createFakeTransferApp({
+    env: { targets: { ...targets(), open: async () => transport } },
+    sessions: hub as unknown as FakeSessions,
+  });
+  await real.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  const session = await real.target.session();
+  const pending = session.info();
+  await new Promise((r) => setTimeout(r, 0));
+  await real.target.releasePort();
+  await assert.rejects(pending, (e: unknown) => (e as { kind?: string }).kind === 'cancelled');
+  assert.deepEqual(events, ['close']);
+});
+
+test('switching to another MIDI port closes the old link and drops its session', async () => {
+  opened.length = closed.length = 0;
+  const sessions = createFakeSessions();
+  const app = createFakeTransferApp({ env: { targets: targets() }, sessions });
+  await app.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  await app.target.session();
+  await app.target.selectTarget({ kind: 'midi', port: 'Port B' });
+  assert.deepEqual(closed, ['Port A']);
+  assert.deepEqual(sessions.dropped, ['midi:Port A']);
+  assert.deepEqual(opened, ['Port A', 'Port B']);
+});
+
+test('reconnect asks the selected link to recover; the emulator has nothing to recover', async () => {
+  const recovered: string[] = [];
+  const app = createFakeTransferApp({
+    env: {
+      targets: {
+        ...targets(),
+        async open(t) {
+          return { ...silentTransport(), recover: async () => void recovered.push(t.kind) };
+        },
+      },
+    },
+  });
+  await app.target.reconnect();
+  await app.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  await app.target.reconnect();
+  assert.deepEqual(recovered, ['midi']);
+});
+
+test('a session reports its request outcomes: a failure marks the indicator lost, an answer asks INFO once, another target is ignored', async () => {
+  const links = new Map<string, SessionHubOptions>();
+  let infos = 0;
+  const sessions = createFakeSessions((key, _transport, opts) => {
+    links.set(key, opts);
+    return {
+      info: async () => {
+        infos++;
+        return { port: 'dt2', runtime: 0 };
+      },
+    };
+  });
+  const app = createFakeTransferApp({ env: { targets: targets() }, sessions });
+  await app.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  await app.target.session();
+  await app.target.emulatorSession();
+  links.get('midi:Port A')!.onLink!(false, 'no reply');
+  assert.equal(app.connection.connection().state, 'disconnected');
+  // the emulator is not the target: its reports change nothing
+  links.get('emulator')!.onLink!(true);
+  assert.equal(infos, 0);
+  links.get('midi:Port A')!.onLink!(true);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(infos, 1);
+  assert.equal(app.connection.connection().state, 'connected');
+  // connected: a later answer asks nothing
+  links.get('midi:Port A')!.onLink!(true);
+  assert.equal(infos, 1);
 });
 
 test('the none target fails with the environment text, and a runtime check stops a request on an emulator without one', async () => {

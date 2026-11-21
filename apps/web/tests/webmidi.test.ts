@@ -93,9 +93,55 @@ test('close hands the state handler back', async () => {
   const earlier = () => {};
   f.access.onstatechange = earlier;
   const t = await WebMidiTransport.open(f.input, f.output, f.access);
-  t.close();
+  await t.close();
   assert.equal(f.access.onstatechange, earlier);
   assert.equal(f.input.onmidimessage, null);
+});
+
+test('recover finds the port again after the device re-enumerated, and a request round-trips', async () => {
+  const f = fake();
+  const t = await WebMidiTransport.open(f.input, f.output, f.access);
+  f.access.onstatechange?.({ port: { ...f.output, state: 'disconnected' } });
+  assert.throws(() => t.send(Uint8Array.of(0xf0, 1, 0xf7)), /disconnected/);
+  // the device is back as new port objects with the same name
+  const sent: number[][] = [];
+  const input: MidiInputLike = { id: 'in2', name: f.input.name, state: 'connected', onmidimessage: null };
+  const output: MidiOutputLike = {
+    id: 'out2',
+    name: f.output.name,
+    state: 'connected',
+    send: (d) => void sent.push(Array.from(d)),
+  };
+  f.access.inputs = [['in2', input]];
+  f.access.outputs = [['out2', output]];
+  await t.recover();
+  t.send(Uint8Array.of(0xf0, 2, 0xf7));
+  assert.deepEqual(sent, [[0xf0, 2, 0xf7]]);
+  const next = t.recv(1000);
+  input.onmidimessage?.({ data: Uint8Array.of(0xf0, 3, 0xf7) });
+  assert.deepEqual(Array.from((await next)!), [0xf0, 3, 0xf7]);
+});
+
+test('recover with the port still missing does not throw and the transport stays lost', async () => {
+  const f = fake();
+  const t = await WebMidiTransport.open(f.input, f.output, f.access);
+  f.access.onstatechange?.({ port: { ...f.output, state: 'disconnected' } });
+  f.access.inputs = [];
+  f.access.outputs = [];
+  await t.recover();
+  assert.throws(() => t.send(Uint8Array.of(0xf0, 1, 0xf7)), /disconnected/);
+});
+
+test('recover after close does nothing', async () => {
+  const f = fake();
+  const t = await WebMidiTransport.open(f.input, f.output, f.access);
+  await t.close();
+  const input: MidiInputLike = { id: 'in2', name: f.input.name, state: 'connected', onmidimessage: null };
+  const output: MidiOutputLike = { id: 'out2', name: f.output.name, state: 'connected', send: () => {} };
+  f.access.inputs = [['in2', input]];
+  f.access.outputs = [['out2', output]];
+  await t.recover();
+  assert.equal(input.onmidimessage, null);
 });
 
 const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');

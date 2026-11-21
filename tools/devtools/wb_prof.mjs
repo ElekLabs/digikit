@@ -23,6 +23,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DkProf } from '../../packages/dk-session/src/dkprof.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
+import { expandCaptures } from '../../packages/workbench-core/src/profile/calibration-view.ts';
 import {
   buildProfile,
   cfPart,
@@ -36,6 +37,17 @@ function readJson(file) {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch (e) {
     console.error(`wb: ${file}: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+/** A fit input file: one dk.profile/1, or the captures of a dk.calcaptures/1 file (the pane's "Save run"). */
+function readCaptures(file, side) {
+  try {
+    return expandCaptures(readJson(file), side, file);
+  } catch (e) {
+    // the message names the file already (expandCaptures)
+    console.error(`wb: ${e.message}`);
     process.exit(1);
   }
 }
@@ -148,8 +160,8 @@ function calibrate({ prof, rest, opts, format, fail }) {
         'profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]',
       );
     const req = {
-      device: dev.map(readJson),
-      model: mdl.map(readJson),
+      device: dev.flatMap((f) => readCaptures(f, 'dev')),
+      model: mdl.flatMap((f) => readCaptures(f, 'emu')),
       sources: [
         ...dev.map((f) => ({ role: 'device', file: path.basename(f), sha256: sha256(f) })),
         ...mdl.map((f) => ({ role: 'model', file: path.basename(f), sha256: sha256(f) })),

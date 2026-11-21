@@ -17,6 +17,7 @@ import {
   type RunOutcome,
 } from '@digi/workbench-core/profile/calibration-run.ts';
 import {
+  estimateSeconds,
   fitRequest,
   loadCalibrationFiles,
   type CalFileTexts,
@@ -44,7 +45,7 @@ export interface CalibrationDeps {
 export interface ProfileChoice {
   name: string;
   description: string;
-  /** How long a run takes at least: cases times captures times (warm-up and window), seconds. */
+  /** How long a run takes before it starts (`estimateSeconds`): captures times (warm-up and window), plus a restart for each case that changes the modules. */
   seconds: number;
   /** The profile with its module cases (the pane's time left counts its cases). */
   profile: CalProfile;
@@ -66,7 +67,7 @@ export function createCalibrator(deps: CalibrationDeps): Calibrator {
       files().profiles.map((p) => ({
         name: p.name,
         description: p.description,
-        seconds: p.cases.length * p.repeats * (p.warmup_s + p.capture_s),
+        seconds: estimateSeconds(p),
         profile: p,
       })),
     async tracks(name) {

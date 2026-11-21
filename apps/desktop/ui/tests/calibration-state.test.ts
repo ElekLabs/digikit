@@ -7,7 +7,7 @@ import type { RunOptions, RunOutcome } from '@digi/workbench-core/profile/calibr
 import type { Calibrator } from '../src/calibration-backend.ts';
 import { createCalibrationState } from '../src/calibration-state.ts';
 
-const profile = { name: 'heavy', cases: [{ id: 'stock' }], warmup_s: 1, capture_s: 2, repeats: 2 };
+const profile = { name: 'heavy', cases: [{ id: 'stock', modules: [] }], warmup_s: 1, capture_s: 2, repeats: 2 };
 const capture = {
   caseId: 'stock',
   repeat: 1,
@@ -15,7 +15,7 @@ const capture = {
   profile: { schema: 'dk.profile/1', run: { id: 'emu-1', case_id: 'stock' }, dsp: { unit: 'insn' } },
 };
 
-function fake() {
+function fake(failing = false) {
   let release!: () => void;
   const gate = new Promise<void>((r) => (release = r));
   const seen: { aborted: boolean; opts?: RunOptions } = { aborted: false };
@@ -25,6 +25,7 @@ function fake() {
       seen.opts = opts;
       opts.onEvent?.({ kind: 'capture', case: 'stock', n: 1, of: 2 });
       opts.onCapture?.(capture as never);
+      if (failing) opts.onEvent?.({ kind: 'fail', case: 'stock', reason: 'no calls' });
       await Promise.race([gate, new Promise<void>((r) => opts.signal!.addEventListener('abort', () => r()))]);
       seen.aborted = !!opts.signal?.aborted;
       return {
@@ -61,6 +62,36 @@ test('a target restart mid-run (reading reset, section unmounted) does not abort
     assert.equal(st.running(), false);
     assert.equal(st.sets().emu?.captures.length, 1);
     assert.deepEqual(running, [true, false]);
+    dispose();
+  });
+});
+
+test('the table fills with each capture, before the run returns', async () => {
+  const f = fake();
+  await createRoot(async (dispose) => {
+    const st = createCalibrationState({ calibrator: f.calibrator, emulator: () => true, blocked: () => false });
+    const done = st.run();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(st.running(), true);
+    assert.equal(st.sets().emu?.captures.length, 1);
+    f.release();
+    await done;
+    dispose();
+  });
+});
+
+test('a failed case lowers the total in the progress line', async () => {
+  const f = fake(true);
+  await createRoot(async (dispose) => {
+    const st = createCalibrationState({ calibrator: f.calibrator, emulator: () => true, blocked: () => false });
+    const done = st.run();
+    await Promise.resolve();
+    await Promise.resolve();
+    // 2 repeats planned, the case ended after 1: the total is 1
+    assert.match(st.progress(), /^capture 1 \/ 1 · stock/);
+    f.release();
+    await done;
     dispose();
   });
 });

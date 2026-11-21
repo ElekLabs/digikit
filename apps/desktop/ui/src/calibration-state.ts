@@ -7,14 +7,17 @@ import {
   trackNote,
   phaseLine,
   progressLine,
+  captureCounter,
+  captureTotal,
   readCaptureSet,
-  secondsLeft,
+  remainingSeconds,
   tableRows,
   type CalibrationDoc,
   type CaptureSet,
   type CalProfileDoc,
   type Side,
 } from '@digi/workbench-core/profile/calibration-view.ts';
+import type { Capture } from '@digi/workbench-core/calibration/runner.ts';
 import type { Calibrator } from './calibration-backend';
 
 const asText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -87,39 +90,72 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     const side: Side = deps.emulator() ? 'emu' : 'dev';
     setRun(true);
     setProgress('starting…');
-    let at: { case: string; n: number; of: number; since: number } | undefined;
+    // what the line shows: a capture of a case, or a phase between captures; `done` counts the finished captures
+    let shown:
+      { kind: 'capture'; case: string } | { kind: 'phase'; event: Parameters<typeof phaseLine>[1] } | undefined;
+    let done = 0;
     let skipping: string[] = [];
-    let now: () => Promise<number> = async () => Date.now();
-    const left = (n: number, kase: string, into: number) =>
-      secondsLeft({ profile: choice.profile, case: kase, n, intoCaptureS: into, skipping });
-    // the time left follows the target's clock (emulated time on the emulator)
-    const tick = setInterval(() => {
-      const a = at;
-      if (!a) return;
-      void now().then((t) =>
-        setProgress(progressLine({ ...a, left: left(a.n, a.case, Math.max(0, (t - a.since) / 1000)) })),
+    // the captures finished per case, and the cases a failure ended early (with the captures they finished)
+    const completed = new Map<string, number>();
+    const dropped = new Map<string, number>();
+    let current: string | undefined;
+    const live: Capture['profile'][] = [];
+    // the line follows the run's position
+    const refresh = () => {
+      const s = shown;
+      if (!s || !running()) return;
+      const total = captureTotal(choice.profile, skipping, dropped);
+      const counter = captureCounter({ done, total, capturing: s.kind === 'capture' });
+      setProgress(
+        s.kind === 'phase'
+          ? phaseLine(counter, s.event)
+          : progressLine({
+              counter,
+              case: s.case,
+              left: remainingSeconds({
+                profile: choice.profile,
+                skipping,
+                caseId: current,
+                n: completed.get(s.case) ?? 0,
+                capturing: true,
+                dropped,
+              }),
+            }),
       );
-    }, 1000);
+    };
     try {
       const out = await calibrator.run({
         profile: choice.name,
         signal: mine.signal,
-        onClock: (f) => {
-          now = f;
+        onCapture: (c) => {
+          done++;
+          completed.set(c.caseId, (completed.get(c.caseId) ?? 0) + 1);
+          live.push(c.profile);
+          // the table fills as the captures arrive
+          setSets((s) => ({
+            ...s,
+            [side]: { side, profile: choice.name, source: 'this run', captures: [...live] },
+          }));
+          setFit(undefined);
         },
         onEvent: (e) => {
           if (e.kind === 'plan') {
             skipping = e.skipping;
           } else if (e.kind === 'restart' || e.kind === 'stable' || e.kind === 'restore') {
-            at = undefined;
-            setProgress(phaseLine(e));
+            shown = { kind: 'phase', event: e };
+            refresh();
           } else if (e.kind === 'capture') {
-            void now().then((t) => {
-              at = { case: e.case, n: e.n, of: e.of, since: t };
-              setProgress(progressLine({ ...e, left: left(e.n, e.case, 0) }));
-            });
-          } else if (e.kind === 'skip') setNotes((n) => [...n, `case ${e.case} skipped: ${e.reason}`]);
-          else if (e.kind === 'fail') setNotes((n) => [...n, `case ${e.case} failed: ${e.reason}`]);
+            shown = { kind: 'capture', case: e.case };
+            current = e.case;
+            refresh();
+          } else if (e.kind === 'skip') {
+            skipping = [...skipping, e.case];
+            setNotes((n) => [...n, `case ${e.case} skipped: ${e.reason}`]);
+          } else if (e.kind === 'fail') {
+            dropped.set(e.case, completed.get(e.case) ?? 0);
+            setNotes((n) => [...n, `case ${e.case} failed: ${e.reason}`]);
+            refresh();
+          }
         },
       });
       if (out.captures.length > 0) {
@@ -135,7 +171,6 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     } catch (e) {
       setError(asText(e));
     } finally {
-      clearInterval(tick);
       setRun(false);
       setStopping(false);
       setProgress('');

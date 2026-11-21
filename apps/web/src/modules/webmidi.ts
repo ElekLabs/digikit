@@ -13,10 +13,12 @@ export interface MidiPortLike {
 export interface MidiInputLike extends MidiPortLike {
   onmidimessage: ((e: { data: Uint8Array | null }) => void) | null;
   open?(): Promise<unknown>;
+  close?(): Promise<unknown>;
 }
 export interface MidiOutputLike extends MidiPortLike {
   send(data: Uint8Array | number[]): void;
   open?(): Promise<unknown>;
+  close?(): Promise<unknown>;
 }
 export interface MidiAccessLike {
   /** Called when a port appears, disappears or changes state (`port.state` is `disconnected` for a port that is gone). */
@@ -25,10 +27,13 @@ export interface MidiAccessLike {
   outputs: Iterable<[string, MidiOutputLike]> | { values(): Iterable<MidiOutputLike> };
 }
 
+// An array of [id, port] pairs also has a values() method (it returns the pairs), so an array is checked first.
 const values = <T>(m: { values(): Iterable<T> } | Iterable<[string, T]>): T[] =>
-  'values' in m && typeof m.values === 'function'
-    ? Array.from(m.values())
-    : Array.from(m as Iterable<[string, T]>, (e) => e[1]);
+  Array.isArray(m)
+    ? (m as [string, T][]).map((e) => e[1])
+    : 'values' in m && typeof m.values === 'function'
+      ? Array.from(m.values())
+      : Array.from(m as Iterable<[string, T]>, (e) => e[1]);
 
 export const portLabel = (p: MidiPortLike) => [p.manufacturer, p.name].filter(Boolean).join(' ') || p.id;
 
@@ -64,6 +69,9 @@ const disconnected = (label: string) =>
  * and every later `send` or `recv` fail with a clear message, and `onLost` is called once.
  */
 export class WebMidiTransport implements DkTransport {
+  /** The names the ports were opened with: `recover` finds them again by name. */
+  private portName: string;
+  private outputName: string;
   private input: MidiInputLike;
   private output: MidiOutputLike;
   private access: MidiAccessLike | undefined;
@@ -71,6 +79,7 @@ export class WebMidiTransport implements DkTransport {
   private queue: Uint8Array[] = [];
   private waiter: { resolve: (m: Uint8Array | null) => void; reject: (e: Error) => void } | null = null;
   private lost: Error | null = null;
+  private closed = false;
   private onLost: ((e: Error) => void) | undefined;
   private previousState: MidiAccessLike['onstatechange'];
 
@@ -79,14 +88,43 @@ export class WebMidiTransport implements DkTransport {
     this.output = output;
     this.access = access;
     this.onLost = onLost;
+    this.portName = input.name ?? input.id;
+    this.outputName = output.name ?? output.id;
     input.onmidimessage = (e) => this.feed(e.data);
     if (access) {
       this.previousState = access.onstatechange;
       access.onstatechange = (e) => {
         this.previousState?.(e);
         const p = e.port;
-        if (p && (p.id === input.id || p.id === output.id) && p.state === 'disconnected') this.fail(p.name ?? p.id);
+        // `this.input` and `this.output`: recover() may have replaced them
+        if (p && (p.id === this.input.id || p.id === this.output.id) && p.state === 'disconnected')
+          this.fail(p.name ?? p.id);
       };
+    }
+  }
+  /**
+   * Find the input and output this transport was opened with by name in the access object, open them and listen again. A device that
+   * re-enumerated shows up as new port objects. Does nothing without `access`, and returns (still lost) when a port is not back yet.
+   */
+  async recover(): Promise<void> {
+    const access = this.access;
+    if (!access || this.closed) return;
+    try {
+      const { inputs, outputs } = listPorts(access);
+      const input = inputs.find((p) => (p.name ?? p.id) === this.portName);
+      const output = outputs.find((p) => (p.name ?? p.id) === this.outputName);
+      if (!input || !output) return;
+      this.input.onmidimessage = null;
+      await input.open?.();
+      await output.open?.();
+      this.input = input;
+      this.output = output;
+      input.onmidimessage = (e) => this.feed(e.data);
+      this.buf = null;
+      this.queue = [];
+      this.lost = null;
+    } catch {
+      // the device is not usable yet; the next failed exchange calls recover again
     }
   }
   static async open(
@@ -160,8 +198,11 @@ export class WebMidiTransport implements DkTransport {
       this.waiter = me;
     });
   }
-  close() {
+  async close(): Promise<void> {
+    this.closed = true;
     this.input.onmidimessage = null;
     if (this.access) this.access.onstatechange = this.previousState ?? null;
+    await Promise.resolve(this.input.close?.()).catch(() => {});
+    await Promise.resolve(this.output.close?.()).catch(() => {});
   }
 }

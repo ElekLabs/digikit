@@ -19,13 +19,26 @@ export default function TargetSelect(props: {
   const { noteConnection } = app.connection;
   const { selectTarget, target, portScan } = app.target;
   const [ports, setPorts] = createSignal<string[]>([]);
-  const rescan = async () => {
+  const rescan = async (): Promise<string[] | undefined> => {
     try {
       const names = await app.env.targets.ports();
       setPorts(names);
       // the port of the target is not listed any more: the device was unplugged
       const t = target();
       if (t.kind === 'midi' && !names.includes(t.port)) noteConnection({ type: 'closed' });
+      return names;
+    } catch (e) {
+      props.onError?.(errorLine(e));
+      return undefined;
+    }
+  };
+  // The button also opens the link of a listed MIDI target again (a device that re-enumerated); the automatic rescan does not.
+  const rescanButton = async () => {
+    const names = await rescan();
+    const t = target();
+    if (!names || t.kind !== 'midi' || !names.includes(t.port)) return;
+    try {
+      await app.target.reconnect();
     } catch (e) {
       props.onError?.(errorLine(e));
     }
@@ -87,7 +100,7 @@ export default function TargetSelect(props: {
           class="act small"
           disabled={props.disabled}
           title="Look for MIDI ports again"
-          onClick={() => void rescan()}
+          onClick={() => void rescanButton()}
         >
           Rescan
         </button>

@@ -5,7 +5,7 @@ import type { NeedsLike } from '../modules/dkneeds';
 import { memoryKeyValue, type KeyValue } from '../storage';
 import { createTransferApp, type TransferApp } from './app';
 import type { TransferEnv } from './env';
-import type { SessionHub } from './session-core';
+import type { SessionHub, SessionHubOptions } from './session-core';
 
 /** A transport that never answers and ignores what is sent. */
 export const silentTransport = (): DkTransport => ({ send: () => {}, recv: async () => null });
@@ -19,16 +19,18 @@ export interface FakeSessions extends SessionHub {
 }
 
 /** A hub whose session for a key is `make(key)` (made once per key until it is dropped). */
-export function createFakeSessions(make: (key: string, transport: DkTransport) => unknown = () => ({})): FakeSessions {
+export function createFakeSessions(
+  make: (key: string, transport: DkTransport, opts: SessionHubOptions) => unknown = () => ({}),
+): FakeSessions {
   const table = new Map<string, DkSession>();
   const hub: FakeSessions = {
     made: [],
     dropped: [],
     cancelled: [],
-    get(key, transport) {
+    get(key, transport, opts = {}) {
       let s = table.get(key);
       if (!s) {
-        s = make(key, transport) as DkSession;
+        s = make(key, transport, opts) as DkSession;
         table.set(key, s);
         hub.made.push(key);
       }
