@@ -187,7 +187,7 @@ cardRigs(
 
     test('the commit logs its rows, writes the voice row ranges and latch mask and commits the effect page', async () => {
       await rig.first();
-      const dev = DEVICE[rig.device];
+      const dev = DEVICE[rig.device as keyof typeof DEVICE];
       const got = await bootGood(rig);
       expect(got.mods.map((m) => m.name)).toEqual([ID]);
       const { session } = got.rt;

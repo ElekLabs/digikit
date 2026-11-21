@@ -8003,7 +8003,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss.DK_HEALTH",
-   "size": 116
+   "size": 124
   },
   {
    "align": 1,
@@ -8209,7 +8209,7 @@
    "size": 4
   }
  ],
- "source_sha256": "3e481e47c78bb8e11effc3b1663cab48b73bf25cf85fed5d93ec5b388b86a48f",
+ "source_sha256": "93d6cf7782801b43e37d356173b63ad8ecdb35cfa6b0ea4c01ab3220f656020d",
  "symbols": [
   {
    "global": false,
@@ -10707,7 +10707,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "4156",
-  "isa_check": "26369024b1cdfe3ce8b71745ac8e19470cc4a14d744f317b6a5c622e7ec128d8",
+  "isa_check": "b8b9ca4b38ea1b801e1988ce70b10e566dfb804b9a6e252cce5b8d8f301d552a",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

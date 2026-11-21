@@ -15,6 +15,7 @@
 //!   and `[modules.frame]` of the device file (docs/design/module-sdk.md 5.2). Only those names, no other constant.
 //! - `gas-sample-pool`: `.equ SP_*` lines for the sample pool adapter's ColdFire assembly, one file per device, from
 //!   `[adapter.sample_pool]` (slot floor and the reserved DDR range; docs/design/sample-api-1.5.md 2.3). Only those names.
+//! - `gas-card-guard`: `.equ CG_*` lines for the card guard's ColdFire assembly, one file per device, from `[card.guard]` (the allow-list rows; docs/plans/card-write-guard.md). Only those names.
 //! - `sharc-sample-pool`: `#define SP_DDR_BASE_NW32` and `SP_DDR_PAGES` for the sample pool's SHARC+ receiver, one file per device that owns a
 //!   DDR range (a device that borrows the stock pool gets no file), from the same fields (docs/design/dn2-sample-pool.md 2.7).
 //!
@@ -239,6 +240,46 @@ struct Digikit {
 #[derive(Deserialize)]
 struct Card {
     store: Option<Store>,
+    guard: Option<GuardDoc>,
+    header_sector: Option<u64>,
+    table_sector: Option<u64>,
+    #[serde(default)]
+    pools: BTreeMap<String, PoolDoc>,
+    #[serde(default)]
+    regions: Vec<RegionDoc>,
+    path_fs: Option<PathFsDoc>,
+}
+/// `[card.guard]`: the eMMC write guard (core/card-guard). `enabled` is the switch. `row`: which sectors each class of writer may write or erase, as
+/// `{ who, first, end }` in sectors (`end` exclusive); absent, the rows are the defaults `stock = [0, store.first)` and `runtime = [store.first, store.end)`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuardDoc {
+    enabled: bool,
+    #[serde(default)]
+    row: Vec<GuardRowDoc>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuardRowDoc {
+    who: String,
+    first: u64,
+    end: u64,
+}
+#[derive(Deserialize)]
+struct PoolDoc {
+    base_sector: u64,
+    stride_sectors: u64,
+    slots: u64,
+}
+#[derive(Deserialize)]
+struct RegionDoc {
+    sector: u64,
+    sectors: u64,
+}
+#[derive(Deserialize)]
+struct PathFsDoc {
+    superblock_sector: u64,
+    end_sector: u64,
 }
 #[derive(Deserialize)]
 struct Store {
@@ -263,6 +304,8 @@ struct DeviceTables {
     tables: std::collections::BTreeSet<String>,
     /// `[patch_sets]`: the root modules of each named set.
     patch_sets: BTreeMap<String, Vec<String>>,
+    /// The booleans of the file's nested tables (`card.guard.enabled`): what a module's `needed_when` reads.
+    switches: BTreeMap<String, bool>,
 }
 
 #[derive(Debug)]
@@ -276,6 +319,8 @@ struct Entry {
     limits: LimitsF,
     adapter: Option<AdapterF>,
     sample_pool: Option<SamplePoolF>,
+    /// `None`: no `[card.guard]`.
+    guard: Option<GuardF>,
     input: InputF,
     /// `[input.keys]`: logical key name to the key's id in the firmware's key events (empty: the device has no key names).
     keys: BTreeMap<String, u64>,
@@ -487,6 +532,7 @@ impl Facts {
                     DeviceTables {
                         tables: table_paths(&table),
                         patch_sets: d.patch_sets.clone(),
+                        switches: crate::devdata::bool_switches(&table),
                     },
                 )
                 .is_some()
@@ -502,6 +548,12 @@ impl Facts {
                     "{short}: [digikit] needs [board], [limits] and [capabilities] (a runtime target)"
                 ));
             };
+            let guard = d
+                .card
+                .as_ref()
+                .map(|c| guard_facts(&short, c))
+                .transpose()?
+                .flatten();
             let s = d.card.and_then(|c| c.store);
             let dsp = cap.dsp == "sharc";
             let dsp_facts = [
@@ -626,6 +678,7 @@ impl Facts {
                         },
                         adapter,
                         sample_pool,
+                        guard,
                         input,
                         keys,
                         fx,
@@ -1143,6 +1196,200 @@ fn sample_pool_constants(p: &SamplePoolF) -> Vec<C> {
             "[adapter.sample_pool] ddr_bytes",
         ),
     ]
+}
+
+/// The most rows of the card guard's allow-list (the generated table has this many slots).
+pub const GUARD_MAX: usize = 8;
+const GUARD_FIRST: [&str; GUARD_MAX] = [
+    "CG_FIRST_0",
+    "CG_FIRST_1",
+    "CG_FIRST_2",
+    "CG_FIRST_3",
+    "CG_FIRST_4",
+    "CG_FIRST_5",
+    "CG_FIRST_6",
+    "CG_FIRST_7",
+];
+const GUARD_END: [&str; GUARD_MAX] = [
+    "CG_END_0", "CG_END_1", "CG_END_2", "CG_END_3", "CG_END_4", "CG_END_5", "CG_END_6", "CG_END_7",
+];
+const GUARD_WHO: [&str; GUARD_MAX] = [
+    "CG_WHO_0", "CG_WHO_1", "CG_WHO_2", "CG_WHO_3", "CG_WHO_4", "CG_WHO_5", "CG_WHO_6", "CG_WHO_7",
+];
+
+/// The class of a writer. `Stock`: every caller of the eMMC write and erase but the runtime's raw card write. `Runtime`: that raw write.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Who {
+    Stock = 0,
+    Runtime = 1,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GuardRow {
+    who: Who,
+    first: u64,
+    end: u64,
+}
+
+#[derive(Debug)]
+struct GuardF {
+    enabled: bool,
+    /// Sorted by start, touching rows of one class merged.
+    rows: Vec<GuardRow>,
+}
+
+/// The allow-list of a device and its checks (a failing check is an error of `patchkit gen`, not of a test):
+/// - at most [`GUARD_MAX`] rows, each `first < end`, `who` is `stock` or `runtime`;
+/// - the `runtime` rows lie inside `[card.store]` and together are the whole store; no `stock` row touches the store or a `runtime` row;
+/// - every `[card]` item (header, table, each pool, each region, the path filesystem) lies inside one `stock` row: a row that is too tight would
+///   make a stock save or a FORMAT fail.
+fn guard_facts(short: &str, card: &Card) -> Result<Option<GuardF>> {
+    let Some(g) = &card.guard else {
+        return Ok(None);
+    };
+    let bad = |m: String| Err(err!("{short}: [card.guard] {m}"));
+    let Some(store) = &card.store else {
+        return bad("needs [card.store]: the guard protects the store".into());
+    };
+    let mut rows: Vec<GuardRow> = if g.row.is_empty() {
+        vec![
+            GuardRow {
+                who: Who::Stock,
+                first: 0,
+                end: store.first_sector,
+            },
+            GuardRow {
+                who: Who::Runtime,
+                first: store.first_sector,
+                end: store.end_sector,
+            },
+        ]
+    } else {
+        let mut v = vec![];
+        for r in &g.row {
+            let who = match r.who.as_str() {
+                "stock" => Who::Stock,
+                "runtime" => Who::Runtime,
+                other => return bad(format!("row who = {other:?} is \"stock\" or \"runtime\"")),
+            };
+            v.push(GuardRow {
+                who,
+                first: r.first,
+                end: r.end,
+            });
+        }
+        v
+    };
+    if rows.iter().any(|r| r.first >= r.end || r.end > 0xFFFF_FFFF) {
+        return bad(
+            "every row needs first < end <= 0xFFFFFFFF (rows are 32-bit sector numbers)".into(),
+        );
+    }
+    rows.sort_by_key(|r| (r.first, r.end));
+    // merge touching or overlapping rows of one class
+    let mut merged: Vec<GuardRow> = vec![];
+    for r in rows {
+        match merged
+            .iter_mut()
+            .find(|m| m.who == r.who && r.first <= m.end && m.first <= r.end)
+        {
+            Some(m) => {
+                m.first = m.first.min(r.first);
+                m.end = m.end.max(r.end);
+            }
+            None => merged.push(r),
+        }
+    }
+    merged.sort_by_key(|r| (r.first, r.end));
+    if merged.len() > GUARD_MAX {
+        return bad(format!(
+            "at most {GUARD_MAX} rows (after merging touching rows of one class)"
+        ));
+    }
+    let (store_first, store_end) = (store.first_sector, store.end_sector);
+    let runtime: Vec<&GuardRow> = merged.iter().filter(|r| r.who == Who::Runtime).collect();
+    if runtime.len() != 1 || runtime[0].first != store_first || runtime[0].end != store_end {
+        return bad(format!(
+            "the runtime rows must together be the store [{store_first:#x}, {store_end:#x})"
+        ));
+    }
+    for (i, a) in merged.iter().enumerate() {
+        for b in &merged[i + 1..] {
+            if a.end > b.first && a.first < b.end {
+                return bad(format!(
+                    "rows [{:#x}, {:#x}) and [{:#x}, {:#x}) overlap",
+                    a.first, a.end, b.first, b.end
+                ));
+            }
+        }
+        if a.who == Who::Stock && a.end > store_first && a.first < store_end {
+            return bad(format!(
+                "the stock row [{:#x}, {:#x}) reaches the store",
+                a.first, a.end
+            ));
+        }
+    }
+    let stock: Vec<&GuardRow> = merged.iter().filter(|r| r.who == Who::Stock).collect();
+    let inside = |first: u64, end: u64| stock.iter().any(|r| r.first <= first && end <= r.end);
+    let mut items: Vec<(String, u64, u64)> = vec![];
+    if let Some(h) = card.header_sector {
+        items.push(("header_sector".into(), h, h + 1));
+    }
+    if let Some(t) = card.table_sector {
+        items.push(("table_sector".into(), t, t + 1));
+    }
+    for (name, p) in &card.pools {
+        items.push((
+            format!("pools.{name}"),
+            p.base_sector,
+            p.base_sector + p.slots * p.stride_sectors,
+        ));
+    }
+    for (i, r) in card.regions.iter().enumerate() {
+        items.push((format!("regions[{i}]"), r.sector, r.sector + r.sectors));
+    }
+    if let Some(f) = &card.path_fs {
+        items.push(("path_fs".into(), f.superblock_sector, f.end_sector));
+    }
+    for (name, first, end) in items {
+        if !inside(first, end) {
+            return bad(format!(
+                "[card] {name} [{first:#x}, {end:#x}) is not inside one stock row: a stock save or FORMAT would be refused"
+            ));
+        }
+    }
+    Ok(Some(GuardF {
+        enabled: g.enabled,
+        rows: merged,
+    }))
+}
+
+/// The `CG_*` constants of one device (core/card-guard): the rows, 0 in the slots that are not used.
+fn guard_constants(g: &GuardF) -> Vec<C> {
+    let mut v = vec![c(
+        "CG_N",
+        g.rows.len() as u64,
+        "[card.guard] rows after merging",
+    )];
+    for i in 0..GUARD_MAX {
+        let r = g.rows.get(i);
+        v.push(c(
+            GUARD_FIRST[i],
+            r.map_or(0, |r| r.first),
+            "row first sector",
+        ));
+        v.push(c(
+            GUARD_END[i],
+            r.map_or(0, |r| r.end),
+            "row end sector (exclusive)",
+        ));
+        v.push(c(
+            GUARD_WHO[i],
+            r.map_or(0, |r| r.who as u64),
+            "row writer class: 0 stock, 1 runtime",
+        ));
+    }
+    v
 }
 
 /// The DSP's view of the same range: the NW32 word address of its first byte and its size in 4 KiB pages.
@@ -2333,6 +2580,10 @@ fn table_paths(t: &toml::Table) -> std::collections::BTreeSet<String> {
     out
 }
 
+fn ids_of(lib: &Library, roots: &[String]) -> Result<Vec<String>> {
+    lib.with_requires(roots).map(|(ids, _)| ids)
+}
+
 /// A module names the tables of the device file that it reads (`[module] needs_device`, for example `input.keys`): every device (runtime target or not)
 /// whose patch sets include the module (as a root or through `requires`) must have them. The generated constants of an absent table would be zeros, which no
 /// module should run on. This whole-library check (`patchkit gen`) also refuses a module id of a patch set that the library does not have.
@@ -2348,6 +2599,13 @@ pub fn check_device_tables(lib: &Library, facts: &Facts) -> Result<()> {
                     .ok_or_else(|| err!("{dev}: patch set {set}: unknown module {id}"))?;
                 check_needs(dev, set, &id, &m.manifest.module.needs_device, e)?;
             }
+            check_needed_when(
+                lib,
+                dev,
+                &e.switches,
+                &ids_of(lib, roots)?,
+                &format!("patch set {set}"),
+            )?;
         }
     }
     Ok(())
@@ -2368,6 +2626,40 @@ pub fn check_module_tables(lib: &Library, facts: &Facts, id: &str, needs: &[Stri
             };
             if includes {
                 check_needs(dev, set, id, needs, e)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The `needed_when` rule of the modules of `lib` for one device and one resolved module set (`ids`): on a device where a module's switch is true, a set that holds
+/// the module's `with` module must hold the module; a set that holds the module where the switch is not true is refused. A module that is not in `lib` is not checked.
+pub fn check_needed_when(
+    lib: &Library,
+    dev: &str,
+    switches: &BTreeMap<String, bool>,
+    ids: &[String],
+    what: &str,
+) -> Result<()> {
+    for m in &lib.modules {
+        let id = m.id();
+        for nw in &m.manifest.module.needed_when {
+            let on = switches.get(&nw.switch).copied().unwrap_or(false);
+            let has = ids.iter().any(|i| i == id);
+            let with = ids.iter().any(|i| i == &nw.with);
+            if on && with && !has {
+                return Err(err!(
+                    "{dev}: {what} includes {} but not {id}: the device file turns [{}] on, so every set with {} needs {id}",
+                    nw.with,
+                    nw.switch,
+                    nw.with
+                ));
+            }
+            if !on && has {
+                return Err(err!(
+                    "{dev}: {what} includes {id}, but the device file does not turn [{}] on",
+                    nw.switch
+                ));
             }
         }
     }
@@ -2552,6 +2844,23 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
             }
+            "gas-card-guard" => {
+                if !g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `gas-card-guard` gen is one file per device: put {{dev}} in the path"
+                    ));
+                }
+                for dev in &devs {
+                    let e = &facts.docs[*dev];
+                    let gf = e.guard.as_ref().filter(|g| g.enabled).ok_or_else(|| {
+                        err!("{module}: {dev} has no [card.guard] with enabled = true")
+                    })?;
+                    out.push((
+                        g.path.replace("{dev}", dev),
+                        gas(module, dev, &guard_constants(gf), None),
+                    ));
+                }
+            }
             "sharc-sample-pool" => {
                 if !g.path.contains("{dev}") {
                     return Err(err!(
@@ -2636,5 +2945,221 @@ mod sample_pool_tests {
         let c = sample_pool_dsp_constants(&p);
         assert_eq!((c[0].name, c[0].value), ("SP_DDR_BASE_NW32", 0x1014_c400));
         assert_eq!((c[1].name, c[1].value), ("SP_DDR_PAGES", 65536));
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+
+    fn device_card(file: &str) -> Card {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../devices")
+            .join(file);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let t: toml::Table = toml::from_str(&text).unwrap();
+        t["card"].clone().try_into().unwrap()
+    }
+
+    fn rows(g: &GuardF) -> Vec<(Who, u64, u64)> {
+        g.rows.iter().map(|r| (r.who, r.first, r.end)).collect()
+    }
+
+    fn row(who: &str, first: u64, end: u64) -> GuardRowDoc {
+        GuardRowDoc {
+            who: who.into(),
+            first,
+            end,
+        }
+    }
+
+    /// The Syntakt card with its guard rows replaced.
+    fn st_with(rows: Vec<GuardRowDoc>) -> Card {
+        let mut c = device_card("syntakt.toml");
+        c.guard = Some(GuardDoc {
+            enabled: true,
+            row: rows,
+        });
+        c
+    }
+
+    fn err_of(c: &Card) -> String {
+        guard_facts("st", c).err().expect("refused").0
+    }
+
+    #[test]
+    fn the_syntakt_rows_are_the_tight_stock_window_and_the_store() {
+        let g = guard_facts("st", &device_card("syntakt.toml"))
+            .unwrap()
+            .unwrap();
+        assert!(g.enabled);
+        assert_eq!(
+            rows(&g),
+            [
+                (Who::Stock, 0, 0x18_0000),
+                (Who::Runtime, 0x20_0000, 0x30_0000)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_device_without_rows_gets_the_defaults_and_its_items_fit() {
+        // stock = [0, store.first), runtime = the store; the +Drive of the DT2 ends at path_fs.end_sector, below the store
+        let dt2 = guard_facts("dt2", &device_card("digitakt-ii.toml"))
+            .unwrap()
+            .unwrap();
+        assert!(!dt2.enabled);
+        assert_eq!(
+            rows(&dt2),
+            [
+                (Who::Stock, 0, 0x2df_1000),
+                (Who::Runtime, 0x2df_1000, 0x2e1_a000)
+            ]
+        );
+        let dn2 = guard_facts("dn2", &device_card("digitone-ii.toml"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            rows(&dn2),
+            [
+                (Who::Stock, 0, 0x80_0000),
+                (Who::Runtime, 0x80_0000, 0x2e1_a000)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_card_without_the_table_has_no_guard() {
+        let mut c = device_card("syntakt.toml");
+        c.guard = None;
+        assert!(guard_facts("st", &c).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_stock_row_that_is_too_tight_for_a_card_item_is_refused() {
+        // the project pool ends at 0x180000: one sector less and the last project slot is outside
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x17_ffff),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(
+            e.contains("pools.projects") && e.contains("not inside one stock row"),
+            "{e}"
+        );
+        // a row that starts above the header sector
+        let e = err_of(&st_with(vec![
+            row("stock", 1, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(e.contains("header_sector"), "{e}");
+    }
+
+    #[test]
+    fn rows_may_not_reach_the_store_overlap_or_leave_the_store_partly_open() {
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x20_0001),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(
+            e.contains("overlap") || e.contains("reaches the store"),
+            "{e}"
+        );
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x2f_0000),
+        ]));
+        assert!(e.contains("runtime rows must together be the store"), "{e}");
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0001),
+        ]));
+        assert!(e.contains("runtime rows must together be the store"), "{e}");
+        let e = err_of(&st_with(vec![row("stock", 0, 0x18_0000)]));
+        assert!(e.contains("runtime rows must together be the store"), "{e}");
+        // a stock row inside the store
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("stock", 0x28_0000, 0x29_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(
+            e.contains("overlap") || e.contains("reaches the store"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn rows_are_checked_for_their_shape() {
+        let e = err_of(&st_with(vec![
+            row("host", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(e.contains("\"stock\" or \"runtime\""), "{e}");
+        let e = err_of(&st_with(vec![
+            row("stock", 0x18_0000, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+        ]));
+        assert!(e.contains("first < end"), "{e}");
+        // rows are u32 in the generated table: an end above 0xFFFFFFFF is refused
+        let e = err_of(&st_with(vec![
+            row("stock", 0, 0x18_0000),
+            row("runtime", 0x20_0000, 0x30_0000),
+            row("stock", 0x4000_0000, 0x1_0000_0000),
+        ]));
+        assert!(e.contains("0xFFFFFFFF"), "{e}");
+        let mut c = device_card("syntakt.toml");
+        c.store = None;
+        let e = err_of(&c);
+        assert!(e.contains("needs [card.store]"), "{e}");
+        // nine stock rows that do not touch
+        let mut many: Vec<GuardRowDoc> = (0..9)
+            .map(|i| row("stock", i * 0x1_0000, i * 0x1_0000 + 0x8000))
+            .collect();
+        many.push(row("runtime", 0x20_0000, 0x30_0000));
+        let e = err_of(&st_with(many));
+        assert!(e.contains("at most 8 rows"), "{e}");
+    }
+
+    #[test]
+    fn touching_rows_of_one_class_are_merged() {
+        let g = guard_facts(
+            "st",
+            &st_with(vec![
+                row("stock", 0x8_0000, 0x18_0000),
+                row("stock", 0, 0x8_0000),
+                row("runtime", 0x20_0000, 0x30_0000),
+            ]),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            rows(&g),
+            [
+                (Who::Stock, 0, 0x18_0000),
+                (Who::Runtime, 0x20_0000, 0x30_0000)
+            ]
+        );
+    }
+
+    #[test]
+    fn the_constants_hold_the_rows_and_zero_the_unused_slots() {
+        let g = guard_facts("st", &device_card("syntakt.toml"))
+            .unwrap()
+            .unwrap();
+        let v: BTreeMap<&str, i64> = guard_constants(&g)
+            .into_iter()
+            .map(|k| (k.name, k.value))
+            .collect();
+        assert_eq!(v["CG_N"], 2);
+        assert_eq!(
+            (v["CG_FIRST_0"], v["CG_END_0"], v["CG_WHO_0"]),
+            (0, 0x18_0000, 0)
+        );
+        assert_eq!(
+            (v["CG_FIRST_1"], v["CG_END_1"], v["CG_WHO_1"]),
+            (0x20_0000, 0x30_0000, 1)
+        );
+        assert_eq!((v["CG_FIRST_2"], v["CG_END_2"], v["CG_WHO_7"]), (0, 0, 0));
+        assert_eq!(v.len(), 1 + 3 * GUARD_MAX);
     }
 }

@@ -59,6 +59,7 @@ pub mod logk {
     pub const VIEW_CLOSED: u16 = 55;
     pub const TEXT_INPUT_OPENED: u16 = 56;
     pub const TEXT_INPUT_DONE: u16 = 57;
+    pub const CARD_GUARD_REFUSED: u16 = 58;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;

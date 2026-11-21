@@ -51,6 +51,33 @@ pub struct DeviceInfo {
     /// `[protect] windows`: address windows `[lo, hi)` that only the firmware and `core/*` drive (flash, FPGA and peer buses, flash controller
     /// registers). The packer refuses a content module that holds an address in one of them (`crate::protect`).
     pub protect: Vec<[u64; 2]>,
+    /// Every boolean of a nested table of the device file, by dotted path (`card.guard.enabled`): the switches that a module's `needed_when` reads.
+    pub switches: BTreeMap<String, bool>,
+}
+
+/// Every boolean of a nested table, by dotted path (`card.guard.enabled`). A boolean at the top level of the file is not a switch.
+pub fn bool_switches(t: &toml::Table) -> BTreeMap<String, bool> {
+    fn walk(t: &toml::Table, prefix: &str, out: &mut BTreeMap<String, bool>) {
+        for (k, v) in t {
+            match v {
+                toml::Value::Table(sub) => {
+                    let path = if prefix.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{prefix}.{k}")
+                    };
+                    walk(sub, &path, out);
+                }
+                toml::Value::Boolean(b) if !prefix.is_empty() => {
+                    out.insert(format!("{prefix}.{k}"), *b);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(t, "", &mut out);
+    out
 }
 
 /// What every device file states, whatever else it holds: who the device is and what it can do. A device file has levels that follow
@@ -369,6 +396,7 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
     let mut out: Vec<DeviceInfo> = vec![];
     for (n, text) in files {
         let f: File = toml::from_str(text).map_err(|e| err!("devices/{n}: {e}"))?;
+        let raw: toml::Table = toml::from_str(text).map_err(|e| err!("devices/{n}: {e}"))?;
         let Some(d) = &f.device else { continue };
         let (Some(caps), Some(cont)) = (&f.capabilities, &f.container) else {
             return Err(err!(
@@ -432,6 +460,7 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
             dsp_blocks_per_second: f.board.as_ref().and_then(|b| b.dsp_blocks_per_second),
             machine_voices: f.adapter.and_then(|a| a.machine).and_then(|m| m.voices),
             protect: f.protect.map(|p| p.windows).unwrap_or_default(),
+            switches: bool_switches(&raw),
         });
     }
     Ok((ids, out))

@@ -753,6 +753,12 @@ pub mod samples {
 
 pub mod storage {
     unsafe extern "C" {
+        /// The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. A second agent checked hash, size, address, displaced bytes and the st-1.42 callers against the image bytes **[V]**; most callers test the result, five st-1.42 sites ignore it (finding 156 section 3). Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156).
+        #[link_name = "cf.storage.fn.block.erase"]
+        pub fn block_erase(sector: u32, count: u32) -> i32;
+    }
+
+    unsafe extern "C" {
         /// The firmware's eMMC block read: int f(u32 sector, u32 bytes, void *buf), 0 = ok (finding 23 S6).
         #[link_name = "cf.storage.fn.block.read"]
         pub fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32;

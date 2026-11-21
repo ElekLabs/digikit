@@ -92,6 +92,9 @@ pub unsafe extern "C" fn dkrt_health(out: *mut DkrtHealth) {
     store::figures(&mut *out);
     (*out).card_sectors = crate::PLATFORM.card_sectors();
     (*out).card_state = crate::card::state();
+    let g = crate::storage::card_guard::stats(&crate::PLATFORM);
+    (*out).guard_refused_writes = g.refused_writes;
+    (*out).guard_refused_erases = g.refused_erases;
 }
 
 
@@ -102,7 +105,7 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     let s = st();
     let (afree, alargest) = arena::stats();
     o.magic = HEALTH_MAGIC;
-    o.version = 4;
+    o.version = 5;
     o.flags = 0;
     o.arena_total = s.arena_hi - s.arena_lo;
     o.arena_free = afree;

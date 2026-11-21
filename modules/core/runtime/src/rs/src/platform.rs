@@ -45,6 +45,13 @@ extern "C" {
     fn dkplat_exc_install() -> u32;
 }
 
+extern "C" {
+    /// core/runtime `src/cf/tramp.s`: the runtime's one raw card write, `cf.storage.fn.block.write` called from a label of its own (`dkrt_raw_write_ret`).
+    fn dkrt_raw_block_write(sector: u32, bytes: u32, buf: *const u8) -> i32;
+    /// core/card-guard (optional, `module.toml`): `u32 f(u32 *out, u32 cap)` fills the six refusal words of `Platform::card_guard_stats`; 0 when the module is not in the image.
+    fn dkcg_stats(out: *mut u32, cap: u32) -> u32;
+}
+
 // Presence checks of the optional adapters: only the addresses and the version call (the calls themselves stay with their users, with their own types).
 #[allow(clashing_extern_declarations)]
 extern "C" {
@@ -319,7 +326,16 @@ impl Platform for RealPlatform {
         dkfw::storage::block_read(sector, bytes, buf)
     }
     unsafe fn block_write_raw(&self, sector: u32, bytes: u32, buf: *const u8) -> i32 {
-        dkfw::storage::block_write(sector, bytes, buf)
+        // through the trampoline of tramp.s: its return address is how core/card-guard knows this write is the runtime's
+        dkrt_raw_block_write(sector, bytes, buf)
+    }
+    unsafe fn card_guard_stats(&self) -> [u32; 6] {
+        let mut out = [0u32; 6];
+        let f: unsafe extern "C" fn(*mut u32, u32) -> u32 = dkcg_stats;
+        if core::hint::black_box(f as usize) != 0 && f(out.as_mut_ptr(), 6) != 6 {
+            out = [0; 6];
+        }
+        out
     }
     fn card_sectors(&self) -> u32 {
         unsafe { dkfw::storage::capacity() }

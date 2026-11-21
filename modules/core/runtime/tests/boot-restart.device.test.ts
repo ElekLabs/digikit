@@ -14,9 +14,9 @@ import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
  * DSP 'sharc': the voice rows live in the DSP registry, and a module's DSP part is acknowledged only by the SHARC.
  */
 
-const MODULES = { dt2: ['test/sine'], dn2: ['test/dyn-dn2', 'test/sine'] } as const;
+const MODULES = { dt2: ['test/sine'], dn2: ['test/dyn-dn2', 'test/sine'], st: [] } as const;
 /** DSP voice rows: test/sine; on DN2 also test/dyn-dn2 (it carries the DSP of test/sine). */
-const VOICES = { dt2: 1, dn2: 2 } as const;
+const VOICES = { dt2: 1, dn2: 2, st: 0 } as const;
 const FREE_TYPE = 0xffff_ffff;
 /** The stable period of the proof's records (DSP blocks): short, so the UI loop clears the boot counter within the settle time. */
 const STABLE_BLOCKS = 300;

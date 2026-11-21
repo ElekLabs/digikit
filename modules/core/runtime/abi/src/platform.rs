@@ -204,6 +204,9 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     fn card_sectors(&self) -> u32;
     /// The firmware's block write, ungated. Only the one gated write (`platform::block_write`) and the card claim call it.
     unsafe fn block_write_raw(&self, sector: u32, bytes: u32, buf: *const u8) -> i32;
+    /// The refusal counters of the card write guard (`core/card-guard`, `dkcg_stats`): `[version, refused writes, refused erases, sector, sectors, class | kind << 8]`
+    /// of the last refusal; all 0 (version 0) when the guard is not in the image.
+    unsafe fn card_guard_stats(&self) -> [u32; 6];
 
     // ---- MIDI and the firmware's state ------------------------------------------------------------------------------------
     /// Send one complete MIDI message (F0 .. F7 for SysEx) to `port` (2 = USB).

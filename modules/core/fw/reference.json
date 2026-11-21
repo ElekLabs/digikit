@@ -13978,6 +13978,67 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4012c4b2",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c792",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e0ce",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f52a",
+            "len": 8
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_storage_block_erase",
+        "rust": "dkfw::storage::block_erase"
+      },
+      "cpu": "cf",
+      "doc": "The firmware's eMMC erase: int f(u32 sector, u32 count), 0 = ok. CMD35 start `sector`, CMD36 end `sector + count - 1`, CMD38 (erase) with argument 1; no range check at all (a count of 0 makes the end `sector - 1`). It takes the ESDHC mutex itself. A second agent checked hash, size, address, displaced bytes and the st-1.42 callers against the image bytes **[V]**; most callers test the result, five st-1.42 sites ignore it (finding 156 section 3). Same hash and size (232) on the DT2 1.17 (0x4012e0ce), DN2 1.12 (0x4012c792) and Syntakt 1.42 (0x4010f52a). The stock callers: the Data API's Clear (FUN_400b639a) and the slot writer's first-block erase (SafeMmcStreamWriter::vfunc_2), the COKi restore (FUN_400bd608, two calls) and the MmcFs erase (FUN_4011015e) on the Syntakt 1.42 (finding 156).",
+      "file": "devices/fw/storage.toml",
+      "kind": "fn",
+      "mark": "V",
+      "name": "cf.storage.fn.block.erase",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "sig": "i32 (u32 sector, u32 count)",
+      "subsystem": "storage",
+      "users": [
+        "core/card-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4012c59a",
             "len": 4
           }
@@ -14099,7 +14160,8 @@
       "subsystem": "storage",
       "users": [
         "core/runtime",
-        "core/sdhc-large"
+        "core/sdhc-large",
+        "core/card-guard"
       ],
       "was": [
         "cf.storage.fn.block_write",
@@ -15144,6 +15206,53 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4012c4b2"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c792"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e0ce"
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f52a"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "As the write's entry hook, for the erase.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "O",
+      "mode": "before",
+      "name": "cf.storage.hook.block_erase.entry",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "a0",
+          "a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.block_erase.entry",
+      "subsystem": "storage",
+      "users": [
+        "core/card-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4012c5bc"
           }
         ],
@@ -15338,6 +15447,53 @@
     },
     {
       "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c780"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca60"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e39c"
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f7f8"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Before the block write's own code: the hook may return to the caller itself (rts with D0 = an error code) instead of continuing in the tail; the stock code has taken no lock and changed no state at the entry. The behaviour at the callers of dt2-1.17 and dn2-1.12 was not read **[O]**.",
+      "file": "devices/fw/storage.toml",
+      "kind": "hook",
+      "mark": "O",
+      "mode": "before",
+      "name": "cf.storage.hook.block_write.entry",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "a0",
+          "a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.storage.site.block_write.entry",
+      "subsystem": "storage",
+      "users": [
+        "core/card-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4012d5c2"
@@ -15429,6 +15585,62 @@
       "subsystem": "storage",
       "users": [
         "core/storage-fault-proof"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c4b2",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012c792",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e0ce",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f52a",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Entry of the block erase, `lea (-0xc,SP),SP; movem.l {D2 D3 A2},(SP)`. At the entry 0(SP) = return address, 4(SP) = sector, 8(SP) = count.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.storage.site.block_erase.entry",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/card-guard"
       ],
       "was": []
     },
@@ -15653,6 +15865,118 @@
       "subsystem": "storage",
       "users": [
         "core/sdhc-large"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c780",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca60",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e39c",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f7f8",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Entry of the block write, `lea (-0x14,SP),SP; movem.l {D2 D3 D4 D5 A2},(SP)`. At the entry 0(SP) = return address, 4(SP) = sector, 8(SP) = bytes, 12(SP) = buffer.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.storage.site.block_write.entry",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/card-guard"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4012c7b6",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4012ca96",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4012e3d2",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4010f82e",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The instruction after the block write's own `jsr (A2)` (`lea (0xc,SP),SP`): the return address of the nested call that a write of more than 64 KiB makes for each 64 KiB piece. The address, not code to patch.",
+      "file": "devices/fw/storage.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.storage.site.block_write.split_ret",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 54
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 54
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 54
+        }
+      },
+      "subsystem": "storage",
+      "users": [
+        "core/card-guard"
       ],
       "was": []
     },
@@ -24901,7 +25225,7 @@
       "name": "samples"
     },
     {
-      "count": 49,
+      "count": 55,
       "cpu": "cf",
       "file": "devices/fw/storage.toml",
       "meaning": "block device reads and writes, the boot record",

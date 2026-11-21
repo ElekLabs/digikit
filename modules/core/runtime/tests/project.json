@@ -6,6 +6,18 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "files": ["card-guard.device.test.ts"],
+        "devices": ["st"],
+        "tags": ["C:storage", "A:core/card-guard"],
+        "modules": [],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts",
+          "packages/dk-session/src/rpcdata.ts",
+          "packages/dk-session/src/backup-file.ts"
+        ]
+      },
+      {
         "files": ["reload.device.test.ts"],
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],

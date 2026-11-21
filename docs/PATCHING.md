@@ -637,8 +637,10 @@ A Syntakt has two hardware sets in `devices/syntakt.toml` (`[patch_sets]`); the 
 
 | Set | Modules | Container (OS 1.42) | Flashed by |
 |---|---|---|---|
-| `device` | the runtime and every core module with a Syntakt port (the same modules as `emulator`) | under `container_max` | the workbench Firmware page, as on the other devices |
+| `device` | the runtime and every core module with a Syntakt port (the same modules as `emulator`), with `core/card-guard` | under `container_max` (16.4 KB free) | the workbench Firmware page, as on the other devices |
 | `device-peer` | `core/peer-image` (and `core/expansion`, which it needs); no runtime, no menu | well under `container_max` | the command line only: an optional first flash |
+
+The Syntakt turns the eMMC write guard on (`[card.guard] enabled = true` in `devices/syntakt.toml`, [card-write-guard](plans/card-write-guard.md)): hooks in the firmware's block write and erase refuse a request outside the rows of its writer class, so no stock caller can reach the module store. `core/card-guard` is in both sets that hold the runtime, and patchkit refuses a patch set (`patchkit gen`) or a module selection (`apply`, `--modules`) that holds `core/runtime` and not `core/card-guard` while the switch is on, and the adapter where it is off (`needed_when` of its `module.toml`). A refusal is counted in INFO (`card_guard`) and logged as `CARD_GUARD_REFUSED`; nothing is shown on the device.
 
 `device-peer` changes MAIN only at the peer thread's NOR read and the reset-path loader, and section 7 is stored packed: it shows on its own whether the unit boots and
 the second CPU loads the unpacked program. Before any flash: **back up the +Drive card**, keep `Syntakt_OS1.42.syx`, and do not use Transfer to put samples or

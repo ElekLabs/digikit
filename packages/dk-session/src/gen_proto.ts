@@ -362,6 +362,7 @@ export const LOG_KIND = {
   VIEW_CLOSED: 55,
   TEXT_INPUT_OPENED: 56,
   TEXT_INPUT_DONE: 57,
+  CARD_GUARD_REFUSED: 58,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -421,6 +422,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   55: ['VIEW_CLOSED', ['owner', 'slot', '-', '-', '-']],
   56: ['TEXT_INPUT_OPENED', ['owner', 'max_len', '-', '-', '-']],
   57: ['TEXT_INPUT_DONE', ['owner', '-', '-', '-', '-']],
+  58: ['CARD_GUARD_REFUSED', ['sector', 'sectors', 'class_kind', 'refused_writes', 'refused_erases']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

@@ -138,7 +138,7 @@ cardRigs(
         const settings = Buffer.concat([
           encodeSettings(2, [['fx/route/test/x', Buffer.from([1])]]),
         ]);
-        const v3 = version3Store(h.device, file);
+        const v3 = version3Store(h.device as 'dt2' | 'dn2', file);
         const settingsCopy = Buffer.concat([settings, Buffer.alloc(SECTOR - settings.length)]);
         const facts: Record<string, unknown> = {};
 
@@ -254,7 +254,7 @@ cardRigs(
       'default modules on a card with a version 3 store: installDefaults ends with the module loaded',
       async () => {
         const file = bytes();
-        let rt: PatchedSession = await h.load('v3-defaults', { selection: [], foreign: version3Store(h.device, file) });
+        let rt: PatchedSession = await h.load('v3-defaults', { selection: [], foreign: version3Store(h.device as 'dt2' | 'dn2', file) });
         const lib = (await libraryModule(file))!;
         const library = [lib];
         const id = lib.id;

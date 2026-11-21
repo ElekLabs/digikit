@@ -61,8 +61,13 @@ it('takes the devices of a single-device project for files that no record pins',
 });
 
 it('rejects a devices list with an unknown device or none', () => {
-  expect(() => fileDevices('a', [{ files: ['a'], devices: ['dt3'] }])).toThrow(/dt2 and dn2/);
-  expect(() => fileDevices('a', [{ files: ['a'], devices: [] }])).toThrow(/dt2 and dn2/);
+  expect(() => fileDevices('a', [{ files: ['a'], devices: ['dt3'] }])).toThrow(/dt2, dn2, st/);
+  expect(() => fileDevices('a', [{ files: ['a'], devices: [] }])).toThrow(/dt2, dn2, st/);
+});
+
+it('gives a device that boots cold only to the file that names it', () => {
+  expect(fileDevices('a', [{ files: ['a'], devices: ['st'] }])).toEqual(['st']);
+  expect(fileDevices('a', [])).toEqual(['dt2', 'dn2']);
 });
 
 it('takes the DSP mode of a task from the records that list its files', () => {
@@ -80,7 +85,7 @@ it('declares in the records the device pins of the test sources', () => {
     .filter((f) => f && !f.endsWith('.manual.device.test.ts'));
   const pinned = (source: string) => {
     const found = new Set<string>();
-    for (const m of source.matchAll(/devices: \['(dt2|dn2)'\]|describeOn\('(dt2|dn2)'/g)) found.add(m[1] ?? m[2]);
+    for (const m of source.matchAll(/devices: \['(dt2|dn2|st)'\]|describeOn\('(dt2|dn2|st)'/g)) found.add(m[1] ?? m[2]);
     // the SHOT DN2 files run through the helper that pins DN2
     if (/\bdn2Tests\(/.test(source)) found.add('dn2');
     return found;

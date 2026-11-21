@@ -2484,7 +2484,7 @@
   },
   {
    "align": 2,
-   "hex": "677f8e52",
+   "hex": "7efc881d",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -3176,7 +3176,7 @@
    "size": 28
   }
  ],
- "source_sha256": "46ca84d9b7d7ee54e0512ff076024fb511e205da245d04ae9012725b7122b969",
+ "source_sha256": "0dd8c4a1a5495ed5436eb41b0b46d63aa562d7aebca6fc2b2623606c5269290a",
  "symbols": [
   {
    "global": false,
@@ -4208,7 +4208,7 @@
  "toolchain": {
   "exports": "dk_module dk_shortcut_add dk_shortcuts_key dk_svc_abi shortcuts_key_hook",
   "instructions_redecoded": "3754",
-  "isa_check": "df14e0c219449679862db986c1ddfece664b0b7da373976aac93a93574c70248",
+  "isa_check": "ca2885f3fea9824c46654e1d335e6b61558fe75ea22f0ba2d1800c88891364ed",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

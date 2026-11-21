@@ -30,6 +30,8 @@ pub struct FakePlatform {
     pub card: RefCell<BTreeMap<u32, [u8; 512]>>,
     pub fill: Cell<u8>,
     pub card_sectors: Cell<u32>,
+    /// What `card_guard_stats` returns (`[version, refused writes, refused erases, sector, sectors, class | kind << 8]`).
+    pub guard_stats: Cell<[u32; 6]>,
     pub writes: RefCell<Vec<(u32, u32)>>,
     pub reads: RefCell<Vec<(u32, u32)>>,
     /// Sectors whose read or write fails (-1).
@@ -91,6 +93,7 @@ impl FakePlatform {
             card: RefCell::new(BTreeMap::new()),
             fill: Cell::new(0xff),
             card_sectors: Cell::new(1 << 20),
+            guard_stats: Cell::new([0; 6]),
             writes: RefCell::new(Vec::new()),
             reads: RefCell::new(Vec::new()),
             bad_read: RefCell::new(Vec::new()),
@@ -197,6 +200,9 @@ impl Platform for FakePlatform {
     }
     fn card_sectors(&self) -> u32 {
         self.card_sectors.get()
+    }
+    unsafe fn card_guard_stats(&self) -> [u32; 6] {
+        self.guard_stats.get()
     }
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32 {
         self.reads.borrow_mut().push((sector, bytes));

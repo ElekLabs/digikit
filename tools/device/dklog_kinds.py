@@ -65,6 +65,10 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     55: ("VIEW_CLOSED", ("owner", "slot", "-", "-", "-")),
     56: ("TEXT_INPUT_OPENED", ("owner", "max_len", "-", "-", "-")),
     57: ("TEXT_INPUT_DONE", ("owner", "-", "-", "-", "-")),
+    58: (
+        "CARD_GUARD_REFUSED",
+        ("sector", "sectors", "class_kind", "refused_writes", "refused_erases"),
+    ),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

@@ -137,6 +137,8 @@ export const deviceTargets = (
     devices.forEach((device, i) => {
       split[halves[i]] = {
         ...target,
+        // a device outside the acceptance devices has no daemon key, image hashes or patchkit key in dist/bytes, so a cached result could not follow its inputs
+        ...(ALL_DEVICES.includes(device) ? {} : { cache: false }),
         inputs: [...forDevice(target.inputs, device), { env: 'DIGI_DEVICE' }],
         options: { ...target.options, env: { ...target.options.env, DIGI_DEVICE: device } },
       };
@@ -145,8 +147,10 @@ export const deviceTargets = (
   return split;
 };
 
+// What a file without `devices` runs on: the devices with a ready snapshot. A device that boots cold (`st`) is named by the file.
 const ALL_DEVICES = ['dt2', 'dn2'];
-const unionDevices = (lists) => ALL_DEVICES.filter((d) => lists.some((list) => list.includes(d)));
+const KNOWN_DEVICES = ['dt2', 'dn2', 'st'];
+const unionDevices = (lists) => KNOWN_DEVICES.filter((d) => lists.some((list) => list.includes(d)));
 
 // The devices a device test file runs on (docs/TESTING.md "Nx gate"): the `devices` of the runtimeAcceptance records that
 // list the file, else `projectDevices` (the pack devices of a module project), else both. A file that the records do not list
@@ -155,8 +159,8 @@ export const fileDevices = (file, recs, projectDevices) => {
   const own = recs.filter((rec) => rec.files?.includes(file));
   const declared = own.filter((rec) => rec.devices !== undefined);
   for (const rec of declared)
-    if (!Array.isArray(rec.devices) || !rec.devices.length || rec.devices.some((d) => !ALL_DEVICES.includes(d)))
-      throw new Error(`metadata.runtimeAcceptance devices of ${file} must be a list of dt2 and dn2`);
+    if (!Array.isArray(rec.devices) || !rec.devices.length || rec.devices.some((d) => !KNOWN_DEVICES.includes(d)))
+      throw new Error(`metadata.runtimeAcceptance devices of ${file} must be a list of ${KNOWN_DEVICES.join(', ')}`);
   const list = declared.length ? unionDevices(declared.map((rec) => rec.devices)) : (projectDevices ?? ALL_DEVICES);
   if (!list.length) throw new Error(`${file} has no device to run on`);
   return list;

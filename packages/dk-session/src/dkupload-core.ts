@@ -624,6 +624,22 @@ export function deviceError(what: string, status: number, body?: Uint8Array): Dk
 
 export const fmtVersion = (packed: number): string => `${packed >>> 16}.${(packed >>> 8) & 255}.${packed & 255}`;
 
+/**
+ * The refusal counters of the card write guard (`core/card-guard`; INFO appends them after the card state): requests to the firmware's eMMC block write
+ * and erase that lay outside the rows of their writer class were refused with the driver's out-of-range error. `last_*` describe the last refused request.
+ */
+export interface DkCardGuard {
+  version: number;
+  refused_writes: number;
+  refused_erases: number;
+  /** The first sector and the length in sectors of the last refused request (0 when none was refused). */
+  last_sector: number;
+  last_sectors: number;
+  /** `stock`: a caller in the firmware; `runtime`: the digikit runtime's raw card write. Null when none was refused. */
+  last_class: 'stock' | 'runtime' | null;
+  last_kind: 'write' | 'erase' | null;
+}
+
 /** INFO with the fields of later runtimes (`caps` and the 32-bit runtime version appeared in 0.2). */
 export interface DkInfoFull extends DkInfo {
   /** The packed runtime version (major << 16 | minor << 8 | patch). */
@@ -638,6 +654,8 @@ export interface DkInfoFull extends DkInfo {
   card_sectors: number | null;
   /** The card check's state: 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small; null when the runtime does not report it. */
   card_state: number | null;
+  /** The card write guard's counters (core/card-guard), or null when the runtime does not report them or the module is not in the image (version 0). */
+  card_guard: DkCardGuard | null;
   /** The id of the flashed image as 16 hex digits (runtime 0.5.2 and later; patchkit stamps it), or null when the reply has none. */
   image_id: string | null;
   /** The runtime's ABI fingerprint for service files (`CAP_SVC_ABI`; the word a `.dks` carries at header 0x3c), or null when the runtime does not report it. */
@@ -1175,6 +1193,7 @@ export class DkSession {
     let fwId: string | null = null;
     let cardSectors: number | null = null;
     let cardState: number | null = null;
+    let cardGuard: DkCardGuard | null = null;
     if (b.length >= at + 9 + 8 + 8) {
       runtime = u32(b, at + 9 + 8);
       caps = u32(b, at + 9 + 12);
@@ -1195,6 +1214,21 @@ export class DkSession {
       if (b.length >= o + 8) {
         cardSectors = u32(b, o);
         cardState = u32(b, o + 4);
+        o += 8;
+        // then the card write guard's six words: version (0: not in the image), refused writes, refused erases, the last refused sector and length, class | kind << 8
+        if (b.length >= o + 24 && u32(b, o) !== 0) {
+          const refused = u32(b, o + 4) + u32(b, o + 8) > 0;
+          const classKind = u32(b, o + 20);
+          cardGuard = {
+            version: u32(b, o),
+            refused_writes: u32(b, o + 4),
+            refused_erases: u32(b, o + 8),
+            last_sector: u32(b, o + 12),
+            last_sectors: u32(b, o + 16),
+            last_class: refused ? ((classKind & 255) === 1 ? 'runtime' : 'stock') : null,
+            last_kind: refused ? (((classKind >>> 8) & 255) === 1 ? 'erase' : 'write') : null,
+          };
+        }
       }
     }
     return {
@@ -1207,6 +1241,7 @@ export class DkSession {
       fw_id: fwId,
       card_sectors: cardSectors,
       card_state: cardState,
+      card_guard: cardGuard,
       port,
       free_bytes: free,
       max_chunk: maxChunk,

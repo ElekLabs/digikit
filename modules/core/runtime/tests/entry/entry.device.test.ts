@@ -22,7 +22,7 @@ const REPORT = 0x1c;
 const WRITE = 0x1d;
 const E_MISSING = -73;
 const E_CONTRACT = -48;
-const DEVICE_ID = { dt2: 1, dn2: 2 } as const; // [digikit] id of devices/*.toml
+const DEVICE_ID = { dt2: 1, dn2: 2, st: 3 } as const; // [digikit] id of devices/*.toml
 
 async function expectEntryPoint({ session, dk }: PatchedSession): Promise<void> {
   expect(['zero', 'none'], 'the entry point needs no DSP').toContain((await session.status()).dsp);

@@ -1780,6 +1780,14 @@ id = 57
 name = "TEXT_INPUT_DONE"
 args = ["owner", "-", "-", "-", "-"]
 
+# core/card-guard refused a request to the firmware's eMMC block write or erase (error level; the runtime raises it from its tick, at most one per wait of five seconds, for all refusals since the last event):
+# the sector and the length in sectors of the LAST refused request, its writer class and kind (class | kind << 8: class 0 stock, 1 runtime; kind 0 write, 1 erase) and the totals of
+# refused writes and refused erases since boot. Nothing is shown on the device screen (docs/plans/card-write-guard.md).
+[[log.kind]]
+id = 58
+name = "CARD_GUARD_REFUSED"
+args = ["sector", "sectors", "class_kind", "refused_writes", "refused_erases"]
+
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
 polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file

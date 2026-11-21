@@ -69,3 +69,18 @@ dkrt_soft_reset:
     move.b  %d0,MCF5441X_RCM_RCR
 3:  bra.s   3b
 
+/* i32 dkrt_raw_block_write(u32 sector, u32 bytes, const u8 *buf): the runtime's one raw card write (`Platform::block_write_raw`, behind the range and ownership
+ * checks of card.rs). It calls the firmware's block write with the arguments pushed again, and the return address of that call is the global label
+ * `dkrt_raw_write_ret`: core/card-guard tells this write from every stock caller by that address (a caller cannot forge it; a flag would be open while
+ * a stock task runs). The runtime has no other call of the firmware's block write. At the entry 0(SP) = return address, 4 sector, 8 bytes, 12 buf; each
+ * `move.l 12(%sp),-(%sp)` reads its source before the push, so 12(%sp) is right for all three. D0 is the firmware's result. */
+    .globl dkrt_raw_block_write
+dkrt_raw_block_write:
+    move.l  12(%sp),-(%sp)      /* buf */
+    move.l  12(%sp),-(%sp)      /* bytes */
+    move.l  12(%sp),-(%sp)      /* sector */
+    jsr     dkrt_fw_block_write
+    .globl dkrt_raw_write_ret
+dkrt_raw_write_ret:
+    lea     12(%sp),%sp
+    rts

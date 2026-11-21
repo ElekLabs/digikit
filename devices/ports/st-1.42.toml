@@ -785,6 +785,16 @@ mark = "D"
 rule = "fw/rtos:cf_reset_helper"
 
 [[anchor]]
+name = "cf.storage.fn.block.erase"
+cpu = "cf"
+kind = "code"
+addr = 0x4010f52a
+len = 8
+sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.fn.block.read"
 cpu = "cf"
 kind = "code"
@@ -821,6 +831,16 @@ kind = "code"
 addr = 0x4010f232
 len = 4
 sha256 = "18b3ab741db58c1897f647576ac8fb2c98fb01460d44ed1e68a28fe492f7cece"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_erase.entry"
+cpu = "cf"
+kind = "code"
+addr = 0x4010f52a
+len = 8
+sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
 mark = "O"
 rule = "fw/storage:cf_func"
 
@@ -862,6 +882,26 @@ addr = 0x4010f80c
 len = 6
 sha256 = "71b2ded1ac10554d6765c1cc38f75afc7a1ef0afd13b4d1f714bc71aa458a693"
 mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_write.entry"
+cpu = "cf"
+kind = "code"
+addr = 0x4010f7f8
+len = 8
+sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_write.split_ret"
+cpu = "cf"
+kind = "code"
+addr = 0x4010f82e
+len = 4
+sha256 = "a48998cd9825641e921b00243186d78a9246c1fda55703863b3ee0ca512625c5"
+mark = "O"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -1250,6 +1290,12 @@ mode = "before"
 clobbers = ["ccr"]
 
 [[hook]]
+name = "cf.storage.hook.block_erase.entry"
+site = "cf.storage.site.block_erase.entry"
+mode = "before"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+
+[[hook]]
 name = "cf.storage.hook.block_read.clamp_chunk"
 site = "cf.storage.site.block_read.clamp_chunk"
 mode = "replace"
@@ -1272,6 +1318,12 @@ name = "cf.storage.hook.block_write.clamp_entry"
 site = "cf.storage.site.block_write.clamp_entry"
 mode = "replace"
 clobbers = ["d0", "d1", "ccr"]
+
+[[hook]]
+name = "cf.storage.hook.block_write.entry"
+site = "cf.storage.site.block_write.entry"
+mode = "before"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.view.hook.ui_loop"

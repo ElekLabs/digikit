@@ -2841,6 +2841,16 @@ mark = "D"
 rule = "fw/samples:cf_func"
 
 [[anchor]]
+name = "cf.storage.fn.block.erase"
+cpu = "cf"
+kind = "code"
+addr = 0x4012c792
+len = 8
+sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
 name = "cf.storage.fn.block.read"
 cpu = "cf"
 kind = "code"
@@ -2877,6 +2887,16 @@ kind = "code"
 addr = 0x4012c49a
 len = 4
 sha256 = "958d3d598d6f5a5f0aae1886cecc577d9c169eec942f68eb8baadd29bb5638d4"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_erase.entry"
+cpu = "cf"
+kind = "code"
+addr = 0x4012c792
+len = 8
+sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
 mark = "O"
 rule = "fw/storage:cf_func"
 
@@ -2918,6 +2938,26 @@ addr = 0x4012ca74
 len = 6
 sha256 = "71b2ded1ac10554d6765c1cc38f75afc7a1ef0afd13b4d1f714bc71aa458a693"
 mark = "D"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_write.entry"
+cpu = "cf"
+kind = "code"
+addr = 0x4012ca60
+len = 8
+sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
+mark = "O"
+rule = "fw/storage:cf_func"
+
+[[anchor]]
+name = "cf.storage.site.block_write.split_ret"
+cpu = "cf"
+kind = "code"
+addr = 0x4012ca96
+len = 4
+sha256 = "a48998cd9825641e921b00243186d78a9246c1fda55703863b3ee0ca512625c5"
+mark = "O"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -4625,6 +4665,12 @@ mode = "before"
 clobbers = ["ccr"]
 
 [[hook]]
+name = "cf.storage.hook.block_erase.entry"
+site = "cf.storage.site.block_erase.entry"
+mode = "before"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+
+[[hook]]
 name = "cf.storage.hook.block_read.clamp_chunk"
 site = "cf.storage.site.block_read.clamp_chunk"
 mode = "replace"
@@ -4647,6 +4693,12 @@ name = "cf.storage.hook.block_write.clamp_entry"
 site = "cf.storage.site.block_write.clamp_entry"
 mode = "replace"
 clobbers = ["d0", "d1", "ccr"]
+
+[[hook]]
+name = "cf.storage.hook.block_write.entry"
+site = "cf.storage.site.block_write.entry"
+mode = "before"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
 name = "cf.usb.hook.init"

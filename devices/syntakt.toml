@@ -176,6 +176,7 @@ send_slots = 0
 param_rows = 0
 page_rows = 0
 
+# core/card-guard is in both sets that hold the runtime: [card.guard] turns the guard on for this device (patchkit refuses a set with the runtime and without it).
 # Module sets patched in by name (the Digitone II file explains them; docs/PATCHING.md "Flashing a Syntakt").
 #   `device`: the runtime and every core module that has a Syntakt port (the same modules as `emulator`), with core/peer-image: it stores the peer
 #     CPU's section 7 packed and unpacks it in MAIN (without it the image is 32 KB over the container limit). The workbench Firmware page flashes this set.
@@ -184,9 +185,9 @@ page_rows = 0
 # `emulator`: what the emulator patches in itself. The DSP, run-time machine and effect modules have no Syntakt port (no DSP). There is no
 # `device-introblank`: the boot screen module has no Syntakt port.
 [patch_sets]
-device = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+device = ["core/runtime", "core/card-guard", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 device-peer = ["core/peer-image"]
-emulator = ["core/runtime", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+emulator = ["core/runtime", "core/card-guard", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
 
 # Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
@@ -231,6 +232,22 @@ end_sector = 0x300000
 selection_sectors = 2      # the last two sectors: the digikit selection record
 settings_sectors = 32      # the 32 sectors before them: the settings record, copy A then copy B of 16 sectors
 header_b_sector = 0x2fffdd  # store header copy B: the sector before the settings record (end - 35, as on the other devices)
+
+# The eMMC write guard (core/card-guard, docs/plans/card-write-guard.md): hooks in the firmware's eMMC block write and erase refuse a request outside the rows of its
+# writer class. `enabled` is the switch: while it is true, every patch set that holds core/runtime must hold core/card-guard (patchkit refuses a set without it).
+# stock: every caller but the runtime's raw card write. MmcFs refuses a sector at or above 0x180000 (the end of the project pool, `[card.pools.projects]`), and every stock
+# range lies below it (FORMAT ends at 0x17ffff), so the stock row is that tight window; the 256 MiB up to the store are a guard band that no stock writer may touch.
+# runtime: the digikit runtime's raw card write; the store only.
+[card.guard]
+enabled = true
+[[card.guard.row]]
+who = "stock"
+first = 0x0
+end = 0x180000
+[[card.guard.row]]
+who = "runtime"
+first = 0x200000
+end = 0x300000
 
 # Board facts that only the emulator uses. free_running_dtcn: the DMA timer counter channels (DTCN0..3) that the firmware reads as
 # free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).

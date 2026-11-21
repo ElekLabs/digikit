@@ -602,21 +602,21 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
                 assert_eq!(all, ["core/peer-image"], "{} set {set}", dev.short);
                 continue;
             }
-            assert_eq!(
-                all,
-                [
-                    "core/digikit-menu",
-                    "core/expansion",
-                    "core/health",
-                    "core/input",
-                    "core/peer-image",
-                    "core/platform",
-                    "core/runtime",
-                    "core/ui"
-                ],
-                "{} set {set}",
-                dev.short
-            );
+            let mut want = vec![
+                "core/digikit-menu",
+                "core/expansion",
+                "core/health",
+                "core/input",
+                "core/peer-image",
+                "core/platform",
+                "core/runtime",
+                "core/ui",
+            ];
+            // a device that turns the eMMC write guard on holds core/card-guard in every set with the runtime
+            if dev.switches.get("card.guard.enabled") == Some(&true) {
+                want.insert(0, "core/card-guard");
+            }
+            assert_eq!(all, want, "{} set {set}", dev.short);
         }
     }
 }
@@ -1164,4 +1164,112 @@ device = ["core/ui", "test/c-demo"]
     let other = bare.replace(", \"test/c-demo\"", "");
     let facts = Facts::from_texts([other.as_str()]).unwrap();
     devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
+}
+
+/// The Syntakt file with `from` replaced by `to` (the test text must differ from the file).
+fn syntakt_with(from: &str, to: &str) -> String {
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    assert!(st.contains(from), "the Syntakt file has {from:?}");
+    st.replace(from, to)
+}
+
+#[test]
+fn a_device_that_turns_the_card_guard_on_needs_it_in_every_set_with_the_runtime() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    // the repository's own sets are consistent (also checked by `patchkit gen`)
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+    // the `device` and `emulator` sets with the runtime and without core/card-guard are refused, naming both modules and the switch
+    for set in ["device", "emulator"] {
+        let line = std::fs::read_to_string(root().join("devices/syntakt.toml"))
+            .unwrap()
+            .lines()
+            .find(|l| l.starts_with(&format!("{set} = [")))
+            .unwrap()
+            .to_string();
+        let without = syntakt_with(&line, &line.replace("\"core/card-guard\", ", ""));
+        let facts = Facts::from_texts([without.as_str()]).unwrap();
+        let e = patchkit::devgen::check_device_tables(&lib, &facts)
+            .unwrap_err()
+            .0;
+        assert!(
+            e.contains(&format!(
+                "st: patch set {set} includes core/runtime but not core/card-guard"
+            )) && e.contains("card.guard.enabled"),
+            "{set}: {e}"
+        );
+    }
+    // a set without the runtime (device-peer) needs no guard
+    let facts = Facts::from_texts([syntakt_with(
+        "device-peer = [\"core/peer-image\"]",
+        "device-peer = [\"core/peer-image\"]",
+    )
+    .as_str()])
+    .unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+}
+
+#[test]
+fn the_card_guard_module_is_refused_where_the_switch_is_off() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let off = syntakt_with(
+        "[card.guard]\nenabled = true",
+        "[card.guard]\nenabled = false",
+    );
+    let facts = Facts::from_texts([off.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains(
+            "includes core/card-guard, but the device file does not turn [card.guard.enabled] on"
+        ),
+        "{e}"
+    );
+    // a device file without the table is refused by `needs_device` first
+    let st = syntakt_with("\n[card.guard]\n", "\n[card.guard]\n");
+    let (head, rest) = st.split_once("\n[card.guard]\n").unwrap();
+    let tail = rest
+        .split_once("# Board facts that only the emulator uses")
+        .unwrap()
+        .1;
+    let none = format!("{head}\n# Board facts that only the emulator uses{tail}");
+    let facts = Facts::from_texts([none.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("needs [card.guard]"), "{e}");
+}
+
+#[test]
+fn the_resolved_selection_of_apply_is_checked_the_same_way() {
+    use std::collections::BTreeMap;
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let on: BTreeMap<String, bool> = [("card.guard.enabled".to_string(), true)].into();
+    let off: BTreeMap<String, bool> = BTreeMap::new();
+    let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let check = |sw: &BTreeMap<String, bool>, v: &[&str]| {
+        patchkit::devgen::check_needed_when(&lib, "st", sw, &ids(v), "the module selection")
+    };
+    check(&on, &["core/runtime", "core/card-guard"]).unwrap();
+    check(&on, &["core/peer-image"]).unwrap();
+    check(&off, &["core/runtime"]).unwrap();
+    let e = check(&on, &["core/runtime", "core/ui"]).unwrap_err().0;
+    assert!(
+        e.contains("st: the module selection includes core/runtime but not core/card-guard"),
+        "{e}"
+    );
+    let e = check(&off, &["core/runtime", "core/card-guard"])
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("includes core/card-guard, but the device file does not turn"),
+        "{e}"
+    );
 }

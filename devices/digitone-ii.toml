@@ -540,6 +540,11 @@ sectors = 0x8000
 # Module and sample store (docs/design/digikit-store.md, version 3): sectors [first_sector, end_sector). DN2: from 0x800000 (above everything the Data API reaches, and nothing stock writes at 0x458000 or above: finding 59) to the card end, about 22 GiB.
 # The last selection_sectors sectors hold the runtime's selection record; before them the settings record (settings_sectors: two copies of
 # sdk/sdk.toml [settings] sectors, 8 KiB each); header copy B is the sector before the settings record; the store's files end before it.
+# The eMMC write guard (core/card-guard) is off on this device for now: the rows are the defaults (stock = [0, store.first), runtime = the store), checked by `patchkit gen`.
+# Turning it on needs core/card-guard in every patch set that holds core/runtime and a port of the module for this device.
+[card.guard]
+enabled = false
+
 [card.store]
 first_sector = 0x800000
 end_sector = 0x2e1a000

@@ -712,6 +712,21 @@ pub struct ModuleInfo {
     /// (`devgen::check_device_tables` for `patchkit gen`, `devgen::check_module_tables` for the generator of the module, `build` and `pack`); the module's `[[gen]]` constants come from them.
     #[serde(default)]
     pub needs_device: Vec<String>,
+    /// Device switches that make this module part of a patch set: `{ switch = "card.guard.enabled", with = "core/runtime" }` says that on a device whose file has that
+    /// boolean true, every module set that holds `with` must hold this module, and that a set that holds this module on a device where the boolean is not true is refused
+    /// (`devgen::check_needed_when`, run by `patchkit gen` on the named patch sets and by `apply` on the resolved set).
+    #[serde(default)]
+    pub needed_when: Vec<NeededWhen>,
+}
+
+/// One entry of `[module] needed_when`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NeededWhen {
+    /// A boolean of a nested table of the device file, by dotted path.
+    pub switch: String,
+    /// The module whose presence makes this module required while the switch is on.
+    pub with: String,
 }
 
 impl ModuleInfo {
