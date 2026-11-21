@@ -1150,6 +1150,8 @@ export class DkSession {
         await abortable(Promise.resolve(this.t.send(frame(cmd, seq, body))), signal);
       } catch (e) {
         if (e instanceof DkError && e.kind === 'cancelled') throw e;
+        // a transport without `recover` cannot reopen its link: a retry would not help, so rethrow as before
+        if (typeof this.t.recover !== 'function') throw e;
         linkError = e;
       }
       if (linkError === undefined) {
@@ -1160,6 +1162,8 @@ export class DkSession {
             raw = await abortable(this.t.recv(left, signal), signal);
           } catch (e) {
             if (e instanceof DkError && e.kind === 'cancelled') throw e;
+            // a transport without `recover` cannot reopen its link: rethrow at once
+            if (typeof this.t.recover !== 'function') throw e;
             linkError = e;
             break;
           }

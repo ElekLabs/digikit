@@ -75,6 +75,21 @@ test('a device error is an answer: the link is not recovered and onLink says it 
   assert.deepEqual(outcomes, [true]);
 });
 
+test('a transport without recover whose recv throws fails at once, without a retry', async () => {
+  let sends = 0;
+  const t = {
+    send() {
+      sends++;
+    },
+    async recv(): Promise<Uint8Array | null> {
+      throw new Error('read failed');
+    },
+  };
+  const s = new DkSession(t, { timeoutMs: 20, retries: 2 });
+  await assert.rejects(s.request(CMD_LIST, listBody), /read failed/);
+  assert.equal(sends, 1);
+});
+
 test('a transport that throws is recovered and its error is rethrown after the last try', async () => {
   const link = new StaleLink(true, false);
   link.send = () => {
