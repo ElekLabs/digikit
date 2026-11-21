@@ -10,6 +10,7 @@
 //!
 //! This file is one of the boundary files `patchkit gen` hashes into `SVC_ABI`: any change here changes the fingerprint.
 pub use dkrt_sdk::api::{JobDoneFn, JobStepFn};
+pub use dkrt_sdk::DkrtLive;
 
 /// Invoke `$m! { fn name(arg: Ty, ...) -> Ret; ... }` with the imports of a service file: the `dkc_*` of `CoreApi`, then `dk_service_declare_row` and `dkc_panic`.
 #[macro_export]
@@ -60,6 +61,20 @@ macro_rules! core_imports {
             fn dkc_link_result(ticket: *const $crate::link::Ticket) -> $crate::link::LinkResult;
             fn dkc_link_drain(owner: $crate::link::Owner) -> bool;
             fn dkc_link_run(owner: $crate::link::Owner, seq: *const $crate::link::Sequence) -> bool;
+            // ---- the settings overlay: the table the runtime's settings calls forward to (`dkrt_abi::service::SettingsOverlay`; the runtime drops it with the file)
+            fn dkc_settings_overlay_set(overlay: *const $crate::service::SettingsOverlay);
+            // The settings of module `id` (`id_len` bytes) changed behind the module's back: the runtime reloads the module if it opened its settings.
+            fn dkc_settings_changed(id: *const u8, id_len: u32);
+            // ---- the live job (`dkrt_live`, `dkrt_live_state`; UI task only): queue a load, unload or reload of the file at `path` (NUL terminated) and read the job's state
+            fn dkc_live(op: u32, path: *const u8) -> i32;
+            fn dkc_live_state(out: *mut $crate::core_imports::DkrtLive);
+            // Add the store file at `path` (`len` bytes) to the saved selection, as the menu does for a module it loads live.
+            fn dkc_selection_add(path: *const u8, len: u32) -> i32;
+            // ---- the loaded modules and the store's module files
+            // The NUL-terminated store path of the content module in record `owner - 1`; null when the record holds none.
+            fn dkc_module_path(owner: u8) -> *const u8;
+            // The store path of the file `name` under `dir`: its length (the path NUL padded in the 64 bytes at `out`) or a negative code.
+            fn dkc_store_find(dir: *const u8, dir_len: u32, name: *const u8, name_len: u32, out: *mut u8) -> i32;
             // ---- only a service file: its row, and a panic
             // Called in `init`: the `ServiceRow` this file provides (`ctx` is the module context). A status.
             fn dk_service_declare_row(ctx: *mut u8, row: *const $crate::service::ServiceRow) -> i32;

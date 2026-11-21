@@ -70,6 +70,29 @@ pub trait CoreApi: crate::mem::FwMem {
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32;
     unsafe fn settings_put(&self, key: &[u8], value: &[u8]) -> i32;
 
+    // ---- the settings overlay and the live job ----------------------------------------------------------------------------------
+    /// A service gives the runtime the table its settings calls forward to (`SettingsOverlay`; valid while the service's file is loaded: the runtime drops it with the record).
+    /// Called from the service's `init`; the owner is the source that runs then. One provider at a time.
+    unsafe fn settings_overlay_set(&self, overlay: *const crate::service::SettingsOverlay);
+    /// The effective settings of module `id` changed behind the module's back (the overlay's values differ from what the module read): the runtime reloads the module when it
+    /// opened its settings (`settings_reload`).
+    unsafe fn settings_changed(&self, id: &[u8]);
+    /// Queue a live job (`LIVE_LOAD`, `LIVE_UNLOAD` or `LIVE_RELOAD` of the file at `path`, NUL terminated): `dkrt_live`, with its refusals. UI task only.
+    unsafe fn live(&self, op: u32, path: *const u8) -> i32;
+    /// The live job's state (`dkrt_live_state`). UI task only.
+    unsafe fn live_state(&self) -> dkrt_sdk::DkrtLive;
+    /// Add the store file at `path` to the saved selection (what the next boot loads), as the DIGIKIT menu saves it for a module it loads live: `OK` also when the path is
+    /// there already, `E_SEL_COUNT` when the selection is full, `E_SEL_PATH` for a path that is no selection entry, `E_READ` when the record cannot be read. UI task only.
+    unsafe fn selection_add(&self, path: &[u8]) -> i32;
+
+    // ---- the loaded modules and the store's module files ------------------------------------------------------------------------
+    /// The NUL-terminated store path (at most 63 bytes) that the content module in record `owner - 1` was loaded from (`owner` as for `module_name`); null for a record that
+    /// holds no loaded module, and for an `owner` past the module records.
+    unsafe fn module_path(&self, owner: u8) -> *const u8;
+    /// The store path of the file called `name` under the folder `dir` (`modules/`, any depth below it): its length and the path NUL padded in `out`, or `E_NOT_FOUND`
+    /// (also without a store). The store's module listing, so the first match in path order.
+    unsafe fn store_find(&self, dir: &[u8], name: &[u8], out: &mut [u8; 64]) -> i32;
+
     // ---- log and source --------------------------------------------------------------------------------------------------
     unsafe fn log(&self, kind: u16, flags: u16, args: [u32; 5]);
     /// The module whose code runs now (record index + 1; 0 outside module code).

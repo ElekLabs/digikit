@@ -188,6 +188,48 @@ pub unsafe fn selection_set(s: *const DkrtSelection) -> i32 {
     write_copy(&PLATFORM, 1 - first, &r)
 }
 
+/// The selection `selection_add` reads and writes back (456 bytes, kept off the stack).
+static mut ADD: DkrtSelection = DkrtSelection { count: 0, flags: 0, paths: [[0; SEL_PATH]; SEL_MAX] };
+
+/// `sel` with `path` added at the end: `Ok(true)` when it was added, `Ok(false)` when it was there, `E_SEL_PATH` for a path that no selection entry can hold, `E_SEL_COUNT`
+/// when all `SEL_MAX` places are taken.
+fn with_path(sel: &mut DkrtSelection, path: &[u8]) -> Result<bool, i32> {
+    if path.is_empty() || path.len() >= SEL_PATH {
+        return Err(E_SEL_PATH);
+    }
+    let mut at = 0;
+    while at < sel.count as usize {
+        let p = &sel.paths[at];
+        if p[..path.len()] == *path && p[path.len()] == 0 {
+            return Ok(false);
+        }
+        at += 1;
+    }
+    if sel.count as usize >= SEL_MAX {
+        return Err(E_SEL_COUNT);
+    }
+    let slot = &mut sel.paths[sel.count as usize];
+    *slot = [0; SEL_PATH];
+    slot[..path.len()].copy_from_slice(path);
+    sel.count += 1;
+    Ok(true)
+}
+
+/// `CoreApi::selection_add`: the saved selection with `path` added at the end, written as `selection_set` writes it (no write when the path is in it already). `E_READ` when the
+/// record cannot be read; the other statuses are `with_path`'s.
+pub unsafe fn selection_add(path: &[u8]) -> i32 {
+    let sel = &mut *addr_of_mut!(ADD);
+    let e = selection_get(sel);
+    if e != OK {
+        return e;
+    }
+    match with_path(sel, path) {
+        Ok(true) => selection_set(sel),
+        Ok(false) => OK,
+        Err(e) => e,
+    }
+}
+
 /// `CMD_SELECT_ONE`: write copy `i` only, with `seq + 1` (the state of a power cut between the two writes).
 pub unsafe fn selection_set_one(i: u32, s: *const DkrtSelection) -> i32 {
     let s = &*s;
@@ -221,6 +263,40 @@ pub(crate) unsafe fn update_with<P: Platform>(p: &P, mut r: Record, current_copy
         REC_COPY = target;
     }
     e
+}
+
+#[cfg(test)]
+mod add_tests {
+    use super::*;
+
+    fn sel(paths: &[&[u8]]) -> DkrtSelection {
+        let mut s = DkrtSelection { count: paths.len() as u32, flags: 0, paths: [[0; SEL_PATH]; SEL_MAX] };
+        for (i, p) in paths.iter().enumerate() {
+            s.paths[i][..p.len()].copy_from_slice(p);
+        }
+        s
+    }
+
+    #[test]
+    fn a_path_is_added_at_the_end_once_and_only_while_there_is_room() {
+        let mut s = sel(&[b"modules/machine/a-b.dkm"]);
+        assert_eq!(with_path(&mut s, b"modules/fx/c-d.dkm"), Ok(true));
+        assert_eq!(s.count, 2);
+        assert_eq!(&s.paths[1][..19], b"modules/fx/c-d.dkm\0");
+        // there already (also a path that is the start of another one is a different path)
+        assert_eq!(with_path(&mut s, b"modules/machine/a-b.dkm"), Ok(false));
+        assert_eq!(with_path(&mut s, b"modules/machine/a-b.dk"), Ok(true));
+        assert_eq!(s.count, 3);
+        while (s.count as usize) < SEL_MAX {
+            let n = s.count as usize;
+            s.paths[n][0] = b'a' + n as u8;
+            s.count += 1;
+        }
+        assert_eq!(with_path(&mut s, b"modules/fx/x-y.dkm"), Err(E_SEL_COUNT));
+        assert_eq!(with_path(&mut s, b"modules/fx/c-d.dkm"), Ok(false), "a full selection that holds the path is no error");
+        assert_eq!(with_path(&mut s, b""), Err(E_SEL_PATH));
+        assert_eq!(with_path(&mut s, &[b'x'; SEL_PATH]), Err(E_SEL_PATH));
+    }
 }
 
 #[cfg(test)]

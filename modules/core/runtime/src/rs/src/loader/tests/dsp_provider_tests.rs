@@ -174,7 +174,12 @@ fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_
         run_passes(&mut l);
         let rec = MAX_MODULES;
         link_script::script_link(false);
+        // a service that stays loaded keeps its tick and its file client
+        crate::entry::publish_tick(rec, 0x1234);
+        crate::files::ready(rec);
         assert_eq!(l.unload_rec(rec), E_BUSY);
+        assert_eq!(crate::entry::tick_of(rec), 0x1234, "the tick is back");
+        assert_eq!(crate::files::ready_state(rec), 2, "the file client is not retired");
         assert_eq!(records::module(rec).used, 1, "the record and its memory are kept");
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))), "no fini before the slots are known to be zero");
         link_script::script_end();

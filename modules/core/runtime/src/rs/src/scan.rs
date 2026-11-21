@@ -217,6 +217,40 @@ pub unsafe extern "C" fn dkrt_scan(out: *mut DkrtScan, max: u32) -> i32 {
     count as i32
 }
 
+/// `CoreApi::module_path`: the store path of the content module in record `owner - 1`, null for a record with no loaded module (`used` is 1 loaded, 2 loading).
+pub unsafe fn module_path(owner: u8) -> *const u8 {
+    let rec = owner as usize;
+    if rec == 0 || rec > MAX_MODULES || st().modules[rec - 1].used == 0 {
+        return core::ptr::null();
+    }
+    (*addr_of!(DKRT_PATHS))[rec - 1].as_ptr()
+}
+
+/// Is `name` the last part of `path` (the whole of it, or after a `/`)?
+pub(crate) fn last_part_is(path: &[u8; 64], name: &[u8]) -> bool {
+    let mut l = 0;
+    while l < 63 && path[l] != 0 {
+        l += 1;
+    }
+    if name.is_empty() || name.len() > l {
+        return false;
+    }
+    let from = l - name.len();
+    (from == 0 || path[from - 1] == b'/') && &path[from..l] == name
+}
+
+/// `CoreApi::store_find`: the first file under `dir` (at most 62 bytes, ending in `/`) whose last path part is `name`, in the table's order. The length of its path,
+/// with the path NUL padded in `out`; `E_NOT_FOUND` after the whole store was read and holds none (and without a store), the error of the read otherwise (`E_BUSY`
+/// while an upload holds the store). UI task.
+pub unsafe fn store_find(dir: &[u8], name: &[u8], out: &mut [u8; 64]) -> i32 {
+    if dir.len() > 62 {
+        return E_NOT_FOUND;
+    }
+    let mut prefix = [0u8; 64];
+    prefix[..dir.len()].copy_from_slice(dir);
+    store::find_name(prefix.as_ptr(), name, out)
+}
+
 /// `dkrt_scan_reads()`: the sector reads the last `dkrt_scan` made to read the needs.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_scan_reads() -> u32 {
@@ -254,4 +288,47 @@ pub unsafe extern "C" fn dkrt_fit(
     };
     fit::fit_set(&mut caps[..k], e, t, &mut *out);
     OK
+}
+
+#[cfg(test)]
+mod find_tests {
+    use super::*;
+
+    fn path(s: &[u8]) -> [u8; 64] {
+        let mut p = [0u8; 64];
+        p[..s.len()].copy_from_slice(s);
+        p
+    }
+
+    #[test]
+    fn only_a_module_record_that_is_in_use_has_a_path() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let saved = *addr_of!(DKRT_PATHS);
+            (&mut (*addr_of_mut!(DKRT_PATHS))[1])[..9].copy_from_slice(b"modules/a");
+            st().modules[1].used = 0;
+            assert!(module_path(2).is_null(), "a record that holds no module");
+            st().modules[1].used = 1;
+            let p = module_path(2);
+            assert!(!p.is_null());
+            assert_eq!(core::slice::from_raw_parts(p, 9), b"modules/a");
+            st().modules[1].used = 2;
+            assert!(!module_path(2).is_null(), "a module whose DSP part still loads is loaded");
+            assert!(module_path(0).is_null(), "owner 0 is no record");
+            assert!(module_path((MAX_MODULES + 1) as u8).is_null(), "a service file's record is no content module");
+            st().modules[1].used = 0;
+            *addr_of_mut!(DKRT_PATHS) = saved;
+        }
+    }
+
+    #[test]
+    fn a_file_name_matches_the_last_part_of_a_path_and_nothing_shorter() {
+        let p = path(b"modules/machine/fadedlimes-analog.dkm");
+        assert!(last_part_is(&p, b"fadedlimes-analog.dkm"));
+        assert!(!last_part_is(&p, b"analog.dkm"), "the part after a dash is not a part of the path");
+        assert!(!last_part_is(&p, b"machine"));
+        assert!(!last_part_is(&p, b""));
+        assert!(last_part_is(&path(b"a.dkm"), b"a.dkm"));
+        assert!(!last_part_is(&path(b"a.dkm"), b"xa.dkm"));
+    }
 }

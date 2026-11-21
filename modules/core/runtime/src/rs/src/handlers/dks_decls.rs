@@ -5,12 +5,13 @@
 pub type DeclareFn = unsafe fn(*mut u8, fn() -> u32) -> i32;
 
 /// The Rust service files: (file name, declarations).
-pub fn declarations() -> [(&'static str, DeclareFn); 5] {
+pub fn declarations() -> [(&'static str, DeclareFn); 6] {
     [
         ("machines", dkrt_svc_machines_dks::dk_svc_declare),
         ("fx", dkrt_svc_fx_dks::dk_svc_declare),
         ("lfo", dkrt_svc_lfo_dks::dk_svc_declare),
         ("samples", dkrt_svc_samples_dks::dk_svc_declare),
         ("shortcuts", dkrt_svc_shortcuts_dks::dk_svc_declare),
+        ("project", dkrt_svc_project_dks::dk_svc_declare),
     ]
 }

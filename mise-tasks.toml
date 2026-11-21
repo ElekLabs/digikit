@@ -421,7 +421,7 @@ description = "Press keys through the digikit remote, record the device's USB au
 
 ["services:pack"]
 hide = true
-run = "pnpm nx:pilot run-many -t pack -p core/services/machines,core/services/fx,core/services/lfo,core/services/samples --output-style=stream"
+run = "pnpm nx:pilot run-many -t pack -p core/services/machines,core/services/fx,core/services/lfo,core/services/samples,core/services/project --output-style=stream"
 description = "Pack the services (dist/modules/<device>/*.dks) from the committed objects; Transfer and wb:cli read them there"
 
 [transfer]

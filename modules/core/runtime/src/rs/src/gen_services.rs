@@ -11,7 +11,7 @@ pub static SERVICES: [ServiceRow; 0] = [
 pub const STATIC: usize = 0;
 
 /// The name of every `[[service]]`, in file order: the ordinal of a service. The rows a `.dks` adds follow the in-crate rows sorted by it (`svc_rows.rs`).
-pub const ORDER: [&str; 6] = ["samples", "machines", "fx", "lfo", "shortcuts", "svc-test"];
+pub const ORDER: [&str; 7] = ["samples", "machines", "fx", "lfo", "shortcuts", "project", "svc-test"];
 
 /// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.
 pub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;

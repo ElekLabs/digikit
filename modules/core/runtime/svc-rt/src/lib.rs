@@ -152,6 +152,35 @@ impl CoreApi for ImportCore {
             value.len() as u32,
         )
     }
+    unsafe fn settings_overlay_set(&self, overlay: *const dkrt_abi::service::SettingsOverlay) {
+        dkc_settings_overlay_set(overlay)
+    }
+    unsafe fn settings_changed(&self, id: &[u8]) {
+        dkc_settings_changed(id.as_ptr(), id.len() as u32)
+    }
+    unsafe fn live(&self, op: u32, path: *const u8) -> i32 {
+        dkc_live(op, path)
+    }
+    unsafe fn live_state(&self) -> dkrt_sdk::DkrtLive {
+        let mut out = core::mem::MaybeUninit::<dkrt_sdk::DkrtLive>::uninit();
+        dkc_live_state(out.as_mut_ptr());
+        out.assume_init()
+    }
+    unsafe fn selection_add(&self, path: &[u8]) -> i32 {
+        dkc_selection_add(path.as_ptr(), path.len() as u32)
+    }
+    unsafe fn module_path(&self, owner: u8) -> *const u8 {
+        dkc_module_path(owner)
+    }
+    unsafe fn store_find(&self, dir: &[u8], name: &[u8], out: &mut [u8; 64]) -> i32 {
+        dkc_store_find(
+            dir.as_ptr(),
+            dir.len() as u32,
+            name.as_ptr(),
+            name.len() as u32,
+            out.as_mut_ptr(),
+        )
+    }
     unsafe fn log(&self, kind: u16, flags: u16, args: [u32; 5]) {
         dkc_log(kind, flags, args.as_ptr())
     }
@@ -297,6 +326,24 @@ pub fn running_device() -> u32 {
     ImportCore.device_id()
 }
 
+static mut INIT_CTX: *mut u8 = core::ptr::null_mut();
+
+/// The module context `init` of this file was called with (`service!` stores it before `setup` runs): what a `setup` needs for the opener imports that take it (`dk_files_open`).
+/// A file is one service, so there is one. Null before `init`. A host build that links several service files shares it: only the last `init` counts.
+pub fn init_ctx() -> *mut u8 {
+    // SAFETY: a plain word, written once in `init` (the UI task) and read after it.
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(INIT_CTX)) }
+}
+
+#[doc(hidden)]
+pub fn set_init_ctx(ctx: *mut u8) {
+    // SAFETY: as `init_ctx`.
+    unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(INIT_CTX), ctx) }
+}
+
+/// The `tick` of a service file: called once per UI pass with the module context, as the `tick` of a module (`ModuleDef::tick`).
+pub type TickFn = unsafe extern "C" fn(*mut u8);
+
 /// The device filter of one hook entry of `service!`: none (every device), `dt2` or `dn2`.
 #[doc(hidden)]
 #[macro_export]
@@ -315,32 +362,38 @@ macro_rules! hook_device {
 /// The service file's glue: `service!(Lfo, "lfo", KINDS_LFO)` for `impl<C: CoreApi> Service<C> for Lfo`, the name of its `[[service]]` and the record kinds
 /// it owns (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`). It emits `dk_module`, `dk_svc_abi` and (on the ColdFire) the panic handler.
 ///
-/// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]` and `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
-/// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
+/// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]`, `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
+/// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name) and `tick = f` (`unsafe extern "C" fn(*mut u8)`, the file's `tick`: once per UI pass, with the module context; only after `exports`), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
 /// of `init` without `setup` (the host test of the assembly runs it and compares the result with the header table).
 ///
 /// The symbols are `no_mangle` on the ColdFire only: a host test links the service crates of all three files into one binary.
 #[macro_export]
 macro_rules! service {
     ($svc:ty, $name:literal, $kinds:expr) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = None, hooks = [], fills = [], exports = $crate::service!(@exports));
+        $crate::service!(@emit $svc, $name, $kinds, setup = None, hooks = [], fills = [], exports = $crate::service!(@exports), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [], exports = $crate::service!(@exports));
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [], exports = $crate::service!(@exports), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports));
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*]) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*));
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = None);
+    };
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*], tick = $tick:path) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = Some($tick as $crate::TickFn));
     };
     ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr) => {
-        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports);
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = None);
+    };
+    ($svc:ty, $name:literal, $kinds:expr, setup = $setup:expr, hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr, tick = $tick:path) => {
+        $crate::service!(@emit $svc, $name, $kinds, setup = Some($setup), hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = Some($tick as $crate::TickFn));
     };
     (@emit $svc:ty, $name:literal, $kinds:expr, setup = $setup:expr,
      hooks = [$(($site:literal, $entry:path $(, $dev:ident)?)),* $(,)?],
      fills = [$(($slot:literal, $fill:path $(, $fdev:ident)?)),* $(,)?],
-     exports = $exports:expr) => {
+     exports = $exports:expr, tick = $tick:expr) => {
         static DK_SVC_ROW: $crate::dkrt_abi::service::ServiceRow =
             $crate::dkrt_abi::service::ServiceRow::of::<$svc, $crate::ImportCore>($name, $kinds);
 
@@ -353,6 +406,7 @@ macro_rules! service {
         }
 
         unsafe extern "C" fn dk_svc_init(ctx: *mut u8) -> i32 {
+            $crate::set_init_ctx(ctx);
             let setup: Option<unsafe fn(&$crate::ImportCore) -> i32> = $setup;
             let r = match setup {
                 Some(f) => f(&$crate::ImportCore),
@@ -368,7 +422,7 @@ macro_rules! service {
         pub static dk_module: $crate::ModuleDef = $crate::ModuleDef {
             init: Some(dk_svc_init),
             fini: None,
-            tick: None,
+            tick: $tick,
             menu: None,
         };
 
@@ -397,6 +451,86 @@ macro_rules! service {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // the imports a service file makes are the runtime's; this test binary links none, so each answers OK
+    mod stubs {
+        #[no_mangle]
+        extern "C" fn dk_service_declare_kind(_: *mut u8, _: u32, _: u32, _: *const u8) -> i32 {
+            0
+        }
+        #[no_mangle]
+        extern "C" fn dk_service_declare_hook(_: *mut u8, _: u32, _: *const u8) -> i32 {
+            0
+        }
+        #[no_mangle]
+        extern "C" fn dk_service_declare_slot(_: *mut u8, _: u32, _: u32, _: *const u8) -> i32 {
+            0
+        }
+        #[no_mangle]
+        extern "C" fn dk_service_declare_export(_: *mut u8, _: u32, _: *const u8) -> i32 {
+            0
+        }
+        #[no_mangle]
+        extern "C" fn dk_service_declare_row(
+            _: *mut u8,
+            _: *const dkrt_abi::service::ServiceRow,
+        ) -> i32 {
+            0
+        }
+        #[no_mangle]
+        extern "C" fn dkc_device_id() -> u32 {
+            0
+        }
+    }
+
+    // a file with `tick =` has the entry in the record and the context `init` was called with; one without has a zero word
+    mod ticked {
+        pub struct S;
+        impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for S {
+            dkrt_abi::accepts_records!();
+            dkrt_abi::accepts_teardown!();
+        }
+        pub static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+        pub unsafe extern "C" fn tick(ctx: *mut u8) {
+            TICKS.fetch_add(ctx as usize, core::sync::atomic::Ordering::Relaxed);
+        }
+        crate::service!(
+            S,
+            "ticked",
+            &[],
+            setup = setup,
+            hooks = [],
+            fills = [],
+            exports = [],
+            tick = tick
+        );
+        unsafe fn setup(_: &crate::ImportCore) -> i32 {
+            assert_eq!(crate::init_ctx() as usize, 0x1234);
+            0
+        }
+        pub unsafe fn init(ctx: *mut u8) -> i32 {
+            dk_svc_init(ctx)
+        }
+    }
+    mod unticked {
+        pub struct S;
+        impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for S {
+            dkrt_abi::accepts_records!();
+            dkrt_abi::accepts_teardown!();
+        }
+        crate::service!(S, "unticked", &[]);
+    }
+
+    #[test]
+    fn tick_puts_the_entry_in_the_module_record_and_the_context_reaches_setup() {
+        let t = ticked::dk_module.tick.expect("tick = f sets the entry");
+        unsafe { t(5 as *mut u8) };
+        assert_eq!(ticked::TICKS.load(core::sync::atomic::Ordering::Relaxed), 5);
+        assert!(unticked::dk_module.tick.is_none());
+        // `init` stores the context before `setup` runs (the assert in `setup`)
+        assert_eq!(unsafe { ticked::init(0x1234 as *mut u8) }, 0);
+        assert_eq!(init_ctx() as usize, 0x1234);
+    }
 
     #[test]
     fn the_module_record_is_four_words_and_a_missing_entry_is_zero() {

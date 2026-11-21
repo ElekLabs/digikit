@@ -88,6 +88,29 @@ impl CoreApi for RealCore {
     unsafe fn settings_put(&self, key: &[u8], value: &[u8]) -> i32 {
         settings::put(key, value)
     }
+    unsafe fn settings_overlay_set(&self, overlay: *const dkrt_abi::service::SettingsOverlay) {
+        crate::settings_overlay::set(overlay)
+    }
+    unsafe fn settings_changed(&self, id: &[u8]) {
+        crate::settings_reload::changed(id)
+    }
+    unsafe fn live(&self, op: u32, path: *const u8) -> i32 {
+        crate::reload::dkrt_live(op, path)
+    }
+    unsafe fn live_state(&self) -> dkrt_sdk::DkrtLive {
+        let mut out = core::mem::MaybeUninit::<dkrt_sdk::DkrtLive>::uninit();
+        crate::reload::dkrt_live_state(out.as_mut_ptr());
+        out.assume_init()
+    }
+    unsafe fn selection_add(&self, path: &[u8]) -> i32 {
+        crate::selection::selection_add(path)
+    }
+    unsafe fn module_path(&self, owner: u8) -> *const u8 {
+        crate::scan::module_path(owner)
+    }
+    unsafe fn store_find(&self, dir: &[u8], name: &[u8], out: &mut [u8; 64]) -> i32 {
+        crate::scan::store_find(dir, name, out)
+    }
     unsafe fn log(&self, kind: u16, flags: u16, args: [u32; 5]) {
         dlog::ev(kind, flags, args)
     }

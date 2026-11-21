@@ -42,16 +42,19 @@ const INFO: ClientInfo = ClientInfo {
     context: core::ptr::null_mut(),
     expired: false,
 };
-static mut JOBS: Broker<{ crate::MAX_MODULES }, Request, FileEntry> = Broker::new();
-static mut INFO_ROWS: [ClientInfo; crate::MAX_MODULES] = [INFO; crate::MAX_MODULES];
+/// The owners of a listing client: one per loader record (`REC_MAX`), a content module's or a service file's. The owner index is the record index, the number
+/// `dlog::current_source` names less one.
+const OWNERS: usize = crate::state::REC_MAX;
+static mut JOBS: Broker<OWNERS, Request, FileEntry> = Broker::new();
+static mut INFO_ROWS: [ClientInfo; OWNERS] = [INFO; OWNERS];
 // 0 retired/uninitialized, 1 initializing, 2 ready. Only init scope can attach.
-static mut READY: [u8; crate::MAX_MODULES] = [0; crate::MAX_MODULES];
+static mut READY: [u8; OWNERS] = [0; OWNERS];
 static mut INIT_SCOPE: usize = usize::MAX;
 static mut TICKING: bool = false;
 static mut SCHED_ERROR: i32 = 0;
 
 unsafe fn locked<T>(
-    f: impl FnOnce(&mut Broker<{ crate::MAX_MODULES }, Request, FileEntry>) -> T,
+    f: impl FnOnce(&mut Broker<OWNERS, Request, FileEntry>) -> T,
 ) -> T {
     let sr = crate::irq_mask();
     let result = f(&mut *addr_of_mut!(JOBS));
@@ -95,9 +98,14 @@ pub unsafe fn retire(owner: usize) -> bool {
         quiet
     })
 }
-/// Is module record `owner` inside its `init` now? The check that `client` and the settings client share.
+/// Is record `owner` (a module or a service file) inside its `init` now? The check that `client` and the settings client share.
 pub unsafe fn in_init(owner: usize) -> bool {
-    owner < crate::MAX_MODULES && INIT_SCOPE == owner && READY[owner] == 1
+    owner < OWNERS && INIT_SCOPE == owner && READY[owner] == 1
+}
+/// Test only: 0 retired, 1 in `init`, 2 ready.
+#[cfg(test)]
+pub unsafe fn ready_state(owner: usize) -> u8 {
+    READY[owner]
 }
 pub unsafe fn client() -> i32 {
     locked(|jobs| {
@@ -106,7 +114,7 @@ pub unsafe fn client() -> i32 {
             return E_NOT_FOUND;
         }
         let owner = source as usize - 1;
-        if owner >= crate::MAX_MODULES || INIT_SCOPE != owner || READY[owner] != 1 {
+        if owner >= OWNERS || INIT_SCOPE != owner || READY[owner] != 1 {
             return E_NOT_FOUND;
         }
         match jobs.attach(owner) {
@@ -593,8 +601,8 @@ mod tests {
 
     unsafe fn reset() {
         *addr_of_mut!(JOBS) = Broker::new();
-        INFO_ROWS = [INFO; crate::MAX_MODULES];
-        READY = [0; crate::MAX_MODULES];
+        INFO_ROWS = [INFO; OWNERS];
+        READY = [0; OWNERS];
         INIT_SCOPE = usize::MAX;
         TICKING = false;
         SCHED_ERROR = 0;
@@ -683,12 +691,50 @@ mod tests {
         }
     }
 
+    /// A service file is a record after the modules: it opens the client through `dk_files_open` in its `init` only, lists as a module does, and its client and listing go with the record.
+    #[test]
+    fn a_service_record_opens_the_listing_client_in_init_only_and_lists_and_retires() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            reset();
+            let f = fixture(profiles::DN2);
+            let rec = crate::MAX_MODULES + 1;
+            let ctx = crate::entry::bind(rec) as *mut u8;
+            crate::dlog::set_source_for_test(rec as u8 + 1);
+            let mut out: *mut u8 = null_mut();
+            assert_eq!(crate::entry::dk_files_open(ctx, &mut out), E_NOT_FOUND, "not before the scope of its init");
+            init_begin(rec);
+            assert!(in_init(rec));
+            assert_eq!(crate::entry::dk_files_open(ctx, &mut out), OK);
+            let h = crate::entry::client(out);
+            assert!(h > 0);
+            ready(rec);
+            assert!(!in_init(rec));
+            let mut again: *mut u8 = null_mut();
+            assert_eq!(crate::entry::dk_files_open(ctx, &mut again), E_NOT_FOUND, "not after its init");
+            let t = start(&f, h, STORE, b"modules");
+            assert!(t > 0);
+            assert_eq!(rows(&f, h, t), modules());
+            // a listing that is open when the record goes away is freed with it, and the handle is dead
+            let t = start(&f, h, SAMPLES, b"KICKS");
+            assert!(t > 0);
+            assert_eq!(TEST_LIVE, 1);
+            assert!(retire(rec));
+            assert_eq!(TEST_LIVE, 0);
+            assert_eq!(READY[rec], 0);
+            let mut e = FileEntry::empty();
+            assert!(poll_with(&f, h, t as u32, addr_of_mut!(e) as *mut u8, 304) < 0);
+            crate::dlog::set_source_for_test(0);
+            crate::entry::unbind(rec);
+        }
+    }
+
     #[test]
     fn a_provider_that_pends_still_completes_with_the_same_rows() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
-            let f = fixture(profiles::DN2);
+            let f = fixture(profiles::ALL[0]);
             f.storage.pending_every.set(1);
             let h = attach(0);
             let t = start(&f, h, SAMPLES, b"KICKS");

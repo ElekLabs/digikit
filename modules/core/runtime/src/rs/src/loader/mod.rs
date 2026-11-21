@@ -48,7 +48,7 @@ pub(crate) mod exports;
 mod image;
 pub(crate) mod install;
 mod port;
-mod records;
+pub(crate) mod records;
 pub(crate) mod role;
 mod seams;
 #[cfg(test)]
@@ -862,9 +862,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return self.fail(rec, r);
         }
-        if module {
-            crate::files::init_begin(rec);
-        }
+        // the listing client and the I/O jobs are for every record: a service file uses the SDK file calls in its `init` as a module does
+        crate::files::init_begin(rec);
         let blk = match self.m.alloc(core::mem::size_of::<crate::collect::Collect>() as u32) {
             Some(b) => b,
             None => return self.fail(rec, E_NOMEM),
@@ -899,13 +898,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let m: &mut Module = records::module(rec);
         m.used = 1;
-        // a provider has no tick, no files, no intro and is no module of the count
+        // a service file has no intro and is no module of the count; its tick runs as a module's does
+        if tick != 0 {
+            crate::entry::publish_tick(rec, tick);
+        }
+        crate::files::ready(rec);
         if module {
-            if tick != 0 {
-                crate::entry::publish_tick(rec, tick);
-            }
             s.loads = s.loads.wrapping_add(1);
-            crate::files::ready(rec);
             crate::intro::commit(rec);
         }
         OK
@@ -916,11 +915,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// Undo what `init` and the checks before the commit did for record `rec`; `r` is the result to return (`E_BUSY` when a step of the module is still running).
     unsafe fn fail(&mut self, rec: usize, r: i32) -> i32 {
         let module = rec < MAX_MODULES;
-        let mut held = false;
         if module {
             crate::intro::discard(rec);
-            held = !crate::files::retire(rec) | !retire_sdk(rec);
         }
+        let held = !crate::files::retire(rec) | !retire_sdk(rec);
         crate::module_cmds::release_cmds(rec as u8 + 1);
         crate::dlog::release_sinks(rec);
         (RoleSteps::<P, M, R>::of(self.roles[rec] as u32).undo)(self, rec);
@@ -931,9 +929,9 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         r
     }
 
-    /// A module's file or I/O step still runs, or the DSP loader keeps its rows: the record must not be freed yet. A provider record has none of these.
+    /// A file or I/O step of the record still runs, or the DSP loader keeps a module's rows: the record must not be freed yet.
     unsafe fn cannot_retire(&mut self, rec: usize) -> bool {
-        rec < MAX_MODULES && (dsp::retained() || !crate::files::retire(rec) || !retire_sdk(rec))
+        (rec < MAX_MODULES && dsp::retained()) || !crate::files::retire(rec) || !retire_sdk(rec)
     }
 
 
@@ -1211,20 +1209,30 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// of a module; the hook sites and slots of a service), drain the DSP, `fini`, the role's undo, the registry, the DSP range, the memory.
     unsafe fn unload_rec_inner(&mut self, rec: usize) -> i32 {
         let module = rec < MAX_MODULES;
+        if !module {
+            // a service: no new tick call, then nothing may jump into it any more (hook sites back to stock, slots zero). This goes first: a refused take-down leaves the
+            // service loaded, so it gets its tick back and keeps its file client and jobs (the retires below cannot be undone).
+            let tick = crate::entry::tick_of(rec);
+            crate::entry::stop_tick(rec);
+            if !self.uninstall(rec) {
+                crate::entry::publish_tick(rec, tick);
+                return E_BUSY;
+            }
+        }
+        // the listing client and the I/O jobs of a module or a service file go before its code does; a queued job's `done` must not point into freed code
+        if !crate::files::retire(rec) { return E_BUSY; }
+        if !crate::worker::retire(rec) { return E_BUSY; }
+        if !retire_sdk(rec) { return E_BUSY; }
         if module {
-            if !crate::files::retire(rec) { return E_BUSY; }
-            if !crate::worker::retire(rec) { return E_BUSY; }
-            if !retire_sdk(rec) { return E_BUSY; }
             // an intro of this module that has not run `done` yet: `done` must not point into freed code
             crate::intro::discard(rec);
+            // the record's next module has opened no settings
+            crate::settings_reload::note_unloaded(rec);
         }
         let m: &mut Module = records::module(rec);
         if module {
             // 1. clear the tick (one aligned store) so no new call starts; the UI task, where it runs, is this task. The address is kept for a reload that gives up.
             self.stop_tick_once(rec);
-        } else if !self.uninstall(rec) {
-            // 1. a service: nothing may jump into it any more (hook sites back to stock, slots zero)
-            return E_BUSY;
         }
         // DSP rows must be invalidated before fini can mutate/release module state.
         if !dsp::quiesce(rec) { return E_BUSY; }

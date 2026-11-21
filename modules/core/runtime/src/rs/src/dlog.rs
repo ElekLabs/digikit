@@ -112,6 +112,12 @@ pub fn current_source() -> u8 {
     unsafe { read_volatile(addr_of!(CURRENT_SRC)) }
 }
 
+/// A test sets the source of the code that runs now.
+#[cfg(test)]
+pub fn set_source_for_test(src: u8) {
+    unsafe { write_volatile(addr_of_mut!(CURRENT_SRC), src) }
+}
+
 /// What the running module code is (`PHASE_*`), for the crash record.
 pub fn current_phase() -> u8 {
     unsafe { read_volatile(addr_of!(CURRENT_PHASE)) }

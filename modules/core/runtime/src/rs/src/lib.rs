@@ -39,6 +39,8 @@ mod loader;
 pub mod registry;
 pub mod scan;
 pub mod settings;
+mod settings_overlay;
+mod settings_reload;
 mod files;
 mod hash32;
 // The file is not aux.rs: Windows does not allow a file named AUX, with any extension.

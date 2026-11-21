@@ -131,7 +131,7 @@ impl Env for Fake {
         0
     }
 }
-type C = Core<2, 8, 3>;
+type C = Core<2, 8>;
 fn run(c: &mut C, e: &mut Fake, n: usize) {
     for _ in 0..n {
         c.tick(e);
@@ -460,64 +460,6 @@ fn check_failure_before_publish_counts_as_loss() {
 }
 
 #[test]
-fn project_change_selects_first_then_unbinds_and_keeps_shared_entries() {
-    let (mut c, mut e) = (core(), Fake::new());
-    for (n, h) in [("a.wav", 1u8), ("b.wav", 2), ("c.wav", 3)] {
-        e.add(n, id(100 + h as u32, h), 400, 2);
-    }
-    c.project_changed(5);
-    c.select(0, 0, b"a.wav");
-    c.select(0, 1, b"b.wav");
-    run(&mut c, &mut e, 8);
-    c.project_changed(6);
-    c.select(0, 0, b"a.wav");
-    c.select(0, 2, b"c.wav");
-    run(&mut c, &mut e, 8);
-    assert_eq!(e.loads, 3);
-    assert_eq!(c.status(0, 1), UNUSED, "project 6 has no track 1");
-    c.project_changed(5);
-    run(&mut c, &mut e, 10);
-    assert_eq!(
-        (c.status(0, 0), c.status(0, 1), c.status(0, 2)),
-        (READY, READY, UNUSED)
-    );
-    assert_eq!(
-        e.loads, 4,
-        "a.wav survived through dedup; b.wav was released by project 6 and loads again"
-    );
-}
-
-#[test]
-fn selections_made_before_the_project_is_known_belong_to_the_first_project() {
-    let (mut c, mut e) = (core(), Fake::new());
-    e.add("a.wav", id(100, 1), 400, 2);
-    c.select(0, 4, b"a.wav");
-    c.project_changed(2);
-    run(&mut c, &mut e, 5);
-    assert_eq!(c.status(0, 4), READY);
-    c.project_changed(3);
-    run(&mut c, &mut e, 5);
-    assert_eq!(c.status(0, 4), UNUSED);
-    c.project_changed(2);
-    run(&mut c, &mut e, 6);
-    assert_eq!(c.status(0, 4), READY);
-}
-
-#[test]
-fn missing_file_after_project_change_is_a_per_track_error() {
-    let (mut c, mut e) = (core(), Fake::new());
-    e.add("a.wav", id(100, 1), 400, 2);
-    c.project_changed(1);
-    c.select(0, 0, b"a.wav");
-    c.select(0, 1, b"gone.wav");
-    c.project_changed(2);
-    c.project_changed(1);
-    run(&mut c, &mut e, 8);
-    assert_eq!(c.status(0, 0), READY);
-    assert_eq!(c.status(0, 1), E_NOT_FOUND);
-}
-
-#[test]
 fn teardown_waits_for_the_drain_then_frees() {
     let (mut c, mut e) = (core(), Fake::new());
     e.add("a.wav", id(100, 1), 400, 2);
@@ -661,25 +603,6 @@ fn the_track_path_is_there_in_every_state_but_unused() {
 }
 
 #[test]
-fn the_track_path_follows_a_project_change() {
-    let (mut c, mut e) = (core(), Fake::new());
-    e.add("p1.wav", id(100, 1), 500, 2);
-    e.add("p2.wav", id(200, 2), 300, 2);
-    c.project_changed(1);
-    c.select(0, 0, b"p1.wav");
-    run(&mut c, &mut e, 4);
-    c.project_changed(2);
-    assert_eq!(
-        c.path(0, 0),
-        Err(E_NOT_FOUND),
-        "the new project has no selection on track 0"
-    );
-    c.select(0, 0, b"p2.wav");
-    c.project_changed(1);
-    assert_eq!(c.path(0, 0), Ok(&b"p1.wav"[..]));
-}
-
-#[test]
 fn pool_add_takes_the_first_free_index_and_a_cleared_hole_is_taken_next() {
     let (mut c, mut e) = (core(), Fake::new());
     for (i, n) in ["a", "b", "c"].iter().enumerate() {
@@ -805,38 +728,6 @@ fn pool_set_reports_bad_arguments() {
     assert_eq!(c.pool_set(0, 0, b""), E_SEL_PATH);
     assert_eq!(c.pool_set(1, 0, b"a"), E_NOT_FOUND, "client 1 is not open");
     assert_eq!(c.status(0, 0), UNUSED);
-}
-
-#[test]
-fn the_pool_list_follows_a_project_change_with_its_holes() {
-    let (mut c, mut e) = (core(), Fake::new());
-    for (n, h) in [("a", 1u8), ("b", 2), ("c", 3), ("x", 4)] {
-        e.add(n, id(100 + h as u32, h), 500, 2);
-    }
-    c.project_changed(1);
-    assert_eq!(c.pool_add(0, b"a"), 0);
-    assert_eq!(c.pool_add(0, b"b"), 1);
-    assert_eq!(c.pool_add(0, b"c"), 2);
-    run(&mut c, &mut e, 8);
-    c.unbind(0, 1);
-    run(&mut c, &mut e, 4);
-    c.project_changed(2);
-    run(&mut c, &mut e, 8);
-    assert_eq!(
-        c.status(0, 0),
-        UNUSED,
-        "project 2 starts with an empty pool"
-    );
-    assert_eq!(c.pool_add(0, b"x"), 0);
-    run(&mut c, &mut e, 6);
-    c.project_changed(1);
-    run(&mut c, &mut e, 12);
-    assert_eq!(
-        (c.status(0, 0), c.status(0, 1), c.status(0, 2)),
-        (READY, UNUSED, READY),
-        "the hole at 1 is still a hole"
-    );
-    assert_eq!(c.path(0, 2), Ok(&b"c"[..]));
 }
 
 #[test]

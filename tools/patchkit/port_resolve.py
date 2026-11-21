@@ -66,6 +66,9 @@ Rule kinds (SHARC rules use the image's sharcdb through tools/sharc_dev/sharc.py
                  followed by scs/scc/bhi/bls), found by the scan of scan_param_sites below. An anchor of
                  kind "sites": addr = the table, len = number of sites, sha256 = their digest.
 
+  cf_call        hash, ordinal as cf_func, `call` = <bytes from the entry of that function to a `jsr (xxx).l` (4eb9) or `jsr d16(pc)` (4eba)>, `offset` = <bytes from
+                 the callee's entry; default 0>, len: a code anchor on the function that the call reaches. For a function whose own hash differs between
+                 firmwares (an immediate that the hash does not mask) while its caller's hash does not; `src` = the call instruction.
   cf_ptr         as cf_func (hash, ordinal, offset), but the 4 bytes at entry + offset are an absolute address literal
                  (a `lea table,An`, a `pea`, an `addi.l #table,Dn`): the anchor is the table the literal points to
                  (kind data, `src` = the literal, `len` bytes of the table hashed).
@@ -627,6 +630,32 @@ def resolve_cf_anchor(cf: CfFacts, rule: dict) -> dict:
         }
     if kind == "cf_words":
         return resolve_cf_words(cf, rule)
+    if kind == "cf_call":
+        src = cf_func_addr(cf, {**rule, "offset": rule["call"]})
+        op = cf.bytes_at(src, 2)
+        if op == b"\x4e\xb9":
+            target = int.from_bytes(cf.bytes_at(src + 2, 4), "big")
+        elif op == b"\x4e\xba":
+            target = (
+                src + 2 + int.from_bytes(cf.bytes_at(src + 2, 2), "big", signed=True)
+            )
+        else:
+            raise ResolveError(
+                f"{rule['name']}: no jsr at call offset {rule['call']:#x} of the caller"
+            )
+        if not cf.base <= target < cf.base + len(cf.main):
+            raise ResolveError(
+                f"{rule['name']}: the call target {target:#x} is not in the MAIN OS image"
+            )
+        addr = target + int(rule.get("offset", 0))
+        n = int(rule["len"])
+        return {
+            "kind": "code",
+            "addr": addr,
+            "len": n,
+            "src": src,
+            "sha256": sha(cf.bytes_at(addr, n)),
+        }
     if kind == "cf_ptr":
         # a table the code reaches through an absolute 32-bit literal: the anchor is the table (`len` bytes of it are
         # hashed), `src` the literal at entry + offset of the function `hash`

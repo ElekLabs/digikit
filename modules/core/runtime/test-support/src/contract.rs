@@ -174,9 +174,13 @@ pub struct Fixture {
     /// What the service does while a module runs that the loader does not do: queue live values for the module's rows, as a knob turn does (`None`: the service
     /// queues none). Case 7 calls it with the module loaded, so a release that leaves a value queued on the link shows.
     pub live: Option<fn(&FakeCore)>,
-    /// The areas (`memory`, `dsp`, `settings`, `state`) in which loaded `A` and loaded `a2` may be equal, each with its reason. Every other area must differ, or the
+    /// The areas (`memory`, `dsp`, `settings`, `state`, and `survives` when the fixture has it) in which loaded `A` and loaded `a2` may be equal, each with its reason. Every other area must differ, or the
     /// comparison of case 7 cannot see a leftover there.
     pub salt_same: &'static [(&'static str, &'static str)],
+    /// The service's data that outlives a module's unload on purpose (the project service keeps what modules put into the current project: it is the project's, not the
+    /// module's), as words, `None` when the service keeps none. It is left out of every "back at the start" comparison and is the area `survives` when `A` and `a2` are
+    /// compared (the area `state` is `Fixture::state` alone), so a module that fills it makes the two differ. Each use has its reason in the fixture.
+    pub survives: Option<fn(&FakeCore) -> Vec<u32>>,
     /// A module the service must refuse at its commit (a record it checks, or a builder call it refuses).
     pub bad: Module,
     /// A module the service refuses while it applies the records, after the rows of earlier records were written (`None`: the service has no such path; its
@@ -232,6 +236,19 @@ pub struct Snapshot {
     settings: Vec<(Vec<u8>, Vec<u8>)>,
     caps: Vec<(u8, u32, u32)>,
     state: Vec<u32>,
+    /// What the service keeps on purpose after a module's unload (`Fixture::survives`); never part of a comparison between two snapshots (its `PartialEq` is always true).
+    survives: Survivors,
+}
+
+/// The view of the data that outlives an unload on purpose. It is shown by `differing_areas` (as its own area, `survives`) and by case 7's check that `a2` differs from `A`,
+/// and ignored by every equality, so that "the state is back at its start" holds without it.
+#[derive(Clone, Debug, Default)]
+struct Survivors(Vec<u32>);
+
+impl PartialEq for Survivors {
+    fn eq(&self, _: &Survivors) -> bool {
+        true
+    }
 }
 
 impl Snapshot {
@@ -385,7 +402,7 @@ impl Snapshot {
         out
     }
 
-    /// The areas in which two snapshots differ: memory, DSP state, settings, the service's view.
+    /// The areas in which two snapshots differ: memory, DSP state, settings, the service's state, and what survives an unload on purpose.
     pub fn differing_areas(&self, other: &Snapshot) -> Vec<&'static str> {
         let mut v = Vec::new();
         if self.mem != other.mem {
@@ -399,6 +416,9 @@ impl Snapshot {
         }
         if self.state != other.state {
             v.push("state");
+        }
+        if self.survives.0 != other.survives.0 {
+            v.push("survives");
         }
         v
     }
@@ -656,6 +676,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             settings,
             caps,
             state: (self.f.state)(core),
+            survives: Survivors(self.f.survives.map_or_else(Vec::new, |f| f(core))),
         }
     }
 
@@ -1824,14 +1845,16 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
     }
     let loaded_a2 = l.snapshot();
     assert!(
-        loaded_a.same_after_unload(&loaded_a2, true).is_err(),
+        loaded_a.same_after_unload(&loaded_a2, true).is_err()
+            || loaded_a.survives.0 != loaded_a2.survives.0,
         "{}: a2 loads to the same state as A: the comparison cannot see a leftover",
         f.name
     );
     // each area has its own salt: an area where A and a2 are equal cannot show a leftover of its content
     let differ = loaded_a.differing_areas(&loaded_a2);
-    let wrong: Vec<String> = ["memory", "dsp", "settings", "state"]
+    let wrong: Vec<String> = ["memory", "dsp", "settings", "state", "survives"]
         .iter()
+        .filter(|area| **area != "survives" || f.survives.is_some())
         .filter_map(|area| {
             let allowed = f.salt_same.iter().any(|(a, _)| a == area);
             (differ.contains(area) == allowed).then(|| {

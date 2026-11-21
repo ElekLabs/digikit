@@ -522,14 +522,21 @@
   },
   {
    "addend": 0,
-   "offset": 2,
+   "offset": 6,
+   "section": ".text._RNvCslpS34BCfq18_22dkrt_svc_shortcuts_dks11dk_svc_init",
+   "symbol": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
    "section": ".text._RNvCslpS34BCfq18_22dkrt_svc_shortcuts_dks11dk_svc_init",
    "symbol": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 12,
+   "offset": 22,
    "section": ".text._RNvCslpS34BCfq18_22dkrt_svc_shortcuts_dks11dk_svc_init",
    "symbol": ".sec..text._RNvCslpS34BCfq18_22dkrt_svc_shortcuts_dks14dk_svc_declare",
    "type": "cf.32"
@@ -1040,6 +1047,13 @@
   },
   {
    "addend": 0,
+   "offset": 6,
+   "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "symbol": ".sec..bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 2,
    "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "symbol": "dkc_device_id",
@@ -1049,7 +1063,7 @@
    "addend": 0,
    "offset": 22,
    "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt4init",
-   "symbol": "_RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "symbol": "_RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "type": "cf.32"
   },
   {
@@ -2337,10 +2351,10 @@
   },
   {
    "align": 2,
-   "hex": "4879000000002f2f00084eb900000000508f4e75",
+   "hex": "2f2f00044eb9000000004879000000002f2f000c4eb9000000004fef000c4e75",
    "kind": "text",
    "name": ".text._RNvCslpS34BCfq18_22dkrt_svc_shortcuts_dks11dk_svc_init",
-   "size": 20
+   "size": 32
   },
   {
    "align": 2,
@@ -2484,7 +2498,7 @@
   },
   {
    "align": 2,
-   "hex": "7efc881d",
+   "hex": "4b109a2b",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -2502,6 +2516,13 @@
    "kind": "data",
    "name": ".rodata._RNvCslpS34BCfq18_22dkrt_svc_shortcuts_dks10DK_SVC_ROW",
    "size": 112
+  },
+  {
+   "align": 2,
+   "hex": "41ef000423d0000000004e75",
+   "kind": "text",
+   "name": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "size": 12
   },
   {
    "align": 2,
@@ -2558,6 +2579,13 @@
    "kind": "text",
    "name": ".text._RNvXs_Cs8bqlSpJqGKy_11dkrt_svc_rtNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi9module_of",
    "size": 14
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "size": 4
   },
   {
    "align": 2,
@@ -2948,7 +2976,7 @@
    "align": 2,
    "hex": "206f0004202800082228000c4e75",
    "kind": "text",
-   "name": ".text._RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "name": ".text._RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "size": 14
   },
   {
@@ -3176,8 +3204,14 @@
    "size": 28
   }
  ],
- "source_sha256": "0dd8c4a1a5495ed5436eb41b0b46d63aa562d7aebca6fc2b2623606c5269290a",
+ "source_sha256": "86e5cf7c34f2fff79a32461ca579c3cc7e0bff056a08bb102d519ce8e1fb247d",
  "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "section": ".bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "value": 0
+  },
   {
    "global": false,
    "name": ".sec..bss._RNvNtCs5i1KCeQkN5Z_18dkrt_svc_shortcuts5build10COLLECTION",
@@ -3876,6 +3910,12 @@
   },
   {
    "global": false,
+   "name": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "value": 0
@@ -3978,8 +4018,8 @@
   },
   {
    "global": false,
-   "name": "_RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
-   "section": ".text._RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "name": "_RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "section": ".text._RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "value": 0
   },
   {
@@ -4207,8 +4247,8 @@
  ],
  "toolchain": {
   "exports": "dk_module dk_shortcut_add dk_shortcuts_key dk_svc_abi shortcuts_key_hook",
-  "instructions_redecoded": "3754",
-  "isa_check": "ca2885f3fea9824c46654e1d335e6b61558fe75ea22f0ba2d1800c88891364ed",
+  "instructions_redecoded": "3759",
+  "isa_check": "49d6eb1e04c7c18054d66223f68219c42198485b7ce38adfed28fbfa080b6793",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

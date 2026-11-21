@@ -2596,6 +2596,16 @@ mark = "D"
 rule = "fw/project:cf_func"
 
 [[anchor]]
+name = "cf.project.fn.mmcfs"
+cpu = "cf"
+kind = "code"
+addr = 0x4018ddc8
+len = 4
+sha256 = "9d173d59041b301888ec7a85e552356c0a38f1538ed266082f5001737ceb2308"
+mark = "D"
+rule = "fw/project:cf_func"
+
+[[anchor]]
 name = "cf.project.fn.serialize"
 cpu = "cf"
 kind = "code"
@@ -2644,6 +2654,68 @@ len = 4
 sha256 = "5b80da913924cb1a83c3f2f91deccdb5220d292d6a5f2bc36b136cd3c7194461"
 mark = "D"
 rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.clear_many_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x4009b3f8
+len = 8
+sha256 = "20c2dfdaa3b9a470ff3b9317fc6f72c4d92163ec77355ac11e4fcb3c655c7ad0"
+mark = "V"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.clear_one_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x4009b37a
+len = 6
+sha256 = "a17b5d1cfb8ae40acddb98acafd71bd34efb584e5fc5c7a54c8f73b94b5ef675"
+mark = "V"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.paste_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x400f6dba
+src = 0x4009b320
+len = 8
+sha256 = "b872a1ae435424ac46bee530d895c4f25114a943a90937d9fb3c7a4fc6437c41"
+mark = "V"
+rule = "fw/project:cf_call"
+
+[[anchor]]
+name = "cf.project.site.save_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x4004027e
+len = 8
+sha256 = "86e679d731efc375264c33f871bbaa4e5cfd289975fec313cf95de9801bf4ef0"
+mark = "V"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.slot_set"
+cpu = "cf"
+kind = "code"
+addr = 0x400bb696
+len = 6
+sha256 = "bcea9c1df31a10387c02fd5a54ba51fdccd92ae2314eeab8df7b7a908503a46f"
+mark = "V"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.value.slot_byte"
+cpu = "cf"
+kind = "value"
+addr = 0x405cd899
+src = 0x400bb698
+len = 4
+sha256 = "490ee35855afc25112b89892ac4d53633167eec4c15fdbc6e25e658c281668cb"
+mark = "D"
+rule = "fw/project:cf_literal"
 
 [[anchor]]
 name = "cf.rtos.fn.create_main"
@@ -2847,7 +2919,7 @@ kind = "code"
 addr = 0x4012c4b2
 len = 8
 sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -2897,7 +2969,7 @@ kind = "code"
 addr = 0x4012c4b2
 len = 8
 sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -2947,7 +3019,7 @@ kind = "code"
 addr = 0x4012c780
 len = 8
 sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -2957,7 +3029,7 @@ kind = "code"
 addr = 0x4012c7b6
 len = 4
 sha256 = "a48998cd9825641e921b00243186d78a9246c1fda55703863b3ee0ca512625c5"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -4646,6 +4718,47 @@ site = "cf.param.fn.value_class"
 offset = 4
 mode = "before"
 clobbers = ["d0"]
+
+[[hook]]
+name = "cf.project.hook.clear_many_exit"
+site = "cf.project.site.clear_many_exit"
+mode = "replace"
+len = 8
+kind = "tail"
+check = "20c2dfdaa3b9a470"
+
+[[hook]]
+name = "cf.project.hook.clear_one_exit"
+site = "cf.project.site.clear_one_exit"
+mode = "replace"
+len = 6
+kind = "tail"
+check = "a17b5d1cfb8ae40a"
+
+[[hook]]
+name = "cf.project.hook.paste_exit"
+site = "cf.project.site.paste_exit"
+mode = "replace"
+len = 6
+kind = "tail"
+check = "1f955be0672e3190"
+
+[[hook]]
+name = "cf.project.hook.save_exit"
+site = "cf.project.site.save_exit"
+mode = "replace"
+len = 8
+kind = "tail"
+check = "86e679d731efc375"
+
+[[hook]]
+name = "cf.project.hook.slot_set"
+site = "cf.project.site.slot_set"
+mode = "replace"
+clobbers = ["d1", "ccr"]
+len = 6
+kind = "tail"
+check = "bcea9c1df31a1038"
 
 [[hook]]
 name = "cf.rtos.hook.idle"

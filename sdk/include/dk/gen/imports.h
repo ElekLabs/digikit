@@ -77,7 +77,7 @@ void dk_fw_free(void *p);
 /* The firmware's eMMC block read: `bytes` (a multiple of 512) from `sector` into `buf`; 0 = ok. Reads the whole card, not only the store. Context: any. Since runtime 0.7.0. */
 int32_t dk_fw_block_read(uint32_t sector, uint32_t bytes, void *buf);
 
-/* Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`. Context: init. Since runtime 0.7.0. */
+/* Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`. Context: ui. Since runtime 0.7.0. */
 int32_t dk_files_read(dk_files *files, const char *path, void *buf, uint32_t cap);
 
 /* Register the SysEx commands `first .. first + count` with `fn`. The range must lie inside one of the ranges sdk/sdk.toml [protocol.ranges] reserves and overlap no registered one; else it returns DK_E_CMD_RANGE. The range is released with the module. Returns 0. See <dk/platform/host.h>. Context: init. Since runtime 0.7.0. */
@@ -92,10 +92,10 @@ uint32_t dk_module_ctx_runtime_version(dk_module_ctx *ctx);
 /* Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then. Context: init. Since runtime 0.7.0. */
 int32_t dk_settings_open(dk_module_ctx *ctx, dk_settings **out);
 
-/* Read the value of `key` (NUL-terminated, own key space) into `out` (`cap` bytes): returns its length (0 is valid), DK_E_SET_NOKEY when there is none, DK_E_SET_VALUE when `cap` is too small (nothing is written), DK_E_SET_KEY for a bad handle or key, DK_E_SET_OFF when the settings store is off. Context: ui. Since runtime 0.7.0. */
+/* Read the value of `key` (NUL-terminated, own key space; per project while the `project` service is loaded: the current project's value if its `.dkp` holds one, else the value of the settings record) into `out` (`cap` bytes): returns its length (0 is valid), DK_E_SET_NOKEY when there is none, DK_E_SET_VALUE when `cap` is too small (nothing is written), DK_E_SET_KEY for a bad handle or key, DK_E_SET_OFF when the settings store is off. Context: ui. Since runtime 0.7.0. */
 int32_t dk_settings_get(dk_settings *s, const char *key, void *out, uint32_t cap);
 
-/* Set `key` to the `len` bytes (0 to 1024) at `value`; the card is written 2 s after the last change. Returns 0, DK_E_SET_KEY, DK_E_SET_VALUE, DK_E_SET_FULL or DK_E_SET_OFF. Not from a host command handler. Context: ui. Since runtime 0.7.0. */
+/* Set `key` to the `len` bytes (0 to 1024) at `value`; the card is written 2 s after the last change (with the `project` service loaded the value also goes to the current project, written to its `.dkp` at the next stock save). Returns 0, DK_E_SET_KEY, DK_E_SET_VALUE, DK_E_SET_FULL or DK_E_SET_OFF. Not from a host command handler. Context: ui. Since runtime 0.7.0. */
 int32_t dk_settings_put(dk_settings *s, const char *key, const void *value, uint32_t len);
 
 /* Remove `key`: returns 0 (also when it was not there), DK_E_SET_KEY or DK_E_SET_OFF. Not from a host command handler. Context: ui. Since runtime 0.7.0. */
@@ -304,6 +304,14 @@ void dk_fx_routes(dk_fx *fx, uint32_t allowed, uint32_t def);
 
 /* Set the default of the effect's MIX knob, 0 to 127 (127 when this is not called). Context: init. Since runtime 0.7.0. */
 void dk_fx_mix(dk_fx *fx, uint32_t def);
+
+/* ---- service project ---- */
+
+/* The current project: its slot (0 to 127) in `*slot` and its name, as the firmware lists it (16 bytes, zero padded), in `name`. DK_E_NOT_FOUND when there is no current project (nothing is written then). A module that calls it needs the `project` service (a hard need, as every provided import); a module that only keeps settings calls nothing: its settings are per project while the service is loaded, and it does not need the service. Context: ui. Since runtime 0.11.0. */
+int32_t dk_project_current(uint32_t *slot, uint8_t *name);
+
+/* The state of the project service as bits: bit 0 a `.dkp` file is loaded for the current project, bit 1 the data has changes the file does not hold (written at the next successful stock save), bit 2 a write was deferred after 30 s of a busy store, bit 3 a file of the slot was not used (a stamp, device, version or crc mismatch). Context: ui. Since runtime 0.11.0. */
+uint32_t dk_project_status(void);
 
 /* ---- service ui ---- */
 

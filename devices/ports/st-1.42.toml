@@ -610,6 +610,68 @@ mark = "D"
 rule = "fw/project:cf_func"
 
 [[anchor]]
+name = "cf.project.site.clear_many_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x4005a898
+len = 8
+sha256 = "20c2dfdaa3b9a470ff3b9317fc6f72c4d92163ec77355ac11e4fcb3c655c7ad0"
+mark = "O"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.clear_one_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x4005a81a
+len = 6
+sha256 = "a17b5d1cfb8ae40acddb98acafd71bd34efb584e5fc5c7a54c8f73b94b5ef675"
+mark = "O"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.paste_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x400c2116
+src = 0x4005a7c0
+len = 8
+sha256 = "b872a1ae435424ac46bee530d895c4f25114a943a90937d9fb3c7a4fc6437c41"
+mark = "O"
+rule = "fw/project:cf_call"
+
+[[anchor]]
+name = "cf.project.site.save_exit"
+cpu = "cf"
+kind = "code"
+addr = 0x4001a7d4
+len = 8
+sha256 = "86e679d731efc375264c33f871bbaa4e5cfd289975fec313cf95de9801bf4ef0"
+mark = "O"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.site.slot_set"
+cpu = "cf"
+kind = "code"
+addr = 0x4006f2ce
+len = 6
+sha256 = "520eee8e2246a361c55f086c46d0223040654c9eea787aa2d7df07fb0bc073f7"
+mark = "O"
+rule = "fw/project:cf_func"
+
+[[anchor]]
+name = "cf.project.value.slot_byte"
+cpu = "cf"
+kind = "value"
+addr = 0x40653441
+src = 0x4006f2d0
+len = 4
+sha256 = "151913f3348cd09a840890d8418b0f759719fecdeb768ec0977c679d31eadacd"
+mark = "D"
+rule = "fw/project:cf_literal"
+
+[[anchor]]
 name = "cf.rtos.fn.create_main"
 cpu = "cf"
 kind = "data"
@@ -791,7 +853,7 @@ kind = "code"
 addr = 0x4010f52a
 len = 8
 sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -841,7 +903,7 @@ kind = "code"
 addr = 0x4010f52a
 len = 8
 sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -891,7 +953,7 @@ kind = "code"
 addr = 0x4010f7f8
 len = 8
 sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -901,7 +963,7 @@ kind = "code"
 addr = 0x4010f82e
 len = 4
 sha256 = "a48998cd9825641e921b00243186d78a9246c1fda55703863b3ee0ca512625c5"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]

@@ -202,11 +202,20 @@ fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
 /// The module an SDK import needs (`requires` of its `[[import]]` in `sdk/sdk.toml`, the source of the runtime's `optional` link list); `None` for an import
 /// without `requires`.
 fn adapter_of(import: &str) -> Option<String> {
-    let text = String::from_utf8(read(&repo().join("sdk/sdk.toml"), "git checkout sdk")).unwrap();
-    let sdk: toml::Table = text.parse().unwrap();
-    let imports = sdk["import"].as_array().unwrap();
-    let row = imports.iter().find(|i| i["name"].as_str() == Some(import))?;
-    row.get("requires").map(|r| r.as_str().unwrap().to_string())
+    // the SDK's import table, read once: `import_addr` asks for every import of every file a test loads
+    static REQUIRES: std::sync::OnceLock<std::collections::HashMap<String, String>> = std::sync::OnceLock::new();
+    REQUIRES
+        .get_or_init(|| {
+            let text = String::from_utf8(read(&repo().join("sdk/sdk.toml"), "git checkout sdk")).unwrap();
+            let sdk: toml::Table = text.parse().unwrap();
+            let imports = sdk["import"].as_array().unwrap();
+            imports
+                .iter()
+                .filter_map(|i| Some((i["name"].as_str()?.to_string(), i.get("requires")?.as_str()?.to_string())))
+                .collect()
+        })
+        .get(import)
+        .cloned()
 }
 
 /// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot, 2 DSP slot), address (the index in the slot block for a DSP slot) and the words of a data entry.
@@ -346,7 +355,10 @@ impl Images for Card {
     unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
         // The device table `IMPORTS` points at firmware symbols that a host test binary does not link: a name the SDK declares gets a stand-in address.
         let n = core::slice::from_raw_parts(name, cstr_len(name, 64));
-        if dkrt_sdk::api::BUILTIN_NAMES.iter().any(|b| b.as_bytes() == n) {
+        // An import that another module provides (`requires` of its `[[import]]`) is optional on the device: it binds to the absent stub when the provider is not in the
+        // image, so it gets a stand-in here too. A name that is neither is unknown and stays 0.
+        let provided = core::str::from_utf8(n).ok().is_some_and(|n| adapter_of(n).is_some());
+        if provided || dkrt_sdk::api::BUILTIN_NAMES.iter().any(|b| b.as_bytes() == n) {
             0x1000
         } else {
             0
@@ -479,14 +491,18 @@ const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortc
 /// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
 const TRACK_SELECT: Fixture = Fixture { leaf: "track-select", nx: "test/track-select" };
 
+/// A module that keeps one setting and calls `dk_project_status`: a user of the project service file, no DSP section; it knows nothing of projects.
+const PROJECT_USER: Fixture = Fixture { leaf: "project-user", nx: "test/project-user" };
+
 /// The service files of the card: the services of the runtime and the test service.
-const SERVICES: [Fixture; 6] = [
+const SERVICES: [Fixture; 7] = [
     Fixture { leaf: "fx", nx: "core/services/fx" },
     Fixture { leaf: "machines", nx: "core/services/machines" },
     Fixture { leaf: "lfo", nx: "core/services/lfo" },
     Fixture { leaf: "samples", nx: "core/services/samples" },
     Fixture { leaf: "svc-test", nx: "test/svc-test" },
     Fixture { leaf: "shortcuts", nx: "core/services/shortcuts" },
+    Fixture { leaf: "project", nx: "core/services/project" },
 ];
 
 fn card_of(dev: Dev, modules: &[&Fixture], services: &[Fixture]) -> Vec<(String, Vec<u8>)> {
@@ -558,7 +574,9 @@ unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) 
         let at = off + i * dkneeds::CF_IMPORT_LEN as usize;
         let name = &file[at..at + dkneeds::CF_IMPORT_LEN as usize];
         let len = name.iter().position(|c| *c == 0).expect("an import name without NUL");
-        let mut a = l.m.import_addr(name.as_ptr());
+        // the loader's stand-in for an import another module provides is not an answer here: this check asks whether the image has that module
+        let provided = adapter_of(std::str::from_utf8(&name[..len]).unwrap()).is_some();
+        let mut a = if provided { 0 } else { l.m.import_addr(name.as_ptr()) };
         if a == 0 && role == 1 {
             a = l.m.svc_import_addr(name.as_ptr());
         }
@@ -899,12 +917,160 @@ fn a_sample_pool_user_is_refused_when_the_image_has_no_sample_pool_adapter() {
         assert!(!image.modules.iter().any(|r| r == "core/sample-pool"), "the set is expected to leave the adapter out");
         unsafe {
             let (mut l, mut plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
-            // the plan finds the file and cannot tell what the image lacks: the file fails its own check (its `requires` word) and the module then misses its service
+            // the plan finds the file and cannot tell what the image lacks: the file fills a slot of the sample-pool adapter, the image has no such slot, so the file is refused at its activation (`E_FORMAT`) and the module then misses its service; the stand-in address of its optional imports plays no part
             assert_eq!(plan.np, 1);
             l.load_providers(&plan);
             assert!(!l.loaded[0], "{}: samples.dks loaded without the sample-pool adapter", dev.name);
             l.settle(&mut plan, 1);
             assert!(matches!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(_))), "{}: {:?}", dev.name, plan.verdicts[0]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// A module that calls a function of the project service is found by its needs: the search finds `services/project.dks`, the file loads (ABI word, declare check, exports, the
+/// stock bytes of its hook sites) and its hooks are installed on the sites of the port file (five on every device: the paste is found through its caller).
+#[test]
+fn a_project_user_loads_with_the_project_service_file_and_takes_its_hooks() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        unsafe {
+            fits(*dev, "emulator", &[&PROJECT_USER], &["project"]);
+        }
+        let _ = clean_state();
+        let file = service_file(*dev, "project", "core/services/project");
+        let t = table_of(&file);
+        let keys = Keys::parse(&t).unwrap();
+        let pf = port_file(*dev);
+        let pt = table_of(&pf);
+        let port = Keys::parse(&pt).unwrap();
+        let present = (0..keys.count(tag::HOOKS))
+            .filter(|i| {
+                let w = keys.words(tag::HOOKS, *i).unwrap();
+                port.find_site(w.0).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0)
+            })
+            .count();
+        assert_eq!(keys.count(tag::HOOKS), 5, "{}", dev.name);
+        assert_eq!(present, 5, "{}: every hook has a site", dev.name);
+        // the two functions the service gives modules
+        assert_eq!(keys.count(tag::EXPORTS), 2, "{}", dev.name);
+    }
+}
+
+/// The project service reads the slot byte of the firmware at its start (`cf.project.value.slot_byte`): the packed file imports it as `dk_fw_<hash>` and the port file of the
+/// device lists it with the address the stock setter's `mvs.b` reads. (A name the port lacks would refuse the file, an absent one would turn the read off.)
+#[test]
+fn the_project_service_binds_the_firmware_slot_byte_from_the_port_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let dev = *dev;
+        // the address the committed port data of the firmware holds for the name
+        let toml = std::fs::read_to_string(repo().join(std::format!("devices/ports/{}.toml", dev.port()))).unwrap();
+        let block = toml.split("name = \"cf.project.value.slot_byte\"").nth(1).expect("the port data has the slot byte");
+        let want = block.lines().find_map(|l| l.strip_prefix("addr = 0x")).expect("an address");
+        let want = u32::from_str_radix(want.trim(), 16).unwrap();
+        let file = service_file(dev, "project", "core/services/project");
+        let (off, n) = (be(&file, dkneeds::H_IMPORT_OFF) as usize, be(&file, dkneeds::H_IMPORT_N) as usize);
+        let import = std::format!("dk_fw_{:08x}", name_hash("cf.project.value.slot_byte"));
+        let imported = (0..n).any(|i| {
+            let at = off + i * dkneeds::CF_IMPORT_LEN as usize;
+            let name = &file[at..at + dkneeds::CF_IMPORT_LEN as usize];
+            name.starts_with(import.as_bytes()) && name[import.len()] == 0
+        });
+        assert!(imported, "{}: project.dks does not import {import}", dev.name);
+        let pf = port_file(dev);
+        let pt = table_of(&pf);
+        let port = Keys::parse(&pt).unwrap();
+        match port.find_name(dkneeds::keys::NAME_FW, name_hash("cf.project.value.slot_byte"), 0) {
+            Some(x) if x.flags & dkneeds::keys::FLAG_ABSENT == 0 => assert_eq!(x.addr, want, "{}: the slot byte", dev.name),
+            other => panic!("{}: cf.project.value.slot_byte is {other:?} in the port file", dev.name),
+        }
+        // the file loads against that port file: every name it imports is listed
+        unsafe {
+            fits(dev, "emulator", &[&PROJECT_USER], &["project"]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The project service shows its warnings with `dk_ui_open` and `dk_ui_toast`, optional imports of core/ui: the packed file imports both, its needs mark the UI service as
+/// optional (a card without core/ui loads it), and the file loads with both imports bound (the stand-in address models the absent stub the device binds).
+#[test]
+fn the_project_service_imports_the_toast_as_an_optional_need_and_loads_with_it_bound() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let dev = *dev;
+        let file = service_file(dev, "project", "core/services/project");
+        let (off, n) = (be(&file, dkneeds::H_IMPORT_OFF) as usize, be(&file, dkneeds::H_IMPORT_N) as usize);
+        let imports: Vec<String> = (0..n)
+            .map(|i| {
+                let at = off + i * dkneeds::CF_IMPORT_LEN as usize;
+                let name = &file[at..at + dkneeds::CF_IMPORT_LEN as usize];
+                String::from_utf8_lossy(&name[..name.iter().position(|b| *b == 0).unwrap()]).to_string()
+            })
+            .collect();
+        for want in ["dk_ui_open", "dk_ui_toast"] {
+            assert!(imports.iter().any(|i| i == want), "{}: project.dks does not import {want}", dev.name);
+        }
+        let t = table_of(&file);
+        let keys = Keys::parse(&t).unwrap();
+        let ui: Vec<_> = keys.needs().filter(|n| n.service == name_hash("ui")).collect();
+        assert_eq!(ui.len(), 1, "{}: one need of the UI service: {ui:?}", dev.name);
+        assert!(!ui[0].hard, "{}: the UI service is a hard need of project.dks", dev.name);
+        unsafe {
+            fits(dev, "emulator", &[&PROJECT_USER], &["project"]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// The same module on a card without `project.dks`: the plan refuses it (its need of the project service is missing), nothing is loaded, and no hook site is written.
+#[test]
+fn a_project_user_is_refused_without_the_project_service_file_and_every_site_stays_stock() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (l, plan) = planned(*dev, &image, &[], &[&PROJECT_USER], &[]);
+            assert_ne!(plan.verdicts[0], Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
+            assert_eq!(plan.np, 0, "{}", dev.name);
+            assert!(!l.p.calls.borrow().iter().any(|c| matches!(c, Call::Write { .. } | Call::Word { .. })), "{}: no site is written", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// A site of the project service whose live bytes are not stock refuses the file with `E_HOOK_STOCK` and writes nothing (the service is not loaded: stock works).
+#[test]
+fn the_project_service_is_refused_when_a_site_of_its_hooks_is_not_stock() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&PROJECT_USER], &SERVICES);
+            let port = (0..plan.np).find(|j| l.found.path(*j).starts_with(b"ports/")).expect("the port file is found");
+            let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/project.dks").expect("project.dks is found");
+            l.phase = Phase::Boot;
+            let ppath = std::format!("ports/{}.dkport\0", dev.port());
+            assert_eq!(l.load_provider(ppath.as_ptr(), port), OK, "{}", dev.name);
+            let pf = port_file(*dev);
+            let pt = table_of(&pf);
+            let pk = Keys::parse(&pt).unwrap();
+            let file = service_file(*dev, "project", "core/services/project");
+            let ft = table_of(&file);
+            let fk = Keys::parse(&ft).unwrap();
+            // every hook of the file is a plain copy that the port file checks: any one of them, changed, refuses the file
+            let sites: Vec<u32> = (0..fk.count(tag::HOOKS))
+                .map(|i| fk.words(tag::HOOKS, i).unwrap().0)
+                .filter_map(|h| pk.find_site(h))
+                .filter(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0)
+                .map(|s| s.addr)
+                .collect();
+            assert!(sites.len() >= 4, "{}: {sites:?}", dev.name);
+            l.p.put_code(sites[0], &[0xff]);
+            assert_eq!(l.load_provider(b"services/project.dks\0".as_ptr(), j), E_HOOK_STOCK, "{}", dev.name);
+            assert!(!l.p.calls.borrow().iter().any(|c| matches!(c, Call::Write { .. } | Call::Word { .. })), "no site is written");
+            assert_eq!(l.installer.count(), 0);
         }
         let _ = clean_state();
     }
@@ -973,8 +1139,8 @@ fn every_service_of_the_card_loads_together_on_the_emulator_and_the_device_image
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         for set in ["emulator", "device"] {
-            let mut modules: Vec<&Fixture> = std::vec![&SINE, &FX_GAIN, &LFO_SHAPE, &SVC_USER, &SHORTCUT_DEMO];
-            let mut want = std::vec!["machines", "fx", "lfo", "svc-test", "shortcuts"];
+            let mut modules: Vec<&Fixture> = std::vec![&SINE, &FX_GAIN, &LFO_SHAPE, &SVC_USER, &SHORTCUT_DEMO, &PROJECT_USER];
+            let mut want = std::vec!["machines", "fx", "lfo", "svc-test", "shortcuts", "project"];
             // the samples service file needs the sample-pool adapter (`requires`), which the DN2 device image leaves out (the DN2 pool is not proven on hardware)
             if !(dev.name == "dn2" && set == "device") {
                 modules.push(&TRACK_SELECT);
@@ -1080,7 +1246,7 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
         let image = Image::read(*dev, "emulator");
         unsafe {
             // with the file on the card the module is accepted and the file is the provider that loads, and its builder import is one of its exports
-            let (mut l, mut plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[5..]);
+            let (mut l, mut plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[5..6]);
             assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
             assert!(found(&l, &plan).contains("services/shortcuts.dks"), "{}", dev.name);
             l.load_providers(&plan);

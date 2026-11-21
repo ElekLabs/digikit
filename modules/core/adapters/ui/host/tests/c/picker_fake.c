@@ -8,7 +8,7 @@
 
 #define MAXE 400
 
-static int pool_token, files_token, ui_token; /* the fake handles */
+static int pool_token, files_token, ui_token, settings_token; /* the fake handles */
 static struct {
     int n, read, finished, list_calls, cancels;
     int32_t ticket, list_result, poll_error;
@@ -23,6 +23,61 @@ static struct {
     int set_result, sets, clears, last_index, path_calls, picks, last_pick;
     char last_path[DK_CHOOSER_PATH];
 } sm;
+
+/* The fake settings: a small key/value table; put_result < 0 refuses every put. */
+#define NKEYS 32
+static struct {
+    int used[NKEYS];
+    char key[NKEYS][16];
+    char val[NKEYS][DK_CHOOSER_PATH];
+    uint32_t len[NKEYS];
+    int put_result, puts, removes;
+} st;
+
+static int st_find(const char *key)
+{
+    int i;
+    for (i = 0; i < NKEYS; i++)
+        if (st.used[i] && !strcmp(st.key[i], key))
+            return i;
+    return -1;
+}
+int32_t dk_settings_get(dk_settings *s, const char *key, void *out, uint32_t cap)
+{
+    int i = st_find(key);
+    (void)s;
+    if (i < 0)
+        return DK_E_SET_NOKEY;
+    if (st.len[i] > cap)
+        return DK_E_SET_VALUE;
+    memcpy(out, st.val[i], st.len[i]);
+    return (int32_t)st.len[i];
+}
+int32_t dk_settings_put(dk_settings *s, const char *key, const void *value, uint32_t len)
+{
+    int i = st_find(key);
+    (void)s;
+    st.puts++;
+    if (st.put_result < 0)
+        return st.put_result;
+    if (i < 0)
+        for (i = 0; st.used[i]; i++)
+            ;
+    st.used[i] = 1;
+    strcpy(st.key[i], key);
+    memcpy(st.val[i], value, len);
+    st.len[i] = len;
+    return 0;
+}
+int32_t dk_settings_remove(dk_settings *s, const char *key)
+{
+    int i = st_find(key);
+    (void)s;
+    st.removes++;
+    if (i >= 0)
+        st.used[i] = 0;
+    return 0;
+}
 
 int32_t dk_files_list(dk_files *f, uint32_t root, const char *path, dk_files_event_fn *notify,
                       void *arg)
@@ -118,6 +173,8 @@ void pf_reset(void)
 {
     memset(&fl, 0, sizeof fl);
     memset(&sm, 0, sizeof sm);
+    memset(&st, 0, sizeof st);
+    g_settings = 0;
     g_pool = 0;
     g_ui = 0;
     g_files = 0;
@@ -136,11 +193,39 @@ int pf_init_with(int pool, int files, int ui)
 {
     return (int)dk_sample_picker_init(pool ? (dk_sample_pool *)&pool_token : 0,
                                       files ? (dk_files *)&files_token : 0,
-                                      ui ? (dk_ui *)&ui_token : 0);
+                                      ui ? (dk_ui *)&ui_token : 0, 0);
 }
 int pf_init(uint32_t pool)
 {
     return pf_init_with(pool != 0, 1, 1);
+}
+/* The picker with the fake settings as the module's settings handle. */
+int pf_init_stored(void)
+{
+    return (int)dk_sample_picker_init((dk_sample_pool *)&pool_token, (dk_files *)&files_token,
+                                      (dk_ui *)&ui_token, (dk_settings *)&settings_token);
+}
+void pf_store(const char *key, const char *value)
+{
+    dk_settings_put((dk_settings *)&settings_token, key, value, (uint32_t)strlen(value));
+}
+/* the stored value of a key: 0 when there is none */
+const char *pf_stored(const char *key)
+{
+    static char out[DK_CHOOSER_PATH];
+    int32_t n = dk_settings_get((dk_settings *)&settings_token, key, out, sizeof out - 1);
+    if (n < 0)
+        return 0;
+    out[n] = 0;
+    return out;
+}
+void pf_put_result(int rc)
+{
+    st.put_result = rc;
+}
+int pf_removes(void)
+{
+    return st.removes;
 }
 void pf_open_pool(int current, int with_pick)
 {
