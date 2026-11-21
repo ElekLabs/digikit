@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 const USAGE: &str = "usage: patchkit size [--set NAME] [--device SHORT,...] [--firmware FILE]... [--no-drop-one]
                      [--runtime-object FILE] [--top N] [--json] [--baseline FILE] [--write-baseline FILE]
-  --device filters by the device short name (dt2, dn2, st), also for --firmware files; --help prints this text";
+  --device filters by the device short name (`short` in devices/*.toml), also for --firmware files; --help prints this text";
 
 fn num(n: i64) -> String {
     let s = n.unsigned_abs().to_string();
