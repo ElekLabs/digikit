@@ -8,24 +8,32 @@ use crate::error::*;
 use crate::module::{LibrarySource, ModuleRole, library_with, selected_library};
 use crate::pack::{PackOptions, pack_module};
 use dkneeds::keys::{Keys, name_hash};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-/// Service name to module id, from the manifests.
-pub fn service_modules(root: &Path) -> Result<BTreeMap<String, String>> {
+/// Service name to package id, from the manifests.
+fn service_modules(root: &Path) -> Result<BTreeMap<String, String>> {
     // no objects are loaded: only the manifests are read
     let lib = library_with(root, &LibrarySource::default(), false, Some(&[]))?;
-    let mut found = BTreeMap::new();
+    let mut found = BTreeMap::<String, String>::new();
+    let mut identities = BTreeMap::new();
     for m in &lib.modules {
         let module = &m.manifest.module;
         if module.role != Some(ModuleRole::Service) {
             continue;
         }
-        if let Some(name) = &module.service
-            && let Some(other) = found.insert(name.clone(), m.id().to_string())
-        {
+        let Some(name) = &module.service else {
+            continue;
+        };
+        if let Some(other) = found.get(name) {
             return Err(err!("service {name} is provided by {other} and {}", m.id()));
         }
+        if let Some(other) = identities.insert(name_hash(name), name) {
+            return Err(err!(
+                "services {other} and {name} have the same identity hash"
+            ));
+        }
+        found.insert(name.clone(), m.id().to_string());
     }
     Ok(found)
 }
@@ -40,35 +48,31 @@ pub fn needed_hashes(dkm: &[u8]) -> Result<Vec<u32>> {
     Ok(keys.needs().filter(|n| n.hard).map(|n| n.service).collect())
 }
 
-/// The services (name, module id) that the packed files need, in name order.
-pub fn needed_services(
+/// Add the services that a packed file hard-needs and this library provides.
+fn add_needs(
     modules: &BTreeMap<String, String>,
-    files: &[Vec<u8>],
-) -> Result<Vec<(String, String)>> {
-    let mut hashes = vec![];
-    for f in files {
-        hashes.extend(needed_hashes(f)?);
-    }
-    Ok(modules
-        .iter()
-        .filter(|(name, _)| hashes.contains(&name_hash(name)))
-        .map(|(n, id)| (n.clone(), id.clone()))
-        .collect())
+    file: &[u8],
+    pending: &mut BTreeSet<String>,
+) -> Result<()> {
+    let hashes = needed_hashes(file)?;
+    pending.extend(
+        modules
+            .keys()
+            .filter(|name| hashes.contains(&name_hash(name)))
+            .cloned(),
+    );
+    Ok(())
 }
 
-/// Pack the service module `id` for `device` as `dir/<name>.dks`.
-fn packed_file(root: &Path, id: &str, name: &str, device: &str, dir: &Path) -> Result<PathBuf> {
+/// Pack the service module `id` for `device`; its bytes give the actual hard needs for both listing and staging.
+fn pack_service(root: &Path, id: &str, device: &str) -> Result<Vec<u8>> {
     let ids = [id.to_string()];
     let lib = selected_library(root, &LibrarySource::default(), false, &ids, &ids)?;
     let opts = PackOptions {
         device: Some(device.into()),
         ..Default::default()
     };
-    let bytes = pack_module(&lib, id, &opts)?.bytes;
-    let out = dir.join(format!("{name}.dks"));
-    std::fs::create_dir_all(dir).map_err(|e| err!("{}: {e}", dir.display()))?;
-    std::fs::write(&out, bytes).map_err(|e| err!("{}: {e}", out.display()))?;
-    Ok(out)
+    Ok(pack_module(&lib, id, &opts)?.bytes)
 }
 
 /// The command line: see the usage text of `patchkit`.
@@ -93,35 +97,53 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
     }
     let device = device.ok_or_else(|| err!("services: --device is required"))?;
     let modules = service_modules(root)?;
-    let mut wanted: BTreeMap<String, String> = BTreeMap::new();
+    let mut pending = BTreeSet::new();
     for id in &named {
         let (name, _) = modules
             .iter()
             .find(|(_, m)| *m == id)
             .ok_or_else(|| err!("{id} is not a service module (role = \"service\")"))?;
-        wanted.insert(name.clone(), id.clone());
+        pending.insert(name.clone());
     }
     for name in &by_name {
-        let id = modules
-            .get(name)
-            .ok_or_else(|| err!("no module provides the service {name}"))?;
-        wanted.insert(name.clone(), id.clone());
+        if !modules.contains_key(name) {
+            return Err(err!("no module provides the service {name}"));
+        }
+        pending.insert(name.clone());
     }
-    let bytes = files
-        .iter()
-        .map(|f| std::fs::read(f).map_err(|e| err!("{f}: {e}")))
-        .collect::<Result<Vec<_>>>()?;
-    wanted.extend(needed_services(&modules, &bytes)?);
-    for (name, id) in &wanted {
+    for f in &files {
+        let bytes = std::fs::read(f).map_err(|e| err!("{f}: {e}"))?;
+        add_needs(&modules, &bytes, &mut pending)?;
+    }
+    // A call with only explicit names and no output directory is a manifest lookup (used to recognize service ids).
+    // A dependency query or staging command visits each provider once, including cycles, using its packed NEEDS.
+    let closure = dir.is_some() || !files.is_empty();
+    let mut selected = BTreeMap::new();
+    while let Some(name) = pending.pop_first() {
+        if selected.contains_key(&name) {
+            continue;
+        }
+        let mut file = None;
+        if closure {
+            let bytes = pack_service(root, &modules[&name], &device)?;
+            add_needs(&modules, &bytes, &mut pending)?;
+            if let Some(dir) = &dir {
+                let path = dir.join(format!("{name}.dks"));
+                std::fs::create_dir_all(dir).map_err(|e| err!("{}: {e}", dir.display()))?;
+                std::fs::write(&path, &bytes).map_err(|e| err!("{}: {e}", path.display()))?;
+                file = Some(path);
+            }
+        }
+        selected.insert(name, file);
+    }
+    for (name, file) in selected {
         let mut line = serde_json::json!({
             "service": name,
-            "module_id": id,
+            "module_id": modules[&name],
             "store_path": format!("services/{name}.dks"),
         });
-        if let Some(dir) = &dir {
-            line["file"] = packed_file(root, id, name, &device, dir)?
-                .to_string_lossy()
-                .into();
+        if let Some(file) = file {
+            line["file"] = file.to_string_lossy().into();
         }
         println!("{line}");
     }

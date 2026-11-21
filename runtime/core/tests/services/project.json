@@ -20,7 +20,9 @@
         "modules": [
           "digikit/debug",
           "test/svc-test",
-          "test/svc-test-user"
+          "test/svc-test-user",
+          "test/local-ping",
+          "test/local-ping-user"
         ],
         "plusdrive": true
       }

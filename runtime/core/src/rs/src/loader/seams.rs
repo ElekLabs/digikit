@@ -46,7 +46,7 @@ pub trait Registry {
     /// Does the runtime accept a service file with this ABI fingerprint (header word 0x3c)? 0: the file uses neither interface B nor C.
     fn abi_ok(&self, fingerprint: u32) -> bool;
     /// Publish the service row that `init` of record `rec` declared (`None`: it declared none, as every module today).
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>) -> i32;
+    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32;
     /// Take everything record `rec` published down (idempotent).
     unsafe fn remove(&mut self, rec: usize);
     /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Service::module_begin`).
@@ -115,10 +115,10 @@ impl Registry for RealRegistry {
     fn abi_ok(&self, fingerprint: u32) -> bool {
         fingerprint == 0 || fingerprint == dkrt_abi::service::SVC_ABI
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32 {
         match row {
             None => dkrt_sdk::OK,
-            Some(row) => crate::svc_rows::add(rec, row),
+            Some(row) => crate::svc_rows::add(rec, row, order),
         }
     }
     unsafe fn remove(&mut self, rec: usize) {

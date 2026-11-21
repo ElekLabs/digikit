@@ -5,6 +5,7 @@ name = "shortcuts service"
 category = "core"
 role = "service"
 service = "shortcuts"
+callback_order = 500
 type = "raw"
 author = "digikit"
 status = "experimental"

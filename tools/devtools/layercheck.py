@@ -265,6 +265,7 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
     ]
     core_dirs = [(root / folder).resolve() for folder in CORE_ROOTS] + [fw_dir]
     runtime_sdk = (root / "runtime/core/sdk").resolve()
+    service_sdk = (root / "runtime/core/svc-rt").resolve()
     all_mod_dirs = [(m.dir.resolve(), m) for m in mods]
     fixtures = (root / "tests/fixtures/modules").resolve()
     for m in mods:
@@ -273,7 +274,13 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
         is_app = (kind == "core" and role == "app") or m.id in APP_LIKE
         if kind == "core" and not is_app:
             continue  # installer and adapters may use the firmware bindings; the runtime's own rule is `check_runtime_platform`
-        who = "an app" if is_app else "a content module"
+        who = (
+            "an app"
+            if is_app
+            else "a service file"
+            if role == "service"
+            else "a content module"
+        )
         own = m.dir.resolve()
         sdk = (root / "sdk").resolve()
         for f in module_sources(m):
@@ -378,6 +385,7 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                         and own not in target.parents
                         and any(d in target.parents for d in core_dirs)
                         and target != runtime_sdk
+                        and not (role == "service" and target == service_sdk)
                     )
                     if bad:
                         out.append(
@@ -480,6 +488,14 @@ def check_committed_objects(root: Path, mods: list[Module]) -> list[Violation]:
 def check_objects(root: Path, mods: list[Module]) -> list[Violation]:
     out = []
     imports, sdk_externs = sdk_symbols(root)
+    service_abi = root / "runtime/core/abi/src/core_imports.rs"
+    service_imports = (
+        set(
+            re.findall(r"^\s*fn (\w+)\(", service_abi.read_text(encoding="utf-8"), re.M)
+        )
+        if service_abi.is_file()
+        else set()
+    )
     stored = stored_objects(root)
     for m in mods:
         kind = classify(root, m)
@@ -487,6 +503,15 @@ def check_objects(root: Path, mods: list[Module]) -> list[Violation]:
         if (kind == "core" and not is_app) or m.id in FIRMWARE_PATCH_MODULES:
             continue
         mrel = rel(root, m.dir)
+        explicit_imports = {
+            name
+            for binding in m.manifest.get("service_import", [])
+            for name in binding.get("names", [])
+            if name not in service_imports
+            and not name.startswith(("dkc_", "dk_service_"))
+        }
+        if m.mod.get("role") == "service":
+            explicit_imports.update(service_imports)
         for obj in m.manifest.get("object", []):
             for sym, anchor in (obj.get("externs") or {}).items():
                 out.append(
@@ -512,6 +537,7 @@ def check_objects(root: Path, mods: list[Module]) -> list[Violation]:
                     continue
                 ok = (
                     name in imports
+                    or name in explicit_imports
                     or name in sdk_externs
                     or name.startswith(("dkrt_", "dk_ui_", "dk_app_", "dkm_"))
                 )
@@ -520,8 +546,8 @@ def check_objects(root: Path, mods: list[Module]) -> list[Violation]:
                         Violation(
                             f"{rel(root, path)}:1",
                             "objects",
-                            f"the object of {m.id} needs the symbol {name}, which is no SDK import, dkrt_*, dk_ui_* or dk_app_*",
-                            "use the SDK (sdk/sdk.toml [[import]]) or an adapter export; a firmware anchor belongs to an adapter",
+                            f"the object of {m.id} needs the symbol {name}, which is neither a declared import nor a permitted adapter export",
+                            "use the SDK, a [[service_import]] declaration or an adapter export; a firmware anchor belongs to an adapter",
                         )
                     )
     return out

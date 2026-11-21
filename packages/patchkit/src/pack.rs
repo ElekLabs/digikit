@@ -277,11 +277,12 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
             .filter(|d| m.manifest.module.builds_for(&d.short));
         crate::protect::check(id, dko, &crate::protect::windows_of(devs))?;
     }
-    let bytes = crate::dkm::pack_keys(
+    let bytes = crate::dkm::pack_keys_with_service_imports(
         service_obj.as_ref().or(cf.first().map(|c| c.0)),
         &reg,
         &dsp,
         &opts,
+        &m.manifest.service_imports,
     )?;
     let dkm = crate::dkm::Dkm::parse(&bytes)?;
     Ok(Packed {

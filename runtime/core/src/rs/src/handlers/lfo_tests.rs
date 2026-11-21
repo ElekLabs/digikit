@@ -56,7 +56,7 @@ const FILE_REC: usize = 0;
 impl Loaded {
     pub(crate) fn new() -> Loaded {
         static ROW: ServiceRow = ServiceRow::of::<Lfo, RealCore>("lfo", &KINDS_LFO);
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW) }, OK);
+        assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW, None) }, OK);
         Loaded
     }
 }

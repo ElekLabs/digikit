@@ -65,10 +65,12 @@ pub struct Manifest {
     /// first word of the record's body. The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
     #[serde(default, rename = "record")]
     pub records: Vec<RecordKey>,
-    /// `[[export]]` is no longer read (an error): the functions a service module (`role = "service"`) exports are the `provided` imports of its service in sdk/sdk.toml.
-    /// Their name hashes and entry offsets go in the `EXPORTS` entry of the header table.
+    /// A service outside sdk/sdk.toml declares its exported functions as `[[export]]`. Their hashes and entry offsets go in `EXPORTS`.
     #[serde(default, rename = "export")]
     pub exports: Vec<ExportDef>,
+    /// A consumer declares the provider and minimum version of each locally defined service API it links.
+    #[serde(default, rename = "service_import")]
+    pub service_imports: Vec<ServiceImport>,
     /// `[[hook]] name = "cf.menu.hook.settings_list.tail"`, `entry = "my_handler"`: the hook sites a service module takes and the global function of the object
     /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; the port file gives each a trampoline.
     #[serde(default, rename = "hook")]
@@ -186,18 +188,18 @@ impl Manifest {
         Ok(())
     }
 
-    /// What a `role = "service"` module provides (`None` for any other role). The service is a `[[service]]` of sdk/sdk.toml without `rust` (provided by a
-    /// `.dks`), and its exports are the `provided` imports of that service, in `sdk/sdk.toml` order.
+    /// What a `role = "service"` module provides (`None` for any other role). SDK services keep their generated exports.
     pub fn provided_service(&self) -> Result<Option<crate::dkm::Provided>> {
         let id = &self.module.id;
         if self.module.role != Some(ModuleRole::Service) {
             if self.module.service.is_some()
+                || self.module.callback_order.is_some()
                 || !self.exports.is_empty()
                 || !self.hooks.is_empty()
                 || !self.fills.is_empty()
             {
                 return Err(err!(
-                    "{id}: `service` in [module], [[export]], [[hook]] and [[fill]] belong to a module with `role = \"service\"`"
+                    "{id}: `service` or `callback_order` in [module], [[export]], [[hook]] and [[fill]] belong to a module with `role = \"service\"`"
                 ));
             }
             return Ok(None);
@@ -207,9 +209,10 @@ impl Manifest {
                 "{id}: a module with `role = \"service\"` needs `service = \"NAME\"` in [module]"
             ));
         };
-        if !crate::sdkgen::provider_services().contains(service) {
+        let sdk_service = crate::sdkgen::provider_services().contains(service);
+        if !sdk_service && !local_service_name(service) {
             return Err(err!(
-                "{id}: service {service:?} is not a [[service]] of sdk/sdk.toml without `rust` (a service provided by a .dks)"
+                "{id}: service {service:?} must be an unreserved service name"
             ));
         }
         // The runtime's find and Transfer name a provider by its file stem: `services/<service>.dks`, and the stem is the id's leaf.
@@ -225,13 +228,25 @@ impl Manifest {
                 "{id}: the id's last part {leaf:?} must equal the provided service {service:?} (the file is `{service}.dks`: the runtime finds a provider by its file name)"
             ));
         }
-        if let Some(e) = self.exports.first() {
-            return Err(err!(
-                "{id}: [[export]] {:?} is not read: the exports of a service file are the `provided = true` imports of its service in sdk/sdk.toml",
-                e.name
-            ));
-        }
-        let exports = crate::sdkgen::provided_exports(service);
+        let exports = if sdk_service {
+            if let Some(e) = self.exports.first() {
+                return Err(err!(
+                    "{id}: [[export]] {:?} is not read: the exports of a service file are the `provided = true` imports of its service in sdk/sdk.toml",
+                    e.name
+                ));
+            }
+            crate::sdkgen::provided_exports(service)
+        } else {
+            if self.exports.is_empty() {
+                return Err(err!(
+                    "{id}: a service outside sdk/sdk.toml needs at least one [[export]]"
+                ));
+            }
+            for e in &self.exports {
+                validate_local_import(id, &e.name)?;
+            }
+            self.exports.iter().map(|e| e.name.clone()).collect()
+        };
         let mut hooks: Vec<(String, String, Vec<String>)> = vec![];
         for h in &self.hooks {
             if h.name.is_empty() || h.entry.is_empty() {
@@ -313,6 +328,7 @@ impl Manifest {
         }
         Ok(Some(crate::dkm::Provided {
             service: service.clone(),
+            callback_order: self.module.callback_order,
             exports,
             hooks,
             fills,
@@ -331,6 +347,41 @@ pub fn service_of(m: &Module) -> Result<Option<crate::dkm::Provided>> {
 #[serde(deny_unknown_fields)]
 pub struct ExportDef {
     pub name: String,
+}
+
+/// The API of a service outside the SDK, declared in a consumer's manifest.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceImport {
+    pub service: String,
+    pub min_version: String,
+    pub names: Vec<String>,
+}
+
+pub(crate) fn local_service_name(service: &str) -> bool {
+    !service.is_empty()
+        && service.len() <= 50
+        && service
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+        && !crate::sdkgen::reserved_service(service)
+}
+
+pub(crate) fn validate_local_import(id: &str, name: &str) -> Result<()> {
+    if name.len() >= crate::dkm::IMPORT_LEN
+        || !name
+            .as_bytes()
+            .first()
+            .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        || crate::sdkgen::reserved_service_import(name)
+    {
+        return Err(err!(
+            "{id}: service API symbol {name:?} must be an unreserved C identifier of at most {} bytes",
+            crate::dkm::IMPORT_LEN - 1
+        ));
+    }
+    Ok(())
 }
 
 /// An entry of `[[fill]]` of a service: the pointer slot of an image adapter and the global function of the object whose address the installer writes in it.
@@ -683,9 +734,12 @@ pub struct ModuleInfo {
     /// The layer of a `core` module (required for `category = "core"`, see `ModuleRole`)
     #[serde(default)]
     pub role: Option<ModuleRole>,
-    /// With `role = "service"`: the service the module provides (a `[[service]]` of sdk/sdk.toml without `rust`)
+    /// With `role = "service"`: the service the module provides.
     #[serde(default)]
     pub service: Option<String>,
+    /// With `role = "service"`: the order its row joins the runtime's callback table.
+    #[serde(default)]
+    pub callback_order: Option<u32>,
     /// What the module is; `framework` is internal (core modules)
     #[serde(rename = "type")]
     pub kind: ModuleKind,

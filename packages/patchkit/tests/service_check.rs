@@ -229,12 +229,12 @@ fn a_declaration_that_differs_from_the_manifest_fails() {
 }
 
 #[test]
-fn the_service_needs_its_row_in_the_manifest_with_a_type_of_its_crate() {
+fn a_service_needs_local_exports_or_an_sdk_row_with_a_type_of_its_crate() {
     let (dir, sdk) = service("row-missing", &[]);
     fs::write(&sdk, "[records.kinds]\n").unwrap();
     assert!(mentions(
         &problems(&dir, &sdk),
-        "has no [[service]] row named `sweep`"
+        "needs at least one [[export]]"
     ));
     fs::write(
         &sdk,
@@ -501,6 +501,39 @@ fn service_exports_are_the_generated_list_of_the_provided_imports() {
         "\n[[export]]\nname = \"dk_sweep_go\"\n",
     );
     assert!(mentions(&problems(&dir, &sdk), "[[export]] is not read"));
+}
+
+#[test]
+fn local_exports_match_by_name_and_ignore_commented_out_tuples() {
+    let (dir, sdk) = service("local-export", &[]);
+    fs::write(&sdk, "[records.kinds]\n").unwrap();
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[export]]\nname = \"sweep_first\"\n\n[[export]]\nname = \"sweep_second\"\n",
+    );
+    let source = r#"
+mod api;
+dkrt_svc_rt::service!(
+    Sweep, "sweep", &[],
+    // This opening block-comment marker is part of a line comment: /*
+    setup = api::setup,
+    hooks = [],
+    fills = [],
+    exports = [
+        ("sweep_second", api::second),
+        /* Keep this example out: /* nested comment */ ("unused", api::unused), */
+        ("sweep_first", api::first),
+    ]
+);
+"#;
+    let entry = dir.join("dks/src/lib.rs");
+    fs::write(&entry, source).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::write(&entry, source.replace("sweep_second", "sweep_first")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "exports must match the names"
+    ));
 }
 
 #[test]

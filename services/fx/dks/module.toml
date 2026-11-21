@@ -5,6 +5,7 @@ name = "fx service"
 category = "core"
 role = "service"
 service = "fx"
+callback_order = 300
 type = "raw"
 author = "digikit"
 status = "experimental"

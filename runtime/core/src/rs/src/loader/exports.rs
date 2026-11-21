@@ -13,6 +13,7 @@ struct Row {
     hash: u32,
     addr: u32,
     rec: u8,
+    bound: bool,
 }
 
 pub struct Exports {
@@ -22,7 +23,7 @@ pub struct Exports {
 
 impl Exports {
     pub const fn new() -> Exports {
-        Exports { rows: [Row { hash: 0, addr: 0, rec: 0 }; EXPORTS_MAX], n: 0 }
+        Exports { rows: [Row { hash: 0, addr: 0, rec: 0, bound: false }; EXPORTS_MAX], n: 0 }
     }
 
     /// Published rows.
@@ -31,14 +32,19 @@ impl Exports {
     }
 
     /// Publish `addr` as the export `hash` of record `rec`. `E_PLAN_OWNER`: another record published the name; `E_TABLE_FULL`: no room.
+    #[cfg(test)]
     pub fn publish(&mut self, rec: usize, hash: u32, addr: u32) -> Result<(), i32> {
-        if self.resolve(hash).is_some() {
+        self.publish_with_scope(rec, hash, addr, false)
+    }
+
+    pub fn publish_with_scope(&mut self, rec: usize, hash: u32, addr: u32, bound: bool) -> Result<(), i32> {
+        if self.get(hash).is_some() {
             return Err(E_PLAN_OWNER);
         }
         if self.n >= EXPORTS_MAX {
             return Err(E_TABLE_FULL);
         }
-        self.rows[self.n] = Row { hash, addr, rec: rec as u8 };
+        self.rows[self.n] = Row { hash, addr, rec: rec as u8, bound };
         self.n += 1;
         Ok(())
     }
@@ -56,12 +62,21 @@ impl Exports {
         }
     }
 
-    /// The address published for `hash`.
+    /// The globally visible address published for `hash`.
     pub fn resolve(&self, hash: u32) -> Option<u32> {
+        self.get(hash).filter(|r| !r.bound).map(|r| r.addr)
+    }
+
+    /// The address and provider record for a named export.
+    pub fn owned(&self, hash: u32) -> Option<(u32, usize)> {
+        self.get(hash).map(|r| (r.addr, r.rec as usize))
+    }
+
+    fn get(&self, hash: u32) -> Option<&Row> {
         let mut i = 0;
         while i < self.n {
             if self.rows[i].hash == hash {
-                return Some(self.rows[i].addr);
+                return Some(&self.rows[i]);
             }
             i += 1;
         }

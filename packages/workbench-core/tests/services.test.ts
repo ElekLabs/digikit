@@ -132,6 +132,20 @@ test('a module that needs only the runtime needs no service', () => {
   assert.deepEqual(r.refused, []);
 });
 
+test('a provider requiring newer runtime features is excluded from the upload plan', () => {
+  const minimum = v(0, 11) + 1;
+  const provider = svc('local-ping', v(1, 2), [need('runtime', minimum)]);
+  const mods = [{ id: 'consumer', needs: [need('local-ping', v(1, 2))] }];
+  const old = resolveServices(mods, [provider], { ...RT, version: minimum - 1 }, RUNTIME);
+  assert.deepEqual(old.order, []);
+  assert.deepEqual(old.refused, [
+    { module: 'consumer', service: 'runtime', kind: 'version', need: '0.11.1', have: '0.11.0' },
+  ]);
+  const current = resolveServices(mods, [provider], { ...RT, version: minimum }, RUNTIME);
+  assert.deepEqual(current.order, [provider]);
+  assert.deepEqual(current.refused, []);
+});
+
 test('a module gets the service it needs', () => {
   const fx = svc('fx', v(1, 2));
   const r = resolveServices([{ id: 'a', needs: [need('fx', v(1, 0))] }], [fx], RT, RUNTIME);

@@ -1,7 +1,7 @@
 """Card services for a development card, by `patchkit services` (packages/patchkit/src/services.rs): the one rule for which services modules need and for the packed file of each.
 
 A service is a file of the card (`services/<name>.dks`) as packed, with the port file of the device's firmware (`ports/<device>-<version>.dkport`). The command reads the NEEDS
-of the packed `.dkm` files, maps them to the service modules of the manifests, and packs each into a work folder.
+of the packed `.dkm` files and of their providers, maps them to the service modules of the manifests, and packs each into a work folder.
 """
 
 from __future__ import annotations

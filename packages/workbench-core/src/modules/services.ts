@@ -237,8 +237,16 @@ export function resolveServices(
           continue;
         }
         if (runtimeServices.has(n.hash32)) {
-          if (!versionFits(rt.version, n.minVersion))
-            return { module: id, service: 'runtime', kind: 'version', need: fmt(n.minVersion), have: fmt(rt.version) };
+          if (!versionFits(rt.version, n.minVersion)) {
+            const format = n.minVersion & 255 ? fmtVersion : fmt;
+            return {
+              module: id,
+              service: 'runtime',
+              kind: 'version',
+              need: format(n.minVersion),
+              have: format(rt.version),
+            };
+          }
           continue;
         }
         const s = provider.get(n.hash32);
