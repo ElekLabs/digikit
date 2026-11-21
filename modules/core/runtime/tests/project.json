@@ -9,23 +9,13 @@
         "files": ["card-guard.device.test.ts"],
         "devices": ["st"],
         "tags": ["C:storage", "A:core/card-guard"],
-        "modules": [],
-        "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts",
-          "packages/dk-session/src/rpcdata.ts",
-          "packages/dk-session/src/backup-file.ts"
-        ]
+        "modules": []
       },
       {
         "files": ["reload.device.test.ts"],
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],
-        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"],
-        "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts"
-        ]
+        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"]
       },
       {
         "files": ["reload-fx.device.test.ts"],
@@ -33,8 +23,6 @@
         "tags": ["C:loading", "C:dsp", "A:core/fx"],
         "modules": ["digikit/debug", "test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-send", "core/services/machines", "core/services/fx"],
         "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts",
           "tools/patchkit/pk_digikit_fxroutes.py"
         ]
       },
@@ -43,20 +31,12 @@
         "devices": ["dt2"],
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "C:storage", "S:machines"],
-        "modules": ["test/sine", "core/services/machines"],
-        "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts"
-        ]
+        "modules": ["test/sine", "core/services/machines"]
       },
       {
         "files": ["reload-menus.device.test.ts"],
         "tags": ["C:loading", "C:state"],
-        "modules": ["digikit/debug", "test/entry-demo"],
-        "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts"
-        ]
+        "modules": ["digikit/debug", "test/entry-demo"]
       },
       {
         "files": ["live.device.test.ts"],
@@ -64,9 +44,6 @@
         "tags": ["C:loading", "C:dsp", "S:machines"],
         "modules": ["digikit/debug", "test/c-demo", "test/sine", "core/services/machines"],
         "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts",
-          "packages/dk-session/src/loads.ts",
           "tools/devtools/wb.mjs",
           "tools/devtools/wb_transfer.mjs",
           "packages/workbench-core/src/modules/dktransfer.ts"
@@ -78,9 +55,6 @@
         "tags": ["C:loading", "C:dsp", "S:machines"],
         "modules": ["digikit/debug", "test/sine", "test/native-page", "core/services/machines"],
         "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts",
-          "packages/dk-session/src/loads.ts",
           "tools/devtools/wb.mjs",
           "tools/devtools/wb_transfer.mjs",
           "packages/workbench-core/src/modules/dktransfer.ts"
@@ -129,9 +103,6 @@
           "tools/devtools/wb_transfer.mjs",
           "packages/devices/src/node.ts",
           "packages/devices/src/parse.ts",
-          "packages/dk-session/src/samples.ts",
-          "packages/dk-session/src/identify.ts",
-          "packages/dk-session/src/dkupload-core.ts",
           "packages/workbench-core/src/modules/dktransfer.ts",
           "packages/workbench-core/src/node/node-host.ts",
           "packages/workbench-core/src/node/stock-image.ts"
@@ -143,9 +114,6 @@
         "tags": ["C:storage", "S:samples"],
         "modules": [],
         "sources": [
-          "packages/dk-session/src/dksample.ts",
-          "packages/dk-session/src/rpcfiles.ts",
-          "packages/dk-session/src/samples.ts",
           "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
         "plusdrive": true,
@@ -168,9 +136,6 @@
         "tags": ["C:storage", "S:samples"],
         "modules": [],
         "sources": [
-          "packages/dk-session/src/dksample.ts",
-          "packages/dk-session/src/rpcfiles.ts",
-          "packages/dk-session/src/samples.ts",
           "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
         "dksampleWasm": true
@@ -248,7 +213,6 @@
         "files": ["log-names.device.test.ts"],
         "tags": ["C:diagnostics", "C:layout"],
         "modules": ["digikit/debug", "test/dyn-demo"],
-        "sources": ["packages/dk-session/src/log-names.ts"],
         "dkprofWasm": true
       },
       {

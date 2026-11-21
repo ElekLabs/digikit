@@ -12,6 +12,7 @@ import {
   deviceInputs,
   forDevice,
   serviceLeaves,
+  withoutDriver,
 } from './device-test-keys.mjs';
 
 export const IMAGE_BUILD = { target: 'build-objects', projects: ['tag:acceptance-image'] };
@@ -211,14 +212,16 @@ const fileTargets = (
     targets[child] = make(narrow, Boolean(opts.twin));
     if (opts.twin) all[`${allName}--${suffix}`] = make(false, false, true);
   }
-  // Nx selects a target by its inputs, so the parents keep the inputs of the whole project.
+  // Nx selects a target by its inputs, so the parents keep the inputs of the whole project: the merge parent the merge key
+  // (without the driver packages), the `-all` parent the full key.
   const { inputs } = build(tests, false);
+  const mergeInputs = opts.twin ? build(tests, false, recs, true).inputs : inputs;
   const children = Object.keys(targets);
   if (opts.twin) {
     for (const [key, value] of Object.entries(all)) if (typeof value !== 'string') targets[key] = value;
     targets[allName] = { executor: 'nx:noop', inputs, dependsOn: Object.keys(all) };
   }
-  targets[name] = { executor: 'nx:noop', inputs, dependsOn: children };
+  targets[name] = { executor: 'nx:noop', inputs: mergeInputs, dependsOn: children };
   return targets;
 };
 
@@ -235,14 +238,17 @@ export const checkMergeTests = (workspaceRoot, root, deviceTests, fullTier) => {
 };
 
 // The shared conformance suite loads every uploadable module (`isUploadable` in module-manifests.mjs).
-export const conformanceTarget = (workspaceRoot, root, m, f, importInputs) => ({
+// `full`: the `-all` twin keeps the driver packages in its key; the merge target leaves them out.
+export const conformanceTarget = (workspaceRoot, root, m, f, importInputs, full = false) => ({
   executor: 'nx:run-commands',
   cache: true,
   inputs: [
     ...DEVICE_INPUTS,
     'production',
     ...builtSourceExclusions(root, workspaceRoot),
-    ...importInputs([...globSync('tests/conformance/**/*.device.test.ts', { cwd: workspaceRoot }), VITEST_SETUP]),
+    ...((imports) => (full ? imports : withoutDriver(imports)))(
+      importInputs([...globSync('tests/conformance/**/*.device.test.ts', { cwd: workspaceRoot }), VITEST_SETUP]),
+    ),
   ],
   dependsOn: ['pack', 'digikit/debug:pack', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES, TEST_ASSEMBLY],
   outputs: [],
@@ -328,25 +334,26 @@ export const testOnlyNodes = (
 };
 
 // The node that adds the emulator tests to tests/regression.
-export const regressionNode = (workspaceRoot, importInputs) => [
-  'tests/regression/project.json',
-  {
-    projects: {
-      'tests/regression': {
-        targets: {
-          'test-device': {
-            inputs: [
-              ...DEVICE_INPUTS,
-              '{projectRoot}/project.json',
-              ...importInputs([
-                ...globSync('tests/regression/emulator/**/*.test.ts', { cwd: workspaceRoot }),
-                VITEST_SETUP,
-              ]),
-            ],
+export const regressionNode = (workspaceRoot, importInputs) => {
+  const imports = importInputs([
+    ...globSync('tests/regression/emulator/**/*.test.ts', { cwd: workspaceRoot }),
+    VITEST_SETUP,
+  ]);
+  return [
+    'tests/regression/project.json',
+    {
+      projects: {
+        'tests/regression': {
+          targets: {
+            'test-device': {
+              inputs: [...DEVICE_INPUTS, '{projectRoot}/project.json', ...withoutDriver(imports)],
+            },
+            'test-device-all': {
+              inputs: [...DEVICE_INPUTS, '{projectRoot}/project.json', ...imports],
+            },
           },
-          'test-device-all': { executor: 'nx:noop', dependsOn: ['test-device'] },
         },
       },
     },
-  },
-];
+  ];
+};

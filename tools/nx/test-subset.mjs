@@ -1,5 +1,5 @@
 // `mise run test:subset -- [<tags...>] [--base REF] [--why] [--run]`: the device tests of the given record tags (tools/nx/acceptance-tags.mjs)
-// as Nx leaf targets, plus gate-smoke and gate-pins. Without --run it prints them and how many start at once by DSP mode;
+// as Nx leaf targets, plus gate-smoke and gate-pins when Nx `affected` selects them (against --base, DIGI_GATE_BASE or origin/main). Without --run it prints them and how many start at once by DSP mode;
 // with --run it runs them through `pnpm nx:pilot run-many` (DIGI_EMU_SLOTS and the other emulator settings pass through the environment).
 // `--why` adds a line to each selected file: the given tags it has, and the changed files that selected it with `--base`.
 // Tags of one call are a union: a test runs when any of its record tags is given.
@@ -17,7 +17,7 @@ import { NON_CELL_GLOBS, SHARED_INPUT_GLOBS } from './device-test-keys.mjs';
 import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 
-// Gate projects whose suites run with every subset: the patchkit smoke matrix and the PCM pins.
+// Gate projects whose suites join a subset when `affected` selects them: the patchkit smoke matrix and the PCM pins.
 export const FIXED = [
   { project: 'gate-smoke', target: 'smoke' },
   { project: 'gate-pins', target: 'pins' },
@@ -153,10 +153,25 @@ export const invocations = (pairs, projects) => {
   return targets.map((t) => call([t], [...new Set(pairs.filter((p) => p.target === t).map((p) => p.project))]));
 };
 
-export const selectionPairs = (tests, projects) => {
+// `fixed`: the FIXED entries that Nx `affected` selects (see affectedFixed); the others are left out.
+export const selectionPairs = (tests, projects, fixed = FIXED) => {
   const known = new Set(projects.map((p) => p.name));
-  const fixed = FIXED.filter((f) => known.has(f.project));
-  return [...tests.flatMap((t) => t.targets.map((target) => ({ project: t.project, target }))), ...fixed];
+  const added = fixed.filter((f) => known.has(f.project));
+  return [...tests.flatMap((t) => t.targets.map((target) => ({ project: t.project, target }))), ...added];
+};
+
+// The FIXED entries whose project Nx `affected` selects against `base`. `affected(base, target)`: the affected project names.
+export const affectedFixed = (base, affected = defaultAffected) =>
+  FIXED.filter((f) => affected(base, f.target).includes(f.project));
+const defaultAffected = (base, target) => {
+  const root = resolve(fileURLToPath(import.meta.url), '../../..');
+  const done = spawnSync(
+    'node',
+    ['tools/nx/nx.mjs', 'show', 'projects', '--affected', `--base=${base}`, `--withTarget=${target}`],
+    { cwd: root, encoding: 'utf8' },
+  );
+  if (done.status !== 0) throw new Error(`nx show projects --affected failed:\n${done.stderr || done.stdout}`);
+  return done.stdout.split('\n').filter(Boolean);
 };
 
 // Files changed since `base`: the tracked diff (committed and working tree) and the untracked files. `git`: runs git in `root`.
@@ -248,13 +263,15 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     );
     process.exit(2);
   }
-  const pairs = selectionPairs(tests, projects);
+  const fixed = affectedFixed(base ?? process.env.DIGI_GATE_BASE ?? 'origin/main');
+  const pairs = selectionPairs(tests, projects, fixed);
   console.log(`test:subset: ${[...tags, ...(base ? [`--base ${base}`] : [])].join(' ')}`);
   for (const t of tests) {
     console.log(`  ${t.project} ${t.file}: ${t.targets.join(' ')}`);
     if (why) console.log(`    why: ${whyText(t)}`);
   }
-  for (const f of FIXED) console.log(`  ${f.project}: ${f.target}`);
+  for (const f of FIXED)
+    console.log(fixed.includes(f) ? `  ${f.project}: ${f.target}` : `  ${f.project}: not affected`);
   const m = modeSummary(tests);
   console.log(
     `test:subset: ${m.count.sharc} coupled and ${m.count.zero} zero-DSP tasks; core budget ${m.cores}, ${m.slots} slots: ` +

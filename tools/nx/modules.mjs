@@ -148,7 +148,10 @@ export const createNodesV2 = [
       if (rustTests) targets['rust-tests'] = rustTests;
       // sound checks on the SHARC-only rig (packages/sharc-rig-kit, docs/TESTING.md "Sound checks"): tests/rig/*.toml run by tests/*.rig.test.ts
       if (rigTests.length) targets['test-rig'] = rigTarget(root);
-      if (uploadable) targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
+      if (uploadable) {
+        targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
+        targets['test-conformance-all'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs, true);
+      }
       if (Object.keys(targets).length) project.targets = targets;
       return [f, { projects: { [root]: project } }];
     });
