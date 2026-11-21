@@ -8417,31 +8417,31 @@
    "type": "cf.32"
   },
   {
-   "addend": 160,
+   "addend": 64,
    "offset": 22,
    "section": ".text._RNvMs0_NtCsaMgU3lEIvKO_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
-   "addend": 164,
+   "addend": 68,
    "offset": 28,
    "section": ".text._RNvMs0_NtCsaMgU3lEIvKO_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
-   "addend": 172,
+   "addend": 76,
    "offset": 34,
    "section": ".text._RNvMs0_NtCsaMgU3lEIvKO_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
-   "addend": 168,
+   "addend": 72,
    "offset": 46,
    "section": ".text._RNvMs0_NtCsaMgU3lEIvKO_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
@@ -10211,18 +10211,18 @@
    "size": 58
   },
   {
-   "align": 8,
-   "hex": "6d616368696e65732e747970657373616d65206d616368696e65206b657920617320616e206561726c696572206d616368696e65",
+   "align": 16,
+   "hex": "6d616368696e65732e747970657373616d65206d616368696e65206b657920617320616e206561726c696572206d616368696e650000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.global.19",
-   "size": 52
+   "size": 78
   },
   {
-   "align": 16,
-   "hex": "000000000000000000000000000000000000000000000000000000000000000061206d616368696e6520686173206120706f736974696f6e206f74686572207468616e203235352c206f776e5f6473702061626f766520312c2061206c6576656c2061626f7665203078666666662c206f722061206e616d652074686174206973206e6f74207072696e7461626c6520415343494900000000000000000000000000000000000000000000000000",
+   "align": 8,
+   "hex": "000000000000000000000000000000000000000000000000000000000000000061206d616368696e6520686173206120706f736974696f6e206f74686572207468616e203235352c206f776e5f6473702061626f766520312c2061206c6576656c2061626f7665203078666666662c206f722061206e616d652074686174206973206e6f74207072696e7461626c65204153434949",
    "kind": "data",
    "name": ".rodata.global.18",
-   "size": 174
+   "size": 149
   },
   {
    "align": 2,
@@ -11478,7 +11478,7 @@
    "size": 28
   }
  ],
- "source_sha256": "84c9719721a1cc9a66936b8feefa886f0366356acde7ba54ce7b0b445f57b0cb",
+ "source_sha256": "87d5bed6b7c03e2000f40edc48fd1f0876cea7b5d9dee303cbe93e08d8ba6bb9",
  "symbols": [
   {
    "global": false,
@@ -14322,7 +14322,7 @@
  "toolchain": {
   "exports": "MF_TAB dk_machine_add_page dk_machines_module_info dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
   "instructions_redecoded": "13464",
-  "isa_check": "500a937f3cb4df8db18898b33c6857e6b4942573321e49c9f3b159b6c5092870",
+  "isa_check": "865f5ed8612e64e8485ff813723322e9c446df3533c002670d585dda6a1a436b",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

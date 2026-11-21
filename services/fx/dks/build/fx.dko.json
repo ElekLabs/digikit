@@ -6100,31 +6100,31 @@
    "type": "cf.32"
   },
   {
-   "addend": 16,
+   "addend": 48,
    "offset": 22,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
-   "addend": 20,
+   "addend": 52,
    "offset": 28,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
-   "addend": 28,
+   "addend": 60,
    "offset": 34,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
-   "addend": 24,
+   "addend": 56,
    "offset": 46,
    "section": ".text._RNvMs0_NtCs4NVp4pdP0rZ_8dkrt_abi4linkNtB5_8Sequence3new",
-   "symbol": ".sec..rodata.global.18",
+   "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
@@ -7698,18 +7698,18 @@
    "size": 47
   },
   {
-   "align": 8,
-   "hex": "66782f73656e642f6d6f72652065666665637473207468616e2074686520636861696e2074616b6573",
+   "align": 16,
+   "hex": "66782f73656e642f6d6f72652065666665637473207468616e2074686520636861696e2074616b6573000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata.global.19",
-   "size": 41
+   "size": 62
   },
   {
-   "align": 16,
-   "hex": "000000000000000000000000000000000000000000000000000000000000",
+   "align": 1,
+   "hex": "00",
    "kind": "data",
    "name": ".rodata.global.18",
-   "size": 30
+   "size": 1
   },
   {
    "align": 1,
@@ -8916,7 +8916,7 @@
    "size": 28
   }
  ],
- "source_sha256": "ae8f80dfb92be174af59da59b9717c035b2e9d9e58cb44f8d8b853659265b385",
+ "source_sha256": "58efc5e5b97955a63c0bb4b6aeeff26d983b738774534caa35e6aa49cb36ca5b",
  "symbols": [
   {
    "global": false,
@@ -11166,7 +11166,7 @@
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_service_query_v1 dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
   "instructions_redecoded": "8986",
-  "isa_check": "b7e34922ea30f5c5d3d188248fa4bc30c577dd069b27367d13b9e647ead84829",
+  "isa_check": "20b235039de07308a701733fcda4112e3fcdbcac64b862ae241c558eeb264385",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
