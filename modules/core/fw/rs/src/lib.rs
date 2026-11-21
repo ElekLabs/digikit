@@ -582,6 +582,12 @@ pub mod project {
     }
 
     unsafe extern "C" {
+        /// `MmcFs *f(void)`: the card file system singleton (the getter of `std::_Sp_counted_ptr<MmcFs*>`; DT2 1.17 0x4019dbda, DN2 1.12 0x4018e0a8, DN2 1.11 0x4018ddc8; the code differs per image, the hash is unique on each). The firmware's listing of the 129 slots is in it [V]: the record of slot s is at +0x10 + s * 0x1c (slot 0x80 is the live mirror): byte 0 is nonzero when the slot exists (the name, header byte 8, is not empty; the firmware's own accessors test only this byte), byte 1 is 1 for a `DT1P` or `DN1P` header and 0 for the in-memory format magic 0xBEEFBACE, the u32 at +4 is a record format word [D] (5 on a cleared project), the 16 name bytes at +8 (no terminator is written), the u32 at +0x18 is the save stamp (header +0x18). The listing refresh `(MmcFs *, slot)` (DT2 0x4012f2fa, DN2 0x4012dbce) fills it and takes a mutex at +0x1e030 (DN2) or +0x1e034 (DT2) at entry. A header that cannot be read leaves the name "ERROR" with bytes 0 and 1 zero [D], unless the static header buffer still holds a valid magic. The project service reads name and stamp there. Not found on Syntakt.
+        #[link_name = "cf.project.fn.mmcfs"]
+        pub fn mmcfs() -> u32;
+    }
+
+    unsafe extern "C" {
         /// The firmware's "serialize the live project into the persistent arena" (FUN_40030c9c on DT2, FUN_4002c694 on DN2: `int f(void)`, returns 1). The same hash on all four images.
         #[link_name = "cf.project.fn.serialize"]
         pub fn serialize() -> i32;

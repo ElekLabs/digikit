@@ -384,6 +384,11 @@ Modules never contain addresses. A firmware site is a named **anchor** (`dsp.mas
 - ColdFire: `cf_func` (a function found by a hash that masks address operands, so one rule serves relinked builds,
   plus an offset), `cf_ptr`, `cf_words` (a masked word signature), `cf_params_t1`, `cf_params_refs` and
   `cf_params_bounds` (many anchors from one rule), `cf_reset_init_calls`, `cf_reset_helper`.
+- `cf_call` finds a function through its caller, for a function whose own hash differs between firmwares (an immediate that the hash does not mask) while the caller's hash does
+  not: `hash` and `ordinal` name the caller as `cf_func` does, `call` is the byte offset from the caller's entry to a `jsr (xxx).l` (`4eb9`) or `jsr d16(pc)` (`4eba`), and the
+  anchor is a code anchor of `len` bytes at `offset` (default 0) in the function that call reaches; the port anchor's `src` is the call. The rule that finds the project paste
+  in `devices/fw/project.toml`: `rule.dt2 = { kind = "cf_call", hash = "74201c46da5dc856daae9e5957420079", call = 0x16, len = 8 }`.
+  `cf_literal` is `cf_ptr` for a RAM variable outside the image: a `value` anchor whose address is the literal and whose `src` is the instruction that reads it.
 
 The lockfile stores, per anchor, the address, the length and the SHA-256 of the bytes, never the bytes. At patch time
 patchkit checks every anchor a module uses against the user's image; a mismatch refuses the patch. This is why one
