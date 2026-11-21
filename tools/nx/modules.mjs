@@ -197,7 +197,17 @@ export const createNodesV2 = [
           },
         },
       ]);
-    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, moduleInfo, coreBuilds, importInputs, pythonInputs, nodes, imageModules);
+    testOnlyNodes(
+      ctx.workspaceRoot,
+      testOwners,
+      byId,
+      moduleInfo,
+      coreBuilds,
+      importInputs,
+      pythonInputs,
+      nodes,
+      imageModules,
+    );
     if (matched.includes('tests/regression/project.json')) nodes.push(regressionNode(ctx.workspaceRoot, importInputs));
     return nodes;
   },

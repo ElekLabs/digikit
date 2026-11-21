@@ -157,7 +157,12 @@ export const forDevice = (inputs, device) =>
   inputs.flatMap((input) => {
     const subject = input?.[IMAGE_SUBJECT];
     if (subject)
-      return forDevice(device === null || subject.devices.includes(device) ? [...subject.inImage, ...(device === null ? subject.built : [])] : subject.built, device);
+      return forDevice(
+        device === null || subject.devices.includes(device)
+          ? [...subject.inImage, ...(device === null ? subject.built : [])]
+          : subject.built,
+        device,
+      );
     if (input === OTHER_DEVICE_FILES) return device ? otherFiles(device).map((glob) => `!{workspaceRoot}/${glob}`) : [];
     const pattern = input?.dependentTasksOutputFiles;
     if (typeof pattern === 'string' && pattern.includes('{device}'))
@@ -309,22 +314,23 @@ export const deviceInputs = (
           // an edit of the subject module reruns a test-only project
           // (its built sources reach the run through the image hashes below)
           ...(opts.subjects?.length
-            ? [
-                ...opts.subjects.map((id) => {
-                  const subject = opts.subjectRoots?.[id];
-                  const built = { input: 'production', projects: [id] };
-                  // `forDevice` picks per half: the fileset with the image hashes when the device's image holds the subject, else `built`
-                  return subject
-                    ? {
-                        [IMAGE_SUBJECT]: {
-                          devices: subject.devices,
-                          inImage: [...subjectInputs(subject.root, opts.base), ...outputFiles(['dist/bytes/images-{device}.sha256'])],
-                          built: [built],
-                        },
-                      }
-                    : built;
-                }),
-              ]
+            ? opts.subjects.map((id) => {
+                const subject = opts.subjectRoots?.[id];
+                const built = { input: 'production', projects: [id] };
+                // `forDevice` picks per half: the fileset with the image hashes when the device's image holds the subject, else `built`
+                return subject
+                  ? {
+                      [IMAGE_SUBJECT]: {
+                        devices: subject.devices,
+                        inImage: [
+                          ...subjectInputs(subject.root, opts.base),
+                          ...outputFiles(['dist/bytes/images-{device}.sha256']),
+                        ],
+                        built: [built],
+                      },
+                    }
+                  : built;
+              })
             : []),
           // fixture image modules that a record names are chosen by the test itself
           ...(recs.some((r) => r.patchModules?.length)

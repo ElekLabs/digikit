@@ -530,7 +530,7 @@ Before RC2 and RC3 start: state payoff and confidence again with the RC1 results
 
 Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way:
 
-1. The worker leaves its changes uncommitted and marks the row `review`.
+1. The worker runs the static checks (`pnpm nx:pilot run-many -t lint,fmt-check,rust-fmt,typecheck,python-checks`), leaves its changes uncommitted and marks the row `review`.
 2. The worker runs `mise run test:plan` with `DIGI_GATE_BASE` at the start of the phase and states whether the selection matches what the change can reach; a selection that is wider is fixed in the inputs and edges, not run. An independent reviewer sub-agent reviews the diff and the selection (ranked findings with `file:line` and a failure scenario; boundaries, separation of concerns and device specifics behind capabilities included). Findings are fixed or answered.
 3. Em reviews the phase or deliverable. Only then is it committed and the row set to `done` with the commit.
 
