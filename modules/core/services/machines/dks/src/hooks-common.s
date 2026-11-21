@@ -123,4 +123,4 @@ mf_flt_list:
     jsr     mf_stock_flt_list
     jsr     dks_filter_list
     addq.l  #4,%sp
-    rts
+    jmp     mf_x_flt_list                  | The service installer enters by jmp at the stock call site.
