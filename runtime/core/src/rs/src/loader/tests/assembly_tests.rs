@@ -30,8 +30,8 @@ fn repo() -> PathBuf {
 }
 
 #[derive(Clone, Copy)]
-struct Dev {
-    name: &'static str,
+pub(crate) struct Dev {
+    pub(crate) name: &'static str,
     profile: dkrt_abi::platform::DeviceProfile,
     /// The stock firmware the images are made from (the acceptance cells); its sites' stock bytes come from `patchkit port stock`.
     firmware: &'static str,
@@ -41,7 +41,7 @@ struct Dev {
 
 const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx", toml: "devices/digitakt-ii.toml" };
 const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx", toml: "devices/digitone-ii.toml" };
-const DEVICES: [Dev; 2] = [DT2, DN2];
+pub(crate) const DEVICES: [Dev; 2] = [DT2, DN2];
 
 impl Dev {
     /// The name of the port file of the firmware: `<device>-<version>`, the version from the firmware file's name (`..._OS1.17.syx`).
@@ -51,7 +51,7 @@ impl Dev {
     }
 
     /// False (with a note) when the firmware is not here: its images are not made, and nothing of this device can be assembled.
-    fn has_firmware(&self) -> bool {
+    pub(crate) fn has_firmware(&self) -> bool {
         let ok = repo().join(self.firmware).exists();
         if !ok {
             eprintln!("SKIP {}: {} is not here", self.name, self.firmware);
@@ -67,7 +67,7 @@ fn read(path: &Path, make: &str) -> Vec<u8> {
 // ---- the artifacts ------------------------------------------------------------------------------------------------------------
 
 /// The packed file of module `id`'s leaf name: a `.dkm`, or a `.dks` for a service.
-fn packed(dev: Dev, leaf: &str, ext: &str, nx: &str) -> Vec<u8> {
+pub(crate) fn packed(dev: Dev, leaf: &str, ext: &str, nx: &str) -> Vec<u8> {
     read(&repo().join(format!("dist/modules/{}/{leaf}.{ext}", dev.name)), &format!("pnpm nx:pilot run {nx}:pack"))
 }
 
@@ -109,7 +109,7 @@ fn be(f: &[u8], at: u32) -> u32 {
 }
 
 /// The header table of a file.
-fn table_of(f: &[u8]) -> Vec<u8> {
+pub(crate) fn table_of(f: &[u8]) -> Vec<u8> {
     let (off, len) = (be(f, dkneeds::H_REG_OFF) as usize, be(f, dkneeds::H_REG_SIZE) as usize);
     f[off..off + len].to_vec()
 }

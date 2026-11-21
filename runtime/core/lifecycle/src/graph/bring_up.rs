@@ -39,6 +39,8 @@ impl PackageGraph {
                         services.push(id);
                     }
                 }
+                // a soft need that nothing meets does not stop the load
+                Resolved::Incompatible | Resolved::None if !need.is_hard() => {}
                 Resolved::Incompatible => {
                     return Err(Refusal::Incompatible {
                         package: p,

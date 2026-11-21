@@ -21,19 +21,36 @@ impl Api {
     }
 }
 
-/// What a consumer needs: the hash of a service name and the minimum packed version.
+/// What a consumer needs: the hash of a service name, the minimum packed version and whether the need is hard. A hard need refuses a bring-up when nothing
+/// meets it; a soft one only orders the consumer after the provider when the graph has one that meets it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Need {
     service: u32,
     min_version: u32,
+    soft: bool,
 }
 
 impl Need {
+    /// A hard need.
     pub const fn new(service: u32, min_version: u32) -> Need {
         Need {
             service,
             min_version,
+            soft: false,
         }
+    }
+
+    /// A soft need: the consumer loads without the service.
+    pub const fn soft(service: u32, min_version: u32) -> Need {
+        Need {
+            service,
+            min_version,
+            soft: true,
+        }
+    }
+
+    pub const fn is_hard(&self) -> bool {
+        !self.soft
     }
 
     pub const fn service(&self) -> u32 {
@@ -64,6 +81,7 @@ impl Node {
             needs: [Need {
                 service: 0,
                 min_version: 0,
+                soft: false,
             }; MAX_NEEDS],
             need_count: 0,
             pinned: false,

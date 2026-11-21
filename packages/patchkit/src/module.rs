@@ -79,6 +79,9 @@ pub struct Manifest {
     /// of a global function of the object when it is loaded (the loader finds the slot word by the hash of the name in the image's info table).
     #[serde(default, rename = "fill")]
     pub fills: Vec<ServiceFill>,
+    /// `[[service.resource]]` and `[[service.record]]`: the capacities and record kinds a service declares. Parsed and validated, not packed yet (RC3).
+    #[serde(default)]
+    pub service: crate::service_decl::ServiceDecl,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
     /// builds different rows per device (DT2 has no page rows).
     #[serde(default)]
@@ -108,6 +111,16 @@ impl Manifest {
             ));
         }
         self.provided_service()?;
+        if !self.service.is_empty() {
+            if self.module.role != Some(ModuleRole::Service) {
+                return Err(err!(
+                    "{}: [[service.resource]] and [[service.record]] belong to a module with `role = \"service\"`",
+                    self.module.id
+                ));
+            }
+            self.service
+                .validate(&self.module.id, &crate::devdata::has_profile_key)?;
+        }
         for r in &self.repack {
             let who = &self.module.id;
             if r.role.is_empty() || r.role.len() > 255 {
@@ -1559,6 +1572,45 @@ mod manifest_tests {
         let m: Manifest = toml::from_str(&format!("{HEAD}{extra}"))?;
         m.validate_header()?;
         Ok(m)
+    }
+
+    const SERVICE_HEAD: &str = "role = \"service\"\nservice = \"ledger\"\n";
+
+    fn load_service(extra: &str) -> Result<Manifest> {
+        let head = HEAD.replace("test/m", "test/ledger").replace(
+            "type = \"machine\"",
+            &format!("type = \"raw\"\n{SERVICE_HEAD}"),
+        );
+        let m: Manifest =
+            toml::from_str(&format!("{head}[[export]]\nname = \"ledger_op\"\n{extra}"))?;
+        m.validate_header()?;
+        Ok(m)
+    }
+
+    #[test]
+    fn a_service_declares_resources_and_records_that_are_checked() {
+        let m = load_service(
+            "[[service.resource]]\nname = \"slots\"\nlimit = \"profile:fx_slots\"\n[[service.record]]\nname = \"row\"\nkind = 1\nlen = 8\n",
+        )
+        .unwrap();
+        assert_eq!((m.service.resource.len(), m.service.record.len()), (1, 1));
+        let e = load_service(
+            "[[service.resource]]\nname = \"slots\"\nlimit = \"profile:no_such_key\"\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            e.contains("test/ledger") && e.contains("no_such_key"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn only_a_service_declares_resources_and_records() {
+        let e = load("[[service.record]]\nname = \"row\"\nkind = 1\nlen = 8\n")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("role = \"service\""), "{e}");
     }
 
     #[test]

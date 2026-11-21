@@ -478,6 +478,30 @@ fn tables() -> &'static (Vec<Identity>, Vec<DeviceInfo>) {
     })
 }
 
+/// Whether `key` is an integer in `[limits]` or `[digikit]` of every device file that is a runtime target (has `[digikit]`): the names a service
+/// manifest may write as `profile:<key>`.
+pub fn has_profile_key(key: &str) -> bool {
+    let mut any = false;
+    for (n, text) in DEVICE_FILES {
+        let Ok(raw) = toml::from_str::<toml::Table>(text) else {
+            panic!("devices/{n}: embedded device file does not parse")
+        };
+        if !raw.contains_key("digikit") {
+            continue;
+        }
+        let found = ["limits", "digikit"].iter().any(|t| {
+            raw.get(*t)
+                .and_then(|v| v.get(key))
+                .is_some_and(|v| v.is_integer())
+        });
+        if !found {
+            return false;
+        }
+        any = true;
+    }
+    any
+}
+
 /// Every device file's identity (patchable or not), in file-name order.
 pub fn identities() -> &'static [Identity] {
     &tables().0
@@ -508,6 +532,13 @@ pub fn short_list() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_keys_are_integers_of_every_runtime_device_file() {
+        assert!(has_profile_key("fx_slots") && has_profile_key("modules"));
+        assert!(!has_profile_key("name"), "a string is no profile key");
+        assert!(!has_profile_key("no_such_key"));
+    }
 
     #[test]
     fn the_embedded_device_files_parse() {

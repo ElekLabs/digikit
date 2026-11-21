@@ -11,6 +11,8 @@ pub enum Refusal {
     DuplicatePackage { package: PackageId },
     /// Two services of this name and major version.
     DuplicateService { package: PackageId, service: u32 },
+    /// The header table of the package is not one the shared parser accepts, or it provides more than one service.
+    BadTable { package: PackageId },
     /// A package that is not in the graph.
     UnknownPackage { package: PackageId },
     /// No package provides the service.

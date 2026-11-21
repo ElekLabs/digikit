@@ -52,7 +52,7 @@ pub(crate) mod records;
 pub(crate) mod role;
 mod seams;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 use image::in_file;
 pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
 

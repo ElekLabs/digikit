@@ -137,10 +137,10 @@ len = 0x1a4
 [[export]]
 name = "dk_fx_routes"              # an SDK import implemented here, or a service-local operation
 
-[[entry]]                          # resolved through the port file at load
-hook = "cf.page.hook.page_desc"
-[[entry]]
-slot = "dsp.fx.master"             # SHARC slot catalogue (section 9)
+[[hook]]                           # existing syntax: a ColdFire site resolved through the port file at load
+name = "cf.page.hook.page_desc"
+[[fill]]                           # existing syntax: a slot of the SHARC slot catalogue (section 9)
+name = "dsp.fx.master"
 ```
 
 ```toml
@@ -265,6 +265,27 @@ The core resolves all three by name hash against live services. None needs a cor
 - The planner checks fit from header tables only, before any code runs. A resource with a limit of `"init"` is checked at `start`.
 - The DSP voice cost rule (`max(per-voice cost) * voices + sum(effect costs)`) becomes an aggregate: `machines.voice_cost` with `aggregate = "max"`, `scale = "profile:dsp_voices"` and `draws_from = "core.dsp_cost"`.
 - The CAPACITY reply lists `(owner, name hash, limit, used, largest)`. Hosts take labels from the manifests.
+
+### 6.6 Settings
+
+A package can have settings: a module, and from RC3 a service. Settings are data, not menus: the owner describes its fields, the menu app renders them with the firmware's views, the core's settings broker stores the values (keyed by owner, with the project overlay), and the owner checks choices and values. No owner builds UI, so a package with settings stays reloadable.
+
+```rust
+// optional part of the provider contract (RC3)
+pub trait Settings {
+    /// The fields of the service itself, or the rows it adds to one consumer's page.
+    fn fields(&self, scope: Scope, out: &mut FieldSink);   // Scope::Service | Scope::Consumer(id)
+    /// Choices that depend on live state (e.g. which routes still have a free send slot).
+    fn choices(&self, field: FieldId, scope: Scope, out: &mut ChoiceSink) -> Result<(), Status>;
+    /// Whether a value may be set now; the broker stores it only when this says yes.
+    fn validate(&self, field: FieldId, scope: Scope, value: u32) -> Result<(), Status>;
+}
+```
+
+- **A service's own settings** (`Scope::Service`) show on the service's page in MODULES.
+- **Settings a service owns about a consumer** (`Scope::Consumer`) show as a section on that module's page: the FX route of an effect is a row the FX service contributes and validates. The menu app's FX route panel and its old-picker fallback are deleted.
+- **A module's own settings stay its own:** keys under its owner, today through its `menu` callback and the SDK get/put calls (unchanged). A module influences a service's rows through its records (e.g. the routes an effect supports), never by writing the service's keys, and reads a service's value through the service's API.
+- **Module fields as data (RC3m):** SDK builder calls in `init` (e.g. `dk_setting_choice(ctx, "curve", "Depth curve", choices)`) that the packer writes as records, rendered by the same renderer. A module that declares fields instead of a `menu` is no longer held by the menu lifetime rule. `menu` stays supported.
 
 ## 7. Core owners
 
@@ -448,10 +469,12 @@ fn take_down_detaches_before_restore() {
 | Fixture | Exercises | Item |
 | --- | --- | --- |
 | `test/local-ping` | Service `local-ping`: one export, PROVIDES with its version | RC1d |
-| `test/local-ping-1-3` | The same service at a newer minor version (a thin variant): reload with a new version | RC1d |
-| `test/local-ping-user`, `test/local-ping-user-b` | Two consumers of one service: shared service, orphan unload | RC1d |
+| `test/local-ping-user` | A consumer of the service (`min_version` 1.2.0) | RC1d |
+| `test/local-ping-user-b` | A second consumer of the service: shared service, orphan unload | RC1d |
 | `test/local-ping-old-user` | Needs a major version the provider does not have: the incompatible-need refusal | RC1d |
 | the same fixtures | One resource `local-ping.tokens` (limit 2), one record kind owned by the service, attach/detach counters, a query, one ColdFire hook entry; a greedy consumer for the fit refusal | RC3 |
+
+A newer minor version satisfying a need is a unit test of `from_tables`, because a second provider of one service cannot be packed beside the first (service files are named by service).
 
 They replace `svc-test`, `svc-test-user` and `svc-echo` where coverage overlaps (RC3). Each deletion is mapped to the test that now covers it and reviewed before merge.
 
@@ -464,7 +487,7 @@ Every item records, before and after:
 - the stored container size against `container_max` for the `device` set of DT2 1.17, DN2 1.12 and Syntakt 1.42, and for `core/runtime` alone;
 - the runtime object's code and data sizes, grouped by Rust module.
 
-The tool is `patchkit size` (built first in RC1; section 14 has the baseline). An item that grows the core states why in its PR. RC2 and RC3 must shrink it. RC6 runs only if the Syntakt still does not fit after RC5.
+The tool is `patchkit size` (built first in RC1; section 14 has the baseline). "The runtime did not change" is shown with `patchkit objdiff` against the committed object, not with the text size: a change to the dependencies or files of a crate the runtime links (`dkrt-abi`, `dkrt-fit`) changes the crate hash in symbol names, relocations and rodata layout, so the committed objects are rebuilt and the image hash changes even when the code bytes do not (RC1d). An item that grows the core states why in its PR. RC2 and RC3 must shrink it. RC6 runs only if the Syntakt still does not fit after RC5.
 
 ## 12. Decisions
 
@@ -492,9 +515,10 @@ Each item is one PR or a small stack, lands green and merges before the next sta
 | Item | What | Exit check | Size | Estimate, confidence |
 | --- | --- | --- | --- | --- |
 | **RC0 Plan and baseline** | This plan; size baseline and gate commands | Em's review | baseline | 0.5 day, high |
-| **RC1 Contract and fixtures** | `patchkit size` (section 14); `Provider`, parts, `ProviderRow`, `Installer`, manifest schema (`[[service.resource]]`, `[[service.record]]`, `[[entry]]`, derived needs) parsed and validated in patchkit, not packed; `PackageGraph` and `ResourceLedger` test-first, not wired; `PackageGraph::from_tables` over the packed `local-ping` fixtures | `core/runtime:rust-tests`, patchkit tests, fixture pack checks | no change in the image | 1-2 days, high |
-| **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; replaces the loader's two inline version checks (loader/mod.rs, `[[service_import]]` and live plan) with `dkrt_abi::version::version_satisfies`; reload of services from the menu; orphans; pins (the selection record has no free field: a record version 2 or a settings key); MIDI snapshot | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
-| **RC3 Service contract v2** | Owner-object services; tagged parts; provider-local record kinds and resources; `Describe` and query replace both bridges; `svc_rows` fallback, `[records.kinds]` owners and domain capacity ids deleted; header table version 4 with the new schema packed (provider-qualified resources with aggregate and parent, provider-local record kinds, entries); `.dkm` record format version bump; the fixtures gain resources, records, a query and a hook; all 6 services and content modules repacked | Service unit tests, assembly, the device tests `test:plan` selects for the services | must shrink | 4-6 days, medium |
+| **RC1 Contract and fixtures** | `patchkit size` (section 14); `Provider`, parts, `ProviderRow`, `Installer`, manifest schema (`[[service.resource]]`, `[[service.record]]`; entries keep the existing `[[hook]]` and `[[fill]]`) parsed and validated in patchkit, not packed; `PackageGraph` and `ResourceLedger` test-first, not wired; `PackageGraph::from_tables` over the packed `local-ping` fixtures | `core/runtime:rust-tests`, patchkit tests, fixture pack checks | no change in the image | 1-2 days, high |
+| **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; replaces the loader's two inline version checks (loader/mod.rs, `[[service_import]]` and live plan) with `dkrt_abi::version::version_satisfies`; reload of services from the menu; services listed in MODULES; orphans; pins (the selection record has no free field: a record version 2 or a settings key); MIDI snapshot | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
+| **RC3 Service contract v2** | Owner-object services; tagged parts; provider-local record kinds and resources; `Describe` and query replace both bridges; `svc_rows` fallback, `[records.kinds]` owners and domain capacity ids deleted; header table version 4 with the new schema packed (provider-qualified resources with aggregate and parent, provider-local record kinds, entries); `.dkm` record format version bump; the fixtures gain resources, records, a query, a hook and one settings field of each scope; the `Settings` part (6.6) with FX's route choice moved to it and the menu's FX route panel deleted; all 6 services and content modules repacked | Service unit tests, assembly, the device tests `test:plan` selects for the services | must shrink | 4-6 days, medium |
+| **RC3m Module settings schema** | SDK builder calls for module settings fields, packed as records and rendered by the RC3 renderer; values keep the SDK get/put calls; `menu` stays supported | SDK header tests, assembly (packed fields reach the renderer), one menu device test per device | small | 1-2 days, medium |
 | **RC4 Installers and ColdFire points** | `Installers` with both backends; `lfo` first (deletes `points/lfo`), then `machines`, `dynreg`, `params` content, `fxpages` into their services and `services/rows` | Backend unit tests; the existing device tests of each service | the image shrinks | 3-5 days, medium (lfo 1 day, high) |
 | **RC5 Remove image-modules and tidy runtime/core** | SHARC slot catalogue and drivers to `runtime/platform`; platform stops naming services; proofs to tests; `overdrive` deleted; the crates of `runtime/core` move to `runtime/core/crates/<name>` (the runtime crate from `src/rs` to `crates/dkrt`, assembly from `src/cf` to `asm/`); the runtime crate's remaining flat files grouped into concept folders | Byte manifest for pure moves; named tests for the de-naming | neutral or smaller | 1-2 days, high |
 | **RC6 Runtime size** (only if the Syntakt still does not fit) | First candidate: load `digikit-menu` from the card (19.1 KB stored on the Syntakt). Then move optional core parts to services, ranked by measured bytes; Transfer and recovery stay in the core | Per moved part | Syntakt fits | sized after RC5 |
@@ -517,11 +541,12 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | `dd211d711` |
 | RC1b crate `dkrt-lifecycle` (`runtime/core/lifecycle`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | done | `65bb121db` |
 | RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-lifecycle`) | done | `4b48e0de9` |
-| RC1f rename `dkrt-packages` to `dkrt-lifecycle` (`runtime/core/lifecycle`): the crate holds the lifecycle logic, RC2's `PackageManager` included | done | commit "Rename dkrt-packages to dkrt-lifecycle" (hash in the next progress update) |
-| RC1d `PackageGraph::from_tables` over the existing header table (NEEDS, PROVIDES; shared `dkneeds` parser); the manifest schema parsed and validated in patchkit, not packed (packing is RC3); the `local-ping` fixtures extended (second consumer, incompatible consumer, newer provider version); one host test that packs them and checks bring-up and take-down orders | todo | |
+| RC1f rename `dkrt-packages` to `dkrt-lifecycle` (`runtime/core/lifecycle`): the crate holds the lifecycle logic, RC2's `PackageManager` included | done | `1066f6351` |
+| RC1d `PackageGraph::from_tables` over the existing header table (NEEDS, PROVIDES; shared `dkneeds` parser); `[[service.resource]]` and `[[service.record]]` parsed and validated in patchkit, not packed (packing is RC3; entries keep `[[hook]]` and `[[fill]]`); the `local-ping` fixtures extended (second consumer, incompatible consumer); one host test that packs them and checks bring-up and take-down orders (a newer provider minor is a `from_tables` unit test) | done | commit "Build the package graph from packed header tables" (hash in the next progress update) |
 | RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | done | `b62328998` |
 | RC2 One lifecycle | todo | |
 | RC3 Service contract v2 | todo | |
+| RC3m Module settings schema | todo | |
 | RC4 Installers and ColdFire points | todo | |
 | RC5 Remove image-modules | todo | |
 | RC6 Runtime size | todo | |

@@ -59,6 +59,9 @@ pub mod record_rules;
 pub mod records_cli;
 pub mod register;
 pub mod sdkgen;
+pub mod service_decl;
+pub mod service_record;
+pub mod service_resource;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod services;
 #[cfg(not(target_arch = "wasm32"))]

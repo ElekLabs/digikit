@@ -5,6 +5,7 @@ use crate::{PackageId, MAX_NEEDS, MAX_PACKAGES};
 use dkrt_abi::version::version_satisfies;
 
 mod bring_up;
+mod from_tables;
 mod take_down;
 
 /// How a need resolves against the services of the graph.

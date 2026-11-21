@@ -288,3 +288,17 @@ fn a_graph_over_the_bounds_is_refused() {
         Refusal::TooManyNeeds { package: id(1) }
     );
 }
+
+#[test]
+fn a_soft_need_orders_after_a_present_provider_and_is_met_by_none() {
+    let soft = Node::new(id(2)).needing(Need::soft(REF, V1));
+    let g = graph(&[service(1, REF, V1), soft]);
+    assert_eq!(up(&g, &[2], &[]).unwrap(), ids(&[1, 2]));
+    // the soft edge counts as a consumer: the provider goes down with its last consumer
+    assert_eq!(down(&g, 2, &[1, 2]), ids(&[2, 1]));
+
+    let g = graph(&[soft]);
+    assert_eq!(up(&g, &[2], &[]).unwrap(), ids(&[2]));
+    let g = graph(&[service(1, REF, 0x020000), soft]);
+    assert_eq!(up(&g, &[2], &[]).unwrap(), ids(&[2]));
+}

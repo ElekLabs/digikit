@@ -18,6 +18,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-fit",
+ "dkrt-lifecycle",
  "dkrt-link",
  "dkrt-sdk",
  "dkrt-svc-fx",
@@ -44,6 +45,15 @@ dependencies = [
 
 [[package]]
 name = "dkrt-fit"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-lifecycle"
 version = "0.1.0"
 dependencies = [
  "dkneeds",

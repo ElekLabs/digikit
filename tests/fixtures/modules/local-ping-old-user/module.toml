@@ -1,0 +1,25 @@
+[module]
+id = "test/local-ping-old-user"
+version = "0.1.0"
+name = "Local ping client of an old major version"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture: needs local-ping at a major version the provider does not have (the incompatible-need refusal)"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[service_import]]
+service = "local-ping"
+min_version = "2.0.0"
+names = ["local_ping_value"]
+
+[[object]]
+path = "build/local-ping-old-user.dko.json"
+sources = ["src/old-user.c"]
+place = "cf.expansion"
