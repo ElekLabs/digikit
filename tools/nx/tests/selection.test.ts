@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'smol-toml';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createDependencies } from '../modules.mjs';
 import { manifestClosure } from '../module-manifests.mjs';
@@ -213,6 +214,45 @@ describe('workspace selection', () => {
     expect(graph.tasks['device-profile:rust-tests']).toBeDefined();
     expect(graph.tasks['patchkit:rust-tests']).toBeUndefined();
   }, 660_000);
+
+  it.each(['contract.rs', 'lib.rs'])(
+    'selects Rust tests of Cargo consumers when shared %s changes',
+    (file) => {
+      const support = 'modules/core/runtime/test-support';
+      const cargo = (dir: string) =>
+        parse(readFileSync(join(root, dir, 'Cargo.toml'), 'utf8')) as {
+          package?: { name: string };
+          workspace?: { members: string[] };
+          'dev-dependencies'?: Record<string, string | { path?: string }>;
+        };
+      const usesSupport = (dir: string) =>
+        Object.values(cargo(dir)['dev-dependencies'] ?? {}).some(
+          (dep) => typeof dep === 'object' && dep.path && resolve(root, dir, dep.path) === join(root, support),
+        );
+      const workspaceConsumers = cargo('.')
+        .workspace!.members.filter(usesSupport)
+        .map((dir) => cargo(dir).package!.name);
+      const standaloneConsumers = globSync('modules/core/services/*/dks/Cargo.toml', { cwd: root })
+        .map(dirname)
+        .filter(usesSupport)
+        .map((dir) => {
+          const { module } = parse(readFileSync(join(root, dir, 'module.toml'), 'utf8')) as { module: { id: string } };
+          return module.id;
+        });
+      const runtime = 'modules/core/runtime';
+      expect(workspaceConsumers).toContain('dkrt-svc-shortcuts');
+      expect(standaloneConsumers).toContain('core/services/machines');
+      expect(usesSupport(`${runtime}/src/rs`)).toBe(true);
+      expect(TIERS.merge.targets).toContain('rust-tests');
+      const graph = selected(`${support}/src/${file}`, 'rust-tests');
+      for (const owner of [...workspaceConsumers, ...standaloneConsumers, 'core/runtime']) {
+        const target = `${owner}:rust-tests`;
+        expect(graph.tasks[target], `${file} selects ${target}`).toBeDefined();
+      }
+      expect(graph.tasks['dkbulk:rust-tests']).toBeUndefined();
+    },
+    660_000,
+  );
 
   it('keeps shared SDK contract edits on the SDK host, pack, runtime device and conformance selection', () => {
     const graph = selected('sdk/include/dk/core/module.h', 'test-host,pack,test-device,test-conformance');
