@@ -180,6 +180,27 @@ Every `test-device` and `test-conformance` target `dependsOn` `core/runtime:test
 
 A new service or runtime mechanism adds an assembly case before its first device test. A failure of this target is a wiring defect (a stale object or ABI word, an unmet need, a limit that is not in the image), not a flaky test.
 
+### Device smoke set
+
+`gate-device-smoke:device` runs a fixed set of 8 device tests, each on DT2 and DN2 (16 halves). It proves: boot and selection (record, restart, boot loads the module), load, unload and reload while running with the entries back to stock, a ColdFire service hook installed and called, the SHARC audio path through a run-time machine, persistence on the card (settings), safe mode and its boot counter, transfer and store, and the DIGIKIT menu.
+
+| Test | Project |
+|---|---|
+| `boot-restart` | `core/runtime-tests` |
+| `live` | `core/runtime-tests` |
+| `services/providers` | `core/runtime-provider-tests` |
+| dynreg `equiv` | `core/dynreg` |
+| `settings/settings-api` | `core/runtime-settings-tests` |
+| `safe-mode` | `core/runtime-tests` |
+| `transfer-live` | `core/runtime-tests` |
+| digikit-menu `zero/menu` | `core/digikit-menu-zero-tests` |
+
+```text
+pnpm nx:pilot run gate-device-smoke:device
+```
+
+The target (`tools/gate/device-smoke/project.json`) only depends on the existing `test-device--<file>--dt2` and `--dn2` targets, so it reuses their cached results and adds no test code. Best runs take about 7 min on DT2 and 12 min on DN2. When to run it: a change to one owner's firmware-facing code runs only that owner's device tests; a host-only change runs no device tests; a change to an input every device test reads (the runtime image, the SDK, patchkit, the platform) runs the device tests of the changed behaviour plus this smoke set, instead of every device test the change selects. Run it by hand for now; `mise run test` does not choose it yet. Nx skips a `dependsOn` target that does not exist, so a renamed smoke test leaves the set silently smaller: check `pnpm nx:pilot show project gate-device-smoke --json` lists 16 halves after renaming one. [device-test-inventory.md](plans/ledgers/device-test-inventory.md) maps the remaining device tests to the plan items that split them.
+
 ### Named device subset
 
 `mise run test:subset -- <tag...> [--base REF] [--why]` is the merge gate for a change that reaches device tests only through shared inputs (SDK, profiles, patchkit, another core module): instead of every device test it runs the tests of the named record tags. The tags are the vocabulary of `metadata.runtimeAcceptance` (`tools/nx/acceptance-tags.mjs`: `S:` services, `C:` areas and mechanisms, `A:` core modules, `M:` tool modules); several tags are a union. The command reads the Nx project graph, resolves each tagged file to its leaf targets `test-device--<file>--dt2` and `--dn2` (the devices the file runs on), and adds `gate-smoke:smoke` and `gate-pins:pins` only when Nx `affected` selects them (against `--base`, `DIGI_GATE_BASE` or `origin/main`); otherwise it prints `gate-smoke: not affected`. Without `--run` it prints them. With `--run` it runs them through `pnpm nx:pilot run-many` (cached, with the remote cache); `DIGI_EMU_SLOTS` and the other emulator settings pass through the environment. `--base REF` adds the records whose inputs changed since REF. It sees the tracked diff against REF (commits and working tree) and the untracked files. A record is selected when a changed file is (a) source of its project or of a project in its `modules` (not tests, Markdown or project.json), (b) a test file it lists, or (c) in the import closure of one of its test files (a helper in `tests/regression/runtime`, a test-support package; the same closure walker as the cache keys, `tools/nx/ts-imports.mjs`). It does not see files that tests read by path without importing them, or a record that omits a module it loads in practice. A changed file that every device test depends on has no subject: the source of `patchkit`, the daemons (`digi-control`) and `core/runtime`, and the shared key inputs (`SHARED_INPUT_GLOBS` in `tools/nx/device-test-keys.mjs`: SDK, device profiles, toolchain, test reads). Without tags the command then fails and names the file ("name tags or run the full set"); it also fails when nothing changed or no record matches, so it never goes green with only the smoke and pin gates. With tags the tags decide and a note counts the shared files. The command also prints how many tasks are coupled and zero-DSP and how many start at once. An unknown tag fails with the vocabulary. Tags say what a test proves, not what it loads: a sample-pool test is `S:samples` even when it loads the machines service.
