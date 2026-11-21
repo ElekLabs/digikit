@@ -76,6 +76,8 @@ const CRATE_TARGETS = {
         'Writes dist/bytes/core-objects.sha256: the hash of each committed core object without its source hash.',
       inputs: [
         '{workspaceRoot}/tools/nx/device-bytes.mjs',
+        '{workspaceRoot}/tools/nx/tracked-objects.mjs',
+        '{workspaceRoot}/tools/nx/module-manifests.mjs',
         '{workspaceRoot}/tools/nx/object-hash.mjs',
         { dependentTasksOutputFiles: '**/*', transitive: true },
       ],
@@ -123,6 +125,8 @@ const CRATE_TARGETS = {
         'Writes dist/bytes/images.sha256 and dist/bytes/images-<device>.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set, in one file for all devices and one per device.',
       inputs: [
         '{workspaceRoot}/tools/nx/device-images.mjs',
+        '{workspaceRoot}/tools/nx/image-jobs.mjs',
+        '{workspaceRoot}/tools/nx/device-inputs.mjs',
         '{workspaceRoot}/tests/regression/runtime/image-roots.json',
         { dependentTasksOutputFiles: '**/*', transitive: true },
       ],

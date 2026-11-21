@@ -11,7 +11,8 @@ export const packDevices = (m) => {
   return ['dt2', 'dn2'].filter((d) => m.ports.some((p) => p.startsWith(`${d}-`)));
 };
 // Shipped module that is loaded at run time: it gets test-conformance.
-export const isUploadable = (root, m) => root.startsWith('modules/') && !!(m.dynamic || m.host || m.type === 'service');
+export const isFixture = (m) => m.category === 'test';
+export const isUploadable = (m) => !isFixture(m) && !!(m.dynamic || m.host || m.type === 'service');
 const leaf = (id) => id.split('/').at(-1);
 export const dkm = (dev, id) => `dist/modules/${dev}/${leaf(id)}.dkm`;
 // The module's address map (docs/ADDRMAP.md), written by `patchkit pack --addrmap` next to the .dkm.

@@ -6,7 +6,7 @@
 // device-test-keys.mjs, and the shape of device, conformance and test-only targets in device-tests.mjs.
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { read, records, mergeTests, packDevices, isUploadable } from './module-manifests.mjs';
+import { read, records, mergeTests, packDevices, isUploadable, isFixture } from './module-manifests.mjs';
 import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
 import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
 import { serviceLeaves, serviceIds } from './device-test-keys.mjs';
@@ -19,29 +19,28 @@ import { pythonImportInputs } from './py-imports.mjs';
 export { createDependencies } from './module-dependencies.mjs';
 
 export const createNodesV2 = [
-  '{modules,tests/fixtures/modules,tests/regression}/**/{module.toml,project.json}',
+  '**/{module.toml,project.json}',
   (matched, _opts, ctx) => {
     // Lazy for manifests without device targets (including small plugin fixtures).
     let imports;
     const importInputs = (files) => (imports ??= testImportInputs(ctx.workspaceRoot))(files);
     let py;
     const pythonInputs = (seeds) => (py ??= pythonImportInputs(ctx.workspaceRoot))(seeds);
-    const files = matched.filter((f) => f.endsWith('/module.toml'));
-    const testOwners = matched
+    // Nx supplies the workspace file list, with ignored build trees and dependencies already excluded.
+    const files = matched.filter((f) => f.endsWith('/module.toml') && !f.startsWith('sdk/templates/'));
+    const projectFiles = matched
       .filter((f) => f.endsWith('/project.json'))
-      .map((f) => [f, JSON.parse(readFileSync(join(ctx.workspaceRoot, f), 'utf8'))])
-      .filter(([, p]) => p.tags?.includes('test-only'));
+      .map((f) => [f, JSON.parse(readFileSync(join(ctx.workspaceRoot, f), 'utf8'))]);
+    const testOwners = projectFiles.filter(([, p]) => p.tags?.includes('test-only'));
     // id -> manifest, so an alias can find the devices of its source module.
-    const byId = new Map(
-      files.map((f) => {
-        const parsed = read(ctx.workspaceRoot, f);
-        return [parsed.module.id, { file: f, manifest: parsed.module, objects: parsed.object ?? [] }];
-      }),
-    );
-    // id -> { category, root }, for the module tags of metadata.runtimeAcceptance (acceptance-tags.mjs).
-    const moduleInfo = new Map(
-      [...byId].map(([id, { file, manifest }]) => [id, { category: manifest.category, root: dirname(file) }]),
-    );
+    const byId = new Map();
+    for (const file of files) {
+      const { module: manifest, object: objects = [] } = read(ctx.workspaceRoot, file);
+      const previous = byId.get(manifest.id);
+      if (previous) throw new Error(`Duplicate module ${manifest.id} in ${previous.file} and ${file}`);
+      byId.set(manifest.id, { file, manifest, objects });
+    }
+    const moduleInfo = new Map([...byId].map(([id, { manifest }]) => [id, manifest]));
     const coreManifests = [...byId.values()]
       .filter(({ manifest }) => manifest.category === 'core')
       .map(({ file }) => file)
@@ -68,28 +67,19 @@ export const createNodesV2 = [
     }
     // Only the modules the gate packs get a pack target: patched-in core modules and static fixtures
     // (several ColdFire objects, no dkm_ symbols) cannot be packed as .dkm.
-    const packable = new Set();
-    for (const [id, { manifest: m }] of byId) {
-      const root = files.find((f) => read(ctx.workspaceRoot, f).module.id === id);
-      if (root?.startsWith('modules/') && (m.dynamic || m.host || m.type === 'service')) packable.add(id);
-    }
-    const projectFiles = [
-      ...globSync('{modules,tests/fixtures/modules}/**/project.json', { cwd: ctx.workspaceRoot }),
-      'tests/regression/project.json',
-    ];
-    for (const pf of projectFiles) {
-      const dir = dirname(pf);
-      checkAcceptanceTags(dir, records(join(ctx.workspaceRoot, dir)), [], moduleInfo);
-      for (const rec of records(join(ctx.workspaceRoot, dir))) {
+    const packable = new Set([...byId].filter(([, { manifest }]) => isUploadable(manifest)).map(([id]) => id));
+    for (const [file, project] of projectFiles) {
+      const recs = project.metadata?.runtimeAcceptance ?? [];
+      checkAcceptanceTags(dirname(file), recs, [], moduleInfo);
+      for (const rec of recs) {
         for (const id of rec.modules ?? []) packable.add(id);
         for (const source of Object.values(rec.aliases ?? {})) packable.add(source);
       }
     }
-    const nodes = files.map((f) => {
-      const { module: m, object: objects = [] } = read(ctx.workspaceRoot, f);
+    const nodes = [...byId.values()].map(({ file: f, manifest: m, objects }) => {
       const root = dirname(f);
       const project = { name: m.id, root, tags: ['module', `type:${m.type}`] };
-      if (root.startsWith('modules/') && m.category !== 'core') project.tags.push('release-module');
+      if (!isFixture(m) && m.category !== 'core') project.tags.push('release-module');
       if (coreBuilds.has(m.id) && imageModules.has(m.id)) project.tags.push('acceptance-image');
       const tests = globSync('tests/**/*.test.ts', { cwd: join(ctx.workspaceRoot, root) }).filter(
         (t) =>
@@ -99,9 +89,9 @@ export const createNodesV2 = [
       const hostTests = tests.filter((t) => !t.endsWith('.device.test.ts') && !t.endsWith('.rig.test.ts'));
       const rigTests = tests.filter((t) => t.endsWith('.rig.test.ts'));
       const deviceTests = tests.filter((t) => t.endsWith('.device.test.ts')).sort();
-      const shipped = root.startsWith('modules/');
+      const shipped = !isFixture(m);
       const targets = {};
-      const uploadable = isUploadable(root, m);
+      const uploadable = isUploadable(m);
       const recs = records(join(ctx.workspaceRoot, root));
       const devices = packDevices(m);
       if (coreBuilds.has(m.id))

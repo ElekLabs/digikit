@@ -3,7 +3,7 @@ import { checkAcceptanceTags } from '../acceptance-tags.mjs';
 
 const modules = new Map([
   ['core/fx', { category: 'core', root: 'modules/core/adapters/fx' }],
-  ['digikit/debug', { category: 'tools', root: 'modules/tools/debug' }],
+  ['digikit/debug', { category: 'tools', root: 'relocated/tools/debug' }],
   ['example/machine', { category: 'machine', root: 'modules/machines/example' }],
 ]);
 const rec = (files: string[], tags?: unknown) => ({ files, ...(tags === undefined ? {} : { tags }) });
@@ -42,7 +42,7 @@ it('throws for a tag outside the vocabulary', () => {
   expect(check('C:speed')).toThrow(/names no area/);
   expect(check('A:core/nothing')).toThrow(/names no module/);
   expect(check('A:example/machine')).toThrow(/not of category core/);
-  expect(check('M:core/fx')).toThrow(/not under modules\/tools/);
+  expect(check('M:core/fx')).toThrow(/not of category tools/);
   expect(check('fx')).toThrow(/no S:, C:, A: or M: prefix/);
   expect(check(3)).toThrow(/not a string/);
 });

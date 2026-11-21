@@ -511,6 +511,26 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `rust-demo` | *Patch-time.* A Rust crate in `cf.expansion` | assembly |
 | `registry-demo` | *Patch-time.* The generic primitives: a registry, a section copied from the image with appended rows, a counting hook | assembly, host |
 
+## Byte manifests for repository moves
+
+Install the development dependencies and module toolchains using the [README setup](../README.md#setup). Provide DT2 1.17 and DN2 1.12 stock firmware in `firmware/`, or set `DIGI_FIRMWARE_DIR`. From a clean checkout of the baseline revision, run:
+
+```sh
+node tools/nx/byte-manifest.mjs write
+```
+
+The command writes `out/e8/manifest-dt2.json` and `out/e8/manifest-dn2.json`. Keep both files. Use `write --baseline DIR` to save them somewhere shared with another worktree. Once the moved paths build, run the comparison in a clean checkout:
+
+```sh
+node tools/nx/byte-manifest.mjs compare --baseline DIR --move-map moves.json
+```
+
+Omit `--baseline DIR` to read `out/e8` in the current checkout. The move map is a JSON object from old to new repository-relative file or directory paths, for example `{"modules/core/runtime":"runtime/core"}`. The most specific source path wins. It applies to baseline keys for generated files, tracked objects and entries in the core object checksum list. It does not rewrite paths embedded in artifacts.
+
+Each manifest records the device's image, plan and address-map hashes for its patch sets and static acceptance root sets, and its packs (including aliases). Both record the pack verdicts, every output checked by `patchkit gen --check`, every tracked `build/*.dko.json` and the entries in `dist/bytes/core-objects.sha256`. The tool also rebuilds each tracked object in a temporary directory and records the fresh hash. For the tracked and fresh objects it masks only the value of `source_sha256`. The generated-file list comes directly from `patchkit gen --check --paths`.
+
+A matching comparison prints both devices and exits zero. Missing, unexpected, stale or changed artifacts fail the command. Both commands prepare packs, images and checksum lists through their Nx targets, with the regular cache and build locks. They start no emulator. Store the reports under ignored `out/` or outside the repository.
+
 ## The gate
 
 ### Gate selection

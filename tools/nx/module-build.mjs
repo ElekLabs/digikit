@@ -128,20 +128,27 @@ export const packAliasesTarget = (workspaceRoot, byId, recs) => {
   const aliasCmds = [];
   const aliasOutputs = [];
   const aliasSources = new Set();
+  const sourceOfAlias = new Map();
+  const aliasOfOutput = new Map();
   for (const rec of recs)
     for (const [alias, source] of Object.entries(rec.aliases ?? {})) {
       // A source outside the scanned module.toml files has no manifest: its devices are unknown, skip it.
       const src = byId.get(source);
       if (!src) continue;
+      const previous = sourceOfAlias.get(alias);
+      if (previous && previous !== source) throw new Error(`Pack alias ${alias} names both ${previous} and ${source}`);
+      sourceOfAlias.set(alias, source);
       aliasSources.add(source);
       for (const d of packDevices(src.manifest)) {
+        const output = packOut(d, src.manifest, alias);
+        const existing = aliasOfOutput.get(output);
+        if (existing && existing !== alias)
+          throw new Error(`Pack aliases ${existing} and ${alias} both write ${output}`);
+        aliasOfOutput.set(output, alias);
         aliasCmds.push(
-          `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${packOut(d, src.manifest, alias)} && ${PK} services --device ${d} ${packOut(d, src.manifest, alias)} > ${servicesOut(d, src.manifest, alias)}`,
+          `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${output} && ${PK} services --device ${d} ${output} > ${servicesOut(d, src.manifest, alias)}`,
         );
-        aliasOutputs.push(
-          `{workspaceRoot}/${packOut(d, src.manifest, alias)}`,
-          `{workspaceRoot}/${servicesOut(d, src.manifest, alias)}`,
-        );
+        aliasOutputs.push(`{workspaceRoot}/${output}`, `{workspaceRoot}/${servicesOut(d, src.manifest, alias)}`);
       }
     }
   if (!aliasCmds.length) return undefined;

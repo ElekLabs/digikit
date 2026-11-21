@@ -105,7 +105,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   list                                   modules under modules/ and ports under devices/ports/
   catalog-check                          validate all modules/ and tests/fixtures/modules/ manifests and requires;
                                          host only: no objects, builds, device models or firmware are read
-  gen [--check [--scope all|modules|shared]] [--modules a,b] [--manifest PATH]...
+  gen [--check [--paths] [--scope all|modules|shared]] [--modules a,b] [--manifest PATH]...
                                          write (or check) generated module, SDK and firmware files
                                          --manifest PATH (repeatable, needs --modules, incompatible with --scope shared): explicit library including requires;
                                          include core/machines for machine galleries or [[gen]] device constants
@@ -436,6 +436,10 @@ fn run(a: Args) -> Result<()> {
         "gen" => {
             let check = rest.iter().any(|a| a == "--check");
             let scope = flag(rest, "--scope");
+            let paths = rest.iter().any(|a| a == "--paths");
+            if paths && !check {
+                return Err(Error("gen --paths requires --check".into()));
+            }
             if rest.iter().any(|a| a == "--scope")
                 && (!check || !matches!(scope.as_deref(), Some("all" | "modules" | "shared")))
             {
@@ -449,6 +453,28 @@ fn run(a: Args) -> Result<()> {
                 ));
             }
             let mut stale = 0;
+            let mut outputs = Vec::new();
+            let mut emit = |path: PathBuf, text: String| -> Result<()> {
+                if paths {
+                    outputs.push(path.strip_prefix(&a.root).unwrap_or(&path).to_path_buf());
+                }
+                let have = std::fs::read_to_string(&path).ok();
+                if have.as_deref() == Some(text.as_str()) {
+                    return Ok(());
+                }
+                if check {
+                    println!("stale    {}", path.display());
+                    stale += 1;
+                } else {
+                    if let Some(d) = path.parent() {
+                        std::fs::create_dir_all(d)
+                            .map_err(|e| Error(format!("{}: {e}", d.display())))?;
+                    }
+                    write(&path.to_string_lossy(), text.as_bytes())?;
+                    println!("wrote    {}", path.display());
+                }
+                Ok(())
+            };
             if scope.as_deref() != Some("shared") {
                 // the generated files are inputs of the build: nothing is built here
                 let only: Vec<String> = flag(rest, "--modules")
@@ -474,67 +500,25 @@ fn run(a: Args) -> Result<()> {
                     files.extend(patchkit::devgen::generate(&lib, &facts, m.id())?);
                     files.extend(patchkit::modgen::module_ids(&lib, m.id())?);
                     for (rel, text) in files {
-                        let path = m.dir.join(&rel);
-                        let have = std::fs::read_to_string(&path).ok();
-                        if have.as_deref() == Some(text.as_str()) {
-                            continue;
-                        }
-                        if check {
-                            println!("stale    {}", path.display());
-                            stale += 1;
-                        } else {
-                            if let Some(d) = path.parent() {
-                                std::fs::create_dir_all(d)
-                                    .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                            }
-                            write(&path.to_string_lossy(), text.as_bytes())?;
-                            println!("wrote    {}", path.display());
-                        }
+                        emit(m.dir.join(rel), text)?;
                     }
                 }
             }
             if scope.as_deref() != Some("modules") {
-                for (rel, text) in patchkit::sdkgen::generate(&a.root)? {
-                    let path = a.root.join(&rel);
-                    let have = std::fs::read_to_string(&path).ok();
-                    if have.as_deref() == Some(text.as_str()) {
-                        continue;
-                    }
-                    if check {
-                        println!("stale    {}", path.display());
-                        stale += 1;
-                    } else {
-                        if let Some(d) = path.parent() {
-                            std::fs::create_dir_all(d)
-                                .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                        }
-                        write(&path.to_string_lossy(), text.as_bytes())?;
-                        println!("wrote    {}", path.display());
-                    }
-                }
-                for (rel, text) in patchkit::fwgen::generate_with_ports(&a.root)? {
-                    let path = a.root.join(&rel);
-                    let have = std::fs::read_to_string(&path).ok();
-                    if have.as_deref() == Some(text.as_str()) {
-                        continue;
-                    }
-                    if check {
-                        println!("stale    {}", path.display());
-                        stale += 1;
-                    } else {
-                        if let Some(d) = path.parent() {
-                            std::fs::create_dir_all(d)
-                                .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                        }
-                        write(&path.to_string_lossy(), text.as_bytes())?;
-                        println!("wrote    {}", path.display());
-                    }
+                let mut files = patchkit::sdkgen::generate(&a.root)?;
+                files.extend(patchkit::fwgen::generate_with_ports(&a.root)?);
+                for (rel, text) in files {
+                    emit(a.root.join(rel), text)?;
                 }
             }
             if stale > 0 {
                 return Err(Error(format!(
                     "{stale} generated file(s) are stale: run `patchkit gen`"
                 )));
+            }
+            if paths {
+                outputs.sort();
+                println!("{}", serde_json::json!(outputs));
             }
         }
         "reference" => {

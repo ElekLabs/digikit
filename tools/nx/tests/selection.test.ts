@@ -140,15 +140,15 @@ it('derives content runtime edges from the unique runtime role', () => {
   const fixture = mkdtempSync(join(scratch, 'runtime-role-'));
   const projects = Object.fromEntries(
     [
-      ['renamed/runtime', 'modules/core/renamed', 'runtime'],
-      ['example/content', 'modules/tools/content', undefined],
+      ['renamed/runtime', 'runtime/renamed', 'runtime'],
+      ['example/content', 'relocated/tools/content', undefined],
     ].map(([name, dir, role]) => {
       mkdirSync(join(fixture, dir!), { recursive: true });
       writeFileSync(
         join(fixture, dir!, 'module.toml'),
         `[module]\nid = "${name}"\ntype = "service"\n${role ? `role = "${role}"\n` : ''}`,
       );
-      return [name, { name, root: dir, tags: ['module'] }];
+      return [name, { name, root: dir, tags: role ? ['module'] : ['module', 'release-module'] }];
     }),
   );
   const dependencies = createDependencies({}, { workspaceRoot: fixture, projects });
@@ -156,7 +156,7 @@ it('derives content runtime edges from the unique runtime role', () => {
     'renamed/runtime',
   ]);
   writeFileSync(
-    join(fixture, 'modules/tools/content/module.toml'),
+    join(fixture, 'relocated/tools/content/module.toml'),
     '[module]\nid = "example/content"\nrole = "runtime"\n',
   );
   expect(() => createDependencies({}, { workspaceRoot: fixture, projects })).toThrow(

@@ -7,50 +7,21 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  globSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from 'smol-toml';
 import { CELLS, syxPath } from './device-inputs.mjs';
+import { imageJobs } from './image-jobs.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const pk = join(root, 'dist/patchkit/patchkit');
-const setsOf = new Map(
-  globSync('devices/*.toml', { cwd: root })
-    .map((f) => parse(readFileSync(join(root, f), 'utf8')))
-    .filter((t) => t.device?.short)
-    .map((t) => [t.device.short, Object.keys(t.patch_sets ?? {}).sort()]),
-);
 const scratch = mkdtempSync(join(tmpdir(), 'digi-images-'));
 const run = promisify(execFile);
-// Static module root lists (`apply --modules`) that tests use: tests/regression/runtime/image-roots.json, also read by runtime-plan.ts.
-// Their image, plan and address map are kept under dist/bytes/images/<device>/<id>.* for the tests to copy.
-const { sets: rootSets } = JSON.parse(readFileSync(join(root, 'tests/regression/runtime/image-roots.json'), 'utf8'));
-const cells = CELLS.filter((cell) => existsSync(syxPath(cell)));
-const jobs = cells.flatMap((cell) => [
-  ...(setsOf.get(cell.dev) ?? []).map((set) => ({ cell, label: set, select: ['--set', set] })),
-  ...rootSets
-    .filter((set) => !set.devices || set.devices.includes(cell.dev))
-    .map((set) => ({
-      cell,
-      label: `roots:${set.id}`,
-      select: ['--modules', set.roots.join(',')],
-      keep: join(root, 'dist/bytes/images', cell.dev, set.id),
-    })),
-]);
+const devices = new Set(CELLS.filter((cell) => existsSync(syxPath(cell))).map(({ dev }) => dev));
+const jobs = imageJobs(root).filter(({ cell }) => devices.has(cell.dev));
 rmSync(join(root, 'dist/bytes/images'), { recursive: true, force: true });
-for (const dev of new Set(cells.map((cell) => cell.dev)))
-  mkdirSync(join(root, 'dist/bytes/images', dev), { recursive: true });
+for (const dev of devices) mkdirSync(join(root, 'dist/bytes/images', dev), { recursive: true });
 /**
  * `dist/bytes/images/<device>/set-<set>.info`: one line per entry of the image's info table (`dkrt_info_table`): name, name hash, kind (0 data table, 1 slot
  * word), address and the words of a data entry, all but the name and kind in hex. The runtime's assembly test builds its `Platform::info` from it.
@@ -110,7 +81,7 @@ writeFileSync(join(root, 'dist/bytes/images.sha256'), `${lines.join('\n')}\n`);
 // One file per device with a cell: the key of a device half hashes only its own device (device-test-keys.mjs).
 for (const name of readdirSync(join(root, 'dist/bytes')))
   if (/^images-.*\.sha256$/.test(name)) rmSync(join(root, 'dist/bytes', name));
-for (const dev of new Set(cells.map((cell) => cell.dev))) {
+for (const dev of devices) {
   const own = lines.filter((_, index) => jobs[index].cell.dev === dev);
   writeFileSync(join(root, `dist/bytes/images-${dev}.sha256`), own.map((line) => `${line}\n`).join(''));
 }
