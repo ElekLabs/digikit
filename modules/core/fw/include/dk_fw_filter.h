@@ -15,5 +15,7 @@ int32_t dk_fw_filter_get(uint32_t track_object) __asm__("cf.filter.fn.get");
 /* cf.filter.fn.set: no sig yet */
 /* The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150. */
 int32_t dk_fw_filter_set_kit(uint32_t kit, int32_t track, int32_t ty, int32_t flag4, int32_t flag5) __asm__("cf.filter.fn.set_kit");
+/* Builds the filter chooser items on the same MachineSelectionView as cf.machine.fn.view.build. Calls the filter order vector function at cf.filter.site.list_call. */
+void dk_fw_filter_view_build(uint32_t view) __asm__("cf.filter.fn.view.build");
 
 #endif

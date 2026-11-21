@@ -1385,27 +1385,31 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
     );
 }
 
-/// The machine selection view caches the machine list: a reload rebuilds it through `dynreg_info` words 48 (the variable that holds the view) and 49 (the builder), once
-/// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
+/// A reload rebuilds both cached lists on the same view. Older images only supply the machine builder.
 #[test]
-fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
+fn the_chooser_lists_are_rebuilt_at_the_end_of_every_reload() {
     use dkrt_abi::service::Service;
+    use dkrt_test_support::contract::locked;
     use std::cell::RefCell;
     use std::rc::Rc;
     const VAR: u32 = 0x7000_0000;
-    const BUILD: u32 = 0x4006_0f50;
-    let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
-    let table = |var: u32, build: u32| {
-        let mut t = vec![0u32; 64];
-        t[w::VIEW_VAR] = var;
-        t[w::VIEW_BUILD] = build;
-        t
-    };
-    let run = |words: Vec<u32>, view: u32, phase: u32| {
+    const BUILD_MACHINE: u32 = 0x4006_0f50;
+    const BUILD_FILTER: u32 = 0x4006_10e8;
+    const VIEW: u32 = 0x1234_5678;
+    let _g = locked();
+    let run = |version: u32, var: u32, view: u32, phase: u32| {
+        let mut words = vec![0u32; w::FILTER_VIEW_BUILD];
+        words[w::VERSION] = version;
+        words[w::VIEW_VAR] = var;
+        words[w::VIEW_BUILD] = BUILD_MACHINE;
+        if version == 4 {
+            words.push(BUILD_FILTER);
+        }
         let mut core = FakeCore::new();
         core.set_dynreg(words);
         core.mem.borrow_mut().insert(VAR, view);
         core.live_op.set(phase);
+        let calls = Rc::new(RefCell::new(Vec::new()));
         let log = calls.clone();
         *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {
             log.borrow_mut().push((a, args.to_vec()));
@@ -1413,27 +1417,25 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
         }));
         unsafe { <Machines as Service<FakeCore>>::live_done(&core) };
         let got = calls.borrow().clone();
-        calls.borrow_mut().clear();
         got
     };
+    let both = [
+        (BUILD_MACHINE, vec![VIEW as usize]),
+        (BUILD_FILTER, vec![VIEW as usize]),
+    ];
     assert_eq!(
-        run(table(VAR, BUILD), 0x1234_5678, 1),
-        vec![(BUILD, vec![0x1234_5678])],
-        "the builder gets the stored view"
+        run(4, VAR, VIEW, 1),
+        both,
+        "both builders get the same view"
     );
+    assert_eq!(run(4, VAR, VIEW, 0), both, "after a failed reload too");
     assert_eq!(
-        run(table(VAR, BUILD), 0x1234_5678, 0),
-        vec![(BUILD, vec![0x1234_5678])],
-        "after a reload that failed too"
+        run(3, VAR, VIEW, 1),
+        [(BUILD_MACHINE, vec![VIEW as usize])],
+        "a version 3 image supplies only the machine builder"
     );
-    assert!(
-        run(table(VAR, BUILD), 0, 1).is_empty(),
-        "the view does not exist yet"
-    );
-    assert!(
-        run(table(0, 0), 0x1234_5678, 1).is_empty(),
-        "an image without the hook has no view variable or builder"
-    );
+    assert!(run(4, VAR, 0, 1).is_empty(), "the view does not exist yet");
+    assert!(run(4, 0, VIEW, 1).is_empty(), "no view variable");
 }
 
 /// The check of a new file that reloads module A (`reload_check` runs the DSP section checks while A is live): A's own voice type and rows are not "used by another module".

@@ -18,7 +18,7 @@ use dkrt_sdk::records::{
     LEN_PARAM,
 };
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
+use dkrt_svc_params::dynreg::{w, RegState, FILTER_VIEW_VERSION, MACH_TEXT};
 
 /// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
 /// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
@@ -247,8 +247,8 @@ impl<C: CoreApi> Service<C> for Machines {
         }
         MISSING_ROWS = 0;
         PARK_TRIES = 0;
-        // the machine selection view caches the list: build it again, after a failed load too (the cached list would keep an entry the rows no longer have)
-        refresh_view(core);
+        // Rebuild both cached lists, including after a failed load that left rows absent.
+        refresh_view(core, inf, true);
     }
 
     unsafe fn remove(core: &C, owner: u8) {
@@ -925,11 +925,9 @@ unsafe fn apply_record<C: CoreApi>(core: &C, kind: u32, b: *const u8, c: &ApplyC
     rc
 }
 
-/// The firmware builds the machine selection view's item list once, from the list getter, and keeps it. After the rows changed, build it again (the builder clears
-/// its items first); nothing to do while the view does not exist yet, or on an image without the hook that remembers it (the variable and the builder are words 48 and 49
-/// of `dynreg_info`).
-unsafe fn refresh_view<C: CoreApi>(core: &C) {
-    let inf = dkrt_svc_params::dynreg(core);
+/// Rebuild the cached lists on the view remembered by the stock machine-list builder's hook.
+/// Parking changes machine rows only. A reload also rebuilds the filter list when the image has its builder.
+unsafe fn refresh_view<C: CoreApi>(core: &C, inf: *const u32, include_filters: bool) {
     if inf.is_null() {
         return;
     }
@@ -938,8 +936,16 @@ unsafe fn refresh_view<C: CoreApi>(core: &C) {
         return;
     }
     let view = core.rd(var);
-    if view != 0 {
-        core.call(build, &[view as usize]);
+    if view == 0 {
+        return;
+    }
+    let args = [view as usize];
+    core.call(build, &args);
+    if include_filters && iw(inf, w::VERSION) >= FILTER_VIEW_VERSION {
+        let build_filter = iw(inf, w::FILTER_VIEW_BUILD);
+        if build_filter != 0 {
+            core.call(build_filter, &args);
+        }
     }
 }
 
@@ -1067,7 +1073,7 @@ unsafe fn park_absent<C: CoreApi>(core: &C) {
         }
     }
     if changed {
-        refresh_view(core);
+        refresh_view(core, inf, false);
     }
 }
 

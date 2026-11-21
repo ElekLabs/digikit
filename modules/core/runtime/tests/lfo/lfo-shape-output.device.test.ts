@@ -95,7 +95,7 @@ cardRigs(
         message: 'before the live load WAVE stops at the boot shape STEP',
       });
 
-      await h.usb(rt, async (dk) => {
+      await h.runningUsb(rt, async (dk) => {
         expect((await dk.modules()).map((m) => m.name), 'only the boot shape is active').toEqual([SHAPE_B]);
         expect(await dk.loadAndWait(rampPath), 'the first live shape loads').toEqual({ result: 0, unloaded: false });
         const row = (await dk.loadStates()).find((m) => m.name === rampPath.split('/').at(-1));

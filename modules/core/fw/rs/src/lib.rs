@@ -59,6 +59,12 @@ pub mod filter {
         #[link_name = "cf.filter.fn.set_kit"]
         pub fn set_kit(kit: u32, track: i32, ty: i32, flag4: i32, flag5: i32) -> i32;
     }
+
+    unsafe extern "C" {
+        /// Builds the filter chooser items on the same MachineSelectionView as cf.machine.fn.view.build. Calls the filter order vector function at cf.filter.site.list_call.
+        #[link_name = "cf.filter.fn.view.build"]
+        pub fn view_build(view: u32);
+    }
 }
 
 pub mod input {

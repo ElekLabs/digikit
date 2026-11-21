@@ -607,6 +607,60 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4005b458",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4005b458",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400610e8",
+            "len": 8
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_filter_view_build",
+        "rust": "dkfw::filter::view_build"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Builds the filter chooser items on the same MachineSelectionView as cf.machine.fn.view.build. Calls the filter order vector function at cf.filter.site.list_call.",
+      "file": "devices/fw/filter.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.filter.fn.view.build",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "sig": "void (u32 view)",
+      "subsystem": "filter",
+      "users": [
+        "core/dynreg"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x400c24b0"
           }
         ],
@@ -25730,7 +25784,7 @@
       "name": "draw"
     },
     {
-      "count": 19,
+      "count": 20,
       "cpu": "cf",
       "file": "devices/fw/filter.toml",
       "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",

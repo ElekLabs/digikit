@@ -54,6 +54,16 @@ users = ["core/services/machines"]
 doc = "Filter name function (type at 4(sp)): `type < 6` returns the row of a table of 12-byte rows (long name, short name, 0), else the string \"ERROR\". DT2 FUN_400da71e (table 0x4020ef30), DN2 FUN_400dc508 (table 0x401f7bbc); one caller, the chooser list."
 
 [[fn]]
+name = "cf.filter.fn.view.build"
+cpu = "cf"
+sig = "void (u32 view)"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_func", hash = "d97b65f89bac742ae13da57b087cf55c", offset = 0x0, len = 8 }
+mark = "D"
+users = ["core/dynreg"]
+doc = "Builds the filter chooser items on the same MachineSelectionView as cf.machine.fn.view.build. Calls the filter order vector function at cf.filter.site.list_call."
+
+[[fn]]
 name = "cf.filter.fn.list_vector"
 cpu = "cf"
 rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0x0, len = 6 }

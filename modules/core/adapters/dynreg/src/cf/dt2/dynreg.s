@@ -77,7 +77,7 @@ dynreg_empty:
     .globl dynreg_info
 dynreg_info:
     .long   0x44594e52                  |  0 'DYNR'
-    .long   3                           |  4 version (3: builder profile from 260; 2: page, unload from 200)
+    .long   4                           |  4 version (4: filter list builder at 348; 3: builder profile from 260)
     .long   DEVICE_ID                   |  8 device ([digikit] id: 1 = dt2)
     .long   _dr_rows                    | 12 machines.rows
     .long   _dr_row_size                | 16 row size
@@ -144,3 +144,4 @@ dynreg_info:
     .long   PROFILE_SLOT_COUNT | 288 knob positions for words 0.. (count)
     .long   PROFILE_SLOT_0, PROFILE_SLOT_1, PROFILE_SLOT_2, PROFILE_SLOT_3, PROFILE_SLOT_4, PROFILE_SLOT_5, PROFILE_SLOT_6, PROFILE_SLOT_7   | 292 .. 320 positions
     .long   PROFILE_TPL_ENCODER, PROFILE_TPL_FADER, PROFILE_TPL_PAN, PROFILE_TPL_ONOFF, PROFILE_TPL_TUNE, PROFILE_TPL_PLAY   | 324 .. 344 stock rows: encoder, fader, pan, onoff, tune, play
+    .long   _dr_filter_build            | 348 (word 87) the filter list builder: build(view)

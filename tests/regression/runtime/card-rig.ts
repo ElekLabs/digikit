@@ -157,6 +157,8 @@ export interface CardRig {
   restart(runtime: PatchedSession): Promise<TestRuntime>;
   /** Run protocol calls on the paused daemon (the transport steps the emulator). */
   usb<T>(runtime: PatchedSession, run: (dk: DkSession) => Promise<T>): Promise<T>;
+  /** Run protocol jobs with the firmware clock advancing, then pause for deterministic panel checks. */
+  runningUsb<T>(runtime: RuntimeCase, run: (dk: DkSession) => Promise<T>): Promise<T>;
   /** The card the guest left: `base` (default the card booted last) with the overlay of its writes laid over a copy (Python `card_after`). */
   after(tag?: string, base?: string): Promise<string>;
   /** The two selection record copies as the card holds them now. */
@@ -505,6 +507,14 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       return settle(withWaitApi({ session, dk, close: runtime.close }), before);
     },
     usb: (runtime, run) => withPausedFxProtocol(runtime, run),
+    async runningUsb(runtime, run) {
+      await rpc(runtime.session, 'run.mode', { mode: 'free' });
+      try {
+        return await run(runtime.dk);
+      } finally {
+        await rpc(runtime.session, 'run.mode', { mode: 'paused' });
+      }
+    },
     after: (tag = `after-${++seq}`, base = image) => afterCard(tag, base),
     async records() {
       const { session } = fixture.runtime;

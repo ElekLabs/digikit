@@ -54,7 +54,7 @@ cardRigs(
       });
 
       const bankPath = rig.mod(BANK).name;
-      await rig.usb(rt, async (dk) => {
+      await rig.runningUsb(rt, async (dk) => {
         const names = (await dk.modules()).map((m) => m.name).sort();
         expect(names, 'only the boot modules are active').toEqual([...BOOT_MODULES].sort());
         expect(await dk.loadAndWait(bankPath), 'the first live filter loads').toEqual({ result: 0, unloaded: false });
@@ -107,7 +107,7 @@ cardRigs(
         );
         previous = pixels;
       }
-      await rig.usb(rt, async (dk) => {
+      await rig.runningUsb(rt, async (dk) => {
         expect(await dk.reloadAndWait(bankPath), 'the selected filter can be replaced').toEqual({ result: 0, unloaded: true });
         expect((await dk.modules()).map((m) => m.name).sort()).toEqual([...BOOT_MODULES, BANK].sort());
       });

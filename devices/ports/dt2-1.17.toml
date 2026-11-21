@@ -149,6 +149,16 @@ mark = "D"
 rule = "fw/filter:cf_func"
 
 [[anchor]]
+name = "cf.filter.fn.view.build"
+cpu = "cf"
+kind = "code"
+addr = 0x400610e8
+len = 8
+sha256 = "2fb21a0a1faeed39702fcb6a686fd6d86e8c9b0eb68d233271e236186b0235fe"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
 name = "cf.filter.site.graph_switch"
 cpu = "cf"
 kind = "code"
