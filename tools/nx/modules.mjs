@@ -164,10 +164,10 @@ export const createNodesV2 = [
       if (rig) targets[DSP_CONFORMANCE] = rig.target;
       if (uploadable) {
         targets['test-conformance-all'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs, true);
-        // Shared machine loader changes are exercised by core/runtime-fixture-tests. A change to a shipped
-        // dynamic machine's pack inputs schedules its existing emulator conformance task.
+        // core/runtime-fixture-tests exercises the shared loader for machines and effects. A change to either
+        // module's private pack inputs schedules its own emulator conformance task.
         targets['test-conformance'] =
-          m.type === 'machine' && m.dynamic === true && m.category !== 'core'
+          (m.type === 'machine' || m.type === 'fx') && m.dynamic === true && m.category !== 'core'
             ? {
                 executor: 'nx:noop',
                 cache: false,

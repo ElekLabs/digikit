@@ -84,13 +84,28 @@ afterEach(async () => {
   await new Promise<void>((resolve) => setImmediate(resolve));
 });
 
-function machineLoads(graph: TaskGraph) {
+function contentLoads(graph: TaskGraph) {
   return Object.keys(graph.tasks)
     .filter((id) => {
       const { project, target } = graph.tasks[id].target;
-      return workspace.nodes[project].data.tags?.includes('type:machine') && target.startsWith('test-conformance');
+      const tags = workspace.nodes[project].data.tags;
+      return (tags?.includes('type:machine') || tags?.includes('type:fx')) && target.startsWith('test-conformance');
     })
     .sort();
+}
+
+function dspLoadSubject(kind: 'machine' | 'fx') {
+  for (const id of Object.keys(workspace.nodes).sort()) {
+    const { root: projectRoot, tags, targets } = workspace.nodes[id].data;
+    if (!tags?.includes(`type:${kind}`) || !tags.includes('release-module')) continue;
+    if (!targets.pack || !targets['test-conformance'] || !targets['test-dsp-conformance']) continue;
+    const source = targets['test-dsp']?.inputs?.find(
+      (input): input is string =>
+        typeof input === 'string' && input.startsWith(`{workspaceRoot}/${projectRoot}/`) && input.endsWith('.s'),
+    );
+    if (source) return { id, source: source.slice('{workspaceRoot}/'.length) };
+  }
+  throw new Error(`Expected a shipped ${kind} with a private DSP source and DSP and emulator load targets`);
 }
 
 function expectFixtureLoad(graph: TaskGraph) {
@@ -98,7 +113,7 @@ function expectFixtureLoad(graph: TaskGraph) {
   const halves = Object.keys(workspace.nodes[fixture].data.targets).filter((name) => name.startsWith('test-device--'));
   expect(halves).toHaveLength(2);
   for (const half of halves) expect(graph.tasks[`${fixture}:${half}`]).toBeDefined();
-  expect(machineLoads(graph)).toEqual([]);
+  expect(contentLoads(graph)).toEqual([]);
 }
 
 it('keeps every gated runtime device file in exactly one owner command', () => {
@@ -189,7 +204,11 @@ describe('workspace selection', () => {
   it('retains core manifest selection for producers and their image consumers', () => {
     const graph = selected('runtime/core/module.toml', 'build-objects,test-device,test-conformance');
     expect(graph.tasks['core/runtime:build-objects']).toBeDefined();
-    expect(graph.tasks['digikit/debug:test-conformance']).toBeDefined();
+    const services = Object.entries(workspace.nodes)
+      .filter(([, { data }]) => data.tags?.includes('type:service') && data.targets['test-conformance'])
+      .map(([id]) => id);
+    expect(services).toContain('digikit/debug');
+    for (const service of services) expect(graph.tasks[`${service}:test-conformance`], service).toBeDefined();
     expectFixtureLoad(graph);
   }, 660_000);
 
@@ -258,23 +277,28 @@ describe('workspace selection', () => {
     660_000,
   );
 
-  it('routes a module DSP edit to its own DSP tests and emulator load', () => {
-    const project = workspace.nodes['digikit/pluck'].data;
-    const graph = selected(`${project.root}/src/dsp/pluck.s`, 'pack,test-dsp,test-dsp-conformance,test-conformance');
-    expect(
-      Object.keys(graph.tasks)
-        .filter((id) => /:test-dsp(-conformance)?$/.test(id))
-        .sort(),
-    ).toEqual(['digikit/pluck:test-dsp', 'digikit/pluck:test-dsp-conformance']);
-    expect(graph.tasks['digikit/pluck:pack']).toBeDefined();
-    expect(machineLoads(graph)).toEqual(['digikit/pluck:test-conformance', 'digikit/pluck:test-conformance-all']);
-  }, 660_000);
+  it.each(['machine', 'fx'] as const)(
+    'routes %s DSP edits to its own DSP tests and emulator load',
+    (kind) => {
+      const { id, source } = dspLoadSubject(kind);
+      const graph = selected(source, 'pack,test-dsp,test-dsp-conformance,test-conformance');
+      expect(
+        Object.keys(graph.tasks)
+          .filter((task) => /:test-dsp(-conformance)?$/.test(task))
+          .sort(),
+      ).toEqual([`${id}:test-dsp`, `${id}:test-dsp-conformance`]);
+      expect(graph.tasks[`${id}:pack`]).toBeDefined();
+      expect(contentLoads(graph)).toEqual([`${id}:test-conformance`, `${id}:test-conformance-all`]);
+    },
+    660_000,
+  );
 
   it('keeps shared SDK contract edits on the SDK host, pack, runtime device and conformance selection', () => {
     const graph = selected('sdk/include/dk/core/module.h', 'test-host,pack,test-device,test-conformance');
+    const { id } = dspLoadSubject('machine');
     for (const target of [
       'sdk:test-host',
-      'digikit/pluck:pack',
+      `${id}:pack`,
       'core/runtime-tests:test-device',
       'digikit/debug:test-conformance',
     ])
