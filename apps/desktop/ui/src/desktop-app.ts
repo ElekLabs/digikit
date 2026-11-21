@@ -19,7 +19,7 @@ export function createDesktopApps(host: Host, storage: KeyValue = localStorageKe
   const getApp = () => app;
   app = createTransferApp(createDesktopEnv(host, getApp), {
     storage,
-    sessions: createSessionHub((transport) => new DkSession(transport, { timeoutMs: 6000 })),
+    sessions: createSessionHub((transport, opts) => new DkSession(transport, { timeoutMs: 6000, ...opts })),
   });
   return { app, firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp), app) };
 }

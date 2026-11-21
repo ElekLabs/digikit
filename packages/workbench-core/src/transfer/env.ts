@@ -59,10 +59,8 @@ export interface TransferTargets {
   inHeader?: boolean;
   /** The names of the MIDI ports that a device can be on. */
   ports(): Promise<string[]>;
-  /** Open the target (a MIDI port is opened here) and give its transport. Called once per use of the target. */
+  /** Open the target (a MIDI port is opened here) and give its transport. The transport owns the link: `recover` and `close` are on it. */
   open(target: Target): Promise<DkTransport>;
-  /** Let go of a MIDI port that is no longer the target. */
-  close?(target: Target): Promise<void>;
   /** The text of a request on the `none` target: why there is no port (the site: no Web MIDI, no permission), and what to do. Asks again when it can. */
   whyNone?(): Promise<string>;
   /** Called before each request of a target; it throws when the target cannot answer now (a paused emulator). */

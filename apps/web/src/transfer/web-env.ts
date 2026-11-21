@@ -68,7 +68,6 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
     return accessPromise;
   }
 
-  const open = new Map<string, WebMidiTransport>();
   const wasm = fetchWasmSource(BASE);
 
   const { library, source } = createWebLibrary({
@@ -115,18 +114,9 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
         const output: MidiOutputLike | undefined = outputs.find((p) => (p.name ?? p.id) === t.port);
         if (!input || !output)
           throw new Error(`The MIDI port "${t.port}" is not there. Connect the device and pick the port again.`);
-        open.get(t.port)?.close();
-        const transport = await WebMidiTransport.open(input, output, a, (e) => {
+        return WebMidiTransport.open(input, output, a, (e) => {
           app().connection.noteConnection({ type: 'closed', reason: e.message });
-          app().target.portLost(t.port);
         });
-        open.set(t.port, transport);
-        return transport;
-      },
-      async close(t: Target) {
-        if (t.kind !== 'midi') return;
-        open.get(t.port)?.close();
-        open.delete(t.port);
       },
     },
     logRun(run) {
@@ -153,7 +143,7 @@ export function createWebTransferApp(storage: KeyValue = localStorageKeyValue())
   const web = createWebEnv(() => app);
   app = createTransferApp(web.env, {
     storage,
-    sessions: createSessionHub((transport) => new DkSession(transport, { timeoutMs: 6000 })),
+    sessions: createSessionHub((transport, opts) => new DkSession(transport, { timeoutMs: 6000, ...opts })),
   });
   return {
     app,
