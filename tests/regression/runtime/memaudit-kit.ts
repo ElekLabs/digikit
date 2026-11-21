@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DkModule } from '@digi/dk-session';
+import { PROVIDER_MAX, type DkModule } from '@digi/dk-session';
 import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { freeRegions, type TestRuntime } from '../support.ts';
@@ -97,6 +97,32 @@ export async function arenaBounds(session: Session, plan: RuntimePlan): Promise<
   return [await word(session, state + 28), await word(session, state + 32)];
 }
 
+/**
+ * The blocks of the loaded service files (providers). The loader keeps them in `DKRT_PROVIDERS`, records of the layout of `DKRT_STATE.modules` (used,
+ * name[32], version, base, size, fini), and MODULES does not list them. Their image (code, data, bss) is a block of the arena like a module's, so it is
+ * a module block for the audit: the code of a service may store in its own block, as the code of a module does.
+ */
+export async function providerBlocks(
+  session: Session,
+  plan: RuntimePlan,
+): Promise<Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[]> {
+  const table = planSymbol(plan, 'DKRT_PROVIDERS');
+  const RECORD = 52; // bytes of one `Module` record
+  const out: Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[] = [];
+  for (let j = 0; j < PROVIDER_MAX; j++) {
+    const at = table + j * RECORD;
+    if ((await word(session, at)) === 0) continue; // `used`
+    const name = Buffer.alloc(32);
+    for (let i = 0; i < 32; i += 4) name.writeUInt32BE(await word(session, at + 4 + i), i);
+    out.push({
+      name: name.toString('latin1').split('\0')[0]!,
+      cf_base: await word(session, at + 40),
+      cf_size: await word(session, at + 44),
+    });
+  }
+  return out;
+}
+
 /** The current bytes of every module's block, read from guest memory. */
 export async function moduleBlocks(session: Session, modules: DkModule[]): Promise<Map<string, Buffer>> {
   const out = new Map<string, Buffer>();
@@ -122,7 +148,7 @@ export interface AuditHit {
 /** The guard's report with each hit attributed to its writer. */
 export async function guardHits(
   session: Session,
-  modules: DkModule[],
+  modules: Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[],
   code: Owned[],
 ): Promise<{ total: number; hits: AuditHit[] }> {
   const report = await session.client.guardReport();
