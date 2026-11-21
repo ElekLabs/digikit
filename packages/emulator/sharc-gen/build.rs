@@ -15,6 +15,7 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(sharc_image)");
     println!("cargo:rustc-check-cfg=cfg(sharc_gen_version)");
     println!("cargo:rustc-check-cfg=cfg(sharc_region_entries)");
+    println!("cargo:rustc-check-cfg=cfg(sharc_block_bounds)");
     // The suffix of the environment variables with this core's fast-tier address lists: none. A host sets the
     // suffix of the device of a loaded core (`sharc_native::core_lib::load`).
     println!("cargo:rustc-env=SHARC_GEN_ENV_SUFFIX=");
@@ -37,6 +38,9 @@ fn main() {
         let image = std::fs::read_to_string(dir.join("image.rs")).unwrap_or_default();
         if image.contains("REGION_ENTRIES") {
             println!("cargo:rustc-cfg=sharc_region_entries");
+        }
+        if image.contains("pub static BLOCK_BOUNDS") {
+            println!("cargo:rustc-cfg=sharc_block_bounds");
         }
     }
     // Generated before the staleness guard: no GENERATOR_VERSION, reported

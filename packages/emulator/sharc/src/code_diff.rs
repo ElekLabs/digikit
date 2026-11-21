@@ -4,9 +4,8 @@
 //! many blocks, so one patched word used to bar every region with an entry in
 //! the range. On a range whose hash differs the engine now decodes the loaded
 //! words, compares them with the generated instruction table, and bars the
-//! regions with an entry that could reach a differing PC. The merged range
-//! bounds each block, including decoder lookahead. These functions hold that
-//! logic without any generated data, so unit tests can run them.
+//! regions with a block spanning a differing instruction PC. The merged
+//! ranges cover decoder lookahead and bound blocks from older generators.
 
 use crate::rt::Insn;
 
@@ -55,21 +54,25 @@ pub fn changed_pcs<K: PartialEq>(
     Some(out)
 }
 
-/// The entry PCs (sorted) that stay off after a code change. Each block starts
-/// at its entry and can extend through other entries up to its hashed range's
-/// exclusive end. Bar it if a PC in `changed` (sorted) falls in that span, or
-/// if `range_end` returns None because its range is unknown or barred whole.
-/// A region's bodies pass control to each other directly, so all its entries
-/// go together.
+/// The entry PCs (sorted) that stay off after a code change. Bar a block if a
+/// PC in `changed` (sorted) falls within its generated bounds (sorted by entry).
+/// If the block has no bounds, use the hashed range's exclusive end. Bar the
+/// block outright if `range_end` returns None for an unknown or wholly barred
+/// range. A region's bodies pass control directly, so all its entries go together.
 pub fn barred_entries(
     region_entries: &[&[u32]],
+    block_bounds: &[(u32, u32)],
     changed: &[u32],
     range_end: impl Fn(u32) -> Option<u32>,
 ) -> Vec<u32> {
     let hit = |pc: u32| {
-        let Some(end) = range_end(pc) else {
+        let Some(range_end) = range_end(pc) else {
             return true;
         };
+        let end = block_bounds
+            .binary_search_by_key(&pc, |&(start, _)| start)
+            .ok()
+            .map_or(range_end, |i| block_bounds[i].1);
         let first = changed.partition_point(|&c| c < pc);
         changed.get(first).is_some_and(|&c| c < end)
     };
@@ -97,13 +100,31 @@ mod tests {
 
     #[test]
     fn no_patch_bars_nothing() {
-        assert!(barred_entries(&[&[10], &[30]], &[], |_| Some(60)).is_empty());
+        assert!(barred_entries(&[&[10], &[30]], &[], &[], |_| Some(60)).is_empty());
     }
 
     #[test]
-    fn overlapping_blocks_are_bounded_by_their_merged_range() {
-        // Blocks starting at 20 and 30 both hold PC 45. Only their regions
-        // are barred, including a companion entry in a separate clean range.
+    fn generated_bounds_keep_earlier_blocks_and_bar_overlaps_and_their_regions() {
+        // PC 45 starts another entry and is also in two earlier blocks.
+        // Block 10 is also in the merged range but ends much earlier.
+        // Block 20 ends exactly at PC 45.
+        let entries: [&[u32]; 5] = [&[10], &[20], &[25, 100], &[30], &[45]];
+        let bounds = [(10, 16), (20, 45), (25, 50), (30, 55), (45, 52), (100, 110)];
+        let range_end = |pc| if pc < 100 { Some(60) } else { Some(120) };
+        assert_eq!(
+            barred_entries(&entries, &bounds, &[45], range_end),
+            vec![25, 30, 45, 100]
+        );
+        assert_eq!(
+            barred_entries(&entries, &[], &[45], range_end),
+            vec![10, 20, 25, 30, 45, 100]
+        );
+    }
+
+    #[test]
+    fn older_generated_blocks_are_bounded_by_their_merged_range() {
+        // Without block bounds, entries earlier in the changed range are
+        // barred, including a region companion in a separate clean range.
         let entries: [&[u32]; 5] = [&[10], &[20, 100], &[30], &[60], &[110]];
         let range_end = |pc| match pc {
             10..16 => Some(16),
@@ -112,11 +133,11 @@ mod tests {
             _ => None,
         };
         assert_eq!(
-            barred_entries(&entries, &[45], range_end),
+            barred_entries(&entries, &[], &[45], range_end),
             vec![20, 30, 100]
         );
         assert_eq!(
-            barred_entries(&entries, &[30, 110], range_end),
+            barred_entries(&entries, &[], &[30, 110], range_end),
             vec![20, 30, 100, 110]
         );
     }
@@ -136,7 +157,12 @@ mod tests {
         .unwrap();
         assert_eq!(changed, vec![29, 30, 31]);
         assert_eq!(
-            barred_entries(&[&[10], &[30], &[32]], &changed, |_| Some(40)),
+            barred_entries(
+                &[&[10], &[30], &[32]],
+                &[(10, 30), (30, 32), (32, 35)],
+                &changed,
+                |_| Some(40)
+            ),
             vec![10, 30]
         );
     }
@@ -144,7 +170,8 @@ mod tests {
     #[test]
     fn a_range_that_cannot_be_narrowed_bars_its_regions() {
         let entries: [&[u32]; 3] = [&[10, 60], &[20], &[30]];
-        let barred = barred_entries(&entries, &[], |pc| (pc >= 30).then_some(70));
+        let bounds = [(10, 12), (20, 23), (30, 39), (60, 63)];
+        let barred = barred_entries(&entries, &bounds, &[], |pc| (pc >= 30).then_some(70));
         assert_eq!(barred, vec![10, 20, 60]);
     }
 
