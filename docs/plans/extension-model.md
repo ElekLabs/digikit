@@ -204,8 +204,8 @@ new table family is the number of direct readers of its stored number; E0b count
    handles it without a fault and the value survives a stock save and load. Otherwise the value lives in digikit's store, as the fx send
    amounts do (`fxsend.rs:11-12`), and the service writes a stock value into the sound. Outcome of E0b:
    - LFO wave 7 and up: every stock reader clamps it (shows "ERR", behaves like RAND, survives save and load). It goes into the sound.
-   - Filter type 16 and up: the stock loader resets it to 0. It goes into digikit's store, and the sound holds the stock filter the module names
-     as its fallback (O6).
+   - Filter type 16 and up: the stock loader resets it to 0. Agreed exception (O6 decided A): the type stays in the sound byte and in kit files, because
+     the stock loader resets it to Multi-Mode without a fault and the loader hook of E7 keeps it while the module is loaded.
 8. **One planner rule checks keys for every kind, against the boot set and the live set.** patchkit and dkneeds read the same `KEYS` table,
    so the workbench refuses a clash at upload.
 9. **Services keep only domain checks**: ranges, row capacity, valid glyphs, page limits.
@@ -974,8 +974,8 @@ What:
    (E3); they never index a stock table. Chooser rows are text only, so a filter has a name and no glyph.
 3. A filter page has at most three own knobs (descriptor fields 4-6); a fourth is refused with `DK_E_PAGE_FULL`. FLTR1 and FLTR2 are a fixed
    global page set, so a second filter page is refused the same way (rule 2).
-4. Stored value (rule 7): the stock loader resets 16..31 to 0, so the choice lives in digikit's store per sound and the sound holds the stock
-   filter the module names as its fallback. The loader-bound hook restores the choice from the store when a kit loads (O6).
+4. Stored value (rule 7, the agreed exception of O6 = A): the type stays in the sound byte and is saved in kit files. The loader-bound hook keeps a saved
+   16..31 while that module filter is loaded; a stock firmware or a missing module loads Multi-Mode.
 5. DSP: three SHARC sites per device: the converter (types 16..31 get S3 7 and up), the coefficient dispatch and the process dispatch (range
    check, then the module's entries; R12-8 stub pattern, dispatch code in `machines.dks`). Filter DSP is a new contract in
    `sdk/dsp/contract/` with two entries: `coef(state, cutoff, params)` once per voice per block, where cutoff is the stock normalized cutoff
@@ -1055,7 +1055,7 @@ runtime-and-services.md.
 | 8 | E6c WAVE maximum as a row write | E6, E5 | lfo device tests (below) | done: branch e6c/row-write (host checks; the lfo device tests below are not run yet) |
 | 8 | E6d custom LFO graphics through the SDK | E6 device check, Em agrees the API | none | todo |
 | 8 | E6e clean-up after E6 | E6 device check | objdiff, host tests | todo |
-| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8, port file | filter test plus subset | active: P0 on branch e7/p0-static (fw.py cost, finding 148 DSP section); bank DSP P2 on branch e7/p2-rbank |
+| 9 | E7 filter machines | E0a, E0b, E3, E4, E5, R12-8, port file | filter test plus subset | active: P0 on branch e7/p0-static (fw.py cost, finding 148 DSP section); filter anchors on branch e7/anchors; E7a service side on branch e7/e7a-service (builder calls, FILTER record, sticky 16..31, fixture `filter-gain`; ColdFire hooks built on the host: accessor, name, chooser list, loader byte and the knob requests; no graph hook; the emulator iteration is next); bank DSP P2 on branch e7/p2-rbank |
 | 10 | E8 top-level lift and names (taxonomy tree, roles, requires edges, patch-set lists, byte-manifest tool; 10-14 h agent editing time) | E1, port-file stack, E5c/E5b, open branches merged | byte manifest, host stage, `test:plan`, gate-smoke, one device test per device; the rest in the next batch's full run | todo |
 | 6 | Port file stack, PR1-PR3 and PR4 ([port-file.md](port-file.md)) | PR D, E5 | the device subset in port-file.md section 12, DT2 and DN2 | PR1 done (PR #621); PR2 and PR3 done (device: providers incl. the port file, live, reload, store-format, transfer-live, fixtures, machines, lfo, shot, refusal, capacity, service-commands, fx-contract, settings-api, file-write, usb-bulk, safe-mode, needs, fits, gate-smoke, gate-pins on DT2 and DN2); PR4 done on the host (branch port/pr4-lfo: one lfo.dks, device mask in the SLOTS flags; device proof not run) |
 | 11 | Port file step 3: adapter routines in the port file (lfo, then fx, then machines) | E8, port file stack | the device subset in port-file.md section 12 | todo |
@@ -1105,6 +1105,10 @@ Open:
 - O4 (decided in E6): the LFO_SHAPE record stays a generic `dk_record_add`. Writing the fixture and the template showed only byte packing as the awkward part (key, name and 32 samples as big-endian bytes, 80 bytes); the service check now refuses a body key that the module's KEYS entry does not list, so a literal key is caught. A typed `dk_lfo_add_shape` would add an import, a `since` and collector plumbing for no new capability; if packing proves error-prone for authors, add a header helper that fills the body in `sdk/include/dk`, with no runtime change.
 - O6: E7 stored filter choice: digikit's store with a stock fallback in the sound (recommended, rule 7), or patch the stock loader bound
   (7 to 32) so the extended type survives in kit files; with the patch, a kit opened on stock firmware falls back to filter 0.
+  **Decided: A (Em).** The type 16..31 stays in the sound byte and is saved in kit files. Reason: the getter, accessor, list, name and knob slots all read the sound byte, so a
+  separate store would need the track at every load (the loader window does not have it) and a second copy of the choice that can disagree with the byte; the sticky numbers
+  already keep the saved number valid across boots. A stock firmware, or a boot without the module, loads Multi-Mode (the stock loader bound resets the byte to 0), and a stock
+  loader never faults on it. The loader hook keeps a saved 16..31 only while that module filter is loaded.
 - O7 (decided in E6): the shape graph is option A of item 1b: one hook at the vector pick, four 28 x 15 tiles per shape built by the service. Replacing
   the accessor (wider, generic) and writing into the firmware's RAM table (needs a second site and the firmware would free our memory) are rejected.
 - O8 (decided in E6): MIDI behaviour with a shape loaded is accepted as a feature. A CC value of 7 or more, or an NRPN of 0x380 or more, reaches shape numbers

@@ -543,22 +543,6 @@ def in_linked_worktree() -> bool:
     return bool(native_target().IS_WORKTREE)
 
 
-def train_command(device: str, set_current: bool = False) -> str:
-    """The ``train`` command line for DEVICE as a user types it."""
-    args = "" if device == "dn2" else f" --device {device}"
-    flag = " --set-current" if set_current else ""
-    return f"uv run python -m tools.emulator.native_pgo train{args}{flag}"
-
-
-def not_current_notice(device: str, key: str) -> str:
-    """The closing line of a lane training that left manifest.json unchanged."""
-    return (
-        f"WARNING: the {device} profile {key[:16]} is NOT current for the launcher "
-        "(manifest.json is unchanged, so a launcher build reports a stale profile "
-        f"and builds without PGO). To make it current, run: {train_command(device, True)}"
-    )
-
-
 def decide_set_current(
     set_current: bool, at_main: bool, head: str | None, origin_main: str | None
 ) -> bool:
@@ -596,10 +580,8 @@ def save_manifest(
         print(f"wrote by-key/{key[:16]}.json and manifest.json")
     else:
         print(
-            f"linked worktree: wrote by-key/{key[:16]}.json only; manifest.json "
-            "is unchanged (--set-current overwrites it)"
+            f"linked worktree: saved {device} profile by key {key[:16]} for automatic lookup"
         )
-        print(not_current_notice(device, key))
 
 
 def profdata_path(manifest: dict[str, object], device: str = "dn2") -> pathlib.Path:
@@ -681,9 +663,11 @@ def resolve(
     GEN2 the DT2 core (slot 2); they default to the registered cores.
     """
     manifest = read_manifest(device)
-    if manifest is None:
+    if manifest is None and not any(by_key_dir(device).glob("*.json")):
         return Resolved(None, "missing", "no manifest")
     if not toolchain_dir().is_dir():
+        if manifest is None:
+            return Resolved(None, "missing", "no usable training toolchain")
         profdata = profdata_path(manifest, device)
         if not profdata.is_file():
             return Resolved(None, "missing", f"profile file {profdata} is gone")
@@ -691,51 +675,33 @@ def resolve(
             manifest, "stale", f"rustup toolchain {TOOLCHAIN} is not installed"
         )
     hasher = FileHasher(device_state(device) / "hash-cache.json")
-    if device == BOTH:
+    if device == BOTH and (gen is None or gen2 is None):
         default1, default2 = both_generated()
         gen, gen2 = gen or default1, gen2 or default2
     gen = gen or generated_dir()
-    components, _ = compute_components(
-        list(manifest["packages"]),  # type: ignore[call-overload]
-        gen,
-        hasher,
-        fast,
-        blocktrans,
-        gen2 if device == BOTH else None,
-    )
-    if device == "dt2":
-        components["workload"] = DT2_WORKLOAD_NAME
-    if device == BOTH:
-        components["workload"] = both_workload_name(reset_fixture_present())
+
+    def components_for(packages: list[str]) -> dict[str, str]:
+        result, _ = compute_components(
+            packages, gen, hasher, fast, blocktrans, gen2 if device == BOTH else None
+        )
+        if device == "dt2":
+            result["workload"] = DT2_WORKLOAD_NAME
+        if device == BOTH:
+            result["workload"] = both_workload_name(reset_fixture_present())
+        return result
+
+    components = components_for(list(manifest["packages"])) if manifest else {}  # type: ignore[call-overload]
+    exact = read_by_key(device, key_of(components)) if manifest else None
+    if exact is None:
+        # A lane can be the first trainer, or use a different crate graph from the shared manifest.
+        try:
+            current = components_for(tree_packages())
+        except (subprocess.CalledProcessError, OSError, ValueError, KeyError):
+            pass
+        else:
+            exact = read_by_key(device, key_of(current))
     desktop = desktop_digest(hasher)
     hasher.save()
-    exact = read_by_key(device, key_of(components))
-    if exact is None:
-        # The shared manifest may hold another package list than this tree trained with (another tree trained last, a
-        # crate was added): try the list of this tree's build graph before giving up the exact match.
-        try:
-            packages = tree_packages()
-        except (
-            subprocess.CalledProcessError,
-            OSError,
-            ValueError,
-            KeyError,
-        ):  # no cargo graph here (or unreadable metadata): the manifest decides
-            packages = None
-        if packages is not None:
-            fresh, _ = compute_components(
-                packages,
-                gen,
-                hasher,
-                fast,
-                blocktrans,
-                gen2 if device == BOTH else None,
-            )
-            if device == "dt2":
-                fresh["workload"] = DT2_WORKLOAD_NAME
-            if device == BOTH:
-                fresh["workload"] = both_workload_name(reset_fixture_present())
-            exact = read_by_key(device, key_of(fresh))
     if exact is not None and profdata_path(exact, device).is_file():
         return Resolved(
             exact,
@@ -743,6 +709,8 @@ def resolve(
             str(profdata_path(exact, device)),
             exact.get("desktop_sha256") != desktop,
         )
+    if manifest is None:
+        return Resolved(None, "missing", "no matching worktree profile")
     profdata = profdata_path(manifest, device)
     if not profdata.is_file():
         return Resolved(None, "missing", f"profile file {profdata} is gone")
@@ -888,8 +856,19 @@ def fresh_profiles(
 ) -> dict[str, pathlib.Path]:
     """device -> its fresh profile (status ok or partial): the `both` profile when it is fresh and covers the device, else the
     device's own. Devices without one are left out (they get the plain library)."""
+    return {
+        device: profiles[0]
+        for device, profiles in fresh_profile_candidates(devices, environ).items()
+    }
+
+
+def fresh_profile_candidates(
+    devices: tuple[str, ...] | list[str],
+    environ: dict[str, str] | os._Environ[str] | None = None,
+) -> dict[str, list[pathlib.Path]]:
+    """Fresh profiles for each device's core library, combined first, then the device's own."""
     environ = os.environ if environ is None else environ
-    found: dict[str, pathlib.Path] = {}
+    found: dict[str, list[pathlib.Path]] = {}
     for target in (BOTH, *devices):
         try:
             plan, _ = launch_plan(environ, target)
@@ -897,7 +876,9 @@ def fresh_profiles(
             continue
         for device, path in library_profiles(plan, environ).items():
             if device in devices:
-                found.setdefault(device, path)
+                candidates = found.setdefault(device, [])
+                if path not in candidates:
+                    candidates.append(path)
     return found
 
 
@@ -974,19 +955,16 @@ def fallback_notice(status: str, detail: str, device: str = "dn2") -> str:
         else f"Run {train_hint(device)}"
     )
     return (
-        f"WARNING: native PGO: {what}; building without PGO "
-        f"(about 30% slower DSP). {hint}"
+        f"WARNING: native PGO: {what}; building the host without PGO "
+        f"(DSP libraries resolve their own profiles). {hint}"
     )
 
 
 def stale_notice(detail: str = "", device: str = "dn2") -> str:
     """The one line printed when a stale profile is not used."""
     return (
-        "WARNING: native PGO: profile is stale for this core; building without PGO "
-        "(about 30% slower DSP). Retrain with "
-        "`mise run perf:pgo` (dn2, dt2 and both), `mise run perf:pgo:dn2`, `mise run perf:pgo:dt2` or "
-        "`mise run perf:pgo:both` (the two-core desktop build; "
-        "`uv run python -m tools.emulator.native_pgo train --device both`)."
+        f"native PGO: {device} host profile is stale; using the plain host. "
+        f"DSP libraries resolve their own profiles. To train the host: mise run perf:pgo:{device}."
     )
 
 

@@ -9,8 +9,10 @@ const MAX_PAGE: usize = limits::PAGE_ROWS;
 pub const MACH_TEXT: usize = 24;
 const REP_SIZE: usize = 48;
 
-/// Words of `dynreg_info` (byte offsets / 4). Words 48, 49 and 61 to 64 were the machine-view hook and the in-use functions of hot
-/// reload (archived, docs/plans/digikit-hot-reload.md); the table keeps them as zeros so the other offsets stay.
+/// First version of `dynreg_info` with the filter list builder.
+pub const FILTER_VIEW_VERSION: u32 = 4;
+
+/// Words of `dynreg_info` (byte offsets / 4). Words 61 to 64 are reserved for the archived in-use scan.
 pub mod w {
     pub const MAGIC: usize = 0;
     pub const DEVICE: usize = 2;
@@ -68,6 +70,7 @@ pub mod w {
     pub const P_NSLOTS: usize = 72;
     pub const P_SLOTS: usize = 73; // 8 words
     pub const P_TPL: usize = 81; // 6 words
+    pub const FILTER_VIEW_BUILD: usize = 87; // the filter list builder on the same view (version 4)
 }
 
 #[repr(C, align(4))]

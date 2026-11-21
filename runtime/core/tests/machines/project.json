@@ -4,6 +4,7 @@
   "tags": ["test-only"],
   "implicitDependencies": ["core/runtime"],
   "metadata": {
+    "mergeTests": ["filter-gain.device.test.ts"],
     "runtimeAcceptance": [
       {
         "files": ["frametype-slot.device.test.ts"],
@@ -18,6 +19,13 @@
         "dsp": "sharc",
         "tags": ["C:state", "C:types", "S:machines"],
         "modules": ["test/dyn-dn2", "core/services/machines"],
+        "plusdrive": true
+      },
+      {
+        "files": ["filter-gain.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["C:state", "C:dsp", "S:machines"],
+        "modules": ["test/sine", "test/filter-gain", "core/services/machines"],
         "plusdrive": true
       },
       {

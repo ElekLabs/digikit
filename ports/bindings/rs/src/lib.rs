@@ -36,7 +36,11 @@ pub mod draw {
 }
 
 pub mod filter {
-    // cf.filter.fn.accessor: no sig yet
+    unsafe extern "C" {
+        /// Filter type to descriptor row (type at 4(sp); d0 and d1 free at the entry): unsigned `type <= 5` gives the row base + 0x2c * type, else the shared fallback row. DT2 FUN_400c89c6 (base 0x4293b858), DN2 FUN_400c2614 (base 0x424339cc). The hook answers 16..31 from the service row.
+        #[link_name = "cf.filter.fn.accessor"]
+        pub fn accessor(index: u32) -> *const u8;
+    }
 
     unsafe extern "C" {
         /// Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store.
@@ -54,6 +58,12 @@ pub mod filter {
         /// The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150.
         #[link_name = "cf.filter.fn.set_kit"]
         pub fn set_kit(kit: u32, track: i32, ty: i32, flag4: i32, flag5: i32) -> i32;
+    }
+
+    unsafe extern "C" {
+        /// Builds the filter chooser items on the same MachineSelectionView as cf.machine.fn.view.build. Calls the filter order vector function at cf.filter.site.list_call.
+        #[link_name = "cf.filter.fn.view.build"]
+        pub fn view_build(view: u32);
     }
 }
 

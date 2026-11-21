@@ -210,6 +210,7 @@ async fn emu_build_info() -> Value {
     serde_json::json!({
         "pgo": std::env::var("DIGI_PGO_STATUS").ok(),
         "pgo_detail": std::env::var("DIGI_PGO_DETAIL").ok(),
+        "dsp_pgo": std::env::var("DIGI_DSP_PGO").ok().and_then(|s| serde_json::from_str::<std::collections::BTreeMap<String, String>>(&s).ok()),
     })
 }
 

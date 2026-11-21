@@ -9,9 +9,10 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{DN2, DT2};
 use dkrt_sdk::limits;
-use dkrt_sdk::records::KINDS_MACHINES;
+use dkrt_sdk::records::{KINDS_MACHINES, KIND_FILTER};
 use dkrt_svc_machines::build;
 use dkrt_svc_machines::dsp::dyndsp;
+use dkrt_svc_machines::filter;
 use dkrt_svc_machines::records::{rstate, types_of, Machines};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
 use dkrt_svc_params::dynreg::w;
@@ -532,6 +533,166 @@ fn the_machines_service_passes_the_contract_on_the_dt2() {
 #[test]
 fn the_machines_service_passes_the_contract_on_the_dn2() {
     contract::<Machines>(&fixture(DN2.id));
+}
+
+// ---- filters (docs/plans/extension-model.md E7) -----------------------------------------------------------------------------------
+
+/// The filter keys of the modules of the filter suite (`hash24 << 8`; a filter's key is in the KIND_FILTER group of the header table, not in the machine keys).
+const FKEY_A: u32 = 0x00d4_0400;
+const FKEY_B: u32 = 0x00e5_0500;
+const FGROUP_A: &[(u32, &[u32])] = &[(KIND_FILTER, &[FKEY_A])];
+const FGROUP_B: &[(u32, &[u32])] = &[(KIND_FILTER, &[FKEY_B])];
+
+/// `tests/fixtures/modules/filter-gain/src/module.c`: the filter "Filter Gain", its page and the knob Gain (default 64).
+fn filter_gain(i: &mut Init) {
+    unsafe {
+        let f = build::add_filter(i.core, i.ctx(), 0, c(b"Filter Gain\0"), c(b"FGAN\0"));
+        let p = build::filter_add_page(i.core, f);
+        build::page_add_param(i.core, p, c(b"Gain\0"), c(b"GAIN\0"), 64);
+    }
+}
+
+const FILTER_DRAW: u32 = 0x4100;
+
+/// A second filter with two knobs, one with its own range, and a response graph callback.
+fn filter_two(i: &mut Init) {
+    unsafe {
+        let f = build::add_filter(i.core, i.ctx(), 0, c(b"Filter Two\0"), c(b"FTWO\0"));
+        let p = build::filter_add_page(i.core, f);
+        build::page_add_param(i.core, p, c(b"Spread\0"), c(b"SPRD\0"), 10);
+        let q = build::page_add_param(i.core, p, c(b"Q\0"), c(b"Q\0"), 20);
+        build::param_range(i.core, q, 0, 100);
+        build::page_canvas(i.core, p, 0, FILTER_DRAW, 0, 0);
+    }
+}
+
+/// The filter of `filter_gain` for another module: the key of A, other names, knob and range.
+fn filter_gain_alt(i: &mut Init) {
+    unsafe {
+        let f = build::add_filter(i.core, i.ctx(), 0, c(b"Filter Alt\0"), c(b"FALT\0"));
+        let p = build::filter_add_page(i.core, f);
+        let l = build::page_add_param(i.core, p, c(b"Depth\0"), c(b"DEPTH\0"), 33);
+        build::param_range(i.core, l, 5, 90);
+    }
+}
+
+/// The stock descriptor row of filter type 0 the module rows copy (words as the firmware's initialiser writes them: names, f0..f3, the three knob fields, f7, f8) and the
+/// parameter table rows of its knob codes (the mirror index at +4; Multi-Mode's third knob has the lowest).
+const STOCK_ROW: u32 = 0x70_0000;
+const STOCK_CODES: [u32; 3] = [0x24, 0x25, 0x26];
+const STOCK_MIRRORS: [u32; 3] = [0x24, 0x25, 0x23];
+
+fn filter_image(core: &mut FakeCore) {
+    image(core);
+    let words: [u32; 11] = [0, 0, 0x2d, 0x2e, 0x2f, 0x30, 0x24, 0x25, 0x26, 0x31, 10];
+    let mut m = core.mem.borrow_mut();
+    for (i, v) in words.iter().enumerate() {
+        m.insert(STOCK_ROW + 4 * i as u32, *v);
+    }
+    for (code, mirror) in STOCK_CODES.iter().zip(STOCK_MIRRORS) {
+        m.insert(P_TABLE + code * 0x40 + 4, mirror);
+    }
+    drop(m);
+    filter::set_stock(STOCK_ROW);
+}
+
+/// The service's own view of the filters: the owner of each row and a word per field of each loaded row, so a name or a knob that a release leaves behind shows.
+fn filter_state(_core: &FakeCore) -> Vec<u32> {
+    let mut v = Vec::new();
+    for row in filter::rows().iter() {
+        v.push(row.owner as u32);
+        v.push(row.key);
+        v.push(row.knobs as u32);
+        v.push(row.draw);
+        let sum = |b: &[u8]| {
+            b.iter()
+                .fold(0u32, |a, x| a.wrapping_mul(31).wrapping_add(*x as u32))
+        };
+        v.push(sum(&row.name) ^ sum(&row.short));
+        for k in row.knob.iter() {
+            v.extend([
+                k.glyph,
+                k.min as u32,
+                k.max as u32,
+                k.def as u32,
+                sum(&k.name) ^ sum(&k.short),
+            ]);
+        }
+    }
+    for owner in 1..=3u8 {
+        let mut ids = [0u8; filter::PER_MODULE];
+        let n = filter::types_of(owner, &mut ids);
+        v.push(n as u32);
+        v.extend(ids.iter().take(n).map(|i| *i as u32));
+    }
+    v.push(filter::used());
+    v.push(filter::map_used());
+    // what the hooks read
+    let t = filter::tab();
+    v.push(t.mask);
+    v.push(t.base);
+    v.extend(t.slots.iter().flatten());
+    v.extend(t.rows.iter().flatten());
+    v.extend(t.name.iter().map(|n| (*n != 0) as u32));
+    v
+}
+
+fn filter_module(
+    sel: u32,
+    groups: &'static [(u32, &'static [u32])],
+    init: fn(&mut Init),
+) -> Module {
+    Module {
+        sel,
+        keys: keys_none, // a filter module has no machine key
+        groups,
+        init,
+        dsp: Dsp::default(),
+    }
+}
+
+fn filter_fixture(device: u32) -> Fixture {
+    Fixture {
+        name: "filter-gain",
+        survives: None,
+        device,
+        kinds: &KINDS_MACHINES,
+        image: filter_image,
+        state: filter_state,
+        rows: Rows::NONE,
+        a: filter_module(0, FGROUP_A, filter_gain),
+        b: filter_module(1, FGROUP_B, filter_two),
+        a2: filter_module(0, FGROUP_A, filter_gain_alt),
+        enable: &[],
+        parks_rows: false,
+        // a knob's parameter row goes back as the machines' parameter rows do
+        kept,
+        kept_dsp: |_, _, _| false,
+        absent_rows: None,
+        live: None,
+        salt_same: &[
+            (
+                "settings",
+                "a load writes no setting (the map of numbers is saved at the boot's settle)",
+            ),
+            ("dsp", "this builder-only case has no DSP section"),
+        ],
+        // no key in the header table for the module's filter: the commit refuses the builder calls (`E_DECL_ID`)
+        bad: filter_module(2, &[], filter_gain),
+        bad_late: None,
+        rules: true,
+        parked_knobs: None,
+    }
+}
+
+#[test]
+fn the_machines_service_passes_the_contract_with_a_filter_module_on_the_dt2() {
+    contract::<Machines>(&filter_fixture(DT2.id));
+}
+
+#[test]
+fn the_machines_service_passes_the_contract_with_a_filter_module_on_the_dn2() {
+    contract::<Machines>(&filter_fixture(DN2.id));
 }
 
 // ---- the MISSING placeholder (docs/plans/extension-model.md E5 item 7) -------------------------------------------------------------------
@@ -1226,27 +1387,31 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
     );
 }
 
-/// The machine selection view caches the machine list: a reload rebuilds it through `dynreg_info` words 48 (the variable that holds the view) and 49 (the builder), once
-/// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
+/// A reload rebuilds both cached lists on the same view. Older images only supply the machine builder.
 #[test]
-fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
+fn the_chooser_lists_are_rebuilt_at_the_end_of_every_reload() {
     use dkrt_abi::service::Service;
+    use dkrt_test_support::contract::locked;
     use std::cell::RefCell;
     use std::rc::Rc;
     const VAR: u32 = 0x7000_0000;
-    const BUILD: u32 = 0x4006_0f50;
-    let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
-    let table = |var: u32, build: u32| {
-        let mut t = vec![0u32; 64];
-        t[w::VIEW_VAR] = var;
-        t[w::VIEW_BUILD] = build;
-        t
-    };
-    let run = |words: Vec<u32>, view: u32, phase: u32| {
+    const BUILD_MACHINE: u32 = 0x4006_0f50;
+    const BUILD_FILTER: u32 = 0x4006_10e8;
+    const VIEW: u32 = 0x1234_5678;
+    let _g = locked();
+    let run = |version: u32, var: u32, view: u32, phase: u32| {
+        let mut words = vec![0u32; w::FILTER_VIEW_BUILD];
+        words[w::VERSION] = version;
+        words[w::VIEW_VAR] = var;
+        words[w::VIEW_BUILD] = BUILD_MACHINE;
+        if version == 4 {
+            words.push(BUILD_FILTER);
+        }
         let mut core = FakeCore::new();
         core.set_dynreg(words);
         core.mem.borrow_mut().insert(VAR, view);
         core.live_op.set(phase);
+        let calls = Rc::new(RefCell::new(Vec::new()));
         let log = calls.clone();
         *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {
             log.borrow_mut().push((a, args.to_vec()));
@@ -1254,27 +1419,25 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
         }));
         unsafe { <Machines as Service<FakeCore>>::live_done(&core) };
         let got = calls.borrow().clone();
-        calls.borrow_mut().clear();
         got
     };
+    let both = [
+        (BUILD_MACHINE, vec![VIEW as usize]),
+        (BUILD_FILTER, vec![VIEW as usize]),
+    ];
     assert_eq!(
-        run(table(VAR, BUILD), 0x1234_5678, 1),
-        vec![(BUILD, vec![0x1234_5678])],
-        "the builder gets the stored view"
+        run(4, VAR, VIEW, 1),
+        both,
+        "both builders get the same view"
     );
+    assert_eq!(run(4, VAR, VIEW, 0), both, "after a failed reload too");
     assert_eq!(
-        run(table(VAR, BUILD), 0x1234_5678, 0),
-        vec![(BUILD, vec![0x1234_5678])],
-        "after a reload that failed too"
+        run(3, VAR, VIEW, 1),
+        [(BUILD_MACHINE, vec![VIEW as usize])],
+        "a version 3 image supplies only the machine builder"
     );
-    assert!(
-        run(table(VAR, BUILD), 0, 1).is_empty(),
-        "the view does not exist yet"
-    );
-    assert!(
-        run(table(0, 0), 0x1234_5678, 1).is_empty(),
-        "an image without the hook has no view variable or builder"
-    );
+    assert!(run(4, VAR, 0, 1).is_empty(), "the view does not exist yet");
+    assert!(run(4, 0, VIEW, 1).is_empty(), "no view variable");
 }
 
 /// The check of a new file that reloads module A (`reload_check` runs the DSP section checks while A is live): A's own voice type and rows are not "used by another module".
@@ -1359,4 +1522,255 @@ fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_ano
     );
     l.unload(0);
     l.unload(1);
+}
+
+// ---- what the filter hooks read (docs/plans/extension-model.md E7a) -----------------------------------------------------------------
+
+/// A filter module with two knobs loads: its descriptor row is the stock row with the module's names, the stock cutoff in field 4 and the knob rows in fields 5 and 6; each
+/// knob is a run-time parameter row with the template and the mirror index of the stock knob at its field; the request that reaches each field answers its code.
+fn two_knob_filter(device: u32) {
+    use dkrt_test_support::contract::Lifecycle;
+    let _g = dkrt_test_support::contract::locked();
+    let f = filter_fixture(device);
+    let l = Lifecycle::<Machines>::new(&f);
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    let core = &l.core;
+    let t = filter::tab();
+    // `filter_two` is the second module's filter: its key is the one after A's, number 16 here (the first loaded)
+    let i = (0..16)
+        .find(|i| t.mask & (1 << i) != 0)
+        .expect("a row is published");
+    assert_eq!(filter::rows()[i].draw, FILTER_DRAW);
+    let row = t.rows[i];
+    let word = |a: u32| unsafe { core.rd(a) };
+    let (long, short) = (row[0], row[1]);
+    assert_ne!(
+        (long, short),
+        (0, 0),
+        "the names are string representations"
+    );
+    assert_eq!(
+        &row[2..6],
+        &[0x2d, 0x2e, 0x2f, 0x30],
+        "fields 0 to 3 are the stock row's"
+    );
+    assert_eq!(row[6], 0x24, "field 4 (knob 1) is the stock cutoff");
+    let (k2, k3) = (row[7], row[8]);
+    assert!(
+        k2 >= P_FIRST && k3 > k2,
+        "knobs 2 and 3 are two run-time parameter rows"
+    );
+    assert_eq!(
+        rstate().param_owner[(k2 - P_FIRST) as usize],
+        2,
+        "owned by record 1"
+    );
+    // the knob's row: the mirror index of the stock knob at the same field, the module's range
+    assert_eq!(word(P_TABLE + k2 * 0x40 + 4), 0x25);
+    assert_eq!(word(P_TABLE + k3 * 0x40 + 4), 0x23);
+    // the requests: base is the lowest mirror index of the three stock knobs, and each request reaches the field whose stock knob has it
+    assert_eq!(t.base, 0x23);
+    assert_eq!(
+        t.slots[i],
+        [k3, 0x24, k2],
+        "mirror 0x23: knob 3, 0x24: the cutoff, 0x25: knob 2"
+    );
+    assert_eq!(t.mask.count_ones(), 1);
+    l.unload(1);
+    assert_eq!(filter::tab().mask, 0, "the row is withdrawn");
+    assert_eq!(filter::rows()[i].draw, 0, "the graph callback is released");
+    assert!(
+        rstate().param_owner.iter().all(|o| *o == 0),
+        "the knob rows are free"
+    );
+}
+
+#[test]
+fn a_two_knob_filter_publishes_its_row_and_requests_on_the_dt2() {
+    two_knob_filter(DT2.id);
+}
+
+#[test]
+fn a_two_knob_filter_publishes_its_row_and_requests_on_the_dn2() {
+    two_knob_filter(DN2.id);
+}
+
+/// The list hook's routine: the vector the stock function filled gets the loaded types after its six, in a new buffer; the old one is given back.
+#[test]
+fn the_chooser_vector_gets_the_loaded_filters_appended() {
+    use dkrt_test_support::contract::Lifecycle;
+    let _g = dkrt_test_support::contract::locked();
+    let f = filter_fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let core = &l.core;
+    let i = 1usize; // B's number: the sticky assignment numbered A's key first
+                    // no filter loaded: the stock vector stays
+    let vec = 0x71_0000u32;
+    unsafe {
+        for (i, v) in [0u32, 1, 4, 3, 5, 2].iter().enumerate() {
+            core.wr(0x72_0000 + 4 * i as u32, *v);
+        }
+        core.wr(vec, 0x72_0000);
+        core.wr(vec + 4, 0x72_0018);
+        core.wr(vec + 8, 0x72_0018);
+        let mut freed = Vec::new();
+        assert_eq!(
+            filter::extend_list(core, vec, &mut |_| 0x73_0000, &mut |p| freed.push(p)),
+            0
+        );
+        assert_eq!((core.rd(vec), freed.len()), (0x72_0000, 0));
+        // one loaded
+        assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+        let n = filter::extend_list(
+            core,
+            vec,
+            &mut |size| {
+                assert_eq!(size, 28, "seven entries");
+                0x73_0000
+            },
+            &mut |p| freed.push(p),
+        );
+        assert_eq!(n, 1);
+        assert_eq!(freed, [0x72_0000], "the stock buffer is freed");
+        assert_eq!(
+            (core.rd(vec), core.rd(vec + 4), core.rd(vec + 8)),
+            (0x73_0000, 0x73_001c, 0x73_001c)
+        );
+        let got: Vec<u32> = (0..7).map(|i| core.rd(0x73_0000 + 4 * i)).collect();
+        assert_eq!(got, [0, 1, 4, 3, 5, 2, 16 + i as u32]);
+        // a failed allocation leaves the vector as it was
+        core.wr(vec, 0x72_0000);
+        core.wr(vec + 4, 0x72_0018);
+        assert_eq!(
+            filter::extend_list(core, vec, &mut |_| 0, &mut |_| panic!("nothing to free")),
+            0
+        );
+        assert_eq!(core.rd(vec), 0x72_0000);
+    }
+    l.unload(1);
+}
+
+/// The offsets the assembler files name for `DKRT_FILTER_TAB` are those of the table.
+#[test]
+fn the_offsets_the_filter_assembler_names_are_those_of_the_table() {
+    let asm = include_str!("../dks/src/hooks-common.s");
+    for (name, at) in filter::ASM_OFFSETS {
+        let line = asm
+            .lines()
+            .map(str::trim)
+            .find(|l| {
+                l.starts_with(".equ") && l[4..].trim_start().starts_with(&std::format!("{name},"))
+            })
+            .unwrap_or_else(|| panic!("{name} is not in hooks-common.s"));
+        let value: usize = line
+            .split(',')
+            .nth(1)
+            .unwrap()
+            .split('|')
+            .next()
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert_eq!(value, *at, "{name}");
+    }
+}
+
+/// The ownership the bytes show (finding 151): the stock function keeps a static vector and fills the caller's object with a fresh copy on every call; the builder frees
+/// that copy. Two calls through the hook's routine give six plus the loaded filters each time, free only the callers' copies and never the static vector.
+#[test]
+fn the_chooser_vector_hook_works_on_the_callers_copy_every_time() {
+    use dkrt_test_support::contract::Lifecycle;
+    let _g = dkrt_test_support::contract::locked();
+    let f = filter_fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let core = &l.core;
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    const STATIC: u32 = 0x72_0000;
+    let mut next = 0x80_0000u32;
+    let mut live: Vec<u32> = Vec::new();
+    let mut freed: Vec<u32> = Vec::new();
+    unsafe {
+        for (i, v) in [0u32, 1, 4, 3, 5, 2].iter().enumerate() {
+            core.wr(STATIC + 4 * i as u32, *v);
+        }
+        for call in 0..2 {
+            // the stock function: a new buffer holding the static six, stored in the object
+            let obj = 0x71_0000u32;
+            let copy = next;
+            next += 0x100;
+            live.push(copy);
+            for i in 0..6 {
+                core.wr(copy + 4 * i, core.rd(STATIC + 4 * i));
+            }
+            core.wr(obj, copy);
+            core.wr(obj + 4, copy + 24);
+            core.wr(obj + 8, copy + 24);
+            // the hook's routine
+            let mut alloc = |size: u32| {
+                let p = next;
+                next += 0x100;
+                live.push(p);
+                assert_eq!(size, 28);
+                p
+            };
+            let n = filter::extend_list(core, obj, &mut alloc, &mut |p| freed.push(p));
+            assert_eq!(n, 1, "call {call}");
+            let (b, e) = (core.rd(obj), core.rd(obj + 4));
+            assert_eq!((e - b) / 4, 7, "six and the loaded filter, call {call}");
+            assert_eq!(core.rd(b + 24), 17);
+            // the builder frees its vector after the loop
+            freed.push(b);
+            live.retain(|p| *p != b);
+        }
+    }
+    let mut sorted = freed.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(sorted.len(), freed.len(), "no buffer is freed twice");
+    assert!(!freed.contains(&STATIC), "the static vector is never freed");
+    live.retain(|p| !freed.contains(p));
+    assert!(live.is_empty(), "every buffer is freed once: {live:?}");
+    l.unload(1);
+}
+
+/// Rows published before the stock row holds its words are completed by the next tick (the order of the firmware's initialiser and the apply is not assumed).
+#[test]
+fn a_row_published_before_the_stock_row_is_filled_is_completed_by_the_tick() {
+    use dkrt_abi::service::{tick_phase, Service};
+    use dkrt_test_support::contract::Lifecycle;
+    let _g = dkrt_test_support::contract::locked();
+    let f = filter_fixture(DT2.id);
+    let l = Lifecycle::<Machines>::new(&f);
+    let core = &l.core;
+    // the stock row is there but empty
+    for i in 0..11u32 {
+        core.mem.borrow_mut().insert(STOCK_ROW + 4 * i, 0);
+    }
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    let t = filter::tab();
+    let i = (0..16).find(|i| t.mask & (1 << i) != 0).unwrap();
+    assert_eq!(
+        (t.base, t.rows[i][6], t.rows[i][7]),
+        (0, 0, 0),
+        "nothing to copy yet"
+    );
+    unsafe { <Machines as Service<FakeCore>>::tick(core, tick_phase::LAST) };
+    assert_eq!(
+        filter::tab().rows[i][6],
+        0,
+        "a tick before the words are there changes nothing"
+    );
+    let words: [u32; 11] = [0, 0, 0x2d, 0x2e, 0x2f, 0x30, 0x24, 0x25, 0x26, 0x31, 10];
+    for (k, v) in words.iter().enumerate() {
+        core.mem.borrow_mut().insert(STOCK_ROW + 4 * k as u32, *v);
+    }
+    unsafe { <Machines as Service<FakeCore>>::tick(core, tick_phase::LAST) };
+    let t = filter::tab();
+    assert_eq!((t.base, t.rows[i][6]), (0x23, 0x24));
+    let (k2, k3) = (t.rows[i][7], t.rows[i][8]);
+    assert!(k2 >= P_FIRST && k3 > k2);
+    assert_eq!(t.slots[i], [k3, 0x24, k2]);
+    l.unload(1);
+    assert!(rstate().param_owner.iter().all(|o| *o == 0));
 }

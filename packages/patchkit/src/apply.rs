@@ -2453,7 +2453,7 @@ pub fn apply_with(
         let packed = crate::aplib::pack_section_in_place(&mem.main, dest, stage, floor as i64)
             .map_err(|e| err!("MAIN OS: {e}"))?;
         main_tail = Some((
-            packed.literal_tail,
+            packed.literal_bytes,
             packed.stream.len() - packed.plain_len.min(packed.stream.len()),
         ));
         fw.replace_main_stored(mem.main.clone(), packed.stream)?;
@@ -2466,7 +2466,7 @@ pub fn apply_with(
         if n > max {
             return Err(match main_tail {
                 Some((tail, extra)) if tail > 0 => err!(
-                    "container is {n} bytes, over the {max}-byte limit: MAIN OS needs a tail of {tail} bytes stored as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs {} bytes more than the container allows: trim the runtime or move it out of MAIN",
+                    "container is {n} bytes, over the {max}-byte limit: MAIN OS stores {tail} bytes as literals so that the bootstrap's in-place unpack keeps its margin, which costs {extra} bytes more than the plain stream; the image needs {} bytes more than the container allows: trim the runtime or move it out of MAIN",
                     n - max
                 ),
                 _ => err!("container is {n} bytes, over the {max}-byte limit"),

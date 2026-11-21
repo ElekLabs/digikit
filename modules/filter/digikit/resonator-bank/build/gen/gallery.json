@@ -1,0 +1,8 @@
+{
+  "machines": [],
+  "module": "digikit/resonator-bank",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

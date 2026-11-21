@@ -1,0 +1,16 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digikit/resonator-bank",
+  "metadata": {
+    "mergeTests": ["tests/filter-graph.device.test.ts"],
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/filter-graph.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["S:machines", "C:state"],
+        "modules": ["digikit/resonator-bank", "core/services/machines", "digikit/debug", "digikit/remote", "test/cal-kernels"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

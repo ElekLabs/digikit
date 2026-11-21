@@ -28,10 +28,10 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # Digitone II: the same, and a page row per machine: a machine with a page row is its own type for the page and draw code
 # (core/machines), the knobs are the page's columns. Eight page rows are reserved (their `machine` is a value no type has).
 #
-# The view hook (`dynreg_view_hook`, the anchor `cf.machine.fn.view.build`) remembers the machine selection view, which caches the machine list:
-# a reload (docs/plans/extension-model.md E5) rebuilds the view's list through words 48 and 49 of `dynreg_info`. At boot the rows are in place
-# before the stock builder reads the list, so nothing rebuilds the view then. The in-use anchors of hot reload (`cf.dynreg.project`, `kit_of`,
-# `track_type`) stay archived (tag digikit-hot-reload-v1).
+# The view hook (`dynreg_view_hook`, the anchor `cf.machine.fn.view.build`) remembers the machine selection view, which caches both chooser lists.
+# A reload (docs/plans/extension-model.md E5) rebuilds them through `dynreg_info`: word 48 holds the view variable, and words 49 and 87 name
+# the machine and filter builders. At boot the rows are in place before the stock builders read the lists. The in-use anchors of hot reload
+# (`cf.dynreg.project`, `kit_of`, `track_type`) stay archived (tag digikit-hot-reload-v1).
 #
 # The runtime fills and clears the rows. With this module the rows read as gap rows (clone of type 0, no name), which is
 # also what a project that names an unloaded run-time machine gets.
@@ -67,6 +67,7 @@ _dr_p_count = "params.count"
 _dr_p_dyn0 = "params.dp0.index"
 dynreg_view_next = "hook.cf.machine.fn.view.build.tail"
 _dr_f_build = "cf.machine.fn.view.build"
+_dr_filter_build = "cf.filter.fn.view.build"
 
 
 [[object]]
@@ -96,6 +97,7 @@ _dr_pg_dyn0 = "pages.dpg0.index"
 _dr_t_copy = "cf.machine.site.list.copy"
 dynreg_view_next = "hook.cf.machine.fn.view.build.tail"
 _dr_f_build = "cf.machine.fn.view.build"
+_dr_filter_build = "cf.filter.fn.view.build"
 
 # the copy at the end of the machine list getter: `jsr copy(begin, end, dest)`, result in d0 = the end of the copy
 [[op]]

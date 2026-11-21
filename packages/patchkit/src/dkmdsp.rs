@@ -23,6 +23,7 @@
 //!            12 u32 state_bytes (per voice), 16 u32 clear_bytes (zeroed at note-on), 20..51 8 x u32 ranges as above, 52 u32 voices (number of
 //!            voice states to reserve behind the image and bss), 56 u32 parameter-word latch mask (contract 1.3), 60 reserved 0. The packer writes version 3 only when a voice has a
 //!            note_on entry or a state; otherwise version 2 (the runtime parses all three; v1 and v2 voices have note_on 0 and no state)
+//! filter : version 6: u32 count at 0x40, then one 16-byte record per filter: key, coef pc offset, process pc offset, descriptor byte offset.
 //! fx     : version 4: 64 bytes each: 0 u32 process (image byte offset of the process routine), 4 u32 desc (image byte offset of its `dk_fx_desc`),
 //!            8 u32 state_bytes (from the desc: reserved behind the image, bss and voice states), 12 u32 n_params (from the desc), 16 u32 flags (the routes, below; 0 is the legacy master-only value; the packer writes the placeholder pair MASTER|SEND, `FXF_SEND`, which the runtime overrides at commit),
 //!            20..51 8 x u32 the words p0 .. p7 of the effect's row (the DSP reads them as they are), 52..63 reserved 0. A version 4 section has voices of 64
@@ -325,6 +326,7 @@ impl SampleTracks {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DspSection {
+    pub filters: Vec<dkneeds::filter::Filter>,
     pub sample_tracks: Option<SampleTracks>,
     pub device: u32,
     pub image: Vec<u8>,
@@ -429,6 +431,17 @@ pub fn pack_with_gate(
     voices: &[VoiceSpec],
     fxs: &[FxSpec],
     tracks: Option<&crate::typed::SampleTracksDef>,
+) -> Result<(Vec<u8>, bool)> {
+    pack_filters(obj, device, voices, fxs, tracks, &[])
+}
+
+pub fn pack_filters(
+    obj: &Dko,
+    device: u32,
+    voices: &[VoiceSpec],
+    fxs: &[FxSpec],
+    tracks: Option<&crate::typed::SampleTracksDef>,
+    filters: &[(u32, String)],
 ) -> Result<(Vec<u8>, bool)> {
     let mut gate = false;
     if obj.arch != "sharc" {
@@ -709,7 +722,21 @@ pub fn pack_with_gate(
             Ok(tracks)
         })
         .transpose()?;
+    let mut filter_records = Vec::new();
+    for (key, prefix) in filters {
+        filter_records.push(dkneeds::filter::Filter {
+            key: *key,
+            coef: entry_of(&format!("_{prefix}_coef"))?,
+            process: entry_of(&format!("_{prefix}_process"))?,
+            desc: symbol(
+                &format!("_{prefix}_desc"),
+                "data",
+                dkneeds::filter::contract::DK_FILTER_DESC_BYTES,
+            )?,
+        });
+    }
     let s = DspSection {
+        filters: filter_records,
         sample_tracks,
         device,
         image,
@@ -727,16 +754,26 @@ pub fn pack_with_gate(
         voices: vs,
         fxs: es,
     };
-    Ok((s.encode(), gate))
+    let bytes = s.encode();
+    if !s.filters.is_empty() {
+        dkneeds::section_area(&bytes)
+            .map_err(|_| err!("invalid filter record or DKFL descriptor"))?;
+    }
+    Ok((bytes, gate))
 }
 
 impl DspSection {
     pub fn encode(&self) -> Vec<u8> {
-        let import_off = HEADER;
+        let v6 = !self.filters.is_empty();
+        let import_off = if v6 {
+            dkneeds::filter::TABLE as usize + self.filters.len() * dkneeds::filter::RECORD as usize
+        } else {
+            HEADER
+        };
         let reloc_off = import_off + self.imports.len() * IMPORT_LEN;
         let voice_off = reloc_off + self.relocs.len() * RELOC_LEN;
         let v5 = self.sample_tracks.is_some();
-        let v4 = v5 || !self.fxs.is_empty();
+        let v4 = v6 || v5 || !self.fxs.is_empty();
         let v3 = v4 || self.voices.iter().any(|v| v.contract());
         let vlen = if v3 { VOICE_LEN_V3 } else { VOICE_LEN };
         let fx_off = voice_off + self.voices.len() * vlen;
@@ -747,7 +784,9 @@ impl DspSection {
         put(
             &mut f,
             4,
-            if v5 {
+            if v6 {
+                dkneeds::filter::VERSION
+            } else if v5 {
                 VERSION_5
             } else if v4 {
                 VERSION_4
@@ -771,6 +810,18 @@ impl DspSection {
         if v4 {
             put(&mut f, H_FX_OFF, fx_off as u32);
             put(&mut f, H_FX_N, self.fxs.len() as u32);
+        }
+        if v6 {
+            put(&mut f, HEADER, self.filters.len() as u32);
+            for (i, filter) in self.filters.iter().enumerate() {
+                let at = dkneeds::filter::TABLE as usize + i * dkneeds::filter::RECORD as usize;
+                for (j, value) in [filter.key, filter.coef, filter.process, filter.desc]
+                    .into_iter()
+                    .enumerate()
+                {
+                    put(&mut f, at + 4 * j, value);
+                }
+            }
         }
         let record = self.sample_tracks.as_ref().map(|t| {
             [
@@ -848,6 +899,11 @@ impl DspSection {
         for v in &self.voices {
             n += v.voices * v.state_bytes.div_ceil(8) * 8;
         }
+        for f in &self.filters {
+            let at = (f.desc + dkneeds::filter::contract::DK_FILTER_DESC_STATE_BYTES) as usize;
+            let state = u32::from_le_bytes(self.image[at..at + 4].try_into().unwrap());
+            n += state.div_ceil(8) * 8 * dkneeds::filter::VOICES;
+        }
         for e in &self.fxs {
             n += e.state_bytes.div_ceil(8) * 8;
         }
@@ -914,7 +970,7 @@ impl DspSection {
                     latched: if v3 { get(vo, at + 56) } else { 0 },
                     ranges: match version {
                         VERSION_1 => [0; 8],
-                        VERSION_3 | VERSION_4 | VERSION_5 => {
+                        VERSION_3..=dkneeds::filter::VERSION => {
                             std::array::from_fn(|k| get(vo, at + VOICE_V3_RANGES + 4 * k))
                         }
                         _ => std::array::from_fn(|k| get(vo, at + VOICE_V2_RANGES + 4 * k)),
@@ -959,7 +1015,21 @@ impl DspSection {
         }) {
             return Err(err!("DSP effect record outside the image or malformed"));
         }
-        let sample_tracks = if version == VERSION_5 {
+        let filters = if version == dkneeds::filter::VERSION {
+            dkneeds::section_area(f)
+                .map_err(|_| err!("invalid filter section or DSP state size"))?;
+            let count = get(f, HEADER) as usize;
+            f[dkneeds::filter::TABLE as usize..]
+                .chunks_exact(dkneeds::filter::RECORD as usize)
+                .take(count)
+                .map(dkneeds::filter::Filter::from_bytes)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let sample_tracks = if version == VERSION_5
+            || (version == dkneeds::filter::VERSION && get(f, H_BANK_OFF) != 0)
+        {
             let off = get(f, H_BANK_OFF);
             let mut ranges = vec![
                 (0u64, HEADER as u64),
@@ -1020,6 +1090,7 @@ impl DspSection {
             None
         };
         Ok(DspSection {
+            filters,
             sample_tracks,
             device: get(f, 8),
             image,

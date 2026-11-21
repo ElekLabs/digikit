@@ -13,6 +13,16 @@ pub unsafe extern "C" fn dk_module_ctx_add_machine(ctx: *mut u8, index: u32, nam
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
+pub unsafe extern "C" fn dk_module_ctx_add_filter(ctx: *mut u8, index: u32, name: *const u8, short_name: *const u8) -> *mut u8 {
+    build::add_filter(&ImportCore, ctx, index, name, short_name)
+}
+
+#[cfg_attr(target_arch = "m68k", no_mangle)]
+pub unsafe extern "C" fn dk_filter_add_page(f: *mut u8) -> *mut u8 {
+    build::filter_add_page(&ImportCore, f)
+}
+
+#[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_machine_add_page(m: *mut u8, name: *const u8, short_name: *const u8) -> *mut u8 {
     build::machine_add_page(&ImportCore, m, name, short_name)
 }
@@ -51,6 +61,8 @@ pub unsafe extern "C" fn dk_page_bind_local(p: *mut u8, local: u32, slot: u32) {
 const _: api::DkParamGetFn = crate::fw::dk_param_get;
 const _: api::DkParamSetFn = crate::fw::dk_param_set;
 const _: api::DkModuleCtxAddMachineFn = dk_module_ctx_add_machine;
+const _: api::DkModuleCtxAddFilterFn = dk_module_ctx_add_filter;
+const _: api::DkFilterAddPageFn = dk_filter_add_page;
 const _: api::DkMachineAddPageFn = dk_machine_add_page;
 const _: api::DkPageAddParamFn = dk_page_add_param;
 const _: api::DkParamRangeFn = dk_param_range;
@@ -62,12 +74,14 @@ const _: api::DkPageBindFn = dk_page_bind;
 const _: api::DkPageBindLocalFn = dk_page_bind_local;
 
 /// The entries `service!` declares, by name hash, in the order of `sdk/sdk.toml`.
-pub fn exports() -> [(u32, *const u8); 13] {
+pub fn exports() -> [(u32, *const u8); 15] {
     [
         (dkrt_svc_rt::name_hash("dk_param_get"), crate::fw::dk_param_get as *const u8),
         (dkrt_svc_rt::name_hash("dk_param_set"), crate::fw::dk_param_set as *const u8),
         (dkrt_svc_rt::name_hash("dk_machines_module_info"), crate::rt::dk_machines_module_info as *const u8),
         (dkrt_svc_rt::name_hash("dk_module_ctx_add_machine"), dk_module_ctx_add_machine as *const u8),
+        (dkrt_svc_rt::name_hash("dk_module_ctx_add_filter"), dk_module_ctx_add_filter as *const u8),
+        (dkrt_svc_rt::name_hash("dk_filter_add_page"), dk_filter_add_page as *const u8),
         (dkrt_svc_rt::name_hash("dk_machine_add_page"), dk_machine_add_page as *const u8),
         (dkrt_svc_rt::name_hash("dk_page_add_param"), dk_page_add_param as *const u8),
         (dkrt_svc_rt::name_hash("dk_param_range"), dk_param_range as *const u8),

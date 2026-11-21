@@ -60,13 +60,37 @@ mf_clone5:
     jmp     mf_x_c5_eq
 2:  jmp     mf_x_c5_ne
 
-| ---- type argument of the parameter mapping: `FUN(index, type, filter)` answers the parameter code of a (mirror index 25..34, machine type) pair. For an added type:
+| ---- type argument of the parameter mapping. The first part answers the knob requests (mirror indexes `F_BASE` to `F_BASE + 2`) of a loaded module filter (type 16 to 31, the
+| third argument at 0x14(sp)) from `DKRT_FILTER_TAB`; the rest is the machine part: `FUN(index, type, filter)` answers the parameter code of a (mirror index 25..34, machine type) pair. For an added type:
 | the slots with a descriptor field answer with the entry's field, the two without (29, 30: MANUAL SLICE's Sample Bank / Slot rows, which the stock map holds for its
 | owner but no descriptor lists) answer as the clone does (the stack argument is replaced by the clone's type, then the stock code runs); every other index runs the
 | stock code. Site (8 bytes): `move.l 0x10(sp),D0; movea.l 0x14(sp),A1` in the middle of the function; a0 = index, d1 live; d0, a1 are reloaded, d2 and a2 are saved by
 | the function (they are saved here too).
     .globl mf_typearg
 mf_typearg:
+    move.l  0x14(%sp),%d0            | the filter type, the third argument
+    subi.l  #16,%d0
+    cmpi.l  #15,%d0
+    bhi.s   5f                          | not a module filter: the machine part and the stock code
+    move.l  %d1,-(%sp)
+    move.l  %d0,%d1
+    lsl.l   #2,%d0
+    lsl.l   #3,%d1
+    add.l   %d1,%d0                     | 12 * (type - 16): this filter's three answers
+    move.l  %a0,%d1
+    sub.l   DKRT_FILTER_TAB+F_BASE,%d1          | the request (a mirror index of a knob word): 0 to 2
+    cmpi.l  #2,%d1
+    bhi.s   4f
+    lsl.l   #2,%d1
+    add.l   %d1,%d0
+    move.l  #DKRT_FILTER_TAB+F_SLOTS,%d1
+    add.l   %d1,%d0
+    movea.l %d0,%a1
+    move.l  (%a1),%d0                   | 0 for a knob the module does not have, as the stock function answers a type it does not know
+    move.l  (%sp)+,%d1
+    jmp     mf_x_typearg                | the second exit of the stock code with d0 = the code
+4:  move.l  (%sp)+,%d1
+5:
     move.l  0x10(%sp),%d0
     sub.l   MF_TAB+T_FIRST,%d0
     cmp.l   MF_TAB+T_COUNT,%d0
@@ -134,3 +158,30 @@ mf_srcpage:
     beq.w   3f
     jmp     mf_x_sp_stock
 3:  jmp     mf_x_sp_alt
+
+| ---- run-time filters, the loader's filter byte (the 34 bytes from the mask of the machine byte to the store of the filter byte; a2 = the sound, a3 = the record, d0 = the machine byte
+| and d1 = its mask when they are entered). The machine byte is stored as the stock code does. The filter byte keeps a stored 16 to 31 while that module filter is loaded and
+| takes the stock bound (0 to 5, and 0xff, which the stock test lets pass) for any other value; d2 = 4 as the stock code leaves it for the next field.
+    .globl mf_flt_load_dt2
+mf_flt_load_dt2:
+    and.l   %d1,%d0
+    move.b  %d0,0xa2(%a2)
+    clr.l   %d0
+    move.b  0xd3(%a3),%d0
+    move.l  %d0,%d1
+    subi.l  #16,%d1
+    cmpi.l  #15,%d1
+    bhi.s   1f
+    move.l  DKRT_FILTER_TAB+F_MASK,%d2
+    btst    %d1,%d2
+    bne.s   3f
+1:  move.l  %d0,%d1
+    addq.l  #1,%d1
+    andi.l  #0xff,%d1
+    moveq   #7,%d2
+    cmp.l   %d1,%d2
+    bhi.s   3f
+    clr.l   %d0
+3:  move.b  %d0,0xa3(%a2)
+    moveq   #4,%d2
+    jmp     mf_x_ldr_dt2

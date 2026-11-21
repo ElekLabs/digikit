@@ -7,7 +7,7 @@ use dkrt_sdk::*;
 
 /// DSP section, version 5: the track-table record (`bank_off` is the record's offset in the section, validated here).
 pub(crate) unsafe fn check_sections(sec: &DspSec) -> i32 {
-    if sec.version != 5 {
+    if sec.version < 5 || (sec.version > 5 && sec.bank_off == 0) {
         return OK;
     }
     let DspSec {

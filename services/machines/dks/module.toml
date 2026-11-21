@@ -1,6 +1,6 @@
 [module]
 id = "core/services/machines"
-version = "0.8.2"
+version = "0.11.1"
 name = "machines service"
 category = "core"
 role = "service"
@@ -50,6 +50,32 @@ entry = "mf_key_hook"
 [[hook]]
 name = "cf.page.hook.source_turn"
 entry = "mf_turn_hook"
+
+[[hook]]
+name = "cf.filter.hook.accessor"
+entry = "mf_flt_acc"
+
+[[hook]]
+name = "cf.filter.hook.name"
+entry = "mf_flt_name"
+
+[[hook]]
+name = "cf.filter.hook.graph"
+entry = "mf_flt_graph"
+
+[[hook]]
+name = "cf.filter.hook.list"
+entry = "mf_flt_list"
+
+[[hook]]
+name = "cf.filter.hook.loader.dt2"
+entry = "mf_flt_load_dt2"
+devices = ["dt2"]
+
+[[hook]]
+name = "cf.filter.hook.loader.dn2"
+entry = "mf_flt_load_dn2"
+devices = ["dn2"]
 
 [[hook]]
 name = "cf.machine.hook.group"
@@ -108,6 +134,18 @@ entry = "_dv_run"
 space = "dsp"
 devices = ["dn2"]
 
+[[fill]]
+slot = "filter_coef"
+entry = "_flt_coef"
+space = "dsp"
+devices = ["dt2", "dn2"]
+
+[[fill]]
+slot = "filter_proc"
+entry = "_flt_process"
+space = "dsp"
+devices = ["dt2", "dn2"]
+
 [[gen]]
 kind = "sharc-adapter"
 path = "build/gen/adapter-{dev}.inc"
@@ -151,6 +189,14 @@ mf_ret_tm2 = "hook.cf.machine.hook.param_code.map.ret"
 mf_x_ft = "hook.cf.machine.hook.frametype.exit"
 mf_x_rd = "hook.cf.machine.hook.type_reader.load.exit.1"
 mf_x_ow = "hook.cf.machine.hook.owner_type_load.exit"
+mf_ret_flt_acc = "hook.cf.filter.hook.accessor.ret"
+mf_ret_flt_name = "hook.cf.filter.hook.name.ret"
+mf_x_graph_stock = "hook.cf.filter.hook.graph.exit.1"
+mf_x_graph_done = "hook.cf.filter.hook.graph.exit.2"
+mf_stock_flt_list = "cf.filter.fn.list_vector"
+mf_x_flt_list = "hook.cf.filter.hook.list.exit"
+mf_x_ldr_dt2 = "hook.cf.filter.hook.loader.dt2.exit.1"
+mf_x_ldr_dn2 = "hook.cf.filter.hook.loader.dn2.exit.1"
 mf_rc0 = "cf.machine.site.type_reader.call.0"
 mf_rc1 = "cf.machine.site.type_reader.call.1"
 mf_rc2 = "cf.machine.site.type_reader.call.2"

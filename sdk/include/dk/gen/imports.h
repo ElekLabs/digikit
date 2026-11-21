@@ -20,6 +20,7 @@ typedef struct dk_dsp_link dk_dsp_link;
 typedef struct dk_sdhc_large dk_sdhc_large;
 typedef struct dk_machine dk_machine;
 typedef struct dk_fx dk_fx;
+typedef struct dk_filter dk_filter;
 typedef struct dk_page dk_page;
 typedef struct dk_param dk_param;
 typedef struct dk_page_frame dk_page_frame;
@@ -261,10 +262,16 @@ int32_t dk_param_set(uint32_t track, uint32_t word, int32_t raw);
 /* Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[machine]]` list of module.toml, which is the row of its key in the keys table. `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad index) a placeholder, and the error is reported when `init` returns. Context: init. Since runtime 0.7.0. */
 dk_machine *dk_module_ctx_add_machine(dk_module_ctx *ctx, uint32_t index, const char *name, const char *short_name);
 
+/* Declare a filter of this module: `index` is its DK_FILTER_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[filter]]` list of module.toml, which is the row of its key in the keys table. `name` is the long name (the chooser row), `short_name` the short one. The runtime numbers the filter 16 to 31 (sticky, like a machine type) and keeps a stock filter (Multi-Mode) as the sound's fallback. A module has at most 8 filters and the device 16 in all. Returns the filter handle; on an error a placeholder, and the error is reported when `init` returns. Context: init. Since runtime 0.11.1. */
+dk_filter *dk_module_ctx_add_filter(dk_module_ctx *ctx, uint32_t index, const char *name, const char *short_name);
+
+/* The page of the filter: the FLTR page of the stock filter, whose knob 1 is always the stock cutoff (FREQ); the module owns knobs 2 and 3 and adds them with `dk_page_add_param` (at most two; a third is refused with DK_E_PAGE_FULL). A filter has one page; a second call is refused with DK_E_PAGE_FULL. Passing a machine handle is refused with DK_E_FORMAT. Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.11.1. */
+dk_page *dk_filter_add_page(dk_filter *f);
+
 /* Add a page to the machine, after the pages already added: `name` is its title, `short_name` its tab label on a device that keeps knobs in page rows. Returns the page handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
 dk_page *dk_machine_add_page(dk_machine *m, const char *name, const char *short_name);
 
-/* Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
+/* Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. On a filter page (`dk_filter_add_page`) the parameter takes knob 2, then knob 3; a third is refused with DK_E_PAGE_FULL. Returns the parameter handle (a placeholder on an error). Context: init. Since runtime 0.7.0. */
 dk_param *dk_page_add_param(dk_page *p, const char *name, const char *short_name, uint32_t def);
 
 /* Set the range of a machine parameter (default 0 to 127). Context: init. Since runtime 0.7.0. */
@@ -279,7 +286,7 @@ void dk_param_latched(dk_param *prm);
 /* Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page. Context: init. Since runtime 0.7.0. */
 void dk_param_on_click(dk_param *prm, dk_param_click_fn *fn, void *arg);
 
-/* Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. Context: init. Since runtime 0.7.0. */
+/* Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. On a filter page, register the response graph with a draw callback, flags 0, and NULL for `event` and `arg`. Context: init. Since runtime 0.7.0. */
 void dk_page_canvas(dk_page *p, uint32_t flags, dk_page_draw_fn *draw, dk_page_event_fn *event, void *arg);
 
 /* On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7). Context: init. Since runtime 0.7.0. */

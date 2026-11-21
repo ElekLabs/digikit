@@ -1,5 +1,5 @@
 //! The `machines` service as a service file (`services/machines.dks`): the crate `dkrt-svc-machines` over the `dkc_*` imports, the hooks of the machine framework (`hooks.rs`),
-//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`), the two builder calls that take a callback (`builder.rs`), the exports that only the runtime calls (`rt.rs`) and the list of all exports (`gen_exports.rs`, written by `patchkit gen`); the image table `machines_info` is bound by `image::setup`
+//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`), the two builder calls that take a callback (`builder.rs`), the exports that only the runtime calls (`rt.rs`) and the list of all exports (`gen_exports.rs`, written by `patchkit gen`); `fw::setup` binds the image table `machines_info` and reads the stock filter row
 //! (docs/plans/runtime-and-services.md section 13.2, R12-6).
 // a host build (the assembly test of the runtime) has std; the file is `no_std` on the ColdFire
 #![cfg_attr(target_arch = "m68k", no_std)]
@@ -21,7 +21,7 @@ dkrt_svc_rt::service!(
     Machines,
     "machines",
     &KINDS_MACHINES,
-    setup = image::setup::<dkrt_svc_rt::ImportCore>,
+    setup = fw::setup::<dkrt_svc_rt::ImportCore>,
     hooks = [
         ("cf.machine.hook.clone.5", hooks::mf_clone5, dt2),
         ("cf.machine.hook.param_code.args", hooks::mf_typearg, dt2),
@@ -32,6 +32,12 @@ dkrt_svc_rt::service!(
         ("cf.machine.hook.param_code.map", hooks::mf_typemap2, dn2),
         ("cf.machine.hook.type_reader.load", hooks::mf_reader, dn2),
         ("cf.machine.hook.owner_type_load", hooks::mf_owner, dn2),
+        ("cf.filter.hook.accessor", hooks::mf_flt_acc),
+        ("cf.filter.hook.name", hooks::mf_flt_name),
+        ("cf.filter.hook.graph", hooks::mf_flt_graph),
+        ("cf.filter.hook.list", hooks::mf_flt_list),
+        ("cf.filter.hook.loader.dt2", hooks::mf_flt_load_dt2, dt2),
+        ("cf.filter.hook.loader.dn2", hooks::mf_flt_load_dn2, dn2),
         ("cf.page.hook.source_draw", hooks::mf_draw_hook),
         ("cf.page.hook.source_code", hooks::mf_code_hook),
         ("cf.page.hook.source_key", hooks::mf_key_hook),

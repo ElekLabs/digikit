@@ -1727,3 +1727,5 @@ _dv_clrstep:
     R0 = 7; \
     R2 = MIN(R2, R0);
 #include "dk_span.inc"
+
+#include "filter-callbacks.inc"

@@ -1,32 +1,63 @@
-// The status bar warning for a build without a valid PGO profile (apps/desktop/ui/src/pgo-warning.ts).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { pgoWarning } from '../src/pgo-warning.ts';
+import { pgoWarning, type BuildInfo } from '../src/pgo-warning.ts';
 
-test('no warning when PGO is active or the state is unknown', () => {
-  assert.equal(pgoWarning(undefined), undefined);
-  assert.equal(pgoWarning({ pgo: null }), undefined);
-  assert.equal(pgoWarning({}), undefined);
-  assert.equal(pgoWarning({ pgo: 'ok', pgo_detail: '' }), undefined);
-  assert.equal(pgoWarning({ pgo: 'something-new' }), undefined);
+test('the loaded firmware selects the DSP core warning independently of host PGO', () => {
+  const info: BuildInfo = { pgo: 'ok', dsp_pgo: { 'unit-a': 'plain', 'unit-b': 'ok' } };
+
+  assert.equal(pgoWarning(info, undefined), undefined);
+  const warning = pgoWarning(info, 'unit-a');
+  assert.equal(warning?.label, 'no DSP PGO');
+  assert.deepEqual(warning?.title.split('\n'), [
+    'The DSP core for this firmware was built without a valid PGO profile.',
+    'Run mise run perf:pgo:unit-a and relaunch.',
+  ]);
+  assert.equal(pgoWarning(info, 'unit-b'), undefined);
+  assert.equal(pgoWarning(info, 'unit-a', false), undefined);
 });
 
-test('a stale profile warns with the reason and the fix', () => {
-  const w = pgoWarning({ pgo: 'stale', pgo_detail: 'changed: sources' });
-  assert.equal(w?.label, 'no PGO');
-  assert.deepEqual(w?.title.split('\n'), [
-    'Built without a valid PGO profile: DSP runs about 30% slower.',
+test('a plain host appears as detail only when the selected core also needs a profile', () => {
+  const info: BuildInfo = { pgo: 'missing', dsp_pgo: { 'unit-a': 'ok', 'unit-b': 'plain' } };
+
+  assert.equal(pgoWarning(info, 'unit-a'), undefined);
+  const warning = pgoWarning(info, 'unit-b');
+  assert.equal(warning?.label, 'no DSP PGO');
+  assert.match(warning?.title ?? '', /The emulator host was built without a valid PGO profile\./);
+  assert.match(warning?.title ?? '', /mise run perf:pgo:unit-b/);
+});
+
+test('external, unavailable and unreported cores stay quiet', () => {
+  const info: BuildInfo = { pgo: 'stale', dsp_pgo: { 'unit-a': 'external', 'unit-b': 'unavailable' } };
+
+  assert.equal(pgoWarning(info, 'unit-a'), undefined);
+  assert.equal(pgoWarning(info, 'unit-b'), undefined);
+  assert.equal(pgoWarning(info, 'other'), undefined);
+});
+
+test('explicitly opting out stays quiet', () => {
+  const dsp_pgo = { 'unit-a': 'plain' } as const;
+
+  assert.equal(pgoWarning({ pgo: 'off', dsp_pgo }, 'unit-a'), undefined);
+  assert.equal(pgoWarning({ pgo: 'skipped', dsp_pgo }, 'unit-a'), undefined);
+});
+
+test('old build info warns about a known host failure only once firmware is loaded', () => {
+  const info = { pgo: 'mismatch', pgo_detail: 'changed: sources' };
+
+  assert.equal(pgoWarning(info, undefined), undefined);
+  const warning = pgoWarning(info, 'unit-a');
+  assert.equal(warning?.label, 'no host PGO');
+  assert.deepEqual(warning?.title.split('\n'), [
+    'The host PGO profile does not match this build.',
     'changed: sources.',
-    'Fix: mise run perf:pgo:both, then relaunch.',
+    'Run mise run perf:pgo:both and relaunch.',
   ]);
 });
 
-test('an empty reason leaves out the middle line', () => {
-  const w = pgoWarning({ pgo: 'missing', pgo_detail: '' });
-  assert.equal(w?.title.split('\n').length, 2);
-});
-
-test('a mismatch uses its own first sentence', () => {
-  const w = pgoWarning({ pgo: 'mismatch', pgo_detail: 'profile does not match this build' });
-  assert.equal(w?.title.split('\n')[0], 'This PGO profile does not match the build: DSP runs about 30% slower.');
+test('old build info stays quiet when the host state is healthy or unknown', () => {
+  assert.equal(pgoWarning(undefined, 'unit-a'), undefined);
+  assert.equal(pgoWarning({ pgo: null }, 'unit-a'), undefined);
+  assert.equal(pgoWarning({}, 'unit-a'), undefined);
+  assert.equal(pgoWarning({ pgo: 'ok' }, 'unit-a'), undefined);
+  assert.equal(pgoWarning({ pgo: 'something-new' }, 'unit-a'), undefined);
 });

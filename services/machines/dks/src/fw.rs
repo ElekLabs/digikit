@@ -3,7 +3,9 @@
 //! resolves), and the entries that use it: the page's key and turn (called by the hooks), and the exports `dk_param_get` and `dk_param_set`. A host build has no firmware, and a firmware function that is not bound (address 0, `guard.rs`):
 //! the calls are no-ops with the neutral answer.
 use core::ptr::read_volatile;
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
+use dkrt_sdk::OK;
 use dkrt_svc_machines::slots;
 use dkrt_svc_rt::ImportCore;
 
@@ -25,6 +27,15 @@ mod native {
     pub unsafe fn view_track(track_ref: *const u8) -> u32 {
         call_if_bound(dkfw::page::view_track as usize, 0, || dkfw::page::view_track(track_ref))
     }
+    pub unsafe fn filter_row(index: u32) -> u32 {
+        call_if_bound(dkfw::filter::accessor as usize, 0, || dkfw::filter::accessor(index) as usize as u32)
+    }
+    pub unsafe fn alloc(size: u32) -> u32 {
+        call_if_bound(dkfw::mem::new as usize, 0, || dkfw::mem::new(size) as usize as u32)
+    }
+    pub unsafe fn free(p: u32) {
+        call_if_bound(dkfw::mem::free as usize, (), || dkfw::mem::free(p as usize as *mut u8))
+    }
 }
 #[cfg(not(target_arch = "m68k"))]
 mod native {
@@ -35,6 +46,13 @@ mod native {
     pub unsafe fn view_track(_: *const u8) -> u32 {
         0
     }
+    pub unsafe fn filter_row(_: u32) -> u32 {
+        0
+    }
+    pub unsafe fn alloc(_: u32) -> u32 {
+        0
+    }
+    pub unsafe fn free(_: u32) {}
 }
 
 /// Vtable slots of the page (`view`) and of its parameter object.
@@ -110,6 +128,21 @@ pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
     slots::page_turn(&ImportCore, view, ev)
 }
 
+/// Bind the machine image table, then read the stock Multi-Mode descriptor row that module filters copy.
+pub unsafe fn setup<C: CoreApi>(core: &C) -> i32 {
+    let status = crate::image::setup(core);
+    if status == OK {
+        dkrt_svc_machines::filter::set_stock(native::filter_row(0));
+    }
+    status
+}
+
+/// The routine of the list hook: the order vector the stock function filled gets the loaded module filters appended (the hook calls it with the vector object).
+#[no_mangle]
+pub unsafe extern "C" fn dks_filter_list(vec: u32) {
+    dkrt_svc_machines::filter::extend_list(&ImportCore, vec, &mut |n| native::alloc(n), &mut |p| native::free(p));
+}
+
 /// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
@@ -120,4 +153,25 @@ pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_set(track: u32, word: u32, raw: i32) -> i32 {
     slots::param_set(&ImportCore, &tab(), track, word, raw)
+}
+
+/// Draw the loaded filter's response into the stock FLTR bitmap before the shared page tail.
+#[no_mangle]
+pub unsafe extern "C" fn dks_filter_graph(view: *mut u8, bitmap: *mut u8, ty: u32) {
+    use crate::image::{w, MF_TAB};
+    use dkrt_svc_machines::filter;
+
+    if !(filter::FIRST..=filter::LAST).contains(&ty) {
+        return;
+    }
+    let index = (ty - filter::FIRST) as usize;
+    let row = &filter::rows()[index];
+    let adapter = MF_TAB[w::N_FILTER_GRAPH];
+    if row.owner == 0 || row.draw == 0 || adapter == 0 {
+        return;
+    }
+    let draw: unsafe extern "C" fn(*mut u8, *mut u8, u32, *const u32, u32) =
+        core::mem::transmute(adapter as usize);
+    let codes = &filter::tab().rows[index][filter::KNOB_WORD..];
+    draw(view, bitmap, row.draw, codes.as_ptr(), 1 + u32::from(row.knobs));
 }

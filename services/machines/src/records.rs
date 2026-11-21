@@ -13,11 +13,12 @@ use dkrt_abi::service::{
     Problem, RowWrite, Service, SettleCtx, TableFault,
 };
 use dkrt_sdk::records::{
-    KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
-    LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
+    KIND_ACTION, KIND_FILTER, KIND_FILTER_V2, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2,
+    KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_FILTER_V2, LEN_MACHINE, LEN_NATIVE_PAGE,
+    LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
+use dkrt_svc_params::dynreg::{w, RegState, FILTER_VIEW_VERSION, MACH_TEXT};
 
 /// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
 /// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
@@ -145,22 +146,34 @@ impl<C: CoreApi> Service<C> for Machines {
         d.kind(KIND_ACTION, LEN_ACTION);
         d.kind(KIND_NATIVE_PAGE, LEN_NATIVE_PAGE);
         d.kind(KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2);
+        d.kind(KIND_FILTER, LEN_FILTER);
+        d.kind(KIND_FILTER_V2, LEN_FILTER_V2);
     }
 
     unsafe fn settle(core: &C, s: &SettleCtx) {
-        // a new plan of the numbers: the parking state of the earlier one is not carried over
-        PARK_TRIES = 0;
-        BUSY_PASSES = 0;
-        LOGGED = 0;
-        crate::assign::plan(core, s)
+        if !s.is_preview() && !s.is_restore() && !s.is_commit() {
+            // A boot starts a new parking cycle. Live assignment keeps the existing cycle.
+            PARK_TRIES = 0;
+            BUSY_PASSES = 0;
+            LOGGED = 0;
+        }
+        crate::assign::plan(core, s);
+        crate::filter::plan(core, s)
     }
 
     unsafe fn check(core: &C, step: u32, c: &CheckCtx) -> i32 {
         use check_step as st;
+        if step == st::RECORDS {
+            // the filter records need no firmware row, so they are checked before the registry is looked at
+            let r = crate::filter::check(core, c.reg, c.image_size);
+            if r != OK {
+                return r;
+            }
+        }
         let inf = dkrt_svc_params::dynreg(core);
         if inf.is_null() || !fits(inf) {
             // the machine, parameter, page, action and native page records need this registry: a section without them does not
-            let none = counts_of(c.reg) == (0, 0, 0, 0, 0);
+            let none = counts_of(c.reg) == (0, 0, 0, 0, 0) && crate::filter::knob_count(c.reg) == 0;
             return if step == st::COUNTS && !none {
                 E_NO_REGISTRY
             } else {
@@ -192,9 +205,10 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn apply(core: &C, c: &ApplyCtx) -> i32 {
+        crate::filter::apply(core, c.owner, c.reg, c.base);
         let inf = dkrt_svc_params::dynreg(core);
         if inf.is_null() {
-            return if counts_of(c.reg) == (0, 0, 0, 0, 0) {
+            return if counts_of(c.reg) == (0, 0, 0, 0, 0) && crate::filter::knob_count(c.reg) == 0 {
                 OK
             } else {
                 E_NO_REGISTRY
@@ -233,12 +247,13 @@ impl<C: CoreApi> Service<C> for Machines {
         }
         MISSING_ROWS = 0;
         PARK_TRIES = 0;
-        // the machine selection view caches the list: build it again, after a failed load too (the cached list would keep an entry the rows no longer have)
-        refresh_view(core);
+        // Rebuild both cached lists, including after a failed load that left rows absent.
+        refresh_view(core, inf, true);
     }
 
     unsafe fn remove(core: &C, owner: u8) {
         crate::build::end();
+        crate::filter::remove(owner);
         remove(core, owner)
     }
 
@@ -252,6 +267,7 @@ impl<C: CoreApi> Service<C> for Machines {
 
     unsafe fn tick(core: &C, phase: u32) {
         if phase == tick_phase::LAST {
+            crate::filter::refresh(core);
             slots::tick(core);
             park_absent(core);
         }
@@ -670,7 +686,7 @@ unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     return capacity::registry_rows(
         ng,
         capacity::free_rows(&s.page_owner, iw(inf, w::PG_DYN_N)),
-        np,
+        np + crate::filter::knob_count(reg),
         capacity::free_rows(&s.param_owner, iw(inf, w::P_DYN_N)),
     );
 }
@@ -909,11 +925,9 @@ unsafe fn apply_record<C: CoreApi>(core: &C, kind: u32, b: *const u8, c: &ApplyC
     rc
 }
 
-/// The firmware builds the machine selection view's item list once, from the list getter, and keeps it. After the rows changed, build it again (the builder clears
-/// its items first); nothing to do while the view does not exist yet, or on an image without the hook that remembers it (the variable and the builder are words 48 and 49
-/// of `dynreg_info`).
-unsafe fn refresh_view<C: CoreApi>(core: &C) {
-    let inf = dkrt_svc_params::dynreg(core);
+/// Rebuild the cached lists on the view remembered by the stock machine-list builder's hook.
+/// Parking changes machine rows only. A reload also rebuilds the filter list when the image has its builder.
+unsafe fn refresh_view<C: CoreApi>(core: &C, inf: *const u32, include_filters: bool) {
     if inf.is_null() {
         return;
     }
@@ -922,8 +936,16 @@ unsafe fn refresh_view<C: CoreApi>(core: &C) {
         return;
     }
     let view = core.rd(var);
-    if view != 0 {
-        core.call(build, &[view as usize]);
+    if view == 0 {
+        return;
+    }
+    let args = [view as usize];
+    core.call(build, &args);
+    if include_filters && iw(inf, w::VERSION) >= FILTER_VIEW_VERSION {
+        let build_filter = iw(inf, w::FILTER_VIEW_BUILD);
+        if build_filter != 0 {
+            core.call(build_filter, &args);
+        }
     }
 }
 
@@ -1051,7 +1073,7 @@ unsafe fn park_absent<C: CoreApi>(core: &C) {
         }
     }
     if changed {
-        refresh_view(core);
+        refresh_view(core, inf, false);
     }
 }
 

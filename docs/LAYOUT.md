@@ -39,7 +39,7 @@ This file says who owns which part of the repository and which moves are planned
 | `runtime/apps/*` | `app` | Menus and screens on the platform API (digikit-menu) |
 | `image-modules/points/*` | `adapter` | Firmware plug-in points, including machines, FX, LFO shapes and the sample pool |
 | `image-modules/{adapters,fixes,proofs}/*` | `adapter` | Other patched-in code, including USB and storage adapters, fixes and test proofs |
-| `modules/<kind>/<author>/<name>` | none | Content modules. The kind folders are `machine`, `fx`, `tool` and `lfo-shape`. |
+| `modules/<kind>/<author>/<name>` | none | Content modules. The kind folders are `machine`, `filter`, `fx`, `tool` and `lfo-shape`. |
 
 Python tools live in `tools/<owner>/`, one package per owner above. The repository root is the only import root: run a tool with `uv run python -m tools.<owner>.<module>` and import it with `from tools.<owner> import <module>`. `tools/coldfire/ghidra/` and `tools/sharc_dev/sharcspec/ghidra/` hold Ghidra scripts and language files, not Python packages.
 

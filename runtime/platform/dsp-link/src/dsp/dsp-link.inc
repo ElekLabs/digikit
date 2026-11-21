@@ -1,3 +1,4 @@
+#include "dk_filter.inc"
 // core/dsp-link: the DSP end of the code channel (docs/findings/31-dsp-link.md; plan: docs/plans/digikit-runtime.md, Phase 5).
 //
 // The ColdFire writes a chunk into the tail of its per-block frame (the data halves of the last frame entries, which no
@@ -199,11 +200,20 @@ _dl_win1:
     R3 = 1;
     COMP(R0, R3);
     IF NE JUMP _dl_win2;
+    R3 = DK_FILTER_LINK_WORD;
+    COMP(R6, R3);
+    IF GE JUMP _dl_win1_filters;
     R3 = _dl_vcount;                      // window 1: the voice rows (24 words each, the terminator row excluded)
     R4 = LSHIFT R3 BY 4;
     R3 = LSHIFT R3 BY 3;
     R3 = R3 + R4;                         // count * 24
     R4 = _dl_vrows;
+    JUMP _dl_wdone;
+_dl_win1_filters:
+    R6 = R6 - R3;                         // window-relative word -> filter-table word
+    R3 = DK_FILTER_TABLE_BYTES;
+    R3 = LSHIFT R3 BY -2;
+    R4 = _dl_filter_rows;
     JUMP _dl_wdone;
 _dl_win2:
     R3 = 2;
@@ -584,6 +594,7 @@ _dl_nodiag:
 .PKDATA _dl_stctl, 12;
 // The slot block (window 0 words 0 to 15): the hook sites of the image read their dispatch entry here (sdk/dsp/contract/dk_stub.inc). Zero at boot: every site takes the stock path.
 .PKDATA _dl_slots, DK_SLOT_BYTES;
+.PKDATA _dl_filter_rows, DK_FILTER_TABLE_BYTES;
 // The module step (fault table word 25): the static word that core/dyndsp exports as `_dk_step`.
 .VAR _dk_step = 0;
 // The previous block's record address (word 30).

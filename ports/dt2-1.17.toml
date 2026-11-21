@@ -149,6 +149,16 @@ mark = "D"
 rule = "fw/filter:cf_func"
 
 [[anchor]]
+name = "cf.filter.fn.view.build"
+cpu = "cf"
+kind = "code"
+addr = 0x400610e8
+len = 8
+sha256 = "2fb21a0a1faeed39702fcb6a686fd6d86e8c9b0eb68d233271e236186b0235fe"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
 name = "cf.filter.site.graph_switch"
 cpu = "cf"
 kind = "code"
@@ -165,6 +175,16 @@ kind = "code"
 addr = 0x40052cec
 len = 6
 sha256 = "f7d3f2bf101b5390d92ea95126a6673424150895520422d0bb9d038d4c87b7e7"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
+name = "cf.filter.site.list_call"
+cpu = "cf"
+kind = "code"
+addr = 0x4006116e
+len = 6
+sha256 = "cddf3cf40bdb4d7ae6a99847fa35530c635439f9f912eb5d2eafaf0b9790ac38"
 mark = "D"
 rule = "fw/filter:cf_func"
 
@@ -195,6 +215,16 @@ kind = "code"
 addr = 0x400db484
 len = 4
 sha256 = "043e98cede6ce9d266d2de95c405d980fcb12a4622379327eada8b5e49815426"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
+name = "cf.filter.site.loader_filter"
+cpu = "cf"
+kind = "code"
+addr = 0x400db484
+len = 34
+sha256 = "177ccec16ee63894e72854ee38cacd6207a2b8d56a9a504045111805063151d3"
 mark = "D"
 rule = "fw/filter:cf_func"
 
@@ -3957,6 +3987,28 @@ mark = "D"
 rule = "fw/dsp/filter:sharc_func"
 
 [[anchor]]
+name = "dsp.filter.site.coef_lookup.next"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838cdc6
+pm = 0x1c66e3
+len = 6
+sha256 = "02a76976b74c05b3fe37777847ea2cd262a983f2ee03ddc413c19566d03582ec"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
+name = "dsp.filter.site.coef_lookup.skip"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838d3da
+pm = 0x1c69ed
+len = 6
+sha256 = "4ac563a5d82b2221f7a00de61002a42f3ba52891890ce42ef38be25e5a1661fa"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
 name = "dsp.filter.site.convert"
 cpu = "sharc"
 kind = "code"
@@ -3968,6 +4020,17 @@ mark = "D"
 rule = "fw/dsp/filter:sharc_func"
 
 [[anchor]]
+name = "dsp.filter.site.convert.next"
+cpu = "sharc"
+kind = "code"
+addr = 0x28384dca
+pm = 0x1c26e5
+len = 6
+sha256 = "31d8dd5e791fb664d454bfe38ad5c5fd587ba4f4168e569e21cdc0ae24c17a45"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
 name = "dsp.filter.site.proc_range"
 cpu = "sharc"
 kind = "code"
@@ -3975,6 +4038,28 @@ addr = 0x2838d826
 pm = 0x1c6c13
 len = 6
 sha256 = "2321e702bdf2ccdca5e0ca716efa1417ceda63e6e956bb2f2ef6eee3866e39af"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
+name = "dsp.filter.site.proc_range.next"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838d82c
+pm = 0x1c6c16
+len = 6
+sha256 = "232635153091cb8ba330ee7a5885e4dc85f8be2fc1a7f993a538c6e484c9b47b"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
+name = "dsp.filter.site.proc_range.skip"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838dd6e
+pm = 0x1c6eb7
+len = 6
+sha256 = "19e897217621116a53d02af9fcc40d57217442580bb311d713d506395a742079"
 mark = "D"
 rule = "fw/dsp/filter:sharc_func"
 
@@ -4338,6 +4423,51 @@ clobbers = ["ccr"]
 len = 8
 kind = "tail"
 check = "3d25d06bf11f3a7b"
+
+[[hook]]
+name = "cf.filter.hook.accessor"
+site = "cf.filter.fn.accessor"
+mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
+len = 6
+kind = "tail"
+check = "ee3af96091c4b93c"
+
+[[hook]]
+name = "cf.filter.hook.graph"
+site = "cf.filter.site.graph_switch"
+mode = "replace"
+clobbers = ["d0", "ccr"]
+len = 8
+kind = "raw"
+check = "64e7d850317c6f86"
+
+[[hook]]
+name = "cf.filter.hook.list"
+site = "cf.filter.site.list_call"
+mode = "retarget"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 6
+kind = "raw"
+check = "cddf3cf40bdb4d7a"
+
+[[hook]]
+name = "cf.filter.hook.loader.dt2"
+site = "cf.filter.site.loader_filter"
+mode = "replace"
+clobbers = ["d0", "d1", "d2", "ccr"]
+len = 6
+kind = "raw"
+check = "d50d8122e82de586"
+
+[[hook]]
+name = "cf.filter.hook.name"
+site = "cf.filter.fn.name"
+mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
+len = 6
+kind = "tail"
+check = "ee3af96091c4b93c"
 
 [[hook]]
 name = "cf.lfo.hook.graph_vec"

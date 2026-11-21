@@ -1,6 +1,7 @@
 //! What the loader needs from outside, as two traits (docs/plans/runtime-and-services.md section 13.2, R12-3a). The real types call the store, the arena, the
 //! module entry and the registry; the fakes of the host tests log the calls. Each trait has one real implementation, so there is no `dyn`.
 
+use super::selection_keys::{RealSelection, SelectionStorage};
 use crate::entry::Ctx;
 use dkrt_abi::service::{ModuleCommitCtx, ServiceRow};
 
@@ -20,6 +21,8 @@ pub struct Block {
 
 /// Where a module's bytes come from and where they go: the file store, the runtime's import table, the arena and the calls into module code.
 pub trait Images {
+    type Selection: SelectionStorage;
+
     /// Read the file at the NUL-terminated store `path` into the staging buffer. Errors are the loader's result codes (`E_NOT_FOUND`, `E_SHA`, ...).
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32>;
     /// A block of at least `n` bytes; `None` when none fits.
@@ -59,6 +62,8 @@ pub trait Registry {
 pub struct RealImages;
 
 impl Images for RealImages {
+    type Selection = RealSelection;
+
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         let found = crate::store::find(path)?;
         let r = crate::store::load_to_stage(&found);

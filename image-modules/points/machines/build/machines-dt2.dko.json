@@ -281,6 +281,13 @@
    "section": ".rodata",
    "symbol": "mf_native_turn",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 120,
+   "section": ".rodata",
+   "symbol": "mf_native_filter_graph",
+   "type": "cf.32"
   }
  ],
  "sections": [
@@ -300,13 +307,13 @@
   },
   {
    "align": 4,
-   "hex": "000000080000000c0000001000000014ffffffffffffffff000000180000001c00000020000000244d41434800000003000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "000000080000000c0000001000000014ffffffffffffffff000000180000001c00000020000000244d4143480000000400000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 120
+   "size": 124
   }
  ],
- "source_sha256": "575725750558efbec50ffb313337853a9a9671ef38457b44272805608f2c9005",
+ "source_sha256": "c59b8a4427ba45566747ee0cba274e3cd641fa6999a988642e2beae875d1f460",
  "symbols": [
   {
    "global": false,
@@ -430,6 +437,12 @@
   },
   {
    "global": true,
+   "name": "mf_native_filter_graph",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "mf_native_overlay",
    "section": null,
    "value": 0
@@ -512,7 +525,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "111",
-  "isa_check": "a9ca68aa55c674ec4d20a13af99d8a6fea67dc56276e50a67cb7a05dc737a5b2",
+  "isa_check": "1b01a5627cc1aae431714e7d0cfa0dfd2749b9b7e5a06d34a7218638be1f7ba0",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

@@ -175,7 +175,8 @@ int32_t mf_native_code(uint8_t *view, uint32_t encoder)
 
 static void canvas_text(int32_t x, int32_t y, const char *text)
 {
-    if (!drawing || x < 0 || x >= (int32_t)drawing->width || y < 0 || y >= HEIGHT || !text)
+    if (!drawing || x < 0 || x >= (int32_t)drawing->width || y < 0 ||
+        y >= (int32_t)drawing->height || !text)
         return;
     char bounded[33];
     unsigned i = 0;
@@ -184,8 +185,8 @@ static void canvas_text(int32_t x, int32_t y, const char *text)
         i++;
     }
     bounded[i] = 0;
-    dk_fw_text_draw_fmt((uint8_t *)drawing, (uint8_t *)native_font_address, x, HEIGHT - 1 - y, 0,
-                        "%s", bounded);
+    dk_fw_text_draw_fmt((uint8_t *)drawing, (uint8_t *)native_font_address, x,
+                        drawing->height - 1 - y, 0, "%s", bounded);
 }
 
 static void canvas_fill(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color)
@@ -202,7 +203,8 @@ static void canvas_fill(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t 
         y0 = y1;
         y1 = t;
     }
-    if (x1 < 0 || y1 < 0 || x0 >= (int32_t)drawing->width || y0 >= HEIGHT)
+    int32_t height = (int32_t)drawing->height;
+    if (x1 < 0 || y1 < 0 || x0 >= (int32_t)drawing->width || y0 >= height)
         return;
     if (x0 < 0)
         x0 = 0;
@@ -210,12 +212,59 @@ static void canvas_fill(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t 
         y0 = 0;
     if (x1 >= (int32_t)drawing->width)
         x1 = (int32_t)drawing->width - 1;
-    if (y1 >= HEIGHT)
-        y1 = HEIGHT - 1;
+    if (y1 >= height)
+        y1 = height - 1;
     if (overlay)
-        native_page_mask_rect(overlay_mask, drawing->width, HEIGHT, x0, y0, x1, y1);
-    dk_fw_draw_fill_rect((uint8_t *)drawing, x0, HEIGHT - 1 - y1, x1, HEIGHT - 1 - y0,
+        native_page_mask_rect(overlay_mask, drawing->width, height, x0, y0, x1, y1);
+    dk_fw_draw_fill_rect((uint8_t *)drawing, x0, height - 1 - y1, x1, height - 1 - y0,
                          color ? 1 : 0);
+}
+
+void mf_native_filter_graph(uint8_t *view, uint8_t *canvas, uint32_t draw, const uint32_t *codes,
+                            uint32_t count)
+{
+    enum { GRAPH_WIDTH = 51, GRAPH_HEIGHT = 17, GRAPH_X = 21, GRAPH_Y = 7 };
+    /* The native page and graph share scratch planes in the UI task. */
+    if (drawing || !draw || !codes || !count || count > 3)
+        return;
+    uint32_t track = dk_fw_page_view_track(*(uint8_t **)(view + 0x74));
+    if (track >= 16)
+        return;
+    dk_page_frame frame;
+    frame.version = 1;
+    frame.size = sizeof(frame);
+    frame.track = track;
+    frame.canvas.width = GRAPH_WIDTH;
+    frame.canvas.height = GRAPH_HEIGHT;
+    frame.canvas.text = canvas_text;
+    frame.canvas.fill_rect = canvas_fill;
+    frame.word_count = count;
+    for (unsigned i = 0; i < 8; i++) {
+        ((volatile int32_t *)frame.params)[i] = 0;
+        ((volatile int32_t *)frame.word_values)[i] = 0;
+    }
+    uint32_t *vtable = *(uint32_t **)view;
+    int32_t (*value)(uint8_t *, uint32_t, int32_t) = (void *)vtable[0x54 / 4];
+    for (unsigned i = 0; i < count; i++)
+        frame.params[4 + i] = frame.word_values[i] = value(view, codes[i], -1);
+    frame.level = value(view, 10, -1); /* native track level code */
+
+    bitmap graph = {((bitmap *)canvas)->vptr, GRAPH_WIDTH, GRAPH_HEIGHT, 1, pixels0, pixels1};
+    /* One band per column. Plane1 is the blit write mask; exclude its padding
+     * so the blit can replace the graph without changing any surrounding pixels. */
+    for (unsigned x = 0; x < GRAPH_WIDTH; x++) {
+        pixels0[x] = 0;
+        pixels1[x] = UINT32_MAX << (32 - GRAPH_HEIGHT);
+    }
+    uint32_t saved_overlay = overlay;
+    drawing = &graph;
+    overlay = 0;
+    ((void (*)(void *, const dk_page_frame *))draw)(0, &frame);
+    drawing = 0;
+    overlay = saved_overlay;
+    /* These are firmware bitmap coordinates (Y grows up). The SDK's local
+     * Y grows down and is inverted by canvas_text and canvas_fill. */
+    dk_fw_draw_blit(canvas, (uint8_t *)&graph, GRAPH_X, GRAPH_Y, 0);
 }
 
 static void paint(uint8_t *view, uint8_t *canvas, native_page *page, uint32_t track)

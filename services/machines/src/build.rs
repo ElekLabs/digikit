@@ -17,8 +17,9 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::iw;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::records::{
-    KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
-    LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
+    KIND_ACTION, KIND_FILTER, KIND_FILTER_V2, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2,
+    KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_FILTER_V2, LEN_MACHINE, LEN_NATIVE_PAGE,
+    LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
 use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
@@ -31,6 +32,9 @@ pub const MAX_PA: usize = dkneeds::MAX_RECORDS as usize;
 const TEXT: usize = 24;
 const KNOBS: usize = limits::PAGE_KNOBS;
 const KNOB_PARAM: u32 = 0x8000_0000;
+/// The `owner` of a page of filter `f` is `FILTER_OWNER + f`; a machine's pages have its index (below `MAX_M`), so no machine loop meets a filter page.
+const FILTER_OWNER: u8 = 0x80;
+const MAX_F: usize = crate::filter::PER_MODULE;
 const POS_END: u32 = 255;
 
 /// The device facts of the lowering (a copy of the words of `dynreg_info` from 65; see core/dynreg).
@@ -93,6 +97,16 @@ pub struct CMachine {
     pub short: [u8; TEXT],
 }
 #[derive(Clone, Copy)]
+pub struct CFilter {
+    /// the filter's index in the module (`DK_FILTER_ID_<ID>`): the position of its key in the keys table
+    pub index: u32,
+    /// the key, read from the keys table at the commit
+    pub key: u32,
+    pub name: [u8; TEXT],
+    pub short: [u8; TEXT],
+    pub has_page: bool,
+}
+#[derive(Clone, Copy)]
 pub struct CPage {
     pub owner: u8,
     pub name: [u8; TEXT],
@@ -127,6 +141,13 @@ const M0: CMachine = CMachine {
     index: 0,
     name: [0; TEXT],
     short: [0; TEXT],
+};
+const F0: CFilter = CFilter {
+    index: 0,
+    key: 0,
+    name: [0; TEXT],
+    short: [0; TEXT],
+    has_page: false,
 };
 const G0: CPage = CPage {
     owner: 0,
@@ -163,6 +184,8 @@ pub struct Build {
     pub np: usize,
     pub params: [CParam; MAX_PA],
     pub nparam: usize,
+    pub filters: [CFilter; MAX_F],
+    pub nf: usize,
     records: usize,
 }
 
@@ -176,13 +199,15 @@ impl Build {
             np: 0,
             params: [P0; MAX_PA],
             nparam: 0,
+            filters: [F0; MAX_F],
+            nf: 0,
             records: 0,
         }
     }
 
     /// Nothing was declared.
     pub fn is_empty(&self) -> bool {
-        self.nm + self.np + self.nparam == 0
+        self.nm + self.np + self.nparam + self.nf == 0
     }
 
     /// The records of the collection so far (machines, pages, parameters, click actions).
@@ -218,10 +243,66 @@ impl Build {
         &mut self.machines[i] as *mut CMachine as *mut u8
     }
 
+    /// `dk_module_ctx_add_filter`: a filter of the module (a bounded array of its own: its handle is an element of it, so a machine handle is not one).
+    pub fn add_filter(&mut self, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
+        if self.nf >= MAX_F || !self.room() {
+            self.fail(E_DECL_FULL);
+            return placeholder();
+        }
+        let i = self.nf;
+        let mut f = F0;
+        f.index = index;
+        let mut e = 0;
+        unsafe {
+            put_text(&mut f.name, name, &mut e);
+            put_text(&mut f.short, short, &mut e);
+        }
+        self.fail(e);
+        self.filters[i] = f;
+        self.nf += 1;
+        &mut self.filters[i] as *mut CFilter as *mut u8
+    }
+
+    /// `dk_filter_add_page`: the filter's one page, which takes its name; a second page is `E_PAGE_FULL`, a handle that is not a filter of this collection (a
+    /// machine's, for one) is `E_FORMAT`.
+    pub fn filter_add_page(&mut self, f: *mut u8) -> *mut u8 {
+        let owner = match find(&self.filters, f) {
+            Some(i) => i,
+            None => {
+                if gate().foreign(f) {
+                    self.fail(E_FORMAT);
+                }
+                return placeholder();
+            }
+        };
+        if self.filters[owner].has_page {
+            self.fail(E_PAGE_FULL);
+            return placeholder();
+        }
+        if self.np >= MAX_PG || !self.room() {
+            self.fail(E_DECL_FULL);
+            return placeholder();
+        }
+        let i = self.np;
+        let mut g = G0;
+        g.owner = FILTER_OWNER + owner as u8;
+        g.name = self.filters[owner].name;
+        g.short = self.filters[owner].short;
+        self.filters[owner].has_page = true;
+        self.pages[i] = g;
+        self.np += 1;
+        &mut self.pages[i] as *mut CPage as *mut u8
+    }
+
     pub fn machine_add_page(&mut self, m: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
         let owner = match find(&self.machines, m) {
             Some(i) => i,
-            None => return placeholder(),
+            None => {
+                if find(&self.filters, m).is_some() {
+                    self.fail(E_FORMAT); // a filter handle is not a machine
+                }
+                return placeholder();
+            }
         };
         if self.np >= MAX_PG || !self.room() {
             self.fail(E_DECL_FULL);
@@ -258,6 +339,12 @@ impl Build {
                 return placeholder();
             }
         };
+        // a filter page has the knobs 2 and 3 only: a third parameter is refused and not recorded
+        let of_filter = self.pages[pg].owner >= FILTER_OWNER;
+        if of_filter && self.pages[pg].nparam as usize >= crate::filter::OWN_KNOBS {
+            self.fail(E_PAGE_FULL);
+            return placeholder();
+        }
         if self.nparam >= MAX_PA || !self.room() {
             self.fail(E_DECL_FULL);
             return placeholder();
@@ -305,6 +392,10 @@ impl Build {
     pub fn param_on_click(&mut self, h: *mut u8, f: u32, arg: u32) {
         match find(&self.params, h) {
             Some(i) => {
+                if self.pages[self.params[i].page as usize].owner >= FILTER_OWNER {
+                    self.fail(E_FORMAT); // a filter has no click action
+                    return;
+                }
                 if self.params[i].click == 0 && f != 0 && !self.room() {
                     return;
                 }
@@ -321,6 +412,14 @@ impl Build {
 
     pub fn page_canvas(&mut self, p: *mut u8, flags: u32, draw: u32, event: u32, arg: u32) {
         if let Some(i) = find(&self.pages, p) {
+            if self.pages[i].owner >= FILTER_OWNER {
+                if flags != 0 || draw == 0 || event != 0 || arg != 0 {
+                    self.fail(E_FORMAT); // a filter graph takes only a draw callback
+                } else {
+                    self.pages[i].draw = draw;
+                }
+                return;
+            }
             let g = &mut self.pages[i];
             g.canvas = true;
             g.flags = flags;
@@ -332,6 +431,10 @@ impl Build {
 
     fn bind(&mut self, p: *mut u8, kind: u32, value: u32, slot: u32) {
         if let Some(i) = find(&self.pages, p) {
+            if self.pages[i].owner >= FILTER_OWNER {
+                self.fail(E_FORMAT);
+                return;
+            }
             let g = &mut self.pages[i];
             if g.nbind as usize >= 8 || slot >= 8 {
                 self.fail(E_FORMAT);
@@ -404,6 +507,26 @@ pub unsafe fn add_machine<C: CoreApi>(
 ) -> *mut u8 {
     if gate().open_for(core, ctx) {
         build().add_machine(index, name, short)
+    } else {
+        placeholder()
+    }
+}
+pub unsafe fn add_filter<C: CoreApi>(
+    core: &C,
+    ctx: *mut u8,
+    index: u32,
+    name: *const u8,
+    short: *const u8,
+) -> *mut u8 {
+    if gate().open_for(core, ctx) {
+        build().add_filter(index, name, short)
+    } else {
+        placeholder()
+    }
+}
+pub unsafe fn filter_add_page<C: CoreApi>(core: &C, f: *mut u8) -> *mut u8 {
+    if gate().open_any(core) {
+        build().filter_add_page(f)
     } else {
         placeholder()
     }
@@ -782,6 +905,79 @@ pub fn lower(
         }
         m += 1;
     }
+    // FILTER: the key, the own knobs of the filter's page (knobs 2 and 3) and the names
+    let mut f = 0;
+    while f < b.nf {
+        let fc = &b.filters[f];
+        let mut page = None;
+        let mut i = 0;
+        while i < b.np {
+            if b.pages[i].owner as usize == FILTER_OWNER as usize + f {
+                page = Some(i);
+            }
+            i += 1;
+        }
+        let nknob = match page {
+            Some(g) => b.pages[g].nparam as u32,
+            None => 0,
+        };
+        let draw = page.map_or(0, |g| b.pages[g].draw);
+        if draw == 0 {
+            o.head(KIND_FILTER, LEN_FILTER as usize);
+        } else {
+            o.head(KIND_FILTER_V2, LEN_FILTER_V2 as usize);
+        }
+        o.p32(fc.key);
+        o.p32(nknob);
+        o.text(&fc.name, TEXT);
+        o.text(&fc.short, TEXT);
+        let mut j = 0;
+        while j < crate::filter::OWN_KNOBS as u32 {
+            let mut q = None;
+            let mut seen = 0;
+            let mut i = 0;
+            while i < b.nparam {
+                if Some(b.params[i].page as usize) == page {
+                    if seen == j {
+                        q = Some(i);
+                    }
+                    seen += 1;
+                }
+                i += 1;
+            }
+            match q {
+                Some(i) => {
+                    let q = &b.params[i];
+                    let (gmin, gmax) = match glyph_range(q.glyph) {
+                        Some(r) => r,
+                        None => return Err(E_FORMAT),
+                    };
+                    if q.min < gmin * 256 || q.max > gmax * 256 {
+                        return Err(E_FORMAT); // the range does not fit the glyph
+                    }
+                    o.p32(q.glyph);
+                    o.p32(q.min as u32);
+                    o.p32(q.max as u32);
+                    o.p32(q.def as u32);
+                    o.text(&q.name, 32);
+                    o.text(&q.short, 16);
+                }
+                None => {
+                    o.p32(0);
+                    o.p32(0);
+                    o.p32(0);
+                    o.p32(0);
+                    o.text(&[], 32);
+                    o.text(&[], 16);
+                }
+            }
+            j += 1;
+        }
+        if draw != 0 {
+            o.p32(draw.wrapping_sub(base));
+        }
+        f += 1;
+    }
     Ok(())
 }
 
@@ -942,6 +1138,18 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
         return E_NO_REGISTRY;
     }
     let p = Profile::read(inf);
+    // the keys of the filters: the row of each filter's index in the keys table
+    let mut fk = [0u32; 8];
+    let nfk = core.keys_of(core.boot_index(), KIND_FILTER, &mut fk);
+    let mut f = 0;
+    while f < b.nf {
+        let ix = b.filters[f].index as usize;
+        if ix >= nfk {
+            return E_DECL_ID;
+        }
+        b.filters[f].key = fk[ix];
+        f += 1;
+    }
     let mut plan = Plan::new();
     let voice = voices(core, rec, b, c.keys);
     let sink = &mut *c.sink;

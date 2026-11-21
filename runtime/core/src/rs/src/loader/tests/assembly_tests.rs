@@ -332,6 +332,8 @@ impl Card {
 }
 
 impl Images for Card {
+    type Selection = SelectionKeys;
+
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         let key = core::slice::from_raw_parts(path, cstr_len(path, 64)).to_vec();
         match self.files.iter().find(|(n, _)| *n == key) {
@@ -487,6 +489,7 @@ struct Fixture {
 const SINE: Fixture = Fixture { leaf: "sine", nx: "test/sine" };
 const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
+const FILTER_GAIN: Fixture = Fixture { leaf: "filter-gain", nx: "test/filter-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
 /// A module that binds a key combination with `dk_shortcut_add`: a user of the shortcuts service file, no DSP section.
@@ -527,7 +530,7 @@ unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fix
     for (addr, bytes) in stock_sites(dev).values() {
         p.put_code(*addr, bytes);
     }
-    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: runtime_object() });
+    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: runtime_object() }, SelectionKeys::new());
     l.reset_plan();
     for (k, m) in modules.iter().enumerate() {
         l.capture(k, &packed(dev, m.leaf, "dkm", m.nx));
@@ -726,6 +729,127 @@ fn a_machine_loads_with_the_machines_service_file() {
     }
 }
 
+/// A filter module (E7a) loads with the machines service file: the plan accepts its FILTER key and its NEEDS (the builder calls it imports are exports of the service file),
+/// and the file's hooks of the filter (accessor, name, chooser list, loader byte) are installed at the sites its port file lists. The host cannot run the module's `init`, so
+/// the rows it makes are the contract suite's (`modules/core/services/machines/tests/contract.rs`).
+#[test]
+fn a_filter_loads_with_the_machines_service_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        unsafe {
+            fits(*dev, "emulator", &[&FILTER_GAIN], &["machines"]);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// Run the real packed filter through the DSP loader and the machines service's
+/// reservation. The host supplies the sticky selection and the acknowledged link.
+#[test]
+fn filter_gain_reserves_one_state_per_voice_and_rejects_a_bad_callback() {
+    use dkrt_abi::dsp::{I_AREA, I_AREA_BYTES, I_DEVICE, I_MAGIC, INFO_MAGIC, L2_BYTE_BASE, L2_SW_BASE};
+    use crate::handlers::exports::{filter, filter_rows};
+    let _guard = clean();
+    for dev in DEVICES {
+        let mut file = packed(dev, FILTER_GAIN.leaf, "dkm", FILTER_GAIN.nx);
+        let map = std::fs::read_to_string(repo().join(format!("dist/modules/{}/filter-gain.addrmap.json", dev.name))).unwrap();
+        let off = be(&file, dkneeds::H_DSP_OFF);
+        let len = be(&file, dkneeds::H_DSP_SIZE);
+        let reg = be(&file, dkneeds::H_REG_OFF) as usize;
+        let reg_len = be(&file, dkneeds::H_REG_SIZE) as usize;
+        let mut keys = [0; 8];
+        assert_eq!(dkrt_abi::keys::keys_of(&file[reg..reg + reg_len], dkneeds::KIND_FILTER, &mut keys), 1);
+        let core = dkrt_test_support::FakeCore::new();
+        core.boot_index.set(0);
+        core.set_keys(0, dkneeds::KIND_FILTER, &keys[..1]);
+        let mut sel = dkrt_abi::service::SettleCtx::new();
+        sel.count = 1;
+        let mut info = [0; dkrt_abi::dsp::I_IMPORTS];
+        info[I_MAGIC] = INFO_MAGIC;
+        info[I_DEVICE] = dev.profile.id;
+        info[I_AREA] = L2_BYTE_BASE + 0x1000;
+        info[I_AREA_BYTES] = 65536;
+        unsafe {
+            let _info = crate::cleanup_tests::VoiceInfoGuard::set(info.as_ptr());
+            crate::cleanup_tests::script_link(true);
+            crate::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::handlers::exports::machines_row());
+            filter::plan(&core, &sel);
+            let saved_index = crate::selection::BOOT_IDX;
+            crate::selection::BOOT_IDX = 0;
+            let mut job = dsp::Job::empty();
+            assert_eq!(dsp::check(file.as_ptr(), off, len, file.len() as u32, &mut job), OK, "{}", dev.name);
+            assert_eq!((job.nfilter, job.state_bytes), (1, 32 * 8));
+            assert_eq!(dsp::reserve(0, &job), OK, "{}", dev.name);
+            let index = (filter::resolve(&core, keys[0]) - filter::FIRST) as usize;
+            let r = filter_rows::row(index);
+            let pc = |symbol| L2_SW_BASE + (0x1000 + crate::contract_tests::symbol_offset(&map, symbol)) / 2;
+            assert_eq!((r.coef_pc, r.process_pc), (pc("_fgan_coef"), pc("_fgan_process")));
+            assert_eq!((r.stride, r.n_params), (8, 1));
+            assert_eq!(r.state, info[I_AREA] + ((job.image_size + job.bss + 7) & !7));
+            let desc = job.image.add((r.desc - info[I_AREA]) as usize);
+            assert_eq!(dkrt_abi::dsp::rd32le(desc.add(12)), 4);
+            assert_eq!(dkneeds::needs_of(&mut file.as_slice()).unwrap().dsp_area, dsp::ds().mod_len[0]);
+            let table = dkneeds::filter::contract::DK_FILTER_LINK_WORD + index as u32 * 8;
+            // A reload can reuse the same row and arena range. Publish all metadata and
+            // reset the DSP's mutable row words before the callbacks become reachable.
+            for reload in [false, true] {
+                if reload {
+                    assert_eq!(dsp::reserve(0, &job), OK, "{}", dev.name);
+                    assert_eq!(filter_rows::row(index).state, r.state);
+                }
+                let writes = [
+                    (1, r.process_pc), (2, r.state), (3, r.stride), (4, r.n_params),
+                    (5, 0), (6, 0), (7, 0), (0, r.coef_pc),
+                ];
+                for (step, (offset, value)) in writes.into_iter().enumerate() {
+                    let mut want = step as u32;
+                    let w = crate::handlers::services().dsp_row_step(0, &mut want, true).unwrap();
+                    assert_eq!((w.win, w.word, w.value), (dkrt_abi::dsp::WIN_VOICES, table + offset, value));
+                    assert_eq!((w.last, w.has_undo, w.published.is_some()), (offset == 0, offset == 0, offset == 0));
+                    if let Some(mark) = w.published {
+                        assert_eq!(w.undo, 0);
+                        *mark = 1;
+                    }
+                }
+                let mut end = writes.len() as u32;
+                assert!(crate::handlers::services().dsp_row_step(0, &mut end, true).is_none());
+                assert!(dsp::quiesce(0));
+                dsp::unreserve(0);
+                assert_eq!(filter_rows::row(index).owner, 0);
+            }
+            // Mutate copies of the actual packed section at the loader boundary.
+            let check_bad = |bad: &[u8]| dsp::check(bad.as_ptr(), off, len, bad.len() as u32, &mut dsp::Job::empty());
+            let set_word = |bad: &mut [u8], field: u32, value: u32| {
+                let at = (off + field) as usize;
+                bad[at..at + 4].copy_from_slice(&value.to_be_bytes());
+            };
+            let mut bad = file.clone();
+            set_word(&mut bad, dkneeds::DSP_H_VOICE_N, u32::MAX);
+            assert_eq!(check_bad(&bad), E_DSP_FORMAT);
+            bad.clone_from(&file);
+            set_word(&mut bad, dkneeds::DSP_H_BANK_OFF, len + 4);
+            assert_eq!(check_bad(&bad), E_DSP_FORMAT);
+            let desc_offset = r.desc - info[I_AREA];
+            let reloc = be(&file, off + dkneeds::DSP_H_RELOC_OFF);
+            assert!(reloc + dkneeds::RELOC_LEN <= be(&file, off + dkneeds::DSP_H_IMAGE_OFF));
+            bad.clone_from(&file);
+            set_word(&mut bad, dkneeds::DSP_H_RELOC_N, 1);
+            set_word(&mut bad, reloc, desc_offset);
+            assert_eq!(check_bad(&bad), E_DSP_FORMAT);
+            bad.clone_from(&file);
+            let state_word = (off + be(&file, off + dkneeds::DSP_H_IMAGE_OFF) + desc_offset + 12) as usize;
+            bad[state_word..state_word + 4].copy_from_slice(&dkneeds::MAX_STATE_BYTES.to_le_bytes());
+            assert_eq!(check_bad(&bad), E_DSP_NOSPACE);
+            let process = (off + dkneeds::filter::TABLE + 8) as usize;
+            file[process..process + 4].copy_from_slice(&job.image_size.to_be_bytes());
+            assert_eq!(dsp::check(file.as_ptr(), off, len, file.len() as u32, &mut job), E_DSP_FORMAT);
+            crate::selection::BOOT_IDX = saved_index;
+            crate::cleanup_tests::script_end();
+            clean_state();
+        }
+    }
+}
+
 #[test]
 fn an_effect_loads_with_the_fx_service_file() {
     let _g = clean();
@@ -828,7 +952,7 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
             for round in 0..2 {
                 assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
                 assert_eq!(l.unload_rec(0), OK, "{} round {round}", dev.name);
-                assert_eq!(l.reload_load(0, path.as_ptr()), OK, "{} round {round}", dev.name);
+                assert_eq!(l.reload_load(0, path.as_ptr(), &[]), OK, "{} round {round}", dev.name);
                 assert_eq!((records::module(0).used, l.sel_of(0)), (1, 0));
             }
         }
@@ -864,20 +988,20 @@ fn a_packed_module_is_unloaded_loaded_under_a_new_path_and_loaded_again_at_run_t
             };
             // the module of that name is loaded: its copy is refused by name, before anything changes
             assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), E_LOADED, "{}", dev.name);
-            assert_eq!((records::module(1).used, l.accepted[1]), (0, false));
+            assert_eq!((records::module(1).used, l.selection.accepted[1]), (0, false));
             // an unload, then the copy at a new index (its file name was not in the boot's selection)
             assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
             l.retire_index(0);
-            assert_eq!((records::module(0).used, l.accepted[0], l.sel_of(0)), (0, false, u8::MAX), "{}", dev.name);
+            assert_eq!((records::module(0).used, l.selection.accepted[0], l.sel_of(0)), (0, false, u8::MAX), "{}", dev.name);
             assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), OK, "{}", dev.name);
-            assert_eq!(l.live_load(1, copy.as_ptr()), OK, "{}", dev.name);
-            assert_eq!((records::module(0).used, l.sel_of(0), l.accepted[1]), (1, 1, true), "{}", dev.name);
+            assert_eq!(l.live_load(1, copy.as_ptr(), &[]), OK, "{}", dev.name);
+            assert_eq!((records::module(0).used, l.sel_of(0), l.selection.accepted[1]), (1, 1, true), "{}", dev.name);
             // and down again, then the first path at its index
             assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
             l.retire_index(1);
             assert_eq!(l.live_check_load(0, path.as_ptr(), &caps(&l)), OK, "{}", dev.name);
-            assert_eq!(l.live_load(0, path.as_ptr()), OK, "{}", dev.name);
-            assert_eq!((records::module(0).used, l.sel_of(0), l.accepted[0], l.accepted[1]), (1, 0, true, false), "{}", dev.name);
+            assert_eq!(l.live_load(0, path.as_ptr(), &[]), OK, "{}", dev.name);
+            assert_eq!((records::module(0).used, l.sel_of(0), l.selection.accepted[0], l.selection.accepted[1]), (1, 0, true, false), "{}", dev.name);
         }
         let _ = clean_state();
     }

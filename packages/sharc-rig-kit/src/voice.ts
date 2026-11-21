@@ -15,6 +15,7 @@ import path from 'node:path';
 import {
   CONTEXT_REGS,
   DIAG,
+  FILTER_EXTERNS,
   FRAME,
   FRIENDLY,
   OUT,
@@ -35,6 +36,7 @@ import {
   type Context,
 } from './context.ts';
 import { realRig, type RigOpener } from './ops.ts';
+import { placeData } from './place.ts';
 import { PyRandom } from './prng.ts';
 import { ROOT, type CallResult } from './rig.ts';
 import {
@@ -87,6 +89,7 @@ export const VOICE_TYPE = 8;
 export function coreExterns(): Record<string, number> {
   return {
     _fw_type_cache: TYPE_CACHE,
+    ...FILTER_EXTERNS,
     _fw_render_next: STOCK_BP,
     _fw_frame: FRAME,
     _fw_param_rec: PARAM_REC,
@@ -142,9 +145,11 @@ function build(defines: readonly string[], r: VoiceRoutine): VoiceBuild {
   let b = builds.get(key);
   if (!b) {
     const moddir = path.resolve(path.dirname(VOICE_CORE), '../..');
-    const dirs = [...sharcIncludeDirs(moddir), path.dirname(VOICE_CORE)];
+    const dirs = sharcIncludeDirs(moddir);
     const object = (file: string) =>
-      assemble(expandIncludes(applyConditionals(readFileSync(file, 'utf8'), [...defines]), dirs));
+      assemble(
+        expandIncludes(applyConditionals(readFileSync(file, 'utf8'), [...defines]), [...dirs, path.dirname(file)]),
+      );
     const stubObj = object(VOICE_CORE);
     const dispObj = object(VOICE_DISPATCH);
     // the dispatch object follows the stub, rounded up to 0x100 short words (the placing of place.ts)
@@ -153,8 +158,11 @@ function build(defines: readonly string[], r: VoiceRoutine): VoiceBuild {
     for (const [name, off] of Object.entries(stubObj.symbols)) own[name] = CORE_BASE + off;
     for (const [name, off] of Object.entries(dispObj.symbols)) own[name] = dispBase + off;
     const externs = { ...coreExterns(), ...own };
-    const stub = link(stubObj, CORE_BASE, externs);
-    const dispatch = link(dispObj, dispBase, externs);
+    // Keep the rig's observable words at their fixed addresses and place private object data separately.
+    const stubData = placeData([stubObj], 0x200b0000);
+    const dispData = placeData([dispObj], stubData.end);
+    const stub = link(stubObj, CORE_BASE, { ...stubData.data, ...externs });
+    const dispatch = link(dispObj, dispBase, { ...dispData.data, ...externs });
     const core: Linked = { ...stub, symbols: { ...stub.symbols, ...dispatch.symbols } };
     const routine = link(assemble(r.text), r.base, r.externs(core.symbols));
     b = { core, dispatch, routine, renderPc: routine.symbols[r.symbol]! };

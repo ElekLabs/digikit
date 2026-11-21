@@ -57,8 +57,11 @@ impl<'a> Dkds<'a> {
             return Err("not a DSP section (magic)".into());
         }
         let version = be32(bytes, DSP_H_VERSION as usize);
-        if !(VERSION_1..=VERSION_5).contains(&version) {
+        if !(VERSION_1..=filter::VERSION).contains(&version) {
             return Err(format!("DSP section version {version}"));
+        }
+        if version == filter::VERSION {
+            filter::check(&mut &bytes[..], 0, bytes.len() as u32).map_err(|e| e.text())?;
         }
         Ok(Dkds { bytes, version })
     }
@@ -106,7 +109,7 @@ impl<'a> Dkds<'a> {
     pub fn voice_len(&self) -> usize {
         match self.version {
             VERSION_1 => VOICE_LEN_V1,
-            VERSION_3..=VERSION_5 => VOICE_LEN_V3,
+            VERSION_3..=filter::VERSION => VOICE_LEN_V3,
             _ => VOICE_LEN,
         }
     }

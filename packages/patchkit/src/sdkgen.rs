@@ -17,6 +17,8 @@ pub const PY_OUT: &str = "tools/device/dklog_kinds.py";
 pub const INC_OUT: &str = "sdk/dsp/contract/dk_machine.inc";
 /// The generated SHARC+ include of the FX contract, relative to the repository root.
 pub const FX_INC_OUT: &str = "sdk/dsp/contract/dk_fx.inc";
+/// The generated SHARC+ include of the filter contract, relative to the repository root.
+pub const FILTER_INC_OUT: &str = "sdk/dsp/contract/dk_filter.inc";
 /// The generated C header of the machine contract's numbers, relative to the repository root.
 pub const C_MACHINE_OUT: &str = "sdk/include/dk/gen/machine_consts.h";
 /// The generated C header of the FX contract's numbers, relative to the repository root.
@@ -79,6 +81,7 @@ struct Sdk {
     keys: KeysToml,
     machine: Machine,
     fx: Fx,
+    filter: Filter,
     log: Log,
     spans: Spans,
     protocol: Protocol,
@@ -641,6 +644,13 @@ fn rust_limits(sdk: &Sdk) -> String {
     ));
     s.push('\n');
     s.push_str(&contract_mod(
+        "filter",
+        "DK_FILTER",
+        &sdk.filter.consts,
+        &[],
+        &sdk.filter.desc,
+    ));
+    s.push_str(&contract_mod(
         "machine",
         "DK",
         &sdk.machine.consts,
@@ -865,6 +875,15 @@ pub struct Fx {
     pub desc: Vec<String>,
     /// The typed view that `sdk/include/dk/gen/fx.h` is written from.
     pub c: CView,
+}
+
+/// The filter contract's numbers: `[filter]` of `sdk/sdk.toml` (assembly only: a filter has no C view).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Filter {
+    pub consts: Vec<MachineConst>,
+    /// Field names of the filter descriptor in order (each field is 4 bytes).
+    pub desc: Vec<String>,
 }
 
 /// `[fx]` of a `sdk/sdk.toml` text (for the header test).
@@ -1874,6 +1893,26 @@ fn fx_inc(sdk: &Sdk) -> String {
         }
         let _ = writeln!(s, "#define DK_FX_{prefix}_WORDS {}", fields.len());
     }
+    s
+}
+
+/// `sdk/dsp/contract/dk_filter.inc`: the same form as `dk_fx.inc` (`DK_FILTER_*`, `DK_FILTER_DESC_*`). Its names do not clash with the other contracts', so one file may include them all.
+fn filter_inc(sdk: &Sdk) -> String {
+    let m = &sdk.filter;
+    let mut s = format!(
+        "// {HEADER}\n// Decimal values: the assembler upper-cases macro text, which breaks `0x` literals after `+`.\n// The contract of a filter's DSP code (docs/plans/extension-model.md E7): entries `coef` and `process`, both named in the descriptor's module.\n"
+    );
+    for c in &m.consts {
+        let _ = writeln!(s, "#define {} {}", c.name, c.value);
+    }
+    for (i, f) in m.desc.iter().enumerate() {
+        let _ = writeln!(s, "#define DK_FILTER_DESC_{} {}", f.to_uppercase(), i * 4);
+    }
+    let _ = writeln!(s, "#define DK_FILTER_DESC_BYTES {}", m.desc.len() * 4);
+    for (i, f) in m.desc.iter().enumerate() {
+        let _ = writeln!(s, "#define DK_FILTER_DESC_W_{} {i}", f.to_uppercase());
+    }
+    let _ = writeln!(s, "#define DK_FILTER_DESC_WORDS {}", m.desc.len());
     s
 }
 
@@ -3227,6 +3266,7 @@ pub fn render(text: &str) -> Result<Vec<(String, String)>> {
         (PY_OUT.to_string(), python(&sdk)?),
         (INC_OUT.to_string(), machine_inc(&sdk)),
         (FX_INC_OUT.to_string(), fx_inc(&sdk)),
+        (FILTER_INC_OUT.to_string(), filter_inc(&sdk)),
         (C_MACHINE_OUT.to_string(), machine_consts_h(&sdk)),
         (C_FX_OUT.to_string(), fx_consts_h(&sdk)),
         (C_LIMITS_OUT.to_string(), limits_h(&sdk)),

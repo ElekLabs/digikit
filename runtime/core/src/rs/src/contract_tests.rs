@@ -92,7 +92,7 @@ fn imports_of(f: &[u8]) -> Vec<String> {
 fn machine_keys_of_file(f: &[u8], out: &mut [u32; 8]) -> usize {
     let be = |at: usize| u32::from_be_bytes([f[at], f[at + 1], f[at + 2], f[at + 3]]) as usize;
     let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
-    crate::loader::table_keys(&f[off..off + len], out)
+    dkrt_abi::keys::keys_of(&f[off..off + len], dkneeds::KIND_MACHINE, out)
 }
 
 /// Run the runtime's check of the DSP section of `f` on a DSP of `device`: the result code and what the check found.
@@ -158,7 +158,7 @@ fn declared_desc(asm: &str, prefix: &str) -> Vec<u32> {
 }
 
 /// The image byte offset of a DSP text symbol of the pack output (the address map counts short words).
-fn symbol_offset(addrmap: &str, symbol: &str) -> u32 {
+pub(crate) fn symbol_offset(addrmap: &str, symbol: &str) -> u32 {
     let at = addrmap.find(&std::format!("\"name\":\"{symbol}\"")).unwrap_or_else(|| panic!("{symbol} is not in the address map"));
     let head = &addrmap[..at];
     let n = &head[head.rfind("\"addr\":").unwrap() + 7..];

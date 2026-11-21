@@ -139,10 +139,34 @@ mf_typemap1:
     CLONEMAP 8
 9:  jmp     dk_tail_763365db
 
-| FUN(slot, type, sub) -> the parameter code (D2 saved by the stock code; a0 = the slot and d1 = 0x64 are loaded already; both are kept). Site (8 bytes):
+| FUN(slot, type, sub) -> the parameter code. A loaded module filter (type 16 to 31 in `sub`, at 0x10(sp)) answers its knob requests from `DKRT_FILTER_TAB` first. (D2 saved by the stock code; a0 = the slot and d1 = 0x64 are loaded already; both are kept). Site (8 bytes):
 | `move.l 0xc(sp),D0; movea.l 0x10(sp),A1`.
     .globl mf_typemap2
 mf_typemap2:
+    move.l  0x10(%sp),%d0            | the filter type, the third argument
+    subi.l  #16,%d0
+    cmpi.l  #15,%d0
+    bhi.s   5f                          | not a module filter: the machine part and the stock code
+    move.l  %d1,-(%sp)
+    move.l  %d0,%d1
+    lsl.l   #2,%d0
+    lsl.l   #3,%d1
+    add.l   %d1,%d0                     | 12 * (type - 16): this filter's three answers
+    move.l  %a0,%d1
+    sub.l   DKRT_FILTER_TAB+F_BASE,%d1          | the request (a mirror index of a knob word): 0 to 2
+    cmpi.l  #2,%d1
+    bhi.s   4f
+    lsl.l   #2,%d1
+    add.l   %d1,%d0
+    move.l  #DKRT_FILTER_TAB+F_SLOTS,%d1
+    add.l   %d1,%d0
+    movea.l %d0,%a1
+    move.l  (%a1),%d0                   | 0 for a knob the module does not have, as the stock function answers a type it does not know
+    move.l  (%sp)+,%d1
+    move.l  (%sp)+,%d2
+    jmp     mf_ret_tm2
+4:  move.l  (%sp)+,%d1
+5:
     move.l  0xc(%sp),%d0
     cmp.l   MF_TAB+T_FIRST,%d0
     bcs.s   9f
@@ -334,3 +358,30 @@ mf_owner:
     lea     8(%sp),%sp
 9:  move.l  %d2,-(%sp)                  | the second displaced instruction
     jmp     mf_x_ow
+
+| ---- run-time filters, the loader's filter byte (the 34 bytes from the mask of the machine byte to the store of the filter byte; a2 = the sound, a3 = the record, d0 = the machine byte
+| and d1 = its mask when they are entered). The machine byte is stored as the stock code does. The filter byte keeps a stored 16 to 31 while that module filter is loaded and
+| takes the stock bound (0 to 5, and 0xff, which the stock test lets pass) for any other value; d2 = 4 as the stock code leaves it for the next field.
+    .globl mf_flt_load_dn2
+mf_flt_load_dn2:
+    and.l   %d1,%d0
+    move.b  %d0,0xde(%a2)
+    clr.l   %d0
+    move.b  0xf5(%a3),%d0
+    move.l  %d0,%d1
+    subi.l  #16,%d1
+    cmpi.l  #15,%d1
+    bhi.s   1f
+    move.l  DKRT_FILTER_TAB+F_MASK,%d2
+    btst    %d1,%d2
+    bne.s   3f
+1:  move.l  %d0,%d1
+    addq.l  #1,%d1
+    andi.l  #0xff,%d1
+    moveq   #7,%d2
+    cmp.l   %d1,%d2
+    bhi.s   3f
+    clr.l   %d0
+3:  move.b  %d0,0xdf(%a2)
+    moveq   #4,%d2
+    jmp     mf_x_ldr_dn2

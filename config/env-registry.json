@@ -145,6 +145,10 @@
    "owner": "rust:packages/emulator",
    "purpose": "DSP instructions per DSPI2 frame; experiment override of the coupled DSP scheduling"
   },
+  "DIGI_DSP_PGO": {
+   "owner": "python:tools/emulator",
+   "purpose": "The launcher passes per-device DSP profile states to the desktop status display as JSON."
+  },
   "DIGI_DSP_RX_PHASE": {
    "owner": "rust:packages/emulator",
    "purpose": "DSP instructions (below the period) of SPI delivery phase inside a frame; experiment only"

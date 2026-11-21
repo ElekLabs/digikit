@@ -81,35 +81,35 @@
   },
   {
    "addend": 0,
-   "offset": 8,
+   "offset": 2,
    "section": ".text.canvas_text",
    "symbol": ".sec..bss.drawing",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 84,
+   "offset": 90,
    "section": ".text.canvas_text",
    "symbol": ".sec..rodata.canvas_text.str1.1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 100,
+   "offset": 110,
    "section": ".text.canvas_text",
    "symbol": "cf.page.data.native_font_operand",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 108,
+   "offset": 118,
    "section": ".text.canvas_text",
    "symbol": "cf.text.fn.draw_fmt",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 186,
+   "offset": 228,
    "section": ".text.canvas_fill",
    "symbol": ".sec..bss.overlay_mask",
    "type": "cf.32"
@@ -123,14 +123,14 @@
   },
   {
    "addend": 0,
-   "offset": 120,
+   "offset": 116,
    "section": ".text.canvas_fill",
    "symbol": ".sec..bss.overlay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 234,
+   "offset": 276,
    "section": ".text.canvas_fill",
    "symbol": "cf.draw.fn.fill_rect",
    "type": "cf.32"
@@ -431,6 +431,90 @@
   },
   {
    "addend": 0,
+   "offset": 98,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..text.canvas_fill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 258,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.pixels0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 314,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.drawing",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 334,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.overlay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 356,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.drawing",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 362,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.overlay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.drawing",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": "cf.page.fn.view_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..text.canvas_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.pixels1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 326,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": ".sec..bss.overlay",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 372,
+   "section": ".text.mf_native_filter_graph",
+   "symbol": "cf.draw.fn.blit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 8,
    "section": ".text.mf_native_draw",
    "symbol": ".sec..text.selected",
@@ -510,17 +594,17 @@
   },
   {
    "align": 2,
-   "hex": "4fefffdc2f0e2079000000002f02222f0030226f00384a88675a4a816d56b2a800046c507034b0af003465484a89674442804def000b14310800670c1d82080052807420b48066ee42021f82080b70342f0e48790000000042a790af00402f002f012f39000000002f084eb9000000004fef001c241f2c5f4fef00244e75",
+   "hex": "2079000000004fefffd048d74404222f0034226f00384a8867644a816d60b2a800046c5a4a896d56b3e800086c504aaf003c674a42804def000f246f003c14320800670c1d82080052807420b48066ea42021f82080f2f0e48790000000042a720280008538090892f002f012f39000000002f084eb9000000004fef001c4cd744044fef00304e75",
    "kind": "text",
    "name": ".text.canvas_text",
-   "size": 126
+   "size": 136
   },
   {
    "align": 2,
-   "hex": "4fefffe048d704fc247900000000282f0024222f0028226f002c206f00304a8a670000d0b3c46d06200922442800b1c16d06200820412200200480816b0000b4202a0004b3c06c0000aa7434b4886d0000a226094a896c02428324084a886c024282b8806d042800538422417234b2896c04327c00344ab900000000674cb8806d16220053812c03b2866d3e20062a02d0802f40001c602a220460ea7e349e852007ea805285d0af001ce5882040701fce80203c80000000d1fc00000000eea88190ba896fd6528660be4aaf003456c07234928274349489710044802f002f012f042f022f032f0a4eb9000000004fef00184cd704fc4fef00204e75",
+   "hex": "4fefffcc48d77cfc247900000000242f0038226f003c202f0040222f00444a8a670000fab0826d06204020022408b2896d06204122092248260986826b0000de262a0004b0836c0000d4206a0008b1c16f0000ca4a806c0242804a816c024281b4836d04240353822c085386b1c96e0222464ab900000000677cb4836d362c43538eb1c96f322a49280806840000001f4a846c0606840000001fea842600538828402f4800304c0438002643bdcc6d462e0160382c4260ca2a4660cc2a2f00309a8720454a856c0441e8001f2608ea835287d68be58b2043761fca83263c80000000d1fc00000000eaab8790bbc76ccc528cd7c460b64aaf004856c32a069a819c89770344832f032f052f022f062f002f0a4eb9000000004fef00184cd77cfc4fef00344e75",
    "kind": "text",
    "name": ".text.canvas_fill",
-   "size": 252
+   "size": 294
   },
   {
    "align": 2,
@@ -584,6 +668,13 @@
    "kind": "text",
    "name": ".text.mf_native_code",
    "size": 86
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff6c48d71c0c246e00084ab900000000660001684aae0010670001604aae001467000158202e001872025380b2806500014a2f2a00744eb900000000588f720fb2806500013672012d40ffa4703341f9000000002d41ff9c72642d40ffc8203c000000002d41ffa072112d48ffd02d40ffd4260e42802d41ffcc0683ffffff9c41eeffa82d6e0018ffd84290720842a8003452805888b28066f0222e001826432052428247eb001ce589286800542d41ff80206e00144878ffff2f3028002f0a4e9458824fef000c2740002426c0b4aeff8066de4878ffff4878000a2f0a4e944fef000c206e000c72112d40fffc70332d40ff8870012d50ff842d41ff8c223c000000002d40ff9041f90000000042802d41ff942d48ff982241223cffff800042b108002181080058800c80000000cc66e841eeff8423c800000000206e00102f0324390000000042a742b9000000004e9042a74878000748780015486eff8442b90000000023c2000000002f2e000c4eb9000000004fef001c4cee1c0cff6c4e5e4e75",
+   "kind": "text",
+   "name": ".text.mf_native_filter_graph",
+   "size": 390
   },
   {
    "align": 2,
@@ -670,7 +761,7 @@
    "size": 14848
   }
  ],
- "source_sha256": "dcee3b461df58cb6de2a41f536ce3099098e42a2ba1845b47597621df610a500",
+ "source_sha256": "de6974cdd283ee44e8b9571f1cfa58a7dbe999ab9ed50e7b8de8344090734e7c",
  "symbols": [
   {
    "global": false,
@@ -872,6 +963,12 @@
   },
   {
    "global": true,
+   "name": "mf_native_filter_graph",
+   "section": ".text.mf_native_filter_graph",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "mf_native_overlay",
    "section": ".text.mf_native_overlay",
    "value": 0
@@ -977,8 +1074,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "832",
-  "isa_check": "cbaf73aa18d474bc032c5e08451675aedb899a32dac80d6e8f00b68afda1655e",
+  "instructions_redecoded": "958",
+  "isa_check": "779ebde540c2336e060e079e833008cd5984fb94b880099cbb59b8dcc9095443",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

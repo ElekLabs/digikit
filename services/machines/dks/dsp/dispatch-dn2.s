@@ -756,3 +756,6 @@ _dv_gdz: DM(I0, M6) = R3;
     R0 = 7; \
     R2 = MIN(R2, R0);
 #include "dk_span.inc"
+
+#define FILTER_DN2 1
+#include "filter-callbacks.inc"

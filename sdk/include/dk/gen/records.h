@@ -21,5 +21,9 @@
 #define DK_RECORD_LEN_LFO_SHAPE 80 /* with the 8-byte record header */
 #define DK_RECORD_KIND_SHORTCUT 9 /* not generic: a builder writes it */
 #define DK_RECORD_LEN_SHORTCUT 68 /* with the 8-byte record header */
+#define DK_RECORD_KIND_FILTER 10 /* not generic: a builder writes it */
+#define DK_RECORD_LEN_FILTER 192 /* with the 8-byte record header */
+#define DK_RECORD_KIND_FILTER_V2 11 /* not generic: a builder writes it */
+#define DK_RECORD_LEN_FILTER_V2 196 /* with the 8-byte record header */
 
 #endif /* DK_GEN_RECORDS_H */

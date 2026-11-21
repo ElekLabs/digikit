@@ -1499,6 +1499,7 @@ mod tests {
     /// A DSP section of an 8-byte image with BSS bytes of bss and one version 3 voice with `voices` states of 20 bytes (0: version 2).
     fn dsp_section(bss: u32, voices: u32) -> Vec<u8> {
         crate::dkmdsp::DspSection {
+            filters: vec![],
             sample_tracks: None,
             device: 1,
             image: vec![0; 8],

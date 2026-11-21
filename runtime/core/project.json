@@ -3,7 +3,7 @@
   "name": "core/runtime",
   "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"],
   "metadata": {
-    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "test/project-user", "core/services/project"] }]
+    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "test/filter-gain", "test/project-user", "core/services/project"] }]
   },
   "targets": {
     "rust-tests": {
@@ -66,6 +66,7 @@
         "test/dyn-dn2:pack",
         "test/dyn-fx-gain:pack",
         "test/lfo-shape:pack",
+        "test/filter-gain:pack",
         "test/shortcut-demo:pack",
         "test/svc-test-user:pack",
         "test/svc-test:pack",

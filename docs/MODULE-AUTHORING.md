@@ -465,6 +465,19 @@ Limits:
 
 `module:check` runs `init` in the emulator, reads the records the module committed and checks them with `validate_records` of the `lfo` service, the rule the service runs at load (`patchkit records --check`). It prints each problem and fails. The same command is `patchkit records --check FILE|-` for a block of records. The check needs the emulator, like the check of a machine or an effect.
 
+### 5.11 A filter (in progress, E7)
+
+A module may declare filters for the FLTR page of the sound. List each id as `[[filter]]` in `module.toml` (at most 8 per module; `patchkit gen` writes `DK_FILTER_ID_<ID>`, the row of its key in the keys table) and build it in `init`:
+
+```c
+dk_filter *f = dk_module_ctx_add_filter(ctx, DK_FILTER_ID_RBNK, "Resonator Bank", "RBNK");
+dk_page *p = dk_filter_add_page(f);          /* one page; a second call is DK_E_PAGE_FULL */
+dk_page_add_param(p, "SPRD", "SPRD", 64);    /* knob 2 */
+dk_page_add_param(p, "Q", "Q", 20);          /* knob 3; a third is DK_E_PAGE_FULL */
+```
+
+Knob 1 of every module filter is the stock cutoff (FREQ); the module owns knobs 2 and 3 only. `dk_filter` is a typed handle: a machine handle given to `dk_filter_add_page`, or a filter handle given to `dk_machine_add_page`, is refused with `DK_E_FORMAT`. `dk_param_range` and `dk_param_glyph` work on a filter parameter. The runtime numbers a filter 16 to 31 (sticky, in the settings key `machines.filters`); the sound keeps a stock filter as its fallback. A filter takes no machine or page row and one parameter row for each of its own knobs: declare them in `[uses]` as `param_rows` (the fixture has one). The module's knob 2 and 3 sit in the words the stock knobs 2 and 3 of Multi-Mode use, so the stock page shows, edits and sends them. The filter shows in the chooser of the FLTR page after the stock filters, and a kit or sound that holds its number keeps it while the module is loaded (a stock firmware, or the module missing, loads Multi-Mode). The DSP object exports `_<id>_coef`, `_<id>_process` and `_<id>_desc` (the optional `dsp` prefix overrides the id). The descriptor gives the size of one voice state. The loader reserves 32 states and passes the relocated callbacks and state stride to the machines service. The machines service initializes each voice state on first use. It passes the normalized, modulated stock cutoff and the two knob words to `coef`, then gives `process` the same state and a 32-sample in-place buffer. Unused knob words are zero. A failing callback or invalid sample silences the block. Eight faults in the machines service’s 1,500-block window disable the type until reload. To draw the response on FLTR, call `dk_page_canvas(p, 0, draw, 0, 0)` on the filter page in `init`. The callback receives a clipped 51×17 canvas. Its `word_values` hold the current stock cutoff followed by the declared filter knobs, all in page units (0..32512 for ordinary percent controls). A filter with a graph adds four bytes to its committed record. The firmware draws its envelope and knob labels separately. See `tests/fixtures/modules/filter-gain` for the minimal ABI example and `modules/filter/digikit/resonator-bank` for a module using an SDK kernel.
+
 ## 6. Generated files
 
 `patchkit gen` writes two files in `build/gen/` of a module. Do not edit them.

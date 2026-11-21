@@ -89,7 +89,7 @@ pub mod exports {
     }
     /// Host tests only: the type numbers of the machines service for the module being loaded, and its row as a loaded service file has it (`svc_rows::test_machines`).
     #[cfg(test)]
-    pub(crate) use dkrt_svc_machines::assign::seed_for_test;
+    pub(crate) use dkrt_svc_machines::{assign::seed_for_test, dsp::filter_rows, filter};
     #[cfg(test)]
     pub(crate) fn machines_row() -> &'static dkrt_abi::service::ServiceRow {
         static ROW: dkrt_abi::service::ServiceRow =

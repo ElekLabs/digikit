@@ -5,7 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { SLOTS, STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
+import { FILTER_EXTERNS, SLOTS, STOCK_BP, TABLE, TYPE_CACHE, FRAME, PARAM_REC, RELEASE, UNPACK_BP } from './context.ts';
 import { ROOT } from './rig.ts';
 import { ConformError, type MachineSpec } from './spec.ts';
 import { assembleSource, link, sharcIncludeDirs, stripSpans, type Linked, type SharcObject } from './toolchain.ts';
@@ -169,6 +169,7 @@ function externsFixed(device: string): Record<string, number> {
     _fw_release_latch: RELEASE,
     _fw_unpack: UNPACK_BP,
     _dv_table: TABLE,
+    ...FILTER_EXTERNS,
   };
   fixed._dl_slots = SLOTS; // the slot block of core/dsp-link, which the stubs of core/dsp-voice read
   if (device === 'dn2') STEREO_STANDINS.forEach((n, i) => (fixed[n] = STOCK_BP + 0x10 + 4 * i));

@@ -593,9 +593,9 @@ from `main_dest` over its own staged stream, with no bounds check ([finding 152]
 decoder runs away before MAIN starts and the unit stays at its logo. The **in-place margin** is the least, over the stream, of the bytes consumed minus the output written past the stage
 (`aplib::inplace_margin`; `tools.firmware.aplibpack.inplace_margin` is the reference).
 
-- `apply` packs MAIN with `aplib::pack_section_in_place`: the plain stream when its margin is at least `[patch] main_margin_min` (default 8 KiB) or the output never reaches the stage (the Digitakt II and
-  Digitone II images are byte for byte as before), otherwise the same optimal path with the shortest tail written as literals that reaches the floor (the bootstrap reads them like any token). When the tail
-  and the container cap cannot both be met, `apply` refuses and says how much the tail costs: trim the runtime or move it out of MAIN.
+- `apply` keeps the plain MAIN stream whenever it meets `[patch] main_margin_min` (default 8 KiB) or the output stays below the stage. Otherwise it writes a region as literals.
+  Eight literals consume nine input bytes, so the decoder gains room to use matches again near the end. The packer keeps a shorter stream only after measuring its margin across every token.
+  If the resulting image exceeds the container limit, `apply` reports the excess.
 - `verify` (with and without a library), `preflight`, `flash` and the workbench path refuse a stored MAIN stream below the floor.
 - They print the budget: `bootstrap margin 8.0 KB, container 20.3 KB free` (the numbers of the current image) (`bootstrap margin: the unpack stays below the stage ...` when the output never reaches it).
 

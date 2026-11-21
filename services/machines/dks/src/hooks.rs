@@ -34,11 +34,18 @@ entries! {
     mf_code_hook,
     mf_key_hook,
     mf_turn_hook,
+    // both devices: the run-time filters (the accessor, the name, the chooser's list)
+    mf_flt_acc,
+    mf_flt_name,
+    mf_flt_graph,
+    mf_flt_list,
     // Digitakt II
+    mf_flt_load_dt2,
     mf_clone5,
     mf_typearg,
     mf_srcpage,
     // Digitone II
+    mf_flt_load_dn2,
     mf_group,
     mf_typemap0,
     mf_typemap1,

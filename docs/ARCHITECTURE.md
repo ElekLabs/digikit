@@ -68,6 +68,8 @@ Three interfaces (details in [runtime and services](plans/runtime-and-services.m
 - **B, runtime to service:** only what a service declared: lifecycle, record-kind handlers, slots and hooks, resources, and the log and span sinks.
 - **C, service to runtime:** the same `sdk.toml` imports as modules, plus a small service-only set.
 
+The runtime owns selection membership. Services read the selected module’s header keys by kind through `CoreApi::keys_of`. Each service owns the numbers it gives those keys. Boot assigns the accepted selection once. Live enable and replacement preview the proposed selection before validating the module. A check-only or refused load restores the previous assignments. An accepted load keeps the new assignments and saves any changed settings. DSP transfer completion is tracked separately. When a live job finishes, the machines service rebuilds the instrument and filter lists in the firmware’s existing selection view. The view caches both lists at startup.
+
 The interfaces are Rust traits in the crate `dkrt-abi` (`runtime/core/abi`): `CoreApi` (C), `Service` and `ServiceList` (B), with the pure types and constants they share (`DspState`, `RegState`, the DSP section types, the row and word constants, memory helpers). The core implements `CoreApi` as `RealCore` and services as `Services`, the static list in `handlers.rs`. A service never calls another service and never names a core module: it calls the core through `crate::core_api` (`REAL_CORE`, or a generic `C: CoreApi` where a host test drives it), and the core calls a service only through `Services` or the C entry points listed in `handlers::exports`.
 
 The crossings of the R2b code, and what R2c made of them:
@@ -78,7 +80,7 @@ The crossings of the R2b code, and what R2c made of them:
 | `fx` needs `machines` rows | Both write parameter rows with the shared crate `dkrt-svc-params` and find `dynreg_info` through `CoreApi::info`; neither calls a function of the other (RS-C: no registry state or table in `CoreApi`) |
 | `pageclick` reads registry rows | `dkrt_svc_machines::records::param_first`, `param_owners`: the registry state `DKRT_REG` is a static of `machines.dks` |
 | `fxsend` uses `settings` | `CoreApi::settings_get` and `settings_put` (a broker resource) |
-| `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Service::settle` plans the numbers once per boot from the machine keys of the selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |
+| `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Service::settle` assigns numbers from the machine keys of the boot or live selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |
 | core calls of `assign`, `fxpage::tick`, `pageclick::tick`, `tracks::tick`, the `dk_fx_routes_entry` export, the nativepage kinds | `Service::tick(phase)`, `handlers::exports`, `dkrt_abi::registry::KIND_NATIVE*` |
 
 ### Today and target

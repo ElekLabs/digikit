@@ -110,7 +110,7 @@ def _daemon(device: str) -> str:
 
 
 def commit_stage(mid: str, devices: list[str]) -> bool:
-    """For a module with `[[machine]]`, `[[fx]]` or a `[[record]]` (an LFO shape): load it on the emulated device, read the records it committed
+    """For a module with `[[machine]]`, `[[fx]]`, `[[filter]]` or a `[[record]]` (an LFO shape): load it on the emulated device, read the records it committed
     (tools/devtools/commit_records.ts, decoded and judged by `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from
     them (docs/plans/sdk.md 6.1 and 6.4). The conformance suite that runs next reads that gallery.json. The records must pass the rule of the service that owns
     their kind (`patchkit records --check`, `Service::validate_records`): a problem stops the check. A tool or a service has no rows to commit and is left alone:
@@ -121,6 +121,7 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
     if (
         "[[machine]]" not in original
         and "[[fx]]" not in original
+        and "[[filter]]" not in original
         and "[[record]]" not in original
     ):
         return False  # declares nothing through builder calls or records: no rows to measure

@@ -5,10 +5,10 @@
 
 /// `MACH`.
 pub const MAGIC: u32 = 0x4d41_4348;
-/// Version 3: the adapter's native page register, remove and turn functions are words of the table (version 2: the firmware addresses left it).
-pub const VERSION: u32 = 3;
+/// Version 4 appends the adapter's native filter graph function.
+pub const VERSION: u32 = 4;
 /// Words of the table.
-pub const WORDS: usize = 20;
+pub const WORDS: usize = 21;
 
 /// Word indexes of the table (byte offset = 4 * index; `hooks-dt2.s` and `hooks-dn2.s` name the byte offsets `T_*`, and a test compares them). The hooks leave through the
 /// imports the port file resolves, so the table has no word for a firmware address.
@@ -40,4 +40,6 @@ pub mod w {
     pub const N_REGISTER_V2: usize = 17;
     pub const N_REMOVE: usize = 18;
     pub const N_TURN: usize = 19;
+    /// The adapter's native filter graph draw (`mf_native_filter_graph`).
+    pub const N_FILTER_GRAPH: usize = 20;
 }

@@ -194,3 +194,6 @@ _dv_frame_sw:
 .VAR _dv_slots6 = ADM_PARAM_SLOT6;
 .VAR _dv_slots7 = ADM_PARAM_SLOT7;
 
+
+#define FILTER_DN2
+#include "filter-hooks.inc"

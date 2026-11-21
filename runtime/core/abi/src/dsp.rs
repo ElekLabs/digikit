@@ -187,6 +187,8 @@ pub struct Job {
     /// How many entries of the section's voice and effect tables the services accepted (each adds the count it checked in `dsp_check_sections`): the core refuses a section
     /// with entries that no loaded service owns.
     pub accepted: u32,
+    pub filters: *const u8,
+    pub nfilter: u32,
     pub import_vals: [u32; MAX_IMPORTS as usize],
 }
 
@@ -209,6 +211,8 @@ impl Job {
             bank: core::ptr::null(),
             state_bytes: 0,
             accepted: 0,
+            filters: core::ptr::null(),
+            nfilter: 0,
             import_vals: [0; MAX_IMPORTS as usize],
         }
     }

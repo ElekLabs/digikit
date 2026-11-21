@@ -281,6 +281,10 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
     assert!(machines.contains("pub unsafe extern \"C\" fn dk_machine_add_page("));
     assert!(machines.contains("build::machine_add_page(&ImportCore, m, name, short_name)"));
     assert!(machines.contains("build::add_machine(&ImportCore,"));
+    assert!(machines.contains("build::add_filter(&ImportCore, ctx, index, name, short_name)"));
+    assert!(machines.contains("build::filter_add_page(&ImportCore, f)"));
+    assert!(machines.contains("const _: api::DkModuleCtxAddFilterFn = dk_module_ctx_add_filter;"));
+    assert!(machines.contains("const _: api::DkFilterAddPageFn = dk_filter_add_page;"));
     assert!(!machines.contains("fn dk_param_get"));
     assert!(machines.contains("const _: api::DkParamGetFn = crate::fw::dk_param_get;"));
     assert!(machines.contains("const _: api::DkPageCanvasFn = crate::builder::dk_page_canvas;"));

@@ -148,8 +148,10 @@ is profile-guided. `uv run python -m tools.emulator.native_pgo train [--device d
 `-Cprofile-generate`, runs the workload with `DIGI_SHARC_CORE_LIB_<DEV>` naming the instrumented libraries and merges the
 host's and the libraries' `.profraw` files into one profile per training target. `mise run perf:pgo` trains `dn2`, `dt2` and then `both`
 (the two-core profile of the desktop build; the libraries of the first two trainings are restored from the store, so
-`both` costs a host build and its runs). Without a current `both` profile the two-core desktop build runs without PGO
-and prints the fallback notice. A training whose profile for the current key exists is skipped (`train --force`, or
+`both` costs a host build and its runs). Run `mise run workbench` and choose a firmware file. Workbench uses the DSP library for that device.
+A current `both` profile covers both libraries. When it is unavailable, Workbench uses each device’s existing
+training independently. A device without usable training gets a plain library. The desktop host can run plain
+while the active firmware uses a profile-guided DSP library. Training in a linked worktree is found by key. A training whose profile for the current key exists is skipped (`train --force`, or
 `mise run perf:pgo:dn2 -- --force`, trains again; a workload edit that keeps the workload name needs `--force`). The
 instrumented libraries are built once per key (the `-Cprofile-generate` directory is fixed per target dir and not in the
 key) and kept in `<git common dir>/sharc-core-pgo-instrument`, shared by all worktrees (the last 4 keys per device stay;

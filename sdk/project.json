@@ -83,6 +83,7 @@
         "{workspaceRoot}/sdk/sdk.toml",
         "{workspaceRoot}/sdk/dsp/contract/dk_machine.inc",
         "{workspaceRoot}/sdk/dsp/contract/dk_fx.inc",
+        "{workspaceRoot}/sdk/dsp/contract/dk_filter.inc",
         "{workspaceRoot}/sdk/dsp/contract/dk_sample_pool.inc",
         "{workspaceRoot}/sdk/dsp/REGISTERS.md",
         "{workspaceRoot}/packages/dksharc/src/rules_table.rs",
