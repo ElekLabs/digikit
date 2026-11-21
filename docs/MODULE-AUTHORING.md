@@ -678,10 +678,9 @@ the DSP section. `dk_sample_pool_open(ctx, &pool)` gives the handle in `init`;
 root-relative path of a `DK_FILES_SAMPLES` listing row (`KICKS/K1`); the runtime adds the device root (DT2 `/`, DN2 `samples/`), and a DT2 path
 that already starts with `/` stays as it is. `dk_sample_pool_set(pool, index, path)` loads a file into that entry and replaces what was there (the old file is released; a file another entry holds is shared). `dk_sample_pool_clear(pool, index)` leaves a hole: indexes are stable, nothing moves. A machine picks
 the entry of a note in its DSP, usually from a parameter (SHOT: SMP, word 0, `word >> 8`); an entry that is not READY is silent.
-`dk_sample_pool_path(pool, index, buf, cap)` gives the path back in the same form, in every state but UNUSED. The pool list is kept per
-project. The runtime closes an entry's old generation before it publishes a new record.
+`dk_sample_pool_path(pool, index, buf, cap)` gives the path back in the same form, in every state but UNUSED. The pool list is not kept by the runtime: a sampler that uses the picker below gets it in its settings, per project while the `project` service is loaded. The runtime closes an entry's old generation before it publishes a new record.
 
-A sampler machine can add the on-device sample picker with `<dk/sample/picker.h>`: include the header and call `dk_sample_picker_init(pool, files, ui)` in `init` (with the handles from `dk_sample_pool_open`, `dk_files_open` and `dk_ui_open`) and `dk_sample_picker_fini()` in
+A sampler machine can add the on-device sample picker with `<dk/sample/picker.h>`: include the header and call `dk_sample_picker_init(pool, files, ui, settings)` in `init` (with the handles from `dk_sample_pool_open`, `dk_files_open`, `dk_ui_open` and `dk_settings_open`; the picker keeps the 16 paths under the settings keys `pool.0` to `pool.15` and sets them again at the next init) and `dk_sample_picker_fini()` in
 `fini`, and call `dk_sample_picker_open_pool(current, pick, arg)` from the click action of the SMP parameter. The picker shows the 16
 slots; YES on a slot opens the file browser for that slot, and YES on a file loads it there (`dk_sample_pool_set`). `pick(arg, index)` runs after a file was loaded, and the machine sets its SMP value to `index`.
 `modules/machines/shot` is the example (design: [sample picker](design/sample-picker.md)). Without `core/ui` the picker does nothing.

@@ -200,8 +200,8 @@ SELECT writes the selection record and loads nothing; RESTART applies it at the 
 - The settings record is digikit's one key-value store (`docs/design/digikit-store.md`, "Keys by owner"). Keys now: `fx/route/<module
   id>`, `fx/send/<module id>`, `dk/fault` (the crash handler's fault record, `crash.rs:545-548`). Keys `<module id>/...` are reserved for
   the module itself, through the settings API of API 1.9 (`settings_client`, `settings_get`, `settings_put`, `settings_remove`, `<dk/settings.h>`). A module
-  can also export a settings menu (`dkm_menu`, `docs/plans/sdk-api.md`).
-- The runtime has a semantic version (`sdk/sdk.toml` `version`, now 0.5.4; `docs/design/module-sdk.md` D9). While it is 0.x, MINOR may
+  can also export a settings menu (`dkm_menu`, `docs/plans/sdk-api.md`). A sampler module keeps its pool list in its settings (`pool.0` to `pool.15`, written by the sample picker); the runtime keeps no pool list of its own, and while the `project` service is loaded the settings are per project (`docs/plans/digikit-project.md`).
+- The runtime has a semantic version (`sdk/sdk.toml` `version`, now 0.11.0; `docs/design/module-sdk.md` D9). While it is 0.x, MINOR may
   break. Adapters carry the version of the runtime image they are built into.
 - Each contract has [major, minor] (`sdk/sdk.toml` `[contract]`, api is 1.5). It decides compatibility (D3).
 - A module's manifest `version` (major.minor.patch) is its own; the runtime does not read it.
@@ -716,6 +716,7 @@ None of them changes D1 to D24. They decide how much of the adapter layer can lo
     SDK documents this rule.
   - The runtime never interprets a module's values. Unloaded modules keep their entries (`settings.rs`).
   - Values saved with the project (parameters) are the firmware's and are not part of this.
+  - SDK contract note: the meaning of the pool line changed. `dk/sample/pool.h` no longer promises a pool "kept per project" by the runtime; the sample picker (shared source, `dk_sample_picker_init` takes the settings handle as a fourth argument) keeps the list in the module's settings. This breaks no import and no `.dkm` field, so it rides in the 0.11.0 minor; a module that compiles the picker source passes the handle (SDK 0.x: a MINOR may break such source).
   - The module settings API (`settings_client`, `settings_get`, `settings_put`, `settings_remove` within the module's prefix, API 1.9) and the settings menu (`dkm_menu`) exist.
 
 ## 13. Enforcement

@@ -97,7 +97,7 @@ E_CHANGED fix: YES on the slot and the same file again (the load selects it agai
 
 ### 2.5 CLEAR
 
-One press, no confirm: `sample_pool_clear`. The row goes to `-`. A note with SMP on that entry is silent from then on (the SMP value is not changed). Elektron project files are not touched (keep-stock rule): the pool list lives in the digikit runtime, per project.
+One press, no confirm: `sample_pool_clear`. The row goes to `-`. A note with SMP on that entry is silent from then on (the SMP value is not changed). Elektron project files are not touched (keep-stock rule): the pool list lives in the module's settings (keys `pool.0` to `pool.15`, one path each; the picker puts a key when a file is loaded and removes it at CLEAR), per project while the `project` service is loaded, and `init` reads it again.
 
 ### 2.6 Screen 4: INFO (DK_UI_TEXT_PAGE, title `INFO`)
 
