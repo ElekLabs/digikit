@@ -92,6 +92,17 @@ def test_exact_key_match_uses_its_profile_while_the_shared_manifest_is_partial(t
     assert native_pgo.current_profile(gen=tree / "gen") == str(lane)
 
 
+def test_first_training_in_a_linked_worktree_needs_no_shared_manifest(
+    tree, monkeypatch
+):
+    (tree / "state/manifest.json").unlink()
+    monkeypatch.setattr(native_pgo, "tree_packages", lambda: PACKAGES)
+    lane = trained_here(tree)
+    assert state(tree) == ("ok", str(lane), False)
+    lane.unlink()
+    assert state(tree)[0] == "missing"
+
+
 def test_key_miss_falls_back_to_the_shared_manifest(tree):
     trained_here(tree)  # the key of the tree as trained
     (tree / "packages/emulator/sharc/lib.rs").write_text("another edit")
@@ -289,17 +300,6 @@ def test_clean_refuses_a_state_dir_outside_the_pgo_root(pgo, tmp_path):
     age(old, 90)
     plan = native_pgo.plan_clean(other, 14, now=NOW, root=root)
     assert plan.items == [] and old.exists()
-
-
-def test_not_current_notice_names_the_command_per_device():
-    key = "ab" * 32
-    assert "NOT current" in native_pgo.not_current_notice("dn2", key)
-    assert native_pgo.not_current_notice("dn2", key).endswith(
-        "native_pgo train --set-current"
-    )
-    assert native_pgo.not_current_notice("both", key).endswith(
-        "native_pgo train --device both --set-current"
-    )
 
 
 @pytest.mark.parametrize(

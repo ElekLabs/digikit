@@ -174,6 +174,7 @@ export default function Console(props: { host: Host }) {
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
   const sidePanelsShown = createMemo(() => page() === 'emulator');
   const panelsActive = createMemo(() => !!status());
+  const loadedDevice = createMemo(() => (booting() ? undefined : status()?.device));
   // While an image boots, only its own device counts: an unknown image has none (no stale device, no faceplate).
   const knownDevice = createMemo(
     () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice())),
@@ -1226,7 +1227,7 @@ export default function Console(props: { host: Host }) {
             <Meter value={rate()! * 100} tone="amber" />
           </span>
         </Show>
-        <Show when={pgoWarning(buildInfo())}>
+        <Show when={pgoWarning(buildInfo(), loadedDevice(), info()?.dsp?.enabled)}>
           {(w) => (
             <span class="warn pgo" title={w().title}>
               <Icon d={WARNING} />

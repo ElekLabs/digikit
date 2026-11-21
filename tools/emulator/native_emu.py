@@ -398,7 +398,7 @@ def pgo_plan(args: list[str]) -> object | None:
     profile gives a DT2 build only the shared-engine 3%, a DT2 profile 19%. A launch with a second engine (`--also-coupled`,
     the desktop default) has the profile of device `both` (`train --device both`), built in a target dir of its
     own; `mise run perf:pgo` trains it after dn2 and dt2, so a missing or stale `both` profile only prints
-    the notice and the launch builds without PGO. The launcher never trains on its own. A stale or missing profile falls back
+    the notice and builds a plain host. Desktop DSP libraries resolve their profiles separately. The launcher never trains on its own. A stale or missing profile falls back
     to the ordinary build (its own target dir, not the launcher's pgo-use). DIGI_EMU_PGO_TRAIN=1 trains a stale or missing
     profile here when the training inputs exist (`mise run perf:pgo` is the usual
     way); DIGI_EMU_PGO=0 skips PGO. Any failure falls back to the ordinary
@@ -725,7 +725,9 @@ def launch_device(syx: pathlib.Path) -> device_data.Device:
     return device_data.by_short(short)
 
 
-def core_library_env(args: list[str], plan: object | None = None) -> dict[str, str]:
+def core_library_env(
+    args: list[str], plan: object | None = None, *, desktop: bool = False
+) -> dict[str, str]:
     """`DIGI_SHARC_CORE_LIB_<DEV>` of both devices for a coupled launch, from the core library store
     (tools/devtools/core_store.py: a hit takes about 0.2 s, a miss builds the library once), whichever device the firmware
     is and with or without `--also-coupled`, so choosing a firmware of the other device in the app boots it coupled. A
@@ -733,14 +735,19 @@ def core_library_env(args: list[str], plan: object | None = None) -> dict[str, s
     coupled audio. When one device's library cannot be built the launch goes on with the other and one line names the
     missing one and the build command; the launch stops when no library can be provided. An explicit
     `DIGI_SHARC_CORE_LIB_<DEV>` wins. With a PGO PLAN (a fresh profile) the library of each device the profile covers is the
-    one built with that profile (its own store entry); the other device gets the plain library."""
+    one built with that profile. Desktop also resolves existing training for any remaining device."""
     if not ("--coupled" in args or "--auto-coupled" in args):
         return {}
     from tools.devtools import core_store
     from tools.emulator import native_pgo
 
     profiles = native_pgo.library_profiles(plan)  # type: ignore[arg-type]
-    own = digi_env.device_for_syx(syx_from_args(args))
+    firmware = (
+        pathlib.Path(args[args.index("--audio-profile-syx") + 1])
+        if "--audio-profile-syx" in args
+        else syx_from_args(args)
+    )
+    own = digi_env.device_for_syx(firmware)
     second: dict[str, str] = {}
     if "--also-coupled" in args:
         at = args.index("--also-coupled")
@@ -751,17 +758,47 @@ def core_library_env(args: list[str], plan: object | None = None) -> dict[str, s
     env: dict[str, str] = {}
     missing: dict[str, str] = {}
     devices = device_data.dsp_shorts()  # a device without a DSP has no core library
+    states: dict[str, str] = {}
+    cores = {}
     for device in devices:
         if device == own:
-            gen = generated_core(args, device)
+            cores[device] = generated_core(args, device)
         else:
             image = (
                 second.get(device) or digi_env.ready_inputs(device=device)["DSP image"]
             )
-            gen = other_core(device, image)
+            cores[device] = other_core(device, image)
+    if desktop:
+        # Key each profile against the exact library the firmware loader will open.
+        profile_env = dict(os.environ)
+        for device, gen in cores.items():
+            if gen is not None:
+                profile_env[f"SHARC_GEN_DIR_{device.upper()}"] = str(gen)
+        profile_env["SHARC_GEN_DIR"] = str(cores[digi_env.SLOT_DEVICES[0]])
+        profiles = native_pgo.fresh_profiles(devices, profile_env)
+    for device, gen in cores.items():
         try:
-            env.update(core_store.library_env({device: gen}, profiles=profiles))
+            library = core_store.library_env({device: gen}, profiles=profiles)
+            env.update(library)
+            if not library:
+                states[device] = "external"
+            elif device in profiles:
+                states[device] = "ok"
+            else:
+                states[device] = "plain"
         except core_store.CoreStoreError as exc:
+            if device in profiles and desktop:
+                print(
+                    f"{device.upper()} profile-guided DSP library failed: {exc}; trying plain",
+                    file=sys.stderr,
+                )
+                try:
+                    env.update(core_store.library_env({device: gen}))
+                    states[device] = "plain"
+                    continue
+                except core_store.CoreStoreError as fallback:
+                    exc = fallback
+            states[device] = "unavailable"
             missing[device] = str(exc)
     if len(missing) == len(devices):
         raise SystemExit(f"core library: {'; '.join(missing.values())}")
@@ -771,6 +808,12 @@ def core_library_env(args: list[str], plan: object | None = None) -> dict[str, s
             f"build with: uv run python -m tools.devtools.verify_build cores --device {device}",
             file=sys.stderr,
         )
+    if (
+        desktop
+        and os.environ.get("DIGI_EMU_PGO") != "0"
+        and native_pgo.supported_host()
+    ):
+        env["DIGI_DSP_PGO"] = json.dumps(states)
     return env
 
 
@@ -888,7 +931,7 @@ def main(args: list[str] | None = None) -> None:
     # Devices whose MAIN mixes the voices of a peer CPU play them (`[emulator.peer_audio]`); the other devices ignore it.
     if not daemon and has_peer_audio(data):
         env.setdefault("DIGI_EMU_PEER_AUDIO", "0" if force_cf else "1")
-    env.update(core_library_env(args, plan))
+    env.update(core_library_env(args, plan, desktop=not daemon))
     if not daemon and data.has_dsp():
         env.update(pgo_env())
         # Workbench default from config/emulator.json; an explicit value, including an empty one, still wins.
