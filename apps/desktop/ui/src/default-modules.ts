@@ -45,8 +45,8 @@ export function createDesktopDefaultModules(app: () => TransferApp): NonNullable
     entries,
     async install(where, device, ids, progress: (p: DefaultProgress) => void, opts) {
       const { target, connection, loadLibrary, installDeps } = app();
-      // after a flash the old session may be of the port before the restart
-      if (where === 'device') target.resetSession();
+      // after a flash the device re-enumerated: the port handle may be the one before the restart
+      if (where === 'device') await target.reconnect();
       const s = await (where === 'emulator' ? target.emulatorSession() : target.session());
       const library = await loadLibrary(device);
       const deps = await installDeps(device);

@@ -41,7 +41,7 @@ export default function RemotePage(props: {
 }): JSX.Element {
   const app = useTransferApp();
   const { asked, noteReply } = app.connection;
-  const { cancelPending, checkRuntime, resetSession, session, target } = app.target;
+  const { cancelPending, checkRuntime, reconnect, session, target } = app.target;
   const { busy } = app.state;
   const [state, setState] = createSignal<RemoteState>();
   const [stateError, setStateError] = createSignal<unknown>();
@@ -86,7 +86,8 @@ export default function RemotePage(props: {
         await new Promise((r) => setTimeout(r, SCREEN_MS[t.kind === 'midi' ? 'midi' : 'emulator']));
       } catch (e) {
         setScreenError(failureLine(e, targetLabel(target())));
-        resetSession();
+        // the session recovers the link between tries; this covers a failure outside a request
+        await reconnect().catch(() => {});
         await new Promise((r) => setTimeout(r, 1500));
       }
     }
@@ -176,14 +177,13 @@ export default function RemotePage(props: {
           </span>
         </span>
       </header>
-      <Show
-        when={!noEmulator()}
-        fallback={
-          <p class="remote-empty">
-            No firmware is loaded in the emulator. Open one on the Emulator page, or choose a MIDI device as the target.
-          </p>
-        }
-      >
+      <Show when={noEmulator()}>
+        <p class="remote-empty">
+          No firmware is loaded in the emulator. Open one on the Emulator page, or choose a MIDI device as the target.
+        </p>
+      </Show>
+      {/* the body stays mounted while hidden, so the side panels keep their state (the loops above ask nothing while noEmulator) */}
+      <div hidden={noEmulator()}>
         <Show when={remotePaused(busy())}>
           <p class="note" role="status">
             Paused during the transfer.
@@ -223,7 +223,7 @@ export default function RemotePage(props: {
           </main>
           <SidePanels host={props.host} visible session={session} where={() => targetLabel(target())} track={target} />
         </div>
-      </Show>
+      </div>
     </section>
   );
 }

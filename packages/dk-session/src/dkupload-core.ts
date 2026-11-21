@@ -68,6 +68,13 @@ export interface DkTransport {
    * while it writes the last one (finding 43, "Two requests in flight"). A link to a device leaves it out until that has run on hardware.
    */
   readonly dataDepth?: number;
+  /**
+   * Make the link usable again after an exchange failed, for example a device that re-enumerated on USB: reopen what the transport holds.
+   * Must not throw when the device is not back yet; the next failure calls it again.
+   */
+  recover?(): Promise<void>;
+  /** Let go of the link. */
+  close?(): Promise<void>;
 }
 
 const cancelledError = () => new DkError({ error: 'cancelled', kind: 'cancelled' });
@@ -774,6 +781,8 @@ export interface DkSessionOptions {
   emulatedProbe?: EmulatedProbe;
   /** Time source of `waitForBoot` and `waitForRestart` (default `wallClock`). A harness and `wb --emu` give `emulatedClock(status)`; a paused daemon gives a stepping clock. */
   clock?: Clock;
+  /** Called once per request: true after the matching reply, false after the last failed try (not for a cancelled request), with the reason. */
+  onLink?: (ok: boolean, reason?: string) => void;
 }
 
 /** Options of `waitForBoot` and `waitForRestart`. */
@@ -939,6 +948,7 @@ export class DkSession {
   private emulatedProbe: EmulatedProbe | undefined;
   private sessionClock: Clock;
   private fileHashOk = false;
+  private onLink?: DkSessionOptions['onLink'];
   private turn: Promise<unknown> = Promise.resolve();
   /** False from `restart()` until a stock MidiRpc request has been answered in the new boot (`waitRpcService`). */
   private rpcProven = true;
@@ -952,6 +962,7 @@ export class DkSession {
     this.depth = Math.max(1, Math.floor(options.depth ?? transport.dataDepth ?? 1));
     this.emulatedProbe = options.emulatedProbe;
     this.sessionClock = options.clock ?? wallClock;
+    this.onLink = options.onLink;
   }
 
   /** The clock of this session's waits. */
@@ -1098,11 +1109,15 @@ export class DkSession {
       both = c.signal;
     }
     try {
-      return await this.exchangeLoop(cmd, body, retries, retryBusy, timeoutMs, both);
+      const r = await this.exchangeLoop(cmd, body, retries, retryBusy, timeoutMs, both);
+      this.onLink?.(true);
+      return r;
     } catch (e) {
-      if (probe && probe.signal.aborted && !signal.aborted && e instanceof DkError && e.kind === 'cancelled')
-        throw lost();
-      throw e;
+      const failure =
+        probe && probe.signal.aborted && !signal.aborted && e instanceof DkError && e.kind === 'cancelled' ? lost() : e;
+      if (!(failure instanceof DkError && failure.kind === 'cancelled'))
+        this.onLink?.(false, failure instanceof Error ? failure.message : String(failure));
+      throw failure;
     } finally {
       release();
     }
@@ -1117,26 +1132,53 @@ export class DkSession {
     signal: AbortSignal,
   ): Promise<RawReply> {
     let busy = 0;
+    let linkError: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
       if (signal.aborted) throw cancelledError();
       const seq = this.takeSeq();
-      await abortable(Promise.resolve(this.t.send(frame(cmd, seq, body))), signal);
-      const deadline = Date.now() + timeoutMs;
-      for (let left = deadline - Date.now(); left > 0; left = deadline - Date.now()) {
-        const raw = await abortable(this.t.recv(left, signal), signal);
-        if (!raw) break;
-        const r = parseReply(raw);
-        if (r && r.seq === seq && r.cmd === cmd) {
-          if (!retryBusy || statusName(r.status) !== 'E_BUSY' || busy >= BUSY_RETRIES) return r;
-          // the device's store is in use: the request did nothing; ask again shortly (not a timeout: it does not use up a retry)
-          busy++;
-          await abortable(new Promise<void>((done) => setTimeout(done, BUSY_WAIT_MS)), signal);
-          attempt--;
-          break;
+      linkError = undefined;
+      let answered = false;
+      try {
+        await abortable(Promise.resolve(this.t.send(frame(cmd, seq, body))), signal);
+      } catch (e) {
+        if (e instanceof DkError && e.kind === 'cancelled') throw e;
+        linkError = e;
+      }
+      if (linkError === undefined) {
+        const deadline = Date.now() + timeoutMs;
+        for (let left = deadline - Date.now(); left > 0; left = deadline - Date.now()) {
+          let raw: Uint8Array | null;
+          try {
+            raw = await abortable(this.t.recv(left, signal), signal);
+          } catch (e) {
+            if (e instanceof DkError && e.kind === 'cancelled') throw e;
+            linkError = e;
+            break;
+          }
+          if (!raw) break;
+          const r = parseReply(raw);
+          if (r && r.seq === seq && r.cmd === cmd) {
+            if (!retryBusy || statusName(r.status) !== 'E_BUSY' || busy >= BUSY_RETRIES) return r;
+            // the device's store is in use: the request did nothing; ask again shortly (not a timeout: it does not use up a retry)
+            busy++;
+            await abortable(new Promise<void>((done) => setTimeout(done, BUSY_WAIT_MS)), signal);
+            attempt--;
+            answered = true;
+            break;
+          }
+        }
+      }
+      // No reply, or the transport failed: the link may be stale (a device that re-enumerated); the transport reopens it before the next try
+      // and before the next request.
+      if (!answered && !signal.aborted) {
+        try {
+          await this.t.recover?.();
+        } catch {
+          // the device may not be back yet; the next failure calls recover again
         }
       }
     }
-    throw new DkError({ error: 'no reply from the device', kind: 'timeout' });
+    throw linkError !== undefined ? linkError : new DkError({ error: 'no reply from the device', kind: 'timeout' });
   }
 
   private async ok(

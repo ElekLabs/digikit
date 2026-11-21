@@ -7,7 +7,7 @@ describe('MIDI to a device through the host port', () => {
   test('notes and the session transport share the port, one whole message per send', async () => {
     const host = createFakeHost();
     const out = new MidiOut(host.ports.midi);
-    const transport = new MidiPortTransport(host.ports.midi);
+    const transport = new MidiPortTransport(host.ports.midi, 'Port A');
     const sysex = Uint8Array.of(0xf0, 0x00, 0x20, 0x3c, 1, 2, 3, 0xf7);
     await Promise.all([out.note(1, 60, 100), transport.send(sysex), out.cc(1, 74, 5)]);
     const sent = host.argsOf('ports.midi.send').map(([b]) => Array.from(b as Uint8Array));
