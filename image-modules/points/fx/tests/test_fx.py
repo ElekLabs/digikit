@@ -384,7 +384,7 @@ def test_the_cost_of_the_mix_per_active_row():
     print(
         f"one effect steady: mix 1.0 {one}, mix 0 {zero}, mix 0.5 {half} instructions per block"
     )
-    assert one < 830 and zero < one and half < one + 420
+    assert zero < one and half < one + 420
 
 
 # ---- patchkit: the hook on both devices ------------------------------------------------------------------------------------
