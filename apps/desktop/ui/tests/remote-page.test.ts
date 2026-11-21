@@ -133,6 +133,15 @@ test('a module listed without the state request is not asked again until the tar
   assert.equal(remoteStateWanted(true, listed, key, stateProbeKey('midi B', listed)), true);
   assert.equal(remoteStateWanted(true, listed, key, stateProbeKey('midi A', [...listed, { name: 'x/y' }])), true);
   assert.equal(stateProbeKey('t', [{ name: 'b' }, { name: 'a' }]), stateProbeKey('t', [{ name: 'a' }, { name: 'b' }]));
+  // a reload or an upgrade of the same module asks again
+  assert.notEqual(
+    stateProbeKey('t', [{ name: 'a', version: 1, cf_base: 16 }]),
+    stateProbeKey('t', [{ name: 'a', version: 2, cf_base: 16 }]),
+  );
+  assert.notEqual(
+    stateProbeKey('t', [{ name: 'a', version: 1, cf_base: 16 }]),
+    stateProbeKey('t', [{ name: 'a', version: 1, cf_base: 32 }]),
+  );
 });
 
 test('held keys are released on leaving when the module answered the state or is listed', () => {

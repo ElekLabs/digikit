@@ -37,9 +37,13 @@ export const isRemoteMissing = (error: unknown): boolean => error instanceof DkE
  * The key of one "listed, but REMOTE_STATE answered E_PROTO" finding: the target and the loaded module names. The page remembers it and does
  * not ask REMOTE_STATE again until the target or the list changes (each refused request is a runtime log error).
  */
-export const stateProbeKey = (target: string, loaded: readonly { name: string }[] | undefined): string =>
+/** A reload or an upgrade keeps the name but changes the version or the load address, so both are part of the key (the probe runs again). */
+export const stateProbeKey = (
+  target: string,
+  loaded: readonly { name: string; version?: number; cf_base?: number }[] | undefined,
+): string =>
   `${target}\n${(loaded ?? [])
-    .map((m) => m.name)
+    .map((m) => `${m.name}@${m.version ?? 0}:${m.cf_base ?? 0}`)
     .sort()
     .join(',')}`;
 
