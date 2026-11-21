@@ -8,7 +8,12 @@ description = "The package graph of the digikit runtime: which services a packag
 [lib]
 path = "src/lib.rs"
 
+[features]
+# `fake`: the recording seams and the fake manifest (`fake`) for the host tests of other crates. It builds with std: only dev-dependencies enable it.
+fake = []
+
 [dependencies]
 dkrt-abi = { path = "../abi" }
+dkrt-fit = { path = "../fit" }
 dkrt-sdk = { path = "../sdk" }
 dkneeds = { path = "../../../packages/dkneeds" }

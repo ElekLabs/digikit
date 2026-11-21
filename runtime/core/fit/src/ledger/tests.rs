@@ -482,3 +482,161 @@ fn claims_table_rows_are_eight_bytes() {
         8 * MAX_CLAIMS
     );
 }
+
+fn changes_nothing(l: &ResourceLedger) -> Vec<PoolReport> {
+    let mut rows = [PoolReport::EMPTY; MAX_POOLS];
+    let n = l.report(&mut rows);
+    rows[..n].to_vec()
+}
+
+#[test]
+fn fits_with_counts_pending_pools_and_the_wants_on_them_and_changes_nothing() {
+    let (l, tokens) = with_tokens();
+    let before = changes_nothing(&l);
+    let own = key(Owner::Package(pkg(5)), LIMITS);
+    let pool = sum(LIMITS, 3);
+    let pending = [(Owner::Package(pkg(5)), &pool)];
+    // package 5 declares a pool of 3 and package 6 wants 3 of it and 1 of the tokens
+    let ok = [want(own, 3), want(tokens, 1)];
+    assert_eq!(l.fits_with(&pending, &[], &[(pkg(6), &ok)]), Ok(()));
+    let over = [want(own, 4)];
+    assert_eq!(
+        l.fits_with(&pending, &[], &[(pkg(6), &over)]),
+        Err(FitError::Short(PoolShort {
+            pool: own,
+            need: 4,
+            free: 3
+        }))
+    );
+    // without the pending pool the want names a pool nobody declared
+    assert_eq!(
+        l.fits_with(&[], &[], &[(pkg(6), &ok)]),
+        Err(FitError::Short(PoolShort {
+            pool: own,
+            need: 3,
+            free: 0
+        }))
+    );
+    assert_eq!(changes_nothing(&l), before);
+    assert_eq!(l.fits(&[want(tokens, 2)]), Ok(()));
+}
+
+#[test]
+fn fits_with_refuses_a_pending_pool_that_cannot_be_declared() {
+    let (l, _) = with_tokens();
+    let dup = sum(TOKENS, 2);
+    assert_eq!(
+        l.fits_with(&[(Owner::Package(pkg(1)), &dup)], &[], &[]),
+        Err(FitError::Pool(LedgerError::Duplicate))
+    );
+    let orphan = ResourceDecl {
+        draws_from: Some(key(Owner::Core, 99)),
+        ..sum(LIMITS, 1)
+    };
+    assert_eq!(
+        l.fits_with(&[(Owner::Package(pkg(2)), &orphan)], &[], &[]),
+        Err(FitError::Pool(LedgerError::UnknownParent))
+    );
+}
+
+#[test]
+fn fits_with_counts_the_claims_of_released_owners_as_returned() {
+    let (mut l, tokens) = with_tokens();
+    l.claim(pkg(2), &[want(tokens, 2)]).unwrap();
+    let again = [want(tokens, 2)];
+    assert!(l.fits_with(&[], &[], &[(pkg(2), &again)]).is_err());
+    assert_eq!(l.fits_with(&[], &[pkg(2)], &[(pkg(2), &again)]), Ok(()));
+    // another consumer's claim stays counted
+    l.release(pkg(2));
+    l.claim(pkg(3), &[want(tokens, 1)]).unwrap();
+    assert!(l.fits_with(&[], &[pkg(2)], &[(pkg(2), &again)]).is_err());
+}
+
+#[test]
+fn fits_with_replaces_the_pools_of_a_released_owner() {
+    let (mut l, tokens) = with_tokens();
+    l.claim(pkg(2), &[want(tokens, 2)]).unwrap();
+    // the service (1) and its consumer (2) reload: the pool is declared again with the same limit
+    let pool = sum(TOKENS, 2);
+    let pending = [(Owner::Package(pkg(1)), &pool)];
+    let again = [want(tokens, 2)];
+    assert_eq!(
+        l.fits_with(&pending, &[pkg(1), pkg(2)], &[(pkg(2), &again)]),
+        Ok(())
+    );
+    let more = [want(tokens, 3)];
+    assert!(l
+        .fits_with(&pending, &[pkg(1), pkg(2)], &[(pkg(2), &more)])
+        .is_err());
+}
+
+#[test]
+fn fits_with_applies_the_per_voice_aggregate_to_pending_wants() {
+    // 8 voices, 20 units of headroom: the largest voice claim counts for every voice
+    let (l, voice, fx) = dsp_ledger(8, 20);
+    let two = [want(voice, 2)];
+    let four = [want(fx, 4)];
+    // voice claims of 2 count 16 and the effects add 4: 20 fits
+    assert_eq!(
+        l.fits_with(&[], &[], &[(pkg(3), &two), (pkg(4), &four)]),
+        Ok(())
+    );
+    // a second voice claim of 2 adds nothing (the largest counts), a larger one does
+    let two_again = [want(voice, 2)];
+    assert_eq!(
+        l.fits_with(
+            &[],
+            &[],
+            &[(pkg(3), &two), (pkg(5), &two_again), (pkg(4), &four)]
+        ),
+        Ok(())
+    );
+    let three = [want(voice, 3)];
+    assert!(l
+        .fits_with(
+            &[],
+            &[],
+            &[(pkg(3), &two), (pkg(5), &three), (pkg(4), &four)]
+        )
+        .is_err());
+}
+
+#[test]
+fn fits_with_follows_draws_from_of_a_pending_pool() {
+    let mut l = ResourceLedger::new();
+    let parent = key(Owner::Core, DSP);
+    l.declare(Owner::Core, &sum(DSP, 100)).unwrap();
+    let child = ResourceDecl {
+        draws_from: Some(parent),
+        ..sum(FX, 1000)
+    };
+    let pending = [(Owner::Package(pkg(1)), &child)];
+    let fx = key(Owner::Package(pkg(1)), FX);
+    let fits = [want(fx, 100)];
+    let over = [want(fx, 101)];
+    assert_eq!(l.fits_with(&pending, &[], &[(pkg(2), &fits)]), Ok(()));
+    assert_eq!(
+        l.fits_with(&pending, &[], &[(pkg(2), &over)]),
+        Err(FitError::Short(PoolShort {
+            pool: parent,
+            need: 101,
+            free: 100
+        }))
+    );
+}
+
+#[test]
+fn a_shortage_names_the_last_owner_own_need_against_what_the_owners_before_it_left() {
+    let mut l = ResourceLedger::new();
+    l.declare(Owner::Package(pkg(1)), &sum(TOKENS, 4)).unwrap();
+    let pool = key(Owner::Package(pkg(1)), TOKENS);
+    let three = [want(pool, 3)];
+    assert_eq!(
+        l.fits_with(&[], &[], &[(pkg(2), &three), (pkg(3), &three)]),
+        Err(FitError::Short(PoolShort {
+            pool,
+            need: 3,
+            free: 1
+        }))
+    );
+}

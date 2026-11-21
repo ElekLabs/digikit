@@ -109,6 +109,11 @@ impl Node {
         self
     }
 
+    /// Pin or unpin this package (the package manager changes pins as selections and requests come and go).
+    pub(crate) fn set_pinned(&mut self, pinned: bool) {
+        self.pinned = pinned;
+    }
+
     pub const fn id(&self) -> PackageId {
         self.id
     }

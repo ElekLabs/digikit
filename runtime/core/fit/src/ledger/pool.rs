@@ -62,6 +62,14 @@ impl ResourceDecl {
         }
     }
 
+    pub const fn name(&self) -> u32 {
+        self.name
+    }
+
+    pub const fn limit(&self) -> u32 {
+        self.limit
+    }
+
     /// This pool's value also counts against `parent`'s limit (the parent must be declared already).
     pub const fn drawing_from(mut self, parent: PoolKey) -> ResourceDecl {
         self.draws_from = Some(parent);
