@@ -162,9 +162,21 @@ test('the capture total skips cases, counts rest cases, and the estimate adds a 
   assert.equal(captureCounter({ done: 6, total: 33, capturing: true }), 'capture 7 / 33');
   assert.equal(captureCounter({ done: 6, total: 33, capturing: false }), 'capture 6 / 33');
   assert.equal(phaseLine('capture 6 / 33', { kind: 'restart', case: 'rest' }), 'capture 6 / 33 · restarting for rest');
-  // before the first capture: the static estimate less the time gone; after: the measured rate times the captures left
-  assert.equal(remainingSeconds({ profile: p, done: 0, elapsedS: 10 }), 12 * 7 + 3 * RESTART_S - 10);
-  assert.equal(remainingSeconds({ profile: p, done: 4, elapsedS: 200 }), 400);
+  // before the first capture: the static estimate
+  assert.equal(remainingSeconds({ profile: p, n: 0, capturing: false }), 12 * 7 + 3 * RESTART_S);
+  // mid-case: case a, 1 finished and the 2nd under way -> 1 left; later: rest and b (3 each), two module changes (rest, b)
+  assert.equal(remainingSeconds({ profile: p, caseId: 'a', n: 1, capturing: true }), (1 + 6) * 7 + 2 * RESTART_S);
+  // last case, last capture under way: nothing left
+  assert.equal(remainingSeconds({ profile: p, caseId: 'b', n: 2, capturing: true }), 0);
+  // a dropped current case has no captures left; b is skipped: rest follows with one module change
+  const dropped = new Map([['a', 1]]);
+  assert.equal(
+    remainingSeconds({ profile: p, skipping: ['b'], caseId: 'a', n: 1, capturing: false, dropped }),
+    3 * 7 + RESTART_S,
+  );
+  // a dropped case counts only its completed captures
+  assert.equal(captureTotal(p, undefined, dropped), 12 - 2);
+  assert.equal(captureTotal(p, ['a'], dropped), 9);
 });
 
 test('phase lines say what the run does between captures', () => {

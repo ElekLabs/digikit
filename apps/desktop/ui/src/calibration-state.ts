@@ -94,45 +94,42 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     let shown:
       { kind: 'capture'; case: string } | { kind: 'phase'; event: Parameters<typeof phaseLine>[1] } | undefined;
     let done = 0;
-    let started: number | undefined;
     let skipping: string[] = [];
-    let now: () => Promise<number> = async () => Date.now();
+    // the captures finished per case, and the cases a failure ended early (with the captures they finished)
+    const completed = new Map<string, number>();
+    const dropped = new Map<string, number>();
+    let current: string | undefined;
     const live: Capture['profile'][] = [];
-    // the time left follows the target's clock (emulated time on the emulator)
+    // the line follows the run's position
     const refresh = () => {
       const s = shown;
-      if (!s) return;
-      void now().then((t) => {
-        started ??= t;
-        const total = captureTotal(choice.profile, skipping);
-        const counter = captureCounter({ done, total, capturing: s.kind === 'capture' });
-        setProgress(
-          s.kind === 'phase'
-            ? phaseLine(counter, s.event)
-            : progressLine({
-                counter,
-                case: s.case,
-                left: remainingSeconds({
-                  profile: choice.profile,
-                  skipping,
-                  done,
-                  elapsedS: Math.max(0, (t - started) / 1000),
-                }),
+      if (!s || !running()) return;
+      const total = captureTotal(choice.profile, skipping, dropped);
+      const counter = captureCounter({ done, total, capturing: s.kind === 'capture' });
+      setProgress(
+        s.kind === 'phase'
+          ? phaseLine(counter, s.event)
+          : progressLine({
+              counter,
+              case: s.case,
+              left: remainingSeconds({
+                profile: choice.profile,
+                skipping,
+                caseId: current,
+                n: completed.get(s.case) ?? 0,
+                capturing: true,
+                dropped,
               }),
-        );
-      });
+            }),
+      );
     };
-    const tick = setInterval(refresh, 1000);
     try {
       const out = await calibrator.run({
         profile: choice.name,
         signal: mine.signal,
-        onClock: (f) => {
-          now = f;
-          void f().then((t) => (started ??= t));
-        },
         onCapture: (c) => {
           done++;
+          completed.set(c.caseId, (completed.get(c.caseId) ?? 0) + 1);
           live.push(c.profile);
           // the table fills as the captures arrive
           setSets((s) => ({
@@ -149,9 +146,16 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
             refresh();
           } else if (e.kind === 'capture') {
             shown = { kind: 'capture', case: e.case };
+            current = e.case;
             refresh();
-          } else if (e.kind === 'skip') setNotes((n) => [...n, `case ${e.case} skipped: ${e.reason}`]);
-          else if (e.kind === 'fail') setNotes((n) => [...n, `case ${e.case} failed: ${e.reason}`]);
+          } else if (e.kind === 'skip') {
+            skipping = [...skipping, e.case];
+            setNotes((n) => [...n, `case ${e.case} skipped: ${e.reason}`]);
+          } else if (e.kind === 'fail') {
+            dropped.set(e.case, completed.get(e.case) ?? 0);
+            setNotes((n) => [...n, `case ${e.case} failed: ${e.reason}`]);
+            refresh();
+          }
         },
       });
       if (out.captures.length > 0) {
@@ -167,7 +171,6 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     } catch (e) {
       setError(asText(e));
     } finally {
-      clearInterval(tick);
       setRun(false);
       setStopping(false);
       setProgress('');

@@ -379,9 +379,22 @@ export const RESTART_S = 40;
 const runnable = (profile: CalProfile, skipping?: readonly string[]) =>
   profile.cases.filter((c) => !skipping?.includes(c.id));
 
-/** The captures of a run: every case that is not skipped (module-free cases like `stock` and the `rest` cases included) times the repeats. */
-export function captureTotal(profile: CalProfile, skipping?: readonly string[]): number {
-  return runnable(profile, skipping).length * profile.repeats;
+/** Whether a case needs a restart: its modules differ from those of the case before it. */
+const modulesChange = (before: readonly string[], modules: readonly string[]): boolean =>
+  [...modules].sort().join('\n') !== [...before].sort().join('\n');
+
+/**
+ * The captures of a run: every case that is not skipped (module-free cases like `stock` and the `rest` cases included) times the repeats.
+ * `dropped` maps a case the run stopped early (it failed) to the captures it completed; the rest of its repeats do not count.
+ */
+export function captureTotal(
+  profile: CalProfile,
+  skipping?: readonly string[],
+  dropped?: ReadonlyMap<string, number>,
+): number {
+  let total = 0;
+  for (const c of runnable(profile, skipping)) total += dropped?.has(c.id) ? dropped.get(c.id)! : profile.repeats;
+  return total;
 }
 
 /** How long a run takes before it starts: every capture at warm-up plus window, and `RESTART_S` for each case whose modules differ from the case before it (the first is compared with no module). */
@@ -389,22 +402,36 @@ export function estimateSeconds(profile: CalProfile, skipping?: readonly string[
   let before: string[] = [];
   let restarts = 0;
   for (const c of runnable(profile, skipping)) {
-    if ([...c.modules].sort().join('\n') !== [...before].sort().join('\n')) restarts++;
+    if (modulesChange(before, c.modules)) restarts++;
     before = c.modules;
   }
   return captureTotal(profile, skipping) * (profile.warmup_s + profile.capture_s) + restarts * RESTART_S;
 }
 
-/** Seconds left of a run: elapsed time per finished capture times the captures left (the rate includes the restarts); before the first capture, the static estimate less the time gone. */
+/**
+ * Seconds left of a run, from the position alone (no elapsed time): the captures left at warm-up plus window, and `RESTART_S` for each later
+ * case whose modules differ from the case before it. The captures left are the rest of the current case (`n` finished, one more under way
+ * when `capturing`; the part of that capture already gone is ignored) and the repeats of every later case. A dropped case has none left.
+ * Without a current case (before the first capture): the static estimate.
+ */
 export function remainingSeconds(p: {
   profile: CalProfile;
   skipping?: readonly string[];
-  done: number;
-  elapsedS: number;
+  caseId?: string;
+  n: number;
+  capturing: boolean;
+  dropped?: ReadonlyMap<string, number>;
 }): number {
-  if (p.done < 1) return Math.max(0, Math.ceil(estimateSeconds(p.profile, p.skipping) - p.elapsedS));
-  const left = Math.max(0, captureTotal(p.profile, p.skipping) - p.done);
-  return Math.ceil((p.elapsedS / p.done) * left);
+  const cases = runnable(p.profile, p.skipping);
+  const at = p.caseId === undefined ? -1 : cases.findIndex((c) => c.id === p.caseId);
+  if (at < 0) return Math.ceil(estimateSeconds(p.profile, p.skipping));
+  let left = p.dropped?.has(p.caseId!) ? 0 : Math.max(0, p.profile.repeats - p.n - (p.capturing ? 1 : 0));
+  let restarts = 0;
+  for (let i = at + 1; i < cases.length; i++) {
+    left += p.profile.repeats;
+    if (modulesChange(cases[i - 1]!.modules, cases[i]!.modules)) restarts++;
+  }
+  return Math.ceil(left * (p.profile.warmup_s + p.profile.capture_s) + restarts * RESTART_S);
 }
 
 /** `capture 7 / 33`: the captures done so far, one more while a capture is under way. */
