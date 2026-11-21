@@ -348,6 +348,7 @@
           "offset": 0
         }
       },
+      "sig": "const u8 *(u32 index)",
       "subsystem": "filter",
       "users": [
         "core/services/machines"
@@ -431,7 +432,7 @@
         "rust": "dkfw::filter::list_vector"
       },
       "cpu": "cf",
-      "doc": "The chooser's order vector (called from the filter list builder, DT2 FUN_400610e8 and DN2 FUN_4005b458): the first call allocates 0x18 bytes and copies the six static longs {0,1,4,3,5,2}; later calls hand out the same vector. DT2 FUN_40052c98, DN2 FUN_4004dae2.",
+      "doc": "The chooser's order vector function (a0 = the vector object it fills; DT2 FUN_40052c98, DN2 FUN_4004dae2; called from the filter list builder, DT2 FUN_400610e8 and DN2 FUN_4005b458): the first call builds a static vector of six longs {0,1,4,3,5,2} (0x18 bytes from operator new, kept in globals, never freed); every call then allocates a new buffer of that size, copies the static vector into it and stores begin, end and capacity in the object at a0. The caller owns that copy: the builder frees its begin with the firmware free after its loop (DT2 0x400611e2, DN2 0x4005b552).",
       "file": "devices/fw/filter.toml",
       "kind": "fn",
       "mark": "D",
@@ -606,6 +607,225 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x400c24b0"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400c2614"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400c89c6"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Entry of the filter type to descriptor row accessor (type at 4(sp); d0, d1 free); the hook answers a loaded module filter (16 to 31) with the service's row.",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.filter.hook.accessor",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.filter.fn.accessor",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4005b4de"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4005b4de"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4006116e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The list builder's call of the chooser's order vector; the target becomes a routine that builds the stock vector and appends the loaded module filters.",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "cf.filter.hook.list",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "a0",
+          "a1",
+          "ccr"
+        ],
+        "in": [
+          "a0"
+        ]
+      },
+      "site": "cf.filter.site.list_call",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400dd2bc"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400dd420"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The loader's filter byte as the DT2 hook (the record byte is rec[0xf5], the sound byte sound+0xdf, the machine byte sound+0xde).",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.filter.hook.loader.dn2",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "d2",
+          "ccr"
+        ],
+        "in": [
+          "a2",
+          "a3",
+          "d0",
+          "d1"
+        ]
+      },
+      "site": "cf.filter.site.loader_filter",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x400db484"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "The loader's filter byte (d0 = the machine byte, d1 = its mask; the record byte is rec[0xd3], the sound byte sound+0xa3): the hook stores the machine byte, keeps a stored 16 to 31 when that module filter is loaded and applies the stock bound otherwise.",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.filter.hook.loader.dt2",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "d2",
+          "ccr"
+        ],
+        "in": [
+          "a2",
+          "a3",
+          "d0",
+          "d1"
+        ]
+      },
+      "site": "cf.filter.site.loader_filter",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400dc3a4"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400dc508"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400da71e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Entry of the filter name function (type at 4(sp); d0, d1 free); the hook returns the long name of a loaded module filter.",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.filter.hook.name",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.filter.fn.name",
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4006eca0",
             "len": 8
           }
@@ -684,6 +904,55 @@
           "kind": "cf_func",
           "len": 6,
           "offset": 84
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4005b4de",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4005b4de",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4006116e",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "`jsr list_vector.l` in the filter chooser's list builder (DT2 FUN_400610e8 at 0x4006116e, DN2 FUN_4005b458 at 0x4005b4de; a0 = the vector object the callee fills, which the builder then walks): an absolute call, so its target can be replaced.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.list_call",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 134
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 134
         }
       },
       "subsystem": "filter",
@@ -818,6 +1087,51 @@
         "dt2": {
           "kind": "cf_func",
           "len": 4,
+          "offset": 210
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400dd2bc",
+            "len": 34
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400dd420",
+            "len": 34
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400db484",
+            "len": 34
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The loader's filter byte, from the end of the machine byte's mask to the store (DT2 0x400db484..0x400db4a6, DN2 0x400dd420..0x400dd442; a2 = the sound, a3 = the record): `and.l D1,D0; move.b D0b,machine(A2)`, then the filter byte's range test against bound 7 (`move.b #7,D2b` first), then `move.b #4,D2b` for the next field and the store. 34 bytes without branch or PC-relative operand; d0, d1 are reloaded behind it and d2 = 4.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.loader_filter",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 34,
+          "offset": 210
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 34,
           "offset": 210
         }
       },
@@ -6032,7 +6346,8 @@
       "subsystem": "mem",
       "users": [
         "core/plusdrive-write",
-        "core/runtime"
+        "core/runtime",
+        "core/services/machines"
       ],
       "was": [
         "dkrt.fw.free"
@@ -6097,7 +6412,8 @@
       "users": [
         "core/digikit-menu",
         "core/plusdrive-write",
-        "core/runtime"
+        "core/runtime",
+        "core/services/machines"
       ],
       "was": [
         "cf.menu.fn.new",
@@ -25127,7 +25443,7 @@
       "name": "draw"
     },
     {
-      "count": 11,
+      "count": 18,
       "cpu": "cf",
       "file": "devices/fw/filter.toml",
       "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",

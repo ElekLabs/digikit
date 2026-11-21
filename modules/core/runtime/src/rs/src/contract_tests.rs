@@ -158,7 +158,7 @@ fn declared_desc(asm: &str, prefix: &str) -> Vec<u32> {
 }
 
 /// The image byte offset of a DSP text symbol of the pack output (the address map counts short words).
-fn symbol_offset(addrmap: &str, symbol: &str) -> u32 {
+pub(crate) fn symbol_offset(addrmap: &str, symbol: &str) -> u32 {
     let at = addrmap.find(&std::format!("\"name\":\"{symbol}\"")).unwrap_or_else(|| panic!("{symbol} is not in the address map"));
     let head = &addrmap[..at];
     let n = &head[head.rfind("\"addr\":").unwrap() + 7..];

@@ -36,7 +36,11 @@ pub mod draw {
 }
 
 pub mod filter {
-    // cf.filter.fn.accessor: no sig yet
+    unsafe extern "C" {
+        /// Filter type to descriptor row (type at 4(sp); d0 and d1 free at the entry): unsigned `type <= 5` gives the row base + 0x2c * type, else the shared fallback row. DT2 FUN_400c89c6 (base 0x4293b858), DN2 FUN_400c2614 (base 0x424339cc). The hook answers 16..31 from the service row.
+        #[link_name = "cf.filter.fn.accessor"]
+        pub fn accessor(index: u32) -> *const u8;
+    }
 
     unsafe extern "C" {
         /// Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store.

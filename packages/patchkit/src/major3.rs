@@ -81,6 +81,7 @@ fn header_table(
     device: &str,
     mk: Vec<u32>,
     fk: Vec<u32>,
+    flk: Vec<u32>,
 ) -> Result<Vec<u8>> {
     let id = &mf.module.id;
     let u = mf.uses.for_device(device);
@@ -96,6 +97,9 @@ fn header_table(
     }
     if !fk.is_empty() {
         groups.insert(dkneeds::KIND_EFFECT, fk);
+    }
+    if !flk.is_empty() {
+        groups.insert(dkneeds::KIND_FILTER, flk);
     }
     for r in &mf.records {
         let kind = dkneeds::KIND_NAMES
@@ -151,6 +155,14 @@ fn header_table(
     Ok(keys)
 }
 
+/// The keys of the `[[filter]]` ids: a machine's derivation from the packed name and the id.
+fn filter_keys(mf: &crate::module::Manifest, name: &str) -> Vec<u32> {
+    mf.filters
+        .iter()
+        .map(|x| crate::register::machine_key(name, &x.id))
+        .collect()
+}
+
 /// The keys table and the DSP section of a new-style module for `device`. `name` is the packed module name (`pack --name`, else the module id): the keys hash it with
 /// the `[[machine]]` and `[[fx]]` ids, so an alias made with another name has keys of its own. `dsp_obj` is its DSP object (none: refused, a machine or an effect
 /// needs one).
@@ -159,9 +171,9 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
     let id = &mf.module.id;
     let Some(obj) = dsp_obj else {
         if mf.machines.is_empty() && mf.fxs.is_empty() {
-            // a tool or a service: no machine or effect keys, no DSP section (a header table with the records and the uses it has)
+            // a tool, a service or a filter module without DSP: no machine or effect keys, no DSP section (a header table with the records, the filter keys and the uses it has)
             return Ok(Sections {
-                keys: header_table(mf, device, vec![], vec![])?,
+                keys: header_table(mf, device, vec![], vec![], filter_keys(mf, name))?,
                 dsp: vec![],
                 stereo: false,
                 gate: false,
@@ -252,12 +264,21 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
             route: dkmdsp::ROUTE_MASTER,
         });
     }
-    let (dsp, gate) = dkmdsp::pack_with_gate(
+    let mut filters = Vec::new();
+    for f in &mf.filters {
+        let (prefix, _) = f.dsp_prefix();
+        for (suffix, kind) in [("coef", "text"), ("process", "text"), ("desc", "data")] {
+            require(obj, id, "filter", &format!("_{prefix}_{suffix}"), kind)?;
+        }
+        filters.push((crate::register::machine_key(name, &f.id), prefix));
+    }
+    let (dsp, gate) = dkmdsp::pack_filters(
         obj,
         crate::register::device_id(device)?,
         &voices,
         &fxs,
         tracks.as_ref(),
+        &filters,
     )?;
     let mk: Vec<u32> = mf
         .machines
@@ -269,7 +290,7 @@ pub fn sections(m: &Module, name: &str, device: &str, dsp_obj: Option<&Dko>) -> 
         .iter()
         .map(|y| crate::register::effect_id(name, &y.id))
         .collect();
-    let keys = header_table(mf, device, mk, fk)?;
+    let keys = header_table(mf, device, mk, fk, filter_keys(mf, name))?;
     Ok(Sections {
         keys,
         dsp,

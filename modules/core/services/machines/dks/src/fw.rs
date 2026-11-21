@@ -25,6 +25,15 @@ mod native {
     pub unsafe fn view_track(track_ref: *const u8) -> u32 {
         call_if_bound(dkfw::page::view_track as usize, 0, || dkfw::page::view_track(track_ref))
     }
+    pub unsafe fn filter_row(index: u32) -> u32 {
+        call_if_bound(dkfw::filter::accessor as usize, 0, || dkfw::filter::accessor(index) as usize as u32)
+    }
+    pub unsafe fn alloc(size: u32) -> u32 {
+        call_if_bound(dkfw::mem::new as usize, 0, || dkfw::mem::new(size) as usize as u32)
+    }
+    pub unsafe fn free(p: u32) {
+        call_if_bound(dkfw::mem::free as usize, (), || dkfw::mem::free(p as usize as *mut u8))
+    }
 }
 #[cfg(not(target_arch = "m68k"))]
 mod native {
@@ -35,6 +44,13 @@ mod native {
     pub unsafe fn view_track(_: *const u8) -> u32 {
         0
     }
+    pub unsafe fn filter_row(_: u32) -> u32 {
+        0
+    }
+    pub unsafe fn alloc(_: u32) -> u32 {
+        0
+    }
+    pub unsafe fn free(_: u32) {}
 }
 
 /// Vtable slots of the page (`view`) and of its parameter object.
@@ -108,6 +124,17 @@ pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
     slots::page_turn(&ImportCore, view, ev)
+}
+
+/// The stock descriptor row of filter type 0 (Multi-Mode), 0 where the firmware function is not bound.
+pub unsafe fn stock_filter_row() -> u32 {
+    native::filter_row(0)
+}
+
+/// The routine of the list hook: the order vector the stock function filled gets the loaded module filters appended (the hook calls it with the vector object).
+#[no_mangle]
+pub unsafe extern "C" fn dks_filter_list(vec: u32) {
+    dkrt_svc_machines::filter::extend_list(&ImportCore, vec, &mut |n| native::alloc(n), &mut |p| native::free(p));
 }
 
 /// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click.

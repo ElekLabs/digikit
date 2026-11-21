@@ -13,8 +13,9 @@ use dkrt_abi::service::{
     Problem, RowWrite, Service, SettleCtx, TableFault,
 };
 use dkrt_sdk::records::{
-    KIND_ACTION, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE, KIND_PARAM,
-    LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
+    KIND_ACTION, KIND_FILTER, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE,
+    KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE,
+    LEN_PARAM,
 };
 use dkrt_sdk::*;
 use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
@@ -145,6 +146,7 @@ impl<C: CoreApi> Service<C> for Machines {
         d.kind(KIND_ACTION, LEN_ACTION);
         d.kind(KIND_NATIVE_PAGE, LEN_NATIVE_PAGE);
         d.kind(KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2);
+        d.kind(KIND_FILTER, LEN_FILTER);
     }
 
     unsafe fn settle(core: &C, s: &SettleCtx) {
@@ -152,15 +154,23 @@ impl<C: CoreApi> Service<C> for Machines {
         PARK_TRIES = 0;
         BUSY_PASSES = 0;
         LOGGED = 0;
-        crate::assign::plan(core, s)
+        crate::assign::plan(core, s);
+        crate::filter::plan(core, s)
     }
 
     unsafe fn check(core: &C, step: u32, c: &CheckCtx) -> i32 {
         use check_step as st;
+        if step == st::RECORDS {
+            // the filter records need no firmware row, so they are checked before the registry is looked at
+            let r = crate::filter::check(core, c.reg);
+            if r != OK {
+                return r;
+            }
+        }
         let inf = dkrt_svc_params::dynreg(core);
         if inf.is_null() || !fits(inf) {
             // the machine, parameter, page, action and native page records need this registry: a section without them does not
-            let none = counts_of(c.reg) == (0, 0, 0, 0, 0);
+            let none = counts_of(c.reg) == (0, 0, 0, 0, 0) && crate::filter::knob_count(c.reg) == 0;
             return if step == st::COUNTS && !none {
                 E_NO_REGISTRY
             } else {
@@ -192,9 +202,10 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn apply(core: &C, c: &ApplyCtx) -> i32 {
+        crate::filter::apply(core, c.owner, c.reg);
         let inf = dkrt_svc_params::dynreg(core);
         if inf.is_null() {
-            return if counts_of(c.reg) == (0, 0, 0, 0, 0) {
+            return if counts_of(c.reg) == (0, 0, 0, 0, 0) && crate::filter::knob_count(c.reg) == 0 {
                 OK
             } else {
                 E_NO_REGISTRY
@@ -239,6 +250,7 @@ impl<C: CoreApi> Service<C> for Machines {
 
     unsafe fn remove(core: &C, owner: u8) {
         crate::build::end();
+        crate::filter::remove(owner);
         remove(core, owner)
     }
 
@@ -252,6 +264,7 @@ impl<C: CoreApi> Service<C> for Machines {
 
     unsafe fn tick(core: &C, phase: u32) {
         if phase == tick_phase::LAST {
+            crate::filter::refresh(core);
             slots::tick(core);
             park_absent(core);
         }
@@ -670,7 +683,7 @@ unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
     return capacity::registry_rows(
         ng,
         capacity::free_rows(&s.page_owner, iw(inf, w::PG_DYN_N)),
-        np,
+        np + crate::filter::knob_count(reg),
         capacity::free_rows(&s.param_owner, iw(inf, w::P_DYN_N)),
     );
 }

@@ -17,11 +17,20 @@ mod hooks;
 mod image;
 mod rt;
 
+/// The service file's `setup`: the image table, then the stock filter row the module filters copy.
+unsafe fn setup<C: dkrt_abi::core_api::CoreApi>(core: &C) -> i32 {
+    let r = image::setup(core);
+    if r == dkrt_sdk::OK {
+        dkrt_svc_machines::filter::set_stock(fw::stock_filter_row());
+    }
+    r
+}
+
 dkrt_svc_rt::service!(
     Machines,
     "machines",
     &KINDS_MACHINES,
-    setup = image::setup::<dkrt_svc_rt::ImportCore>,
+    setup = setup::<dkrt_svc_rt::ImportCore>,
     hooks = [
         ("cf.machine.hook.clone.5", hooks::mf_clone5, dt2),
         ("cf.machine.hook.param_code.args", hooks::mf_typearg, dt2),
@@ -32,6 +41,11 @@ dkrt_svc_rt::service!(
         ("cf.machine.hook.param_code.map", hooks::mf_typemap2, dn2),
         ("cf.machine.hook.type_reader.load", hooks::mf_reader, dn2),
         ("cf.machine.hook.owner_type_load", hooks::mf_owner, dn2),
+        ("cf.filter.hook.accessor", hooks::mf_flt_acc),
+        ("cf.filter.hook.name", hooks::mf_flt_name),
+        ("cf.filter.hook.list", hooks::mf_flt_list),
+        ("cf.filter.hook.loader.dt2", hooks::mf_flt_load_dt2, dt2),
+        ("cf.filter.hook.loader.dn2", hooks::mf_flt_load_dn2, dn2),
         ("cf.page.hook.source_draw", hooks::mf_draw_hook),
         ("cf.page.hook.source_code", hooks::mf_code_hook),
         ("cf.page.hook.source_key", hooks::mf_key_hook),

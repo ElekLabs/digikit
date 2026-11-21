@@ -209,8 +209,10 @@ pub const KIND_LFO_SHAPE: u32 = 8;
 pub const LEN_LFO_SHAPE: u32 = 0x50;
 pub const KIND_SHORTCUT: u32 = 9;
 pub const LEN_SHORTCUT: u32 = 0x44;
+pub const KIND_FILTER: u32 = 10;
+pub const LEN_FILTER: u32 = 0xc0;
 /// Every record kind in the order of its number: (kind, record length with its header, owning service).
-pub const KINDS: [(u32, u32, &str); 9] = [
+pub const KINDS: [(u32, u32, &str); 10] = [
     (KIND_PARAM, LEN_PARAM, "machines"),
     (KIND_MACHINE, LEN_MACHINE, "machines"),
     (KIND_PAGE, LEN_PAGE, "machines"),
@@ -220,15 +222,17 @@ pub const KINDS: [(u32, u32, &str); 9] = [
     (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2, "machines"),
     (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
     (KIND_SHORTCUT, LEN_SHORTCUT, "shortcuts"),
+    (KIND_FILTER, LEN_FILTER, "machines"),
 ];
 /// The kinds of the `machines` service: (kind, record length).
-pub const KINDS_MACHINES: [(u32, u32); 6] = [
+pub const KINDS_MACHINES: [(u32, u32); 7] = [
     (KIND_PARAM, LEN_PARAM),
     (KIND_MACHINE, LEN_MACHINE),
     (KIND_PAGE, LEN_PAGE),
     (KIND_ACTION, LEN_ACTION),
     (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE),
     (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2),
+    (KIND_FILTER, LEN_FILTER),
 ];
 /// The kinds of the `fx` service: (kind, record length).
 pub const KINDS_FX: [(u32, u32); 1] = [
@@ -252,7 +256,7 @@ pub const HANDLE_SERVICES: [&str; 6] = [
     "sdhc_large",
 ];
 /// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
-pub const KIND_NAMES: [(&str, u32); 9] = [
+pub const KIND_NAMES: [(&str, u32); 10] = [
     ("param", KIND_PARAM),
     ("machine", KIND_MACHINE),
     ("page", KIND_PAGE),
@@ -262,6 +266,7 @@ pub const KIND_NAMES: [(&str, u32); 9] = [
     ("native_page_v2", KIND_NATIVE_PAGE_V2),
     ("lfo_shape", KIND_LFO_SHAPE),
     ("shortcut", KIND_SHORTCUT),
+    ("filter", KIND_FILTER),
 ];
 /// The kinds a module emits with `dk_record_add`.
 pub const GENERIC_KINDS: [u32; 1] = [
@@ -317,6 +322,31 @@ pub mod fx {
     pub const DK_FX_DESC_WORDS: u32 = 6;
 }
 
+/// The `[filter]` contract of sdk/sdk.toml (the numbers of <dk/gen/filter_consts.h>).
+pub mod filter {
+    pub const DK_FILTER_V1: u32 = 1;
+    pub const DK_FILTER_BLOCK: u32 = 32;
+    pub const DK_FILTER_MAX_PARAMS: u32 = 2;
+    pub const DK_FILTER_OK: u32 = 0;
+    pub const DK_FILTER_BOUND_BITS: u32 = 1090519040;
+    pub const DK_FILTER_MAGIC: u32 = 1145783884;
+    pub const DK_FILTER_IN_BYTES: u32 = 0;
+    pub const DK_FILTER_IN_WORDS: u32 = 0;
+    pub const DK_FILTER_DESC_MAGIC: u32 = 0;
+    pub const DK_FILTER_DESC_CONTRACT: u32 = 4;
+    pub const DK_FILTER_DESC_N_PARAMS: u32 = 8;
+    pub const DK_FILTER_DESC_STATE_BYTES: u32 = 12;
+    pub const DK_FILTER_DESC_MAX_CALL_DEPTH: u32 = 16;
+    pub const DK_FILTER_DESC_STACK_BYTES: u32 = 20;
+    pub const DK_FILTER_DESC_BYTES: u32 = 24;
+    pub const DK_FILTER_DESC_W_MAGIC: u32 = 0;
+    pub const DK_FILTER_DESC_W_CONTRACT: u32 = 1;
+    pub const DK_FILTER_DESC_W_N_PARAMS: u32 = 2;
+    pub const DK_FILTER_DESC_W_STATE_BYTES: u32 = 3;
+    pub const DK_FILTER_DESC_W_MAX_CALL_DEPTH: u32 = 4;
+    pub const DK_FILTER_DESC_W_STACK_BYTES: u32 = 5;
+    pub const DK_FILTER_DESC_WORDS: u32 = 6;
+}
 /// The `[machine]` contract of sdk/sdk.toml (the numbers of <dk/gen/machine_consts.h>).
 pub mod machine {
     pub const DK_MACHINE_V1: u32 = 1;

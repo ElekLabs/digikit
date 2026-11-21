@@ -112,6 +112,8 @@ fn the_tail_a_hook_names_is_the_hash_of_its_hook() {
         "cf.machine.hook.type_page.desc",
         "cf.machine.hook.param_code.map",
         "cf.machine.hook.param_code.args",
+        "cf.filter.hook.accessor",
+        "cf.filter.hook.name",
         "cf.page.hook.source_draw",
         "cf.page.hook.source_code",
         "cf.page.hook.source_key",

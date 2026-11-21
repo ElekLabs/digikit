@@ -302,7 +302,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         VOICE_V1
     } else if version == DSP_V2 {
         VOICE_V2
-    } else if (DSP_V3..=DSP_V5).contains(&version) {
+    } else if (DSP_V3..=filter::VERSION).contains(&version) {
         VOICE_V3
     } else {
         return Err(Error::Dsp);
@@ -345,7 +345,12 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     {
         return Err(Error::Dsp);
     }
-    if version == 5 {
+    let filter_state = if version == filter::VERSION {
+        filter::check(src, off, size)?.1
+    } else {
+        0
+    };
+    if version == 5 || (version == filter::VERSION && word(src, off + DSP_H_BANK_OFF)? != 0) {
         let record_off = word(src, off + DSP_H_BANK_OFF)?;
         if record_off < DSP_HEADER || record_off & 3 != 0 || !inside(record_off, 32, image_off) {
             return Err(Error::Dsp);
@@ -428,6 +433,7 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
         total = total.checked_add((state + 7) & !7).ok_or(Error::Dsp)?;
         i += 1;
     }
+    total = total.checked_add(filter_state).ok_or(Error::Dsp)?;
     n.fx_slots = nfx;
     n.arena_xfer = arena_block(image).ok_or(Error::Dsp)?;
     n.dsp_area = total.checked_add(GRANULE - 1).ok_or(Error::Dsp)? & !(GRANULE - 1);
@@ -436,6 +442,14 @@ fn dsp<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Result<(), 
     Ok(())
 }
 
+/// Validate the standalone DKDS section produced or inspected by patchkit with the planner's limits.
+pub fn section_area(bytes: &[u8]) -> Result<u32, Error> {
+    let mut n = Needs::default();
+    dsp(&mut &bytes[..], 0, bytes.len() as u32, &mut n)?;
+    Ok(n.dsp_area)
+}
+
+pub mod filter;
 pub mod keys;
 
 #[cfg(test)]

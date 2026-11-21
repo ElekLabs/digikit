@@ -60,6 +60,9 @@ pub struct Manifest {
     /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
     #[serde(default, rename = "fx")]
     pub fxs: Vec<IdRef>,
+    /// `[[filter]] id = "..."`: the filters the module declares in init (`dk_module_ctx_add_filter`), at most 8. Their keys (a machine's derivation) go in the keys table.
+    #[serde(default, rename = "filter")]
+    pub filters: Vec<IdRef>,
     /// `[[record]] kind = "lfo_shape", id = "ramp"`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`. Its key is
     /// `hash24(<module id>:<id>) << 8`, like a machine key; `patchkit gen` writes it as `DK_KEY_<ID>` in `build/gen/module_ids.h` and `init` writes that constant as the
     /// first word of the record's body. The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
@@ -126,7 +129,11 @@ impl Manifest {
                 return Err(err!("{who}: [[repack]] stage_end is below dest"));
             }
         }
-        for (table, ids) in [("machine", &self.machines), ("fx", &self.fxs)] {
+        for (table, ids) in [
+            ("machine", &self.machines),
+            ("fx", &self.fxs),
+            ("filter", &self.filters),
+        ] {
             let mut seen = std::collections::BTreeSet::new();
             for r in ids {
                 let ok = !r.id.is_empty()

@@ -6,7 +6,7 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.10.6"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -29,7 +29,7 @@ order = [
 ]
 
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
+types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_filter", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
 services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
@@ -154,7 +154,7 @@ entry       = { entry = "I12", return = "I13" }
 # (DK_SLOT_*: byte offsets) from it; the file is part of the service ABI hash. A `[[slot]] space = "dsp"` of an image adapter and a `[[fill]]` of a service name an entry.
 [dsp.slots]
 words = 16
-names = ["voice_render", "voice_unpack", "fx_entry", "fx_send"]
+names = ["voice_render", "voice_unpack", "fx_entry", "fx_send", "filter_coef", "filter_proc"]
 
 # The FX contract's numbers (sdk/include/dk/gen/fx.h is the generated C view; it includes the generated sdk/include/dk/gen/fx_consts.h).
 # `patchkit gen` writes sdk/dsp/contract/dk_fx.inc and sdk/include/dk/gen/fx_consts.h from this table. Do not include it together with dk_machine.inc (DK_BLOCK and DK_LEVEL_BOUND_BITS are in both).
@@ -200,6 +200,26 @@ desc = [
 fns = [
     "i32 process(void *state, const dk_fx_in *in, const i32 *params) // Block entry point. params: DK_FX_MAX_PARAMS words. Returns dk_fx_status; a negative number is a fault: the block plays dry. Entered as note_on of dk_machine.h.",
 ]
+
+# The filter contract's numbers (docs/plans/extension-model.md E7, finding 148): the DSP code of a run-time filter type (16 to 31) that the machines service calls from the stubs of
+# core/dsp-voice at the stock filter's coefficient and process dispatch. `patchkit gen` writes sdk/dsp/contract/dk_filter.inc from this table; its names do not clash with the machine and fx
+# contracts. Entries (SHARC+ assembly, as the machine contract: the caller enters with `I13 = return address; JUMP (M13, I12)` and the filter returns with `JUMP (M13, I13)`; result R0):
+#   coef(state, cutoff, params): once per voice and block, before process. R4 = state, R8 = the normalised cutoff 0 to 1 as a float (the stock cutoff with the filter envelope, key tracking,
+#     LFO and MIDI modulation already in it, clamped to 0 .. 1), R12 = params (DK_FILTER_MAX_PARAMS words: the module's knobs 2 and 3 as the page words, 0 .. 0x7f00; unused words 0). Returns 0.
+#   process(state, buf, n): R4 = state, R8 = the voice's block (n floats, DK_FILTER_BLOCK, in place), R12 = n. Returns 0.
+# The output guard of the machines is the same: after process the block is checked, a sample that is not finite or with |x| above DK_FILTER_BOUND zeroes the whole block and counts a fault
+# (the filter type is switched off after the fault window of the machines; the voice then plays unfiltered).
+# The descriptor is one per module in read-only data: the fields of `desc` in order, 4 bytes each.
+[filter]
+consts = [
+    { name = "DK_FILTER_V1", value = 1, doc = "Contract version." },
+    { name = "DK_FILTER_BLOCK", value = 32, doc = "Samples per call, 48 kHz, both devices." },
+    { name = "DK_FILTER_MAX_PARAMS", value = 2, doc = "Knobs a filter owns (its page's knobs 2 and 3; knob 1 is the stock cutoff)." },
+    { name = "DK_FILTER_OK", value = 0, doc = "Returned by coef and process." },
+    { name = "DK_FILTER_BOUND_BITS", value = 1090519040, doc = "|sample| above DK_FILTER_BOUND is a fault (+18 dB over full scale)." },  # 8.0f
+    { name = "DK_FILTER_MAGIC", value = 1145783884, doc = "'DKFL', the first word of the descriptor." },        # 'DKFL' = 0x444b464c
+]
+desc = ["magic", "contract", "n_params", "state_bytes", "max_call_depth", "stack_bytes"]
 
 # Page constants. `patchkit gen` writes `consts` to the public sdk/include/dk/gen/page_consts.h: the knob glyphs, the display of an effect
 # parameter and the routes of an effect, which builders pass to dk_param_glyph, dk_page_add_fx_param and dk_fx_routes. `knobs` is
@@ -729,6 +749,24 @@ sig = "dk_machine *(dk_module_ctx *ctx, u32 index, const char *name, const char 
 doc = "Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[machine]]` list of module.toml, which is the row of its key in the keys table. `name` the long name, `short_name` the short one. The DSP entry points are found by the names `_<id>_render` and `_<id>_note_on`. Returns the builder handle; on an error (full, bad index) a placeholder, and the error is reported when `init` returns."
 
 [[import]]
+name = "dk_module_ctx_add_filter"
+service = "machines"
+provided = true
+since = "0.10.6"
+context = "init"
+sig = "dk_filter *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
+doc = "Declare a filter of this module: `index` is its DK_FILTER_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[filter]]` list of module.toml, which is the row of its key in the keys table. `name` is the long name (the chooser row), `short_name` the short one. The runtime numbers the filter 16 to 31 (sticky, like a machine type) and keeps a stock filter (Multi-Mode) as the sound's fallback. A module has at most 8 filters and the device 16 in all. Returns the filter handle; on an error a placeholder, and the error is reported when `init` returns."
+
+[[import]]
+name = "dk_filter_add_page"
+service = "machines"
+provided = true
+since = "0.10.6"
+context = "init"
+sig = "dk_page *(dk_filter *f)"
+doc = "The page of the filter: the FLTR page of the stock filter, whose knob 1 is always the stock cutoff (FREQ); the module owns knobs 2 and 3 and adds them with `dk_page_add_param` (at most two; a third is refused with DK_E_PAGE_FULL). A filter has one page; a second call is refused with DK_E_PAGE_FULL. Passing a machine handle is refused with DK_E_FORMAT. Returns the page handle (a placeholder on an error)."
+
+[[import]]
 name = "dk_module_ctx_add_fx"
 service = "fx"
 provided = true
@@ -810,7 +848,7 @@ provided = true
 since = "0.7.0"
 context = "init"
 sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 def)"
-doc = "Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. Returns the parameter handle (a placeholder on an error)."
+doc = "Add a machine parameter on the next knob of the page (word = order of declaration, range 0 to 127 until `dk_param_range`), default value `def`. On a filter page (`dk_filter_add_page`) the parameter takes knob 2, then knob 3; a third is refused with DK_E_PAGE_FULL. Returns the parameter handle (a placeholder on an error)."
 
 [[import]]
 name = "dk_page_add_fx_param"
@@ -1989,6 +2027,7 @@ EFFECT = { id = 4, len = 0x1a4, service = "fx" }
 ACTION = { id = 5, len = 0x10, service = "machines" }
 NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
 NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
+FILTER = { id = 10, len = 0xc0, service = "machines" }
 SHORTCUT = { id = 9, len = 68, service = "shortcuts" }   # id (16 bytes, NUL padded), label (24), two logical keys (`dk_key`), `on` and `off` as image offsets (0: none), `arg` as given (the builder `dk_shortcut_add` writes it)
 LFO_SHAPE = { id = 8, len = 80, service = "lfo", generic = true }   # u32 key (`DK_KEY_<ID>`: not 0), 4 characters of name (space to tilde), 32 samples of i16 (big-endian)
 

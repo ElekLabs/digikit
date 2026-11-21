@@ -169,6 +169,16 @@ mark = "D"
 rule = "fw/filter:cf_func"
 
 [[anchor]]
+name = "cf.filter.site.list_call"
+cpu = "cf"
+kind = "code"
+addr = 0x4006116e
+len = 6
+sha256 = "cddf3cf40bdb4d7ae6a99847fa35530c635439f9f912eb5d2eafaf0b9790ac38"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
 name = "cf.filter.site.list_end"
 cpu = "cf"
 kind = "code"
@@ -195,6 +205,16 @@ kind = "code"
 addr = 0x400db484
 len = 4
 sha256 = "043e98cede6ce9d266d2de95c405d980fcb12a4622379327eada8b5e49815426"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
+name = "cf.filter.site.loader_filter"
+cpu = "cf"
+kind = "code"
+addr = 0x400db484
+len = 34
+sha256 = "177ccec16ee63894e72854ee38cacd6207a2b8d56a9a504045111805063151d3"
 mark = "D"
 rule = "fw/filter:cf_func"
 
@@ -4266,6 +4286,42 @@ clobbers = ["ccr"]
 len = 8
 kind = "tail"
 check = "3d25d06bf11f3a7b"
+
+[[hook]]
+name = "cf.filter.hook.accessor"
+site = "cf.filter.fn.accessor"
+mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
+len = 6
+kind = "tail"
+check = "ee3af96091c4b93c"
+
+[[hook]]
+name = "cf.filter.hook.list"
+site = "cf.filter.site.list_call"
+mode = "retarget"
+clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 6
+kind = "raw"
+check = "cddf3cf40bdb4d7a"
+
+[[hook]]
+name = "cf.filter.hook.loader.dt2"
+site = "cf.filter.site.loader_filter"
+mode = "replace"
+clobbers = ["d0", "d1", "d2", "ccr"]
+len = 6
+kind = "raw"
+check = "d50d8122e82de586"
+
+[[hook]]
+name = "cf.filter.hook.name"
+site = "cf.filter.fn.name"
+mode = "replace"
+clobbers = ["d0", "d1", "ccr"]
+len = 6
+kind = "tail"
+check = "ee3af96091c4b93c"
 
 [[hook]]
 name = "cf.lfo.hook.graph_vec"

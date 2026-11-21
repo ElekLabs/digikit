@@ -13,4 +13,6 @@
 #define DK_SLOT_VOICE_UNPACK 4
 #define DK_SLOT_FX_ENTRY 8
 #define DK_SLOT_FX_SEND 12
+#define DK_SLOT_FILTER_COEF 16
+#define DK_SLOT_FILTER_PROC 20
 #endif

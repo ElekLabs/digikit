@@ -208,6 +208,9 @@ impl Acc {
 
 /// Checks the records `bodies` of `kind` (parameter, machine, page or action) of one module, in order. The native page kinds and a kind the service does not own are accepted.
 pub fn records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+    if kind == dkrt_sdk::records::KIND_FILTER {
+        return crate::filter::validate(bodies, report);
+    }
     let mut acc = Acc::new();
     for body in bodies {
         acc.record(kind, body, report);

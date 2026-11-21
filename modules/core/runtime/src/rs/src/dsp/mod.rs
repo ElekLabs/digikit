@@ -196,8 +196,9 @@ pub(crate) unsafe fn alloc_range(len: u32, align: u32) -> Option<u32> {
 
 /// Bytes of the range a module needs, before the granule: image, bss, then the state blocks the services counted (`Job::state_bytes`: the voices' and the effects' states,
 /// each block rounded to 8). The services checked the counts, so nothing overflows.
-pub(crate) fn extent(image_size: u32, bss: u32, state_bytes: u32) -> u32 {
-    ((image_size + bss + 7) & !7) + state_bytes
+fn range_bytes(image_size: u32, bss: u32, state_bytes: u32) -> Option<u32> {
+    let start = image_size.checked_add(bss)?.checked_add(7)? & !7;
+    Some(start.checked_add(state_bytes)?.checked_add(GRANULE - 1)? & !(GRANULE - 1))
 }
 
 /// An exported DSP symbol of `dyndsp_info`; 0 when there is none of that name.
@@ -222,7 +223,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     }
     let s = f.add(off as usize);
     let version = rd32(s.add(DSP_H_VERSION as usize));
-    if rd32(s.add(DSP_H_MAGIC as usize)) != DSP_MAGIC || (version != DSP_V1 && version != DSP_V2 && version != DSP_V3 && version != DSP_V4 && version != DSP_V5) {
+    if rd32(s.add(DSP_H_MAGIC as usize)) != DSP_MAGIC || !(DSP_V1..=dkneeds::filter::VERSION).contains(&version) {
         return E_DSP_FORMAT;
     }
     if !have_link() {
@@ -255,6 +256,10 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         || bss & 3 != 0
         || !(8..=GRANULE).contains(&align)
         || align & (align - 1) != 0
+        || nvoice > MAX_VOICES as u32
+        || nfx > MAX_FX as u32
+        || !in_sec(voice_off, nvoice * vstride, size)
+        || !in_sec(fx_off, nfx * FX_REC, size)
         || nreloc > MAX_RELOCS
         || nimport > MAX_IMPORTS
         || !in_sec(image_off, image_size, size)
@@ -263,7 +268,17 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     {
         return E_DSP_FORMAT;
     }
-    let bank_off = if version == DSP_V5 { rd32(s.add(DSP_H_BANK_OFF as usize)) } else { 0 };
+    let (nfilter, filter_state) = if version == dkneeds::filter::VERSION {
+        let mut bytes = core::slice::from_raw_parts(s, size as usize);
+        match dkneeds::filter::check(&mut bytes, 0, size) {
+            Ok(v) => v,
+            Err(_) => return E_DSP_FORMAT,
+        }
+    } else { (0, 0) };
+    if filter_state > iw(I_AREA_BYTES) { return E_DSP_NOSPACE; }
+    job.nfilter = nfilter;
+    job.filters = if nfilter == 0 { core::ptr::null() } else { s.add(dkneeds::filter::TABLE as usize) };
+    let bank_off = if version >= DSP_V5 { rd32(s.add(DSP_H_BANK_OFF as usize)) } else { 0 };
     let sec = DspSec {
         s,
         version,
@@ -282,7 +297,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         bank_off,
     };
     // the entries of the tables the services own: track table, voices, effects
-    job.state_bytes = 0;
+    job.state_bytes = filter_state;
     job.accepted = 0;
     let r = services().dsp_check_sections(&sec, job);
     if r != OK {
@@ -290,12 +305,11 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     }
     // an entry that no loaded service owns would load as nothing: refuse it as a missing service (the boot plan already refuses a module that needs a service nobody
     // provides, `E_MISSING`; this is the backstop for a section whose header table does not say so)
-    if job.accepted != nvoice.saturating_add(nfx) {
+    if job.accepted != nvoice.saturating_add(nfx).saturating_add(nfilter) {
         return E_MISSING;
     }
     // the range must fit the area at all (a later load may still find it taken: reserve())
-    let need = extent(image_size, bss, job.state_bytes);
-    if need > iw(I_AREA_BYTES) || (need + GRANULE - 1) & !(GRANULE - 1) > iw(I_AREA_BYTES) {
+    if range_bytes(image_size, bss, job.state_bytes).is_none_or(|need| need > iw(I_AREA_BYTES)) {
         return E_DSP_NOSPACE;
     }
     let mut i = 0;
@@ -317,7 +331,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
         let o = rd32(e.add(RELOC_OFFSET as usize));
         let w = rd32(e.add(RELOC_WORD as usize));
         let (kind, class, imp) = (w >> 28, (w >> 24) & 15, w & 0xffff);
-        if o > image_size - 6 || kind > 1 || class > 2 || (class == 2 && imp >= nimport) || (kind == 0 && class == 1) {
+        if !in_sec(o, 6, image_size) || kind > 1 || class > 2 || (class == 2 && imp >= nimport) || (kind == 0 && class == 1) {
             return E_DSP_FORMAT;
         }
         i += 1;
@@ -344,7 +358,7 @@ pub unsafe fn check(f: *const u8, off: u32, size: u32, file_size: u32, job: &mut
     job.vstride = vstride;
     job.fxs = s.add(fx_off as usize);
     job.nfx = nfx;
-    job.bank = if version == 5 { s.add(bank_off as usize) } else { core::ptr::null() };
+    job.bank = if bank_off != 0 { s.add(bank_off as usize) } else { core::ptr::null() };
     OK
 }
 
@@ -369,7 +383,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         return r;
     }
     let d = ds();
-    let len = (extent(job.image_size, job.bss, job.state_bytes) + GRANULE - 1) & !(GRANULE - 1);
+    let Some(len) = range_bytes(job.image_size, job.bss, job.state_bytes) else { return E_DSP_NOSPACE; };
     let off = match alloc_range(len, job.align) {
         Some(o) => o,
         None => return E_DSP_NOSPACE,

@@ -680,6 +680,14 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             if r != OK {
                 return r;
             }
+            if c.job.nfilter != 0 {
+                let table = core::slice::from_raw_parts(reg, reg_size as usize);
+                let Ok(keys) = dkneeds::keys::Keys::parse(table) else { return E_FORMAT; };
+                let records = (0..c.job.nfilter).map(|i| rd32(c.job.filters.add((i * dkneeds::filter::RECORD) as usize)));
+                if !keys.keys_of(dkneeds::KIND_FILTER).eq(records) {
+                    return E_FORMAT;
+                }
+            }
             let (v, stride) = (c.job.voices, c.job.vstride as usize);
             let r = crate::collect::check_dsp_keys(&c.keys, c.job.nvoice as usize, |i| rd32(v.add(stride * i)), c.job.nfx as usize);
             if r != OK {

@@ -8,6 +8,7 @@
 [[fn]]
 name = "cf.filter.fn.accessor"
 cpu = "cf"
+sig = "const u8 *(u32 index)"
 rule.dt2 = { kind = "cf_func", hash = "89ab5a838f61efc9a9906f0a858837fe", offset = 0x0, len = 6 }
 rule.dn2 = { kind = "cf_func", hash = "89ab5a838f61efc9a9906f0a858837fe", offset = 0x0, len = 6 }
 mark = "D"
@@ -59,7 +60,7 @@ rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset
 rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/services/machines"]
-doc = "The chooser's order vector (called from the filter list builder, DT2 FUN_400610e8 and DN2 FUN_4005b458): the first call allocates 0x18 bytes and copies the six static longs {0,1,4,3,5,2}; later calls hand out the same vector. DT2 FUN_40052c98, DN2 FUN_4004dae2."
+doc = "The chooser's order vector function (a0 = the vector object it fills; DT2 FUN_40052c98, DN2 FUN_4004dae2; called from the filter list builder, DT2 FUN_400610e8 and DN2 FUN_4005b458): the first call builds a static vector of six longs {0,1,4,3,5,2} (0x18 bytes from operator new, kept in globals, never freed); every call then allocates a new buffer of that size, copies the static vector into it and stores begin, end and capacity in the object at a0. The caller owns that copy: the builder frees its begin with the firmware free after its loop (DT2 0x400611e2, DN2 0x4005b552)."
 
 [[site]]
 name = "cf.filter.site.list_size"
@@ -105,3 +106,83 @@ rule.dn2 = { kind = "cf_func", hash = "f766c42c6be0674aadb1177f3f536367", offset
 mark = "D"
 users = ["core/services/machines"]
 doc = "`move.b #7,D2b` in the sound loader (DT2 FUN_400db3b2 at 0x400db484, DN2 FUN_400dd34e at 0x400dd420): the bound of the next compare, which keeps a stored filter type below 7 and resets any other to 0 (the filter byte is rec[0xd3] on DT2 and rec[0xf5] on DN2; the machine byte uses an earlier bound). The immediate is the low byte of the word at +2."
+
+# The sites and hooks the machines service takes for run-time filters (plan E7a). The graph switch has no hook yet: a type of 6 or more already takes the stock default
+# (no response curve), which is what a module filter shows until E7c draws it.
+
+[[site]]
+name = "cf.filter.site.list_call"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_func", hash = "d97b65f89bac742ae13da57b087cf55c", offset = 0x86, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "`jsr list_vector.l` in the filter chooser's list builder (DT2 FUN_400610e8 at 0x4006116e, DN2 FUN_4005b458 at 0x4005b4de; a0 = the vector object the callee fills, which the builder then walks): an absolute call, so its target can be replaced."
+
+[[site]]
+name = "cf.filter.site.loader_filter"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "d5cd38f131d3119fd16d700d526b4fb9", offset = 0xd2, len = 34 }
+rule.dn2 = { kind = "cf_func", hash = "f766c42c6be0674aadb1177f3f536367", offset = 0xd2, len = 34 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "The loader's filter byte, from the end of the machine byte's mask to the store (DT2 0x400db484..0x400db4a6, DN2 0x400dd420..0x400dd442; a2 = the sound, a3 = the record): `and.l D1,D0; move.b D0b,machine(A2)`, then the filter byte's range test against bound 7 (`move.b #7,D2b` first), then `move.b #4,D2b` for the next field and the store. 34 bytes without branch or PC-relative operand; d0, d1 are reloaded behind it and d2 = 4."
+
+[[hook]]
+name = "cf.filter.hook.accessor"
+site = "cf.filter.fn.accessor"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d0", "d1", "ccr"] }   # type at 4(sp); a loaded module filter returns its row in d0 with rts, else the displaced `moveq #5,D1; move.l 4(sp),D0` and on
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "Entry of the filter type to descriptor row accessor (type at 4(sp); d0, d1 free); the hook answers a loaded module filter (16 to 31) with the service's row."
+
+[[hook]]
+name = "cf.filter.hook.name"
+site = "cf.filter.fn.name"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d0", "d1", "ccr"] }   # type at 4(sp); a loaded module filter returns its name in d0 with rts, else the displaced instructions
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "Entry of the filter name function (type at 4(sp); d0, d1 free); the hook returns the long name of a loaded module filter."
+
+[[hook]]
+name = "cf.filter.hook.list"
+site = "cf.filter.site.list_call"
+cpu = "cf"
+mode = "retarget"
+regs = { in = ["a0"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # C ABI callee with the vector object in a0 (a hidden return pointer); it calls the stock function and appends the module types
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "The list builder's call of the chooser's order vector; the target becomes a routine that builds the stock vector and appends the loaded module filters."
+
+[[hook]]
+name = "cf.filter.hook.loader.dt2"
+site = "cf.filter.site.loader_filter"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.filter.site.loader_filter + 34"]
+regs = { in = ["a2", "a3", "d0", "d1"], clobbers = ["d0", "d1", "d2", "ccr"] }   # d2 = 4 on the exit, as the stock code leaves it
+devices = ["dt2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "The loader's filter byte (d0 = the machine byte, d1 = its mask; the record byte is rec[0xd3], the sound byte sound+0xa3): the hook stores the machine byte, keeps a stored 16 to 31 when that module filter is loaded and applies the stock bound otherwise."
+
+[[hook]]
+name = "cf.filter.hook.loader.dn2"
+site = "cf.filter.site.loader_filter"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.filter.site.loader_filter + 34"]
+regs = { in = ["a2", "a3", "d0", "d1"], clobbers = ["d0", "d1", "d2", "ccr"] }   # d2 = 4 on the exit, as the stock code leaves it
+devices = ["dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "The loader's filter byte as the DT2 hook (the record byte is rec[0xf5], the sound byte sound+0xdf, the machine byte sound+0xde)."

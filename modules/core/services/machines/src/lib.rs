@@ -20,6 +20,7 @@ pub(crate) fn profile<C: dkrt_abi::core_api::CoreApi>(
 pub mod assign;
 pub mod build;
 pub mod dsp;
+pub mod filter;
 pub mod guard;
 pub mod info;
 pub mod nativepage;

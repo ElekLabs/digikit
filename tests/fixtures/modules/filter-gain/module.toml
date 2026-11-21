@@ -1,0 +1,43 @@
+[module]
+id = "test/filter-gain"
+version = "0.1.0"
+name = "Filter gain"
+category = "test"
+type = "service"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: one gain knob and a per-voice DSP gain coefficient."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The id stays what the key hashes: `test/filter-gain:fgan`. `patchkit gen` writes build/gen/module_ids.h (`DK_FILTER_ID_FGAN`) from it.
+[[filter]]
+id = "fgan"
+
+# The record block `init` commits: the register section header (16 bytes) and one FILTER record (192 bytes). A filter takes no machine or page row and one parameter
+# row for each of its own knobs (here one).
+[uses.dt2]
+param_rows = 1
+record_bytes = 208
+
+[uses.dn2]
+param_rows = 1
+record_bytes = 208
+
+# C, built by `patchkit build`; the runtime loads it from the card store.
+[[object]]
+path = "build/filter-gain.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/filter-gain-dsp.dko.json"
+sources = ["src/dsp/filter_gain.s"]
+place = "dsp.l2"
+devices = ["dt2", "dn2"]

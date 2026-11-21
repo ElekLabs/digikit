@@ -6,7 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* cf.filter.fn.accessor: no sig yet */
+/* Filter type to descriptor row (type at 4(sp); d0 and d1 free at the entry): unsigned `type <= 5` gives the row base + 0x2c * type, else the shared fallback row. DT2 FUN_400c89c6 (base 0x4293b858), DN2 FUN_400c2614 (base 0x424339cc). The hook answers 16..31 from the service row. */
+const uint8_t * dk_fw_filter_accessor(uint32_t index) __asm__("cf.filter.fn.accessor");
 /* Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store. */
 int32_t dk_fw_filter_get(uint32_t track_object) __asm__("cf.filter.fn.get");
 /* cf.filter.fn.list_vector: no sig yet */

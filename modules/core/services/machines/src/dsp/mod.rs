@@ -269,7 +269,18 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec, job: &mu
             i += 1;
         }
     }
-    job.accepted += nvoice;
+    for i in 0..job.nfilter {
+        let key = rd32(job.filters.add((i * dkneeds::filter::RECORD) as usize));
+        let ty = crate::filter::resolve(core, key);
+        if !(crate::filter::FIRST..=crate::filter::LAST).contains(&ty) {
+            return E_DSP_TYPE;
+        }
+        let owner = filter_rows::row((ty - crate::filter::FIRST) as usize).owner;
+        if owner != 0 && owner != core.live_op() {
+            return E_DSP_TYPE;
+        }
+    }
+    job.accepted += nvoice + job.nfilter;
     OK
 }
 
@@ -493,11 +504,13 @@ pub(crate) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
         v += 1;
     }
     c.state_at = state_at;
+    filter_rows::claim(core, c);
     d.mod_rows[rec] = claimed;
 }
 
 /// Give back the voice rows module record `rec` claimed.
 pub(crate) unsafe fn release<C: CoreApi>(core: &C, rec: usize) {
+    filter_rows::release(rec);
     let d = vrows();
     let mut k = 0;
     while k < MAX_ROWS {
@@ -654,3 +667,5 @@ pub(crate) unsafe fn table_check(used: u32, out: &mut TableFault) -> u32 {
     }
     0
 }
+
+pub mod filter_rows;

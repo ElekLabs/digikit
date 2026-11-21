@@ -67,3 +67,60 @@ mf_turn_hook:
     moveq   #1,%d0                      /* the native dispatcher consumes a nonzero D0b */
     jmp     mf_ret_turn
 1:  jmp     dk_tail_d46e3075
+
+| ---- run-time filters (docs/plans/extension-model.md E7a). `DKS_FLT` is the table of dkrt-svc-machines `filter::Tab` (the offsets below are checked against it): `F_MASK` bit i is set
+| while filter type 16 + i is loaded, `F_BASE` the first request code of the parameter-code function, `F_SLOTS` its answers (3 words per filter), `F_NAMES` the long names and
+| `F_ROWS` the descriptor rows (`F_ROW_BYTES` each). A type that is not a loaded module filter takes the stock path, so a stock type behaves as it did.
+    .equ F_MASK,      0
+    .equ F_BASE,      4
+    .equ F_SLOTS,     8
+    .equ F_NAMES,     200
+    .equ F_ROWS,      264
+    .equ F_ROW_BYTES, 44
+
+| The filter type to descriptor row accessor. Entry (6 bytes: `moveq #5,D1; move.l 4(sp),D0`): type at 4(sp); d0, d1 free. A loaded module filter returns its row.
+    .globl mf_flt_acc
+mf_flt_acc:
+    move.l  4(%sp),%d0
+    subi.l  #16,%d0
+    cmpi.l  #15,%d0
+    bhi.s   9f                          | below 16 or above 31 (unsigned: a negative type too)
+    move.l  DKS_FLT+F_MASK,%d1
+    btst    %d0,%d1
+    beq.s   9f
+    move.l  #F_ROW_BYTES,%d1
+    muls.l  %d1,%d0
+    move.l  #DKS_FLT+F_ROWS,%d1
+    add.l   %d1,%d0
+    jmp     mf_ret_flt_acc
+9:  jmp     dk_tail_e1a730f6
+
+| The filter name function: the long name of a loaded module filter. Entry (6 bytes, as the accessor): type at 4(sp); d0, d1 free; a0 is kept.
+    .globl mf_flt_name
+mf_flt_name:
+    move.l  4(%sp),%d0
+    subi.l  #16,%d0
+    cmpi.l  #15,%d0
+    bhi.s   9f
+    move.l  DKS_FLT+F_MASK,%d1
+    btst    %d0,%d1
+    beq.s   9f
+    lsl.l   #2,%d0
+    move.l  %a0,%d1
+    movea.l %d0,%a0
+    adda.l  #DKS_FLT+F_NAMES,%a0
+    move.l  (%a0),%d0
+    movea.l %d1,%a0
+    jmp     mf_ret_flt_name
+9:  jmp     dk_tail_b13bb53a
+
+| The chooser's order vector: the target of the list builder's call (a0 = the vector object the callee fills). The stock function builds its copy of the six stock types, then the
+| routine in Rust appends the loaded module filters. The builder reads neither d0 nor a0 after the call: it loads a3 and d5 from the vector object (DT2 0x40061174 and 0x40061178,
+| DN2 0x4005b4e4 and 0x4005b4e8) and d2 (the address of a local) is kept by the C routine.
+    .globl mf_flt_list
+mf_flt_list:
+    move.l  %a0,-(%sp)
+    jsr     mf_stock_flt_list
+    jsr     dks_filter_list
+    addq.l  #4,%sp
+    rts

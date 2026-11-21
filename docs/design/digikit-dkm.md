@@ -127,7 +127,7 @@ All integers are big endian. Offsets are from the start of the section.
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0x00 | 4 | magic `DKDS` (0x444b4453) |
-| 0x04 | 4 | version = 4 (effect records, see below; the packer writes it only when the module has an effect, its voices are those of version 3) or 3 (voices of 64 bytes; the packer writes it only when a voice has a note_on entry or state, else version 2; versions 1 and 2 are still loaded: note_on 0, no state; version 1, voices of 16 bytes without ranges: every range undeclared) |
+| 0x04 | 4 | version = 6 (filters), 5 (sample table), 4 (effect records, see below; the packer writes it only when the module has an effect, its voices are those of version 3) or 3 (voices of 64 bytes; the packer writes it only when a voice has a note_on entry or state, else version 2; versions 1 and 2 are still loaded: note_on 0, no state; version 1, voices of 16 bytes without ranges: every range undeclared) |
 | 0x08 | 4 | device (1 DT2, 2 DN2): must equal the runtime's |
 | 0x0c | 4 | `image_size`: bytes of text and data that are sent (a multiple of 4) |
 | 0x10 | 4 | `bss_size`: bytes reserved behind the image (`.PKBSS`; not sent, not zeroed) |
@@ -139,6 +139,10 @@ All integers are big endian. Offsets are from the start of the section.
 | 0x34 | 4 | `fx_off`: offset of the effect records (version 4; 0 before) |
 | 0x38 | 4 | `fx_count`: effect records, at most 4 (`DK_FX_MAX`) (version 4; 0 before) |
 | 0x3c | 4 | `sample_off` (version 5): offset of a 32-byte record of little-endian words, 0 before. Word 0 is the kind: 1 a sample bank (local id, bank byte offset, capacity frames, descriptor byte offset), 2 the per-track sample table of API 1.5 (local id, byte offsets of the 16 `dk_sample_pool_entry` records, 512 bytes, and of the 16 control sets, 256 bytes; four zero words). The blocks lie in the initialized image, are zero and have no relocations in them. Version 5 keeps the voices and effects of version 4 |
+| 0x40 | 4 | Version 6 only. Number of filter records (1 to 8). The records start at 0x44, before the other tables. The sample record at 0x3c is optional in v6 (zero if absent). |
+
+Each filter record contains four big-endian words in filter-key order: key, coefficient callback offset, process callback offset and descriptor offset. Offsets are bytes from the beginning of the DSP image. The six little-endian descriptor words are magic (`DKFL`), contract (1), number of parameters (0 to 2), state bytes per voice (word aligned), maximum call depth and stack bytes. The machines service reserves 32 voice states for each filter with an eight-byte aligned stride.
+
 
 - **Imports**: 32-byte NUL padded names of DSP symbols the object references and does not define: today the helpers of `core/dsp-voice`
   (`_dv_exp2`, `_dv_frame_hw`, `_dv_frame_sw`). The runtime resolves them in `dyndsp_info` (module `core/dyndsp`): a name it does not
