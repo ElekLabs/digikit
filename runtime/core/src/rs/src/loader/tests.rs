@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::vec::Vec;
 
 // the seams between the real packed artifacts (`core/runtime:test-assembly`)
-mod assembly_tests;
+pub(crate) mod assembly_tests;
 mod dsp_provider_tests;
 
 const PATH: &[u8] = b"mods/a.dkm\0";

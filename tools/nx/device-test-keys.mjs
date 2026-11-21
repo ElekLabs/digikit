@@ -6,8 +6,8 @@
 // - narrow key: the production files of the project, the packs the test loads and its imports.
 // Python tool inputs: the import closure (py-imports.mjs) of the `.py` tools a record lists in its `sources`. A test that
 // runs a new Python tool must list it there.
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, globSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { nonCellGlobs, otherFiles } from './device-files.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
 
@@ -123,6 +123,8 @@ export const BUILT_OUTPUTS = outputFiles([...SHARED_BUILT, ...PATCHKIT_BINARIES]
 // (tools/nx/patchkit-key.mjs, written by `patchkit:cli`): the sources patchkit was built from, without the other devices' files.
 // `{device}` is replaced for each half by `forDevice`.
 export const PATCHKIT_TEST_KEY = 'dist/bytes/patchkit-test-{device}.key';
+// Stands for a subject built into the device images: `forDevice` takes its fileset and image hashes on the halves whose image holds it.
+const IMAGE_SUBJECT = Symbol('image-subject');
 // Stands for the negative globs of the files of the other devices; `forDevice` expands it.
 export const OTHER_DEVICE_FILES = '!{workspaceRoot}/{other-device-files}';
 export const MERGE_OUTPUTS = outputFiles([...SHARED_BUILT, ...MERGE_BYTES]);
@@ -153,6 +155,14 @@ export const mergeDeviceInputs = (imports, patchkitLive) => [
 // placeholder: unchanged.
 export const forDevice = (inputs, device) =>
   inputs.flatMap((input) => {
+    const subject = input?.[IMAGE_SUBJECT];
+    if (subject)
+      return forDevice(
+        device === null || subject.devices.includes(device)
+          ? [...subject.inImage, ...(device === null ? subject.built : [])]
+          : subject.built,
+        device,
+      );
     if (input === OTHER_DEVICE_FILES) return device ? otherFiles(device).map((glob) => `!{workspaceRoot}/${glob}`) : [];
     const pattern = input?.dependentTasksOutputFiles;
     if (typeof pattern === 'string' && pattern.includes('{device}'))
@@ -167,6 +177,24 @@ export const builtSourceExclusions = (root, base = '.') =>
   ['src', 'include', 'fit', 'sdk']
     .filter((dir) => existsSync(join(base, root, dir)) && !root.includes('/tests'))
     .map((dir) => `!{projectRoot}/${dir}/**/*`);
+
+// What a test-only project hashes of a module subject that is built into the image: its files without the directories its
+// objects are built from (the image hashes hold those). `{ input: 'production', projects }` cannot take exclusions, so the
+// subject is a plain fileset: Nx evaluates it per hash, a directory added later is in the key without a graph rebuild.
+// The exclusions of nested projects (project.json) and crates (Cargo.toml) are computed here, at graph time: a new project adds a
+// project.json and rebuilds the graph. Tests, `*.md` and test-named Rust files stay out like in `production`.
+const subjectInputs = (root, base = '.') => {
+  const nested = globSync('**/{project.json,Cargo.toml}', { cwd: join(base, root) })
+    .map((f) => dirname(f))
+    .filter((d) => d !== '.' && !['src', 'include', 'fit', 'sdk', 'build', 'tests'].includes(d.split('/')[0]));
+  return [
+    `{workspaceRoot}/${root}/**/*`,
+    ...['src', 'include', 'fit', 'sdk', 'build', 'tests'].map((d) => `!{workspaceRoot}/${root}/${d}/**`),
+    ...[...new Set(nested)].sort().map((d) => `!{workspaceRoot}/${root}/${d}/**`),
+    `!{workspaceRoot}/${root}/**/*.md`,
+    `!{workspaceRoot}/${root}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}`,
+  ];
+};
 
 // The leaves of the modules with role "service": they pack to `.dks`, every other module to `.dkm`. `byId`: id -> { manifest }.
 export const serviceLeaves = (byId) =>
@@ -284,7 +312,26 @@ export const deviceInputs = (
             ? [{ dependentTasksOutputFiles: 'apps/web/public/dkprof.wasm', transitive: true }]
             : []),
           // an edit of the subject module reruns a test-only project
-          ...(opts.subjects?.length ? [{ input: 'production', projects: opts.subjects }] : []),
+          // (its built sources reach the run through the image hashes below)
+          ...(opts.subjects?.length
+            ? opts.subjects.map((id) => {
+                const subject = opts.subjectRoots?.[id];
+                const built = { input: 'production', projects: [id] };
+                // `forDevice` picks per half: the fileset with the image hashes when the device's image holds the subject, else `built`
+                return subject
+                  ? {
+                      [IMAGE_SUBJECT]: {
+                        devices: subject.devices,
+                        inImage: [
+                          ...subjectInputs(subject.root, opts.base),
+                          ...outputFiles(['dist/bytes/images-{device}.sha256']),
+                        ],
+                        built: [built],
+                      },
+                    }
+                  : built;
+              })
+            : []),
           // fixture image modules that a record names are chosen by the test itself
           ...(recs.some((r) => r.patchModules?.length)
             ? [{ input: 'production', projects: [...new Set(recs.flatMap((r) => r.patchModules ?? []))] }]

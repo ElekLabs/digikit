@@ -75,13 +75,25 @@ Callback order governs the walk of registered service rows. It is independent of
 
 A local API can add a provider and ColdFire function exports without a central SDK entry. SDK-wide imports and record kinds still use the SDK contract. A provider that registers a row must match the runtime's service ABI. Discovery and admission use bounded tables, with eight provider slots in the boot plan, including the port when needed. Service and port replacement take effect on restart. For the manifest and working provider/consumer example, see [card services with a local API](MODULE-AUTHORING.md#card-services-with-a-local-api).
 
+### Choosing an API
+
+The SDK defines shared public contracts and their generated C and Rust bindings and packaging metadata. For example, a module's `dk_fx_routes` builder call comes from `sdk/sdk.toml`. Its implementation and route policy run in `fx.dks`. Add a public SDK import or record definition when the project will maintain its compatibility, bindings and conventions as part of the shared SDK. A provider can support several consumers through its own versioned API.
+
+A service can define a narrower API in its own headers and export it from its `.dks`. The `local-ping` fixture and its consumer illustrate this path. The consumer declares `[[service_import]]` with the provider name, minimum compatible version and symbols. The packer records the hard need, and the loader links only to the matching provider. Card modules use these declared imports or SDK imports.
+
+A patched-in resident app can query an optional card provider through `dkrt_service_query` (runtime 0.11.2). The provider declares one `[[export]]` named `dk_service_query_v1`, and passes its implementation as `query = path::dk_service_query_v1` to `service!`. The glue checks the entry against the fixed C signature `ResidentQueryV1`. Patchkit marks the export as a resident query and adds the 0.11.2 runtime minimum. The loader activates it with its owning provider and withdraws it when the provider is retired. Each call checks the provider identity, compatible version and live entry. The entry stays private to the broker.
+
+The provider owns operation numbers, typed request and reply layouts, validation and status codes. Publish the wrapper with the provider contract and use a new operation number for a changed layout. Operations run synchronously in the UI task, read state without blocking, and must return before any UI or loader work resumes. They cannot recurse, retain the buffers or publish service addresses. `DKRT_E_MISSING` reports an absent provider or facet. The caller chooses the fallback. A runtime change is needed for a new shared mechanism or lifecycle rule. New operations within this query contract add code to their provider and caller.
+
+The menu keeps pending FX route choices and asks the FX provider which routes fit. The typed wrapper is [dk/fx/route-query.h](../sdk/include/dk/fx/route-query.h). The FX provider reads its effect rows and send-slot capacity. Existing `dkrt_fx` enumeration keeps the same layout and returns an empty list when the provider is absent. The menu uses the previous picker rule when an older provider can enumerate effects but lacks the query facet.
+
 ### Shipped services
 
 | Service | Callback order | Owns | Optional facets used |
 | --- | --- | --- | --- |
 | [samples](../services/samples/dks/module.toml) | 100 | Per-module sample pools, track state and peak windows | Sample-pool API, pool completion/loss fills, DSP track-table parts |
 | [machines](../services/machines/dks/module.toml) | 200 | Machine types, parameters and pages, native pages, sticky type assignment | Record handlers and builders, module diagnostics, ColdFire hooks, DN2 frame-type fill and DSP voice dispatch |
-| [fx](../services/fx/dks/module.toml) | 300 | Effect records, pages, parameters, kit values and routes | Record handler and builders, route enumeration, ColdFire page hooks and DSP dispatch fills |
+| [fx](../services/fx/dks/module.toml) | 300 | Effect records, pages, parameters, kit values and routes | Record handler and builders, route enumeration and choices, ColdFire page hooks and DSP dispatch fills |
 | [lfo](../services/lfo/dks/module.toml) | 400 | LFO shape records, numbering and wave bounds | Record handler, six interrupt fills per device and MOD UI hooks |
 | [shortcuts](../services/shortcuts/dks/module.toml) | 500 | Shortcut records and dispatch | Record handler, shortcut builder and a port-resolved key-walker hook |
 | [project](../services/project/dks/module.toml) | 600 | `.dkp` files and project-scoped module settings | Project API, settings overlay, tick and port-resolved project hooks |
@@ -104,9 +116,7 @@ The inventory covers DT2 1.17 and DN2 1.12. Residency is a property of the execu
 
 ### Remaining ownership work
 
-The [runtime export bridges](../runtime/core/src/rs/src/handlers.rs) still name `dk_fx_routes_entry` and `dk_machines_module_info` for the FX list and the MODULES report. The menu also enforces allowed FX routes and send limits and writes `fx/route/` keys. [The settings reload queue](../runtime/core/src/rs/src/settings_reload.rs) still owns policy for overlay-driven reloads, including when a settings client is eligible and when a refusal is retried. The core's serialized live job and settings broker are shared mechanisms. The project service identifies changed settings owners. A future change to the reload policy should make its owner explicit at that boundary.
-
-The first extraction candidate is the FX route-choice policy in [the DIGIKIT menu](../runtime/apps/digikit-menu/src/menu.c). Have `fx.dks` answer which routes are valid given an effect and pending choices, using its capacity data. Keep the menu's pending edits and presentation in the app. Verify allowed routes and the send-slot boundary in the FX host tests, then run the existing FX route panel and persistence tests on DT2 and DN2 (`core/fx:test-device--fx-routes-panel`, `core/fx:test-device--fx-routes-persist`). Keep the `dkrt_fx` C entry point for its existing callers and check that the list stays empty when the provider is absent.
+The open work is planned in [runtime contract and package lifecycle](plans/runtime-contract-and-lifecycle.md) (roadmap row RC): one lifecycle for modules and services, provider-owned records and resources, tagged service parts, two installers, the ColdFire points moved into their services and `image-modules/` removed. Its evidence is [finding 158](findings/158-service-entry-survey.md).
 
 When a service dependency, runtime guarantee or firmware-resident responsibility changes, update this contract or inventory in the same change and link its lowest-layer proof.
 
@@ -148,7 +158,7 @@ Use the lowest layer that sees the behavior. A host test replaces device coverag
 
 7. **Platform.** The runtime manifest installs no firmware hooks. The platform adapter installs boot, UI-loop and MIDI hooks, and the machines service owns the source-page key and turn hooks. The runtime's `platform.rs` and `fw.rs` adapt firmware through the platform and firmware traits. Only `rs/dev.rs` reads `dkrt_dev`. Runtime and service code use profiles and capabilities for device values, which come from `devices/*.toml`.
 
-8. **Kind-free core.** Builders, record semantics and machine or effect state belong to services. The core walks generic records and calls the owning row for checks, application and teardown. `patchkit records --check` and the service share the rules for records a module can validate before it loads. Device- and registry-dependent checks run at load. The core owns generic DSP allocation and load state, while services own voice and effect rows, guard counts and diagnostics. See [remaining ownership work](#remaining-ownership-work) for the current compatibility bridges and policy seams.
+8. **Kind-free core.** Builders, record semantics and machine or effect state belong to services. The core walks generic records and calls the owning row for checks, application and teardown. `patchkit records --check` and the service share the rules for records a module can validate before it loads. Device- and registry-dependent checks run at load. The core owns generic DSP allocation and load state, while services own voice and effect rows, guard counts and diagnostics. See [remaining ownership work](#remaining-ownership-work) for the current bridges and policy seams.
 
 `check:layers` enforces the source and object boundaries it can inspect. The assembly and device checks cover declaration and execution behavior.
 

@@ -1,6 +1,6 @@
 [module]
 id = "core/services/fx"
-version = "0.8.2"
+version = "0.8.3"
 name = "fx service"
 category = "core"
 role = "service"
@@ -16,6 +16,9 @@ conflicts = []
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
+
+[[export]]
+name = "dk_service_query_v1"
 
 # The hooks it takes (the firmware sites of the effect pages, ports/fw/page.toml). They have no `handler`: each is a routine of this file that runs in place
 # of the stock instructions at the site and leaves into the stock code through the exits the port file resolves (it makes the site jump straight to the

@@ -20,6 +20,12 @@ pub use gen_sdk::RUNTIME_VERSION;
 pub mod gen_abi;
 pub use gen_abi::*;
 
+/// Reserved name of a resident query v1 entry in a service file.
+pub const RESIDENT_QUERY_ENTRY: &str = "dk_service_query_v1";
+
+/// The fixed v1 entry of a provider's resident query facet. Every operation has its own typed input and output.
+pub type ResidentQueryV1 = unsafe extern "C" fn(u32, *const u8, u32, *mut u8, u32) -> i32;
+
 // Result codes of `dkrt_load` and `dk_files_read` (negative = error; `OK` is in `gen_abi`). The codes themselves are written by `patchkit gen` from `[load.status]` of `sdk/sdk.toml` (`gen_sdk.rs`, module `load`, with their
 // texts): -1 to -14 `dkrt_load`; -20 to -29 the run-time registry (`register` records, docs/design/digikit-registry.md); -30 to -39 the
 // DSP side's (docs/design/digikit-dkm.md, "DSP section"); -40 to -49 boot-time loading (finding 37). Additive: a code is never renumbered.

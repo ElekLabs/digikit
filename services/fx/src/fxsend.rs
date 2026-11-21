@@ -189,6 +189,46 @@ pub unsafe fn fx_entry<C: CoreApi>(core: &C, index: u32, out: &mut DkrtFx) -> i3
     E_NOT_FOUND
 }
 
+/// Operation 1 of the FX resident query facet. Row bits refer to DkrtFx.row.
+pub const ROUTE_CHOICES_V1: u32 = 1;
+
+#[repr(C)]
+pub struct RouteChoicesV1 {
+    pub row: u32,
+    pub pending_sends: u32,
+}
+
+fn allowed_choices(allowed: u8, row: u32, pending_sends: u32, slots: u32) -> u32 {
+    let current = 1 << row;
+    let keep_send = pending_sends & current != 0;
+    let sends = (0..dsp::MAX_FX)
+        .filter(|k| pending_sends & (1 << k) != 0)
+        .count() as u32;
+    let send_available = keep_send || sends < slots;
+    u32::from(if send_available {
+        allowed
+    } else {
+        allowed & !ROUTE_SEND
+    })
+}
+
+/// The route options the menu can offer for this row, given the edits the caller has pending.
+pub unsafe fn route_choices<C: CoreApi>(core: &C, request: RouteChoicesV1) -> Result<u32, i32> {
+    let RouteChoicesV1 { row, pending_sends } = request;
+    if row >= dsp::MAX_FX as u32 || pending_sends >> dsp::MAX_FX != 0 {
+        return Err(E_CONTRACT);
+    }
+    if fxpage::page_owner(row as usize) == 0 {
+        return Err(E_NOT_FOUND);
+    }
+    Ok(allowed_choices(
+        ss().allow[row as usize],
+        row,
+        pending_sends,
+        slots(core),
+    ))
+}
+
 /// Does effect row `k` run on a send bus (the FX view lists the send effects before the master effects).
 #[inline]
 pub fn is_send(k: usize) -> bool {
@@ -609,6 +649,17 @@ mod tests {
             core.settings.borrow_mut()[0].1 = std::vec![7];
             assert_eq!(saved_route(&core, 3), ROUTE_MASTER, "7 is no route");
         }
+    }
+
+    #[test]
+    fn route_choices_use_pending_sends_and_the_image_slot_limit() {
+        let both = ROUTE_MASTER | ROUTE_SEND;
+        assert_eq!(allowed_choices(both, 2, 0, 0), ROUTE_MASTER.into());
+        assert_eq!(allowed_choices(both, 2, 1, 2), both.into());
+        assert_eq!(allowed_choices(both, 2, 1, 1), ROUTE_MASTER.into());
+        assert_eq!(allowed_choices(both, 2, 5, 1), both.into());
+        assert_eq!(allowed_choices(ROUTE_SEND, 2, 1, 1), 0);
+        assert_eq!(allowed_choices(ROUTE_MASTER, 2, 0, 2), ROUTE_MASTER.into());
     }
 
     /// `fx_entry` lists the effects that have a page in row order and answers "no fx" past the end: here no page is owned.

@@ -65,7 +65,7 @@ pub struct Manifest {
     /// first word of the record's body. The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
     #[serde(default, rename = "record")]
     pub records: Vec<RecordKey>,
-    /// A service outside sdk/sdk.toml declares its exported functions as `[[export]]`. Their hashes and entry offsets go in `EXPORTS`.
+    /// A service outside sdk/sdk.toml declares its exported functions as `[[export]]`. Any service can declare a resident query. Their hashes and entry offsets go in `EXPORTS`.
     #[serde(default, rename = "export")]
     pub exports: Vec<ExportDef>,
     /// A consumer declares the provider and minimum version of each locally defined service API it links.
@@ -79,6 +79,9 @@ pub struct Manifest {
     /// of a global function of the object when it is loaded (the loader finds the slot word by the hash of the name in the image's info table).
     #[serde(default, rename = "fill")]
     pub fills: Vec<ServiceFill>,
+    /// `[[service.resource]]` and `[[service.record]]`: the capacities and record kinds a service declares. Parsed and validated, not packed yet (RC3).
+    #[serde(default)]
+    pub service: crate::service_decl::ServiceDecl,
     /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
     /// builds different rows per device (DT2 has no page rows).
     #[serde(default)]
@@ -108,6 +111,16 @@ impl Manifest {
             ));
         }
         self.provided_service()?;
+        if !self.service.is_empty() {
+            if self.module.role != Some(ModuleRole::Service) {
+                return Err(err!(
+                    "{}: [[service.resource]] and [[service.record]] belong to a module with `role = \"service\"`",
+                    self.module.id
+                ));
+            }
+            self.service
+                .validate(&self.module.id, &crate::devdata::has_profile_key)?;
+        }
         for r in &self.repack {
             let who = &self.module.id;
             if r.role.is_empty() || r.role.len() > 255 {
@@ -228,8 +241,13 @@ impl Manifest {
                 "{id}: the id's last part {leaf:?} must equal the provided service {service:?} (the file is `{service}.dks`: the runtime finds a provider by its file name)"
             ));
         }
-        let exports = if sdk_service {
-            if let Some(e) = self.exports.first() {
+        let query_name = dkrt_sdk::RESIDENT_QUERY_ENTRY;
+        let query_count = self.exports.iter().filter(|e| e.name == query_name).count();
+        if query_count > 1 {
+            return Err(err!("{id}: the service declares {query_name} twice"));
+        }
+        let mut exports = if sdk_service {
+            if let Some(e) = self.exports.iter().find(|e| e.name != query_name) {
                 return Err(err!(
                     "{id}: [[export]] {:?} is not read: the exports of a service file are the `provided = true` imports of its service in sdk/sdk.toml",
                     e.name
@@ -242,11 +260,16 @@ impl Manifest {
                     "{id}: a service outside sdk/sdk.toml needs at least one [[export]]"
                 ));
             }
-            for e in &self.exports {
+            let mut local = vec![];
+            for e in self.exports.iter().filter(|e| e.name != query_name) {
                 validate_local_import(id, &e.name)?;
+                local.push(e.name.clone());
             }
-            self.exports.iter().map(|e| e.name.clone()).collect()
+            local
         };
+        if query_count != 0 {
+            exports.push(query_name.into());
+        }
         let mut hooks: Vec<(String, String, Vec<String>)> = vec![];
         for h in &self.hooks {
             if h.name.is_empty() || h.entry.is_empty() {
@@ -1549,6 +1572,45 @@ mod manifest_tests {
         let m: Manifest = toml::from_str(&format!("{HEAD}{extra}"))?;
         m.validate_header()?;
         Ok(m)
+    }
+
+    const SERVICE_HEAD: &str = "role = \"service\"\nservice = \"ledger\"\n";
+
+    fn load_service(extra: &str) -> Result<Manifest> {
+        let head = HEAD.replace("test/m", "test/ledger").replace(
+            "type = \"machine\"",
+            &format!("type = \"raw\"\n{SERVICE_HEAD}"),
+        );
+        let m: Manifest =
+            toml::from_str(&format!("{head}[[export]]\nname = \"ledger_op\"\n{extra}"))?;
+        m.validate_header()?;
+        Ok(m)
+    }
+
+    #[test]
+    fn a_service_declares_resources_and_records_that_are_checked() {
+        let m = load_service(
+            "[[service.resource]]\nname = \"slots\"\nlimit = \"profile:fx_slots\"\n[[service.record]]\nname = \"row\"\nkind = 1\nlen = 8\n",
+        )
+        .unwrap();
+        assert_eq!((m.service.resource.len(), m.service.record.len()), (1, 1));
+        let e = load_service(
+            "[[service.resource]]\nname = \"slots\"\nlimit = \"profile:no_such_key\"\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            e.contains("test/ledger") && e.contains("no_such_key"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn only_a_service_declares_resources_and_records() {
+        let e = load("[[service.record]]\nname = \"row\"\nkind = 1\nlen = 8\n")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("role = \"service\""), "{e}");
     }
 
     #[test]

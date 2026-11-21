@@ -52,7 +52,7 @@ pub(crate) mod records;
 pub(crate) mod role;
 mod seams;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 use image::in_file;
 pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
 
@@ -69,12 +69,14 @@ pub(crate) struct ProvRec {
     /// The PROVIDES identity and optional callback order, read before the staged bytes can change.
     pub provides: Option<(u32, u32)>,
     pub callback_order: Option<u32>,
+    /// The activated, resident-only v1 query entry. Zero when absent or retired.
+    query_v1: u32,
     /// Bytes of the DSP image of the file (0: it has no DSP section): the bound of the entries of its DSP slot fills.
     pub dsp_image: u32,
 }
 
 impl ProvRec {
-    pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, provides: None, callback_order: None, dsp_image: 0 };
+    pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, provides: None, callback_order: None, query_v1: 0, dsp_image: 0 };
 }
 
 /// Which loads the loader accepts. The boot hook loads the module set; after it only a live job loads (docs/plans/extension-model.md E5c).
@@ -186,6 +188,11 @@ fn loader() -> &'static mut Real {
 /// The address a loaded service file published for the export `hash`, if any (`handlers::exports::find_export`).
 pub fn find_export(hash: u32) -> Option<u32> {
     loader().exports.resolve(hash)
+}
+
+/// Copy the query address out of the loader before entering provider code. Both run on the UI task.
+pub fn resident_query(provider: u32, minimum: u32) -> Result<u32, i32> {
+    loader().resident_query(provider, minimum)
 }
 
 /// The name part of the module id of the last file whose header a check read (zero: none); a live or reload job reports it.
@@ -1262,6 +1269,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 crate::entry::publish_tick(rec, tick);
                 return E_BUSY;
             }
+            self.provs[rec - MAX_MODULES].query_v1 = 0;
         }
         // the listing client and the I/O jobs of a module or a service file go before its code does; a queued job's `done` must not point into freed code
         if !crate::files::retire(rec) { return E_BUSY; }
@@ -1323,6 +1331,27 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             b.unloads = b.unloads.wrapping_add(1);
         }
         OK
+    }
+
+    fn resident_query(&self, provider: u32, minimum: u32) -> Result<u32, i32> {
+        if self.phase != Phase::Closed {
+            return Err(E_CONTEXT);
+        }
+        for (index, record) in self.provs.iter().enumerate() {
+            if !self.loaded[index] || record.query_v1 == 0 {
+                continue;
+            }
+            if let Some((name, version)) = record.provides {
+                if name == provider {
+                    return if version >= minimum && version >> 16 == minimum >> 16 {
+                        Ok(record.query_v1)
+                    } else {
+                        Err(E_CONTRACT)
+                    };
+                }
+            }
+        }
+        Err(E_MISSING)
     }
 
     /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the

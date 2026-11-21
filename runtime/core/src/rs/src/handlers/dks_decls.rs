@@ -4,6 +4,9 @@
 /// `dk_svc_declare` of a service file: the declarations of `init` without `setup`, for the device that `device` gives.
 pub type DeclareFn = unsafe fn(*mut u8, fn() -> u32) -> i32;
 
+/// Host entry of the FX service's resident query. The packed ColdFire entry is tested before this host call.
+pub const FX_QUERY: dkrt_sdk::ResidentQueryV1 = dkrt_svc_fx_dks::dk_service_query_v1;
+
 /// The Rust service files: (file name, declarations).
 pub fn declarations() -> [(&'static str, DeclareFn); 6] {
     [

@@ -35,6 +35,7 @@ mod link;
 pub mod dsp_stats;
 pub mod entry;
 mod gen_abi_check;
+mod resident_query;
 mod loader;
 pub mod registry;
 pub mod scan;
@@ -78,6 +79,7 @@ pub use health::*;
 pub use imports::*;
 pub use platform::*;
 pub use report::*;
+pub use resident_query::dkrt_service_query;
 pub use state::*;
 pub use tick::*;
 
@@ -127,6 +129,8 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
 
 
 
+#[cfg(test)]
+mod lifecycle;
 #[cfg(test)]
 mod cleanup_tests;
 #[cfg(test)]

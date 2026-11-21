@@ -133,6 +133,35 @@ c-symbol  dkrt_poll_set
 
 `--format json` prints `{identical, functions, data_objects, differences: [{kind, name, detail}]}`.
 
+### Size gate
+
+`patchkit size` reports the numbers that the runtime work is held to ([plan](plans/runtime-contract-and-lifecycle.md) section 11). It reads the stock firmware in `firmware/` (the newest one of each device that has a port; `--device dt2,dn2,st` selects, `--firmware FILE` names one) and the runtime object `runtime/core/build/runtime.dko.json` (`--runtime-object FILE`). It builds nothing. From a clean checkout, build the CLI with `pnpm nx:pilot run patchkit:cli` (it writes `dist/patchkit/patchkit`; run it again after patchkit sources change). The runtime object `runtime/core/build/runtime.dko.json` is committed, so a clean checkout has it (it is only as current as the last commit of that file). About 1 minute with all three devices, no emulator. `--device` takes the device short names `dt2`, `dn2`, `st` (it also filters `--firmware` files); an unknown flag or device is an error, and `--help` prints the usage.
+
+```sh
+dist/patchkit/patchkit size                              # tables for every device and the runtime object
+dist/patchkit/patchkit size --device st --no-drop-one    # one device, only the two stored sizes
+dist/patchkit/patchkit size --write-baseline out/size-base.json
+dist/patchkit/patchkit size --baseline out/size-base.json   # the same tables, then every number that changed, is new or is gone
+dist/patchkit/patchkit size --device st --baseline out/size-base.json   # only the keys of the measured devices are compared
+dist/patchkit/patchkit size --json                       # JSON only
+```
+
+Per device the output has the stored container of the patch set (`--set NAME`, default `device`) against the port's `container_max`, the stored container of `core/runtime` with its `requires` (and the modules a device rule such as `needed_when` adds), and the saving of dropping each module of the set. The sizes are measured without the flash cap, so an image over the limit still gets a number (`OVER by N`); `apply` keeps the limit check. A saving of 0 marked "re-added by requires or a device rule" means that another module of the set pulls the module back in. Savings are not additive, because the pack compresses the whole image.
+
+```text
+== dt2 1.17 (Digitakt_II_OS1.17.syx), set device
+  stored container     1,616,928  limit 2,096,640  headroom + 479,712
+  runtime + requires   1,577,872  (core/runtime, ...)
+  drop-one saving (bytes the image shrinks when the module leaves the set):
+    core/digikit-menu           9,328
+== runtime object ...
+  text 211,942  data+rodata 20,817  bss 791,234  (image carries 232,759 non-bss bytes)
+  text+data by crate and first module (top 30):
+      35,504  15.3%  dkrt::loader
+```
+
+The runtime groups are the sections of the object (one per symbol) named by their Rust v0 symbol: crate plus first module, `(export) NAME` for C exports, `(consts/strings)` for anonymous data. The baseline file is a flat JSON map of every number (`DEVICE/stored/set`, `DEVICE/drop/MODULE`, `runtime/text`, `runtime/group/NAME`). A module that fails to link, a device that fails or a missing runtime object is an error entry (text lines, or `errors` in the JSON); the other numbers are still measured, the exit code is 1 and no baseline file is written. The baseline compare covers the devices and the runtime object of this run only.
+
 ### Services and the port file
 
 A service (`.dks`) is packed without firmware and stays so: `patchkit pack SERVICE-ID -o dist/service.dks` writes a file that holds no firmware address and no firmware

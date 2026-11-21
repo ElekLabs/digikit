@@ -15,6 +15,8 @@
 //! (the next boot loads them into an empty runtime), and a host checks against CAPACITY as the device reports it.
 #![no_std]
 
+pub mod ledger;
+
 use dkrt_sdk::proto::*;
 use dkrt_sdk::{DkrtCap, DkrtFitOut, DkrtScan, SCAN_COMPAT, SCAN_MAX, SCAN_NEEDS};
 

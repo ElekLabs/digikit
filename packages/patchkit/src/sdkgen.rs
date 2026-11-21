@@ -877,6 +877,8 @@ struct Runtime {
     table: String,
     /// The runtime version that introduced local service registration.
     service_registration: String,
+    /// The runtime version that first handles resident query exports separately.
+    resident_query: String,
 }
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
@@ -927,6 +929,12 @@ pub fn table_runtime() -> u32 {
 pub fn service_registration_runtime() -> u32 {
     parse_runtime(&sdk_embedded().runtime.service_registration)
         .expect("sdk/sdk.toml [runtime] service_registration")
+}
+
+/// Minimum runtime for a provider with a resident query export.
+pub fn resident_query_runtime() -> u32 {
+    parse_runtime(&sdk_embedded().runtime.resident_query)
+        .expect("sdk/sdk.toml [runtime] resident_query")
 }
 
 pub fn embedded_runtime() -> u32 {
@@ -1074,9 +1082,16 @@ fn parse(text: &str) -> Result<Sdk> {
         }
     }
     let registration = parse_runtime(&sdk.runtime.service_registration)?;
-    if registration > parse_runtime(&sdk.runtime.version)? {
+    let version = parse_runtime(&sdk.runtime.version)?;
+    if registration > version {
         return Err(err!(
             "{SOURCE}: [runtime] service_registration is newer than version"
+        ));
+    }
+    let query = parse_runtime(&sdk.runtime.resident_query)?;
+    if query < registration || query > version {
+        return Err(err!(
+            "{SOURCE}: [runtime] resident_query must be between service_registration and version"
         ));
     }
     for (i, (n, k)) in sdk.records.kinds.iter().enumerate() {
@@ -2515,6 +2530,7 @@ pub fn reserved_service_import(name: &str) -> bool {
         .import
         .iter()
         .any(|i| dkneeds::keys::name_hash(&i.name) == hash)
+        || hash == dkneeds::keys::name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY)
         || name.starts_with("dkc_")
         || name.starts_with("dk_service_")
         || name.starts_with("dkrt_")

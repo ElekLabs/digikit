@@ -866,8 +866,16 @@ fn pack_inner(
             }
             sl.sort_by_key(|p| p.id);
             let mut ex: Vec<dkneeds::keys::Pair> = vec![];
-            let bound = !crate::sdkgen::provider_services().contains(&s.service);
+            let local_service = !crate::sdkgen::provider_services().contains(&s.service);
             for n in &s.exports {
+                let query = n == dkrt_sdk::RESIDENT_QUERY_ENTRY;
+                let flags = if query {
+                    dkneeds::keys::EXPORT_FLAGS
+                } else if local_service {
+                    dkneeds::keys::EXPORT_BOUND
+                } else {
+                    0
+                };
                 let at = sym(n)?.ok_or_else(|| {
                     err!("the service exports {n}, which the object does not define")
                 })?;
@@ -880,7 +888,7 @@ fn pack_inner(
                 if ex.iter().any(|p| p.a == a) {
                     return Err(err!("the service exports {n} twice"));
                 }
-                if bound
+                if flags != 0
                     && !obj.symbols.iter().any(|s| {
                         s.name == *n
                             && s.section.as_deref().and_then(|sec| kind_of.get(sec))
@@ -891,14 +899,7 @@ fn pack_inner(
                         "the service exports {n}, which is not a function in the object's text"
                     ));
                 }
-                ex.push(dkneeds::keys::Pair {
-                    a,
-                    b: if bound {
-                        at | dkneeds::keys::EXPORT_BOUND
-                    } else {
-                        at
-                    },
-                });
+                ex.push(dkneeds::keys::Pair { a, b: at | flags });
             }
             ex.sort_by_key(|p| p.a);
             (
@@ -919,7 +920,12 @@ fn pack_inner(
             b,
         })
     });
-    let registration_floor = if !local.owners.is_empty()
+    let registration_floor = if svc_exports
+        .iter()
+        .any(|e| e.b & dkneeds::keys::EXPORT_QUERY != 0)
+    {
+        crate::sdkgen::resident_query_runtime()
+    } else if !local.owners.is_empty()
         || callback_order.is_some()
         || svc_exports
             .iter()

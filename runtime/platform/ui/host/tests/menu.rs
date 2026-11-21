@@ -15,6 +15,8 @@ extern "C" {
     fn fk_settings_runs() -> c_int;
     fn fk_settings_acts() -> c_int;
     fn fk_send_slots(n: u32);
+    fn fk_route_choices(mask: u32);
+    fn fk_route_query_sends() -> u32;
     fn fk_restart_result(r: c_int);
     fn fk_open_digikit() -> c_int;
     fn fk_restarts() -> c_int;
@@ -489,6 +491,29 @@ fn route_choice_is_limited_to_what_the_effect_allows() {
     press_right(1);
     choose_panel_row(1);
     assert_eq!(dialog().unwrap().3, ["MASTER"]);
+}
+
+#[test]
+fn the_route_picker_uses_the_provider_reply_and_passes_pending_edits() {
+    let _g = digikit();
+    add("modules/a.dkm", OK | LOADED, 10, 1, 0);
+    add("modules/b.dkm", OK | LOADED, 10, 1, 0);
+    loaded("modules/a.dkm", "test/a");
+    loaded("modules/b.dkm", "test/b");
+    fx("test/a", 3, 1);
+    fx("test/b", 3, 1);
+    // The provider can return a different result than the menu's fallback.
+    unsafe { fk_route_choices(2) };
+    open_modules();
+    press_right(1);
+    choose_panel_row(1);
+    assert_eq!(dialog().unwrap().3, ["SEND"]);
+    pick_choice(0);
+    unsafe { fk_route_choices(1) };
+    press_right(0);
+    choose_panel_row(1);
+    assert_eq!(dialog().unwrap().3, ["MASTER"]);
+    assert_eq!(unsafe { fk_route_query_sends() }, 2);
 }
 
 #[test]

@@ -30,8 +30,8 @@ fn repo() -> PathBuf {
 }
 
 #[derive(Clone, Copy)]
-struct Dev {
-    name: &'static str,
+pub(crate) struct Dev {
+    pub(crate) name: &'static str,
     profile: dkrt_abi::platform::DeviceProfile,
     /// The stock firmware the images are made from (the acceptance cells); its sites' stock bytes come from `patchkit port stock`.
     firmware: &'static str,
@@ -41,7 +41,7 @@ struct Dev {
 
 const DT2: Dev = Dev { name: "dt2", profile: profiles::DT2, firmware: "firmware/Digitakt_II_OS1.17.syx", toml: "devices/digitakt-ii.toml" };
 const DN2: Dev = Dev { name: "dn2", profile: profiles::DN2, firmware: "firmware/Digitone_II_OS1.12.syx", toml: "devices/digitone-ii.toml" };
-const DEVICES: [Dev; 2] = [DT2, DN2];
+pub(crate) const DEVICES: [Dev; 2] = [DT2, DN2];
 
 impl Dev {
     /// The name of the port file of the firmware: `<device>-<version>`, the version from the firmware file's name (`..._OS1.17.syx`).
@@ -51,7 +51,7 @@ impl Dev {
     }
 
     /// False (with a note) when the firmware is not here: its images are not made, and nothing of this device can be assembled.
-    fn has_firmware(&self) -> bool {
+    pub(crate) fn has_firmware(&self) -> bool {
         let ok = repo().join(self.firmware).exists();
         if !ok {
             eprintln!("SKIP {}: {} is not here", self.name, self.firmware);
@@ -67,7 +67,7 @@ fn read(path: &Path, make: &str) -> Vec<u8> {
 // ---- the artifacts ------------------------------------------------------------------------------------------------------------
 
 /// The packed file of module `id`'s leaf name: a `.dkm`, or a `.dks` for a service.
-fn packed(dev: Dev, leaf: &str, ext: &str, nx: &str) -> Vec<u8> {
+pub(crate) fn packed(dev: Dev, leaf: &str, ext: &str, nx: &str) -> Vec<u8> {
     read(&repo().join(format!("dist/modules/{}/{leaf}.{ext}", dev.name)), &format!("pnpm nx:pilot run {nx}:pack"))
 }
 
@@ -109,7 +109,7 @@ fn be(f: &[u8], at: u32) -> u32 {
 }
 
 /// The header table of a file.
-fn table_of(f: &[u8]) -> Vec<u8> {
+pub(crate) fn table_of(f: &[u8]) -> Vec<u8> {
     let (off, len) = (be(f, dkneeds::H_REG_OFF) as usize, be(f, dkneeds::H_REG_SIZE) as usize);
     f[off..off + len].to_vec()
 }
@@ -425,7 +425,7 @@ impl Images for Card {
             } else if d.tag == Declare::HOOK {
                 crate::collect::dk_service_declare_hook(ctx, d.a, at(d.b))
             } else if d.tag == Declare::EXPORT {
-                crate::collect::dk_service_declare_export(ctx, d.a, at(d.b & !dkneeds::keys::EXPORT_BOUND))
+                crate::collect::dk_service_declare_export(ctx, d.a, at(d.b & !dkneeds::keys::EXPORT_FLAGS))
             } else {
                 crate::collect::dk_service_declare_resource(ctx, d.a, d.b)
             };
@@ -1371,8 +1371,7 @@ fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns
     }
 }
 
-/// The header EXPORTS of a service file are exactly its `provided` imports of sdk/sdk.toml, by name hash (the file's `exports()` is generated from the same list): the
-/// builder calls of the modules, and the `internal` ones that only the runtime calls (`handlers::exports` names them, so a renamed export is a failure here).
+/// The SDK exports of a service file are its `provided` imports of sdk/sdk.toml, including the internal calls from `handlers::exports`.
 #[test]
 fn the_header_exports_of_a_service_file_are_its_provided_imports() {
     let _g = clean();
@@ -1381,7 +1380,10 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
             let owner = service_file(*dev, service, &format!("core/services/{service}"));
             let table = table_of(&owner);
             let keys = Keys::parse(&table).unwrap();
-            let listed: std::collections::BTreeSet<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
+            let listed: std::collections::BTreeSet<u32> = keys.exports()
+                .filter(|entry| entry.b & dkneeds::keys::EXPORT_QUERY == 0)
+                .map(|entry| entry.a)
+                .collect();
             use crate::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_MODULE_INFO};
             let internal: &[&str] = match service {
                 "fx" => &[FX_ROUTES_ENTRY],
@@ -1392,6 +1394,49 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
             assert!(!want.is_empty(), "{service} provides nothing in sdk/sdk.toml");
             assert_eq!(listed, want, "{} {service}.dks: header EXPORTS differ from the provided imports", dev.name);
         }
+    }
+}
+
+/// The packed query is associated with the live provider, not the import table. The host calls the
+/// same typed export natively because it cannot execute the packed ColdFire address.
+#[test]
+fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let file = service_file(*dev, "fx", "core/services/fx");
+        let table = table_of(&file);
+        let keys = Keys::parse(&table).unwrap();
+        let name = name_hash("fx");
+        let query = name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
+        let export = keys.exports().find(|e| e.a == query).expect("fx has a query entry");
+        assert_eq!(export.b & dkneeds::keys::EXPORT_FLAGS, dkneeds::keys::EXPORT_FLAGS);
+        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000b02);
+        let fx_version = keys.words(tag::PROVIDES, 0).unwrap().1;
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
+            let _dsp = dsp_env(*dev, &l, &plan);
+            assert_eq!(l.resident_query(name, fx_version), Err(E_MISSING));
+            l.load_providers(&plan);
+            let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/fx.dks").unwrap();
+            let base = records::module(MAX_MODULES + j).base;
+            assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
+            assert_eq!(l.resident_query(name, fx_version + 1), Err(E_CONTRACT));
+            assert_eq!(l.resident_query(name_hash("machines"), fx_version), Err(E_MISSING));
+            assert_eq!(l.exports.owned(query), None);
+            // An ordinary legacy export with the same hash cannot change which entry the broker uses.
+            l.exports.publish_with_scope(MAX_MODULES + j + 1, query, base, true).unwrap();
+            assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
+
+            let ask = crate::handlers::dks_decls::FX_QUERY;
+            let request = [0u32, 0];
+            let mut reply = u32::MAX;
+            let out = (&mut reply as *mut u32).cast();
+            assert_eq!(ask(1, request.as_ptr().cast(), 4, out, 4), E_CONTRACT);
+            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_NOT_FOUND);
+            assert_eq!(reply, u32::MAX, "the service has no loaded FX page to report");
+        }
+        clean_state();
     }
 }
 

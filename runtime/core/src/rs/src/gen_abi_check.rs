@@ -9,6 +9,7 @@ const _: sig::dkrt_live = crate::reload::dkrt_live;
 const _: sig::dkrt_live_state = crate::reload::dkrt_live_state;
 const _: sig::dkrt_module = crate::dkrt_module;
 const _: sig::dkrt_fx = crate::dkrt_fx;
+const _: sig::dkrt_service_query = crate::dkrt_service_query;
 const _: sig::dkrt_health = crate::dkrt_health;
 const _: sig::dkrt_capacity = crate::dkrt_capacity;
 const _: sig::dkrt_blocks = crate::dkrt_blocks;

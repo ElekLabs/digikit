@@ -276,6 +276,7 @@ export const testOnlyNodes = (
   importInputs,
   pythonInputs,
   nodes,
+  imageModules,
 ) => {
   for (const [file, config] of testOwners) {
     const root = dirname(file);
@@ -314,6 +315,14 @@ export const testOnlyNodes = (
       {
         twin: targetName === 'test-device',
         subjects: config.implicitDependencies,
+        // image-module subjects (patched into the image): their root, to leave the built sources out of the key (the image
+        // hashes hold them). Pack-loaded subjects (content modules, services, fixtures) keep `production` with their sources.
+        // `devices`: the devices whose image holds the subject; the other halves keep its built sources.
+        subjectRoots: Object.fromEntries(
+          (config.implicitDependencies ?? [])
+            .filter((id) => byId.has(id) && coreBuilds.has(id) && imageModules.has(id))
+            .map((id) => [id, { root: dirname(byId.get(id).file), devices: [...imageModules.get(id)].sort() }]),
+        ),
         services: serviceLeaves(byId),
         serviceIds: serviceIds(byId),
         base: workspaceRoot,

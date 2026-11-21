@@ -29,14 +29,13 @@ export const BUILD_INPUTS = [
   { dependentTasksOutputFiles: '**/*', transitive: true },
   // gen reads the library manifests and device facts; builders read shared SDK headers and pins.
   ...ALL_MANIFESTS,
-  // pack and build-objects run the Rust patchkit binary, which reads devices/*.toml and the toolchain pins;
+  // pack and build-objects run the Rust patchkit binary (its build output arrives through dependentTasksOutputFiles, so the workspace
+  // Cargo.toml and Cargo.lock are no inputs: a Rust object is staged from its own crate and path dependencies, packSourceInputs), which reads devices/*.toml and the toolchain pins;
   // pk_toolchains.py pins the m68k compiler; there is no Python on this path.
   '{workspaceRoot}/devices/*.toml',
   ...SHARED_SDK_INPUTS,
   '{workspaceRoot}/tools/patchkit/toolchain/**/*',
   '{workspaceRoot}/tools/patchkit/pk_toolchains.py',
-  '{workspaceRoot}/Cargo.toml',
-  '{workspaceRoot}/Cargo.lock',
   '{workspaceRoot}/.cargo/**/*',
   '{workspaceRoot}/rust-toolchain*',
   '{workspaceRoot}/mise.toml',

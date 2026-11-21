@@ -4,7 +4,7 @@ Date: 2026-11-06. Base: `main` at 9a849b7b. Targets: DT2 OS 1.17, DN2 OS 1.12.
 
 Binding (the workbench step that resolved firmware names into the `.dks`; the terms bound, unbound, `BIND` and `patchkit bind` below) is replaced by the port file: [port-file.md](port-file.md). A `.dks` is packed without firmware and the card holds `ports/<device>-<version>.dkport`; read the binding passages below as the earlier design.
 
-Status: **The service split and the `.dks` format are built (R12, RS-S, RS-C, B1); R12-8 step 7 is open.** This is the only active plan for this work.
+**Status.** The service split and the `.dks` format are built (R12, RS-S, RS-C, B1). R12-8 step 7 merged in PR #657. Follow the [current service-boundary work](../ARCHITECTURE.md#remaining-ownership-work) for the sequence of ownership changes.
 
 Built so far (SDK steps S2b and S3, runtime 0.7.0, see [sdk.md](sdk.md)): modules call the runtime through named imports (no Api table); a module reaches an optional provider (`core/ui`, `core/input`, `core/usb-bulk`, `core/dsp-link`, `core/sdhc-large`) through a handle, and an absent provider binds the imports to stubs that answer `DK_E_MISSING` and record the missing provider as the module's need; one runtime version with `since` per import and a loader check (same major and minor, patch not higher); and the builder commit (machines, pages and parameters declared in `init`, checked and written at commit). Section 12 item 1 (`since` and the loader check) is done; the text below is the design these parts follow.
 

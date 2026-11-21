@@ -12,6 +12,7 @@
 //!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`).
 //!   The exports of the file are the `provided = true` imports of the service in `sdk.toml`: `service!` takes `exports = gen_exports::exports()` (the file `patchkit gen`
 //!   writes) for SDK services. A service outside the SDK declares its export names in `dks/module.toml` and in the literal `exports` list.
+//!   Either can add a resident query with the reserved export name in the manifest and a typed `query` entry in `service!`.
 //!   Assembler (`asm!`, `global_asm!`, `naked`) is only in `dks/src/hooks.rs`, and firmware names (`cf.` hook and anchor names, `dkfw`) only under `dks/`.
 //! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`image-modules/**/module.toml`). When the
 //!   slot must exist (a typo is an error). When the slot exists only on some devices (`devices` in its `[[slot]]`), the fill names `devices` too and only devices the slot has.
@@ -397,6 +398,7 @@ fn check_dks(
     let mut hooks: Vec<(String, Vec<String>)> = vec![];
     let mut fills: Vec<(String, Vec<String>)> = vec![];
     let mut local_exports = vec![];
+    let mut has_query = false;
     if let Some(m) = &manifest {
         let list = |table: &str, key: &str| -> Vec<(String, Vec<String>)> {
             m.get(table)
@@ -516,18 +518,35 @@ fn check_dks(
         if !dsp_fills.is_empty() {
             fills.retain(|(n, _)| !dsp_fills.contains(n));
         }
+        let query_name = dkrt_sdk::RESIDENT_QUERY_ENTRY;
+        let exports = list("export", "name");
+        has_query = exports.iter().any(|(name, _)| name == query_name);
         if local_service {
             match std::fs::read_to_string(dks.join("module.toml"))
                 .ok()
                 .and_then(|text| toml::from_str::<crate::module::Manifest>(&text).ok())
                 .map(|m| m.provided_service())
             {
-                Some(Ok(Some(service))) => local_exports = service.exports,
+                Some(Ok(Some(service))) => {
+                    local_exports = service
+                        .exports
+                        .into_iter()
+                        .filter(|name| name != query_name)
+                        .collect();
+                }
                 Some(Err(e)) => out.push(format!("dks/module.toml: {e}")),
                 _ => out.push("dks/module.toml does not declare a service".into()),
             }
-        } else if m.get("export").is_some() {
-            out.push("dks/module.toml: [[export]] is not read: the exports of the file are the `provided = true` imports of its service in sdk/sdk.toml".into());
+        } else if exports.iter().any(|(name, _)| name != query_name) {
+            out.push("dks/module.toml: SDK service exports are the `provided = true` imports of its service in sdk/sdk.toml, plus the optional resident query".into());
+        }
+        if exports
+            .iter()
+            .filter(|(name, _)| name == query_name)
+            .count()
+            > 1
+        {
+            out.push(format!("dks/module.toml: repeated [[export]] {query_name}"));
         }
         let module = m.get("module").and_then(|t| t.as_table());
         let get = |k: &str| module.and_then(|t| t.get(k)).and_then(|v| v.as_str());
@@ -580,6 +599,13 @@ fn check_dks(
     if let Some(lib) = get("src/lib.rs") {
         if !only_service_call(lib) {
             out.push("dks/src/lib.rs is not the `service!(...)` call alone (attributes, `use` and `mod` lines are allowed)".into());
+        }
+        let query = Regex::new(r"\bquery\s*=\s*(?:[A-Za-z_]\w*\s*::\s*)*([A-Za-z_]\w*)")
+            .unwrap()
+            .captures(lib)
+            .and_then(|c| c.get(1).map(|name| name.as_str()));
+        if query != has_query.then_some(dkrt_sdk::RESIDENT_QUERY_ENTRY) {
+            out.push("dks/src/lib.rs: service! query must match the dk_service_query_v1 export in dks/module.toml".into());
         }
         let literal = Regex::new(r"\bexports\s*=\s*\[").unwrap().is_match(lib);
         let generated = Regex::new(r"\bexports\s*=\s*gen_exports::exports\(\)")

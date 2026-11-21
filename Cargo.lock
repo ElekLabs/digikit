@@ -1203,6 +1203,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dkrt-lifecycle"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
 name = "dkrt-link"
 version = "0.1.0"
 dependencies = [
