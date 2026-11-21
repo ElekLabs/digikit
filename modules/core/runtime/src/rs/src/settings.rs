@@ -220,6 +220,31 @@ pub unsafe fn put(key: &[u8], value: &[u8]) -> i32 {
     }
 }
 
+/// Can the record take `key` set to a value of `value_len` bytes now? 0, or what `put` would answer (`E_SET_OFF`, `E_SET_KEY`, `E_SET_VALUE`, `E_SET_FULL`). Changes nothing.
+/// `module_put` asks this before it writes the settings overlay, so the record's write that follows cannot refuse for these reasons.
+pub unsafe fn fits(key: &[u8], value_len: usize) -> i32 {
+    ensure();
+    if state().off != 0 {
+        return E_SET_OFF;
+    }
+    match set::fits(&area()[..], key, value_len) {
+        Ok(()) => OK,
+        Err(e) => e,
+    }
+}
+
+/// Can the record take a `remove` of `key` now? 0, or what `remove` would answer (`E_SET_OFF`, `E_SET_KEY`). Changes nothing.
+pub unsafe fn can_remove(key: &[u8]) -> i32 {
+    ensure();
+    if state().off != 0 {
+        return E_SET_OFF;
+    }
+    if !set::valid_key(key) {
+        return E_SET_KEY;
+    }
+    OK
+}
+
 /// Remove `key`: 0 (also when it was not there), or `E_SET_KEY`.
 pub unsafe fn remove(key: &[u8]) -> i32 {
     ensure();
@@ -358,9 +383,12 @@ pub unsafe fn module_client() -> i32 {
         return E_NOT_FOUND;
     }
     let rec = source as usize - 1;
-    if !crate::files::in_init(rec) {
+    // a service file reads the device scope through the core, not through a module handle
+    if rec >= crate::MAX_MODULES || !crate::files::in_init(rec) {
         return E_NOT_FOUND;
     }
+    // the module reads its settings in `init`: a change of what they return reloads it (`settings_reload`)
+    crate::settings_reload::note_opened(rec);
     rec as i32 + 1
 }
 
@@ -382,8 +410,20 @@ unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY
     }
 }
 
+/// The module id of a settings handle (the name of its record), as `module_stored_key` takes it: `None` for a handle that is 0, past the table or of a record that is not loaded.
+unsafe fn module_id<'a>(client: u32) -> Option<&'a [u8]> {
+    if client == 0 || client as usize > crate::MAX_MODULES {
+        return None;
+    }
+    let m = &crate::st().modules[client as usize - 1];
+    if m.used == 0 {
+        return None;
+    }
+    Some(core::slice::from_raw_parts(m.name.as_ptr(), crate::cstr_len(m.name.as_ptr(), 31)))
+}
+
 /// `settings_get`: the length of the value (0 is valid), `E_SET_NOKEY`, `E_SET_VALUE` (`cap` too small: nothing is written), `E_SET_KEY` (bad handle or
-/// key), `E_SET_OFF`. In `init` and in the UI task.
+/// key), `E_SET_OFF`. In `init` and in the UI task. With a settings overlay set the overlay's value is the answer when it holds one (`settings_overlay`), else the record's.
 pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
@@ -395,10 +435,18 @@ pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) ->
     }
     let mut none = [0u8; 0];
     let buf: &mut [u8] = if cap == 0 { &mut none } else { core::slice::from_raw_parts_mut(out, cap as usize) };
+    if let Some(id) = module_id(client) {
+        if let Some(r) = crate::settings_overlay::get(id, key_of(key), buf) {
+            return r;
+        }
+    }
     get(&k[..n], buf)
 }
 
-/// `settings_put`: 0, or `E_SET_KEY` (bad handle or key, or `value` null with `len` above 0), `E_SET_VALUE` (over 1024 bytes), `E_SET_FULL`, `E_SET_OFF`. UI task.
+/// `settings_put`: 0, or `E_SET_KEY` (bad handle or key, or `value` null with `len` above 0), `E_SET_VALUE` (over 1024 bytes), `E_SET_FULL`, `E_SET_OFF`. UI task. The order is:
+/// first the record is asked whether it can take the change (`fits`: key, value size, room after replacing the key's entry, settings on); a refusal is the answer and nothing
+/// is written. Then the settings overlay (if set) takes the value; its refusal (any answer `settings_overlay::put` passes through) is the answer, with the record unchanged.
+/// Last the record takes it, which cannot refuse for the reasons `fits` checked. So a module that gets an error reads back what it read before.
 pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
@@ -412,16 +460,38 @@ pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32
         return E_SET_KEY;
     }
     let v: &[u8] = if len == 0 { &[] } else { core::slice::from_raw_parts(value, len as usize) };
+    let r = fits(&k[..n], v.len());
+    if r != OK {
+        return r;
+    }
+    if let Some(id) = module_id(client) {
+        let r = crate::settings_overlay::put(id, key_of(key), v);
+        if r != OK {
+            return r;
+        }
+    }
     put(&k[..n], v)
 }
 
-/// `settings_remove`: 0 (also when the key was not there), or `E_SET_KEY` (bad handle or key), `E_SET_OFF`. UI task.
+/// `settings_remove`: 0 (also when the key was not there), or `E_SET_KEY` (bad handle or key), `E_SET_OFF`. UI task. The order is: the record is asked whether it can take the
+/// remove (`can_remove`: key valid, settings on); a refusal is the answer and nothing changes. Then the key leaves the settings overlay (a refusal the overlay passes through is
+/// the answer, the record unchanged); last the record drops it. A module that gets an error still reads the value it read before.
 pub unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,
         Err(e) => return e,
     };
+    let r = can_remove(&k[..n]);
+    if r != OK {
+        return r;
+    }
+    if let Some(id) = module_id(client) {
+        let r = crate::settings_overlay::remove(id, key_of(key));
+        if r != OK {
+            return r;
+        }
+    }
     remove(&k[..n])
 }
 
@@ -520,5 +590,228 @@ mod tests {
         assert!(!write_due(changed, changed, delay, DEAD_PASSES - 1, 0));
         assert!(write_due(changed, changed, delay, DEAD_PASSES, 0));
         assert!(!write_due(changed, changed, delay, 10 + DEAD_PASSES - 1, 10));
+    }
+
+    // ---- the settings overlay of the module calls (settings_overlay.rs) ---------------------------------------------------------------
+
+    use crate::settings_overlay;
+    use dkrt_abi::service::{SettingsOverlay, SETTINGS_OVERLAY_VERSION};
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
+    use std::vec::Vec;
+
+    /// The overlay's entries as the service holds them, `<id>/<key>`.
+    static ENTRIES: Mutex<BTreeMap<Vec<u8>, Vec<u8>>> = Mutex::new(BTreeMap::new());
+    unsafe fn full(id: *const u8, il: u32, key: *const u8, kl: u32) -> Vec<u8> {
+        [core::slice::from_raw_parts(id, il as usize), b"/", core::slice::from_raw_parts(key, kl as usize)].concat()
+    }
+    unsafe extern "C" fn p_get(id: *const u8, il: u32, key: *const u8, kl: u32, out: *mut u8, cap: u32) -> i32 {
+        match ENTRIES.lock().unwrap().get(&full(id, il, key, kl)) {
+            None => E_SET_NOKEY,
+            Some(v) if v.len() > cap as usize => E_SET_VALUE,
+            Some(v) => {
+                core::ptr::copy_nonoverlapping(v.as_ptr(), out, v.len());
+                v.len() as i32
+            }
+        }
+    }
+    /// What the table's `put` answers instead of storing, when set.
+    static PUT_ANSWER: Mutex<Option<i32>> = Mutex::new(None);
+    unsafe extern "C" fn p_put(id: *const u8, il: u32, key: *const u8, kl: u32, v: *const u8, len: u32) -> i32 {
+        if let Some(a) = *PUT_ANSWER.lock().unwrap() {
+            return a;
+        }
+        ENTRIES.lock().unwrap().insert(full(id, il, key, kl), core::slice::from_raw_parts(v, len as usize).to_vec());
+        0
+    }
+    /// What the table's `remove` answers after removing, when set.
+    static REMOVE_ANSWER: Mutex<Option<i32>> = Mutex::new(None);
+    unsafe extern "C" fn p_remove(id: *const u8, il: u32, key: *const u8, kl: u32) -> i32 {
+        ENTRIES.lock().unwrap().remove(&full(id, il, key, kl));
+        REMOVE_ANSWER.lock().unwrap().unwrap_or(0)
+    }
+    static SCOPE: SettingsOverlay = SettingsOverlay { version: SETTINGS_OVERLAY_VERSION, get: p_get, put: p_put, remove: p_remove };
+
+    /// An empty settings record in RAM and a loaded module `test/m` at record 0 (handle 1); an overlay is set when `service`.
+    unsafe fn setup(service: bool) {
+        let s = state();
+        s.loaded = 1;
+        s.off = 0;
+        set::init(&mut area()[..], 0);
+        ENTRIES.lock().unwrap().clear();
+        *PUT_ANSWER.lock().unwrap() = None;
+        *REMOVE_ANSWER.lock().unwrap() = None;
+        let m = &mut crate::st().modules[0];
+        m.used = 1;
+        m.name = [0; 32];
+        m.name[..6].copy_from_slice(b"test/m");
+        if service {
+            crate::dlog::set_source_for_test(1);
+            settings_overlay::set(&SCOPE);
+            crate::dlog::set_source_for_test(0);
+        }
+    }
+    unsafe fn teardown() {
+        settings_overlay::withdraw(0);
+        crate::st().modules[0].used = 0;
+    }
+    unsafe fn rd(key: &[u8]) -> i32 {
+        let mut out = [0u8; 8];
+        module_get(1, key.as_ptr(), out.as_mut_ptr(), 8)
+    }
+
+    #[test]
+    fn without_the_service_module_settings_are_the_record_alone() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(false);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"v".as_ptr(), 1), 0);
+            assert_eq!(rd(b"k\0"), 1);
+            assert_eq!(module_remove(1, b"k\0".as_ptr()), 0);
+            assert_eq!(rd(b"k\0"), E_SET_NOKEY);
+            assert!(ENTRIES.lock().unwrap().is_empty());
+            teardown();
+        }
+    }
+
+    #[test]
+    fn with_an_overlay_a_read_prefers_it_and_a_write_goes_to_both() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(true);
+            // the record's value is the answer while the overlay holds none
+            assert_eq!(put(b"test/m/k", b"rec"), 0);
+            let mut out = [0u8; 8];
+            assert_eq!(module_get(1, b"k\0".as_ptr(), out.as_mut_ptr(), 8), 3);
+            assert_eq!(&out[..3], b"rec");
+            // the overlay's value wins
+            ENTRIES.lock().unwrap().insert(b"test/m/k".to_vec(), b"proj".to_vec());
+            assert_eq!(module_get(1, b"k\0".as_ptr(), out.as_mut_ptr(), 8), 4);
+            assert_eq!(&out[..4], b"proj");
+            // a write: the record has the last used value and so has the overlay
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"new".as_ptr(), 3), 0);
+            let mut rec = [0u8; 8];
+            assert_eq!(get(b"test/m/k", &mut rec), 3);
+            assert_eq!(&rec[..3], b"new");
+            assert_eq!(ENTRIES.lock().unwrap().get(&b"test/m/k".to_vec()).map(|v| v.as_slice()), Some(&b"new"[..]));
+            // a remove leaves neither
+            assert_eq!(module_remove(1, b"k\0".as_ptr()), 0);
+            assert_eq!(get(b"test/m/k", &mut rec), E_SET_NOKEY);
+            assert!(ENTRIES.lock().unwrap().is_empty());
+            teardown();
+        }
+    }
+
+    #[test]
+    fn a_write_the_overlay_refuses_leaves_the_record_unchanged() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(true);
+            assert_eq!(put(b"test/m/k", b"old"), 0);
+            *PUT_ANSWER.lock().unwrap() = Some(E_SET_FULL);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"new".as_ptr(), 3), E_SET_FULL);
+            let mut rec = [0u8; 8];
+            assert_eq!(get(b"test/m/k", &mut rec), 3);
+            assert_eq!(&rec[..3], b"old");
+            // another answer is a refusal too: the record stays
+            *PUT_ANSWER.lock().unwrap() = Some(dkrt_sdk::proto::E_STATE);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"new".as_ptr(), 3), dkrt_sdk::proto::E_STATE);
+            assert_eq!(get(b"test/m/k", &mut rec), 3);
+            assert_eq!(&rec[..3], b"old");
+            // the provider has nothing to layer now (`E_SET_OFF`): the record alone takes it
+            *PUT_ANSWER.lock().unwrap() = Some(E_SET_OFF);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"new".as_ptr(), 3), 0);
+            assert_eq!(get(b"test/m/k", &mut rec), 3);
+            assert_eq!(&rec[..3], b"new");
+            teardown();
+        }
+    }
+
+    /// Fill the record until it takes no further 900-byte value.
+    unsafe fn fill_record() {
+        let mut i = 0u32;
+        loop {
+            let key = std::format!("fill/{i}");
+            if put(key.as_bytes(), &[7u8; 900]) != 0 {
+                break;
+            }
+            i += 1;
+        }
+    }
+
+    #[test]
+    fn a_put_the_record_refuses_never_reaches_the_overlay() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(true);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"old".as_ptr(), 3), 0);
+            fill_record();
+            // the record has no room for a value of 1000 bytes in place of 3: the module is told, and reads the old value from the overlay as before
+            let big = [9u8; 1000];
+            assert_eq!(module_put(1, b"k\0".as_ptr(), big.as_ptr(), 1000), E_SET_FULL);
+            assert_eq!(ENTRIES.lock().unwrap().get(&b"test/m/k".to_vec()).map(|v| v.as_slice()), Some(&b"old"[..]));
+            let mut out = [0u8; 8];
+            assert_eq!(module_get(1, b"k\0".as_ptr(), out.as_mut_ptr(), 8), 3);
+            assert_eq!(&out[..3], b"old");
+            // a new key with no room: the overlay holds no entry for it
+            assert_eq!(module_put(1, b"n\0".as_ptr(), big.as_ptr(), 1000), E_SET_FULL);
+            assert!(!ENTRIES.lock().unwrap().contains_key(&b"test/m/n".to_vec()));
+            // a value that fits in place of the old one is taken by both
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"new".as_ptr(), 3), 0);
+            assert_eq!(ENTRIES.lock().unwrap().get(&b"test/m/k".to_vec()).map(|v| v.as_slice()), Some(&b"new"[..]));
+            teardown();
+        }
+    }
+
+    #[test]
+    fn with_the_settings_off_a_put_and_a_remove_leave_the_overlay_alone() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(true);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"old".as_ptr(), 3), 0);
+            state().off = 1;
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"new".as_ptr(), 3), E_SET_OFF);
+            assert_eq!(module_remove(1, b"k\0".as_ptr()), E_SET_OFF);
+            assert_eq!(ENTRIES.lock().unwrap().get(&b"test/m/k".to_vec()).map(|v| v.as_slice()), Some(&b"old"[..]));
+            state().off = 0;
+            let mut out = [0u8; 8];
+            assert_eq!(module_get(1, b"k\0".as_ptr(), out.as_mut_ptr(), 8), 3);
+            assert_eq!(&out[..3], b"old");
+            teardown();
+        }
+    }
+
+    #[test]
+    fn a_remove_the_overlay_refuses_leaves_the_record_and_the_overlay() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(true);
+            assert_eq!(module_put(1, b"k\0".as_ptr(), b"v".as_ptr(), 1), 0);
+            *REMOVE_ANSWER.lock().unwrap() = Some(dkrt_sdk::proto::E_STATE);
+            assert_eq!(module_remove(1, b"k\0".as_ptr()), dkrt_sdk::proto::E_STATE);
+            let mut rec = [0u8; 8];
+            assert_eq!(get(b"test/m/k", &mut rec), 1);
+            // the provider has nothing to layer now: the record alone drops the key
+            *REMOVE_ANSWER.lock().unwrap() = Some(E_SET_OFF);
+            assert_eq!(module_remove(1, b"k\0".as_ptr()), 0);
+            assert_eq!(get(b"test/m/k", &mut rec), E_SET_NOKEY);
+            teardown();
+        }
+    }
+
+    #[test]
+    fn the_runtimes_own_keys_do_not_pass_through_the_overlay() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            setup(true);
+            // the runtime's own `put` (the core's `settings_put`, the menu's `dkrt_settings_put`) is device scope: a route or a send never reaches the overlay
+            assert_eq!(put(b"fx/route/test/x", b"\x01"), 0);
+            assert_eq!(put(b"fx/send/test/x", b"\x07"), 0);
+            assert!(ENTRIES.lock().unwrap().is_empty());
+            // and a module cannot reach them: its keys are `<id>/<key>`
+            let mut out = [0u8; 4];
+            assert_eq!(module_get(1, b"fx/route/test/x\0".as_ptr(), out.as_mut_ptr(), 4), E_SET_KEY);
+            teardown();
+        }
     }
 }

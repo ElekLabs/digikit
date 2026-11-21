@@ -134,6 +134,23 @@ pub struct FakeCore {
     pub on_call: RefCell<Option<Box<dyn FnMut(u32, &[usize]) -> usize>>>,
     /// The platform facts (`CoreApi::host`).
     pub host: FakeHost,
+    /// The table a service gave (`CoreApi::settings_overlay_set`), null: none.
+    pub settings_overlay: Cell<*const dkrt_abi::service::SettingsOverlay>,
+    /// The module ids `CoreApi::settings_changed` named, in order.
+    pub settings_changed: RefCell<Vec<Vec<u8>>>,
+    /// The live jobs asked for (`CoreApi::live`): the op and the path without its NUL, in order.
+    pub live_calls: RefCell<Vec<(u32, Vec<u8>)>>,
+    /// What `CoreApi::live` answers; `OK` is a queued job: the state reads phase 1 until a test sets `live_job`.
+    pub live_result: Cell<i32>,
+    /// The words `CoreApi::live_state` reports: phase, result, step, unloaded, op.
+    pub live_job: Cell<[u32; 5]>,
+    /// The paths `CoreApi::selection_add` was given, in order, and what it answers.
+    pub selection_adds: RefCell<Vec<Vec<u8>>>,
+    pub selection_result: Cell<i32>,
+    /// The loaded content modules (`CoreApi::module_name` and `module_path`): (id, path), each NUL terminated, by record. Empty: `module_name` answers `name` and no module has a path.
+    pub loaded: RefCell<Vec<(Vec<u8>, Vec<u8>)>>,
+    /// The store files `CoreApi::store_find` searches, by path.
+    pub store_files: RefCell<Vec<Vec<u8>>>,
     jobs: RefCell<Vec<FakeJob>>,
     next_job: Cell<u32>,
     dsp: *mut DspState,
@@ -209,6 +226,15 @@ impl FakeCore {
             fw_result: Cell::new(0),
             on_call: RefCell::new(None),
             host: FakeHost::new(),
+            settings_overlay: Cell::new(core::ptr::null()),
+            settings_changed: RefCell::new(Vec::new()),
+            live_calls: RefCell::new(Vec::new()),
+            live_result: Cell::new(0),
+            live_job: Cell::new([0; 5]),
+            selection_adds: RefCell::new(Vec::new()),
+            selection_result: Cell::new(0),
+            loaded: RefCell::new(Vec::new()),
+            store_files: RefCell::new(Vec::new()),
             jobs: RefCell::new(Vec::new()),
             next_job: Cell::new(0),
             dsp,
@@ -343,8 +369,28 @@ impl CoreApi for FakeCore {
     fn device_id(&self) -> u32 {
         self.device
     }
-    unsafe fn module_name(&self, _owner: u8) -> *const u8 {
-        self.name.as_ptr()
+    unsafe fn module_name(&self, owner: u8) -> *const u8 {
+        match self.loaded.borrow().get((owner as usize).wrapping_sub(1)) {
+            Some((id, _)) => id.as_ptr(),
+            None => self.name.as_ptr(),
+        }
+    }
+    unsafe fn module_path(&self, owner: u8) -> *const u8 {
+        match self.loaded.borrow().get((owner as usize).wrapping_sub(1)) {
+            Some((_, path)) => path.as_ptr(),
+            None => core::ptr::null(),
+        }
+    }
+    unsafe fn store_find(&self, dir: &[u8], name: &[u8], out: &mut [u8; 64]) -> i32 {
+        for p in self.store_files.borrow().iter() {
+            let last = p.rsplit(|c| *c == b'/').next().unwrap_or(p);
+            if p.starts_with(dir) && last == name {
+                *out = [0; 64];
+                out[..p.len()].copy_from_slice(p);
+                return p.len() as i32;
+            }
+        }
+        dkrt_sdk::E_NOT_FOUND
     }
     unsafe fn module_of(&self, _ctx: *const u8) -> u8 {
         self.running.get()
@@ -386,6 +432,37 @@ impl CoreApi for FakeCore {
             s.push((key.to_vec(), value.to_vec()));
         }
         r
+    }
+    unsafe fn settings_overlay_set(&self, overlay: *const dkrt_abi::service::SettingsOverlay) {
+        self.settings_overlay.set(overlay);
+    }
+    unsafe fn settings_changed(&self, id: &[u8]) {
+        self.settings_changed.borrow_mut().push(id.to_vec());
+    }
+    unsafe fn live(&self, op: u32, path: *const u8) -> i32 {
+        let n = (0..64).take_while(|i| *path.add(*i) != 0).count();
+        self.live_calls
+            .borrow_mut()
+            .push((op, core::slice::from_raw_parts(path, n).to_vec()));
+        let r = self.live_result.get();
+        if r == 0 {
+            self.live_job.set([1, 0, 1, 0, op]);
+        }
+        r
+    }
+    unsafe fn selection_add(&self, path: &[u8]) -> i32 {
+        self.selection_adds.borrow_mut().push(path.to_vec());
+        self.selection_result.get()
+    }
+    unsafe fn live_state(&self) -> dkrt_sdk::DkrtLive {
+        let [phase, result, step, unloaded, op] = self.live_job.get();
+        dkrt_sdk::DkrtLive {
+            phase,
+            result: result as i32,
+            step,
+            unloaded,
+            op,
+        }
     }
     unsafe fn log(&self, kind: u16, flags: u16, args: [u32; 5]) {
         self.rec(Call::Log { kind, flags, args })

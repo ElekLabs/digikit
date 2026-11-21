@@ -369,6 +369,58 @@ unsafe fn list_unlocked(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -
     n as i32
 }
 
+/// `find_name(prefix, name, out)`: the first file (in table order) whose path starts with `prefix` (NUL-terminated) and whose last path part is `name`,
+/// its path NUL padded into `out`; its length, `E_NOT_FOUND` after the whole table is read and holds none, or the error of the read (`E_BUSY` while
+/// an upload holds the store). It reads every entry (no cap on the files), unlike `list`.
+pub unsafe fn find_name(prefix: *const u8, name: &[u8], out: *mut [u8; 64]) -> i32 {
+    if !super::lock::acquire() {
+        return E_BUSY;
+    }
+    let r = find_name_unlocked(prefix, name, out);
+    super::lock::unlock();
+    r
+}
+
+unsafe fn find_name_unlocked(prefix: *const u8, name: &[u8], out: *mut [u8; 64]) -> i32 {
+    let (io, lay) = (reader(), layout());
+    let fp = addr_of_mut!(DKRT_STORE_FP) as *mut u8;
+    let mut plen = 0;
+    while *prefix.add(plen) != 0 {
+        plen += 1;
+    }
+    let r = store::stable(&io, &lay, fp, || {
+        let t = open()?;
+        let mut found = 0i32;
+        let r = store::scan(&io, &lay, &t.h, stage(), STAGE_BYTES, |_, e| {
+            if !listed(e, prefix, plen, Filter::Modules) {
+                return true;
+            }
+            let len = store::path_len(e);
+            let mut path = [0u8; 64];
+            let mut k = 0;
+            while k < len {
+                path[k] = *e.add(k);
+                k += 1;
+            }
+            if !crate::scan::last_part_is(&path, name) {
+                return true;
+            }
+            *out = path;
+            found = len as i32;
+            false
+        });
+        if r != OK {
+            return Err(r);
+        }
+        Ok(found)
+    });
+    match r {
+        Ok(0) => E_NOT_FOUND,
+        Ok(n) => n,
+        Err(e) => e,
+    }
+}
+
 /// `dkrt_store_read_sector(rel, out)`: one sector of the store (relative to its start) into `out`, 512 bytes, 16-byte aligned. 0 or a negative code.
 pub unsafe fn read_sector(rel: u32, out: *mut u8) -> i32 {
     if crate::card::state() == CARD_TOO_SMALL {

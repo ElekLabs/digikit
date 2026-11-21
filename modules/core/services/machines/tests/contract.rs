@@ -520,6 +520,7 @@ fn fixture(device: u32) -> Fixture {
         }),
         rules: true,
         parked_knobs: None,
+        survives: None,
     }
 }
 

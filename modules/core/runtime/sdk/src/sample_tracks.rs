@@ -3,9 +3,9 @@
 //! The ColdFire runtime implements `Env` with the optional `dkpool_*` symbols and the DSP link.
 //!
 //! One `Core` serves `CL` clients (modules with a track table). It owns the 16-track tables, the
-//! dedup entries (one per backing handle, refcount = tracks bound), the load state machine and the
-//! in-memory per-project selection table. `tick` runs in the UI task and does one bounded step per
-//! track; `select`, `unbind`, `done`, `lost` and `project_changed` only change state.
+//! dedup entries (one per backing handle, refcount = tracks bound) and the load state machine. `tick` runs in the UI task and does one bounded
+//! step per track; `select`, `unbind`, `done` and `lost` only change state. The core knows no project: the pool list of a module is kept in
+//! its settings by the module (sdk/src/sample/picker.c), which the runtime makes per project while the `project` service is loaded.
 use crate::{
     E_CHANGED, E_CONTRACT, E_DSP_XFER, E_FORMAT, E_LOST, E_NOMEM, E_NOT_FOUND, E_POOL, E_SEL_PATH,
     E_TOO_BIG,
@@ -13,8 +13,6 @@ use crate::{
 
 pub const TRACKS: usize = crate::sample_pool::ENTRIES;
 pub const PATH: usize = 256;
-/// Selection paths kept per project (store paths are at most 159 bytes; longer ones are not remembered).
-pub const SEL_PATH: usize = 160;
 /// Where the device roots its sample paths. `select` takes a root-relative path (a listing row); the runtime adds the root.
 pub const ROOT_DT2: &[u8] = b"/";
 pub const ROOT_DN2: &[u8] = b"samples/";
@@ -25,7 +23,6 @@ pub const READY: i32 = 3;
 pub const FMT_PCM16: u32 = 1;
 /// Ticks the DSP may take to drain a closed track before the track fails closed.
 pub const DRAIN_GUARD: u32 = 6000;
-const NO_SLOT: u32 = u32::MAX;
 
 /// File identity snapshot (`dk_file_id` of dkrt_pool.h).
 #[repr(C)]
@@ -280,23 +277,6 @@ const TRACK0: Track = Track {
     ticks: 0,
 };
 
-#[derive(Clone, Copy)]
-struct Sel {
-    len: u8,
-    path: [u8; SEL_PATH],
-}
-const SEL0: Sel = Sel {
-    len: 0,
-    path: [0; SEL_PATH],
-};
-#[derive(Clone, Copy)]
-struct Proj<const CL: usize> {
-    used: bool,
-    slot: u32,
-    age: u32,
-    sel: [[Sel; TRACKS]; CL],
-}
-
 /// The device-rooted form of a path given to `sample_pool_add`: the root, then the root-relative path. A path that already starts with
 /// the root `/` (the 1.5 form on DT2) is kept as it is. `E_SEL_PATH` for an empty path and for a result that does not fit `PATH` bytes.
 pub fn rooted(root: &[u8], path: &[u8], out: &mut [u8; PATH]) -> Result<usize, i32> {
@@ -356,21 +336,18 @@ fn fnv(path: &[u8]) -> u32 {
     h
 }
 
-/// `CL` clients, `EN` dedup entries, `PR` remembered projects.
-pub struct Core<const CL: usize, const EN: usize, const PR: usize> {
+/// `CL` clients, `EN` dedup entries.
+pub struct Core<const CL: usize, const EN: usize> {
     open: [bool; CL],
     tracks: [[Track; TRACKS]; CL],
     entries: [Entry; EN],
     next_req: u32,
     next_token: u32,
-    proj: [Proj<CL>; PR],
-    cur: usize,
-    clock: u32,
     /// Handles dropped as invalid since the start (wrapping).
     drops: u32,
 }
 
-impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
+impl<const CL: usize, const EN: usize> Core<CL, EN> {
     pub const fn new() -> Self {
         let mut c = Self::zeroed();
         c.start();
@@ -385,29 +362,14 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
             entries: [ENTRY0; EN],
             next_req: 0,
             next_token: 0,
-            proj: [Proj {
-                used: false,
-                slot: 0,
-                age: 0,
-                sel: [[SEL0; TRACKS]; CL],
-            }; PR],
-            cur: 0,
-            clock: 0,
             drops: 0,
         }
     }
 
     /// The few non-zero starting values of a `zeroed` state.
     pub const fn start(&mut self) {
-        let mut i = 0;
-        while i < PR {
-            self.proj[i].slot = NO_SLOT;
-            i += 1;
-        }
-        self.proj[0].used = true;
         self.next_req = 1;
         self.next_token = 1;
-        self.clock = 1;
     }
 
     /// Log a dropped handle: the first 64 drops, then every 64th.
@@ -510,11 +472,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         if n == 0 || n >= PATH {
             return E_SEL_PATH;
         }
-        let r = self.select_at(client, track, &path[..n], false);
-        if r == 0 {
-            self.remember(client, track, Some(&path[..n]));
-        }
-        r
+        self.select_at(client, track, &path[..n], false)
     }
 
     fn select_at(&mut self, client: usize, track: usize, path: &[u8], reload: bool) -> i32 {
@@ -536,11 +494,7 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
 
     /// Close the generation and drop the references; the status is UNUSED at once.
     pub fn unbind(&mut self, client: usize, track: usize) -> i32 {
-        let r = self.unbind_at(client, track);
-        if r == 0 {
-            self.remember(client, track, None);
-        }
-        r
+        self.unbind_at(client, track)
     }
     fn unbind_at(&mut self, client: usize, track: usize) -> i32 {
         let t = match self.slot(client, track) {
@@ -621,7 +575,8 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         }
     }
 
-    /// The backing lost everything (DT2 stock reset): every bound track reloads from its path.
+    /// The backing lost everything (DT2 stock reset): every bound track reloads from the path it is bound to (`Track::path`, set by `select_at`),
+    /// so the pool list survives a reset with no help from the module and the picker (sdk/src/sample/picker.c) needs no event for it.
     pub fn lost(&mut self, env: &mut impl Env) {
         for i in 0..EN {
             if matches!(self.entries[i].state, EState::Loading | EState::Ready) {
@@ -655,90 +610,6 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
                     t.status = LOADING;
                     t.reload = true;
                     t.phase = Phase::Queued;
-                }
-            }
-        }
-    }
-
-    fn remember(&mut self, client: usize, track: usize, path: Option<&[u8]>) {
-        let s = &mut self.proj[self.cur].sel[client][track];
-        match path {
-            Some(p) if p.len() < SEL_PATH => {
-                s.path[..p.len()].copy_from_slice(p);
-                s.len = p.len() as u8;
-            }
-            _ => s.len = 0,
-        }
-    }
-
-    /// The current project changed. Selections of the new project are queued first, then the
-    /// tracks it does not use are unbound, so files both projects use keep their pool entry.
-    /// A first call with the staging table (selections made before the project was known) adopts it.
-    pub fn project_changed(&mut self, slot: u32) {
-        if self.proj[self.cur].slot == slot {
-            return;
-        }
-        if self.proj[self.cur].slot == NO_SLOT {
-            let seen = self.proj.iter().position(|p| p.used && p.slot == slot);
-            if seen.is_none() {
-                self.proj[self.cur].slot = slot;
-                return;
-            }
-        }
-        self.clock += 1;
-        let idx = match self.proj.iter().position(|p| p.used && p.slot == slot) {
-            Some(i) => i,
-            None => {
-                let mut victim = None;
-                for i in 0..PR {
-                    if !self.proj[i].used {
-                        victim = Some(i);
-                        break;
-                    }
-                }
-                let victim = victim.unwrap_or_else(|| {
-                    let mut best = if self.cur == 0 { 1 } else { 0 };
-                    for i in 0..PR {
-                        if i != self.cur && self.proj[i].age < self.proj[best].age {
-                            best = i;
-                        }
-                    }
-                    best
-                });
-                self.proj[victim] = Proj {
-                    used: true,
-                    slot,
-                    age: 0,
-                    sel: [[SEL0; TRACKS]; CL],
-                };
-                victim
-            }
-        };
-        self.proj[self.cur].age = self.clock;
-        if idx == self.cur {
-            return;
-        }
-        if self.proj[self.cur].slot == NO_SLOT {
-            // The staging table stays as an ordinary project of unknown slot: drop it.
-            self.proj[self.cur].used = false;
-        }
-        self.cur = idx;
-        let proj = self.proj[idx];
-        for c in 0..CL {
-            if !self.open[c] {
-                continue;
-            }
-            for k in 0..TRACKS {
-                let s = &proj.sel[c][k];
-                if s.len != 0 {
-                    self.select_at(c, k, &s.path[..s.len as usize], false);
-                }
-            }
-            for k in 0..TRACKS {
-                if proj.sel[c][k].len == 0
-                    && (self.tracks[c][k].status != UNUSED || self.tracks[c][k].bound.is_some())
-                {
-                    self.unbind_at(c, k);
                 }
             }
         }
@@ -1129,9 +1000,6 @@ impl<const CL: usize, const EN: usize, const PR: usize> Core<CL, EN, PR> {
         if done {
             self.open[client] = false;
             self.tracks[client] = [TRACK0; TRACKS];
-            for p in self.proj.iter_mut() {
-                p.sel[client] = [SEL0; TRACKS];
-            }
         }
         done
     }

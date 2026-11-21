@@ -116,10 +116,10 @@ pub(crate) unsafe fn own_rec(ctx: *mut u8) -> Option<usize> {
     }
 }
 
-/// Call every loaded module's `tick` once, in the UI task, with the module as the source of what it logs.
+/// Call the `tick` of every loaded record (content modules, then service files) once, in the UI task, with the record as the source of what it logs.
 pub unsafe fn tick_all() {
     let mut rec = 0;
-    while rec < MAX_MODULES {
+    while rec < REC_MAX {
         let t = read_volatile(addr_of!(DKRT_TICKS[rec]));
         if t != 0 {
             let call: unsafe extern "C" fn(*const Ctx) = core::mem::transmute(t as usize);

@@ -741,6 +741,29 @@ mod tests {
         }
     }
 
+    /// A service file is a record after the modules: the source of its code is the owner of its job, and the record's retire drops the job.
+    #[test]
+    fn a_service_files_job_is_owned_by_its_record_and_dropped_with_it() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            reset();
+            let rec = crate::MAX_MODULES + 2;
+            let mut a = script(1, 0);
+            crate::dlog::set_source_for_test(rec as u8 + 1);
+            assert!(post(crate::dlog::current_source(), Some(step), Some(done), ptr(&mut a)) > 0);
+            crate::dlog::set_source_for_test(0);
+            drain();
+            assert_eq!(a.owner_seen, Some(rec as u8 + 1));
+            let mut b = script(2, 0);
+            post(rec as u8 + 1, Some(step), Some(done), ptr(&mut b));
+            assert!(retire(rec));
+            drain();
+            tick();
+            assert_eq!((b.calls, b.done_calls), (0, 0), "the retired record's waiting job is gone");
+            assert_eq!(a.done_calls, 0, "its finished job is dropped without done");
+        }
+    }
+
     #[test]
     fn a_step_is_a_file_context_only_in_the_io_task() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());

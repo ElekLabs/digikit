@@ -290,6 +290,7 @@ fn fixture(device: u32) -> Fixture {
         }),
         rules: true,
         parked_knobs: Some(parked_knobs()),
+        survives: None,
     }
 }
 

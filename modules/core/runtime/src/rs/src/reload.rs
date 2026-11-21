@@ -1102,6 +1102,56 @@ mod tests {
     }
 
     #[test]
+    fn a_service_queues_a_live_job_and_reads_its_state_through_the_core_imports() {
+        use crate::svc_imports::shims::{dkc_live, dkc_live_state};
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            // `dkrt_live` runs `init_once`, which sets up the arena at a 32-bit address that a 64-bit host cannot write: the runtime counts as initialised
+            crate::st().magic = crate::state::STATE_MAGIC;
+            *job() = Job::new();
+            // the refusals are those of `dkrt_live`: no loaded module came from the path, an empty path, an unknown op; nothing is queued
+            assert_eq!(dkc_live(LIVE_RELOAD, b"mods/x.dkm\0".as_ptr()), E_NOT_FOUND);
+            assert_eq!(dkc_live(LIVE_UNLOAD, b"mods/x.dkm\0".as_ptr()), E_NOT_FOUND);
+            assert_eq!(dkc_live(LIVE_RELOAD, b"\0".as_ptr()), dkrt_sdk::proto::E_MSG);
+            assert_eq!(dkc_live(99, b"mods/x.dkm\0".as_ptr()), dkrt_sdk::proto::E_MSG);
+            assert_eq!(job().phase, 0);
+            // a queued job (the state a successful queue leaves) is read the way `dkrt_live_state` reports it
+            *job() = Job { phase: 1, step: step::CHECK, op: LIVE_LOAD as u8, ..Job::new() };
+            assert_eq!(dkc_live(LIVE_LOAD, b"mods/y.dkm\0".as_ptr()), E_BUSY, "one job at a time");
+            let mut out = core::mem::MaybeUninit::<DkrtLive>::uninit();
+            dkc_live_state(out.as_mut_ptr());
+            let out = out.assume_init();
+            assert_eq!((out.phase, out.step, out.op, out.unloaded), (1, step::CHECK as u32, LIVE_LOAD, 0));
+            *job() = Job { phase: 2, result: E_RELOAD_PLAYING, step: 5, torn: true, op: LIVE_UNLOAD as u8, ..Job::new() };
+            let mut out = core::mem::MaybeUninit::<DkrtLive>::uninit();
+            dkc_live_state(out.as_mut_ptr());
+            let out = out.assume_init();
+            assert_eq!((out.phase, out.result, out.step, out.unloaded, out.op), (2, E_RELOAD_PLAYING, 5, 1, LIVE_UNLOAD));
+            *job() = Job::new();
+        }
+    }
+
+    #[test]
+    fn a_service_cannot_load_unload_or_reload_the_file_of_a_loaded_service() {
+        use crate::svc_imports::shims::dkc_live;
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            crate::st().magic = crate::state::STATE_MAGIC;
+            *job() = Job::new();
+            // a loaded service: the first provider record, with its path
+            let rec = crate::MAX_MODULES;
+            let path = b"services/svc.dks\0";
+            crate::loader::records::module(rec).used = 1;
+            crate::loader::records::path(rec)[..path.len()].copy_from_slice(path);
+            let answers = [LIVE_LOAD, LIVE_UNLOAD, LIVE_RELOAD].map(|op| dkc_live(op, path.as_ptr()));
+            crate::loader::records::module(rec).used = 0;
+            crate::loader::records::path(rec)[..path.len()].fill(0);
+            assert_eq!(answers, [E_FORMAT; 3]);
+            assert_eq!(job().phase, 0, "nothing is queued");
+        }
+    }
+
+    #[test]
     fn queueing_resolves_the_path_refuses_a_service_file_a_bad_path_and_a_second_job() {
         let mut s = Script::new();
         let mut j = Job::new();

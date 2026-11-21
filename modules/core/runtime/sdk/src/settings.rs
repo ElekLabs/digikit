@@ -40,33 +40,107 @@ const O_SEQ: usize = 6;
 const O_USED: usize = 10;
 const O_CRC: usize = 14;
 
-fn put16(b: &mut [u8], at: usize, v: u32) {
+pub fn put16(b: &mut [u8], at: usize, v: u32) {
     b[at] = (v >> 8) as u8;
     b[at + 1] = v as u8;
 }
-fn put32(b: &mut [u8], at: usize, v: u32) {
+pub fn put32(b: &mut [u8], at: usize, v: u32) {
     b[at] = (v >> 24) as u8;
     b[at + 1] = (v >> 16) as u8;
     b[at + 2] = (v >> 8) as u8;
     b[at + 3] = v as u8;
 }
-fn get16(b: &[u8], at: usize) -> u32 {
+pub fn get16(b: &[u8], at: usize) -> u32 {
     ((b[at] as u32) << 8) | (b[at + 1] as u32)
 }
-fn get32(b: &[u8], at: usize) -> u32 {
+pub fn get32(b: &[u8], at: usize) -> u32 {
     ((b[at] as u32) << 24)
         | ((b[at + 1] as u32) << 16)
         | ((b[at + 2] as u32) << 8)
         | (b[at + 3] as u32)
 }
 
+/// The shape of a record that this codec reads and writes: the settings record, or another file of the same family (the project file `.dkp` of the project
+/// service). The header is `header` bytes and ends with `seq` (u32, at `header - 12`), `used` (u32, at `header - 8`) and the crc32 (u32, at `header - 4`); the
+/// magic is at 0 and the u16 version at 4. The crc32 covers the header without its last four bytes and the bytes from `header` to `used`. `area` is the
+/// most bytes a record has. What lies between the version and `seq` is the owner's: the codec checks it only through the crc32.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fmt {
+    pub magic: u32,
+    pub version: u16,
+    pub header: usize,
+    pub area: usize,
+}
+
+/// The settings record.
+pub const SETTINGS: Fmt = Fmt {
+    magic: MAGIC,
+    version: VERSION,
+    header: HEADER,
+    area: AREA,
+};
+
+impl Fmt {
+    /// Offsets of the three words at the end of the header.
+    pub const fn o_seq(&self) -> usize {
+        self.header - 12
+    }
+    pub const fn o_used(&self) -> usize {
+        self.header - 8
+    }
+    pub const fn o_crc(&self) -> usize {
+        self.header - 4
+    }
+    /// The crc32 of a record of `used` bytes: the header without the crc field, then the bytes from `header` to `used`. `b` holds at least `used` bytes.
+    pub fn crc(&self, b: &[u8], used: usize) -> u32 {
+        let rest = &b[self.header..used];
+        // SAFETY: `rest` checks that `b` holds `used` bytes, and o_crc < header <= used.
+        let c = unsafe { crc32(0xffff_ffff, b.as_ptr(), self.o_crc()) };
+        // SAFETY: the pointer and the length come from one slice.
+        !unsafe { crc32(c, rest.as_ptr(), rest.len()) }
+    }
+    /// The first part of a record: its `seq` and `used`, when the magic and the version are right and `used` lies in `header..=area`.
+    pub fn peek(&self, b: &[u8]) -> Option<(u32, usize)> {
+        if b.len() < self.header
+            || get32(b, 0) != self.magic
+            || get16(b, O_VERSION) != self.version as u32
+        {
+            return None;
+        }
+        let u = get32(b, self.o_used()) as usize;
+        if !(self.header..=self.area).contains(&u) {
+            return None;
+        }
+        Some((get32(b, self.o_seq()), u))
+    }
+    /// Write the magic and the version, an empty record (`used == header`, every other header byte 0) with `seq`, and its crc32.
+    pub fn init(&self, b: &mut [u8], seq: u32) {
+        let mut i = 0;
+        while i < self.header {
+            b[i] = 0;
+            i += 1;
+        }
+        put32(b, 0, self.magic);
+        put16(b, O_VERSION, self.version as u32);
+        put32(b, self.o_used(), self.header as u32);
+        self.seal(b, seq);
+    }
+    /// Set the sequence number and the crc32 of a record whose bytes are final.
+    pub fn seal(&self, b: &mut [u8], seq: u32) {
+        put32(b, self.o_seq(), seq);
+        let u = get32(b, self.o_used()) as usize;
+        let c = self.crc(b, u);
+        put32(b, self.o_crc(), c);
+    }
+    /// Does the crc32 of a record whose `peek` passed hold? `b` holds `used` bytes.
+    pub fn crc_ok(&self, b: &[u8], used: usize) -> bool {
+        used <= b.len() && get32(b, self.o_crc()) == self.crc(b, used)
+    }
+}
+
 /// The crc32 of a record of `used` bytes: bytes 0..14, then bytes 18..used. `b` holds at least `used` bytes.
 pub fn crc_of(b: &[u8], used: usize) -> u32 {
-    let rest = &b[HEADER..used];
-    // SAFETY: `rest` checks that `b` holds `used` bytes, and O_CRC < HEADER <= used.
-    let c = unsafe { crc32(0xffff_ffff, b.as_ptr(), O_CRC) };
-    // SAFETY: the pointer and the length come from one slice.
-    !unsafe { crc32(c, rest.as_ptr(), rest.len()) }
+    SETTINGS.crc(b, used)
 }
 
 /// Are the two byte strings equal? A loop, not `==`: a slice comparison compiles to a call of `memcmp`, which the runtime does not link.
@@ -281,7 +355,14 @@ impl<'a> Iterator for Iter<'a> {
 
 /// The entry of `key` in the record `b` (checked, `used` bytes), if there is one.
 pub fn find(b: &[u8], used: usize, key: &[u8]) -> Option<Entry> {
-    let mut at = HEADER;
+    find_from(b, HEADER, used, key)
+}
+
+/// The entry of `key` among the entries that lie in `b[start..end]` (a run of entries, as the part of a record after its header, or the body of a section of another
+/// file of this family), if there is one.
+pub fn find_from(b: &[u8], start: usize, end: usize, key: &[u8]) -> Option<Entry> {
+    let used = end;
+    let mut at = start;
     while at < used {
         let e = entry_at(b, used, at)?;
         if same(&b[e.key.0..e.key.0 + e.key.1], key) {
@@ -316,7 +397,7 @@ pub fn get(b: &[u8], key: &[u8], out: &mut [u8]) -> i32 {
 }
 
 /// Move `b[from..used]` to `to` (either way); the bytes it leaves behind keep their value.
-fn shift(b: &mut [u8], from: usize, used: usize, to: usize) {
+pub fn shift(b: &mut [u8], from: usize, used: usize, to: usize) {
     if to < from {
         let mut i = from;
         while i < used {
@@ -330,6 +411,27 @@ fn shift(b: &mut [u8], from: usize, used: usize, to: usize) {
             b[to + (i - from)] = b[i];
         }
     }
+}
+
+/// Would `put` of a value of `value_len` bytes under `key` be accepted? `Ok` when it cannot refuse for the key, the value size or the room (an existing entry of the key is
+/// replaced, so only the difference counts): else the `E_SET_KEY`, `E_SET_VALUE` or `E_SET_FULL` that `put` answers. The record is not changed.
+pub fn fits(b: &[u8], key: &[u8], value_len: usize) -> Result<(), i32> {
+    if !valid_key(key) {
+        return Err(E_SET_KEY);
+    }
+    if value_len > VALUE_MAX {
+        return Err(E_SET_VALUE);
+    }
+    let cap = if b.len() < AREA { b.len() } else { AREA };
+    let u = used(b);
+    let new_used = match find(b, u, key) {
+        Some(e) => u - e.value.1 + value_len,
+        None => u + 1 + key.len() + 2 + value_len,
+    };
+    if new_used > cap {
+        return Err(E_SET_FULL);
+    }
+    Ok(())
 }
 
 /// Set `key` to `value` in the record `b` (the whole area, a record with a header): replaces the value or appends the entry. `Ok(true)` when the

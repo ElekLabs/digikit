@@ -75,6 +75,7 @@ fn fixture(device: u32) -> Fixture {
         bad_late: None,
         rules: false,
         parked_knobs: None,
+        survives: None,
     }
 }
 

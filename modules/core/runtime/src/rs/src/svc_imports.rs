@@ -98,6 +98,38 @@ pub mod shims {
         REAL_CORE.log(kind, flags, [a[0], a[1], a[2], a[3], a[4]])
     }
     #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_settings_overlay_set(overlay: *const dkrt_abi::service::SettingsOverlay) {
+        REAL_CORE.settings_overlay_set(overlay)
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_settings_changed(id: *const u8, id_len: u32) {
+        REAL_CORE.settings_changed(core::slice::from_raw_parts(id, id_len as usize))
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_live(op: u32, path: *const u8) -> i32 {
+        REAL_CORE.live(op, path)
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_live_state(out: *mut dkrt_sdk::DkrtLive) {
+        *out = REAL_CORE.live_state()
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_selection_add(path: *const u8, len: u32) -> i32 {
+        REAL_CORE.selection_add(core::slice::from_raw_parts(path, len as usize))
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_module_path(owner: u8) -> *const u8 {
+        REAL_CORE.module_path(owner)
+    }
+    #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_store_find(dir: *const u8, dir_len: u32, name: *const u8, name_len: u32, out: *mut u8) -> i32 {
+        REAL_CORE.store_find(
+            core::slice::from_raw_parts(dir, dir_len as usize),
+            core::slice::from_raw_parts(name, name_len as usize),
+            &mut *(out as *mut [u8; 64]),
+        )
+    }
+    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_current_source() -> u8 {
         REAL_CORE.current_source()
     }

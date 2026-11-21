@@ -997,3 +997,37 @@ fn every_lister_gives_the_same_entries_for_the_same_folder() {
     }
     assert!(kids.iter().any(|(n, st)| n == b"sub" && st.kind == EntryKind::Dir));
 }
+
+/// `store_find` of a name under `modules/`: the status and the path it found.
+fn find_module(name: &str) -> (i32, String) {
+    let mut out = [0u8; 64];
+    let r = unsafe { crate::scan::store_find(b"modules/", name.as_bytes(), &mut out) };
+    let end = out.iter().position(|b| *b == 0).unwrap_or(64);
+    (r, String::from_utf8_lossy(&out[..end]).into_owned())
+}
+
+#[test]
+fn store_find_reads_the_whole_store_and_is_not_found_only_after_all_of_it() {
+    let _f = Fixture::new();
+    // more module files than the listing's cap, the wanted one past it
+    for i in 0..(dkrt_sdk::SCAN_MAX + 8) {
+        assert_eq!(upload(&std::format!("modules/m{i:02}/f{i:02}.dkm"), &pattern(600, 3)), OK);
+    }
+    let last = dkrt_sdk::SCAN_MAX + 7;
+    let (r, path) = find_module(&std::format!("f{last:02}.dkm"));
+    assert_eq!(path, std::format!("modules/m{last:02}/f{last:02}.dkm"));
+    assert_eq!(r as usize, path.len());
+    assert_eq!(find_module("f00.dkm").0 as usize, "modules/m00/f00.dkm".len());
+    assert_eq!(find_module("nothing.dkm").0, dkrt_sdk::E_NOT_FOUND);
+}
+
+#[test]
+fn store_find_gives_the_error_of_a_busy_store_and_not_a_missing_file() {
+    let _f = Fixture::new();
+    assert_eq!(upload("modules/m/a-x.dkm", &pattern(600, 3)), OK);
+    assert!(sw::try_lock(), "the store lock is free");
+    let (r, _) = find_module("a-x.dkm");
+    sw::unlock();
+    assert_eq!(r, dkrt_sdk::E_BUSY);
+    assert_eq!(find_module("a-x.dkm").0 as usize, "modules/m/a-x.dkm".len());
+}

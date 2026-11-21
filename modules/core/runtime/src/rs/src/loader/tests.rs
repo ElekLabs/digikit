@@ -31,6 +31,10 @@ enum Ev {
     AbiOk(u32),
 }
 
+/// The init of a provider asks for its listing client (`files::client`) and leaves the answer here.
+static PROBE_FILES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static PROBED_CLIENT: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
 /// What the init of the module does.
 #[derive(Clone, Copy)]
 enum Init {
@@ -143,6 +147,12 @@ impl Images for FakeImages {
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
         self.log.push(Ev::Init(rec, init));
         order("init");
+        if rec >= MAX_MODULES && PROBE_FILES.load(std::sync::atomic::Ordering::SeqCst) {
+            // what `dk_files_open` of a service file asks of the runtime: the listing client of the running record, in its `init`
+            crate::dlog::set_source_for_test(rec as u8 + 1);
+            PROBED_CLIENT.store(crate::files::client(), std::sync::atomic::Ordering::SeqCst);
+            crate::dlog::set_source_for_test(0);
+        }
         match self.init {
             Init::Ok => OK,
             // (`ctx` is the context address as a u32: not a host pointer)
@@ -816,6 +826,39 @@ fn a_hook_the_port_file_does_not_list_is_refused_and_one_it_lists_as_absent_is_s
         put_port(&mut l, &[hook(0, 4)]);
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_RANGE);
         assert_eq!(l.m.allocs, 0);
+    }
+}
+
+/// A service file uses the file calls as a module does: its `init` is the listing client's scope, its tick runs, and the client and the tick end with the record,
+/// also when `init` fails.
+#[test]
+fn a_service_file_gets_the_listing_client_in_init_runs_its_tick_and_loses_both_with_its_record() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let rec = MAX_MODULES + 1;
+        PROBE_FILES.store(true, SeqCst);
+        PROBED_CLIENT.store(0, SeqCst);
+        let mut file = service_file(&svc_table(), 0);
+        put(&mut file, dkneeds::H_TICK, 8);
+        seal(&mut file);
+        let mut l = provider_loader(file, svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK);
+        assert!(PROBED_CLIENT.load(SeqCst) > 0, "init is the scope of the client");
+        assert_eq!(crate::files::ready_state(rec), 2, "ready after the load");
+        assert!(!crate::files::in_init(rec));
+        let base = records::module(rec).base;
+        assert_eq!(crate::entry::tick_of(rec), base + 8, "the tick of a service file runs as a module's");
+        assert_eq!(l.unload_rec(rec), OK);
+        assert_eq!((crate::files::ready_state(rec), crate::entry::tick_of(rec)), (0, 0));
+        // a failing init ends the scope and the client
+        PROBED_CLIENT.store(0, SeqCst);
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::Fails(E_INIT));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), E_INIT);
+        assert!(PROBED_CLIENT.load(SeqCst) > 0);
+        assert_eq!(crate::files::ready_state(rec), 0);
+        assert!(!crate::files::in_init(rec));
+        PROBE_FILES.store(false, SeqCst);
     }
 }
 

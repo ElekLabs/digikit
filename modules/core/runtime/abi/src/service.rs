@@ -55,6 +55,7 @@ const fn svc_abi() -> u32 {
         size_of::<ModuleCommitCtx>(),
         size_of::<SettleCtx>(),
         size_of::<crate::keys::KeysCopy>(),
+        size_of::<SettingsOverlay>(),
     ];
     let mut h = crate::gen_svc_abi::FILES_HASH;
     let mut i = 0;
@@ -659,6 +660,42 @@ pub trait Service<C: CoreApi> {
         None
     }
 }
+
+/// The version of `SettingsOverlay`.
+pub const SETTINGS_OVERLAY_VERSION: u32 = 1;
+
+/// A layer over the settings of the modules that a service gives the runtime: the entry points the runtime's settings calls forward to. The service file sets one table with
+/// `dkc_settings_overlay_set` in `init` and the runtime drops the pointer when the file's record goes away, so the runtime holds at most one table and the settings calls of a
+/// module find the layer or do nothing. All three are called in the UI task. `id` is the NUL-free module id (the runtime took it from the module's record, never from the
+/// caller), `key` the module's bare key; the layer stores `<id>/<key>` and applies the key and value rules of the settings record. The results are those of
+/// `dk_settings_get`, `dk_settings_put` and `dk_settings_remove`. `put` and `remove` answer `E_SET_OFF` when the layer has nothing to hold now (the provider has no data
+/// to layer): the runtime reads that as no refusal and the record alone takes the change. Every other negative answer (`E_SET_FULL`, `E_SET_KEY`, `E_SET_VALUE`, any other
+/// code) is the module's answer and the record stays as it was. The runtime has checked before the call that the record can take the change.
+#[repr(C)]
+pub struct SettingsOverlay {
+    pub version: u32,
+    pub get: unsafe extern "C" fn(
+        id: *const u8,
+        id_len: u32,
+        key: *const u8,
+        key_len: u32,
+        out: *mut u8,
+        cap: u32,
+    ) -> i32,
+    pub put: unsafe extern "C" fn(
+        id: *const u8,
+        id_len: u32,
+        key: *const u8,
+        key_len: u32,
+        value: *const u8,
+        len: u32,
+    ) -> i32,
+    pub remove:
+        unsafe extern "C" fn(id: *const u8, id_len: u32, key: *const u8, key_len: u32) -> i32,
+}
+
+// Read-only data of a service file.
+unsafe impl Sync for SettingsOverlay {}
 
 /// One service in the table, as the core sees it: its name, the record kinds it owns and its methods as `extern "C"` thunks. The row is the
 /// same type for every service and every core: `ServiceRow::of::<S, C>` builds it from `impl Service<C> for S` with generic thunks, so a row

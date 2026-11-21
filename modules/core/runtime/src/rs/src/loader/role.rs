@@ -404,6 +404,7 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
 unsafe fn service_undo<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) {
     let idx = index_of(rec);
     l.exports.withdraw(rec);
+    crate::settings_overlay::withdraw(rec);
     if let Some(b) = l.provs[idx].block {
         l.m.free(b.addr);
     }

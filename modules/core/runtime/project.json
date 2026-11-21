@@ -1,9 +1,9 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime",
-  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkneeds", "dkfw"],
+  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"],
   "metadata": {
-    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user"] }]
+    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "test/project-user", "core/services/project"] }]
   },
   "targets": {
     "rust-tests": {
@@ -13,7 +13,7 @@
         "{projectRoot}/src/rs/**/*",
         {
           "input": "production",
-          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkneeds", "dkfw"]
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
         },
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
@@ -40,7 +40,7 @@
         "{projectRoot}/src/rs/**/*",
         {
           "input": "production",
-          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkneeds", "dkfw"]
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
         },
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
@@ -52,7 +52,8 @@
         "{workspaceRoot}/modules/core/services/lfo/dks/build/lfo.dko.json",
         "{workspaceRoot}/modules/core/services/shortcuts/dks/build/shortcuts.dko.json",
         "{workspaceRoot}/modules/core/services/samples/dks/build/samples.dko.json",
-        "{workspaceRoot}/modules/core/services/{fx,machines,lfo,samples,shortcuts}/dks/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/modules/core/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/modules/core/services/project/dks/build/project.dko.json",
         "{workspaceRoot}/tools/nx/device-images.mjs",
         { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
@@ -68,11 +69,13 @@
         "test/shortcut-demo:pack",
         "test/svc-test-user:pack",
         "test/svc-test:pack",
+        "test/project-user:pack",
         "core/services/fx:pack",
         "core/services/machines:pack",
         "core/services/lfo:pack",
         "core/services/shortcuts:pack",
         "core/services/samples:pack",
+        "core/services/project:pack",
         "test/track-select:pack",
         "patchkit:ports-test",
         "patchkit:cli",
