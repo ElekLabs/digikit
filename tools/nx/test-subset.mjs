@@ -1,5 +1,5 @@
 // `mise run test:subset -- [<tags...>] [--base REF] [--why] [--run]`: the device tests of the given record tags (tools/nx/acceptance-tags.mjs)
-// as Nx leaf targets, plus gate-smoke and gate-pins when Nx `affected` selects them (against --base, DIGI_GATE_BASE or origin/main). Without --run it prints them and how many start at once by DSP mode;
+// as Nx leaf targets, plus gate-smoke and gate-pins when Nx `affected` selects them (against --base, else DIGI_GATE_BASE, else main, as gate.mjs; if the affected call fails it stops with one line naming the base). Without --run it prints them and how many start at once by DSP mode;
 // with --run it runs them through `pnpm nx:pilot run-many` (DIGI_EMU_SLOTS and the other emulator settings pass through the environment).
 // `--why` adds a line to each selected file: the given tags it has, and the changed files that selected it with `--base`.
 // Tags of one call are a union: a test runs when any of its record tags is given.
@@ -170,7 +170,12 @@ const defaultAffected = (base, target) => {
     ['tools/nx/nx.mjs', 'show', 'projects', '--affected', `--base=${base}`, `--withTarget=${target}`],
     { cwd: root, encoding: 'utf8' },
   );
-  if (done.status !== 0) throw new Error(`nx show projects --affected failed:\n${done.stderr || done.stdout}`);
+  if (done.status !== 0) {
+    console.error(
+      `test:subset: nx affected failed against base ${base}; set the base with --base REF or DIGI_GATE_BASE`,
+    );
+    process.exit(2);
+  }
   return done.stdout.split('\n').filter(Boolean);
 };
 
@@ -263,7 +268,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     );
     process.exit(2);
   }
-  const fixed = affectedFixed(base ?? process.env.DIGI_GATE_BASE ?? 'origin/main');
+  const fixed = affectedFixed(base ?? process.env.DIGI_GATE_BASE ?? 'main');
   const pairs = selectionPairs(tests, projects, fixed);
   console.log(`test:subset: ${[...tags, ...(base ? [`--base ${base}`] : [])].join(' ')}`);
   for (const t of tests) {

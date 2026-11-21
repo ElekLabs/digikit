@@ -176,11 +176,30 @@ export const serviceIds = (byId) =>
   new Set([...byId].filter(([, { manifest }]) => manifest.role === 'service').map(([id]) => id));
 
 // The code a device test drives the device with. Its own host tests cover it: merge and narrow keys leave it out;
-// full keys (test-device-all, conformance, test:full) keep it.
+// full keys (test-device-all, conformance, test:full) keep it. Exception: DRIVER_SUBJECT_FILES.
 export const DRIVER_ROOTS = ['packages/dk-session/', 'packages/test-support/', 'packages/control-client/'];
-// `imports` in the form of importInputs (`{workspaceRoot}/<path>`) without the files of DRIVER_ROOTS.
+// Files under the driver roots that stay in every key (merge, narrow, full): the protocol and log layout, the stock
+// MidiRpc protocol, the emulator launch and its settings, the panel key codes. A change here changes what a device test sends or reads.
+export const DRIVER_SUBJECT_FILES = [
+  'packages/dk-session/src/gen_proto.ts',
+  'packages/dk-session/src/gen_bulk.ts',
+  'packages/dk-session/src/runtime-log.ts',
+  'packages/dk-session/src/log-names.ts',
+  'packages/dk-session/src/runtime-events.ts',
+  'packages/dk-session/src/rpcdata.ts',
+  'packages/dk-session/src/rpcfiles.ts',
+  'packages/test-support/src/session.ts',
+  'packages/test-support/src/emulator-config.ts',
+  'packages/test-support/src/keys.ts',
+  'packages/test-support/src/input.ts',
+];
+// `imports` in the form of importInputs (`{workspaceRoot}/<path>`) without the files of DRIVER_ROOTS, except DRIVER_SUBJECT_FILES.
 export const withoutDriver = (imports) =>
-  imports.filter((p) => !DRIVER_ROOTS.some((root) => p.startsWith(`{workspaceRoot}/${root}`)));
+  imports.filter(
+    (p) =>
+      DRIVER_SUBJECT_FILES.some((f) => p === `{workspaceRoot}/${f}`) ||
+      !DRIVER_ROOTS.some((root) => p.startsWith(`{workspaceRoot}/${root}`)),
+  );
 
 // The cache inputs of one device test target, and whether its key follows patchkit (`patchkitLive`).
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when

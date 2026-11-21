@@ -12,7 +12,19 @@ const imports = [
 const rest = imports.slice(3);
 
 it('leaves the driver packages out of a list and keeps the harness helpers', () => {
-  expect(withoutDriver(imports)).toEqual(rest);
+  expect(withoutDriver(imports)).toEqual([imports[1], ...rest]);
+});
+
+it('keeps the driver files that hold device facts', () => {
+  const kept = withoutDriver([
+    '{workspaceRoot}/packages/dk-session/src/gen_proto.ts',
+    '{workspaceRoot}/packages/test-support/src/session.ts',
+    '{workspaceRoot}/packages/dk-session/src/dkupload-core.ts',
+  ]);
+  expect(kept).toEqual([
+    '{workspaceRoot}/packages/dk-session/src/gen_proto.ts',
+    '{workspaceRoot}/packages/test-support/src/session.ts',
+  ]);
 });
 
 const keyOf = (opts: object) =>

@@ -1128,7 +1128,7 @@ edit invalidates only the targets whose definition changes. `UPDATE_GOLDENS` is 
 targets and `gate-stock:stock`.
 
 A package or a harness file that no test imports is not an input: an edit to `packages/dk-session/src/samples.ts`
-leaves a target that does not import it cached. Merge and narrow keys also leave out the driver packages (`DRIVER_ROOTS`), even when imported. Files read by path are described in "What a device test's cache key contains". `digi-control:daemons` declares the daemon
+leaves a target that does not import it cached. Merge and narrow keys also leave out the driver packages (`DRIVER_ROOTS`), even when imported, except the files that hold device facts (protocol, log layout, emulator launch, key codes; `DRIVER_SUBJECT_FILES`). Files read by path are described in "What a device test's cache key contains". `digi-control:daemons` declares the daemon
 sources (`SOURCE_GLOBS` of `tools/devtools/emud_key.py`) as inputs. The binary is keyed by content, and these
 inputs make a source edit select every task that consumes `dist/daemons.json`.
 
@@ -1142,7 +1142,7 @@ Where the targets come from:
 - `tools/nx/ts-imports.mjs` and `tools/nx/py-imports.mjs` compute import closures.
 
 Three keys exist:
-- Full key: all shared reads and all built outputs, including the patchkit binary. Used by `test-device-all` and conformance.
+- Full key: all shared reads and all built outputs, including the patchkit binary. Used by `test-device-all`, `test-conformance-all` and `stock-all` (the full tier); the merge targets `test-conformance` and `stock` leave the driver out.
 - Merge key: the key of files listed in `metadata.mergeTests`. It holds the bytes the test loads (its `.dkm` packs, `images-<device>.sha256`, the daemon key of the device) and the reads its import closure needs, without the driver packages. A half of it leaves out the files of the other device.
 - Narrow key: the default for files not in `metadata.mergeTests`. It holds the production files of the project, the packs the test loads, and its imports, without the driver packages.
 
