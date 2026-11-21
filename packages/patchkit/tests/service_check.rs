@@ -494,13 +494,16 @@ fn service_exports_are_the_generated_list_of_the_provided_imports() {
         &problems(&dir, &sdk),
         "dks/src/gen_exports.rs is missing"
     ));
-    // [[export]] in the manifest is not read
+    // an SDK service exports only its provided imports (and the optional resident query)
     fs::write(dir.join("dks/src/gen_exports.rs"), listed).unwrap();
     append(
         &dir.join("dks/module.toml"),
         "\n[[export]]\nname = \"dk_sweep_go\"\n",
     );
-    assert!(mentions(&problems(&dir, &sdk), "[[export]] is not read"));
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "SDK service exports are the `provided = true` imports"
+    ));
 }
 
 #[test]
