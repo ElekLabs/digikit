@@ -7,7 +7,6 @@ import {
   copyPasteProject,
   dkpOf,
   E_SET_NOKEY,
-  forSlot,
   idHash,
   loadProject,
   ProjectLog,
