@@ -121,6 +121,7 @@ fn fixture(device: u32) -> Fixture {
         rows: Rows::NONE,
         absent_rows: None,
         live: None,
+        survives: None,
         salt_same: &[
             ("memory", "a shortcut writes no firmware memory"),
             ("dsp", "a shortcut has no DSP section"),
