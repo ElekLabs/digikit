@@ -1209,9 +1209,19 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// of a module; the hook sites and slots of a service), drain the DSP, `fini`, the role's undo, the registry, the DSP range, the memory.
     unsafe fn unload_rec_inner(&mut self, rec: usize) -> i32 {
         let module = rec < MAX_MODULES;
-        // the listing client and the I/O jobs of a module or a service file go before its code does
+        if !module {
+            // a service: no new tick call, then nothing may jump into it any more (hook sites back to stock, slots zero). This goes first: a refused take-down leaves the
+            // service loaded, so it gets its tick back and keeps its file client and jobs (the retires below cannot be undone).
+            let tick = crate::entry::tick_of(rec);
+            crate::entry::stop_tick(rec);
+            if !self.uninstall(rec) {
+                crate::entry::publish_tick(rec, tick);
+                return E_BUSY;
+            }
+        }
+        // the listing client and the I/O jobs of a module or a service file go before its code does; a queued job's `done` must not point into freed code
         if !crate::files::retire(rec) { return E_BUSY; }
-        if module && !crate::worker::retire(rec) { return E_BUSY; }
+        if !crate::worker::retire(rec) { return E_BUSY; }
         if !retire_sdk(rec) { return E_BUSY; }
         if module {
             // an intro of this module that has not run `done` yet: `done` must not point into freed code
@@ -1223,12 +1233,6 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if module {
             // 1. clear the tick (one aligned store) so no new call starts; the UI task, where it runs, is this task. The address is kept for a reload that gives up.
             self.stop_tick_once(rec);
-        } else {
-            // 1. a service: no new tick call, then nothing may jump into it any more (hook sites back to stock, slots zero)
-            crate::entry::stop_tick(rec);
-            if !self.uninstall(rec) {
-                return E_BUSY;
-            }
         }
         // DSP rows must be invalidated before fini can mutate/release module state.
         if !dsp::quiesce(rec) { return E_BUSY; }

@@ -6,6 +6,52 @@ pub struct SlotRecord {
     pub stamp: u32,
 }
 
+/// A record the firmware may rewrite while it is read (no lock): read it twice and accept it only when both reads are equal, so a name of one refresh is never paired with
+/// the stamp of another. `None` when the slot has no record or the two reads differ (not ready: the caller's wait and retry apply).
+pub fn stable_record(mut read: impl FnMut() -> Option<SlotRecord>) -> Option<SlotRecord> {
+    let first = read()?;
+    let second = read()?;
+    if first == second {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rec(name: u8, stamp: u32) -> SlotRecord {
+        SlotRecord {
+            name: [name; 16],
+            stamp,
+        }
+    }
+
+    #[test]
+    fn stable_record_accepts_two_equal_reads() {
+        assert_eq!(stable_record(|| Some(rec(1, 5))), Some(rec(1, 5)));
+    }
+
+    #[test]
+    fn stable_record_refuses_a_torn_read() {
+        // the firmware refreshes between the reads: old record, then new record
+        let mut reads = [rec(1, 5), rec(2, 6)].into_iter();
+        assert_eq!(stable_record(|| reads.next()), None);
+    }
+
+    #[test]
+    fn stable_record_refuses_a_record_that_vanishes() {
+        let mut n = 0;
+        let got = stable_record(|| {
+            n += 1;
+            (n == 1).then(|| rec(1, 5))
+        });
+        assert_eq!(got, None);
+    }
+}
+
 /// The longest path of one listing row.
 const LIST_ROW_MAX: usize = 64;
 

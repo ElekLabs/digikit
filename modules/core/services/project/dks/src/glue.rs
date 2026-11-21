@@ -9,7 +9,7 @@ use dkrt_abi::service::{SettingsOverlay, SETTINGS_OVERLAY_VERSION};
 use dkrt_svc_project::dkp::Ignore;
 use dkrt_svc_project::engine::{
     Env, Files, ListPoll, ListRow, LiveJob, LoadedModule, ModuleId, ModulePath, ModuleWarning,
-    ProjectService, SlotRecord,
+    ProjectService, SlotRecord, stable_record,
 };
 use dkrt_svc_rt::ImportCore;
 
@@ -246,18 +246,21 @@ impl Env for DkEnv {
                 return None;
             }
             let r = (fs + REC_BASE + slot * REC_SIZE) as usize;
-            if read_volatile(r as *const u8) == 0 {
-                return None;
-            }
-            let mut name = [0u8; 16];
-            let mut i = 0;
-            while i < 16 {
-                name[i] = read_volatile((r + REC_NAME + i) as *const u8);
-                i += 1;
-            }
-            Some(SlotRecord {
-                name,
-                stamp: read_volatile((r + REC_STAMP) as *const u32),
+            // no lock: the record is read twice and used only when both reads agree
+            stable_record(|| {
+                if read_volatile(r as *const u8) == 0 {
+                    return None;
+                }
+                let mut name = [0u8; 16];
+                let mut i = 0;
+                while i < 16 {
+                    name[i] = read_volatile((r + REC_NAME + i) as *const u8);
+                    i += 1;
+                }
+                Some(SlotRecord {
+                    name,
+                    stamp: read_volatile((r + REC_STAMP) as *const u32),
+                })
             })
         }
     }

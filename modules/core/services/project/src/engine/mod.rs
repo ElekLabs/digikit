@@ -34,7 +34,7 @@ pub use bound::{
 };
 pub use buffer::FileBuffer;
 pub use clock::{is_busy, BusyClock, BusyVerdict, DEFER_MS, RETRY_MS};
-pub use env::{Env, Files, ListPoll, ListRow, SlotRecord};
+pub use env::{stable_record, Env, Files, ListPoll, ListRow, SlotRecord};
 pub use pending::{take_hook_records, HookRecords, Pending};
 pub use plan::Plan;
 pub use queue::{Work, WorkQueue, REC_WAIT_MS};

@@ -28,7 +28,7 @@ import type { TestRuntime } from '@digi/regression/support.ts';
 /**
  * The `project` service on a card (docs/design/digikit-project.md): the file of a project follows the stock project menus. `test/project-user` keeps one setting that the test
  * puts and reads by service commands; the project's own value is then the one in the file. One session per device runs the cases in order (the state carries on). The
- * cases wait on the service's events (PROJECT_LOADED, PROJECT_SAVED, PROJECT_MODULE) and on the store, not on fixed times.
+ * cases wait on the service's events (PROJECT_LOADED, PROJECT_SAVED, PROJECT_MODULE) and on the store, plus a short settle in emulated time after each stock dialog (`DIALOG_MS` in project-kit.ts).
  *
  * The panel flows (`savePanelProject`, `saveProjectAs`, `loadProject`, `renameProject`, `copyPasteProject`, `clearProject` of project-kit.ts) follow the stock menus as seen on
  * screen; `from` is the current project's slot, where the lists open.
