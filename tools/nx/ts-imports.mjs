@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 // TypeScript is a dependency of tests/regression in the real checkout; a workspaceRoot that is a fixture has no node_modules.
 const regressionRequire = createRequire(fileURLToPath(new URL('../../tests/regression/package.json', import.meta.url)));
 
-export const testImportInputs = (workspaceRoot) => {
+export const testImportInputs = (workspaceRoot, { runtimeOnly = false } = {}) => {
   const config = join(workspaceRoot, 'tests/regression/tsconfig.json');
   const ts = regressionRequire('typescript');
   const parsed = ts.getParsedCommandLineOfConfigFile(
@@ -51,6 +51,7 @@ export const testImportInputs = (workspaceRoot) => {
     const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
     // Names each specifier asks for: a Set, or null when the whole file is used (sticky).
     const wanted = new Map();
+    const types = new Set();
     const want = (specifier, names) => {
       if (wanted.get(specifier) === null) return;
       if (!names) wanted.set(specifier, null);
@@ -60,7 +61,18 @@ export const testImportInputs = (workspaceRoot) => {
       if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
         const clause = node.importClause;
         const bindings = clause?.namedBindings;
-        if (!clause || clause.name || !bindings || !ts.isNamedImports(bindings)) want(node.moduleSpecifier.text, null);
+        const specifier = node.moduleSpecifier.text;
+        if (
+          runtimeOnly &&
+          (clause?.isTypeOnly ||
+            (!clause?.name &&
+              bindings &&
+              ts.isNamedImports(bindings) &&
+              bindings.elements.length &&
+              bindings.elements.every((e) => e.isTypeOnly)))
+        )
+          types.add(specifier);
+        else if (!clause || clause.name || !bindings || !ts.isNamedImports(bindings)) want(specifier, null);
         else
           want(
             node.moduleSpecifier.text,
@@ -87,7 +99,16 @@ export const testImportInputs = (workspaceRoot) => {
     check(syntax);
     const names = (specifier) => wanted.get(specifier) ?? null;
     for (const { fileName: specifier } of ts.preProcessFile(source, true, true).importedFiles) {
-      const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule?.resolvedFileName;
+      if (types.has(specifier) && !wanted.has(specifier)) continue;
+      // The runtime reads the JS implementation even when TypeScript resolves its declaration.
+      const js =
+        runtimeOnly && specifier.startsWith('.') && specifier.endsWith('.mjs')
+          ? resolve(dirname(file), specifier)
+          : null;
+      const resolved =
+        js && existsSync(js)
+          ? js
+          : ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule?.resolvedFileName;
       if (resolved) {
         if (local(resolved)) result.push({ path: resolved, names: names(specifier) });
         continue;

@@ -13,45 +13,6 @@
         "command": "pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-kit",
         "cwd": "."
       }
-    },
-    "test-conformance-rig": {
-      "executor": "nx:run-commands",
-      "cache": true,
-      "description": "The machine and effect conformance suites (every module, both devices) on the SHARC-only rig: no daemon, no firmware, no emulator. Reports: DIGI_CONFORM_REPORTS or dist/conformance-rig of the worktree. Select: DIGI_CONFORM_MODULES, DIGI_CONFORM_DEVICE.",
-      "dependsOn": ["patchkit:cli", "sharc-rig:build"],
-      "inputs": [
-        "hostTests",
-        "!{projectRoot}/tests/**/*",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/src/**/*.s",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/src/**/*.inc",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/build/gen/**/*",
-        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
-        "{workspaceRoot}/tests/fixtures/modules/**/src/**/*.s",
-        "{workspaceRoot}/tests/fixtures/modules/**/src/**/*.inc",
-        "{workspaceRoot}/tests/fixtures/modules/**/build/gen/**/*",
-        "{workspaceRoot}/image-modules/points/dsp-voice/**/*",
-        "{workspaceRoot}/image-modules/points/fx/**/*",
-        "{workspaceRoot}/services/machines/dks/dsp/**/*",
-        "{workspaceRoot}/services/fx/dks/dsp/**/*",
-        "{workspaceRoot}/image-modules/points/machines/types.toml",
-        "{workspaceRoot}/sdk/dsp/**/*",
-        "{workspaceRoot}/sdk/sdk.toml",
-        "{workspaceRoot}/sdk/include/**/*",
-        "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/devices/cycle-factors.json",
-        "{workspaceRoot}/tests/support/fx_effects.s",
-        "{workspaceRoot}/tools/patchkit/toolchain/pins.toml",
-        {
-          "dependentTasksOutputFiles": "**/*"
-        }
-      ],
-      "outputs": [],
-      "options": {
-        "forwardAllArgs": false,
-        "command": "pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-conformance",
-        "cwd": "."
-      }
     }
   }
 }

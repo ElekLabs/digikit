@@ -22,7 +22,7 @@ const MERGE_TARGETS = [
   'pack',
   'test-device',
   'test-conformance',
-  'test-conformance-rig',
+  'test-conformance-rig-merge',
   'test-rig',
   'stock',
   'fx',
@@ -48,9 +48,12 @@ export const TIERS = {
   merge: { targets: MERGE_TARGETS, access: 'rw', narrow: false, pgo: true },
   full: {
     targets: [
-      ...MERGE_TARGETS.filter((target) => !['test-device', 'test-conformance', 'stock'].includes(target)),
+      ...MERGE_TARGETS.filter(
+        (target) => !['test-device', 'test-conformance', 'test-conformance-rig-merge', 'stock'].includes(target),
+      ),
       'test-device-all',
       'test-conformance-all',
+      'test-conformance-rig',
       'stock-all',
       'test-device-full',
       'tier-sweep',

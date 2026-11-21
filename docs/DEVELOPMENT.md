@@ -246,6 +246,9 @@ Usage of Transfer install, restart and delete with services (`mise run transfer`
 
 Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).
 Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `runtime/core/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
+The [Pluck test coverage](TESTING.md#pluck-test-coverage) table shows which checks
+to run for a DSP, control declaration or loader edit.
+
 Usage of the SDK-surface coverage (`patchkit imports`, `patchkit coverage`, `patchkit:sdk-coverage`): [TESTING.md](TESTING.md#sdk-surface-coverage).
 Usage of the module DSP analysis (`wb module analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
 Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` artifact, `wb profile calibrate`: [Calibration](INSTRUMENTATION.md#calibration-wb-profile-calibrate)): [INSTRUMENTATION.md](INSTRUMENTATION.md#profiles). Calibration runs (`wb profile calibrate run`, the step and profile files of `devices/calibration/`): [INSTRUMENTATION.md](INSTRUMENTATION.md#calibration-runs-wb-profile-calibrate-run).

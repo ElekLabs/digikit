@@ -1,9 +1,19 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { f2w } from '../src/context.ts';
-import { fxSpec, fxSpecs, frameHw, fxWord, galleryGaps, machineSpec, machineSpecs, paramMid } from '../src/spec.ts';
+import {
+  fxSpec,
+  fxSpecs,
+  frameHw,
+  fxWord,
+  galleryGaps,
+  machineLabel,
+  machineSpec,
+  machineSpecs,
+  paramMid,
+} from '../src/spec.ts';
 import { param } from './fakes.ts';
 
 let root: string;
@@ -134,6 +144,29 @@ describe('machineSpec', () => {
     expect(machineSpecs(true).map((s) => s.module)).not.toContain('zzt/mach');
     expect(machineSpecs(true).map((s) => s.module)).toContain('test/dyn-guard-nan#overrun');
   });
+});
+
+it('scopes fixed conformance to one module, including its negative variants', () => {
+  const standalone = path.join(root, 'zz');
+  const allMachines = machineSpecs();
+  const negative = machineSpecs(true).find((spec) => spec.module === 'test/dyn-guard-nan')!;
+  const allNegatives = machineSpecs(true);
+  try {
+    vi.stubEnv('DIGI_CONFORM_ROOT', standalone);
+    expect(machineSpecs().map(machineLabel)).toEqual(
+      allMachines.filter((spec) => spec.moddir === standalone).map(machineLabel),
+    );
+    expect(machineSpecs(true)).toEqual([]);
+    expect(fxSpecs()).toEqual([]);
+
+    vi.stubEnv('DIGI_CONFORM_ROOT', negative.moddir);
+    expect(machineSpecs()).toEqual([]);
+    expect(machineSpecs(true).map(machineLabel)).toEqual(
+      allNegatives.filter((spec) => spec.moddir === negative.moddir).map(machineLabel),
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 describe('galleryGaps', () => {

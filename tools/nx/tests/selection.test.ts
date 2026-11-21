@@ -254,6 +254,17 @@ describe('workspace selection', () => {
     660_000,
   );
 
+  it('routes a module DSP edit to its own rig tests', () => {
+    const project = workspace.nodes['digikit/pluck'].data;
+    const graph = selected(`${project.root}/src/dsp/pluck.s`, 'pack,test-rig,test-conformance-rig-merge');
+    expect(
+      Object.keys(graph.tasks)
+        .filter((id) => /:test-(conformance-rig-merge|rig)$/.test(id))
+        .sort(),
+    ).toEqual(['digikit/pluck:test-conformance-rig-merge', 'digikit/pluck:test-rig']);
+    expect(graph.tasks['digikit/pluck:pack']).toBeDefined();
+  }, 660_000);
+
   it('keeps shared SDK contract edits on the SDK host, pack, runtime device and conformance selection', () => {
     const graph = selected('sdk/include/dk/core/module.h', 'test-host,pack,test-device,test-conformance');
     for (const target of [

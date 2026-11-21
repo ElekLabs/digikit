@@ -30,6 +30,7 @@ const MAX_SHOWN = 6;
 const wanted = new Set((process.env.DIGI_CONFORM_MODULES ?? '').split(',').filter(Boolean));
 const device = process.env.DIGI_CONFORM_DEVICE ?? '';
 const specs = machineSpecs().filter((s) => (!wanted.size || wanted.has(s.module)) && (!device || s.device === device));
+const negatives = machineSpecs(true).filter((s) => !wanted.size || wanted.has(s.module));
 const reports = new Map<string, MachineReport>();
 
 beforeAll(async () => {
@@ -78,10 +79,11 @@ if (specs.length > 0) {
 }
 
 it('finds machine modules', () => {
-  expect(specs.length > 0 || wanted.size > 0 || device !== '', 'no machine module found').toBe(true);
+  const found = specs.length + negatives.length;
+  const manualSelection = !process.env.DIGI_CONFORM_ROOT && (wanted.size > 0 || device !== '');
+  expect(found > 0 || manualSelection, 'no machine module found').toBe(true);
 });
 
-const negatives = machineSpecs(true).filter((s) => !wanted.size || wanted.has(s.module));
 if (negatives.length > 0)
   describe('the suite rejects a machine that breaks a rule', () => {
     it.each(negatives.map((s) => [machineLabel(s), s] as const))('%s', async (_label, spec) => {

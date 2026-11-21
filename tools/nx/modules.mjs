@@ -12,7 +12,14 @@ import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regre
 import { serviceLeaves, serviceIds } from './device-test-keys.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { standaloneRustTests } from './cargo.mjs';
-import { rigTarget } from './rig-tests.mjs';
+import {
+  allRigConformance,
+  fxWriteConformance,
+  moduleRigConformance,
+  RIG_CONFORMANCE_MERGE,
+  RIG_KIT_ROOT,
+  rigTarget,
+} from './rig-tests.mjs';
 import { testImportInputs } from './ts-imports.mjs';
 import { pythonImportInputs } from './py-imports.mjs';
 
@@ -24,6 +31,8 @@ export const createNodesV2 = [
     // Lazy for manifests without device targets (including small plugin fixtures).
     let imports;
     const importInputs = (files) => (imports ??= testImportInputs(ctx.workspaceRoot))(files);
+    let rig;
+    const rigImports = (files) => (rig ??= testImportInputs(ctx.workspaceRoot, { runtimeOnly: true }))(files);
     let py;
     const pythonInputs = (seeds) => (py ??= pythonImportInputs(ctx.workspaceRoot))(seeds);
     // Nx supplies the workspace file list, with ignored build trees and dependencies already excluded.
@@ -35,10 +44,11 @@ export const createNodesV2 = [
     // id -> manifest, so an alias can find the devices of its source module.
     const byId = new Map();
     for (const file of files) {
-      const { module: manifest, object: objects = [] } = read(ctx.workspaceRoot, file);
+      const doc = read(ctx.workspaceRoot, file);
+      const { module: manifest, object: objects = [] } = doc;
       const previous = byId.get(manifest.id);
       if (previous) throw new Error(`Duplicate module ${manifest.id} in ${previous.file} and ${file}`);
-      byId.set(manifest.id, { file, manifest, objects });
+      byId.set(manifest.id, { file, manifest, objects, doc });
     }
     const moduleInfo = new Map([...byId].map(([id, { manifest }]) => [id, manifest]));
     const coreManifests = [...byId.values()]
@@ -76,9 +86,13 @@ export const createNodesV2 = [
         for (const source of Object.values(rec.aliases ?? {})) packable.add(source);
       }
     }
-    const nodes = [...byId.values()].map(({ file: f, manifest: m, objects }) => {
+    const nodes = [...byId.values()].map(({ file: f, manifest: m, objects, doc }) => {
       const root = dirname(f);
-      const project = { name: m.id, root, tags: ['module', `type:${m.type}`] };
+      const project = {
+        name: m.id,
+        root,
+        tags: ['module', `type:${m.type}`],
+      };
       if (!isFixture(m) && m.category !== 'core') project.tags.push('release-module');
       if (coreBuilds.has(m.id) && imageModules.has(m.id)) project.tags.push('acceptance-image');
       const tests = globSync('tests/**/*.test.ts', { cwd: join(ctx.workspaceRoot, root) }).filter(
@@ -137,7 +151,9 @@ export const createNodesV2 = [
       const rustTests = standaloneRustTests(ctx.workspaceRoot, root);
       if (rustTests) targets['rust-tests'] = rustTests;
       // sound checks on the SHARC-only rig (packages/sharc-rig-kit, docs/TESTING.md "Sound checks"): tests/rig/*.toml run by tests/*.rig.test.ts
-      if (rigTests.length) targets['test-rig'] = rigTarget(root);
+      const rig = moduleRigConformance(ctx.workspaceRoot, f, doc, rigImports);
+      if (rigTests.length) targets['test-rig'] = rigTarget(root, rig?.soundInputs);
+      if (rig) targets[RIG_CONFORMANCE_MERGE] = rig.target;
       if (uploadable) {
         targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
         targets['test-conformance-all'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs, true);
@@ -145,6 +161,21 @@ export const createNodesV2 = [
       if (Object.keys(targets).length) project.targets = targets;
       return [f, { projects: { [root]: project } }];
     });
+    const rigProjectFile = `${RIG_KIT_ROOT}/project.json`;
+    if (matched.includes(rigProjectFile))
+      nodes.push([
+        rigProjectFile,
+        {
+          projects: {
+            [RIG_KIT_ROOT]: {
+              targets: {
+                'test-conformance-rig': allRigConformance(),
+                [RIG_CONFORMANCE_MERGE]: fxWriteConformance(rigImports),
+              },
+            },
+          },
+        },
+      ]);
     testOnlyNodes(ctx.workspaceRoot, testOwners, byId, moduleInfo, coreBuilds, importInputs, pythonInputs, nodes);
     if (matched.includes('tests/regression/project.json')) nodes.push(regressionNode(ctx.workspaceRoot, importInputs));
     return nodes;

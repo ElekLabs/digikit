@@ -23,12 +23,12 @@ conflicts = []
 id = "pluck"
 dsp = "pk"
 
-# The equiv-dyn-pluck cells pin the PCM of a note (modules/machine/digikit/pluck/tests/equiv.device.test.ts): a change of the sound here moves the pins.
 [[object]]
 path = "build/pluck-cf.dko.json"
 sources = ["src/module.c"]
 place = "cf.expansion"
 
+# tests/rig/equiv-note.toml pins the two-note DSP output on the rig for each device.
 [[object]]
 path = "build/pluck-dsp.dko.json"
 sources = ["src/dsp/pluck.s"]

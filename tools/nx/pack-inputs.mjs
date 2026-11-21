@@ -18,6 +18,10 @@ const sdkHeaders = (workspaceRoot, sources, moduleDirs) => {
     ...moduleDirs.flatMap((dir) => [`${dir}/build/gen`, `${dir}/src`]),
     ...new Set([...pins.cf, ...pins.sharc]),
   ];
+  return sourceIncludeInputs(workspaceRoot, sources, dirs);
+};
+
+export const sourceIncludeInputs = (workspaceRoot, sources, dirs) => {
   const seen = new Set();
   const found = new Set();
   const visit = (file) => {

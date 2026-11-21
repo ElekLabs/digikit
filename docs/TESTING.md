@@ -790,7 +790,11 @@ within 200,000 instructions; registers the stock function expects are preserved;
 count stays 0; the module stores only to its output block, data, bss and stack; the master stays finite
 within 8.0; the effect stays within `min(headroom) / 4` plus 900 for core/fx. Negative fixtures:
 `test/dyn-dsp-hang` (machine), `test/dyn-fx-nan` (effect). `DIGI_JOBS` sets the worker count.
-A change in a machine or effect module, `core/dsp-voice`, `core/fx` or the kit selects the suite.
+The merge gate gives every manifest exercised by the machine or FX suite its own cached
+`test-conformance-rig-merge` target, including the negative fixtures. The key tracks the DSP
+sources and includes, generated gallery, rig code and shared contracts. The kit's merge
+target checks the FX write-set harness. The kit's explicit `test-conformance-rig` target
+and the full gate run the aggregate suite.
 
 ### SHARC-only rig (`sharc-rig`, T1g slice)
 
@@ -876,14 +880,19 @@ and the recorded costs stay comparable. Host tests (fake transport, made-up buil
 The machine and effect conformance on the rig (about 45 s for all 30 specs with 4 workers, no daemon, firmware or emulator):
 
 ```sh
-pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig       # cached; needs patchkit:cli and sharc-rig:build, which it runs
+pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig       # uncached, builds patchkit:cli and sharc-rig:build
+pnpm nx:pilot run digikit/pluck:test-conformance-rig-merge      # fixed machine cases on both devices
 DIGI_CONFORM_MODULES=fadedlimes/analog DIGI_CONFORM_DEVICE=dt2 DIGI_JOBS=4 DIGI_CONFORM_REPORTS=/tmp/reports \
   pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-conformance conformance/machine.test.ts
 ```
 
 It replaced the Python suites (`tests/modules`, retired in T1g phase 6, [ledger](plans/ledgers/t1g-retirement.md)) with the same case list, the same pass set and the same failure messages for the negative
 fixtures. The worst steady block of each (module, device) is the `dsp_cost_voice` or `dsp_cost_fx` of module.toml. Reports are
-`dist/conformance-rig/<id>@<device|fx>.json` (`DIGI_CONFORM_REPORTS` moves them). Reports sit in the worktree's own `dist/`, not in `out/`, which every worktree shares, and each records its `worktree`: `module:check` refuses to write a cost from a report of another worktree.
+`dist/conformance-rig/<id>@<device|fx>.json` (`DIGI_CONFORM_REPORTS` moves them). Reports sit in the worktree's own `dist/`, and each records its `worktree`. The fixed merge
+targets write and restore their own directories under `dist/conformance-rig/merge/`.
+The explicit target and raw Vitest accept `DIGI_CONFORM_MODULES`, `DIGI_CONFORM_DEVICE` and
+`DIGI_CONFORM_REPORTS`. The explicit target runs uncached so those invocations write fresh
+reports. `module:check` refuses to write a cost from a report of another worktree.
 
 The cost writer, `patchkit uses set --id MODULE --device dt2 --dsp-cost-voice N` (or `--dsp-cost-fx N`), edits `[uses.<device>]` of the
 module.toml like `pk_modcheck.write_uses` does: only the lines of the keys given change, comments and other keys stay, and the file
@@ -937,6 +946,32 @@ A `same-as` pin comes from the rig itself: a machine case with a `same-as` check
 runs no checks and writes the words hash of every `same-as` signal into its `sha256` line (`pinRigFile` in `soundcheck.ts`; the n-th `sha256` line belongs to the n-th `same-as` check of the file) and prints `pin CASE [device] HASH`.
 Every machine case runs twice with all module state filled differently: the module's `.PKBSS` and the voice state blocks (the state array is a bss run in the rig's data layout) hold NaN words in the first run and a seeded integer pattern (`FILL_SEED`) in the second (`MachineRigOptions.poison` default true, `fillSeed`). The case fails with kind `initial state` when the two outputs differ in any sample: the output does not depend on the initial state, so a read of state the machine never wrote shows, float or integer, and a NaN output fails the finite rule. That is a machine bug to report, not a value to pin. The adapter's `note_on` clears the first `clear` bytes of the voice state, as on the device. `poison = false` on a case zeroes the memory, skips the second run and needs a `poison_reason`. A `MachineRig` refuses to open a machine whose device is missing from `build/gen/gallery.json` or has no parameter there (`galleryGaps`; `module:check` writes the gallery).
 The machine note pins of analog, bd, pd and pluck are `tests/rig/equiv-note.toml`: note 60, velocity 100, default parameters, 375 blocks (0.25 s) in a friendly context, one case per device (pluck adds a second note, 67, for 375 blocks).
+
+#### Pluck test coverage
+
+| Assertion | Owner and scope |
+| --- | --- |
+| Loop period across the note and TUNE grid, bounded model output | `test_pluck_range.py` exercises the float32 model. The same file probes the real SHARC state at the corners. |
+| Sound, pitch, retriggers, idle and ending behavior | `digikit/pluck:test-rig` runs the sound cases in `tests/rig/`. The model tables, pitch, corner and voice lifecycle checks run on DT2. The numeric two-note fingerprints and initial-state check run on DT2 and DN2. |
+| DSP contract and budget | `digikit/pluck:test-conformance-rig-merge` uses the shared machine suite on both devices. Its limits, corners, modulation, long-note, retrigger and write-set cases check returns, context, bounded samples, memory ownership and instruction cost. |
+| Controls and registration | The four controls in `src/module.c` are declarative SDK builder calls. The rig reads knob slots, defaults and ranges from the generated gallery. SDK host tests exercise the shared builder contract. Runtime fixture tests check machine rows and parameter state, and the module's device load checks its real pack, published voice row and type. The shipped DT2 pages scenario exercises the actual panel. |
+| Runtime loader integration | `core/runtime-fixture-tests:test-device` exercises the common upload and load assertions with `test/sine` on both devices and the machine with its own page, `test/dyn-dn2`, on DN2. `core/runtime:test-assembly` exercises the loader seams on the host. |
+
+A Pluck DSP-source edit selects the pack and both rig checks. An edit to its private
+ColdFire source is outside the rig inputs. Device-load conformance follows the same
+packed-module policy as other shipped modules. It covers USB upload, persisted bytes,
+reboot, registration and runtime faults.
+The DT2 menu scenario is available through `module:check`
+with the module's host and generic rig conformance checks. The dedicated pages
+scenario runs separately and checks the SRC page and encoder interaction.
+
+```sh
+pnpm nx:pilot run digikit/pluck:test-rig
+pnpm nx:pilot run digikit/pluck:test-conformance         # shipped load on DT2 and DN2
+pnpm nx:pilot run core/runtime-fixture-tests:test-device # representative fixture loads
+mise run module:check -- digikit/pluck                  # includes the module's DT2 menu scenario
+uv run python -m tools.patchkit.pk_digikit_scen run pages-dyn-pluck --image dt2-1.17
+```
 
 #### Classifying a changed pin (fingerprint, report, plots)
 

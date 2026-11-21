@@ -422,7 +422,7 @@
   "packages/patchkit/tests/typed.rs": 3,
   "packages/sharc-rig-kit/conformance/machine.test.ts": 2,
   "packages/sharc-rig-kit/src/checks.ts": 1,
-  "packages/sharc-rig-kit/src/conform.ts": 1,
+  "packages/sharc-rig-kit/src/conform-machine.ts": 1,
   "packages/sharc-rig-kit/src/context.ts": 1,
   "packages/sharc-rig-kit/src/fx.ts": 9,
   "packages/sharc-rig-kit/src/machine.ts": 40,
