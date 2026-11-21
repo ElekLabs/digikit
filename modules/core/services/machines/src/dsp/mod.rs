@@ -158,7 +158,7 @@ pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
         }
         k += 1;
     }
-    true
+    filter_rows::clear(core, rec)
 }
 
 /// Park a voice row for machine type `t` whose module is absent and that has no voice row yet (a boot where the module is not loaded, a module that failed before its row
@@ -544,7 +544,7 @@ pub(crate) unsafe fn row_step<C: CoreApi>(
         k += 1;
     }
     if row == MAX_ROWS {
-        return None;
+        return filter_rows::row_step(rec, want, write);
     }
     if !write {
         return Some(RowWrite {

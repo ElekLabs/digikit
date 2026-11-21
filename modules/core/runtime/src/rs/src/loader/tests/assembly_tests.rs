@@ -766,6 +766,20 @@ fn filter_gain_reserves_one_state_per_voice_and_rejects_a_bad_callback() {
             let desc = job.image.add((r.desc - info[I_AREA]) as usize);
             assert_eq!(dkrt_abi::dsp::rd32le(desc.add(12)), 4);
             assert_eq!(dkneeds::needs_of(&mut file.as_slice()).unwrap().dsp_area, dsp::ds().mod_len[0]);
+            let table = dkneeds::filter::contract::DK_FILTER_LINK_WORD + index as u32 * 4;
+            for (step, (offset, value)) in [(1, r.process_pc), (2, r.state), (3, r.stride), (0, r.coef_pc)].into_iter().enumerate() {
+                let mut want = step as u32;
+                let w = crate::handlers::services().dsp_row_step(0, &mut want, true).unwrap();
+                assert_eq!((w.win, w.word, w.value), (dkrt_abi::dsp::WIN_VOICES, table + offset, value));
+                assert_eq!((w.last, w.has_undo, w.published.is_some()), (offset == 0, offset == 0, offset == 0));
+                if let Some(mark) = w.published {
+                    assert_eq!(w.undo, 0);
+                    *mark = 1;
+                }
+            }
+            let mut end = 4;
+            assert!(crate::handlers::services().dsp_row_step(0, &mut end, true).is_none());
+            assert!(dsp::quiesce(0));
             dsp::unreserve(0);
             assert_eq!(filter_rows::row(index).owner, 0);
             // Mutate copies of the actual packed section at the loader boundary.

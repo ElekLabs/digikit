@@ -216,6 +216,8 @@ consts = [
     { name = "DK_FILTER_BLOCK", value = 32, doc = "Samples per call, 48 kHz, both devices." },
     { name = "DK_FILTER_MAX_PARAMS", value = 2, doc = "Knobs a filter owns (its page's knobs 2 and 3; knob 1 is the stock cutoff)." },
     { name = "DK_FILTER_OK", value = 0, doc = "Returned by coef and process." },
+    { name = "DK_FILTER_LINK_WORD", value = 4096, doc = "First word of the filter row range in link window 1. Words below this range address the voice registry." },
+    { name = "DK_FILTER_TABLE_BYTES", value = 256, doc = "The adapter table for filter types 16 through 31: four words per type (coefficient PC, process PC, state base, byte stride)." },
     { name = "DK_FILTER_BOUND_BITS", value = 1090519040, doc = "|sample| above DK_FILTER_BOUND is a fault (+18 dB over full scale)." },  # 8.0f
     { name = "DK_FILTER_MAGIC", value = 1145783884, doc = "'DKFL', the first word of the descriptor." },        # 'DKFL' = 0x444b464c
 ]
