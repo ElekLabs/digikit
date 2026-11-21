@@ -22,6 +22,16 @@ impl PackageGraph {
         out
     }
 
+    /// The packages to take down and bring back to reload `target`: `target` and its live consumers, transitively, consumers first. The services it
+    /// needs stay up, so no orphan is part of a reload. Empty when `target` is not live.
+    pub fn reload_order(&self, target: PackageId, live: &LiveSet) -> Steps {
+        let mut out = Steps::new();
+        if live.contains(target) {
+            self.consumers_down(target, live, &mut out);
+        }
+        out
+    }
+
     fn consumers_down(&self, p: PackageId, live: &LiveSet, out: &mut Steps) {
         if out.contains(p) {
             return;
@@ -51,5 +61,27 @@ impl PackageGraph {
             out.push(s);
             self.orphans_of(s, live, out);
         }
+    }
+
+    /// Of `candidates` (the packages a bring-up started, in bring-up order) those to take down because nothing needs them: live, unpinned and needed by no
+    /// live package outside `removed` and the result, so a service goes together with the last consumer that was refused. In take-down order (consumers first).
+    pub fn orphans_among(&self, candidates: &Steps, live: &LiveSet, removed: &Steps) -> Steps {
+        let mut gone = *removed;
+        let mut out = Steps::new();
+        for &p in candidates.as_slice().iter().rev() {
+            let pinned = self.node(p).is_some_and(|n| n.is_pinned());
+            if gone.contains(p) || !live.contains(p) || pinned {
+                continue;
+            }
+            if self
+                .consumers_of(p)
+                .any(|c| live.contains(c) && !gone.contains(c))
+            {
+                continue;
+            }
+            gone.push(p);
+            out.push(p);
+        }
+        out
     }
 }

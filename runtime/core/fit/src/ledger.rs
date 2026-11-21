@@ -19,14 +19,16 @@ mod claim;
 mod error;
 mod pool;
 mod report;
+mod view;
 
 pub use claim::Want;
-pub use error::{ClaimError, LedgerError};
+pub use error::{ClaimError, FitError, LedgerError};
 pub use pool::{Aggregate, Owner, OwnerId, PoolKey, ResourceDecl};
 pub use report::{PoolReport, PoolShort};
 
 use claim::Claim;
 use pool::Pool;
+use view::{View, NEW_CONSUMER};
 
 /// The pools and the claims on them.
 pub struct ResourceLedger {
@@ -54,105 +56,54 @@ impl ResourceLedger {
 
     /// Declares a pool of `owner` (`Owner::Core` or a package). Refuses a pool that exists and a parent that is not declared.
     pub fn declare(&mut self, owner: Owner, r: &ResourceDecl) -> Result<(), LedgerError> {
-        let key = PoolKey {
-            owner,
-            name: r.name,
-        };
-        if self.find(key).is_some() {
-            return Err(LedgerError::Duplicate);
-        }
-        let parent = match r.draws_from {
-            Some(k) => Some(self.find(k).ok_or(LedgerError::UnknownParent)?),
-            None => None,
-        };
-        let slot = (0..MAX_POOLS)
-            .find(|&i| self.pools[i].is_none())
-            .ok_or(LedgerError::Full)?;
-        self.pools[slot] = Some(Pool {
-            key,
-            limit: r.limit,
-            aggregate: r.aggregate,
-            parent,
-        });
-        Ok(())
+        declare_in(&mut self.pools, owner, r)
     }
 
-    /// The claim of `consumer` on pool `i`, with `extra` units of `wants` added when `extra_for` is that consumer (or a new consumer when it has no claim).
-    fn own(&self, i: usize, wants: &[Want], extra_for: Option<OwnerId>) -> u32 {
-        let pool = self.pools[i].unwrap();
-        let mut extra = 0u32;
-        for w in wants {
-            if w.pool == pool.key {
-                extra = extra.saturating_add(w.units);
-            }
-        }
-        let mut sum = 0u32;
-        let mut max = 0u32;
-        let mut extra_placed = extra == 0;
-        for c in self.claims.iter().flatten().filter(|c| c.pool() == i) {
-            let mut units = c.units;
-            if !extra_placed && Some(c.consumer()) == extra_for {
-                units = units.saturating_add(extra);
-                extra_placed = true;
-            }
-            sum = sum.saturating_add(units);
-            max = max.max(units);
-        }
-        if !extra_placed {
-            sum = sum.saturating_add(extra);
-            max = max.max(extra);
-        }
-        match pool.aggregate {
-            Aggregate::Sum => sum,
-            Aggregate::Max { scale } => max.saturating_mul(scale),
-        }
-    }
-
-    /// The value of pool `i` with the wants applied: its own value plus the value of every pool that draws from it. A parent is declared before its children,
-    /// so the recursion ends.
-    fn value(&self, i: usize, wants: &[Want], extra_for: Option<OwnerId>) -> u32 {
-        let mut v = self.own(i, wants, extra_for);
-        for j in 0..MAX_POOLS {
-            if matches!(self.pools[j], Some(p) if p.parent == Some(i)) {
-                v = v.saturating_add(self.value(j, wants, extra_for));
-            }
-        }
-        v
-    }
-
-    fn check(&self, wants: &[Want], extra_for: Option<OwnerId>) -> Result<(), PoolShort> {
-        for w in wants {
-            if self.find(w.pool).is_none() {
-                return Err(PoolShort {
-                    pool: w.pool,
-                    need: w.units,
-                    free: 0,
-                });
-            }
-        }
-        for i in 0..MAX_POOLS {
-            let Some(p) = self.pools[i] else { continue };
-            let before = self.value(i, &[], None);
-            let after = self.value(i, wants, extra_for);
-            if after > p.limit && after > before {
-                return Err(PoolShort {
-                    pool: p.key,
-                    need: after - before,
-                    free: p.limit.saturating_sub(before),
-                });
-            }
-        }
-        Ok(())
+    fn view<'a>(
+        &'a self,
+        pools: &'a [Option<Pool>; MAX_POOLS],
+        released: &'a [OwnerId],
+        wants: &'a [(OwnerId, &'a [Want])],
+    ) -> View<'a> {
+        View::new(&self.claims, pools, released, wants)
     }
 
     /// Whether `wants`, claimed by one new consumer, fit. Changes nothing. The first overflowing pool in declaration order is named.
     pub fn fits(&self, wants: &[Want]) -> Result<(), PoolShort> {
-        self.check(wants, None)
+        self.view(&self.pools, &[], &[(NEW_CONSUMER, wants)])
+            .check()
+    }
+
+    /// Whether a bring-up fits, decided without changing anything: `pending` pools would be declared, the pools and claims of the `released` owners
+    /// would be gone, and each owner of `wants` would claim its list (on top of what it holds, if it is not released). The first overflowing pool in
+    /// declaration order is named; a pool that a want names and nobody declares is short with nothing free. A pending pool that exists, names an unknown
+    /// parent or finds no slot is a [`FitError::Pool`]. Each owner appears at most once in `wants`; a released owner's pools are drawn from only by pools
+    /// of released owners.
+    pub fn fits_with(
+        &self,
+        pending: &[(Owner, &ResourceDecl)],
+        released: &[OwnerId],
+        wants: &[(OwnerId, &[Want])],
+    ) -> Result<(), FitError> {
+        let mut pools = self.pools;
+        for slot in pools.iter_mut() {
+            if matches!(slot, Some(p) if matches!(p.key.owner, Owner::Package(o) if released.contains(&o)))
+            {
+                *slot = None;
+            }
+        }
+        for (owner, r) in pending {
+            declare_in(&mut pools, *owner, r).map_err(FitError::Pool)?;
+        }
+        self.view(&pools, released, wants)
+            .check()
+            .map_err(FitError::Short)
     }
 
     /// Claims `wants` for `consumer`, all or nothing. A consumer that claims a pool again adds to its claim.
     pub fn claim(&mut self, consumer: OwnerId, wants: &[Want]) -> Result<(), ClaimError> {
-        self.check(wants, Some(consumer))
+        self.view(&self.pools, &[], &[(consumer, wants)])
+            .check()
             .map_err(ClaimError::Short)?;
         // room for the new (consumer, pool) rows first, so that a full table changes nothing
         let mut fresh = 0;
@@ -230,7 +181,7 @@ impl ResourceLedger {
             if n == out.len() {
                 break;
             }
-            let used = self.value(i, &[], None);
+            let used = self.view(&self.pools, &[], &[]).value(i, false);
             let largest = match p.aggregate {
                 Aggregate::Sum => p.limit.saturating_sub(used),
                 Aggregate::Max { .. } => self
@@ -252,6 +203,38 @@ impl ResourceLedger {
         }
         n
     }
+}
+
+/// Declares `r` for `owner` in `pools`: the one rule of [`ResourceLedger::declare`] and of the trial of [`ResourceLedger::fits_with`].
+fn declare_in(
+    pools: &mut [Option<Pool>; MAX_POOLS],
+    owner: Owner,
+    r: &ResourceDecl,
+) -> Result<(), LedgerError> {
+    let find = |pools: &[Option<Pool>; MAX_POOLS], key: PoolKey| {
+        (0..MAX_POOLS).find(|&i| matches!(pools[i], Some(p) if p.key == key))
+    };
+    let key = PoolKey {
+        owner,
+        name: r.name,
+    };
+    if find(pools, key).is_some() {
+        return Err(LedgerError::Duplicate);
+    }
+    let parent = match r.draws_from {
+        Some(k) => Some(find(pools, k).ok_or(LedgerError::UnknownParent)?),
+        None => None,
+    };
+    let slot = (0..MAX_POOLS)
+        .find(|&i| pools[i].is_none())
+        .ok_or(LedgerError::Full)?;
+    pools[slot] = Some(Pool {
+        key,
+        limit: r.limit,
+        aggregate: r.aggregate,
+        parent,
+    });
+    Ok(())
 }
 
 #[cfg(test)]

@@ -24,3 +24,12 @@ pub enum ClaimError {
     /// changing anything.
     Full,
 }
+
+/// Why [`ResourceLedger::fits_with`] refuses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FitError {
+    /// A pool would overflow.
+    Short(PoolShort),
+    /// A pending pool cannot be declared (it exists, its parent is unknown, or the table is full).
+    Pool(LedgerError),
+}

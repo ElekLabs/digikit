@@ -530,8 +530,12 @@ Update this block whenever the state changes.
 - Working rules from Em: no commits until Em has reviewed the step; every step ends with the static checks, `test:plan` against the phase base, an independent reviewer, then Em; plan rows are kept current.
 - RC1g: the inventory is [ledgers/device-test-inventory.md](ledgers/device-test-inventory.md) (105 device test files, 173 halves; 44 firmware-only, 11 logic, 46 mixed). Proposed smoke set (same 8 per device): boot-restart, live, services/providers, dynreg/equiv, settings-api, safe-mode, transfer-live, digikit-menu zero menu; approved by Em 2026-11-22. Each logic or mixed file is mapped to the item that splits it (ledger column `item`); AGENTS.md states the rule.
 - RC2 is split into RC2a manager over fakes, RC2b real seams and boot, RC2c service reload and unload with orphans and MODULES listing, RC2d pins (service paths in the selection), RC2e MIDI snapshot; each step splits its ledger device tests.
-- RC1g done (PR `rc/rc1g-device-tests`): `gate-device-smoke:device` (tools/gate/device-smoke/project.json, 16 halves), TESTING.md "Device smoke set", the ledger, generic AGENTS.md wording. Not yet part of `mise run test` (a later step after one measured run).
-- Next: RC2a from main (after the RC1g PR merges, or stacked on it).
+- RC1g done (PR #693): `gate-device-smoke:device` (tools/gate/device-smoke/project.json, 16 halves), TESTING.md "Device smoke set", the ledger, generic AGENTS.md wording. Not yet part of `mise run test` (a later step after one measured run).
+- PR #693 (RC1g) merged as `43e4f3cb7`. RC2a active on branch `rc/rc2a-package-manager` in the lane.
+- Open: agents sometimes report an Nx pilot summary of "1 failed" (e.g. on `patchkit:cli`) while every task passes and the exit code is 0; not reproduced in the saved logs yet. Look at the next occurrence's log.
+- RC2a reviewed (three rounds; fixes: stuck restore-pending, boot continues past failures, orphans of a failed bring-up, reload fit, `fits_with`, `retry_pending`, per-package shortage), approved by Em; PR from branch `rc/rc2a-package-manager`.
+- Open for RC2b: the DSP part after Active (over UI passes); module init timing; `Limit::Init` and entry-name checks; `load` and `reload` errors should carry a pending take-down like `Report::pending()`; the runtime crate dev-depends on dkrt-lifecycle, so its object's source hash changes with every lifecycle edit until RC2b links it for real.
+- Next: RC2a PR gate (host-only: static checks and host tests; no device tests); then RC2b (the runtime's real seams and boot on the manager).
 
 ### Progress
 
@@ -551,8 +555,9 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | RC1f rename `dkrt-packages` to `dkrt-lifecycle` (`runtime/core/lifecycle`): the crate holds the lifecycle logic, RC2's `PackageManager` included | done | `1066f6351` |
 | RC1d `PackageGraph::from_tables` over the existing header table (NEEDS, PROVIDES; shared `dkneeds` parser); `[[service.resource]]` and `[[service.record]]` parsed and validated in patchkit, not packed (packing is RC3; entries keep `[[hook]]` and `[[fill]]`); the `local-ping` fixtures extended (second consumer, incompatible consumer); one host test that packs them and checks bring-up and take-down orders (a newer provider minor is a `from_tables` unit test) | done | `a4d2ecfcb` (objects refreshed in `890092c7d`) |
 | RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | done | `b62328998` |
-| RC1g Device test diet: inventory and smoke set | done | branch `rc/rc1g-device-tests` (PR number in the next progress update) |
-| RC2 One lifecycle | todo | |
+| RC1g Device test diet: inventory and smoke set | done | PR #693 (`125419d11`) |
+| RC2 One lifecycle | active | lane `fx-route-policy` |
+| RC2a `PackageManager` in `dkrt-lifecycle` over seam traits, test-first with fakes; ledger bound check against `REC_MAX` | done | branch `rc/rc2a-package-manager` (PR number in the next progress update) |
 | RC3 Service contract v2 | todo | |
 | RC3m Module settings schema | todo | |
 | RC4 Installers and ColdFire points | todo | |

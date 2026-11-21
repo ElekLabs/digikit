@@ -28,6 +28,14 @@ impl Steps {
         self.len = self.len.saturating_sub(1);
     }
 
+    /// Drops `id`, keeping the order of the others.
+    pub(crate) fn remove(&mut self, id: PackageId) {
+        if let Some(i) = self.as_slice().iter().position(|&x| x == id) {
+            self.ids.copy_within(i + 1..self.len, i);
+            self.len -= 1;
+        }
+    }
+
     pub(crate) fn contains(&self, id: PackageId) -> bool {
         self.as_slice().contains(&id)
     }
