@@ -1,7 +1,7 @@
 # The module contract: version numbers, log kinds and the SysEx protocol numbers. `patchkit gen` writes
-# modules/core/runtime/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
+# runtime/core/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
 # packages/dkupload/src/gen_proto.rs, packages/dk-session/src/gen_proto.ts, sdk/dsp/contract/dk_machine.inc, sdk/dsp/contract/dk_fx.inc,
-# sdk/dsp/contract/dk_sample_pool.inc, modules/core/services/<service>/dks/src/gen_exports.rs (a service file's export list and pure builder wrappers), sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
+# sdk/dsp/contract/dk_sample_pool.inc, services/<service>/dks/src/gen_exports.rs (a service file's export list and pure builder wrappers), sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
 # and sample.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
@@ -220,7 +220,7 @@ consts = [
 ]
 
 # The names a module may import. The service imports (`service`, `since` and `context` set) are the SDK of the entry point `dk_module` (docs/plans/sdk.md
-# section 5.1). The runtime's table (modules/core/runtime/src/rs/src/lib.rs `IMPORTS`) holds the imports without `requires`, in this order; those with `requires`
+# section 5.1). The runtime's table (runtime/core/src/rs/src/lib.rs `IMPORTS`) holds the imports without `requires`, in this order; those with `requires`
 # are symbols of another module that the runtime links by name (`optional` in its module.toml). `kind` `helper`: a compiler helper that gcc calls by itself, or a
 # call whose prototype is in another header (<dk/platform/ui.h>), so none in <dk/gen/imports.h>. `requires`: the module whose absence makes the address 0 (the
 # import is then not found). `absent`: with `requires`, the runtime hands out a stub instead of 0 and the module loads: the stub returns this value ("0", "-1"),
@@ -228,7 +228,7 @@ consts = [
 # `provided = true`: the import is a function of a service file (`.dks`), not of the runtime's table; the file exports it, and its export list is these imports in this
 # order (the header table sorts them by name hash). `wrapper = "<module>"`: with `provided`, the function is written by hand in that module of the service's `dks/src`
 # (`fw`, `builder`, `glue`: it converts a callback, takes the click state or a client handle). Without `wrapper` the function is a pure wrapper: `patchkit gen` writes
-# it to `modules/core/services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
+# it to `services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
 # calls `build::add_machine`) and a callback argument is an error. If the service crate's function has another name, or the call is not a plain forward, use `wrapper`.
 # `internal = true`: with `provided` and `wrapper`, an export that only the runtime calls, by name, through the loader's export table (`handlers::exports`): it is in the file's export
 # list and `gen_exports.rs`, and in no header, document or import table of a module. It is a plain `extern "C"` function with no core argument (the file reaches the core through `ImportCore`).
@@ -1840,8 +1840,8 @@ name = "PROJECT_MODULE"
 args = ["slot", "what", "status", "index", "id_hash"]
 
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
-phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
-polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
+phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (runtime/core/abi/src/service.rs)
+polls = 4                            # the poll slots, owner 0x200 | i: POLLS of runtime/core/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
 
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
@@ -2002,8 +2002,8 @@ DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machin
 # The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
 # voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before
 # effect pages, and the removal runs the other way round). `rust` is the full path of the type that implements `Service`: the type of a service crate linked into
-# the runtime (`dkrt_svc_NAME::records::Type`, `modules/core/services/NAME`).
-# `patchkit gen` writes the static table of these rows (modules/core/runtime/src/rs/src/gen_services.rs); a new service is a row here, its crate
+# the runtime (`dkrt_svc_NAME::records::Type`, `services/NAME`).
+# `patchkit gen` writes the static table of these rows (runtime/core/src/rs/src/gen_services.rs); a new service is a row here, its crate
 # and its `[records.kinds]`.
 [[service]]
 name = "samples"
@@ -2059,7 +2059,7 @@ DSP_COST_FX = { id = 6, capacity = "DSP_COST" }   # DSP instructions per block o
 
 [limits.max]        # contract maxima (capacity plan, docs/plans/capacity-isolation.md): a device's `[limits]` value in devices/*.toml may not exceed them
                     # (`patchkit gen` refuses it). Names are the keys of `[limits]` and, for dsp_area_bytes, of `[digikit]`.
-modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, modules/core/runtime/sdk/src/lib.rs)
+modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, runtime/core/sdk/src/lib.rs)
 map_entries = 8     # sticky machine-type map entries: MAP_N = 8 (record format: bytes 28-31 and 480-507)
 fx_slots = 4        # effects in the chain: DK_FX_MAX of [fx] (kept equal by packages/patchkit/tests/sdkgen.rs)
 send_slots = 2      # effects on a send bus: the Sound array's free indices a send page can use, [fx] send_indices (at most SEND_MAX = 2 in core/fxpages)
@@ -2069,7 +2069,7 @@ page_rows = 8       # page rows core/dynreg reserves (Digitone II)
 machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 stage_bytes = 131072  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
 
-[limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
+[limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, runtime/core/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
 dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, the keys table pair at 0x90/0x94, then the tables follow); `dkneeds::HEADER`
 # The header table of a `.dkm` (spec: packages/dkneeds/src/keys.rs; patchkit writes it, the runtime, the boot planner, dkneeds and the host tools read it). The header

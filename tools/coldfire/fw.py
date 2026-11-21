@@ -1627,7 +1627,7 @@ def cmd_catalog(
 # --- dossier: everything about one function, optionally with its pair on another image ----
 
 DOSSIER_MAX = 90
-REFERENCE = os.path.join(ROOT, "modules", "core", "fw", "reference.json")
+REFERENCE = os.path.join(ROOT, "ports", "bindings", "reference.json")
 _DIS = re.compile(r"^([0-9a-f]{8})  [0-9a-f ]+?\s{2,}(\S.*)$")
 _A0_LOAD = re.compile(r"^(movea\.l|move\.l|lea)\s.*,A0$")
 

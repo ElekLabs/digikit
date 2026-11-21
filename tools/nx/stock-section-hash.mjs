@@ -1,4 +1,4 @@
-// Nx runtime input of the `test-rig` targets: the sha256 of the stock DSP section the stereo rig tests load (the file
+// Nx runtime input of the `test-dsp` targets: the sha256 of the stock DSP section the stereo rig tests load (the file
 // packages/sharc-rig-kit/src/stock.ts reads), or "absent". Without it a run that skipped the stock-image suites could be replayed
 // by a clone that has the firmware. DIGI_STOCK_SECTION_DIR points at another out/sections root (proof only).
 import { createHash } from 'node:crypto';

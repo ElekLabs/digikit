@@ -38,7 +38,7 @@ A service is planned, not built (see section 4). It will be a module with a role
 ## 2. Files of a module
 
 ```text
-modules/machines/analog/
+modules/machine/fadedlimes/analog/
   module.toml          identity, [[machine]] list, [uses.<device>] counts
   src/module.c         the entry point and the builder calls
   src/dsp/analog.s     SHARC code
@@ -98,7 +98,7 @@ Today the `runtime`, `samples`, `machines` and `fx` imports resolve to code in t
 
 ### Registry: built (R7 to R11, R12-1) and planned (R12)
 
-R7 is built: one generated table of record kinds, resources and services (crates in `modules/core/services`); `dk_record_add` for generic kinds; the header table with the R12 entries; a boot planner that returns one verdict for each module of the selection before anything loads; declare-check-commit for services ([runtime-and-services.md](plans/runtime-and-services.md) 4.1). What is planned: R12 packages the service crates as `.dks` files. The layers, the three interfaces and the rule that services do not call each other are in [ARCHITECTURE.md](ARCHITECTURE.md). The design:
+R7 is built: one generated table of record kinds, resources and services (crates in `services`); `dk_record_add` for generic kinds; the header table with the R12 entries; a boot planner that returns one verdict for each module of the selection before anything loads; declare-check-commit for services ([runtime-and-services.md](plans/runtime-and-services.md) 4.1). What is planned: R12 packages the service crates as `.dks` files. The layers, the three interfaces and the rule that services do not call each other are in [ARCHITECTURE.md](ARCHITECTURE.md). The design:
 
 - A service declares its name, record kinds, resources, exports and hook table. The runtime fills a registry during boot planning, before any module code runs. There is no run-time registration call.
 - A service loads only when a selected module needs it. Load order follows dependencies.
@@ -121,7 +121,7 @@ dk_module_ctx_add_machine / dk_module_ctx_add_fx
 
 Setters refine them: `dk_param_range`, `dk_param_glyph`, `dk_param_latched`, `dk_param_on_click`, `dk_page_canvas`, `dk_page_bind`, `dk_page_bind_local`, `dk_fx_routes`, `dk_fx_mix`. The signatures are in `sdk/sdk.toml`.
 
-The Analog machine (`modules/machines/analog/src/module.c`) is the shortest example: one machine, one page, four parameters.
+The Analog machine (`modules/machine/fadedlimes/analog/src/module.c`) is the shortest example: one machine, one page, four parameters.
 
 ```c
 dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANA");
@@ -129,7 +129,7 @@ dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
 dk_page_add_param(p, "Detune", "DET", 40);
 ```
 
-The SHOT machine (`modules/machines/shot`) uses most of the surface: a knob page, a canvas page over the stock overlay, a wide canvas page, a click handler and a sample pool.
+The SHOT machine (`modules/machine/digikit/shot`) uses most of the surface: a knob page, a canvas page over the stock overlay, a wide canvas page, a click handler and a sample pool.
 
 ### The calls collect; the commit decides
 

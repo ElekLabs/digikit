@@ -30,7 +30,7 @@
  *     dk_files_write(files, h, off, buf, len);
  *     dk_helper_wait();                   // E_STATE when dk_helper_run did not start one
  *
- * The values must match modules/core/runtime/src/rs/src/io.rs. */
+ * The values must match runtime/core/src/rs/src/io.rs. */
 #ifndef DK_IO_H
 #define DK_IO_H
 

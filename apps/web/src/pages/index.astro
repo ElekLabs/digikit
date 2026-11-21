@@ -8,11 +8,11 @@ import { siteDeviceNamesText, siteDevices } from '../firmware/site-policy';
 import { SHOW_EMULATOR } from '../../site.config.mjs';
 
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
-// Without the emulator, only the releases patchkit has a port file for (devices/ports/<device>-<version>.toml).
+// Without the emulator, only the releases patchkit has a port file for (ports/<device>-<version>.toml).
 const portFiles = new Set(
-  Object.keys(
-    import.meta.glob('../../../../devices/ports/*.toml', { query: '?raw', import: 'default', eager: true }),
-  ).map((p) => p.split('/').pop()),
+  Object.keys(import.meta.glob('../../../../ports/*.toml', { query: '?raw', import: 'default', eager: true })).map(
+    (p) => p.split('/').pop(),
+  ),
 );
 // Releases the emulator boots and patchkit has ports for: the ones with a boot profile.
 const supported = siteDevices().map((id) => ({

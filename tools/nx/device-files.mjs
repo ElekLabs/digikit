@@ -16,11 +16,7 @@ const devices = (workspaceRoot) =>
       if (!t.device?.short) return [];
       return [{ short: t.device.short, stem: basename(file, '.toml'), cell: Boolean(t.acceptance?.ready_dir) }];
     });
-const globsOf = ({ stem, short }) => [
-  `devices/${stem}.toml`,
-  `devices/**/${stem}-*.toml`,
-  `devices/ports/${short}-*.toml`,
-];
+const globsOf = ({ stem, short }) => [`devices/${stem}.toml`, `devices/**/${stem}-*.toml`, `ports/${short}-*.toml`];
 
 /** The short ids of the device files. */
 export const deviceShorts = (workspaceRoot = root) => devices(workspaceRoot).map((d) => d.short);

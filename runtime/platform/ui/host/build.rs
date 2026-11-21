@@ -1,0 +1,55 @@
+// Compiles tests/c/*.c against sdk/include into a static library that the tests link.
+use std::path::PathBuf;
+
+fn main() {
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    // The menu of core/digikit-menu is compiled by tests/c/menu_fake.c (it includes the source), with the runtime's header.
+    let includes = [
+        root.join("../../../../sdk/include"),
+        root.join("../../../core/include"),
+        root.join("../include"),
+    ];
+    let menu_dir = root.join("../../../apps/digikit-menu/src");
+    let src_dir = root.join("tests/c");
+    // The pure functions of the chooser and the sample picker (sdk/src/chooser/logic.c, core/text.c, core/path.c) are linked; its screens (sdk/src/sample/picker.c) are included by tests/c/picker_fake.c.
+    let sdk_src = root.join("../../../../sdk/src");
+    println!("cargo:rerun-if-changed={}", sdk_src.display());
+    for dir in includes.iter().chain([&menu_dir, &src_dir]) {
+        println!("cargo:rerun-if-changed={}", dir.display());
+    }
+
+    let mut sources: Vec<PathBuf> = std::fs::read_dir(&src_dir)
+        .expect("tests/c")
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "c"))
+        .collect();
+    sources.sort();
+    let mut build = cc::Build::new();
+    build
+        .std("c11")
+        .warnings(false)
+        .flag("-Wall")
+        .flag("-Wextra")
+        .flag("-Werror")
+        .opt_level(1)
+        .includes(&includes)
+        .files(&sources)
+        .file(sdk_src.join("chooser/logic.c"))
+        .file(sdk_src.join("core/text.c"))
+        .file(sdk_src.join("core/path.c"));
+    // The pure logic of core/ui (no firmware): the SETTINGS rows, the view pool, the canvas mapping and the text input checks.
+    // panel_keys.c is not linked: tests/c/views.c has its own ui_key_of_code.
+    let ui_src = root.join("../src");
+    println!("cargo:rerun-if-changed={}", ui_src.display());
+    for f in [
+        "settings_rows.c",
+        "view_pool.c",
+        "key_defer.c",
+        "key_map.c",
+        "canvas_map.c",
+        "text_input.c",
+    ] {
+        build.file(ui_src.join(f));
+    }
+    build.compile("dkuisample");
+}

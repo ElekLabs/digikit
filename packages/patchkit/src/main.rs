@@ -46,16 +46,16 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          (a `dynamic = true` module: its machine and param records for --device)
                                          (--trace: built with DK_TRACE defined, trace bit set in the header; objects cached apart)
                                          --manifest PATH (repeatable, relative to cwd): explicit library instead of discovery; include the module and its requires closure
-                                         explicit manifests replace modules/, --modules-dir and PATCHKIT_MODULES
+                                         explicit manifests replace repository discovery, --modules-dir and PATCHKIT_MODULES
   pack-all --device SHORT --out DIR ID...  pack many modules for a device in one process into DIR/<last part of id>.dkm (.dks for a service), one JSON line each:
                                          {id, file, bytes, sha256}, {id, error} or {id, skipped: \"patch-only\"}; exit 1 when a module failed
   synth-dkm SPEC.toml --device SHORT -o OUT.dkm [--size]   a synthetic .dkm of a chosen size, machines, parameters and DSP voices (capacity tests;
                                          the spec keys are in packages/patchkit/src/dkmsynth.rs)
   dkm-info FILE.dkm                      check a .dkm and list what it holds
   port    facts --firmware FW.syx [--port FILE|-]   the site facts (len, kind, check) of the hooks that services use, as JSON; the port TOML on stdin or in FILE
-                                         (`tools/patchkit/port_resolve.py` calls it and writes them into devices/ports/*.toml)
-  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dkport (role 2) of each committed port (with --all, only of devices that a service targets), from devices/ports and
-                                         devices/fw only (no firmware); one JSON line each {port, file, bytes, sha256, names, sites}; --with-test-hooks also lists the hooks of the test fixture service (the port file of the test image)
+                                         (`tools/patchkit/port_resolve.py` calls it and writes them into ports/*.toml)
+  port    build (--device SHORT --version V | --all) --out DIR   the port file DIR/<device>-<version>.dkport (role 2) of each committed port (with --all, only of devices that a service targets), from ports and
+                                         ports/fw only (no firmware); one JSON line each {port, file, bytes, sha256, names, sites}; --with-test-hooks also lists the hooks of the test fixture service (the port file of the test image)
   port    stock --firmware FW.syx --port FILE   the site facts as TOML with the address and the stock bytes of each site (firmware bytes: for host tests, never committed)
   port    check [--with-test-hooks] SERVICE.dks...   every firmware name and hook a service takes is in the port file of every committed port that a service targets (an absent one
                                          counts as listed); exit 1 on a difference
@@ -87,9 +87,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          do two objects hold the same code up to names, order and addresses? (proof for moves of Rust items;
                                          docs/PATCHING.md); exit 1 and the differences when not
   service-check DIR... [--sdk sdk/sdk.toml]
-                                         the structure check of a service crate (modules/core/services/NAME): layout, one exported entry,
+                                         the structure check of a service crate (services/NAME): layout, one exported entry,
                                          declarations equal to the manifest in sdk.toml (`module:check service/NAME`)
-  owners RUNTIME.dko.json [--owners modules/core/runtime/owners.toml] --out DIR
+  owners RUNTIME.dko.json [--owners runtime/core/owners.toml] --out DIR
                                          one sha256 file per owner of the runtime object (docs/TESTING.md, Owner hashes)
   dko show FILE.dko.json [--relocs]      arch, toolchain record, sections, symbols and relocations of an object
   dko isa-digest FILE.dko.json           the ISA check record the object's bytes need (toolchain.isa_check)
@@ -102,16 +102,16 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          patch the stock file with the device's patch set, check the image and the messages the way the
                                          device's OS UPGRADE receiver does, then send it (USB MIDI) and read INFO after the restart;
                                          --restore sends the stock file itself; --dry-run only checks (docs/PATCHING.md, \"Flashing\")
-  list                                   modules under modules/ and ports under devices/ports/
-  catalog-check                          validate all modules/ and tests/fixtures/modules/ manifests and requires;
+  list                                   modules under the repository roots and ports under ports/
+  catalog-check                          validate all committed module manifests and requires;
                                          host only: no objects, builds, device models or firmware are read
-  gen [--check [--scope all|modules|shared]] [--modules a,b] [--manifest PATH]...
+  gen [--check [--paths] [--scope all|modules|shared]] [--modules a,b] [--manifest PATH]...
                                          write (or check) generated module, SDK and firmware files
                                          --manifest PATH (repeatable, needs --modules, incompatible with --scope shared): explicit library including requires;
                                          include core/machines for machine galleries or [[gen]] device constants
                                          --scope restricts checks to module outputs or shared SDK/firmware outputs (default all)
   reference [-o OUT.html] [--fragment]   the searchable firmware reference page (default out/reference/fw.html) from
-                                         modules/core/fw/reference.json (written by `gen`); --fragment writes the
+                                         ports/bindings/reference.json (written by `gen`); --fragment writes the
                                          page body without the document tags, for publishing
 ";
 
@@ -126,7 +126,7 @@ fn find_root(given: Option<String>) -> PathBuf {
     }
     let mut d = std::env::current_dir().unwrap_or_default();
     loop {
-        if d.join("devices/ports").is_dir() {
+        if d.join("ports").is_dir() {
             return d;
         }
         if !d.pop() {
@@ -142,10 +142,10 @@ fn flag(rest: &[String], name: &str) -> Option<String> {
 }
 
 fn registry(root: &Path) -> Result<Registry> {
-    Registry::from_dir(&root.join("devices/ports"))
+    Registry::from_dir(&root.join("ports"))
 }
 
-/// `modules/` and `tests/fixtures/modules/` of the repository, then the extra roots of `--modules-dir DIR` and the PATCHKIT_MODULES
+/// The committed module roots, then the extra roots of `--modules-dir DIR` and the PATCHKIT_MODULES
 /// environment variable (a path list), in that order. Generated modules (derived from a firmware) live there. Content modules get their
 /// objects from the cache `out/cache/dko`; a stale object is built.
 fn library(root: &Path, rest: &[String]) -> Result<Library> {
@@ -436,6 +436,10 @@ fn run(a: Args) -> Result<()> {
         "gen" => {
             let check = rest.iter().any(|a| a == "--check");
             let scope = flag(rest, "--scope");
+            let paths = rest.iter().any(|a| a == "--paths");
+            if paths && !check {
+                return Err(Error("gen --paths requires --check".into()));
+            }
             if rest.iter().any(|a| a == "--scope")
                 && (!check || !matches!(scope.as_deref(), Some("all" | "modules" | "shared")))
             {
@@ -449,6 +453,28 @@ fn run(a: Args) -> Result<()> {
                 ));
             }
             let mut stale = 0;
+            let mut outputs = Vec::new();
+            let mut emit = |path: PathBuf, text: String| -> Result<()> {
+                if paths {
+                    outputs.push(path.strip_prefix(&a.root).unwrap_or(&path).to_path_buf());
+                }
+                let have = std::fs::read_to_string(&path).ok();
+                if have.as_deref() == Some(text.as_str()) {
+                    return Ok(());
+                }
+                if check {
+                    println!("stale    {}", path.display());
+                    stale += 1;
+                } else {
+                    if let Some(d) = path.parent() {
+                        std::fs::create_dir_all(d)
+                            .map_err(|e| Error(format!("{}: {e}", d.display())))?;
+                    }
+                    write(&path.to_string_lossy(), text.as_bytes())?;
+                    println!("wrote    {}", path.display());
+                }
+                Ok(())
+            };
             if scope.as_deref() != Some("shared") {
                 // the generated files are inputs of the build: nothing is built here
                 let only: Vec<String> = flag(rest, "--modules")
@@ -474,67 +500,25 @@ fn run(a: Args) -> Result<()> {
                     files.extend(patchkit::devgen::generate(&lib, &facts, m.id())?);
                     files.extend(patchkit::modgen::module_ids(&lib, m.id())?);
                     for (rel, text) in files {
-                        let path = m.dir.join(&rel);
-                        let have = std::fs::read_to_string(&path).ok();
-                        if have.as_deref() == Some(text.as_str()) {
-                            continue;
-                        }
-                        if check {
-                            println!("stale    {}", path.display());
-                            stale += 1;
-                        } else {
-                            if let Some(d) = path.parent() {
-                                std::fs::create_dir_all(d)
-                                    .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                            }
-                            write(&path.to_string_lossy(), text.as_bytes())?;
-                            println!("wrote    {}", path.display());
-                        }
+                        emit(m.dir.join(rel), text)?;
                     }
                 }
             }
             if scope.as_deref() != Some("modules") {
-                for (rel, text) in patchkit::sdkgen::generate(&a.root)? {
-                    let path = a.root.join(&rel);
-                    let have = std::fs::read_to_string(&path).ok();
-                    if have.as_deref() == Some(text.as_str()) {
-                        continue;
-                    }
-                    if check {
-                        println!("stale    {}", path.display());
-                        stale += 1;
-                    } else {
-                        if let Some(d) = path.parent() {
-                            std::fs::create_dir_all(d)
-                                .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                        }
-                        write(&path.to_string_lossy(), text.as_bytes())?;
-                        println!("wrote    {}", path.display());
-                    }
-                }
-                for (rel, text) in patchkit::fwgen::generate_with_ports(&a.root)? {
-                    let path = a.root.join(&rel);
-                    let have = std::fs::read_to_string(&path).ok();
-                    if have.as_deref() == Some(text.as_str()) {
-                        continue;
-                    }
-                    if check {
-                        println!("stale    {}", path.display());
-                        stale += 1;
-                    } else {
-                        if let Some(d) = path.parent() {
-                            std::fs::create_dir_all(d)
-                                .map_err(|e| Error(format!("{}: {e}", d.display())))?;
-                        }
-                        write(&path.to_string_lossy(), text.as_bytes())?;
-                        println!("wrote    {}", path.display());
-                    }
+                let mut files = patchkit::sdkgen::generate(&a.root)?;
+                files.extend(patchkit::fwgen::generate_with_ports(&a.root)?);
+                for (rel, text) in files {
+                    emit(a.root.join(rel), text)?;
                 }
             }
             if stale > 0 {
                 return Err(Error(format!(
                     "{stale} generated file(s) are stale: run `patchkit gen`"
                 )));
+            }
+            if paths {
+                outputs.sort();
+                println!("{}", serde_json::json!(outputs));
             }
         }
         "reference" => {
@@ -1140,18 +1124,18 @@ mod tests {
         // Replace the build fixture's SDK link with a private copy: stale checks never touch the repository.
         std::fs::remove_file(fixture.0.join("sdk")).unwrap();
         let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for dir in ["sdk", "devices", "modules/core/adapters/machines"] {
+        for dir in ["sdk", "devices", "ports", "image-modules/points/machines"] {
             copy_tree(&real.join(dir), &fixture.0.join(dir));
         }
-        std::fs::create_dir_all(fixture.0.join("modules/core/runtime")).unwrap();
+        std::fs::create_dir_all(fixture.0.join("runtime/core")).unwrap();
         std::fs::copy(
             real.join(patchkit::abigen::SOURCE),
             fixture.0.join(patchkit::abigen::SOURCE),
         )
         .unwrap();
         copy_tree(
-            &real.join("modules/core/runtime/abi/src"),
-            &fixture.0.join("modules/core/runtime/abi/src"),
+            &real.join("runtime/core/abi/src"),
+            &fixture.0.join("runtime/core/abi/src"),
         );
         let module_dir = fixture.0.join("modules/fixture");
         std::fs::create_dir_all(&module_dir).unwrap();
@@ -1222,7 +1206,7 @@ uses = ["DEVICE_ID"]
             let mut a = args("modules");
             for path in [
                 module_dir.join("module.toml"),
-                fixture.0.join("modules/core/adapters/machines/module.toml"),
+                fixture.0.join("image-modules/points/machines/module.toml"),
             ] {
                 a.rest
                     .extend(["--manifest".into(), path.display().to_string()]);
@@ -1337,10 +1321,13 @@ uses = ["DEVICE_ID"]
         let root = ApplyRoot::new("catalog");
         root.module("modules", "test/selected", &["test/dependency"], false);
         root.module("tests/fixtures/modules", "test/dependency", &[], false);
+        root.module("runtime", "test/runtime", &[], false);
+        root.module("services", "test/service", &[], false);
+        root.module("image-modules", "test/image", &[], false);
         // Device models and declared objects/sources are deliberately unusable: catalog validation never reads them.
         std::fs::write(root.0.join("devices/broken.toml"), "malformed = [").unwrap();
         let check = || Library::catalog_check(&root.0);
-        assert_eq!(check().unwrap(), 2);
+        assert_eq!(check().unwrap(), 5);
         run(Args {
             root: root.0.clone(),
             rest: vec!["catalog-check".into()],
@@ -1383,7 +1370,7 @@ uses = ["DEVICE_ID"]
             assert!(check().unwrap_err().0.contains(error), "expected {error}");
         }
         std::fs::write(path, original).unwrap();
-        assert_eq!(check().unwrap(), 2);
+        assert_eq!(check().unwrap(), 5);
         assert!(!cache_dir(&root.0).exists());
     }
 

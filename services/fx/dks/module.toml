@@ -1,0 +1,106 @@
+[module]
+id = "core/services/fx"
+version = "0.8.2"
+name = "fx service"
+category = "core"
+role = "service"
+service = "fx"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "The fx service of the runtime as a service file: effect pages, FX parameters, routes, send amounts and the kit values of run-time effects; it owns the effect record kind, exports the builder calls of the effects and takes the nine hooks of the effect pages"
+requires = ["core/fxpages"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The hooks it takes (the firmware sites of the effect pages, ports/fw/page.toml). They have no `handler`: each is a routine of this file that runs in place
+# of the stock instructions at the site and leaves into the stock code through the exits the port file resolves (it makes the site jump straight to the
+# entry; there is no trampoline). `init` repeats the hooks with dk_service_declare_hook (`service!`).
+[[hook]]
+name = "cf.page.hook.page_desc"
+entry = "fxp_acc"
+
+[[hook]]
+name = "cf.page.hook.tab_label_test"
+entry = "fxp_label"
+
+[[hook]]
+name = "cf.page.hook.filter_graph_test"
+entry = "fxp_graph"
+
+[[hook]]
+name = "cf.page.hook.fx_view_list.load"
+entry = "fxp_list"
+
+[[hook]]
+name = "cf.page.hook.fx_array.load"
+entry = "fxp_load"
+
+[[hook]]
+name = "cf.page.hook.fx_array.save"
+entry = "fxp_save"
+
+[[hook]]
+name = "cf.page.hook.fx_array.init_exit"
+entry = "fxp_init"
+
+[[hook]]
+name = "cf.page.hook.fx_key_list.load"
+entry = "fxp_keylist"
+
+[[hook]]
+name = "cf.page.hook.sound_load_exit"
+entry = "fxp_sound"
+
+# The dispatch code of the effects (the part of core/fx behind its hook stubs: the master chain with the output guard and the send route). The image keeps the stubs and all data of the adapter; the object
+# reaches them through DSP imports (the table of core/dyndsp) and fills the two slots the stubs read.
+[[fill]]
+slot = "fx_entry"
+entry = "_fx_dispatch"
+space = "dsp"
+
+[[fill]]
+slot = "fx_send"
+entry = "_fxs_dispatch"
+space = "dsp"
+
+[[object]]
+path = "build/fx-dsp-dt2.dko.json"
+sources = ["dsp/fx-dt2.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[[object]]
+path = "build/fx-dsp-dn2.dko.json"
+sources = ["dsp/fx-dn2.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
+# Rust, built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/fx`): the file is `fx.dks`.
+[[object]]
+path = "build/fx.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"
+
+# The firmware names of the assembler (`hooks.rs`), as aliases that `patchkit pack` turns into the imports the port file resolves (docs/PATCHING.md "Firmware references"): the hooks
+# leave by `jmp` to `exit` (the end of the site) or `exit.<n>` (the exit n of the hook in `ports/fw/page.toml`), `ret` is an `rts` and `stock` the stock path called from the hook.
+[object.externs]
+fx_x_acc = "hook.cf.page.hook.page_desc.exit"
+fx_ret_acc = "hook.cf.page.hook.page_desc.ret"
+fx_stock_acc = "hook.cf.page.hook.page_desc.stock"
+fx_x_list = "hook.cf.page.hook.fx_view_list.load.exit"
+fx_x_keylist = "hook.cf.page.hook.fx_key_list.load.exit"
+fx_x_sound = "hook.cf.page.hook.sound_load_exit.exit"
+fx_x_label = "hook.cf.page.hook.tab_label_test.exit"
+fx_x_label_tail = "hook.cf.page.hook.tab_label_test.exit.1"
+fx_x_graph = "hook.cf.page.hook.filter_graph_test.exit"
+fx_x_graph_skip = "hook.cf.page.hook.filter_graph_test.exit.1"
+fx_x_load = "hook.cf.page.hook.fx_array.load.exit"
+fx_x_save = "hook.cf.page.hook.fx_array.save.exit"
+fx_x_init = "hook.cf.page.hook.fx_array.init_exit.exit"
+fx_stock = "cf.page.data.fx_view_list"
+fx_stock_n = "cf.page.site.fx_view_list.count"
+fx_keystock = "cf.page.data.fx_key_list"

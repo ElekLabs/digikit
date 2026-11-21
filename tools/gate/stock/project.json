@@ -18,6 +18,8 @@
       "!{workspaceRoot}/{packages,modules}/**/tests/**/*.rs",
       "{workspaceRoot}/config/emulator.json",
       "{workspaceRoot}/devices/**/*",
+      "{workspaceRoot}/ports/*.toml",
+      "{workspaceRoot}/ports/fw/**/*",
       "jsToolchain",
       {
         "dependentTasksOutputFiles": "**/*",

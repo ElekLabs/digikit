@@ -17,7 +17,7 @@ fn root() -> PathBuf {
 
 fn reg() -> &'static Registry {
     static R: OnceLock<Registry> = OnceLock::new();
-    R.get_or_init(|| Registry::from_dir(&root().join("devices/ports")).unwrap())
+    R.get_or_init(|| Registry::from_dir(&root().join("ports")).unwrap())
 }
 
 fn lib() -> &'static Library {

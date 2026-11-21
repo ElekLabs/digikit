@@ -6,7 +6,7 @@ Status: built, 2026-10-16; DSP loader added 2026-10-17 (finding 32); emulator on
 
 ## What it is
 
-A patchkit module (`modules/core/runtime`, requires `core/expansion`) written in Rust for the ColdFire (rustc_codegen_gcc,
+A patchkit module (`runtime/core`, requires `core/expansion`) written in Rust for the ColdFire (rustc_codegen_gcc,
 finding 26) with two assembly files. Everything is in `cf.expansion` and part of the module's own object, so patchkit places it
 like any static object:
 
@@ -46,7 +46,7 @@ It is not an interrupt, so the loader may block in the card read.
 `dkrt_tick` (a) polls the host mailbox for a command (selection, restart) and (b) calls the `tick` of every loaded module (`entry::tick_all`),
 with the module as the source of what it logs and counting each call in `tick_calls`.
 
-## C ABI (stable names; declared in `modules/core/runtime/sdk/src/lib.rs`, crate `dkrt-sdk`)
+## C ABI (stable names; declared in `runtime/core/sdk/src/lib.rs`, crate `dkrt-sdk`)
 
 All three are for the UI task (or another task context); not from an interrupt; not reentrant. Results are `i32`; no small-struct
 results.

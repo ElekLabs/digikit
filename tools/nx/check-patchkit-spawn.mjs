@@ -16,7 +16,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const SPAWN_POINT = new Set(['tests/regression/runtime/patchkit-exec.ts', 'tests/regression/runtime/patchkit.ts']);
 const DIRS = [
   'tests/**',
-  'modules/**/tests/**',
+  '{modules,runtime,services,image-modules}/**/tests/**',
   'packages/test-support/src/**',
   'packages/dk-session/src/**',
   'packages/control-client/src/**',

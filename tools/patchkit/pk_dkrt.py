@@ -14,7 +14,7 @@ the duplicate refused), the module's counter rising while the UI task runs, and 
 old unload) is refused as unknown. The write-watch on `cf.expansion` (the runtime's code and the arena allowed as writers) and
 the flush check run through all of it. Prints one JSON report; exit status 0 when every check holds.
 
-The state layout peeked here is `State` and `Mailbox` in modules/core/runtime/src/rs/src/state.rs and modules/core/runtime/sdk/src/lib.rs.
+The state layout peeked here is `State` and `Mailbox` in runtime/core/src/rs/src/state.rs and runtime/core/sdk/src/lib.rs.
 """
 
 from __future__ import annotations

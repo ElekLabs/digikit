@@ -6,7 +6,7 @@
 
 The ColdFire functions come from out/cfdb (the function table, with the image's own name list where it has one: `fw.CF.names`), the SHARC
 functions from out/sharcdb. The file has the format of docs/ADDRMAP.md (kind `dev`) and is keyed by the SHA-256 of the stock image, taken from
-the port file `devices/ports/IMAGE.toml`. It is derived from firmware: it stays under out/ and is never committed or shipped.
+the port file `ports/IMAGE.toml`. It is derived from firmware: it stays under out/ and is never committed or shipped.
 `patchkit addr` reads it together with the ship map `patchkit apply --addrmap` writes.
 """
 
@@ -27,7 +27,7 @@ VERSION = 1
 
 
 def port_of(image: str) -> dict:
-    path = ROOT / "devices" / "ports" / f"{image}.toml"
+    path = ROOT / "ports" / f"{image}.toml"
     if not path.is_file():
         raise fw.FwError(
             f"no port file {path.relative_to(ROOT)}: only ported images have an address map"

@@ -231,7 +231,7 @@ fn bad_hooks_are_errors() {
 #[test]
 fn sharc_entries_make_no_output() {
     let t = "[[fn]]\nname = \"dsp.fx.fn.send\"\ncpu = \"sharc\"\nrule = { kind = \"sharc_func\" }\nsig = \"void ()\"\ndoc = \"Sends.\"\n";
-    let files = render(&[("devices/fw/dsp/fx.toml", t)]).expect("renders");
+    let files = render(&[("ports/fw/dsp/fx.toml", t)]).expect("renders");
     assert_eq!(files.len(), 1);
     assert_eq!(files[0].0, RUST_OUT);
     assert!(!files[0].1.contains("pub mod"));
@@ -254,7 +254,7 @@ fn port(device: &str, version: &str, sha: char, anchors: &[(&str, u64)]) -> Stri
 
 fn reference_of(decls: &str, ports: &[String]) -> Value {
     let reg = Registry::from_texts(ports.iter().map(|s| s.as_str())).expect("ports");
-    let text = reference(&[("devices/fw/view.toml", decls)], SUBSYSTEMS, &reg).expect("reference");
+    let text = reference(&[("ports/fw/view.toml", decls)], SUBSYSTEMS, &reg).expect("reference");
     assert!(text.ends_with('\n'));
     serde_json::from_str(&text).expect("json")
 }

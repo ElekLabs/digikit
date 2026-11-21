@@ -1,0 +1,5369 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text",
+   "symbol": "cf.string.fn.shared_ptr.make",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "dk_app_settings_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text",
+   "symbol": "ui_settings_rows_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text",
+   "symbol": "_dk_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.fn_manager",
+   "symbol": ".sec..rodata.typeinfo_dummy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.text_paint",
+   "symbol": ".sec..bss.g_text_stock_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.inv_answer",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.inv_answer_bool",
+   "symbol": ".sec..text.inv_answer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.inv_detach",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.inv_detach",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.fw_screens",
+   "symbol": "cf.text.fn.width",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.fw_screens",
+   "symbol": "cf.view.fn.view_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.fw_screens",
+   "symbol": "cf.window.fn.name_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.fw_screens",
+   "symbol": "cf.window.site.name_cb_vptr_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.fw_new",
+   "symbol": "cf.mem.fn.new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 248,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.inv_act",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 310,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.inv_adjust",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 332,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 340,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.inv_draw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 398,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 408,
+   "section": ".text.add_item",
+   "symbol": ".sec..text.fw_new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 430,
+   "section": ".text.add_item",
+   "symbol": "cf.menu.site.settings_list.system_icon_ref",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 448,
+   "section": ".text.add_item",
+   "symbol": "cf.menu.fn.item_builder",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 530,
+   "section": ".text.add_item",
+   "symbol": "cf.menu.fn.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.new_block",
+   "symbol": ".sec..text.fw_new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.fwv_invalidate",
+   "symbol": "cf.view.fn.invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.fwc_fill",
+   "symbol": "cf.draw.fn.fill_rect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.list_paint",
+   "symbol": ".sec..bss.g_list_stock_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text.list_paint",
+   "symbol": "cf.draw.fn.fill_rect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 124,
+   "section": ".text.list_paint",
+   "symbol": ".sec..rodata.list_paint.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 146,
+   "section": ".text.list_paint",
+   "symbol": "cf.text.fn.draw_fmt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 234,
+   "section": ".text.list_paint",
+   "symbol": ".sec..rodata.list_paint.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 258,
+   "section": ".text.list_paint",
+   "symbol": "cf.text.fn.draw_fmt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.key_is_down",
+   "symbol": "cf.input.fn.key_down",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.run_settings_row",
+   "symbol": ".sec..bss.g_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.run_settings_row",
+   "symbol": "ui_rows_run",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.fwt_emit",
+   "symbol": "dk_log_event",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.inv_view_detached",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.inv_view_detached",
+   "symbol": "ui_views_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.fwc_text_width",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.fwc_text_width",
+   "symbol": ".sec..bss.g_canvas_font",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text.fwc_text_width",
+   "symbol": "cf.text.fn.width",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text.fwc_text_width",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.mv_key",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.mv_key",
+   "symbol": "ui_views_key",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.fwc_invert",
+   "symbol": "cf.draw.fn.invert_rect",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.fwc_text",
+   "symbol": ".sec..bss.g_canvas_font",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.fwc_text",
+   "symbol": "cf.text.fn.draw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.inv_name_detached",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.inv_name_detached",
+   "symbol": "ui_text_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.inv_name_done",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.inv_name_done",
+   "symbol": "ui_text_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.inv_draw",
+   "symbol": ".sec..rodata.inv_draw.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text.inv_draw",
+   "symbol": ".sec..rodata.list_paint.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 120,
+   "section": ".text.inv_draw",
+   "symbol": "cf.text.fn.draw_box",
+   "type": "cf.32"
+  },
+  {
+   "addend": 3,
+   "offset": 136,
+   "section": ".text.inv_draw",
+   "symbol": ".sec..rodata.inv_draw.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 7,
+   "offset": 152,
+   "section": ".text.inv_draw",
+   "symbol": ".sec..rodata.inv_draw.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.poll_start",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.poll_start",
+   "symbol": ".sec..text.ui_poll",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.poll_start",
+   "symbol": "dkrt_poll_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.poll_start",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.fwv_poll_start",
+   "symbol": ".sec..text.poll_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.ui_poll",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..text.key_is_down",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 160,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 166,
+   "section": ".text.ui_poll",
+   "symbol": "ui_defer_poll",
+   "type": "cf.32"
+  },
+  {
+   "addend": 128,
+   "offset": 176,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 184,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 190,
+   "section": ".text.ui_poll",
+   "symbol": "ui_views_poll",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 202,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 208,
+   "section": ".text.ui_poll",
+   "symbol": "ui_views_used",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 220,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 226,
+   "section": ".text.ui_poll",
+   "symbol": "ui_defer_pending",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 238,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 250,
+   "section": ".text.ui_poll",
+   "symbol": "dkrt_poll_remove",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 256,
+   "section": ".text.ui_poll",
+   "symbol": ".sec..bss.g_polling",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.ui_owner_gone",
+   "symbol": ".sec..bss.g_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.ui_owner_gone",
+   "symbol": "ui_rows_remove_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.ui_owner_gone",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.ui_owner_gone",
+   "symbol": "ui_views_close_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.ui_owner_gone",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": ".text.ui_owner_gone",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.ui_owner_gone",
+   "symbol": "ui_defer_drop_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.ui_owner_gone",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.ui_owner_gone",
+   "symbol": "ui_text_drop_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.ui_checked",
+   "symbol": "cf.menu.fn.is_checked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.invalidate.isra.0",
+   "symbol": "cf.view.fn.invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.refill",
+   "symbol": "cf.menu.fn.clear_items",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text.refill",
+   "symbol": ".sec..rodata.refill.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".text.refill",
+   "symbol": ".sec..text.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 180,
+   "section": ".text.refill",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.value_changed",
+   "symbol": ".sec..text.refill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.value_changed",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": ".text.inv_adjust",
+   "symbol": ".sec..text.value_changed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.ui_open",
+   "symbol": ".sec..text.ui_is_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.ui_open",
+   "symbol": ".sec..text.refill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.ui_open",
+   "symbol": "cf.view.fn.brain.instance",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": ".text.ui_open",
+   "symbol": "cf.view.fn.brain.view_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 110,
+   "section": ".text.ui_open",
+   "symbol": "cf.view.fn.view_controller_push",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.ui_check",
+   "symbol": ".sec..text.ui_checked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.ui_check",
+   "symbol": "cf.menu.fn.check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text.ui_check",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".text.ui_check",
+   "symbol": "cf.menu.fn.uncheck",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 60,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 80,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 90,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text.list_key",
+   "symbol": "cf.menu.fn.clear_items",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 202,
+   "section": ".text.list_key",
+   "symbol": "cf.menu.fn.popout_set_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 212,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 262,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 270,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 278,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 298,
+   "section": ".text.list_key",
+   "symbol": ".sec..bss.g_list_stock_key",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 310,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 318,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 326,
+   "section": ".text.list_key",
+   "symbol": "dk_ui_view_keys",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 362,
+   "section": ".text.list_key",
+   "symbol": ".sec..text.ui_checked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 376,
+   "section": ".text.list_key",
+   "symbol": ".sec..text.ui_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.defer_start",
+   "symbol": ".sec..text.poll_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.fwv_emit",
+   "symbol": "dk_log_event",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.push_shared",
+   "symbol": "cf.view.fn.brain.instance",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.push_shared",
+   "symbol": "cf.view.fn.brain.view_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.push_shared",
+   "symbol": "cf.view.fn.view_controller_push",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text.push_shared",
+   "symbol": "cf.string.fn.shared_ptr.release",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.show",
+   "symbol": ".sec..text.inv_detach",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.show",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.show",
+   "symbol": ".sec..text.push_shared",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.fw_screens",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.fwv_push",
+   "symbol": "cf.window.site.confirm_cb_vptr_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.new_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..rodata.fwv_push.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text.fwv_push",
+   "symbol": "cf.view.fn.view_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 74,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..bss.g_view_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..bss.g_view_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.mv_draw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.mv_key",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 124,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..bss.g_view_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 130,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..bss.g_view_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 140,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..bss.g_view_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 178,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.inv_view_detached",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 188,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 72,
+   "offset": 202,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..bss.g_view_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 216,
+   "section": ".text.fwv_push",
+   "symbol": ".sec..text.push_shared",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.fw_screens",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.fwt_push",
+   "symbol": "cf.window.site.name_cb_vptr_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.new_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
+   "section": ".text.fwt_push",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..rodata.refill.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.inv_name_done",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 170,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 204,
+   "section": ".text.fwt_push",
+   "symbol": "cf.window.fn.name_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 216,
+   "section": ".text.fwt_push",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 252,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.inv_name_detached",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text.fwt_push",
+   "symbol": ".sec..text.push_shared",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.add_row",
+   "symbol": ".sec..text.fw_new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.add_row",
+   "symbol": "cf.mem.fn.free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.inv_act",
+   "symbol": "cf.menu.fn.popout_set_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 166,
+   "section": ".text.inv_act",
+   "symbol": ".sec..text.ui_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 188,
+   "section": ".text.inv_act",
+   "symbol": ".sec..text.value_changed",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.mv_draw",
+   "symbol": "cf.menu.site.vertical_menu_view_ctor.font_ref",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.mv_draw",
+   "symbol": "cf.text.data.font_large",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..bss.g_canvas_font",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_fill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_text_width",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 124,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..bss.g_canvas_font",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..text.fwc_invert",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 144,
+   "section": ".text.mv_draw",
+   "symbol": "ui_canvas_bind",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 162,
+   "section": ".text.mv_draw",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 168,
+   "section": ".text.mv_draw",
+   "symbol": "ui_views_draw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 174,
+   "section": ".text.mv_draw",
+   "symbol": "ui_canvas_unbind",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": ".sec..text.inv_stock",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 84,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": ".sec..text.fw_new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": "cf.menu.site.settings_list.system_icon_ref",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 124,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": "cf.menu.fn.item_builder",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.dk_ui_stock_row",
+   "symbol": "cf.menu.fn.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..text.fw_new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_parent",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_parent",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..rodata.refill.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 220,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.menu.fn.popout_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 230,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.menu.fn.set_title",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 260,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_stock_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 312,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 332,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 338,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 344,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_stock_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 350,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..text.list_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 356,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_stock_key",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 362,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..text.list_key",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 368,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 374,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 380,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_list_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 438,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 470,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_parent",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 478,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "dk_make_sp",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 490,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "dkrt_menu_built",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 538,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.menu.fn.vertical_menu_view_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 564,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.menu.site.vertical_menu_view_ctor.font_ref",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 588,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 598,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_stock_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 624,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 644,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 650,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_stock_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 656,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..text.text_paint",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 662,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 668,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": ".sec..bss.g_text_vt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 684,
+   "section": ".text.dk_ui_menu_new",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.dk_ui_confirm",
+   "symbol": "cf.window.site.confirm_cb_vptr_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..text.new_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 132,
+   "section": ".text.dk_ui_confirm",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 160,
+   "section": ".text.dk_ui_confirm",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..text.inv_answer_bool",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 186,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 206,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..bss.g_serial",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 226,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..bss.g_serial",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 232,
+   "section": ".text.dk_ui_confirm",
+   "symbol": "cf.window.fn.confirm_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 244,
+   "section": ".text.dk_ui_confirm",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 254,
+   "section": ".text.dk_ui_confirm",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 274,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..text.show",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 290,
+   "section": ".text.dk_ui_confirm",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.window.site.multichoice_cb_vptr_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.new_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.fw_new",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 114,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 220,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..bss.g_serial",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 226,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 232,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.inv_answer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 256,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..bss.g_serial",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 274,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.window.fn.multichoice_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 312,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.mem.fn.free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 322,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 328,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.show",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 342,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..bss.g_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_ui_toast",
+   "symbol": ".sec..text.cut",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_ui_toast",
+   "symbol": "cf.window.fn.ui_states",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.dk_ui_toast",
+   "symbol": ".sec..rodata.list_paint.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.dk_ui_toast",
+   "symbol": "cf.window.fn.toast",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_ui_tick",
+   "symbol": "dkrt_blocks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_passes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..bss.g_ticks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 140,
+   "section": ".text.dk_ui_tick",
+   "symbol": ".sec..text.poll_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 10,
+   "section": ".text.ui_settings_rows_tail",
+   "symbol": ".sec..bss.g_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.ui_settings_rows_tail",
+   "symbol": ".sec..text.dk_ui_stock_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 160,
+   "offset": 24,
+   "section": ".text.ui_settings_rows_tail",
+   "symbol": ".sec..bss.g_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.ui_settings_rows_tail",
+   "symbol": ".sec..text.run_settings_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.dk_ui_settings_row",
+   "symbol": "dkrt_module",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".text.dk_ui_settings_row",
+   "symbol": "dkrt_ctx_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.dk_ui_settings_row",
+   "symbol": "dkrt_phase",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text.dk_ui_settings_row",
+   "symbol": ".sec..bss.g_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 140,
+   "section": ".text.dk_ui_settings_row",
+   "symbol": "ui_rows_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..text.defer_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 102,
+   "offset": 8,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 128,
+   "offset": 14,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..rodata.g_view_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.dk_ui_view_open",
+   "symbol": "ui_views_init",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.dk_ui_view_open",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".text.dk_ui_view_open",
+   "symbol": "ui_views_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 128,
+   "offset": 2,
+   "section": ".text.dk_ui_view_close",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.dk_ui_view_close",
+   "symbol": ".sec..bss.g_views",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text.dk_ui_view_close",
+   "symbol": "ui_views_close",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..text.defer_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 102,
+   "offset": 8,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..rodata.g_text_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..bss.g_defer",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 40,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.dk_ui_text_input",
+   "symbol": ".sec..bss.g_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".text.dk_ui_text_input",
+   "symbol": "ui_text_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_core_handle",
+   "symbol": ".sec..bss.ui_token",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.dk_ui_open",
+   "symbol": "dkrt_ctx_owner",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.dk_ui_open",
+   "symbol": ".sec..bss.done.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.dk_ui_open",
+   "symbol": ".sec..text.ui_owner_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.dk_ui_open",
+   "symbol": "dkrt_unload_observer_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text.dk_ui_open",
+   "symbol": ".sec..bss.done.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_menu_open",
+   "symbol": ".sec..text.ui_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.dk_ui_menu_close",
+   "symbol": ".sec..text.ui_is_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text.dk_ui_menu_select",
+   "symbol": ".sec..text.ui_is_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.dk_ui_menu_select",
+   "symbol": ".sec..text.refill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text.dk_ui_menu_refresh",
+   "symbol": ".sec..text.refill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_menu_is_open",
+   "symbol": ".sec..text.ui_is_open",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.dk_ui_menu_add_text",
+   "symbol": ".sec..text.add_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text.dk_ui_menu_add_text",
+   "symbol": ".sec..text.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": ".text.dk_ui_menu_add_text",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.dk_ui_menu_add_action",
+   "symbol": ".sec..text.add_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": ".text.dk_ui_menu_add_action",
+   "symbol": ".sec..text.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 120,
+   "section": ".text.dk_ui_menu_add_action",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.dk_ui_menu_add_submenu",
+   "symbol": ".sec..text.add_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 76,
+   "section": ".text.dk_ui_menu_add_submenu",
+   "symbol": ".sec..text.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": ".text.dk_ui_menu_add_submenu",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text.dk_ui_menu_add_toggle",
+   "symbol": ".sec..text.add_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.dk_ui_menu_add_toggle",
+   "symbol": ".sec..text.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 124,
+   "section": ".text.dk_ui_menu_add_toggle",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text.dk_ui_menu_add_value",
+   "symbol": ".sec..text.add_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": ".text.dk_ui_menu_add_value",
+   "symbol": ".sec..text.add_item",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 148,
+   "section": ".text.dk_ui_menu_add_value",
+   "symbol": ".sec..text.invalidate.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_menu_check",
+   "symbol": ".sec..text.ui_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.dk_ui_menu_checked",
+   "symbol": ".sec..text.ui_checked",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".rodata.g_text_fw",
+   "symbol": ".sec..text.fwt_push",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".rodata.g_text_fw",
+   "symbol": ".sec..text.fwt_emit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".rodata.g_view_fw",
+   "symbol": ".sec..text.fwv_poll_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".rodata.g_view_fw",
+   "symbol": ".sec..text.fwv_push",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".rodata.g_view_fw",
+   "symbol": ".sec..text.fwv_close",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".rodata.g_view_fw",
+   "symbol": ".sec..text.fwv_invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".rodata.g_view_fw",
+   "symbol": ".sec..text.fwv_emit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.ui_rows_add",
+   "symbol": ".sec..rodata.ui_rows_add.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.push_deferred",
+   "symbol": ".sec..text.push_slot",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 130,
+   "section": ".text.push_deferred",
+   "symbol": ".sec..text.push_now",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.close_deferred",
+   "symbol": ".sec..text.request_close.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 156,
+   "section": ".text.ui_views_open",
+   "symbol": "ui_defer_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 172,
+   "section": ".text.ui_views_open",
+   "symbol": ".sec..text.push_deferred",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 186,
+   "section": ".text.ui_views_open",
+   "symbol": "ui_defer_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 230,
+   "section": ".text.ui_views_open",
+   "symbol": ".sec..text.push_slot",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text.ui_views_close",
+   "symbol": ".sec..text.push_deferred",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": ".text.ui_views_close",
+   "symbol": "ui_defer_cancel",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 168,
+   "section": ".text.ui_views_close",
+   "symbol": "ui_defer_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 190,
+   "section": ".text.ui_views_close",
+   "symbol": ".sec..text.close_deferred",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 204,
+   "section": ".text.ui_views_close",
+   "symbol": "ui_defer_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 238,
+   "section": ".text.ui_views_close",
+   "symbol": ".sec..text.request_close.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.ui_views_close_owner",
+   "symbol": ".sec..text.push_deferred",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text.ui_views_close_owner",
+   "symbol": "ui_defer_cancel",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 144,
+   "section": ".text.ui_views_close_owner",
+   "symbol": ".sec..text.request_close.isra.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".text.ui_views_key",
+   "symbol": "ui_defer_released",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 122,
+   "section": ".text.ui_views_key",
+   "symbol": "ui_key_of_code",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 156,
+   "section": ".text.ui_views_key",
+   "symbol": "ui_defer_enter",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 184,
+   "section": ".text.ui_views_key",
+   "symbol": "ui_defer_leave",
+   "type": "cf.32"
+  },
+  {
+   "addend": 64,
+   "offset": 10,
+   "section": ".text.ui_key_of_code",
+   "symbol": "dkrt_dev",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.ui_key_of_code",
+   "symbol": "ui_key_from_codes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.c_text_width_in",
+   "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.c_text_width",
+   "symbol": ".sec..text.c_text_width_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.c_text_in",
+   "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.c_text",
+   "symbol": ".sec..text.c_text_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.c_fill",
+   "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text.c_frame",
+   "symbol": ".sec..text.c_fill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text.c_frame",
+   "symbol": ".sec..text.c_fill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.c_invert",
+   "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_fill",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_invert",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_frame",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_text_width",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_text_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..text.c_text_width_in",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.ui_canvas_bind",
+   "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text.ui_canvas_unbind",
+   "symbol": ".sec..bss.g_fw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.ui_text_open",
+   "symbol": ".sec..text.ui_text_input_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.ui_text_open",
+   "symbol": ".sec..text.ui_text_input_initial",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 132,
+   "section": ".text.ui_text_open",
+   "symbol": "ui_defer_active",
+   "type": "cf.32"
+  },
+  {
+   "addend": 98,
+   "offset": 152,
+   "section": ".text.ui_text_open",
+   "symbol": ".sec..text.push_deferred",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": ".text.ui_text_open",
+   "symbol": "ui_defer_add",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text.ui_text_open",
+   "symbol": ".sec..text.push_now",
+   "type": "cf.32"
+  },
+  {
+   "addend": 98,
+   "offset": 36,
+   "section": ".text.ui_text_drop_owner",
+   "symbol": ".sec..text.push_deferred",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text.ui_text_drop_owner",
+   "symbol": "ui_defer_cancel",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "206f00042f2f000c2f2f000c4eb900000000508f4e75203c00000000670820402f0a4e90588f2f0a4eb900000000588f4ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 54
+  },
+  {
+   "align": 2,
+   "hex": "202f000c7201206f0004226f0008b28067147202b28067124a80660620bc0000000042804e75208960f8209121690004000460ee",
+   "kind": "text",
+   "name": ".text.fn_manager",
+   "size": 52
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02206f000c42804aaf00146614420111810800241f245f4e753409118208002001246f001412320800324167e022005281b2af001066e260d4",
+   "kind": "text",
+   "name": ".text.cut",
+   "size": 60
+  },
+  {
+   "align": 2,
+   "hex": "206f000442a72f28000420504e90508f4e75",
+   "kind": "text",
+   "name": ".text.inv_stock",
+   "size": 18
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0a246f000c202affe02f400004203c7fffffff2540ffe02079000000002f2f00102f0a4e90256f000cffe0508f245f588f4e75",
+   "kind": "text",
+   "name": ".text.text_paint",
+   "size": 54
+  },
+  {
+   "align": 2,
+   "hex": "226f00044a89660442804e75206900044a8867f471a9001057804a8067ea4aa8006467e44a28006857c07100448060da",
+   "kind": "text",
+   "name": ".text.ui_is_open",
+   "size": 48
+  },
+  {
+   "align": 2,
+   "hex": "206f0004202f000842b90000000022504a89670c2f4000082f68000400044ed14e75",
+   "kind": "text",
+   "name": ".text.inv_answer",
+   "size": 34
+  },
+  {
+   "align": 2,
+   "hex": "4a2f000b56c0710044802f4000084ef900000000",
+   "kind": "text",
+   "name": ".text.inv_answer_bool",
+   "size": 20
+  },
+  {
+   "align": 2,
+   "hex": "206f0004203900000000b090660642b9000000004e75",
+   "kind": "text",
+   "name": ".text.inv_detach",
+   "size": 22
+  },
+  {
+   "align": 2,
+   "hex": "4feffff02ebc00000000203c000000002f400004203c000000002f400008203c000000002f40000c4a97660842804fef00104e754aaf000467f24aaf000867ec4aaf000c56c07100448060e2",
+   "kind": "text",
+   "name": ".text.fw_screens",
+   "size": 76
+  },
+  {
+   "align": 2,
+   "hex": "206f000822502f480004226900284ed1",
+   "kind": "text",
+   "name": ".text.fwv_close",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00044eb900000000588f4a80670c206f00042200d1c0b1c166024e7522414219220960f2",
+   "kind": "text",
+   "name": ".text.fw_new",
+   "size": 38
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff44700248d71c7c246e0008222e0010226e001479aa0010b084670691c8600000ce4a8967f6701e4c010800206a001ad1c01010240057827582e28a66de2068000e75804a8867000226201057824a82660c4a806636744f7646704660284a806c000216742d4480760a7c0a4c4308054c4308004c4608032005068000000030068300000030307c0003600a744f764e7046307c00021d43ffb11d40ffb2761342801d42ffb09688600ab6806f101d8208985280266e000c1433080066ec74149488b0826600015a7a9897cbda8ed48549f3e8b017942800528bb7c866f2420047eeff9820492d4b000c1d40ffac49f900000000203c000000002d4aff682d41ff6c2d4cff702d40ff7442aeff7842aeff7c42aeff8442aeff804a89672a701e4c010800266a001a71b3080059804a806616263c000000002d4aff782d41ff7c2d4cff802d43ff842a3c0000000055842c3c000000002d4aff882d41ff8c2d45ff902d46ff944a84670000c270184a8967064a88670000da97cb2f2e000c2f00240e0682ffffffb02f024eb900000000487800544eb9000000004fef00102d40ff644a806770486eff7841f9000000002f280002486eff682f022f004eb9000000004fef0014226eff64206900344a88671648780003220906810000002c2f012f014e904fef000c4a8b676c286eff642953002c296b00040030296b00080034296b000c00382f2eff642f2a00044eb900000000508f4cee1c7cff444e5e4e7576201d83089852806000fe98b2aa001e6c00ff3a741e4c021800266a001a71b3180055804a806600ff2470506000ff2047eeff886000ff24266eff6442ab003842ab003442ab003042ab002c609857824a826700fde242807c647a0a24004c46280226024c45380624060682000000306000fdd6",
+   "kind": "text",
+   "name": ".text.add_item",
+   "size": 662
+  },
+  {
+   "align": 2,
+   "hex": "206f000441e800102f084eb900000000588f4a8067182240720141e9001022af000823410004234100082348000c4e75",
+   "kind": "text",
+   "name": ".text.new_block",
+   "size": 48
+  },
+  {
+   "align": 2,
+   "hex": "2f6f000800044ef900000000",
+   "kind": "text",
+   "name": ".text.fwv_invalidate",
+   "size": 12
+  },
+  {
+   "align": 2,
+   "hex": "4aaf001856c071002f4000184ef900000000",
+   "kind": "text",
+   "name": ".text.fwc_fill",
+   "size": 18
+  },
+  {
+   "align": 1,
+   "hex": "257300",
+   "kind": "data",
+   "name": ".rodata.list_paint.str1.1",
+   "size": 3
+  },
+  {
+   "align": 2,
+   "hex": "4fefffd448d77cfc246f0030242f0034286a05104a8c670a4a9467064aac001e67182f4200342f4a00304cd77cfc2279000000004fef002c4ed12a6a01602c4d2e2a004c7840ddea01682c2a0184988742a776412f044878007f4878003f42a72f0247f90000000096874e932a0e53854fef00184a8667222f06487900000000487800022f0348780040486a005c2f024eb9000000004fef001c4878ffff2f032f0d4878003e2f0d2f024e934878ffff2f032f054878003e2f052f024e934fef00304878ffff2f04486efffe4878003f486d00012f024e934fef00182054202800144a8067242f00487900000000487800024878001c48780040486a005c2f024eb9000000004fef001c4cd77cfc4fef002c4e75",
+   "kind": "text",
+   "name": ".text.list_paint",
+   "size": 276
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00084eb900000000588f4a8056c0710044804e75",
+   "kind": "text",
+   "name": ".text.key_is_down",
+   "size": 22
+  },
+  {
+   "align": 2,
+   "hex": "2f6f00040008203c000000002f4000044ef900000000",
+   "kind": "text",
+   "name": ".text.run_settings_row",
+   "size": 22
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffec2d6e0014ffec486effec2f2e001042aefff442aefff842aefffc2f2e000c2d6e0018fff04eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.fwt_emit",
+   "size": 54
+  },
+  {
+   "align": 2,
+   "hex": "206f00042f104879000000004eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text.inv_view_detached",
+   "size": 22
+  },
+  {
+   "align": 2,
+   "hex": "42004e56fff4486efffb2f2e000c486efffc1d40fffb4eb900000000486efffc202e00084878ffff41f9000000002f300c004eb900000000486efffc2d40fff44eb9000000004fef001c202efff44e5e4e75",
+   "kind": "text",
+   "name": ".text.fwc_text_width",
+   "size": 82
+  },
+  {
+   "align": 2,
+   "hex": "206f00082f2800102f28000c206f000c2f28004c4879000000004eb9000000004fef00104e75",
+   "kind": "text",
+   "name": ".text.mv_key",
+   "size": 38
+  },
+  {
+   "align": 2,
+   "hex": "4878ffff2f2f00182f2f00182f2f00182f2f00182f2f00184eb9000000004fef00184e75",
+   "kind": "text",
+   "name": ".text.fwc_invert",
+   "size": 36
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00144878ffff2f2f00182f2f001841f900000000202f00182f300c002f2f00184eb9000000004fef00184e75",
+   "kind": "text",
+   "name": ".text.fwc_text",
+   "size": 46
+  },
+  {
+   "align": 2,
+   "hex": "206f00042f104879000000004eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text.inv_name_detached",
+   "size": 22
+  },
+  {
+   "align": 2,
+   "hex": "206f0008203c000000002f5000082f4000044ef900000000",
+   "kind": "text",
+   "name": ".text.inv_name_done",
+   "size": 24
+  },
+  {
+   "align": 1,
+   "hex": "4f4e004f4646002530336400",
+   "kind": "data",
+   "name": ".rodata.inv_draw.str1.1",
+   "size": 12
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02246f000c226f001820524a88676e202a00044a806d66b0a8001e6c602228000c4a816758741e4c0208002068001ad1c02028000e4a80670424402012759020427403b48866444a806738203c000000002f0048790000000042a742a748780002206f0030486800024869004e2f012f2f00344eb9000000004fef0024241f245f4e75203c0000000060c67404b48866ec2f0048790000000060be",
+   "kind": "text",
+   "name": ".text.inv_draw",
+   "size": 158
+  },
+  {
+   "align": 2,
+   "hex": "4ab900000000661c4879000000004eb900000000588f4a80660e720123c1000000004e75428060fa70ff60f6",
+   "kind": "text",
+   "name": ".text.poll_start",
+   "size": 44
+  },
+  {
+   "align": 2,
+   "hex": "4ef900000000",
+   "kind": "text",
+   "name": ".text.fwv_poll_start",
+   "size": 6
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe448d70c3c4eb9000000004a80660000fe203900000000528023c000000000767847f9000000004282244b20524a886740222a000c4c0318000681000003e70c81000003e7630000d0283c000003e84c441001224093ea0010b2896214254000102f2a00042f40001c4e90588f202f0018528245ea00147204b28266ae95ca42804a936702528a528047eb00147804b88066ee42a74879000000004879000000004eb9000000004fef000c4ab900000000670e4879000000004eb900000000588f4a8a663e4879000000004eb900000000588f4a80662c4879000000004eb900000000588f4a80661a4ab9000000006712487aff0a4eb90000000042b900000000588f4cd70c3c4fef001c4e75263c000005dc6000ff0c72016000ff38",
+   "kind": "text",
+   "name": ".text.ui_poll",
+   "size": 288
+  },
+  {
+   "align": 2,
+   "hex": "2f02242f000852822f024879000000004eb9000000002f024879000000004eb9000000004fef001041f90000000042804a906708b4a8000866024290528041e800147204b28066e82f024879000000004eb9000000002f024879000000004eb9000000004fef0010241f4e75",
+   "kind": "text",
+   "name": ".text.ui_owner_gone",
+   "size": 108
+  },
+  {
+   "align": 2,
+   "hex": "2f02206f0008202f000c4a8866064280241f4e7573a8001055814a8166f04a806dec2f002f2800044eb900000000508f7201c08160da",
+   "kind": "text",
+   "name": ".text.ui_checked",
+   "size": 54
+  },
+  {
+   "align": 2,
+   "hex": "7038d1af00044ef900000000",
+   "kind": "text",
+   "name": ".text.invalidate.isra.0",
+   "size": 12
+  },
+  {
+   "align": 1,
+   "hex": "00",
+   "kind": "data",
+   "name": ".rodata.refill.str1.1",
+   "size": 1
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02246f000c4a2a0011660000b0206a00044aaf00106600009e242800102f084eb90000000070012252588f42aa001e154000112069000c4a88670a2f2900102f0a4e90508f4201154100114aaa001e662071aa001055804a80661642a742a74879000000002f0a4eb9000000004fef0010206a00042228000892a80004e68967242002b2826e04200153802250487800024a806c0242802f002f082069001c4e904fef000c2f6a0004000c241f245f4ef90000000042826000ff64241f245f4e75",
+   "kind": "text",
+   "name": ".text.refill",
+   "size": 196
+  },
+  {
+   "align": 2,
+   "hex": "206f000471a8001055804a80660e42a72f084eb900000000508f4e752f68000400044ef900000000",
+   "kind": "text",
+   "name": ".text.value_changed",
+   "size": 40
+  },
+  {
+   "align": 2,
+   "hex": "4feffff0206f001448d7040c22104a8167000084202800044a806d7a2041b0a8001e6c72741e4c0208002068001ad1c0719059804a80665e2028000e4a8067562628001624402252242f001cd489b6826c02240326280012b6826f022403b48967342268000226280006204020822f012f4900104eb900000000588f226f000c4a8967122f4200182f4300144cd7040c4fef00104ed14cd7040c4fef00104e75",
+   "kind": "text",
+   "name": ".text.inv_adjust",
+   "size": 160
+  },
+  {
+   "align": 2,
+   "hex": "2f0b2f0a246f000c4a8a660870ff245f265f4e754aaa000467f24a9267ee71aa00107203b28067e447f90000000053804a80664a2f0a4e93588f7201b3802f002f0a4eb9000000002f0a4e934fef000c4a80662e246a00084eb9000000002f004eb90000000042a72f0a2f004eb9000000004fef00104a8057c071006090428060bc42806088",
+   "kind": "text",
+   "name": ".text.ui_open",
+   "size": 134
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0a2f02246f0010242f00142f6f001800084a8a675671aa001055804a80664c4a826d482f022f0a4eb900000000508f4aaf000867244a80660e2f022f2a00044eb900000000508f2f6a00040010241f245f588f4ef9000000004a8067ea2f022f2a00044eb90000000060da241f245f588f4e75",
+   "kind": "text",
+   "name": ".text.ui_check",
+   "size": 118
+  },
+  {
+   "align": 2,
+   "hex": "4fefffec48d71c0c266f0018286f001c246b05104a8a6700010420524a88670000fc200b0680ffffffc8b0ab0508660000ec242c000c262c0010b4b90000000067000090202a001e4a80670000b8b4b900000000660000de2239000000000303670000d220524aa80018670000c84a2b050d670000c0266a00164a8b677a286a0004242c00104a826d6eb4806c6a2f2b00044eb900000000700142ab001e1740001120522f2800102f022f0b206800184e9042014fef0010174100114aab001e6f362f2b00042f0c4eb900000000508f602620390000000001036700ff68226800204a896700ff5e2f2800104e91588f53804a806600ff4e4cd71c0c70014fef00144e75b4b90000000067ecb4b90000000067e4b4b90000000067dc2f4c001c2f4b00184cd71c0c2279000000004fef00144ed1b4b9000000006708b4b90000000066d8223900000000030367ce20524aa8001c67c6242bffd84a826d9ab4806c962f0276012f0a4eb900000000b1832f032f022f0a4eb9000000004fef001422522069001c4a886700ff6e2f032f022f2900104e904fef000c6000ff5c",
+   "kind": "text",
+   "name": ".text.list_key",
+   "size": 414
+  },
+  {
+   "align": 2,
+   "hex": "4ef900000000",
+   "kind": "text",
+   "name": ".text.defer_start",
+   "size": 6
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffec2d6e0014ffec486effec2f2e001042aefff842aefffc2f2e000c2d6e0018fff02d6e001cfff44eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.fwv_emit",
+   "size": 56
+  },
+  {
+   "align": 2,
+   "hex": "4e56fff4202e0008204041e800102d48fff82d40fffc4eb9000000002f004eb90000000042a7486efff82f004eb900000000486efffc2d40fff44eb9000000004aaefff456c04fef0014710044804e5e4e75",
+   "kind": "text",
+   "name": ".text.push_shared",
+   "size": 82
+  },
+  {
+   "align": 2,
+   "hex": "4e56fff0226e0008223c00000000203c000000002d41fffc2d40fff820690010486efff04869001042aefff4206800402d6e000cfff04e902f2e00084eb9000000004fef000c7201b38044804e5e4e75",
+   "kind": "text",
+   "name": ".text.show",
+   "size": 80
+  },
+  {
+   "align": 1,
+   "hex": "646b7669657700",
+   "kind": "data",
+   "name": ".rodata.fwv_push.str1.1",
+   "size": 7
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffec2f024eb9000000004a80670000d6487900000000487800504eb900000000508f2d40ffec4a80670000ba487900000000242effec0682000000102f024eb900000000508f4ab900000000663643f900000000206effec202800102040068000000044518822d8b08866fa203c0000000041f90000000023c00000000023c800000000206effec203c000000002d6e000cfff042aefff4214000104aae001057c0216e000c005c44801140002641f9000000002d48fffc203c000000002d40fff8486efff02079000000002f024e902f2effec4eb9000000004fef000c4a8067022002242effe84e5e4e75",
+   "kind": "text",
+   "name": ".text.fwv_push",
+   "size": 238
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffa048d70c1c4eb9000000004a8067000120487900000000487800a04eb900000000508f2d40ffb44a80670001002800240e42000682ffffffe7206e000c260e45eeffb90683ffffffbe47f9000000000684000000102f10487800192f021d40ffb94eb9000000002f0a2f020682ffffffd32f024e932f0a2f2e00102f034e934fef00202e8a48790000000045eeffc22f0a4e93486effc6206e000c2f0a42a7203c0000000043f9000000002f28000842a72f032f022d49ffce2d40ffd22f0442aeffc642aeffca4eb9000000004fef00282e8a45f9000000004e922f034e922f024e9242aeffda2d6e0014ffd643f9000000002d49ffde203c000000002d40ffe2226effb420690010486effd62f04206800404e902f2effb44eb9000000004fef0018220042804a81660670f8600270d04cee0c1cffa04e5e4e75",
+   "kind": "text",
+   "name": ".text.fwt_push",
+   "size": 318
+  },
+  {
+   "align": 2,
+   "hex": "4fefffec48d70c0c266f0018242b0022b4ab001e66424a826778d482701e4c0208002f004eb900000000588f24404a806754222b001e22404280206b001ab0816d544a88670a2f084eb900000000588f274a001a27420022202b001e721e246b001a4c010800d5c0421242aa000242aa000642aa000a42aa000e42aa001642aa001242aa001a200a4cd70c0c4fef00144e75740860862609968ad1c31290528043e9001e23680002ffe423680006ffe82368000affec2368000efff023680012fff423680016fff82368001afffc6000ff6a",
+   "kind": "text",
+   "name": ".text.add_row",
+   "size": 210
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe4206f002048d71c0c24504a8a677a202800044a806d72b0aa001e6c6c721e4c010800206a001ad1c02228000a141071aa001026680002262800062868000e2068001a57802f4100142f4800184a806618206a00124a886710202800042f002f004eb900000000508f71827201b280672257804a8067304a02660e4a8b670a2f2f00142f034e93508f4cd71c0c4fef001c4e754cd71c0c2f6f001800204fef001c4ef9000000004a8c67de4a9457c27502448228822f0a4eb900000000588f4a8b67c62f0260bc",
+   "kind": "text",
+   "name": ".text.inv_act",
+   "size": 202
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffb041f90000000022680002203c000000002f0b2f0a23c9000000002d40ffb24aaeffb26700009a206effb2246e000c71e9000647f9000000002d6a0004ffde2d6a0008ffe22d40ffe671e800062d4affda45f9000000002d4afff02d40ffea486effda700145f900000000486effb62d4bfff42d4afffc23c8000000001d40ffee203c000000002d40fff84eb900000000486effb6206e00082f28004c4879000000004eb9000000004eb9000000004fef0014246effa8266effac4e5e4e7520496000ff68",
+   "kind": "text",
+   "name": ".text.mv_draw",
+   "size": 200
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff8c203c000000002f022f2e000c487800182d40ff98203c00000000240e0682ffffffb02f022d40ff9c42aeffa02d6e0010ff9042aeffa442aeffac42aeffa82d6e0014ff944eb900000000487800544eb9000000004fef00102d40ff8c4a80672e486effa041f9000000002f280002486eff902f022f004eb9000000002f2eff8c2f2e00084eb9000000004fef001c242eff884e5e4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_stock_row",
+   "size": 154
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffdc48d73c0c266e000c4a8b670002a249f9000000004ab900000000671e487800264e94588f2d40fff44a8066264cee3c0cffdc202efff44e5e4e75487800a04e94588f2d40fff423c0000000004a8066cc60da202b00087206226efff4c280228b4a816600018e7201c081206efff41140001042001d40fffb202b00044a806606203c00000000486efffb2f00240e59822f024eb9000000004fef000c206efff471a8001055804a806600014e487805504e94588f24404a80670001ea487800014878000142a748780040260a0683000000942f132f004eb9000000002f022f0a4eb9000000004fef0020206efff42143000c25480548214a0004206a0038b1fc00000000677a4ab90000000066682268001071d10c80000070c8660001882268000871d10c80000070c86600017843e8fff8203c0000000041e800442a402ad9200db1c966f641f9000000004bf90000000023d00000000043f90000000023d500000000203c0000000023c90000000023c000000000223c0000000025410038487800264e94588f20404a806700011670032a6efff443ea0380214900042143000c214d0012114000102b4800162f024eb900000000487800084e94508f206efff4214000084a80670000e4486a00382f39000000002f004eb9000000002f0b2f2b000c4eb9000000004fef00146000fe3c70026000fe74487801ac4e94588f24404a806700009e42a72f02487800082f132f004eb9000000004fef0014206efff4226efff4214a000471a9001041f900000000538023680002000c4a806600ff6e206a0038b1fc000000006700ff604ab900000000663e2268001071d10c80000070c8663e43e8fff8203c0000000041e800442a402ad9200db1c966f641f90000000023d00000000043f90000000023c9000000004bf900000000254d00386000ff0c2f024eb900000000588f42aefff46000fd78",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_new",
+   "size": 698
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff3048d7003c4ab900000000661a4879000000004878007c4eb900000000508f2d40ff404a80660c70ff4cee003cff304e5e4e752f2e000c48780051240e0682ffffff5e2f0241f9000000004e902f2e001048780051280e0684ffffffaf2f0441f9000000004e9042002a0e0685ffffff452f052f02260e0683ffffff462f0341f9000000001d40ff454e904fef00202e852f040684ffffff9b2f0441f9000000004e9042a7486eff4e2f0441f9000000002d48ff5a203c000000002f032d40ff56206eff404868001024390000000052822d6e0014ff4e2d6e0018ff5223c2000000004eb9000000004fef001c2e8441f9000000004e902f0341f9000000004e902f022f2eff4023c2000000004eb9000000004fef00104a806700ff0e42b9000000006000ff02",
+   "kind": "text",
+   "name": ".text.dk_ui_confirm",
+   "size": 298
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff9c48d73c7c282e00144ab900000000660001464aae00106700013e20045380ea88660001342c04e58e487900000000487800d84eb90000000024402f064eb9000000004fef000c2d40ffc04a8a670001084a806700010242002a0e428247eeffe80685ffffffc74bf90000000049f9000000001d40ffc7206e00102f302c00487800182f0b4e9571c22f052f0b262effc0204348700c004e9452824fef0018b48466d4206effc0dc882f2e000c487800182f0b2d48ffcc2d46ffd02d46ffd44e952f052f0b47eeffc82f0b4e9448780001486effd82f0b283900000000203c00000000223c000000005284486effcc2d40ffe02d41ffe4486a001023c4000000002d6e0018ffd82d6e001cffdc4eb9000000004fef00282e8b47f9000000004e93588f2f034e935883588fbc8366f42f2effc04eb9000000002f042f0a23c4000000004eb9000000004fef000c4a80670842b90000000070ff4cee3c7cff9c4e5e4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_choice",
+   "size": 358
+  },
+  {
+   "align": 2,
+   "hex": "4fefffdc2f0e2f2f0030487800214def000f2f0e4eb9000000004eb9000000002f0e4879000000002f004eb9000000004fef00182c5f42804fef00244e75",
+   "kind": "text",
+   "name": ".text.dk_ui_toast",
+   "size": 62
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe448d70c7c242f0024262f0028282f002c4eb9000000004a80660e203900000000528023c0000000004a82670000a42a040c84000f424063062a3c000f424045f90000000091c8224a4281264a2c11bc826660b6a9000466647c144c0618004a84664642b3180041f900000000428042814a9067025280528141e800147804b88166ee4a80674c4eb9000000004a8067424280b492665eb6aa000466587c144c06080042b3080060282785180c2780181060b44a8666064a8866022049528143e900147c04bc8166844a84679a4a88660c70ff4cd70c7c4fef001c4e75208221430004216f002000082145000c214000106000ff74528045ea00147204b280669260ce",
+   "kind": "text",
+   "name": ".text.dk_ui_tick",
+   "size": 262
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d7040c263c00000000428245f900000000b4b900000000650a4cd7040c4fef000c4e75204352822f184879000000002f082f2f001c4e920683000000284fef001060ce",
+   "kind": "text",
+   "name": ".text.ui_settings_rows_tail",
+   "size": 72
+  },
+  {
+   "align": 2,
+   "hex": "42004e56ff5448d71c0042aeff6045eeff841d40ff642f0a2f2eff604eb900000000508f4a806636202efffc4a80676e2f004eb900000000588f5280b0ae0008665c428043f20800722041eeff645280119108ffb28066ec42001d40ff834eb9000000002f2e00142f2e00102f2e000c7201b28057c0710044802f00486eff642f2e00084879000000004eb9000000004fef001c4cee1c00ff544e5e4e7552aeff606000ff72",
+   "kind": "text",
+   "name": ".text.dk_ui_settings_row",
+   "size": 166
+  },
+  {
+   "align": 2,
+   "hex": "203c0000000023c0000000004ab900000000661c4879000000004879000000004879000000004eb9000000004fef000c2f2f00082f2f00084879000000004eb9000000004fef000c4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_view_open",
+   "size": 74
+  },
+  {
+   "align": 2,
+   "hex": "4ab90000000067122f2f00044879000000004eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_view_close",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "203c0000000023c0000000004ab9000000006618203c0000000023c000000000203c0000000023c000000000487800102f2f000c2f2f000c4879000000004eb9000000004fef00104e75",
+   "kind": "text",
+   "name": ".text.dk_ui_text_input",
+   "size": 74
+  },
+  {
+   "align": 2,
+   "hex": "203c000000004e75",
+   "kind": "text",
+   "name": ".text.dk_ui_core_handle",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "2f02202f00084a80660670d0241f4e754aaf000c67f42f004eb900000000588f24004a806de44ab900000000661a4879000000004eb900000000588f4a806614700123c000000000206f000c52824280208260b870f860b4",
+   "kind": "text",
+   "name": ".text.dk_ui_open",
+   "size": 88
+  },
+  {
+   "align": 2,
+   "hex": "4ef900000000",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_open",
+   "size": 6
+  },
+  {
+   "align": 2,
+   "hex": "2f0a246f00082f0a4eb900000000588f4a80671c202a00042240206900380680000000382f400008245f226800284ed1245f4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_close",
+   "size": 52
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02246f000c202f00104a8a673e206a00044a8867364a92673273aa001057814a8167284a806d24214000102f0a4eb900000000588f4a80671242af00102f4a000c241f245f4ef900000000241f245f4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_select",
+   "size": 84
+  },
+  {
+   "align": 2,
+   "hex": "206f00044a8867204aa80004671a4a90671671a8001057804a80670c42a72f084eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_refresh",
+   "size": 42
+  },
+  {
+   "align": 2,
+   "hex": "4ef900000000",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_is_open",
+   "size": 6
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0a246f000c2f6f001000044a8a67502f0a4eb900000000588f20404a80674010bc000242a8000242a8000642a8000a202a001e220052812541001e42a72f002f2f000c2f0a4eb9000000004fef00102f6a0004000c245f588f4ef900000000245f588f4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_add_text",
+   "size": 104
+  },
+  {
+   "align": 2,
+   "hex": "4feffff02f0a246f00182f6f001c00042f6f002000082f6f0024000c2f6f002800104a8a67562f0a4eb900000000588f20404a8067464210216f00080002216f000c0006216f0010000a202a001e220052812541001e42a72f002f2f000c2f0a4eb9000000004fef00102f6a00040018245f4fef00104ef900000000245f4fef00104e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_add_action",
+   "size": 132
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0a2f02242f0018246f00102f6f001400084a82674e4a8a674a2f0a4eb900000000588f4a80673c204010bc00012142001a202a001e220052812541001e42a72f002f2f00102f0a4eb9000000004fef00102f6a00040010241f245f588f4ef900000000241f245f588f4e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_add_submenu",
+   "size": 110
+  },
+  {
+   "align": 2,
+   "hex": "4feffff02f0a246f00182f6f001c00042f6f002000082f6f0024000c2f6f002800104a8a675a2f0a4eb900000000588f20404a80674a10bc0003216f0008000e216f000c0002216f00100006202a001e220052812541001e487800012f002f2f000c2f0a4eb9000000004fef00102f6a00040018245f4fef00104ef900000000245f4fef00104e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_add_toggle",
+   "size": 136
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe82f0a246f00202f6f002400042f6f002800082f6f002c000c2f6f003000102f6f003400142f6f003800184a8a67662f0a4eb900000000588f20404a80675610bc0004216f0008000e216f000c0012216f00100016216f00140002216f00180006202a001e220052812541001e487800012f002f2f000c2f0a4eb9000000004fef00102f6a00040020245f4fef00184ef900000000245f4fef00184e75",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_add_value",
+   "size": 160
+  },
+  {
+   "align": 2,
+   "hex": "4ef900000000",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_check",
+   "size": 6
+  },
+  {
+   "align": 2,
+   "hex": "4ef900000000",
+   "kind": "text",
+   "name": ".text.dk_ui_menu_checked",
+   "size": 6
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.done.0",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.ui_token",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "000000000000000000000000",
+   "kind": "data",
+   "name": ".rodata.g_text_fw",
+   "size": 12
+  },
+  {
+   "align": 2,
+   "hex": "000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": ".rodata.g_view_fw",
+   "size": 24
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_view_vt",
+   "size": 76
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_canvas_font",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_text",
+   "size": 74
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_rows",
+   "size": 468
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_defer",
+   "size": 110
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_views",
+   "size": 136
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_polling",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_passes",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_ticks",
+   "size": 80
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_serial",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_open",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_list_stock_key",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_list_stock_paint",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_text_stock_paint",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_list_vt",
+   "size": 76
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_text_vt",
+   "size": 76
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_parent",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "00000000",
+   "kind": "data",
+   "name": ".rodata.typeinfo_dummy",
+   "size": 4
+  },
+  {
+   "align": 1,
+   "hex": "00",
+   "kind": "data",
+   "name": ".rodata.ui_rows_add.str1.1",
+   "size": 1
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe048d71c7c206f0024246f002c4aaf00306700012a4aaf0034660c70d04cd71c7c4fef00204e754aaf003867ee222800a07004b081660470f860e243e8000842824280b08166444a8a660645f900000000200828080680000000c40684000001f493c92640284047ebffe04a2c0004662c4a896602224b068000000026b88066e24a8967b2428060000090262f0028b69166025282528043e9002860a6b49466d64281163318007b3218007d03ba8666c64a036654224b262800a0742842804c03280047f02800246f003412320800670a52807818b880665e7017420145f028005283282f003815810810428021842800256f003c0004256f002800082549000c214300a06000ff1652817620b681669260a2138108005280123208006706781fb88066ee4201760113810800134300242342002060801781080f608a70ed6000fedc",
+   "kind": "text",
+   "name": ".text.ui_rows_add",
+   "size": 326
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe4428148d71c1c206f00202248202800a02f4000184280b0af0018661a240022419481b3c0656020024cd71c1c214100a04fef001c4e7526290008b6af0024673eb280673874284c012800264997c82191280045f028002569000400042543000842832569000c000c45f02810284a99c214f4b80052837818b88366f05281528043e900286090260978284c043800528942b03800608c",
+   "kind": "text",
+   "name": ".text.ui_rows_remove_owner",
+   "size": 154
+  },
+  {
+   "align": 2,
+   "hex": "2f02206f0008428043e8000c222800a0b081660442806022242f000c43e90028b4a9ffd8661872284c0108002f300804207008004e90588f7001241f4e75528060ce",
+   "kind": "text",
+   "name": ".text.ui_rows_run",
+   "size": 66
+  },
+  {
+   "align": 2,
+   "hex": "4feffff0700148d71c04242f0018266f0014eb8a206b008045f32800c0aa000c49ea000c2f002f2f001c2f10206800084e904fef000c254000084a806622178028004280429442aa001042aa001442aa001842aa001c4cd71c044fef00104e75700217802800206b00802f2f00182f142f2a000448780010487800362f10206800144e904fef0018700160ca",
+   "kind": "text",
+   "name": ".text.push_slot",
+   "size": 140
+  },
+  {
+   "align": 2,
+   "hex": "518f2f032f02242f00182002eb88222f0014224077b1180020437601b688663a2041d1c0226800182068001c2f48000c2f022f012f4900104eb900000000508f226f00084a8066124a89670e2f6f000c0014241f261f508f4ed1241f261f508f4e75206f0004202f0008b0a8001466164a28001867104200114000182f4800044ef9000000004e75",
+   "kind": "text",
+   "name": ".text.push_deferred",
+   "size": 136
+  },
+  {
+   "align": 2,
+   "hex": "226f0008206f000412bc00032f69000800082f5000042268000c4ed1",
+   "kind": "text",
+   "name": ".text.request_close.isra.0",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "2f032f02222f001020017180206f000c2400eb8a224275b1880055824a82662275f09802e089b28266182009d0882f4000102f680080000c241f261f4ef900000000241f261f4e75",
+   "kind": "text",
+   "name": ".text.close_deferred",
+   "size": 72
+  },
+  {
+   "align": 2,
+   "hex": "206f00042008068000000080216f00080080216f000c00844241421042a8000442a8000842a8000c42a8001042a8001442a8001842a8001c41e800203141ffe2b08866d44e75",
+   "kind": "text",
+   "name": ".text.ui_views_init",
+   "size": 70
+  },
+  {
+   "align": 2,
+   "hex": "4fefffec48d73c04286f0020266f00184a8c672c4aac000467267001b0946520428271c2eb882a404a330800661e206b00802f10206800044e90588f4a80671642804cd73c044fef00144e7552827004b08266ce60ea2202dbcbeb891abc000141f31802301052804a4066027001308045f31800256f001c00042554000c256c00040010256c00080014256c000c0018256c0010001c2f2b00844eb900000000588f4a80673a2f022f0b4879000000002f2f00282f2b00844eb9000000004fef00144a80672c421542aa000c42aa001042aa001442aa001842aa001c6000ff622f022f0b4eb900000000508f4a806700ff5071ea00025282e18880826000ff44",
+   "kind": "text",
+   "name": ".text.ui_views_open",
+   "size": 256
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe87203206f00202008718048d73c0c266f001c24005382b282650000d42602eb8b45f3380073ea00024bea0002e1898280b288660000baeb88720149f3080071acffe0b2806652262a00182a6a001c2f022f0b4879000000002f2b00844eb9000000004fef001042001940ffe042aa000442aa000c42aa001042aa001442aa001842aa001c4a8367662f4d001c22434cd73c0c4fef00184ed155804a8066502f2b00844eb900000000588f4a80672671d5e18880822f002f0b4879000000002f2a00042f2b00844eb9000000004fef00144a80671ad68b2f4300202f6b0080001c4cd73c0c4fef00184ef9000000004cd73c0c4fef00184e75",
+   "kind": "text",
+   "name": ".text.ui_views_close",
+   "size": 252
+  },
+  {
+   "align": 2,
+   "hex": "4feffff048d70c0c266f00144282244b428310126754222f0018b2aa0004664a718042aa0010720142aa001442aa001842aa001cb280664a2f022f0b4879000000002f2b00844eb90000000042aa000442aa000c42aa0010421242aa001442aa001842aa001c4fef0010528245ea00207004b082669c20034cd70c0c4fef00104e7555804a8066e22f0a2f2b00804eb9000000005283508f60d0",
+   "kind": "text",
+   "name": ".text.ui_views_close_owner",
+   "size": 154
+  },
+  {
+   "align": 2,
+   "hex": "2f027203202f000c206f0008b2806526eb8873b0080055814a81661ad1c0226800104a8967102f6f0010000c2f68001c0008241f4ed1241f4e75",
+   "kind": "text",
+   "name": ".text.ui_views_draw",
+   "size": 58
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe8700348d70c1c242f0020246f001c262f0028b082640c42804cd70c1c4fef00184e75eb8a47f228007193e28867e87001c0ab000c4a8066de7801c88308030000670c719357804a80661a700160ca2f2f00242f2a00844eb900000000508f4a8067e060e6d48a264247eb00144a9367da2f2f00244eb900000000588f4a8067ca06820000001c4a84673e2f2f00242f2a00842f40001c4eb9000000002f03202f002020422f002f1020534e902f2a008424004eb9000000004a8256c04fef0018710044806000ff522f032f0020422f1020534e904fef000c4a8056c060e2",
+   "kind": "text",
+   "name": ".text.ui_views_key",
+   "size": 226
+  },
+  {
+   "align": 2,
+   "hex": "518f2f0b70032f0a222f0018206f0014b08165722001eb8845f008004a126766202a001c226a0018206800802f40000c42a72f012f2a0004487800104878003747ea00042f10206800142f4900204e90421242aa00084fef0018226f0008429342aa000c42aa001042aa001442aa001842aa001c4a89670e2f6f000c0014245f265f508f4ed1245f265f508f4e75",
+   "kind": "text",
+   "name": ".text.ui_views_gone",
+   "size": 142
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d70c04266f0010240b244b068200000080719255804a806612206b00802f2a00082f10206800104e90508f45ea0020b48a66de4cd70c044fef000c4e75",
+   "kind": "text",
+   "name": ".text.ui_views_poll",
+   "size": 66
+  },
+  {
+   "align": 2,
+   "hex": "206f0004428043e800804a1056c141e8002073019081b3c866f04e75",
+   "kind": "text",
+   "name": ".text.ui_views_used",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "2f2f0004487800404879000000004eb9000000004fef000c4e75",
+   "kind": "text",
+   "name": ".text.ui_key_of_code",
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "222f000c206f00044a8167087001b0af0008650442804e75b2b00c0067f8528060ec",
+   "kind": "text",
+   "name": ".text.ui_key_from_codes",
+   "size": 34
+  },
+  {
+   "align": 2,
+   "hex": "7001206f0004216f00080060114000644e75",
+   "kind": "text",
+   "name": ".text.ui_defer_enter",
+   "size": 18
+  },
+  {
+   "align": 2,
+   "hex": "4200206f0004114000644e75",
+   "kind": "text",
+   "name": ".text.ui_defer_leave",
+   "size": 12
+  },
+  {
+   "align": 2,
+   "hex": "206f000471a800644e75",
+   "kind": "text",
+   "name": ".text.ui_defer_active",
+   "size": 10
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02246f000c428241ea00144a106714528241e800187004b08266f070f8241f245f4e75206a00664a88663c70184c002800303c010041ef00142590280041f22800216f001c0008216f0010000c216a00600010216f0018000435802814420011400016428060b62f2a006a4e90588f4a8067b860a6",
+   "kind": "text",
+   "name": ".text.ui_defer_add",
+   "size": 120
+  },
+  {
+   "align": 2,
+   "hex": "206f00044280226f0008222f000406810000007041e800104a280004670cb3d06608700111400005700141e80018b28866e64e75",
+   "kind": "text",
+   "name": ".text.ui_defer_released",
+   "size": 52
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02246f000c240a0682000000604a2a0014671a4a2a0015672242002052154000142f2a00082f2a00044e90508f45ea0018b48a66d8241f245f4e752f2a00102f2f0018206f00184e90508f4a80670842001540001660d6102a001672025280154000167180b28065b060c2",
+   "kind": "text",
+   "name": ".text.ui_defer_poll",
+   "size": 110
+  },
+  {
+   "align": 2,
+   "hex": "2f02222f000c4280226f000820494a280014672ab2906626242f0010b4a80004661c242f0014b4a800086612420272184c010800138208147001241f4e75528041e800187404b48066c4428060ec",
+   "kind": "text",
+   "name": ".text.ui_defer_cancel",
+   "size": 78
+  },
+  {
+   "align": 2,
+   "hex": "206f00044280226f0008222f000406810000007441e800144a10670ab3e8fff866044210528041e80018b28866ea4e75",
+   "kind": "text",
+   "name": ".text.ui_defer_drop_owner",
+   "size": 48
+  },
+  {
+   "align": 2,
+   "hex": "206f000473a8002c71a80014d08173a80044d08173a8005cd0814e75",
+   "kind": "text",
+   "name": ".text.ui_defer_pending",
+   "size": 28
+  },
+  {
+   "align": 2,
+   "hex": "2079000000004a88671c4aaf000867167201b2af000457c0710044802f400004226800224ed142804e75",
+   "kind": "text",
+   "name": ".text.c_text_width_in",
+   "size": 42
+  },
+  {
+   "align": 2,
+   "hex": "2f2f000442a74eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text.c_text_width",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "4feffff048d70c0c247900000000266f00204a8a676a4a8b67664a1367627201b2af001c57c07203710092802400448226321c002f0b2f02206a00224e90508f222f0014b2aa00046c36d0814a806f30202a0008b0af00186f26222f0018d2834a816f1c2f0b90af001c90832f002f2f001c2f022f12206a00164e904fef00144cd70c0c4fef00104e75",
+   "kind": "text",
+   "name": ".text.c_text_in",
+   "size": 138
+  },
+  {
+   "align": 2,
+   "hex": "2f2f000c42a72f2f00102f2f00104eb9000000004fef00104e75",
+   "kind": "text",
+   "name": ".text.c_text",
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d7040c247900000000226f0010206f0014222f0018202f001c4a8a6772b2896d06240122092242b0886d062400200820422409260884836b56262a0004b2836c4e242a0008b0826c464a816c0242814a806c024280b3c36d0422435389b1c26d04204253884a2a0014670c538226029688204291c020032f2f00202f082f092f002f012f12206a001a4e904fef00184cd7040c4fef000c4e75",
+   "kind": "text",
+   "name": ".text.c_fill",
+   "size": 158
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe848d7047c282f001c2a2f0024262f0020242f00282c2f002cba846d0620052a042800b4836d062002240326002f062f022f042f022f0545f9000000004e924fef0014b6826f542f062f032f042f032f054e924fef00142003908253804a80673a2f0653832f032f0552822f022f054e924fef0014b8856f222f46002c2f4300282f4400242f4200202f44001c4cd7047c4fef00184ef9000000004cd7047c4fef00184e75",
+   "kind": "text",
+   "name": ".text.c_frame",
+   "size": 168
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d7040c247900000000226f0010206f0014222f0018202f001c4a8a676eb2896d06240122092242b0886d062400200820422409260884836b52262a0004b2836c4a242a0008b0826c424a816c0242814a806c024280b3c36d0422435389b1c26d04204253884a2a0014670c538226029688204291c020032f082f092f002f012f12206a001e4e904fef00144cd7040c4fef000c4e75",
+   "kind": "text",
+   "name": ".text.c_invert",
+   "size": 154
+  },
+  {
+   "align": 2,
+   "hex": "206f0004203c00000000226f000820a9000421690008000421400008203c000000002140000c203c0000000021400010203c0000000021400014203c0000000021400018203c000000002140001c203c0000000023c900000000214000204e75",
+   "kind": "text",
+   "name": ".text.ui_canvas_bind",
+   "size": 96
+  },
+  {
+   "align": 2,
+   "hex": "42b9000000004e75",
+   "kind": "text",
+   "name": ".text.ui_canvas_unbind",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.g_fw",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffe8206e0008226e0008202e000806800000003141e800192d48ffec20512d690042fff42d690008fff82d40fff02d69000cfffc2f2900142f00486effec2f10206800044e904fef0010226e00084a806712420142a9001442a90008134100184e5e4e7520512f2900422f29001048780010487800382f10206800082d40ffe84e904fef0014202effe860d4",
+   "kind": "text",
+   "name": ".text.push_now",
+   "size": 142
+  },
+  {
+   "align": 2,
+   "hex": "2f02206f00084a88660470d060204aa8000c67f64a9067f220280008740e22005381b48165e4b0af000c62de4280241f4e75",
+   "kind": "text",
+   "name": ".text.ui_text_input_check",
+   "size": 50
+  },
+  {
+   "align": 2,
+   "hex": "2f0a206f000c4280226f00084aa800046610420113810800245f4e75138108005280246800041232080067e6b0a8000865ea60de",
+   "kind": "text",
+   "name": ".text.ui_text_input_initial",
+   "size": 52
+  },
+  {
+   "align": 2,
+   "hex": "4feffff048d70c0c266f001c246f0014242f00182f2f00202f0b4eb900000000508f4a80660000d0202a00144a80660000ca52aa0046222a00464a81660272012053254100464a88667c42014203158108192f0b486a00314eb900000000256b00080042256b000c0008256b0010000c1543001825420010256a004600142f2a00044eb9000000004fef000c4a8067542f2a00142f0a4879000000002f022f2a00044eb9000000004fef00144a80672c42aa001442aa00084cd70c0c4fef00104e7515810818123008006700ff7e52807618b68066ec70176000ff7072011541001860d42f4a00144cd70c0c4fef00104ef90000000070d060be70f460ba",
+   "kind": "text",
+   "name": ".text.ui_text_open",
+   "size": 254
+  },
+  {
+   "align": 2,
+   "hex": "4feffff42f0a206f00142f6f0018000c42a800142468000c2268000842a8000820102f4a000842a72f280010487800104878003920402f10206800082f4900184e904fef0014226f00044a8967142f6f000c00182f6f00080014245f4fef000c4ed1245f4fef000c4e75",
+   "kind": "text",
+   "name": ".text.ui_text_done",
+   "size": 106
+  },
+  {
+   "align": 2,
+   "hex": "206f0004202f0008b0a80014660842a8001442a800084e75",
+   "kind": "text",
+   "name": ".text.ui_text_gone",
+   "size": 24
+  },
+  {
+   "align": 2,
+   "hex": "2f0a246f0008202a00144a806736222f000cb2aa0010662c4a2a001867222f002f0a4879000000002f2a00044eb90000000042aa00144fef001042001540001842aa0008245f4e75",
+   "kind": "text",
+   "name": ".text.ui_text_drop_owner",
+   "size": 72
+  }
+ ],
+ "source_sha256": "8aa2b5c4e0705fa04407614c13dda0a1ae4b723f5a342759fffb02e665b1fd61",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.done.0",
+   "section": ".bss.done.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_canvas_font",
+   "section": ".bss.g_canvas_font",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_defer",
+   "section": ".bss.g_defer",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_fw",
+   "section": ".bss.g_fw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_list_stock_key",
+   "section": ".bss.g_list_stock_key",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_list_stock_paint",
+   "section": ".bss.g_list_stock_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_list_vt",
+   "section": ".bss.g_list_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_open",
+   "section": ".bss.g_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_parent",
+   "section": ".bss.g_parent",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_passes",
+   "section": ".bss.g_passes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_polling",
+   "section": ".bss.g_polling",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_rows",
+   "section": ".bss.g_rows",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_serial",
+   "section": ".bss.g_serial",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_text",
+   "section": ".bss.g_text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_text_stock_paint",
+   "section": ".bss.g_text_stock_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_text_vt",
+   "section": ".bss.g_text_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_ticks",
+   "section": ".bss.g_ticks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_view_vt",
+   "section": ".bss.g_view_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.g_views",
+   "section": ".bss.g_views",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.ui_token",
+   "section": ".bss.ui_token",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.fwv_push.str1.1",
+   "section": ".rodata.fwv_push.str1.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.g_text_fw",
+   "section": ".rodata.g_text_fw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.g_view_fw",
+   "section": ".rodata.g_view_fw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.inv_draw.str1.1",
+   "section": ".rodata.inv_draw.str1.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.list_paint.str1.1",
+   "section": ".rodata.list_paint.str1.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.refill.str1.1",
+   "section": ".rodata.refill.str1.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.typeinfo_dummy",
+   "section": ".rodata.typeinfo_dummy",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.ui_rows_add.str1.1",
+   "section": ".rodata.ui_rows_add.str1.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.add_item",
+   "section": ".text.add_item",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.add_row",
+   "section": ".text.add_row",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_fill",
+   "section": ".text.c_fill",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_frame",
+   "section": ".text.c_frame",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_invert",
+   "section": ".text.c_invert",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_text",
+   "section": ".text.c_text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_text_in",
+   "section": ".text.c_text_in",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_text_width",
+   "section": ".text.c_text_width",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.c_text_width_in",
+   "section": ".text.c_text_width_in",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.close_deferred",
+   "section": ".text.close_deferred",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.cut",
+   "section": ".text.cut",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.defer_start",
+   "section": ".text.defer_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.dk_ui_stock_row",
+   "section": ".text.dk_ui_stock_row",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fn_manager",
+   "section": ".text.fn_manager",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fw_new",
+   "section": ".text.fw_new",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fw_screens",
+   "section": ".text.fw_screens",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwc_fill",
+   "section": ".text.fwc_fill",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwc_invert",
+   "section": ".text.fwc_invert",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwc_text",
+   "section": ".text.fwc_text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwc_text_width",
+   "section": ".text.fwc_text_width",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwt_emit",
+   "section": ".text.fwt_emit",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwt_push",
+   "section": ".text.fwt_push",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwv_close",
+   "section": ".text.fwv_close",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwv_emit",
+   "section": ".text.fwv_emit",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwv_invalidate",
+   "section": ".text.fwv_invalidate",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwv_poll_start",
+   "section": ".text.fwv_poll_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.fwv_push",
+   "section": ".text.fwv_push",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_act",
+   "section": ".text.inv_act",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_adjust",
+   "section": ".text.inv_adjust",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_answer",
+   "section": ".text.inv_answer",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_answer_bool",
+   "section": ".text.inv_answer_bool",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_detach",
+   "section": ".text.inv_detach",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_draw",
+   "section": ".text.inv_draw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_name_detached",
+   "section": ".text.inv_name_detached",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_name_done",
+   "section": ".text.inv_name_done",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_stock",
+   "section": ".text.inv_stock",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.inv_view_detached",
+   "section": ".text.inv_view_detached",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.invalidate.isra.0",
+   "section": ".text.invalidate.isra.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.key_is_down",
+   "section": ".text.key_is_down",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.list_key",
+   "section": ".text.list_key",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.list_paint",
+   "section": ".text.list_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.mv_draw",
+   "section": ".text.mv_draw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.mv_key",
+   "section": ".text.mv_key",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.new_block",
+   "section": ".text.new_block",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.poll_start",
+   "section": ".text.poll_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.push_deferred",
+   "section": ".text.push_deferred",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.push_now",
+   "section": ".text.push_now",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.push_shared",
+   "section": ".text.push_shared",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.push_slot",
+   "section": ".text.push_slot",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.refill",
+   "section": ".text.refill",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.request_close.isra.0",
+   "section": ".text.request_close.isra.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.run_settings_row",
+   "section": ".text.run_settings_row",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.show",
+   "section": ".text.show",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.text_paint",
+   "section": ".text.text_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_check",
+   "section": ".text.ui_check",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_checked",
+   "section": ".text.ui_checked",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_is_open",
+   "section": ".text.ui_is_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_open",
+   "section": ".text.ui_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_owner_gone",
+   "section": ".text.ui_owner_gone",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_poll",
+   "section": ".text.ui_poll",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_text_input_check",
+   "section": ".text.ui_text_input_check",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.ui_text_input_initial",
+   "section": ".text.ui_text_input_initial",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.value_changed",
+   "section": ".text.value_changed",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dk_tail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "add_item",
+   "section": ".text.add_item",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "add_row",
+   "section": ".text.add_row",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_fill",
+   "section": ".text.c_fill",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_frame",
+   "section": ".text.c_frame",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_invert",
+   "section": ".text.c_invert",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_text",
+   "section": ".text.c_text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_text_in",
+   "section": ".text.c_text_in",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_text_width",
+   "section": ".text.c_text_width",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "c_text_width_in",
+   "section": ".text.c_text_width_in",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.draw.fn.fill_rect",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.draw.fn.invert_rect",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.input.fn.key_down",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.mem.fn.free",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.mem.fn.new",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.add_item",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.check",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.clear_items",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.is_checked",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.item_builder",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.popout_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.popout_set_active",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.set_title",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.uncheck",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.vertical_menu_view_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.site.settings_list.system_icon_ref",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.site.vertical_menu_view_ctor.font_ref",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.string.fn.shared_ptr.make",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.string.fn.shared_ptr.release",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.string.fn.std_string.ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.string.fn.std_string.dtor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.text.data.font_large",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.text.fn.draw",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.text.fn.draw_box",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.text.fn.draw_fmt",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.text.fn.width",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.view.fn.brain.instance",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.view.fn.brain.view_manager",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.view.fn.invalidate",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.view.fn.view_controller_push",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.view.fn.view_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.fn.confirm_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.fn.multichoice_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.fn.name_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.fn.toast",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.fn.ui_states",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.site.confirm_cb_vptr_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.site.multichoice_cb_vptr_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.window.site.name_cb_vptr_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "close_deferred",
+   "section": ".text.close_deferred",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "cut",
+   "section": ".text.cut",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "defer_start",
+   "section": ".text.defer_start",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_app_settings_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_hook",
+   "section": ".text",
+   "value": 22
+  },
+  {
+   "global": true,
+   "name": "dk_log_event",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_make_sp",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_choice",
+   "section": ".text.dk_ui_choice",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_confirm",
+   "section": ".text.dk_ui_confirm",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_core_handle",
+   "section": ".text.dk_ui_core_handle",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_action",
+   "section": ".text.dk_ui_menu_add_action",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_submenu",
+   "section": ".text.dk_ui_menu_add_submenu",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_text",
+   "section": ".text.dk_ui_menu_add_text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_toggle",
+   "section": ".text.dk_ui_menu_add_toggle",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_add_value",
+   "section": ".text.dk_ui_menu_add_value",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_check",
+   "section": ".text.dk_ui_menu_check",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_checked",
+   "section": ".text.dk_ui_menu_checked",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_close",
+   "section": ".text.dk_ui_menu_close",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_is_open",
+   "section": ".text.dk_ui_menu_is_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_new",
+   "section": ".text.dk_ui_menu_new",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_open",
+   "section": ".text.dk_ui_menu_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_refresh",
+   "section": ".text.dk_ui_menu_refresh",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_menu_select",
+   "section": ".text.dk_ui_menu_select",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_open",
+   "section": ".text.dk_ui_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_settings_row",
+   "section": ".text.dk_ui_settings_row",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_stock_row",
+   "section": ".text.dk_ui_stock_row",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_text_input",
+   "section": ".text.dk_ui_text_input",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_tick",
+   "section": ".text.dk_ui_tick",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_toast",
+   "section": ".text.dk_ui_toast",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_view_close",
+   "section": ".text.dk_ui_view_close",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_view_keys",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_view_open",
+   "section": ".text.dk_ui_view_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_blocks",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_ctx_owner",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_dev",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_menu_built",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_module",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_phase",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_poll_add",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_poll_remove",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dkrt_unload_observer_add",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "done.0",
+   "section": ".bss.done.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fn_manager",
+   "section": ".text.fn_manager",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fw_new",
+   "section": ".text.fw_new",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fw_screens",
+   "section": ".text.fw_screens",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwc_fill",
+   "section": ".text.fwc_fill",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwc_invert",
+   "section": ".text.fwc_invert",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwc_text",
+   "section": ".text.fwc_text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwc_text_width",
+   "section": ".text.fwc_text_width",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwt_emit",
+   "section": ".text.fwt_emit",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwt_push",
+   "section": ".text.fwt_push",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwv_close",
+   "section": ".text.fwv_close",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwv_emit",
+   "section": ".text.fwv_emit",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwv_invalidate",
+   "section": ".text.fwv_invalidate",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwv_poll_start",
+   "section": ".text.fwv_poll_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "fwv_push",
+   "section": ".text.fwv_push",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_canvas_font",
+   "section": ".bss.g_canvas_font",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_defer",
+   "section": ".bss.g_defer",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_fw",
+   "section": ".bss.g_fw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_list_stock_key",
+   "section": ".bss.g_list_stock_key",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_list_stock_paint",
+   "section": ".bss.g_list_stock_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_list_vt",
+   "section": ".bss.g_list_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_open",
+   "section": ".bss.g_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_parent",
+   "section": ".bss.g_parent",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_passes",
+   "section": ".bss.g_passes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_polling",
+   "section": ".bss.g_polling",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_rows",
+   "section": ".bss.g_rows",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_serial",
+   "section": ".bss.g_serial",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_text",
+   "section": ".bss.g_text",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_text_fw",
+   "section": ".rodata.g_text_fw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_text_stock_paint",
+   "section": ".bss.g_text_stock_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_text_vt",
+   "section": ".bss.g_text_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_ticks",
+   "section": ".bss.g_ticks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_view_fw",
+   "section": ".rodata.g_view_fw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_view_vt",
+   "section": ".bss.g_view_vt",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "g_views",
+   "section": ".bss.g_views",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_act",
+   "section": ".text.inv_act",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_adjust",
+   "section": ".text.inv_adjust",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_answer",
+   "section": ".text.inv_answer",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_answer_bool",
+   "section": ".text.inv_answer_bool",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_detach",
+   "section": ".text.inv_detach",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_draw",
+   "section": ".text.inv_draw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_name_detached",
+   "section": ".text.inv_name_detached",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_name_done",
+   "section": ".text.inv_name_done",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_stock",
+   "section": ".text.inv_stock",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "inv_view_detached",
+   "section": ".text.inv_view_detached",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "invalidate.isra.0",
+   "section": ".text.invalidate.isra.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "key_is_down",
+   "section": ".text.key_is_down",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "list_key",
+   "section": ".text.list_key",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "list_paint",
+   "section": ".text.list_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "mv_draw",
+   "section": ".text.mv_draw",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "mv_key",
+   "section": ".text.mv_key",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "new_block",
+   "section": ".text.new_block",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "poll_start",
+   "section": ".text.poll_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "push_deferred",
+   "section": ".text.push_deferred",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "push_deferred",
+   "section": ".text.push_deferred",
+   "value": 98
+  },
+  {
+   "global": false,
+   "name": "push_now",
+   "section": ".text.push_now",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "push_shared",
+   "section": ".text.push_shared",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "push_slot",
+   "section": ".text.push_slot",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "refill",
+   "section": ".text.refill",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "request_close.isra.0",
+   "section": ".text.request_close.isra.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "run_settings_row",
+   "section": ".text.run_settings_row",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "show",
+   "section": ".text.show",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "text_paint",
+   "section": ".text.text_paint",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "typeinfo_dummy",
+   "section": ".rodata.typeinfo_dummy",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_canvas_bind",
+   "section": ".text.ui_canvas_bind",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_canvas_unbind",
+   "section": ".text.ui_canvas_unbind",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_check",
+   "section": ".text.ui_check",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_checked",
+   "section": ".text.ui_checked",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_active",
+   "section": ".text.ui_defer_active",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_add",
+   "section": ".text.ui_defer_add",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_cancel",
+   "section": ".text.ui_defer_cancel",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_drop_owner",
+   "section": ".text.ui_defer_drop_owner",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_enter",
+   "section": ".text.ui_defer_enter",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_leave",
+   "section": ".text.ui_defer_leave",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_pending",
+   "section": ".text.ui_defer_pending",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_poll",
+   "section": ".text.ui_defer_poll",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_defer_released",
+   "section": ".text.ui_defer_released",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_is_open",
+   "section": ".text.ui_is_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_key_from_codes",
+   "section": ".text.ui_key_from_codes",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_key_of_code",
+   "section": ".text.ui_key_of_code",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_open",
+   "section": ".text.ui_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_owner_gone",
+   "section": ".text.ui_owner_gone",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_poll",
+   "section": ".text.ui_poll",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_rows_add",
+   "section": ".text.ui_rows_add",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_rows_remove_owner",
+   "section": ".text.ui_rows_remove_owner",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_rows_run",
+   "section": ".text.ui_rows_run",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_settings_rows_tail",
+   "section": ".text.ui_settings_rows_tail",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_text_done",
+   "section": ".text.ui_text_done",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_text_drop_owner",
+   "section": ".text.ui_text_drop_owner",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_text_gone",
+   "section": ".text.ui_text_gone",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_text_input_check",
+   "section": ".text.ui_text_input_check",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_text_input_initial",
+   "section": ".text.ui_text_input_initial",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_text_open",
+   "section": ".text.ui_text_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_token",
+   "section": ".bss.ui_token",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_close",
+   "section": ".text.ui_views_close",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_close_owner",
+   "section": ".text.ui_views_close_owner",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_draw",
+   "section": ".text.ui_views_draw",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_gone",
+   "section": ".text.ui_views_gone",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_init",
+   "section": ".text.ui_views_init",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_key",
+   "section": ".text.ui_views_key",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_open",
+   "section": ".text.ui_views_open",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_poll",
+   "section": ".text.ui_views_poll",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_views_used",
+   "section": ".text.ui_views_used",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "value_changed",
+   "section": ".text.value_changed",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "3837",
+  "isa_check": "a78c573138283c3fd12b745eb3ea44631c3fc213bc9eb1dbdce4247a0cd2faea",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

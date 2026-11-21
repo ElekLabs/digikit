@@ -7,7 +7,7 @@
  *     const b = await rig.block(master);   // master: 64 floats (32 left, 32 right) before the hook
  *     b.master                             // the 64 floats after the hook; b.instructions, b.returned, b.ctxBad, b.regsBad
  *
- * The adapter (modules/core/adapters/fx/src/dsp/fx.s) and the effect sources are assembled and linked the way the patch does: the
+ * The adapter (image-modules/points/fx/src/dsp/fx.s) and the effect sources are assembled and linked the way the patch does: the
  * table at TABLE, the master block at MASTER, the hook's tail (the stock function's second instruction) at STOCK_BP. `.PKBSS` memory
  * (the effects' states) starts poisoned, so an effect that reads a state the adapter did not zero shows. Every call draws a hostile
  * context (M5 ... MODE1) and fills the registers the stock function expects back with markers; both must come back unchanged.

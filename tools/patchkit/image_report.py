@@ -115,7 +115,7 @@ def report(stock: Path, patched: Path, plan_path: Path) -> tuple[list[str], bool
     prof = next(
         p for p in R.load_profiles().values() if f"{p['device']}-{p['version']}" == name
     )
-    port = tomllib.loads((ROOT / "devices" / "ports" / f"{name}.toml").read_text())
+    port = tomllib.loads((ROOT / "ports" / f"{name}.toml").read_text())
     cont = prof["container"]
     readonly = set(cont.get("readonly", []))
     # read-only sections that a module may store packed (`[container] repack`, roles): the decoded bytes must still be the stock bytes

@@ -9,7 +9,7 @@
     uv run python -m tools.coldfire.liveness PORT --preds FUNC ADDR
     uv run python -m tools.coldfire.liveness PORT --writes ADDR [--writes ADDR ...]
 
-PORT is a port file (devices/ports/dt2-1.17.toml) or a tag (dt2-1.17); SITE is a resolved
+PORT is a port file (ports/dt2-1.17.toml) or a tag (dt2-1.17); SITE is a resolved
 site name of that port (cf.lfo.site.tick_call) or --addr. The image is
 out/sections/<tag>/section_3_MAIN_OS.bin at 0x40000400, checked against `main_sha256` of the
 port. Instructions are decoded by pypcode with the repo's ColdFireEMAC SLEIGH language
@@ -173,7 +173,7 @@ class Image:
 def load_port(arg: str) -> tuple[Path, dict]:
     p = Path(arg)
     if p.suffix != ".toml":
-        p = ROOT / "devices" / "ports" / f"{arg}.toml"
+        p = ROOT / "ports" / f"{arg}.toml"
     with open(p, "rb") as f:
         return p, tomllib.load(f)
 

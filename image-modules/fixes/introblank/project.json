@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/introblank",
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/introblank.device.test.ts", "tests/introblank-rec.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["A:core/introblank", "C:boot"],
+        "modules": ["tools/bootscreen", "test/sine", "core/services/machines"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

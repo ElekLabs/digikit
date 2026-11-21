@@ -270,7 +270,7 @@ pub fn hashes(o: &Dko, owners: &Owners) -> Result<BTreeMap<String, (usize, Strin
         .collect())
 }
 
-pub const DEFAULT_OWNERS: &str = "modules/core/runtime/owners.toml";
+pub const DEFAULT_OWNERS: &str = "runtime/core/owners.toml";
 
 /// `patchkit owners RUNTIME.dko.json [--owners owners.toml] --out DIR`: writes `<tag>.sha256` for every tag and `shared.sha256`,
 /// and prints one line per tag.

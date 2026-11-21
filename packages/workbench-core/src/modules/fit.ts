@@ -1,5 +1,5 @@
 // The fit rule: does a module, from the needs inferred from its contents, fit the capacity of a device (docs/plans/what-fits.md)?
-// The rule exists once, in Rust (modules/core/runtime/fit: the code the DIGIKIT menu runs). This file only calls it through `pk_fit` of
+// The rule exists once, in Rust (runtime/core/fit: the code the DIGIKIT menu runs). This file only calls it through `pk_fit` of
 // patchkit.wasm (dkneeds.ts) and gives the types. The reader is set once, where patchkit.wasm is loaded (`setFitReader`), so the callers stay
 // synchronous. Written without TS-only runtime syntax so node can import it.
 

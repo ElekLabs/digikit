@@ -9,7 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { parse as parseToml } from 'smol-toml';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, globSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { MidiOut, RuntimeEvents, wallClock } from '../../packages/dk-session/src/index.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
@@ -53,21 +53,23 @@ function stepLibrary(root) {
 }
 
 /**
- * The `calibration.toml` a module ships in its own directory (modules/machines|fx|tools/NAME/), for the modules whose `module.toml` lists a port of `device` (the id before the version of the INFO port):
+ * The `calibration.toml` a module ships in its own directory (modules/<kind>/<author>/<name>/), for the modules whose `module.toml` lists a port of `device` (the id before the version of the INFO port):
  * a module that is not built for the target has no case on it (the install would refuse it and end the run).
  */
 function moduleCases(root, fail, device) {
   const found = [];
-  for (const kind of ['machines', 'fx', 'tools']) {
-    const base = path.join(root, 'modules', kind);
-    if (!existsSync(base)) continue;
-    for (const name of readdirSync(base)) {
-      const f = path.join(base, name, 'calibration.toml');
-      if (!existsSync(f)) continue;
-      const manifest = parseToml(readFileSync(path.join(base, name, 'module.toml'), 'utf8'));
+  for (const kind of ['machine', 'fx', 'tool']) {
+    const cases = globSync(`modules/${kind}/*/*/calibration.toml`, { cwd: root }).sort((a, b) => {
+      const leafA = path.basename(path.dirname(a));
+      const leafB = path.basename(path.dirname(b));
+      return leafA === leafB ? a.localeCompare(b) : leafA < leafB ? -1 : 1;
+    });
+    for (const file of cases) {
+      const f = path.join(root, file);
+      const manifest = parseToml(readFileSync(path.join(path.dirname(f), 'module.toml'), 'utf8'));
       if (!(manifest.module?.ports ?? []).some((p) => p.split('-')[0] === device)) continue;
       try {
-        found.push(parseCalCase(readFileSync(f, 'utf8'), path.relative(root, f)));
+        found.push(parseCalCase(readFileSync(f, 'utf8'), file));
       } catch (e) {
         fail(e instanceof Error ? e.message : String(e));
       }

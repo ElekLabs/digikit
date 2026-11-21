@@ -54,7 +54,7 @@ export function sessionSetup(
   };
 }
 
-/** `STABLE_BLOCKS` of the runtime when the boot record names none: 30 s of DSP blocks (1500 a second). A host test keeps it equal to `modules/core/runtime/abi.toml`. */
+/** `STABLE_BLOCKS` of the runtime when the boot record names none: 30 s of DSP blocks (1500 a second). A host test keeps it equal to `runtime/core/abi.toml`. */
 export const DEFAULT_STABLE_BLOCKS = 45_000;
 const BLOCKS_PER_S = 1500;
 

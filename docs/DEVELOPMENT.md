@@ -117,7 +117,7 @@ disabled ("desktop only for now"). Headless: the control socket's `card.load {di
 
 `createNodeHost(options)` (`src/node/node-host.ts`) is the `Host` for a command line, so a command runs the workbench's code over the same interfaces as the app: `fs` over `node:fs` (the rules of `local.rs`: one level, folders first, no dot files, no path outside the folder), `library` (`out/modules`), `ports.midi` and `ports.bulk` over the `dkmidi` and `dkbulk` bridge processes, `firmware.patchkitWasm` and `sampleWasm` from `apps/web/public`, and `rpc` over the control socket of a running emulator (`packages/control-client`). A command that needs a window or the app's own emulator session (a dialog, `library.build`, `emu.*`, `firmware.prepare`) fails with `NodeHostUnsupported`. `wb` (`tools/devtools/wb.mjs`) builds one: `wb ports` lists the MIDI ports through `host.ports.midi.ports()`, and the samples commands choose their backend from the device registry (`@digi/devices`, `[storage] samples`), as the desktop's Samples backend does. `wb samples put FILE --slot N` puts one WAV into numbered slot N of a device with sample slots and replaces what the slot holds; without `--slot` the lowest free slot is used and an occupied slot is never overwritten; `wb samples rm NAME` clears the slot that `wb samples ls` lists under that name. Test it with temp folders and stand-in bridge programs (`tests/node-host.test.ts`).
 
-`dkbulk descriptors [ID]` checks the USB descriptors Windows needs for WinUSB on a real device, read-only on macOS and Linux: see [usb-fast](../modules/tools/usb-fast/README.md) "Windows descriptor check".
+`dkbulk descriptors [ID]` checks the USB descriptors Windows needs for WinUSB on a real device, read-only on macOS and Linux: see [usb-fast](../modules/tool/digikit/usb-fast/README.md) "Windows descriptor check".
 
 ### Host and EmuRpc (desktop UI)
 
@@ -206,10 +206,12 @@ mise run test:subset -- S:machines  # the device tests of record tags plus gate-
 uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --seconds 3,6   # paired counter runs of two coupled-run binaries: DSP and ColdFire host instructions per audio second, B/A ratios, parity (docs/TESTING.md)
 mise run module:check ID      # one module: conformance and its own tests
 mise run lfo:report -- digikit/lfo_shapes_1   # output report of an LFO shape module on the emulator: fit error per shape against its table, swing, verdict, SVG plots (sdk/templates/lfo-shape/README.md "Output report")
-pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig   # machine and effect conformance of every module on the SHARC-only rig (docs/TESTING.md "The Vitest kit")
-DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig modules/machines/analog/tests/   # verdict, plot.png and wav files for the pinned cases (docs/TESTING.md "Classifying a changed pin")
+pnpm nx:pilot run-many -t test-dsp-conformance             # cached machine and effect conformance on the SHARC-only rig
+DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig modules/machine/fadedlimes/analog/tests/   # verdict, plot.png and wav files for the pinned cases (docs/TESTING.md "Classifying a changed pin")
 node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stereo-fwd-oneshot/note60   # `wb profile report` of one case on the rig: instructions per function and loop (docs/TESTING.md "SHARC-only rig")
 ```
+
+For a repository move, capture and compare the [byte manifests](TESTING.md#byte-manifests-for-repository-moves).
 
 Pins are valid only for the firmware and ready state they were recorded with.
 
@@ -243,7 +245,10 @@ Services and the port file (no binding step; `patchkit port build|check|stock`):
 Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).
 
 Core library store (`verify_build cores`, `tools/devtools/store.py`, shared with the daemon store): [TESTING.md](TESTING.md#core-library-store).
-Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `modules/core/runtime/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
+Owner hashes of the runtime object (`patchkit owners`, `objdiff --owners`, `runtime/core/owners.toml`): [TESTING.md](TESTING.md#owner-hashes-patchkit-owners).
+The [Pluck test coverage](TESTING.md#pluck-test-coverage) table shows which checks
+to run for a DSP, control declaration or loader edit.
+
 Usage of the SDK-surface coverage (`patchkit imports`, `patchkit coverage`, `patchkit:sdk-coverage`): [TESTING.md](TESTING.md#sdk-surface-coverage).
 Usage of the module DSP analysis (`wb module analyse`): [packages/dksharc/README.md](../packages/dksharc/README.md#usage).
 Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` artifact, `wb profile calibrate`: [Calibration](INSTRUMENTATION.md#calibration-wb-profile-calibrate)): [INSTRUMENTATION.md](INSTRUMENTATION.md#profiles). Calibration runs (`wb profile calibrate run`, the step and profile files of `devices/calibration/`): [INSTRUMENTATION.md](INSTRUMENTATION.md#calibration-runs-wb-profile-calibrate-run).
@@ -290,18 +295,18 @@ pnpm dev                                # the gallery at /patch: patch in the br
 4. Run it in the emulator: `mise run dk:run -- fx/NAME --emu`. An emulator must already run (`mise run workbench` or `mise run emu:serve`). It builds, packs, uploads, selects the module, restarts the guest and follows the log.
 5. Run it on the device: `mise run dk:run -- fx/NAME --port Digitakt`. The device needs the digikit runtime (version 0.1.0 or newer for the log levels): `mise run patch`, then `mise run patch:preflight` on the image before you flash it.
 
-**A service** (`modules/core/services/NAME`): `mise run module:new -- service NAME` writes the layout of `sdk/templates/service`: the neutral crate
+**A service** (`services/NAME`): `mise run module:new -- service NAME` writes the layout of `sdk/templates/service`: the neutral crate
 (`Cargo.toml`, `src/lib.rs`, `records.rs`, `slots.rs`, `tests/records.rs`; add `src/dsp/` when the service has DSP parts) and the service file `dks/` (`module.toml` with
 id `core/services/NAME`, `src/lib.rs` with the `service!` call; add `src/hooks.rs` for hook assembler and `src/fw.rs` for firmware calls). It prints the steps that register it
-(workspace member, `[[service]]` row and `[records.kinds]` in `sdk/sdk.toml`). `mise run module:check -- service/NAME` runs `patchkit service-check modules/core/services/NAME`
+(workspace member, `[[service]]` row and `[records.kinds]` in `sdk/sdk.toml`). `mise run module:check -- service/NAME` runs `patchkit service-check services/NAME`
 (the layout of both crates, the id and the role; the `[[hook]]` entries equal to the `service!` hooks per device; assembler only in `dks/src/hooks.rs`; firmware names only under `dks/`;
-at most one exported symbol, `dk_module`; no row anchor of `devices/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the record kinds that `Service::declare` makes equal to the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
+at most one exported symbol, `dk_module`; no row anchor of `ports/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the record kinds that `Service::declare` makes equal to the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
 `rust-tests`. Example, run in the repository root:
 
 ```text
-$ patchkit service-check modules/core/services/lfo modules/core/services/fx
-modules/core/services/lfo: ok
-modules/core/services/fx: ok
+$ patchkit service-check services/lfo services/fx
+services/lfo: ok
+services/fx: ok
 ```
 
 Log levels: `mise run dk:log -- --port Digitakt level` prints them, `level debug` sets the default, `level --module NAME=trace` sets one module (`NAME=default` clears it), `follow --level L --module NAME` filters the display. Levels are not stored on the card.
@@ -314,7 +319,7 @@ Each task takes `-- --help`.
 
 A boot screen is a script `x.mjs` that exports `ticks` and `draw(ctx, t)` and draws with Canvas 2D (128x64). The agent skill `.agents/skills/digikit-bootscreen/SKILL.md` has the rules.
 
-0. `mise run bootscreen` (no arguments): opens a gallery of `modules/tools/bootscreen/examples/*.mjs` in a browser. Click a tile to zoom it in; Esc closes. Tiles update when any file in the folder changes; `--no-open` skips the browser.
+0. `mise run bootscreen` (no arguments): opens a gallery of `modules/tool/tools/bootscreen/examples/*.mjs` in a browser. Click a tile to zoom it in; Esc closes. Tiles update when any file in the folder changes; `--no-open` skips the browser.
 1. `mise run bootscreen -- dev x.mjs`: packs the script and opens a browser preview that reloads when the file changes.
 2. `mise run bootscreen -- sheet x.mjs`: writes a contact sheet PNG of up to 24 ticks to `out/bootscreens/` (a way to see the result without a browser).
 3. `mise run bootscreen -- put x.mjs [--port Digitakt]`: packs the script and uploads it to `data/tools/bootscreen/x.dkbs` on the device (`wb store put`, verified after the upload).

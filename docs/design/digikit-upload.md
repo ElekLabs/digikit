@@ -87,7 +87,7 @@ SELECT also answers the selection record's own codes (runtime codes -40 to -49):
 | 0x31 | RESTART (runtime 4) | (none) | (none). The reply is sent first; the soft reset (`dkrt_restart`, the one APPLY & RESTART runs) follows from the UI task's next passes, once the TX ring has drained (at most 4000 passes). `E_STATE` while an upload is open. When `dkrt_restart` refuses (a card transfer is in flight) the request is dropped and the log gets an UPLOAD error event `{cmd 0x31, status}`; the host sees the runtime still running and asks again. A host that wants the new boot reads LOG: the new boot's log holds no UPLOAD event for cmd 0x31 (the ring starts again), and holds BOOT_START. |
 
 The device id is the device, not the firmware version: the runtime has no per-port constant (a port is a set of anchors, and a
-constant would be a fourth copy of a fact `devices/ports/` holds). A host that wants the version asks the stock MidiRpc
+constant would be a fourth copy of a fact `ports/` holds). A host that wants the version asks the stock MidiRpc
 SoftwareVersion (the stock route is unchanged). *Changed 2026-10-18 (lane r4); the first draft said "dt2-1.16".*
 
 Behaviour the first draft left open (lane r4, built and tested):
@@ -182,7 +182,7 @@ so the count is exact for one faulting type and, when two types fault inside one
 
 ## The debug log (LOG and PEEK; finding 46)
 
-The runtime keeps a small RAM ring of 32 boot and error events (`modules/core/runtime/src/rs/src/dlog.rs`) and hands every event to one sink; the module `digikit/debug` (`modules/tools/debug`) keeps a ring of 512 events and answers LOG, PEEK and LOGCFG (the service range `debug`, 0x20 to 0x22). The events are: boot steps, safe mode and why, the card check, each module's
+The runtime keeps a small RAM ring of 32 boot and error events (`runtime/core/src/rs/src/dlog.rs`) and hands every event to one sink; the module `digikit/debug` (`modules/tool/digikit/debug`) keeps a ring of 512 events and answers LOG, PEEK and LOGCFG (the service range `debug`, 0x20 to 0x22). The events are: boot steps, safe mode and why, the card check, each module's
 load result, upload commands, menu actions, a health snapshot every ten seconds, the DSP diagnostics once a second (raw words of `dl_diag`), the DSP
 heartbeat watch, the crash record of the boot before. Without the module only error events and the boot's events are kept (INFO then has no LOG capability); the module's level filter drops the others above its level (LOGCFG). The argument words of each kind are listed in `docs/findings/46-digikit-debug.md`; the host tool is
 `tools/device/dklog.py` (`follow`, `crash`, `peek`). LOG and PEEK follow the framing and the TX guard of every other command: a reply is sent only when the
@@ -239,7 +239,7 @@ anchor on both ports (`dkrt.fw.*`). The runtime's upload buffer is a static 16-b
 
 ## Tests
 
-- CLI transfer acceptance: `modules/core/runtime/tests/transfer-live.device.test.ts` on DT2 1.17 and DN2 1.12, through the real `wb transfer` CLI (`mise run transfer`), which installs the services the module needs with it. Install/restart persists the upload and selection, the mirror matches the card's file hash and metadata, delete plus `card.sync` removes it, and the next protocol restart skips the selected missing module with `MOD_LOAD E_NOT_FOUND` and reaches `UI_FIRST`. Run with `mise run test:runtime -- transfer-live` (prerequisites: `tests/regression/README.md`); the gate selects this acceptance on relevant changes. Remaining scenario tests are in `tests/digikit/scenarios`.
+- CLI transfer acceptance: `runtime/core/tests/transfer-live.device.test.ts` on DT2 1.17 and DN2 1.12, through the real `wb transfer` CLI (`mise run transfer`), which installs the services the module needs with it. Install/restart persists the upload and selection, the mirror matches the card's file hash and metadata, delete plus `card.sync` removes it, and the next protocol restart skips the selected missing module with `MOD_LOAD E_NOT_FOUND` and reaches `UI_FIRST`. Run with `mise run test:runtime -- transfer-live` (prerequisites: `tests/regression/README.md`); the gate selects this acceptance on relevant changes. Remaining scenario tests are in `tests/digikit/scenarios`.
 - upload, list, restart, load: equal to a card built with the file in `digikit/` (rows, tables, PCM).
 - replace, delete, CLEAR, E_FULL, E_HASH (a wrong file hash commits nothing), DATA retry and bad offset.
 - power cut during staging, between header B and A, and after A: the next boot reads a valid store (old or new, never mixed).

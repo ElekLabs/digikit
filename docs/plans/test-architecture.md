@@ -150,7 +150,7 @@ Reading the table:
 
 Runs alongside R12.
 
-**Rule: real modules model the fixtures.** A real module needs no device test of its own when all of these hold: its imports and descriptor features are covered by the fixture contract suite (patchkit coverage plus descriptor coverage, to add); it passes `test-conformance-rig`; its `tests/rig` sound checks pass; the device conformance load passes. A missing feature goes into a fixture, not into a device test.
+**Rule: real modules model the fixtures.** A real module needs no device test of its own when all of these hold: its imports and descriptor features are covered by the fixture contract suite (patchkit coverage plus descriptor coverage, to add); it passes `test-dsp-conformance`; its `tests/rig` sound checks pass; the device conformance load passes. A missing feature goes into a fixture, not into a device test.
 
 **Target layout per layer.**
 

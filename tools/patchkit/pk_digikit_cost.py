@@ -12,7 +12,7 @@ run-time machine and capture its PCM, then SECONDS of emulated idle time. The em
     fast-forwarded and is not in it), and the difference B - A as a share of A;
   - the HEALTH figures `dkrt_health` reports (CPU load in tenths of a percent, the idle-loop iterations of the last window) over the same time.
 
-A's runtime is built from `git archive GIT_REF modules/core/runtime` laid over a copy of the module roots (patchkit's `--root`), so nothing in the
+A's runtime is built from `git archive GIT_REF` of the runtime directory, laid over a copy of the module roots (patchkit's `--root`), so nothing in the
 working tree changes.
 """
 
@@ -51,21 +51,29 @@ HEALTH_WORDS = {
 
 
 def old_root(ref: str, work: Path) -> Path:
-    """A patchkit root whose `core/runtime` is the one of GIT_REF: a copy of the module roots, the old runtime laid over it, `devices/` linked."""
+    """A patchkit root whose `core/runtime` is the one of GIT_REF: a copy of the module roots, the old runtime laid over it, `devices/` and `ports/` linked."""
     root = work / f"root-{ref}"
     if root.exists():
         shutil.rmtree(root)
     for r in modroots.REPO_ROOTS:
         shutil.copytree(ROOT / r, root / r)
-    shutil.rmtree(root / "modules/core/runtime")
+    runtime = "runtime/core"
+    present = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{runtime}"], cwd=ROOT, capture_output=True
+    )
+    archive_path = runtime if present.returncode == 0 else "modules/core/runtime"
+    shutil.rmtree(root / runtime)
     tar = subprocess.run(
-        ["git", "archive", ref, "modules/core/runtime"],
+        ["git", "archive", ref, archive_path],
         cwd=ROOT,
         check=True,
         capture_output=True,
     ).stdout
     subprocess.run(["tar", "-x", "-C", str(root)], input=tar, check=True)
-    (root / "devices").symlink_to(ROOT / "devices")
+    if archive_path != runtime:
+        (root / archive_path).rename(root / runtime)
+    for path in ("devices", "ports"):
+        (root / path).symlink_to(ROOT / path)
     return root
 
 

@@ -27,7 +27,7 @@ def test_rules_are_declared_for_the_three_anchors():
     declarations = {
         entry["name"]: entry
         for entries in tomllib.loads(
-            (REPO_ROOT / "devices/fw/param.toml").read_text()
+            (REPO_ROOT / "ports/fw/param.toml").read_text()
         ).values()
         for entry in entries
     }
@@ -64,7 +64,7 @@ def test_rules_are_declared_for_the_three_anchors():
 @pytest.mark.parametrize("version", ["1.17"])
 def test_the_scan_reproduces_the_recorded_port(version):
     syx = os.path.join(ROOT, f"Digitakt_II_OS{version}.syx")
-    port = os.path.join(ROOT, "devices", "ports", f"dt2-{version}.toml")
+    port = os.path.join(ROOT, "ports", f"dt2-{version}.toml")
     if not (os.path.exists(syx) and os.path.exists(port)):
         pytest.skip("needs the stock image and its port")
     with open(port, "rb") as f:

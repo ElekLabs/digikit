@@ -1,6 +1,6 @@
 # The `.dkm` module file
 
-Status: built, 2026-10-16 (packer `packages/patchkit/src/dkm.rs`, loader `modules/core/runtime/src/rs/src/loader/mod.rs`). Plan:
+Status: built, 2026-10-16 (packer `packages/patchkit/src/dkm.rs`, loader `runtime/core/src/rs/src/loader/mod.rs`). Plan:
 `docs/plans/digikit-runtime.md` (Module file, Load sequence). Runtime: `docs/design/digikit-runtime.md`. Store the file lives in:
 `docs/design/digikit-store.md`.
 
@@ -101,15 +101,15 @@ It does not read the image, the tables' entries, the records' bodies or the DSP 
 
 Names that are capacity kinds (`[capacity.kinds]` of `sdk/sdk.toml`) are in the unit of that kind's CAPACITY entry, so "fits" is need <= limit - used, with the largest free block for the arena and the DSP area.
 
-Who calls it: the DIGIKIT menu (`modules/core/apps/digikit-menu`, on the card's files, once per open of the menu); patchkit (`patchkit needs [--json] FILE.dkm...`, and a `needs` line of `dkm-info`);
+Who calls it: the DIGIKIT menu (`runtime/apps/digikit-menu`, on the card's files, once per open of the menu); patchkit (`patchkit needs [--json] FILE.dkm...`, and a `needs` line of `dkm-info`);
 `patchkit.wasm` (`pk_needs`, read by the Transfer page through `apps/web/src/modules/dkneeds.ts`); the Python tools through the command line (`tools/device/dkneeds.py`: `dk run`, `module:check`, `dktransfer`). The arithmetic exists once.
 
-The rule that compares the needs with a device is `fits_now` (docs/plans/what-fits.md; `dkrt_fit` in `modules/core/runtime/fit`, vectors in `modules/core/runtime/vectors/fit-vectors.json`; the compare and the needs are each written once, in Rust: the web app calls the compare through `pk_fit` and the tools through `patchkit fit --json -`): the staging buffer holds the file, a module record and a selection path are free,
+The rule that compares the needs with a device is `fits_now` (docs/plans/what-fits.md; `dkrt_fit` in `runtime/core/fit`, vectors in `runtime/core/vectors/fit-vectors.json`; the compare and the needs are each written once, in Rust: the web app calls the compare through `pk_fit` and the tools through `patchkit fit --json -`): the staging buffer holds the file, a module record and a selection path are free,
 the DSP range (with up to `DSP_ALIGN - 8` bytes for alignment) is at most the largest free range, the arena holds the module's block and the block of its DSP image together (each block at most the largest free block), and every row count is at most
 limit - used. A kind that a device's CAPACITY lacks is not judged.
 
 The key rules (`Keys::first_repeat`, `first_shared_key`, `first_missing_key`: the planner's and the reload's) are asked by the Transfer page before an upload through `pk_keys_check` of `patchkit.wasm` (`keyWarnings` in `packages/workbench-core/src/modules/fit.ts`): a key the file has twice, a key of another module that is on the card, a key of the version on the card that the new file lacks. They show as `keys` events of the install, which only warn: the device refuses the module itself.
-The `inferred needs` tests of `modules/core/runtime/tests/capacity/inferred/inferred-needs.device.test.ts` (full tier) load a set of run-time modules and fixtures alone, coupled, and compare
+The `inferred needs` tests of `runtime/core/tests/capacity/inferred/inferred-needs.device.test.ts` (full tier) load a set of run-time modules and fixtures alone, coupled, and compare
 CAPACITY and MODULES with `needs_of` of the file (rows of a DSP module come in after the DSP acknowledges). The Rust tests of `dkneeds` cover the arithmetic and malformed files (truncated sections, absurd counts, every cut of a file).
 
 ## DSP section

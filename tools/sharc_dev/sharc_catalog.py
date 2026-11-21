@@ -9,7 +9,7 @@ Builds tables `catalog` and `catalog_groups` for both images and writes the TSV
 and graph JSON files next to them. The rows are the functions near an existing
 anchor, on the voice, master or frame call path, hot in a profile, or called
 from many places. Inputs: out/sharcdb/<image>.sqlite (also of the old image),
-devices/ports/<image>.toml. The ColdFire catalogue is tools/coldfire/atlas.py;
+ports/<image>.toml. The ColdFire catalogue is tools/coldfire/atlas.py;
 the shared part is tools/firmware/catalog.py.
 """
 
@@ -179,8 +179,8 @@ def anchor_sw(a: dict[str, Any]) -> int | None:
 
 
 def anchor_functions(image: str, d: DspImg) -> dict[int, list[str]]:
-    """Existing SHARC anchors of devices/ports/<image>.toml by containing function."""
-    path = os.path.join(fw.ROOT, "devices", "ports", image + ".toml")
+    """Existing SHARC anchors of ports/<image>.toml by containing function."""
+    path = os.path.join(fw.ROOT, "ports", image + ".toml")
     if not os.path.exists(path):
         return {}
     with open(path, "rb") as fh:

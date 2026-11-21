@@ -1,0 +1,86 @@
+[module]
+id = "core/runtime"
+version = "0.11.0"
+name = "digikit runtime"
+category = "core"
+role = "runtime"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Loads modules from the card module store into a private arena at run time"
+requires = ["core/expansion", "core/platform"]
+conflicts = []
+# The firmwares it is built for. (A device added after the device-literals baseline is listed here and not in [targets]: a `[targets]` key names a device.)
+ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
+# What the runtime does without on a firmware that lacks the anchor or hook: the DSP block counter (`dkrt_blocks` reports 0) and the stock sample worker
+# (`worker.rs` queues nothing).
+optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.get", "cf.samples.fn.worker.queue", "cf.machine.fn.set_kit", "cf.filter.fn.set_kit", "cf.filter.fn.get"]
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.11" = "experimental"
+"dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
+
+# The runtime: Rust, built with rustc_codegen_gcc for -mcpu=54418 (finding 26). Its bss holds the module arena
+# (DKRT_ARENA, 512 KiB) and the staging buffer (64 KiB), so patchkit reserves both together with the code and no other
+# static object can overlap them. The Rust object has no externs table: it calls the firmware through the generated crate `dkfw`
+# (ports/bindings, from ports/fw/), whose symbols are the anchor names resolved at patch time.
+[[object]]
+path = "build/runtime.dko.json"
+sources = ["src/rs/Cargo.toml"]
+place = "cf.expansion"
+# The run-time registry's table of addresses (core/dynreg), the DSP code channel (core/dsp-link: dl_send, dl_send_win, dl_poll, dl_stats_hook) and
+# the table of DSP addresses (core/dyndsp) and `dkrt_info_table`, the one table of the adapters' data tables and slot words that `CoreApi::info` searches by name hash (patchkit writes it from the `[[info]]` and `[[slot]]` entries); each is 0 when its module is not in the image.
+# The service imports of the providers (`dk_input_*`, `dk_usb_bulk_*`, `dk_sdhc_large_*`, `dk_dsp_link_*`, `dk_ui_menu_*`, `dk_ui_menu_add_*`) are the imports of sdk/sdk.toml with `requires` (the runtime links them to modules by name; `optional_imports!` in lib.rs). `sdhc_large_range` and `sdhc_large_ctl` are not SDK imports: the runtime declares them itself (store_writer.rs, include/dkrt_sdhc.h).
+optional = ["dl_send", "dl_send_win", "dl_poll", "dl_diag", "dl_tick_cb_drop", "dl_stats_hook", "dyndsp_info", "dkrt_info_table", "dkpool_version", "dkpool_load", "dkpool_release", "dkpool_check", "dkpool_free_frames", "dkpool_tick", "dkpool_cancel", "dkpool_peaks", "dkpool_window_step", "dkpw_version", "dkpw_begin", "dkpw_write", "dkpw_close", "dkpw_abort", "dkpw_delete", "dkpw_recover", "dkpw_commit", "dkpw_staging", "sdhc_large_range", "sdhc_large_ctl", "dkcg_stats", "health_read", "health_heap", "introblank_table", "dk_ui_menu_new", "dk_ui_confirm", "dk_ui_choice", "dk_ui_toast", "dk_ui_tick", "dk_ui_settings_row", "dk_ui_view_open", "dk_ui_view_close", "dk_ui_text_input", "dk_ui_open", "dk_ui_menu_open", "dk_ui_menu_close", "dk_ui_menu_select", "dk_ui_menu_refresh", "dk_ui_menu_is_open", "dk_ui_menu_add_text", "dk_ui_menu_add_action", "dk_ui_menu_add_submenu", "dk_ui_menu_add_toggle", "dk_ui_menu_add_value", "dk_ui_menu_check", "dk_ui_menu_checked", "dk_input_open", "dk_input_key", "dk_input_turn", "dk_usb_bulk_open", "dk_usb_bulk_enable", "dk_usb_bulk_disable", "dk_usb_bulk_take", "dk_usb_bulk_release", "dk_usb_bulk_send", "dk_usb_bulk_state", "dk_usb_bulk_takeover", "dk_usb_bulk_giveback", "dk_usb_bulk_ring", "dk_sdhc_large_open", "dk_sdhc_large_ctl", "dk_dsp_link_open", "dk_dsp_link_set_tick"]
+
+# Constants from the device files (devices/*.toml, core/machines types.toml), written by `patchkit gen`; docs/design/device-data.md.
+# The runtime is one image for all devices: it has no device value in its code. What differs is data that it reads from the device object
+# `dkrt_dev` (struct DkrtDevice of abi.toml): `gas-dkdv` writes it per device, `gas-dkdv-offsets` the field offsets for tramp.s. `gas` writes the
+# per-device numbers of the device objects below that are not in that struct.
+[[gen]]
+kind = "gas-dkdv"
+path = "build/gen/dkdv-{dev}.inc"
+
+# One DeviceProfile constant for each device file: what the host tests' FakePlatform is built from (the real platform reads the device object's words).
+[[gen]]
+kind = "rust-profiles"
+path = "abi/src/profiles.rs"
+
+[[gen]]
+kind = "gas-dkdv-offsets"
+path = "build/gen/dkdv-offsets.inc"
+
+[[gen]]
+kind = "gas"
+path = "build/gen/device-{dev}.inc"
+uses = ["DEVICE_ID", "DEVICE_NAME_WORD", "SAMPLES_IN_STORE", "SAMPLE_PATH_MAX", "DSP_HEADROOM", "DSP_VOICES", "STORE_FIRST", "STORE_SECTORS", "PEEK_N", "SPAN_CLOCK", "SPAN_CLOCK_HZ", "FX_SOUND_WORDS", "PEEK_LO_*", "PEEK_HI_*"]
+
+# The cache flush, interrupt mask, soft reset (assembly); the UI-loop, boot and MIDI hooks are in core/platform.
+# `dkrt_raw_block_write` (tramp.s) calls the firmware's block write from a label of its own, `dkrt_raw_write_ret`, which core/card-guard reads to tell the runtime's write from a stock one.
+[[object]]
+path = "build/tramp.dko.json"
+sources = ["src/cf/tramp.s"]
+place = "cf.expansion"
+
+[object.externs]
+dkrt_fw_block_write = "cf.storage.fn.block.write"
+
+[[object]]
+path = "build/device-dt2.dko.json"
+sources = ["src/cf/dt2/device.s", "src/cf/dt2/storage.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[[object]]
+path = "build/device-dn2.dko.json"
+sources = ["src/cf/dn2/device.s", "src/cf/dn2/storage.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[[object]]
+path = "build/device-st.dko.json"
+sources = ["src/cf/st/device.s"]
+place = "cf.expansion"
+devices = ["st"]

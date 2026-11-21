@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "tom/tb303",
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/tb303.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["S:machines"],
+        "modules": ["tom/tb303", "digikit/debug", "core/services/machines"],
+        "plusdrive": true
+      }
+    ],
+    "mergeTests": ["tests/tb303.device.test.ts"]
+  }
+}

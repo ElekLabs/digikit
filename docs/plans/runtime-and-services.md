@@ -51,7 +51,7 @@ Done means:
 | **Use** | A module's derived demand on a resource. Older documents call this a claim. Not the `[[claim]]` manifest op |
 | **Needs** | The services and resources a module requires. Always derived by the packer, never declared by the author |
 | **Sample pool** | Only the thing the `samples` service manages |
-| **Port** | Firmware-version data in `devices/ports`. No other meaning |
+| **Port** | Firmware-version data in `ports/`. A MIDI port is a separate term. |
 | **Profile** | Device data in `devices/*.toml` |
 
 Word changes:
@@ -371,13 +371,13 @@ The contract is the ABI in `sdk.toml`, so a Rust service uses the generated bind
 
 **Template.** Every service has one shape (`sdk/templates/service`, `module:new -- service NAME`):
 
-- `modules/core/services/NAME/`: `Cargo.toml`, `src/{lib,records,slots}.rs`, `src/dsp/` (when it has DSP parts) and `tests/`. This is the neutral crate, host-tested over `FakeCore`. It exports only `dk_module` and `DKRT_*` symbols, has no assembler and names no firmware.
+- `services/NAME/`: `Cargo.toml`, `src/{lib,records,slots}.rs`, `src/dsp/` (when it has DSP parts) and `tests/`. This is the neutral crate, host-tested over `FakeCore`. It exports only `dk_module` and `DKRT_*` symbols, has no assembler and names no firmware.
 - `dks/`: `module.toml` (id `core/services/NAME`, `role = "service"`), `src/lib.rs` (the `service!(...)` call and nothing else), `src/hooks.rs` (every hook as assembler) and `src/fw.rs` (firmware calls, when needed).
-- `modules/core/adapters/X` is the image half of a service: reserved rows, stubs, `[[slot]]` and `[[info]]`.
+- A service can have an image module under `image-modules/points/` for reserved rows, stubs, `[[slot]]` and `[[info]]`.
 
 One mechanism serves each concern. A hook site is entered through `BIND`, which `patchkit bind` writes: a handler trampoline, or the raw entry of a `replace` hook. An interrupt site is an image stub with a slot. Everything else a service needs about the device, the firmware or the image is a data table of its image adapter, found by name hash through `dkc_info`. The image has one export table, `dkrt_info_table` (`{magic "DKIT", count}`, then `{name hash, address}`), which holds the adapter data tables and the slot words. patchkit writes it from the `[[info]]` and `[[slot]]` entries of all image adapters and refuses a duplicate hash. `Platform::info` is the one lookup (`FakePlatform` gives it in host tests); `CoreApi::info` forwards to it. The runtime names no service and no adapter table.
 
-`patchkit service-check` (run by `module:check -- service/NAME`) enforces the shape: the `dks/` layout, the id and the role; `[[hook]]` entries equal to the `service!` hook list, per device; assembler only in `dks/src/hooks.rs`; firmware names (`cf.*`, `dkfw`) only under `dks/`. A failure blocks `module:check`. `check:layers` gives `modules/core/services` the role `service`. R12-1 built the template and the neutral-crate checks; fx, machines, samples and lfo are neutral crates. lfo is `core/services/lfo` with its `dks/`.
+`patchkit service-check` (run by `module:check -- service/NAME`) enforces the shape: the `dks/` layout, the id and the role; `[[hook]]` entries equal to the `service!` hook list, per device; assembler only in `dks/src/hooks.rs`; firmware names (`cf.*`, `dkfw`) only under `dks/`. A failure blocks `module:check`. `check:layers` checks the service modules under `services/NAME/dks/`. R12-1 built the template and the neutral-crate checks; fx, machines, samples and lfo are neutral crates. lfo is `core/services/lfo` with its `dks/`.
 
 ## 6. DSP
 

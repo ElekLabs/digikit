@@ -5,7 +5,7 @@
  * its own memory and calls no import. The worker is shared with the stock sample loads, so a step should take
  * well under 10 ms; a long job is many steps.
  *
- * The values must match modules/core/runtime/src/rs/src/worker.rs. */
+ * The values must match runtime/core/src/rs/src/worker.rs. */
 #ifndef DK_JOB_H
 #define DK_JOB_H
 

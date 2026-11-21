@@ -1,6 +1,6 @@
 #!/bin/sh
 # The output report of an LFO shape module: tools/devtools/lfo_report.sh <author/name> [--device dn2|dt2]  (mise run lfo:report)
-# Runs modules/core/runtime/tests/lfo/lfo-report.manual.device.test.ts (sdk/templates/lfo-shape/README.md "Output report").
+# Runs runtime/core/tests/lfo/lfo-report.manual.device.test.ts (sdk/templates/lfo-shape/README.md "Output report").
 set -eu
 id=
 device=dn2
@@ -32,5 +32,5 @@ pnpm nx:pilot run-many -t pack,bind -p core/services/lfo
 pnpm nx:pilot run patchkit:device-images
 # Vitest prints the runtime log with it: the table is printed again at the end
 DIGI_LFO_MODULE=$id DIGI_LFO_DEVICE=$device DIGIKIT_TIER=full REGRESSION_JOBS=1 \
-  pnpm --filter @digi/regression test:runtime ../../modules/core/runtime/tests/lfo/lfo-report.manual.device.test.ts
+  pnpm --filter @digi/regression test:runtime ../../runtime/core/tests/lfo/lfo-report.manual.device.test.ts
 cat "out/runs/lfo-shape-report/$device/${id##*/}/summary.txt"

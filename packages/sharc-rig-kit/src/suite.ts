@@ -1,5 +1,5 @@
 /**
- * The Vitest entry of a module's sound checks: `rigSuite(import.meta.dirname)` in modules/<kind>/<name>/tests/rig.rig.test.ts runs every `rig/*.toml` there.
+ * The Vitest entry of a module's sound checks: `rigSuite(import.meta.dirname)` in modules/<kind>/<author>/<name>/tests/rig.rig.test.ts runs every `rig/*.toml` there.
  * With `DIGI_RIG_PIN=1` it runs no checks: it writes the `same-as` pins, the fingerprints and the local cache of the pinned output (the re-pin step).
  * With `DIGI_RIG_REPORT=1` it runs no checks: it writes `out/rig/<case>/{out.wav,ref.wav,plot.png}` and prints one verdict per case (docs/TESTING.md "Classifying a changed pin").
  */

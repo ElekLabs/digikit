@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emulator proof of SETTINGS > DIGIKIT (modules/core/apps/digikit-menu, docs/findings/28-digikit-menu.md).
+"""Emulator proof of SETTINGS > DIGIKIT (runtime/apps/digikit-menu, docs/findings/28-digikit-menu.md).
 
     uv run python -m tools.coldfire.digikit_menu_proof run [--image dt2-1.16] [--update] [--jobs N] [--regress] [--only NAMES]
 

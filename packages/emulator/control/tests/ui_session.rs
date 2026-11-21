@@ -94,7 +94,7 @@ fn patched_zero_keeps_the_block_clock_through_cache_fallback_and_restart() {
         return;
     }
     let firmware = patchkit::firmware::Firmware::parse(&std::fs::read(&syx).unwrap()).unwrap();
-    let ports = patchkit::port::Registry::from_dir(&root.join("devices/ports")).unwrap();
+    let ports = patchkit::port::Registry::from_dir(&root.join("ports")).unwrap();
     let literal = ports
         .find(&firmware.syx_sha256)
         .unwrap()

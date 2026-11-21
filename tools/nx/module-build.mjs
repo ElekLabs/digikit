@@ -11,8 +11,12 @@ export const SHARED_SDK_INPUTS = [
   '{workspaceRoot}/sdk/include/**/*',
   '{workspaceRoot}/sdk/dsp/contract/**/*',
   '{workspaceRoot}/sdk/dsp/**/*',
-  '{workspaceRoot}/modules/core/runtime/vectors/**/*',
+  '{workspaceRoot}/runtime/core/vectors/**/*',
 ];
+export const ALL_MANIFESTS = new Set([
+  '{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml',
+  '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
+]);
 // Build/pack producers do not read acceptance tests. Nx's implicit ^default input would
 // otherwise turn a harness-only edit into a changed image output for every consumer.
 // Plugin sources are not inputs: Nx hashes each project's resolved configuration, so a plugin edit reaches only targets whose definition changes.
@@ -24,8 +28,7 @@ export const BUILD_INPUTS = [
   'jsToolchain',
   { dependentTasksOutputFiles: '**/*', transitive: true },
   // gen reads the library manifests and device facts; builders read shared SDK headers and pins.
-  '{workspaceRoot}/modules/**/module.toml',
-  '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
+  ...ALL_MANIFESTS,
   // pack and build-objects run the Rust patchkit binary, which reads devices/*.toml and the toolchain pins;
   // pk_toolchains.py pins the m68k compiler; there is no Python on this path.
   '{workspaceRoot}/devices/*.toml',
@@ -40,10 +43,6 @@ export const BUILD_INPUTS = [
 ];
 
 // These commands receive an explicit library; shared devices, SDK and tool inputs stay conservative.
-export const ALL_MANIFESTS = new Set([
-  '{workspaceRoot}/modules/**/module.toml',
-  '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
-]);
 export const scopedManifestInputs = (inputs, manifests) => [
   ...inputs.filter((input) => !ALL_MANIFESTS.has(input)),
   ...manifests.map((file) => `{workspaceRoot}/${file}`),
@@ -128,20 +127,27 @@ export const packAliasesTarget = (workspaceRoot, byId, recs) => {
   const aliasCmds = [];
   const aliasOutputs = [];
   const aliasSources = new Set();
+  const sourceOfAlias = new Map();
+  const aliasOfOutput = new Map();
   for (const rec of recs)
     for (const [alias, source] of Object.entries(rec.aliases ?? {})) {
       // A source outside the scanned module.toml files has no manifest: its devices are unknown, skip it.
       const src = byId.get(source);
       if (!src) continue;
+      const previous = sourceOfAlias.get(alias);
+      if (previous && previous !== source) throw new Error(`Pack alias ${alias} names both ${previous} and ${source}`);
+      sourceOfAlias.set(alias, source);
       aliasSources.add(source);
       for (const d of packDevices(src.manifest)) {
+        const output = packOut(d, src.manifest, alias);
+        const existing = aliasOfOutput.get(output);
+        if (existing && existing !== alias)
+          throw new Error(`Pack aliases ${existing} and ${alias} both write ${output}`);
+        aliasOfOutput.set(output, alias);
         aliasCmds.push(
-          `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${packOut(d, src.manifest, alias)} && ${PK} services --device ${d} ${packOut(d, src.manifest, alias)} > ${servicesOut(d, src.manifest, alias)}`,
+          `${PK} pack ${source} ${manifestArgs(manifestClosure(byId, [source]))} --device ${d} --name ${alias} -o ${output} && ${PK} services --device ${d} ${output} > ${servicesOut(d, src.manifest, alias)}`,
         );
-        aliasOutputs.push(
-          `{workspaceRoot}/${packOut(d, src.manifest, alias)}`,
-          `{workspaceRoot}/${servicesOut(d, src.manifest, alias)}`,
-        );
+        aliasOutputs.push(`{workspaceRoot}/${output}`, `{workspaceRoot}/${servicesOut(d, src.manifest, alias)}`);
       }
     }
   if (!aliasCmds.length) return undefined;

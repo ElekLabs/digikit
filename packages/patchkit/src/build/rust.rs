@@ -42,6 +42,18 @@ struct Cargo {
 #[derive(Deserialize)]
 struct Package {
     name: String,
+    metadata: Option<PackageMetadata>,
+}
+
+#[derive(Deserialize)]
+struct PackageMetadata {
+    patchkit: Option<PatchkitMetadata>,
+}
+
+#[derive(Deserialize)]
+struct PatchkitMetadata {
+    #[serde(rename = "staged-dir")]
+    staged_dir: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -260,6 +272,34 @@ fn without_workspace_root(text: &str) -> String {
     out
 }
 
+/// Cargo includes the relative dependency path in its crate disambiguator. Keep the staged name stable when a source directory moves.
+fn staged_dir_name(manifest: &Path) -> Result<String> {
+    let package = parse_cargo(&tc::read_text(manifest)?, manifest)?.package;
+    if let Some(name) = package
+        .metadata
+        .and_then(|metadata| metadata.patchkit)
+        .and_then(|patchkit| patchkit.staged_dir)
+    {
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+        {
+            return Err(err!(
+                "{}: package.metadata.patchkit.staged-dir must contain only ASCII letters, digits, '-' or '_' and cannot be empty",
+                manifest.display()
+            ));
+        }
+        return Ok(name);
+    }
+    Ok(manifest
+        .parent()
+        .and_then(|p| p.file_name())
+        .unwrap()
+        .to_string_lossy()
+        .into_owned())
+}
+
 /// Copy a crate to `dest` and its path dependencies to `deps_dir/<n>-<name>`, rewriting the `path = ".."` of the copies. A dependency stages without its own
 /// `[workspace]` line.
 fn stage(
@@ -275,13 +315,8 @@ fn stage(
         let sd = match seen.iter().find(|(k, _)| *k == sub) {
             Some((_, sd)) => sd.clone(),
             None => {
-                let name = sub
-                    .parent()
-                    .and_then(|p| p.file_name())
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned();
-                let sd = deps_dir.join(format!("{}-{}", seen.len(), name));
+                let name = staged_dir_name(&sub)?;
+                let sd = deps_dir.join(format!("{}-{name}", seen.len()));
                 seen.push((sub.clone(), sd.clone()));
                 stage(&sub, &sd, deps_dir, seen)?;
                 let dep_manifest = sd.join("Cargo.toml");
@@ -647,6 +682,53 @@ mod tests {
             without_workspace_root(text),
             "[package]\nname = \"a\"\n\n\n[profile.release]\npanic = \"abort\"\n"
         );
+    }
+
+    #[test]
+    fn staging_keeps_a_dependency_name_after_its_source_directory_moves() {
+        let work = TempDir::new("pk-stage-").unwrap();
+        let src = work.path().join("source");
+        let dep = work.path().join("moved");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::create_dir(&dep).unwrap();
+        let manifest = src.join("Cargo.toml");
+        let dep_manifest = dep.join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"root\"\n[dependencies]\ndep = { path = \"../moved\" }\n",
+        )
+        .unwrap();
+        let dep_text = "[package]\nname = \"dep\"\n";
+        std::fs::write(&dep_manifest, dep_text).unwrap();
+        assert_eq!(staged_dir_name(&dep_manifest).unwrap(), "moved");
+        let before = source_sha256(&manifest).unwrap();
+        std::fs::write(
+            &dep_manifest,
+            format!("{dep_text}[package.metadata.patchkit]\nstaged-dir = \"original\"\n"),
+        )
+        .unwrap();
+        assert_ne!(source_sha256(&manifest).unwrap(), before);
+
+        let dest = work.path().join("staged");
+        let deps_dir = dest.join(".deps");
+        let staged = stage(&manifest, &dest, &deps_dir, &mut vec![]).unwrap();
+        assert_eq!(
+            path_deps(&tc::read_text(&staged).unwrap(), &staged, false).unwrap(),
+            [".deps/0-original"]
+        );
+        assert!(deps_dir.join("0-original/Cargo.toml").is_file());
+    }
+
+    #[test]
+    fn staging_rejects_a_name_with_a_path_separator() {
+        let work = TempDir::new("pk-stage-").unwrap();
+        let manifest = work.path().join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"dep\"\n[package.metadata.patchkit]\nstaged-dir = \"../other\"\n",
+        )
+        .unwrap();
+        assert!(staged_dir_name(&manifest).is_err());
     }
 
     #[test]

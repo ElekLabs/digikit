@@ -47,7 +47,7 @@ export class DkNeeds {
     }
   }
 
-  /** The fit rule (`pk_fit`: modules/core/runtime/fit) on a request; throws with the reason when the request is bad. */
+  /** The fit rule (`pk_fit`: runtime/core/fit) on a request; throws with the reason when the request is bad. */
   fit(req: FitRequest): FitAnswer {
     const bytes = new TextEncoder().encode(JSON.stringify(req));
     const p = this.x.pk_alloc(bytes.length);

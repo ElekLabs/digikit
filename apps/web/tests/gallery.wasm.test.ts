@@ -30,7 +30,7 @@ test('bundle lists the committed modules and ports', () => {
     manifestFiles().length + manifestFiles(join(root, 'tests/fixtures/modules')).length,
   );
   assert.ok(bundle.modules.some((m) => m.manifest.includes('id = "core/fx"')));
-  assert.equal(bundle.ports.length, readdirSync(join(root, 'devices/ports')).length);
+  assert.equal(bundle.ports.length, readdirSync(join(root, 'ports')).filter((f) => f.endsWith('.toml')).length);
   // Module content only: no firmware blobs or out/modules oracles.
   assert.ok(!JSON.stringify(bundle).includes('out/modules'));
 });
@@ -64,8 +64,8 @@ test.skipIf(!existsSync(join(root, '.venv')))('bundle equals tools/patchkit/patc
 test('the shipped modules: the index describes them, the sources hold no build output', () => {
   const out = workDir('ship-');
   const { modules } = shipModules(out, root);
-  // what ships is the rule of isShipped over the manifests of modules/{machines,fx,tools} (a device-less module is left out)
-  const expected = ['machines', 'fx', 'tools']
+  // what ships is the rule of isShipped over the manifests of modules/{machine,fx,tool} (a device-less module is left out)
+  const expected = ['machine', 'fx', 'tool']
     .flatMap((r) => manifestFiles(join(root, 'modules', r)))
     .map((file) => ({ file, d: parse(readFileSync(file, 'utf8')) as { module: { id: string } } }))
     .filter(

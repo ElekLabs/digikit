@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static worst-case stack depth of the functions in a patchkit object (`build/*.dko.json`).
 
-    uv run python -m tools.coldfire.frame_depth modules/core/runtime/build/runtime.dko.json dkrt_load dkrt_unload ...
+    uv run python -m tools.coldfire.frame_depth runtime/core/build/runtime.dko.json dkrt_load dkrt_unload ...
 
 Each `.text.*` section is one function. A linear scan of its code follows the stack pointer through `lea -N(a7),a7`,
 `link`, `pea`, `move.l x,-(a7)`, `movem.l ..,-(a7)`, `subq/addq/subi/addi/suba/adda #N,a7` and the matching releases; at

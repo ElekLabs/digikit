@@ -1,0 +1,31 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [],
+ "sections": [
+  {
+   "align": 2,
+   "hex": "0000000100000006000000090000000600000031000000060000000100000032000000060000000000000033000000060000000400000034000000060000000500000035000000060000000600000036000000060000000700000000000000000000000000000000000000000000000000000007",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 116
+  }
+ ],
+ "source_sha256": "a5a8251847266e0a25f9a60681ff0cb7e1e1609fb63557c8967c5ef376b43ac6",
+ "symbols": [
+  {
+   "global": true,
+   "name": "input_cfg",
+   "section": ".rodata",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "0",
+  "isa_check": "98bb1d5150288d9788053a6a19f584420d0d1a76eb1ce52fad93204cc3b69975",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

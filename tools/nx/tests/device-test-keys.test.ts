@@ -41,11 +41,13 @@ const keyOf = (opts: object) =>
 
 it('test-conformance leaves the driver out, test-conformance-all keeps it', () => {
   const inputs = (full: boolean) =>
-    conformanceTarget('.', 'modules/a', { id: 'a' }, 'm.toml', () => imports, full).inputs.filter(
-      (i: unknown) => typeof i === 'string' && i.includes('packages/dk-session'),
-    );
-  expect(inputs(false)).toEqual([]);
-  expect(inputs(true)).toHaveLength(1);
+    conformanceTarget('.', 'modules/a', { id: 'a' }, 'm.toml', () => imports, full).inputs;
+  const drivers = (full: boolean) =>
+    inputs(full).filter((i: unknown) => typeof i === 'string' && i.includes('packages/dk-session'));
+  expect(drivers(false)).toEqual([]);
+  expect(drivers(true)).toHaveLength(1);
+  expect(inputs(false)).toContainEqual({ env: 'DIGI_DEVICE' });
+  expect(inputs(true)).toContainEqual({ env: 'DIGI_DEVICE' });
 });
 
 it('keeps the driver files in a full key only', () => {

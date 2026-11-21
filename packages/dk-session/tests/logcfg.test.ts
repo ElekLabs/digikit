@@ -1,4 +1,4 @@
-// LOGCFG in the pure TypeScript client against a fake debug module that keeps the levels as modules/tools/debug `cmd_logcfg` does (set needs exactly 10 body bytes).
+// LOGCFG in the pure TypeScript client against a fake debug module that keeps the levels as modules/tool/digikit/debug `cmd_logcfg` does (set needs exactly 10 body bytes).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, DkSession, decode8in7, encode8in7 } from '@digi/dk-session';

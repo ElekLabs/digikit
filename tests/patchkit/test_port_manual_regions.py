@@ -68,9 +68,7 @@ def test_the_port_of_a_device_without_a_dsp_has_no_dsp_region_stream_limits_or_a
     assert bare, "no ported firmware without a DSP"
     for prof in bare:
         port = tomllib.loads(
-            (
-                ROOT / "devices" / "ports" / f"{prof['device']}-{prof['version']}.toml"
-            ).read_text()
+            (ROOT / "ports" / f"{prof['device']}-{prof['version']}.toml").read_text()
         )
         assert {r["name"] for r in port["region"]} == {"cf.flash_cave", "cf.expansion"}
         assert "dsp_sha256" not in port["port"]
@@ -80,7 +78,7 @@ def test_the_port_of_a_device_without_a_dsp_has_no_dsp_region_stream_limits_or_a
 
 def test_every_ported_firmware_with_a_dsp_names_its_stream():
     for prof in R.load_profiles().values():
-        path = ROOT / "devices" / "ports" / f"{prof['device']}-{prof['version']}.toml"
+        path = ROOT / "ports" / f"{prof['device']}-{prof['version']}.toml"
         if not prof["port"] or not path.exists():
             continue
         port = tomllib.loads(path.read_text())["port"]

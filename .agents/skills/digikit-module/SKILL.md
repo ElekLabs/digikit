@@ -13,10 +13,10 @@ The packer infers the kind from what the module declares: `[[machine]]` makes a 
 
 | Kind | What it is | Template |
 | --- | --- | --- |
-| `machine` | A SHARC+ voice: `render`, `note_on`, `desc` (guide 5.2, 7.1) | `sdk/templates/machine`; a real one: `modules/machines/pluck` |
-| `fx` | A SHARC+ master or send effect with its own page: `process`, `desc` (guide 5.4, 7.2) | `sdk/templates/fx`; a real one: `modules/fx/freqshift` |
+| `machine` | A SHARC+ voice: `render`, `note_on`, `desc` (guide 5.2, 7.1) | `sdk/templates/machine`; a real one: `modules/machine/digikit/pluck` |
+| `fx` | A SHARC+ master or send effect with its own page: `process`, `desc` (guide 5.4, 7.2) | `sdk/templates/fx`; a real one: `modules/fx/digikit/freqshift` |
 | `tool` | ColdFire C: the constant `dk_module` with `init`, `fini`, `tick`, `menu` and the named imports of `<dk/gen/imports.h>` (guide 5.5, 7.3) | `sdk/templates/tool` |
-| `lfo-shape` | 1 to 8 LFO waveforms: one `[[record]] kind = "lfo_shape"` each, 32 literal samples in `SHAPES`; `module:check` validates them with the `lfo` service's rule (guide 5.10) | `sdk/templates/lfo-shape`; modules go to `modules/lfo/NAME` |
+| `lfo-shape` | 1 to 8 LFO waveforms: one `[[record]] kind = "lfo_shape"` each, 32 literal samples in `SHAPES`; `module:check` validates them with the `lfo` service's rule (guide 5.10) | `sdk/templates/lfo-shape`; modules go to `modules/lfo-shape/AUTHOR/NAME` |
 
 The `core/*` modules are patched into the image. Changes to `core/*` are firmware work and need Em.
 

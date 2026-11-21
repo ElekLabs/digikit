@@ -10,7 +10,7 @@ use std::fmt::Write;
 /// The contract file, relative to the repository root.
 pub const SOURCE: &str = "sdk/sdk.toml";
 /// The generated Rust file, relative to the repository root.
-pub const RUST_OUT: &str = "modules/core/runtime/sdk/src/gen_sdk.rs";
+pub const RUST_OUT: &str = "runtime/core/sdk/src/gen_sdk.rs";
 /// The generated Python file, relative to the repository root.
 pub const PY_OUT: &str = "tools/device/dklog_kinds.py";
 /// The generated SHARC+ include of the machine contract, relative to the repository root.
@@ -52,9 +52,9 @@ pub const REGISTERS_MD_OUT: &str = "sdk/dsp/REGISTERS.md";
 /// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
 pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
 /// The generated static table of the runtime's in-crate services, relative to the repository root.
-pub const SERVICES_RS_OUT: &str = "modules/core/runtime/src/rs/src/gen_services.rs";
+pub const SERVICES_RS_OUT: &str = "runtime/core/src/rs/src/gen_services.rs";
 /// The generated hash of the `dkrt-abi` boundary files (`SVC_ABI`, docs/plans/runtime-and-services.md section 13.2), relative to the repository root.
-pub const SVC_ABI_OUT: &str = "modules/core/runtime/abi/src/gen_svc_abi.rs";
+pub const SVC_ABI_OUT: &str = "runtime/core/abi/src/gen_svc_abi.rs";
 /// The generated Python protocol numbers, relative to the repository root.
 pub const PROTO_PY_OUT: &str = "tools/device/dkproto.py";
 /// The generated Rust protocol numbers of the host client, relative to the repository root.
@@ -564,7 +564,7 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
     s
 }
 
-/// `modules/core/runtime/src/rs/src/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
+/// `runtime/core/src/rs/src/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
 fn rust_services(sdk: &Sdk) -> String {
     let mut s = format!("// {HEADER}\n\n");
     s.push_str("use crate::core_api::{RealCore, REAL_CORE};\nuse dkrt_abi::service::{rows_with_tail, RowPtrs, ServiceRow, ServiceTable};\n\n");
@@ -2670,7 +2670,7 @@ fn build_fn(name: &str) -> &str {
     n.strip_prefix("module_ctx_").unwrap_or(n)
 }
 
-/// `modules/core/services/<service>/dks/src/gen_exports.rs`: for each `provided` import of the service, in `sdk.toml` order, the pure `extern "C"` wrapper
+/// `services/<service>/dks/src/gen_exports.rs`: for each `provided` import of the service, in `sdk.toml` order, the pure `extern "C"` wrapper
 /// (or a reference to the hand-written function of `wrapper`), a type check against `api`, and `exports()` for `service!`.
 fn gen_exports_rs(service: &str, imps: &[(&Import, Option<Sig>)]) -> String {
     let mine: Vec<_> = imps
@@ -2746,7 +2746,7 @@ fn gen_exports(sdk: &Sdk, root: &std::path::Path) -> Result<Vec<(String, String)
         let has = imps
             .iter()
             .any(|(im, _)| im.provided && im.service.as_deref() == Some(d.name.as_str()));
-        let dks = format!("modules/core/services/{}/dks", d.name);
+        let dks = format!("services/{}/dks", d.name);
         if has && root.join(&dks).is_dir() {
             out.push((
                 format!("{dks}/src/gen_exports.rs"),
@@ -3294,13 +3294,13 @@ pub(crate) fn abi_inputs(text: &str) -> Result<AbiInputs> {
 /// The files of `dkrt-abi` that a service file and the runtime share across the boundary (interfaces B and C), relative to the repository root. `gen_svc_abi.rs`
 /// itself and the other files of the crate are not in the list.
 pub const SVC_ABI_FILES: [&str; 8] = [
-    "modules/core/runtime/abi/src/service.rs",
-    "modules/core/runtime/abi/src/core_api.rs",
-    "modules/core/runtime/abi/src/link.rs",
-    "modules/core/runtime/abi/src/dsp.rs",
-    "modules/core/runtime/abi/src/registry.rs",
-    "modules/core/runtime/abi/src/core_imports.rs",
-    "modules/core/runtime/abi/src/platform.rs",
+    "runtime/core/abi/src/service.rs",
+    "runtime/core/abi/src/core_api.rs",
+    "runtime/core/abi/src/link.rs",
+    "runtime/core/abi/src/dsp.rs",
+    "runtime/core/abi/src/registry.rs",
+    "runtime/core/abi/src/core_imports.rs",
+    "runtime/core/abi/src/platform.rs",
     // the slot offsets of the hook stubs: the image stubs and the dispatch code of a service must agree on them
     STUB_INC_OUT,
 ];
@@ -3322,17 +3322,24 @@ pub fn svc_abi_hash(files: &[(&str, &[u8])]) -> u32 {
     if h == 0 { 1 } else { h }
 }
 
-/// `modules/core/runtime/abi/src/gen_svc_abi.rs`: the hash of `SVC_ABI_FILES` as read under `root`. `dkrt-abi` mixes the sizes of the shared structs into it.
+/// `runtime/core/abi/src/gen_svc_abi.rs`: the hash of `SVC_ABI_FILES` as read under `root`. `dkrt-abi` mixes the sizes of the shared structs into it.
 fn svc_abi_rs(root: &std::path::Path) -> Result<String> {
     let mut bytes = vec![];
     for rel in SVC_ABI_FILES {
         let path = root.join(rel);
         bytes.push(std::fs::read(&path).map_err(|e| err!("{}: {e}", path.display()))?);
     }
-    let files: Vec<(&str, &[u8])> = SVC_ABI_FILES
+    // The labels are part of the on-device ABI hash and predate the repository move.
+    let labels = SVC_ABI_FILES.map(|path| {
+        path.strip_prefix("runtime/core/").map_or_else(
+            || path.to_string(),
+            |suffix| format!("modules/core/runtime/{suffix}"),
+        )
+    });
+    let files: Vec<_> = labels
         .iter()
         .zip(&bytes)
-        .map(|(n, b)| (*n, b.as_slice()))
+        .map(|(label, bytes)| (label.as_str(), bytes.as_slice()))
         .collect();
     Ok(format!(
         "// {HEADER}\n\n/// The hash of the boundary files of this crate (`patchkit::sdkgen::SVC_ABI_FILES`); `SVC_ABI` mixes the sizes of the shared structs into it.\npub const FILES_HASH: u32 = {:#010x};\n",

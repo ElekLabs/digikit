@@ -1,6 +1,6 @@
 //! `patchkit service-check DIR... [--sdk sdk/sdk.toml]`: the structure check of a service crate (`module:check service/NAME`).
 //!
-//! A service is a crate `modules/core/services/NAME` with one layout (docs/plans/runtime-and-services.md 5.12, R12-1). The check reads the sources and
+//! A service is a crate `services/NAME` with one layout (docs/plans/runtime-and-services.md 5.12, R12-1). The check reads the sources and
 //! `sdk.toml`; it builds nothing and runs nothing. It reports every problem, one line each, and the exit status is 1 when there is one.
 //!
 //! - **Layout.** `Cargo.toml` (package `dkrt-svc-NAME`), `src/lib.rs`, `src/records.rs`, `src/slots.rs` and `tests/` with at least one `.rs` file. A folder
@@ -13,7 +13,7 @@
 //!   The exports of the file are the `provided = true` imports of the service in `sdk.toml`: `service!` takes `exports = gen_exports::exports()` (the file `patchkit gen`
 //!   writes) when there are any, never a literal list, and `dks/module.toml` has no `[[export]]`.
 //!   Assembler (`asm!`, `global_asm!`, `naked`) is only in `dks/src/hooks.rs`, and firmware names (`cf.` hook and anchor names, `dkfw`) only under `dks/`.
-//! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`modules/core/adapters/**/module.toml`). When the
+//! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`image-modules/**/module.toml`). When the
 //!   slot must exist (a typo is an error). When the slot exists only on some devices (`devices` in its `[[slot]]`), the fill names `devices` too and only devices the slot has.
 //! - **One entry.** The crate exports at most one entry symbol, `dk_module`: the entry that carries the service's `ServiceRow` (interface B). A service
 //!   linked into the runtime exports none yet (the runtime names its row in the generated table); a second export of any other name is a second row
@@ -450,7 +450,7 @@ fn check_dks(
                     continue;
                 };
                 // the table of the repository around the service folder
-                let rel = format!("modules/core/adapters/dyndsp/src/cf/dyndsp-{dev}.s");
+                let rel = format!("runtime/platform/dyndsp/src/cf/dyndsp-{dev}.s");
                 let table = dir.ancestors().map(|a| a.join(&rel)).find(|p| p.is_file());
                 let Some(table_text) = table.and_then(|p| std::fs::read_to_string(p).ok()) else {
                     out.push(format!(
@@ -728,7 +728,7 @@ fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
     out
 }
 
-/// The row anchors of `devices/fw` that name the service `name` in `users` and another service too. A row anchor is a `[[data]]` entry found by the words of its row
+/// The row anchors of `ports/fw` that name the service `name` in `users` and another service too. A row anchor is a `[[data]]` entry found by the words of its row
 /// (`rule.kind = "cf_words"`, not a code site): a service that writes such a row owns it, and two services that write one row would overwrite each other's words.
 /// A missing folder gives no problem (the service folder is checked outside the repository in tests).
 pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
@@ -770,7 +770,7 @@ pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
             if words && services.len() > 1 && services.contains(&me) {
                 out.push(format!(
                     "{}: the row anchor `{}` has {} services in `users` ({}): one service writes a row",
-                    f.file_name().and_then(|n| n.to_str()).unwrap_or("devices/fw"),
+                    f.file_name().and_then(|n| n.to_str()).unwrap_or("ports/fw"),
                     d.get("name").and_then(|n| n.as_str()).unwrap_or("?"),
                     services.len(),
                     services.join(", ")
@@ -781,10 +781,9 @@ pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
     out
 }
 
-/// Every problem of the service crate at `dir`; empty when it is as the layout says. The image adapters are at `../../adapters` of the service folder
-/// (`modules/core/adapters`).
+/// Every problem of the service crate at `dir`; empty when it is as the layout says. The image slots are under `image-modules/` of the repository.
 pub fn check(dir: &Path, sdk: &Path) -> Result<Vec<String>> {
-    check_with_adapters(dir, sdk, &dir.join("../../adapters"))
+    check_with_adapters(dir, sdk, &dir.join("../../image-modules"))
 }
 
 /// `check` with the folder of the image adapters named (the fills of the service file are compared with the `[[slot]]` entries under it).
@@ -886,7 +885,7 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     for p in fill_problems(dir, adapters) {
         problem(p);
     }
-    for p in row_anchor_problems(&name, &adapters.join("../../../devices/fw")) {
+    for p in row_anchor_problems(&name, &adapters.join("../ports/fw")) {
         problem(p);
     }
     match row {

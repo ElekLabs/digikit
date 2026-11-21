@@ -294,15 +294,14 @@ fn the_report_of_objdiff_names_the_owner() {
 }
 
 fn runtime_object() -> Dko {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../modules/core/runtime/build/runtime.dko.json");
+    let p =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/build/runtime.dko.json");
     Dko::parse(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 
 #[test]
 fn every_item_of_the_runtime_object_has_an_owner() {
-    let p =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../modules/core/runtime/owners.toml");
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/owners.toml");
     let owners = Owners::read(&p).unwrap();
     let o = runtime_object();
     let h = hashes(&o, &owners).unwrap();

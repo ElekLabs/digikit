@@ -5,7 +5,7 @@ The ColdFire collector (tools/coldfire/atlas.py) and the SHARC collector
 This module holds what they share: rule suggestion, grade, call-graph groups
 and the sqlite, TSV and JSON writers. Rows are dicts keyed by column name.
 
-It is also the way from a firmware function to a checked declaration in devices/fw/:
+It is also the way from a firmware function to a checked declaration in ports/fw/:
 
     uv run python -m tools.firmware.catalog emit-rule IMAGE ADDR [--len N] [--other IMAGE]
     uv run python -m tools.firmware.catalog declare IMAGE ADDR NAME [--table T] [--other IMAGE] [--doc TEXT] [--write]
@@ -274,7 +274,7 @@ def write_catalog_groups(
     return len(groups)
 
 
-# --- from a firmware function to a declaration (devices/fw/) -------------------------------------
+# --- from a firmware function to a declaration (ports/fw/) -------------------------------------
 
 SHARC_LIMIT = (
     0x1000000  # a SHARC pc is below this; ColdFire code is at 0x40000000 and up
@@ -378,7 +378,7 @@ def render_entry(
 
 def entry_path(root: Path, name: str) -> Path:
     cpu, subsystem = name.split(".")[:2]
-    fw = root / "devices" / "fw"
+    fw = root / "ports" / "fw"
     return (fw / "dsp" if cpu == "dsp" else fw) / f"{subsystem}.toml"
 
 
@@ -413,7 +413,7 @@ def insert_entry(text: str, name: str, entry: str) -> str:
 
 def new_file_text(root: Path, name: str, entry: str) -> str:
     cpu, subsystem = name.split(".")[:2]
-    meaning = tomllib.loads((root / "devices" / "fw" / "subsystems.toml").read_text())[
+    meaning = tomllib.loads((root / "ports" / "fw" / "subsystems.toml").read_text())[
         cpu
     ][subsystem]
     return (

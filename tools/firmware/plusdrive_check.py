@@ -50,7 +50,7 @@ MANY = 700
 def block_read(syx: pathlib.Path) -> int:
     """The firmware's block read (sector, bytes, buffer): anchor cf.storage.fn.block.read of the image's port file."""
     image = config.image_key(syx)
-    port = tomllib.loads((ROOT / "devices" / "ports" / f"{image}.toml").read_text())
+    port = tomllib.loads((ROOT / "ports" / f"{image}.toml").read_text())
     return next(
         a["addr"] for a in port["anchor"] if a["name"] == "cf.storage.fn.block.read"
     )

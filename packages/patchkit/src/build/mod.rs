@@ -559,9 +559,12 @@ pub fn module_dirs(root: &Path, ids: &[String]) -> Result<Vec<(String, PathBuf)>
         .collect()
 }
 
-/// The module roots of a repository (`modules/`, `tests/fixtures/modules/`) and the extra roots of PATCHKIT_MODULES.
+/// The committed module roots and the extra roots of PATCHKIT_MODULES.
 pub fn module_roots(root: &Path) -> Vec<PathBuf> {
-    let mut v = vec![root.join("modules"), root.join("tests/fixtures/modules")];
+    let mut v: Vec<PathBuf> = crate::module::REPO_MODULE_ROOTS
+        .iter()
+        .map(|r| root.join(r))
+        .collect();
     if let Some(p) = std::env::var_os("PATCHKIT_MODULES") {
         v.extend(std::env::split_paths(&p).filter(|p| !p.as_os_str().is_empty()));
     }

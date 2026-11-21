@@ -28,7 +28,7 @@ macro_rules! need_toolchain {
 }
 
 fn registry() -> Registry {
-    Registry::from_dir(&root().join("devices/ports")).unwrap()
+    Registry::from_dir(&root().join("ports")).unwrap()
 }
 
 /// The real library (core/expansion, core/fx, ...) plus synthetic modules.

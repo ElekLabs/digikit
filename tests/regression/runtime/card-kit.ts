@@ -303,7 +303,7 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
   const base = planSymbol(plan, 'DKRT_BOOT') + 4 * BI_FIELDS.length;
   const tail = await Promise.all(Array.from({ length: SEL_MAX + 2 }, (_, i) => word(session, base + 4 * i)));
   const allResults = tail.slice(0, SEL_MAX).map((v) => v | 0);
-  // after `needs` (SEL_MAX * NEEDS_LEN bytes at offset 80 of DkrtBootInfo, modules/core/runtime/abi.toml): `states[SEL_MAX]` (bytes), `detail[SEL_MAX][2]`
+  // after `needs` (SEL_MAX * NEEDS_LEN bytes at offset 80 of DkrtBootInfo, runtime/core/abi.toml): `states[SEL_MAX]` (bytes), `detail[SEL_MAX][2]`
   const statesAt = planSymbol(plan, 'DKRT_BOOT') + BI_STATES_AT;
   const stateWords = await Promise.all([0, 1].map((i) => word(session, statesAt + 4 * i)));
   const states = Array.from({ length: SEL_MAX }, (_, i) => (stateWords[i >> 2]! >>> (24 - 8 * (i & 3))) & 255);

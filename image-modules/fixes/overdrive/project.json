@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/overdrive",
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/overdrive-type.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "tags": ["A:core/overdrive"],
+        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
+        "sources": ["tools/patchkit/pk_digikit_fxroutes.py"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

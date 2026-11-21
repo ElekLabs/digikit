@@ -40,7 +40,7 @@ macro_rules! need_toolchain {
 }
 
 fn registry() -> Registry {
-    Registry::from_dir(&root().join("devices/ports")).unwrap()
+    Registry::from_dir(&root().join("ports")).unwrap()
 }
 
 fn library(extra: Vec<Module>) -> Library {
