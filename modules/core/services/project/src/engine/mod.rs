@@ -16,7 +16,7 @@
 //! Everything that reaches the outside goes through [`Env`] (the store listing and reads, the firmware's project list, the log, the clock) and [`Files`] (the store writes), so the
 //! host tests run it over fakes.
 //!
-//! Slots: 0 to 127 are projects; the live mirror 0x80 and -1 mean "no current project". The file of a slot is `projects/<slot>-<name>.dkp` ([`crate::name`]).
+//! Slots: 0 to 127 are projects; the live mirror 0x80 and -1 mean "no current project". The file of a slot is `projects/<number>-<name>.dkp`, the number being slot + 1 ([`crate::name`]).
 mod bound;
 mod buffer;
 mod clock;

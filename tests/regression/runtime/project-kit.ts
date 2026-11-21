@@ -378,9 +378,9 @@ export function idHash(id: string): number {
 export const projectPaths = async (usb: ProtocolRun): Promise<string[]> =>
   (await usb((dk) => dk.list('projects/'))).map((e) => e.path);
 
-/** The store path of the file of `slot` (`projects/<slot as 3 digits>-<name>.dkp`) among `paths`, or undefined. */
+/** The store path of the file of the firmware `slot` (0 to 127) among `paths`, or undefined. The file number is the menu number, slot + 1, as 3 digits: `projects/<number>-<name>.dkp`. */
 export const slotFile = (paths: string[], slot: number): string | undefined =>
-  paths.find((p) => p.startsWith(`projects/${String(slot).padStart(3, '0')}-`) && p.endsWith('.dkp'));
+  paths.find((p) => p.startsWith(`projects/${String(slot + 1).padStart(3, '0')}-`) && p.endsWith('.dkp'));
 
 /** A whole store file, read in pieces of `READ_MAX`. */
 export async function readStoreFile(dk: Pick<DkSession, 'read'>, path: string): Promise<Buffer> {

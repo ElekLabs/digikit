@@ -890,7 +890,7 @@ fn a_stock_clear_archives_the_slots_file_and_empties_the_image_when_the_slot_is_
     // the next stock save of the cleared project must not bring the old data back
     r.hook_save(9);
     r.settle();
-    assert!(!r.f.store.keys().any(|k| k.starts_with(b"projects/009")));
+    assert!(!r.f.store.keys().any(|k| k.starts_with(b"projects/010")));
 }
 
 #[test]

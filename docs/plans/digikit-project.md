@@ -22,10 +22,10 @@ A digikit project holds the digikit data that belongs to one Elektron project: t
    - Result: new modules that need saved state use the general API and need no runtime change.
 4. **Write on Elektron save.** The current project's data is held in RAM and written to the `.dkp` when the stock project save succeeds. Changes the user discards (load without save) are discarded for digikit too. A save hook refused at the byte check means no service (see "Stock safety" 4).
 5. **Identity.**
-   - The slot is the identity. The file is `projects/<slot>-<name>.dkp`, for example `projects/012-MY SONG.dkp` (the store belongs to one device, so the path has no device part). The service never looks a project up by name.
+   - The slot is the identity (the file carries its number, slot + 1, as the menus show it). The file is `projects/<number>-<name>.dkp`, for example `projects/013-MY SONG.dkp` (the store belongs to one device, so the path has no device part). The service never looks a project up by name.
    - The `.dkp` header stores device, slot, name and the save stamp: the 32-bit word at card slot header +0x18, which stock writes on each save. It is a save stamp, not an identity (finding 110 and finding 39 say the word is not an identity; both are true).
-   - On load, the service takes the file that starts with `<slot>-` and compares its stamp with the listing record's stamp for the slot, before the load regenerates the live stamp. Match and another name (a stock rename): rename the file to the new name, then load. Mismatch (the slot was overwritten outside digikit, or a project was copied in on the +Drive): one short warning, the file is ignored.
-   - Save as to another slot: the save hook sees the new slot and writes `<new slot>-<name>.dkp` from the current data.
+   - On load, the service takes the file that starts with `<number>-` and compares its stamp with the listing record's stamp for the slot, before the load regenerates the live stamp. Match and another name (a stock rename): rename the file to the new name, then load. Mismatch (the slot was overwritten outside digikit, or a project was copied in on the +Drive): one short warning, the file is ignored.
+   - Save as to another slot: the save hook sees the new slot and writes `<new number>-<name>.dkp` from the current data.
 6. **The module list: recorded at the stock save, restored after the load, by the service.** There is no offer and no menu change.
    - At a stock save the service writes the content modules that are loaded at that moment into the `.dkp` module list (tag 1: id and store hash of each): machines, effects and tool modules loaded from the store, not services, not platform modules, not the runtime. A save with modules loaded and no settings data still writes a `.dkp`: the module list is digikit data.
    - At a project load, after the service has installed the project's settings image (so the `init` of a module that loads now reads the project's values), it asks the runtime to live-load each listed module that is on the card and not loaded, one at a time, with the live job of E5c (`dkc_live(LIVE_LOAD, path)`, the job DIGIKIT > MODULES runs). Rules:
@@ -37,7 +37,7 @@ A digikit project holds the digikit data that belongs to one Elektron project: t
    - A load that ended well is added to the saved selection, as the menu saves the selection of a module it loads live (the runtime's live load does not touch the selection; `dkc_selection_add`). A store hash that differs from the file on the card loads the file on the card without a warning.
 7. **A `project` service and an optional tool module.** Words and card paths: [taxonomy](../design/taxonomy.md).
    - `project` is a service (`services/project`, file `services/project.dks`, crate `dkrt-svc-project`). Its hooks on the stock project save and load are names in `devices/fw/project.toml` `[[hook]]` entries, resolved into the port file ([port-file](port-file.md)); they are not addresses. Before port step 3, the hook routines are per-device `.s` files in the service, as for lfo, machines and fx. Port step 3 moves them later. There are five hooks per device: slot setter, save exit, clear (one and many) and paste. There is no delete or format hook. The sites are in the "Firmware facts" table and [finding 110](../findings/110-project-identity.md) sections 4 and 5.
-   - The service writes and reads `projects/<slot>-<name>.dkp` in the store, beside the stock files, by the rules of decision 5. The slot is three digits, `000` to `127`. The file name maps the bytes `c5 c4 d6 dc df c6 d8 c7 d1` and any byte not safe in a store path to `_`. The header holds device, slot, name and save stamp. A project gets a `.dkp` only when there is digikit data to keep.
+   - The service writes and reads `projects/<number>-<name>.dkp` in the store, beside the stock files, by the rules of decision 5. The number is three digits, `001` to `128`: the firmware slot plus one, because that is the slot number the stock menus show (the firmware slot 0 to 127 stays in the header, the engine and the log events). The file name maps the bytes `c5 c4 d6 dc df c6 d8 c7 d1` and any byte not safe in a store path to `_`. The header holds device, slot, name and save stamp. A project gets a `.dkp` only when there is digikit data to keep.
    - Modules are told nothing. The service names the modules whose settings changed (`dkc_settings_changed`); the runtime reloads them with the E5 live job. The service restores the module list through the E5c live job (decision 6); the filter choices follow later.
    - The optional module `digikit/project-manager` has kind `tool`. It is UI only: it imports the exports `dk_project_current` and `dk_project_status` of the service (which also makes the service load when it is selected). The user selects it when wanted. In the first version it only listens. Later it lists `projects/*.dkp` and loads a project from the list through the stock load.
    - The service not selected: no service, no hooks, stock behaviour.
@@ -80,17 +80,17 @@ module put/get:  module -> dk_settings_put(h) -> runtime -+- settings record (la
                                                           +- overlay -> service -> .dkp (RAM)
                  get: the project's value if the .dkp holds the key, else the record's
 
-stock save:      stock save ends with success -> hook records slot -> service writes projects/<slot>-<name>.dkp
+stock save:      stock save ends with success -> hook records slot -> service writes projects/<number>-<name>.dkp
                  -> "saved" in the runtime log
 
-stock load:      stock sets the project slot -> hook records slot -> service finds projects/<slot>-*.dkp,
+stock load:      stock sets the project slot -> hook records slot -> service finds projects/<number>-*.dkp,
                  compares the save stamp, renames the file if the project name changed
                  -> install image; service names the modules whose settings differ
                  -> runtime reloads those that opened settings (E5 job)
                  -> service: live job (E5c) loads the listed modules that are on the card and not loaded,
                     one at a time; missing or refused: warning and log line
 
-stock clear:     hook records the slot -> service archives projects/<slot>-*.dkp to
+stock clear:     hook records the slot -> service archives projects/<number>-*.dkp to
                  projects/archive/<name>-<stamp>.dkp (no module event)
 
 stock paste:     hook records source and destination -> service copies the source .dkp
@@ -101,14 +101,14 @@ The hooks run inside the stock save, load, clear and paste paths. They only reco
 
 ### File name and identity
 
-- File: `projects/<slot>-<name>.dkp`, for example `projects/012-MY SONG.dkp`. The slot is three digits, `000` to `127`.
+- File: `projects/<number>-<name>.dkp`, for example `projects/013-MY SONG.dkp`. The number is three digits, `001` to `128`: the firmware slot plus one, because that is the slot number the stock menus show (the firmware slot 0 to 127 stays in the header, the engine and the log events).
 - The slot is the identity. The service never looks a project up by name. The name is for the user to read.
 - The stock name holds at most 16 bytes, from a known character table ([finding 110](../findings/110-project-identity.md) section 4). The file name maps the bytes `c5 c4 d6 dc df c6 d8 c7 d1` and any byte not safe in a store path to `_`.
 - The header keeps device, slot, name and the stock save stamp (card slot header +0x18), which stock writes on each save.
-- On load the service takes the file that starts with `<slot>-` and compares its stamp with the stamp of the slot:
+- On load the service takes the file that starts with `<number>-` and compares its stamp with the stamp of the slot:
   - Match and another name (a stock rename): rename the file to the new name, then load.
   - Mismatch (the slot was overwritten outside digikit, or a project was copied in on the +Drive): one short warning, the file is ignored.
-- Save as to another slot: the save hook sees the new slot and writes `<new slot>-<name>.dkp` from the current data, so the digikit data follows the save-as.
+- Save as to another slot: the save hook sees the new slot and writes `<new number>-<name>.dkp` from the current data, so the digikit data follows the save-as.
 - A project gets a `.dkp` only when there is digikit data to keep. A new project writes none.
 - Archive rule: the service never deletes a `.dkp` for good. A file that no longer belongs to its slot moves to `projects/archive/<name>-<stamp>.dkp` (stamp as 8 hex digits): at a save into a reused slot (the existing file has another stamp) and at a stock clear. Stock paste copies the source `.dkp` to the destination slot. A stamp mismatch on load ignores the file and leaves it in place. A rename's old path (also when the rename of the current project changed the stamp: the file the bound project came from) and the loser of the two-file rule are superseded copies of the same project and may be removed. Design: [digikit-project](../design/digikit-project.md) section 5.
 
@@ -127,7 +127,7 @@ Load (hook on the stock slot setter, on change):
 6. A load the runtime refuses (does not fit, not compatible): one warning and a `PROJECT_MODULE` event (what 4), then the next module. No restart offer.
 7. Transport playing: the live load is refused while playing; the service asks again every second until the transport stops. A project change replaces the pending list. A load that ended well is added to the saved selection (`PROJECT_MODULE` what 2).
 
-Clear (hook on the stock clear, single and multi-slot): the hook records each slot. The service archives the slot's `<slot>-*.dkp` to `projects/archive/<name>-<stamp>.dkp`. No module event.
+Clear (hook on the stock clear, single and multi-slot): the hook records each slot. The service archives the slot's `<number>-*.dkp` to `projects/archive/<name>-<stamp>.dkp`. No module event.
 
 Paste (hook on the stock paste): the hook records source and destination. The service copies the source `.dkp` to `<dest>-<name>.dkp`. No module event.
 
@@ -162,7 +162,7 @@ The service's RAM, measured: packed `project.dks` 55264 bytes (DT2 and DN2 alike
 - The service writes with the SDK file calls that every module can import: `dk_files_create` with root `DK_FILES_STORE` and flag `DK_FILE_REPLACE`, `dk_files_write`, `dk_files_close` (`sdk/include/dk/platform/files.h:46-60`). They run in an I/O step (`dk_io_post`). The runtime serves a service file like a content module here: the listing client of `dk_files_open` (init scope only), the I/O jobs, the store's write session and the tick all belong to the loader record, and the owner index is the record index for both kinds (a service file's record follows the module records). The ABI is unchanged, and there is no new core writer.
 - The calls inherit the card checks (a foreign or read-only card refuses with `E_INUSE`; a blank range is claimed first, through `block_write`) and the atomic replace (`DK_FILE_REPLACE` keeps the old file whole until close swaps the table).
 - The SDK path has its own buffer. It does not use the upload buffers. It shares the one store write session with SysEx upload, so a write during an upload returns `E_BUSY`.
-- Reads use `dk_files_list` of `projects/` (prefix match on `<slot>-`) and `dk_files_read`, from the service's UI tick, never while a live job stages (the read stage is shared with the loader).
+- Reads use `dk_files_list` of `projects/` (prefix match on `<number>-`) and `dk_files_read`, from the service's UI tick, never while a live job stages (the read stage is shared with the loader).
 - The service has a UI tick: the `service!` macro takes a `tick =` entry (`glue::tick`).
 
 ### The .dkp format
@@ -189,7 +189,7 @@ Big-endian, as the store.
 
 ### Rename and duplicates
 
-- A stock rename: write the file under the new name, then delete the old one (for the current project also when the rename changed the stamp: the bound file is deleted, not archived). A cut between the two leaves two files with the prefix `<slot>-`. The loader keeps the one with the higher write counter and deletes the other.
+- A stock rename: write the file under the new name, then delete the old one (for the current project also when the rename changed the stamp: the bound file is deleted, not archived). A cut between the two leaves two files with the prefix `<number>-`. The loader keeps the one with the higher write counter and deletes the other.
 - A later option: `dk_files_rename` over the store's table-only rename, one atomic commit, if renames turn out common (an SDK minor version).
 
 ### Save during an upload, and timing
@@ -302,7 +302,7 @@ Estimate: about 1.5 days of agent time.
    - Unit tests in the service with fixtures: `.dkp` encode and decode, identity and rename, mismatch, size limits, save-success-only, scope and owner prefix, the opener without the service. The step 2 cases are listed in "Step 2 design", Tests.
    - One case in the shared contract suite: a project change drives the live load and unload through the same job.
    - Assembly: the service with the test port file, one fit and one refusal per seam.
-   - Device, at most one per device, driving firmware paths: save, `projects/<slot>-<name>.dkp` written, SAVED and LOADED events in the runtime log; a plain stock project with no `.dkp` loads with no popup and no change.
+   - Device, at most one per device, driving firmware paths: save, `projects/<number>-<name>.dkp` written, SAVED and LOADED events in the runtime log; a plain stock project with no `.dkp` loads with no popup and no change.
 8. [ ] Later: move FX send amounts and F4 effect values out of kit spare halfwords into the `.dkp` (per kit).
 
 ## References

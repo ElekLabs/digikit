@@ -9,7 +9,7 @@ service = "project"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "The project service of the runtime as a service file: the digikit data of one Elektron project in a .dkp file of the store (projects/<slot>-<name>.dkp), read when a project becomes current and written at the next successful stock save; the runtime's settings overlay makes module settings per project through it, and it takes five hooks on the stock project paths (slot setter, save exit, clear one, clear many, paste)"
+summary = "The project service of the runtime as a service file: the digikit data of one Elektron project in a .dkp file of the store (projects/<number>-<name>.dkp), read when a project becomes current and written at the next successful stock save; the runtime's settings overlay makes module settings per project through it, and it takes five hooks on the stock project paths (slot setter, save exit, clear one, clear many, paste)"
 requires = []
 conflicts = []
 
