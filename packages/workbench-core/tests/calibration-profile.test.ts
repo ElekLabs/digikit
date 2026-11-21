@@ -99,7 +99,7 @@ test('the shipped profiles and step files are valid and resolve on every device 
   );
   assert.deepEqual(found.map((c) => c.id).sort(), ['analog', 'bd', 'freqshift', 'pluck', 'shot', 'tb303']);
   const profiles = read('profiles').map(([f, t]) => addModuleCases(parseCalProfile(t, f), found));
-  assert.deepEqual(profiles.map((p) => p.name).sort(), ['heavy', 'light', 'modules']);
+  assert.deepEqual(profiles.map((p) => p.name).sort(), ['heavy', 'kernels', 'light', 'modules']);
   const devices = loadDevices().devices.filter((d) => d.midi);
   assert.ok(devices.length >= 2);
   for (const d of devices)
@@ -108,7 +108,20 @@ test('the shipped profiles and step files are valid and resolve on every device 
         const ctx = { midi: d.midi, where: `${d.id} ${p.name} ${c.id}` };
         assert.ok(resolveRef(c.steps, lib, ctx).length > 0);
         if (p.teardown) resolveRef(p.teardown, lib, ctx);
+        if (c.teardown) resolveRef(c.teardown, lib, ctx);
       }
+  // kernels: the stock case and one case per machine of the calibration module, in the order of its [[machine]] entries, a module-free case between two
+  const kernels = profiles.find((p) => p.name === 'kernels')!;
+  const machines = kernels.cases.filter((c) => c.modules.length > 0);
+  assert.deepEqual(
+    machines.map((c) => [c.id, 'args' in c.steps ? c.steps.args?.machine : undefined]),
+    ['alu', 'dm', 'mem', 'branch', 'mix'].map((id, i) => [id, `test/cal-kernels#${i + 1}`]),
+  );
+  assert.ok(machines.every((c) => c.modules.join() === 'test/cal-kernels' && c.teardown));
+  assert.deepEqual(
+    kernels.cases.map((c) => c.modules.length > 0),
+    [false, true, false, true, false, true, false, true, false, true],
+  );
   // heavy plays every audio track of the device
   const heavy = profiles.find((p) => p.name === 'heavy')!;
   for (const d of devices) {

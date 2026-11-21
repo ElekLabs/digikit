@@ -322,3 +322,30 @@ test('a module case whose module has no build for the target is skipped with tha
   assert.ok(out.captures.length > 0, 'the stock case still ran');
   assert.ok(events.some((e) => e.kind === 'skip' && e.case === 'only-other'));
 });
+
+test('`module#n` sets the n-th machine type of the module in the order of the MODULES reply, `module` the first', async () => {
+  const sent: number[] = [];
+  const session = {
+    modules: async () => [
+      { name: 'a/other', types: [9] },
+      { name: 'a/b', types: [17, 18, 19] },
+    ],
+    setup: async (_what: string, _track: number, type: number) => {
+      sent.push(type);
+      return sent.length;
+    },
+  };
+  const clock: Clock = { now: async () => 0, pause: async () => {} };
+  const events = {
+    until: async () => ({ fields: { seq: sent.length, status: 0 } }),
+    tryUntil: async () => undefined,
+  };
+  const setup = sessionSetup(session as never, events as never, clock);
+  await setup('machine', 1, 'a/b');
+  await setup('machine', 1, 'a/b#1');
+  await setup('machine', 1, 'a/b#3');
+  assert.deepEqual(sent, [17, 17, 19]);
+  await assert.rejects(setup('machine', 1, 'a/b#4'), /3 machine type\(s\), no machine #4/);
+  await assert.rejects(setup('machine', 1, 'a/b#0'), /counts from 1/);
+  await assert.rejects(setup('machine', 1, 'a/missing#2'), /not loaded/);
+});

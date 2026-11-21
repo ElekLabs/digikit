@@ -1,4 +1,4 @@
-export { parse } from './parse.ts';
+export { parse, stockFirmware } from './parse.ts';
 export type {
   Acceptance,
   Capabilities,

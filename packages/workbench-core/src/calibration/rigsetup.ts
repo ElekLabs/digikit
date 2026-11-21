@@ -13,9 +13,18 @@ import type { Rig } from './runner.ts';
 /** Clock ms a SETUP request may wait for the debug module's track watch to have its baseline (about 2 s of emulated time after a boot). */
 export const SETUP_READY_MS = 30_000;
 
+/** `module#n` -> the module id and the 1-based machine number (`module` alone is #1). */
+export function parseMachineRef(ref: string): { id: string; n: number } {
+  const at = ref.lastIndexOf('#');
+  if (at < 0) return { id: ref, n: 1 };
+  const n = Number(ref.slice(at + 1));
+  if (!Number.isInteger(n) || n < 1) throw new Error(`machine ${ref}: the number after # counts from 1`);
+  return { id: ref.slice(0, at), n };
+}
+
 /**
  * A machine given as a module id is the first machine type the runtime reports for that module (the MODULES reply, read when the step plays: the types change
- * with every load; a module with several machines calibrates its first one). A number is the type itself: the runner puts the stock machine (0, valid in every boot)
+ * with every load; `module#n` is its n-th, counted from 1, in the order of the reply, which is the order of the module's `[[machine]]` entries). A number is the type itself: the runner puts the stock machine (0, valid in every boot)
  * on a track to start and to end a case, and never restores a type the track had before the run (a run-time type may not be loaded in this boot). `track` is 1 to 16.
  * Effects are not set by SETUP.
  */
@@ -35,9 +44,11 @@ export function sessionSetup(
     let machine: number;
     if (typeof type === 'number') machine = type;
     else {
-      const m = (await session.modules()).find((x) => x.name === type);
-      if (!m || m.types.length === 0) throw new Error(`module ${type} is not loaded or has no machine type`);
-      machine = m.types[0]!;
+      const { id, n } = parseMachineRef(type);
+      const m = (await session.modules()).find((x) => x.name === id);
+      if (!m || m.types.length === 0) throw new Error(`module ${id} is not loaded or has no machine type`);
+      if (n > m.types.length) throw new Error(`module ${id} has ${m.types.length} machine type(s), no machine #${n}`);
+      machine = m.types[n - 1]!;
     }
     await t.setMachine(track - 1, machine);
   };

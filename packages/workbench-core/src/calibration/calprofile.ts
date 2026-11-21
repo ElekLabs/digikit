@@ -113,14 +113,23 @@ export function parseCalProfile(text: string, file: string): CalProfile {
   const cases: CalCase[] = rawCases.map((c, i) => {
     if (!isTable(c)) throw new Error(`${file}: case ${i + 1} is not a table`);
     for (const k of Object.keys(c))
-      if (!['id', 'steps', 'args', 'inline', 'modules'].includes(k))
+      if (!['id', 'steps', 'args', 'inline', 'modules', 'teardown'].includes(k))
         throw new Error(`${file}: case ${i + 1}: unknown key ${k}`);
     if (typeof c.id !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(c.id))
       throw new Error(`${file}: case ${i + 1} needs an id of lowercase letters, digits, _ and -`);
     const mods = strings(file, `case ${c.id} modules`, c.modules);
     for (const m of mods)
       if (!modules.includes(m)) throw new Error(`${file}: case ${c.id}: module ${m} is not in the profile's modules`);
-    return { id: c.id, steps: ref(file, `case ${c.id}`, c), modules: mods };
+    if (c.teardown !== undefined && !isTable(c.teardown))
+      throw new Error(`${file}: case ${c.id}: teardown must be a table`);
+    return {
+      id: c.id,
+      steps: ref(file, `case ${c.id}`, c),
+      modules: mods,
+      ...(c.teardown !== undefined
+        ? { teardown: ref(file, `case ${c.id} teardown`, c.teardown as Record<string, unknown>) }
+        : {}),
+    };
   });
   const ids = new Set<string>();
   for (const c of cases) {

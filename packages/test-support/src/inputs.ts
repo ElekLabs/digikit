@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   firmwareDir as stockFirmwareDir,
-  STOCK_SYX,
+  stockSyx,
   stockImage as stockImageOf,
 } from '@digi/workbench-core/node/stock-image.ts';
 import { parse as parseToml } from 'smol-toml';
@@ -28,10 +28,10 @@ function firmwareTable(): Record<string, { syx: string; ready: string }> {
   }
   const ready = (device: Device) => readyDirs.get(device) ?? '';
   return {
-    'dt2 1.17': { syx: STOCK_SYX.dt2, ready: ready('dt2') },
-    'dn2 1.12': { syx: STOCK_SYX.dn2, ready: ready('dn2') },
+    'dt2 1.17': { syx: stockSyx('dt2'), ready: ready('dt2') },
+    'dn2 1.12': { syx: stockSyx('dn2'), ready: ready('dn2') },
     // a device with no `[acceptance]` has no ready snapshot: its sessions boot the stock image cold (`dsp: 'cold'`)
-    'st 1.42': { syx: 'Syntakt_OS1.42.syx', ready: ready('st') },
+    'st 1.42': { syx: stockSyx('st'), ready: ready('st') },
   };
 }
 
@@ -76,7 +76,6 @@ export function firmwareDir(env: NodeJS.ProcessEnv = process.env): string {
 
 /** The stock .syx of a device on its analysis version (the file `wb transfer install` binds services to). */
 export function stockImage(device: Device, env: NodeJS.ProcessEnv = process.env): string {
-  if (device === 'st') return path.join(firmwareDir(env), 'Syntakt_OS1.42.syx');
   return stockImageOf(device, repoRoot(), env);
 }
 

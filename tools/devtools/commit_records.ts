@@ -28,6 +28,9 @@ import { emulatorClock } from '../../packages/test-support/src/emulated-clock.ts
 import { repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
 import { Session } from '../../packages/test-support/src/session.ts';
 
+// stdout is the JSON result: the boot window wait of a session logs with console.info, which must go to stderr
+console.info = console.error;
+
 const FIRMWARE: Record<Device, string> = { dt2: '1.17', dn2: '1.12' };
 
 const { values } = parseArgs({
