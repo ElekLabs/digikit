@@ -13,11 +13,11 @@ The two stock filter stages use different loop registers on the two devices. Cal
 | Process range check | `0x1c6c13` | `0x1c9584` |
 | Process iteration, zero-based | `32 - R7`. Initialized at `0x1c6bf2`, decremented at `0x1c6eb7`, branches back at `0x1c6ec6` | `16 - R15`. Initialized at `0x1c9563`, decremented at `0x1c98b9`, branches back at `0x1c98c6` |
 
-**[D]** DT2 initializes R13 from a saved zero at `0x1c6501`, increments it at `0x1c6a77` and tests its right shift by five at `0x1c6ac3` before the backedge to `0x1c6530`. DN2 clears R3 at `0x1c8f4d`, increments it at `0x1c927e` and tests its right shift by four at `0x1c934e` before the backedge to `0x1c9045`. These are candidate coefficient-state indices. **[O]** Confirm that coefficient and process calls for a sounding voice select the same state and that consecutive voices select different states.
+**[D]** DT2 initializes R13 from a saved zero at `0x1c6501`, increments it at `0x1c6a77` and tests its right shift by five at `0x1c6ac3` before the backedge to `0x1c6530`. DN2 clears R3 at `0x1c8f4d`, increments it at `0x1c927e` and tests its right shift by four at `0x1c934e` before the backedge to `0x1c9045`. The stock per-voice correspondence is measured below. **[O]** Confirm that module callbacks receive the same allocated state through the adapter once dispatch is installed.
 
 **[D]** The five continuation anchors under `dsp.filter.site` give the instruction after the converter load and the next and skip destinations of each dispatch. All five records, including lengths and hashes, matched a fresh `tools.patchkit.port_resolve resolve` from the two analysis images and the DN2 1.11 patch port.
 
-## Emulator observation still needed
+## Emulator observations
 
 Use the `emulator` base set and `--store 'test/filter-gain*'` with `dk:dev`. The trailing star includes the fixture in the card's saved boot selection. Check that the fixture loaded, select its filter, and change GAIN (knob 2) while holding cutoff fixed. Compare the record around the coefficient hook before and after that change. Record the process buffer and both loop indices for the same voice before wiring dispatch. **[O]**
 
@@ -36,4 +36,28 @@ Use the `emulator` base set and `--store 'test/filter-gain*'` with `dk:dev`. The
 | DT2 1.17 | `0x2506ec` | `0xdc` | `+0x6c` | `+0x70` |
 | DN2 1.12 | `0x2554b8` | `0x234` | `+0x1cc` | `+0x1d0` |
 
-On DT2 the change appeared in the first two records. The corresponding halves of the input frame word at `0x2558dc + 0xfc` changed independently. On DN2 the caller loads R8 with the parameter-array base at `0x1c303b` before the call at `0x1c3044`; the encoder F change appeared at the same offset in all sixteen records. **[O]** The fixture has no third knob: its Q input and the pairing of coefficient and audio state still need measurement.
+On DT2 the change appeared in the first two records. The corresponding halves of the input frame word at `0x2558dc + 0xfc` changed independently. On DN2 the caller loads R8 with the parameter-array base at `0x1c303b` before the call at `0x1c3044`; the encoder F change appeared at the same offset in all sixteen records. The standard fixture has one module knob. The temporary variant below adds the second.
+
+### Third filter control and a changed-pack live reload
+
+**[D]** In a temporary copy of the gain fixture, append an SDK page parameter named Q Probe after Gain, set the filter descriptor parameter count and the two device parameter-row budgets to 2, and keep the original module ID and filter key. Pack for each device. In the emulator booted with the ordinary gain fixture, upload and verify the new pack at the same card path and issue RELOAD directly. Both returned result 0 with unloaded=true. On FLTR page 1 the new knob appeared on encoder G. The fixture DSP still implements only the gain operation.
+
+With track 1 selected, turn G low and high and capture the array during the same TRIG 1 input after each edit. Then turn F while holding G fixed. At panel Q Probe = 20, the third-control field was float bits `0x3e214285` (about 0.15748), up from zero. The F change affected the previously identified spread field while the third-control field stayed fixed. These values describe transport to the SDK adapter; the resonator kernel maps the third control to musical Q.
+
+| Firmware | Third control (byte offset) | Records showing the change |
+| --- | --- | --- |
+| DT2 1.17 | `+0x68` | First two records, stride `0xdc` |
+| DN2 1.12 | `+0x1c8` | All sixteen, stride `0x234` |
+
+On DN2 a single record's word at `+0x1dc` also changed during the repeated note input. It did not follow the third control across all records.
+
+### Matching a voice between stock coefficient and audio processing
+
+**[D]** Captured SHARC registers before the coefficient dispatch, at the selector store, and before the audio loop's selector load. Run the coupled emulator from the stock ready snapshot with a 0.12 s scenario, `SHARC_PCDUMP` set to the three PCs in the table, `SHARC_PCDUMP_LIMIT=4096`, interpreter execution (`SHARC_AOT=0`, empty fast-region and block-translation lists). DT2 used `dt2-sample-trig-noqa`; DN2 used `trig1-hold`. Compare complete blocks only; register samples precede the instruction at their PC.
+
+| Firmware | Coefficient PC and ordinal | Selector store PC and byte address | Process load PC, ordinal and byte address | Complete blocks |
+| --- | --- | --- | --- | --- |
+| DT2 1.17 | `0x1c66e0`, R13 | `0x1c69f1`, I1 − 65 × 4 | `0x1c6c0f`, 32 − R7, I1 | 42 (1,344 pairs) |
+| DN2 1.12 | `0x1c91a1`, R3 | `0x1c9289`, I4 − 17 × 4 | `0x1c9580`, 16 − R15, I2 | 85 (1,360 pairs) |
+
+For every pair, both ordinals equalled the zero-based slot and both byte addresses matched. Adjacent slots had distinct selector addresses four bytes apart (DT2 `0x24eeac..0x24ef28`, DN2 `0x254ad4..0x254b10`). This identifies the indexing rule for the adapter. A module call still needs to demonstrate that its coefficient write is consumed by the process callback at the same allocated state address.
