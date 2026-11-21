@@ -33,7 +33,13 @@
           "target": "ports"
         },
         {
-          "projects": ["core/services/machines", "core/services/fx", "core/services/lfo", "core/services/samples"],
+          "projects": [
+            "core/services/machines",
+            "core/services/fx",
+            "core/services/lfo",
+            "core/services/samples",
+            "core/services/project"
+          ],
           "target": "pack"
         }
       ]

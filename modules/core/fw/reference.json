@@ -12097,6 +12097,56 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4018ddc8",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4018e0a8",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4019dbda",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_project_mmcfs",
+        "rust": "dkfw::project::mmcfs"
+      },
+      "cpu": "cf",
+      "doc": "`MmcFs *f(void)`: the card file system singleton (the getter of `std::_Sp_counted_ptr<MmcFs*>`; DT2 1.17 0x4019dbda, DN2 1.12 0x4018e0a8, DN2 1.11 0x4018ddc8; the code differs per image, the hash is unique on each). The firmware's listing of the 129 slots is in it [V]: the record of slot s is at +0x10 + s * 0x1c (slot 0x80 is the live mirror): byte 0 is nonzero when the slot exists (the name, header byte 8, is not empty; the firmware's own accessors test only this byte), byte 1 is 1 for a `DT1P` or `DN1P` header and 0 for the in-memory format magic 0xBEEFBACE, the u32 at +4 is a record format word [D] (5 on a cleared project), the 16 name bytes at +8 (no terminator is written), the u32 at +0x18 is the save stamp (header +0x18). The listing refresh `(MmcFs *, slot)` (DT2 0x4012f2fa, DN2 0x4012dbce) fills it and takes a mutex at +0x1e030 (DN2) or +0x1e034 (DT2) at entry. A header that cannot be read leaves the name \"ERROR\" with bytes 0 and 1 zero [D], unless the static header buffer still holds a valid magic. The project service reads name and stamp there. Not found on Syntakt.",
+      "file": "devices/fw/project.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.project.fn.mmcfs",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 ()",
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4002c694",
             "len": 2
           }
@@ -12405,6 +12455,500 @@
       "subsystem": "project",
       "users": [
         "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4009b3f8"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009b55c"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a13e6"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "At the exit of the multi-slot clear callback: re-reads the vector from the job and records each slot as cleared, always (at most 129 entries are read). The routine saves D0, D1, D2, A0, A1 and the flags.",
+      "file": "devices/fw/project.toml",
+      "kind": "hook",
+      "mark": "V",
+      "mode": "replace",
+      "name": "cf.project.hook.clear_many_exit",
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.project.site.clear_many_exit",
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4009b37a"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009b4de"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a1368"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "At the exit of the clear callback, after the card write and the listing refresh: records the slot **(0x3c(SP)) as cleared, always (a failed clear then archives a `.dkp` that is still needed, which is recoverable). The routine saves D0, D1, D2, A0, A1 and the flags (strict liveness proves only A0 dead).",
+      "file": "devices/fw/project.toml",
+      "kind": "hook",
+      "mark": "V",
+      "mode": "replace",
+      "name": "cf.project.hook.clear_one_exit",
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.project.site.clear_one_exit",
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400f6dba"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400f6f86"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400f55aa"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Before the rts of the paste: when D0.b is nonzero it records the destination slot D6 as pasted over (a paste that did not reach the card write records nothing). The routine saves D1, A0, A1 and the flags and keeps D0 and D6.",
+      "file": "devices/fw/project.toml",
+      "kind": "hook",
+      "mark": "V",
+      "mode": "replace",
+      "name": "cf.project.hook.paste_exit",
+      "regs": {
+        "clobbers": [],
+        "in": [
+          "d0",
+          "d6"
+        ]
+      },
+      "site": "cf.project.site.paste_exit",
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004027e"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004027e"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40043b1e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Before the rts of the save: when D0.b is nonzero and D3 is not 0x80 it records the slot D3. Strict liveness leaves every register and the flags live at the return, so the routine saves D1 and the flags and keeps D0 and D3.",
+      "file": "devices/fw/project.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.project.hook.save_exit",
+      "regs": {
+        "clobbers": [],
+        "in": [
+          "d0",
+          "d3"
+        ]
+      },
+      "site": "cf.project.site.save_exit",
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400bb696"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400bb7fa"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400c11ca"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Records the slot the setter was called with (also a call with the current slot: the setter ignores it, so the service does) and runs the displaced `mvs.b` in the tail. D1 and the flags are written by that instruction first.",
+      "file": "devices/fw/project.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.project.hook.slot_set",
+      "regs": {
+        "clobbers": [
+          "d1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.project.site.slot_set",
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4009b3f8",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009b55c",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a13e6",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005a898",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x400a13e6, DN2 1.12 0x4009b55c (function DT2 0x400a1376, DN2 0x4009b4ec, + 0x70): the exit of the job callback of the stock clear of several projects (`bool f(Job **)`, run on the BgWorker thread, finishes its writes and refresh inside the job: **arg is a vector of 32-bit slots, begin at +0 and end at +4): `movem.l (SP),D2-D5/A2-A6; lea 0x34(SP),SP` (8 bytes, a plain copy); the rts follows. The job is at 0x38(SP); D0.b is the AND of the per-slot results. Checked against image bytes [V].",
+      "file": "devices/fw/project.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.project.site.clear_many_exit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 112
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 112
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "mark": "O",
+          "offset": 112
+        }
+      },
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4009b37a",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009b4de",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a1368",
+            "len": 6
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005a81a",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x400a1368, DN2 1.12 0x4009b4de (function DT2 0x400a131e, DN2 0x4009b494, + 0x4a): the exit of the job callback of the stock clear of one project (`bool f(Job **)`, run on the BgWorker thread: slot = **arg, then the slot record is reset, written to the card and the listing refreshed, all inside the job): `movem.l 0x1c(SP),D2/A2/A3` (6 bytes, a plain copy); `lea 0x38(SP),SP; moveq 1,D0; rts` follow. SP is the entry SP - 0x38, so the job is at 0x3c(SP); D2 still holds the slot. The function always returns 1. Checked against image bytes [V].",
+      "file": "devices/fw/project.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.project.site.clear_one_exit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 74
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 74
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 6,
+          "mark": "O",
+          "offset": 74
+        }
+      },
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400f6dba",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400f6f86",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400f55aa",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x400c2116",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x400f55aa, DN2 1.12 0x400f6f86, DN2 1.11 0x400f6dba (function DT2 0x400f548e, DN2 0x400f6e6a, DN2 1.11 0x400f6c9e, + 0x11c): the one exit of the stock project paste `bool paste(ProjectCache *, int slot, bool)` (it runs on the BgWorker thread: it copies the clipboard's project over the slot record, stamp and name included, writes the card and refreshes the listing, all inside the job): `movem.l -0x38(A6),D2-D6/A2; unlk A6` (8 bytes, a plain copy; the rts follows). D0.b is nonzero when the copy reached the card write (the write's own result, `FUN_400f5150`, is discarded and not returned), D6 and 12(A6) the destination slot, A6 the frame. The function is found as the target of the `jsr` at +0x16 of the paste job callback (DT2 0x400a12f8, DN2 0x4009b46e, one strict hash on both), because the function's own strict hash differs between the devices (the project size is an immediate); `offset` is added to that target. Checked against image bytes [V]; bytes equal on all three images.",
+      "file": "devices/fw/project.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.project.site.paste_exit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_call",
+          "len": 8,
+          "offset": 284
+        },
+        "dt2": {
+          "kind": "cf_call",
+          "len": 8,
+          "offset": 284
+        },
+        "st": {
+          "kind": "cf_call",
+          "len": 8,
+          "mark": "O",
+          "offset": 284
+        }
+      },
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004027e",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004027e",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40043b1e",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4001a7d4",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x40043b1e, DN2 0x4004027e: the one exit of the stock project save `int save(Project *, int slot, progress)` (the only rts is the next instruction): `movem.l (SP),D2-D4/A2-A6; lea 0x34(SP),SP` (8 bytes, a plain copy). D0.b is nonzero when the card write succeeded and D3 is the slot (0x80 on the mirror save).",
+      "file": "devices/fw/project.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.project.site.save_exit",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 238
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 238
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "mark": "O",
+          "offset": 238
+        }
+      },
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x400bb696",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x400bb7fa",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400c11ca",
+            "len": 6
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4006f2ce",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x400c11ca, DN2 0x400bb7fa: the entry of the project slot setter `void set(int slot)` (slot at 4(SP); -1 is no project; writes the slot byte only on a change): `mvs.b (slot byte).l,D1` (6 bytes, a plain copy).",
+      "file": "devices/fw/project.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.project.site.slot_set",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 6,
+          "mark": "O",
+          "offset": 0
+        }
+      },
+      "subsystem": "project",
+      "users": [
+        "core/services/project"
       ],
       "was": []
     },
@@ -25204,7 +25748,7 @@
       "name": "peer"
     },
     {
-      "count": 6,
+      "count": 17,
       "cpu": "cf",
       "file": "devices/fw/project.toml",
       "meaning": "the project object, kits, tracks, serialisation",

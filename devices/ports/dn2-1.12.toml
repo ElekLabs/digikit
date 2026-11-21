@@ -2919,7 +2919,7 @@ kind = "code"
 addr = 0x4012c792
 len = 8
 sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -2969,7 +2969,7 @@ kind = "code"
 addr = 0x4012c792
 len = 8
 sha256 = "d43e64e0210fdd98e9dd8476d7cea57c93492ec611d50eddcbf6fd90ea80cef7"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -3019,7 +3019,7 @@ kind = "code"
 addr = 0x4012ca60
 len = 8
 sha256 = "ba7573adceae0b4d98e7fca043628b41525f9bf3ec50663e051c89a57a79cb35"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]
@@ -3029,7 +3029,7 @@ kind = "code"
 addr = 0x4012ca96
 len = 4
 sha256 = "a48998cd9825641e921b00243186d78a9246c1fda55703863b3ee0ca512625c5"
-mark = "O"
+mark = "V"
 rule = "fw/storage:cf_func"
 
 [[anchor]]

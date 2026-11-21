@@ -3560,35 +3560,42 @@
   },
   {
    "addend": 0,
-   "offset": 2,
+   "offset": 6,
+   "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
+   "symbol": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
    "symbol": ".sec..data",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 14,
+   "offset": 24,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
    "symbol": "_RNvNtCs18JH71OYjh5_11dkrt_svc_fx6fxpage12set_firmware",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 24,
+   "offset": 34,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
    "symbol": ".sec..text._RINvNtCs18JH71OYjh5_11dkrt_svc_fx6fxpage5setupNtCs8bqlSpJqGKy_11dkrt_svc_rt10ImportCoreECse0keKd3R4h8_15dkrt_svc_fx_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 40,
+   "offset": 50,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
    "symbol": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 50,
+   "offset": 60,
    "section": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
    "symbol": ".sec..text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks14dk_svc_declare",
    "type": "cf.32"
@@ -4799,6 +4806,13 @@
   },
   {
    "addend": 0,
+   "offset": 6,
+   "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "symbol": ".sec..bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 2,
    "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "symbol": "dkc_device_id",
@@ -4808,7 +4822,7 @@
    "addend": 0,
    "offset": 22,
    "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt4init",
-   "symbol": "_RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "symbol": "_RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "type": "cf.32"
   },
   {
@@ -7293,10 +7307,10 @@
   },
   {
    "align": 2,
-   "hex": "41f9000000002f2800042f104eb900000000487800014eb9000000004fef000c4a8067024e754879000000002f2f00084eb900000000508f60ea",
+   "hex": "2f2f00044eb90000000041f9000000002f2800042f104eb900000000487800014eb9000000004fef00104a8067024e754879000000002f2f00084eb900000000508f60ea",
    "kind": "text",
    "name": ".text._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks11dk_svc_init",
-   "size": 58
+   "size": 68
   },
   {
    "align": 2,
@@ -7650,7 +7664,7 @@
   },
   {
    "align": 2,
-   "hex": "7efc881d",
+   "hex": "4b109a2b",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -7668,6 +7682,13 @@
    "kind": "data",
    "name": ".rodata._RNvCse0keKd3R4h8_15dkrt_svc_fx_dks10DK_SVC_ROW",
    "size": 112
+  },
+  {
+   "align": 2,
+   "hex": "41ef000423d0000000004e75",
+   "kind": "text",
+   "name": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "size": 12
   },
   {
    "align": 2,
@@ -7801,6 +7822,13 @@
    "kind": "text",
    "name": ".text._RNvXs_Cs8bqlSpJqGKy_11dkrt_svc_rtNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi9module_of",
    "size": 14
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "size": 4
   },
   {
    "align": 2,
@@ -8289,7 +8317,7 @@
    "align": 2,
    "hex": "206f0004202800082228000c4e75",
    "kind": "text",
-   "name": ".text._RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "name": ".text._RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "size": 14
   },
   {
@@ -8762,7 +8790,7 @@
    "size": 28
   }
  ],
- "source_sha256": "911fe1c043895d953693ad57f01dbc84e0ba7dca036536d8d523a7baa0b96de9",
+ "source_sha256": "b8d652474706bb8e562c93501bd962f76174eb26b271411987e7ba996e8c3a82",
  "symbols": [
   {
    "global": false,
@@ -8774,6 +8802,12 @@
    "global": false,
    "name": ".sec..bss.DKRT_FXS",
    "section": ".bss.DKRT_FXS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
+   "section": ".bss._RNvCs8bqlSpJqGKy_11dkrt_svc_rt8INIT_CTX",
    "value": 0
   },
   {
@@ -10140,6 +10174,12 @@
   },
   {
    "global": false,
+   "name": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt12set_init_ctx",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "section": ".text._RNvCs8bqlSpJqGKy_11dkrt_svc_rt14running_device",
    "value": 0
@@ -10272,8 +10312,8 @@
   },
   {
    "global": false,
-   "name": "_RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
-   "section": ".text._RNvMs5_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "name": "_RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
+   "section": ".text._RNvMs6_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "value": 0
   },
   {
@@ -10951,8 +10991,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_FXP_FW dk_fx_add_page dk_fx_mix dk_fx_routes dk_fx_routes_entry dk_module dk_module_ctx_add_fx dk_page_add_fx_param dk_svc_abi fxp_acc fxp_graph fxp_init fxp_keylist fxp_label fxp_list fxp_load fxp_save fxp_sound",
-  "instructions_redecoded": "8828",
-  "isa_check": "5eea33e8b898cf42c1c5bacbe8d0f943b7a0acde5850b2c582034e2757b2e7c3",
+  "instructions_redecoded": "8833",
+  "isa_check": "b8478637ac875fe005f31ed59bfe4bec348e6b040ce49b54bfb011c3c1a36b8f",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
