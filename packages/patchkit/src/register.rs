@@ -810,6 +810,11 @@ impl Register {
     }
 
     pub fn parse(b: &[u8]) -> Result<Register> {
+        Self::parse_with_filter_param_rows(b).map(|(reg, _)| reg)
+    }
+
+    /// The filter service allocates a parameter row for each own knob embedded in a FILTER record.
+    pub(crate) fn parse_with_filter_param_rows(b: &[u8]) -> Result<(Register, usize)> {
         let g = |off: usize| -> Result<u32> {
             b.get(off..off + 4)
                 .map(|x| u32::from_be_bytes(x.try_into().unwrap()))
@@ -824,6 +829,7 @@ impl Register {
         };
         let n = g(12)? as usize;
         let mut at = HEADER;
+        let mut filter_param_rows = 0;
         let txt = |off: usize, len: usize| -> Result<String> {
             let f = b
                 .get(off..off + len)
@@ -933,6 +939,16 @@ impl Register {
                         knobs,
                     })
                 }
+                (dkneeds::KIND_FILTER, len) if len == dkneeds::LEN_FILTER as usize => {
+                    if b.get(rec..at + len).is_none() {
+                        return Err(err!("register section: read past the end"));
+                    }
+                    let knobs = g(rec + 4)?;
+                    if knobs > dkneeds::filter::contract::DK_FILTER_MAX_PARAMS {
+                        return Err(err!("register section: filter record knob count"));
+                    }
+                    filter_param_rows += knobs as usize;
+                }
                 // a record of a generic kind (an LFO shape): another service owns it and `patchkit records --check` judges it; no field of the register is read from it
                 _ if dkneeds::KINDS
                     .iter()
@@ -948,7 +964,7 @@ impl Register {
             ));
         }
         reg.check()?;
-        Ok(reg)
+        Ok((reg, filter_param_rows))
     }
 }
 

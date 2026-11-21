@@ -79,7 +79,7 @@ fn problems_json(_bytes: &[u8]) -> Result<Value> {
 
 /// The decoded records of the block BYTES as JSON: `counts` (the three `[uses]` numbers) and the rows.
 pub fn records_json(bytes: &[u8]) -> Result<Value> {
-    let r = Register::parse(bytes)?;
+    let (r, filter_param_rows) = Register::parse_with_filter_param_rows(bytes)?;
     let params: Vec<Value> = r
         .params
         .iter()
@@ -117,7 +117,7 @@ pub fn records_json(bytes: &[u8]) -> Result<Value> {
         })
         .collect();
     Ok(json!({
-        "counts": {"machine_rows": machines.len(), "param_rows": params.len(), "page_rows": pages.len()},
+        "counts": {"machine_rows": machines.len(), "param_rows": params.len() + filter_param_rows, "page_rows": pages.len()},
         "problems": problems_json(bytes)?,
         "device": r.device,
         "machines": machines, "params": params, "pages": pages, "effects": effects,
@@ -194,6 +194,47 @@ mod tests {
         assert_eq!(v["params"][0]["name"], "Cutoff");
         assert_eq!(v["params"][0]["max"], 100);
         assert!(records_json(&[0u8; 8]).is_err());
+    }
+
+    #[test]
+    fn a_filters_own_knobs_count_as_parameter_rows() {
+        let mut block = vec![];
+        for word in [
+            crate::register::MAGIC,
+            crate::register::VERSION,
+            1,
+            1,
+            dkneeds::KIND_FILTER,
+            dkneeds::LEN_FILTER,
+            0x1234_5600,
+            2,
+        ] {
+            block.extend_from_slice(&word.to_be_bytes());
+        }
+        block.extend_from_slice(b"Dual Band");
+        block.resize(crate::register::HEADER + 16 + 24, 0);
+        block.extend_from_slice(b"DUAL");
+        block.resize(crate::register::HEADER + 16 + 48, 0);
+        for (name, short, default) in [("Spread", "SPRD", 64u32), ("Resonance", "RES", 20)] {
+            let start = block.len();
+            for word in [0, 0, 127 * 256, default * 256] {
+                block.extend_from_slice(&word.to_be_bytes());
+            }
+            block.extend_from_slice(name.as_bytes());
+            block.resize(start + 48, 0);
+            block.extend_from_slice(short.as_bytes());
+            block.resize(start + 64, 0);
+        }
+
+        let decoded = records_json(&block).unwrap();
+        assert_eq!(
+            decoded["counts"],
+            json!({"machine_rows": 0, "param_rows": 2, "page_rows": 0})
+        );
+        assert_eq!(decoded["params"], json!([]));
+        #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
+        assert_eq!(decoded["problems"], json!([]));
+        assert!(records_json(&block[..block.len() - 1]).is_err());
     }
 
     #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
