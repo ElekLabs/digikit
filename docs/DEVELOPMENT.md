@@ -240,6 +240,7 @@ All tools are indexed in [docs/TOOLS.md](TOOLS.md).
 Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
 Usage of the object compare for moves of runtime code (`patchkit objdiff OLD NEW`): [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move).
 Usage of the register liveness of stock code at a patch site (`tools/coldfire/liveness.py`): [PATCHING.md](PATCHING.md#register-liveness-at-a-hook-site).
+Usage of the size gate (`patchkit size`: stored container per device, drop-one per module, runtime object by module, baseline compare): [PATCHING.md](PATCHING.md#size-gate).
 Usage of the port file (`patchkit port build|check`, `patchkit:ports`): [PATCHING.md](PATCHING.md#port-file).
 Services and the port file (no binding step; `patchkit port build|check|stock`): [PATCHING.md](PATCHING.md#services-and-the-port-file). Which services a module needs (`patchkit services`): [PATCHING.md](PATCHING.md#which-services-a-module-needs).
 Usage of Transfer install, restart and delete with services (`mise run transfer`, `wb transfer install --restart`, `wb transfer delete`): [MODULES.md](MODULES.md#install-with-services-from-the-command-line).

@@ -35,6 +35,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          names for addresses from address maps and a module load table (docs/ADDRMAP.md); JSON by default
   budget  [--device SHORT]... [--fx-max N] [--budget-pct P]   the DSP budget of each device in instructions per block (headroom, voice-block, note-on-block;
                                          with --fx-max the effect budget of the tightest device): JSON from devices/*.toml and devices/cycle-factors.json
+  size    [--set NAME] [--device SHORT,...] [--firmware FILE]... [--no-drop-one] [--runtime-object FILE] [--top N] [--json] [--baseline FILE] [--write-baseline FILE]
+                                         size gate: stored container of the set and of core/runtime with its requires against container_max (measured past the limit),
+                                         drop-one saving per module, the runtime object by crate and module (docs/PATCHING.md \"Size gate\")
   uses    set --id MODULE --device SHORT [--dsp-cost-voice N] [--dsp-cost-fx N]   write the measured DSP cost (instructions per block) into
                                          [uses.<device>] of the module's module.toml (only those lines change; comments stay); prints wrote/unchanged PATH
   services --device SHORT [--pack-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...   the card services that the .dkm files need, including transitive local dependencies (the NEEDS of their header
@@ -896,6 +899,8 @@ plan.json {}",
         "records" => patchkit::records_cli::run(rest)?,
         "addr" => patchkit::addrmap::run(rest)?,
         "budget" => patchkit::budget_cli::run(rest)?,
+        #[cfg(not(target_arch = "wasm32"))]
+        "size" => patchkit::size_cli::run(&a.root, rest)?,
         #[cfg(not(target_arch = "wasm32"))]
         "uses" => patchkit::uses::run(&a.root, rest)?,
         "imports" => patchkit::coverage_cli::run_imports(rest)?,

@@ -484,13 +484,17 @@ Before RC2 and RC3 start: state payoff and confidence again with the RC1 results
 
 ### Progress
 
-Status: `todo`, `active`, `done`. An item or step is marked in the commit that finishes it.
+Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way:
+
+1. The worker leaves its changes uncommitted and marks the row `review`.
+2. An independent reviewer sub-agent reviews the diff (ranked findings with `file:line` and a failure scenario; boundaries, separation of concerns and device specifics behind capabilities included). Findings are fixed or answered.
+3. Em reviews the phase or deliverable. Only then is it committed and the row set to `done` with the commit.
 
 | Item or step | Status | Commits, PR |
 | --- | --- | --- |
 | RC0 Plan and baseline | done | `57b861aaa` (finding 158), `3d6a6bc49` (plan, baseline); approved by Em 2026-11-22 |
 | RC1 Contract and fixtures | active | lane `fx-route-policy` |
-| RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | todo | |
+| RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | commit "Add patchkit size" (hash in the next progress update) |
 | RC1b crate `dkrt-packages` (`runtime/core/packages`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | todo | |
 | RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-packages`) | todo | |
 | RC1d manifest schema in patchkit (`[[service.resource]]`, `[[service.record]]`, `[[entry]]`, derived `[[need]]`, selection `pin`) and the `ref-*` fixtures; `PackageGraph::from_tables` over the packed fixtures | todo | |

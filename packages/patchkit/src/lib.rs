@@ -61,6 +61,8 @@ pub mod register;
 pub mod sdkgen;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod services;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod size_cli;
 pub mod svccheck;
 pub mod typed;
 pub mod uses;
