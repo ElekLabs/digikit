@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   captureSetFile,
+  expandCaptures,
   fitRequest,
   groupByCase,
   fitView,
@@ -17,6 +18,14 @@ import {
   type CalProfileDoc,
 } from '../src/profile/calibration-view';
 import { runCalibration } from '../src/calibration/runner';
+
+test('a fit input file expands to its captures: a calcaptures file to its list, a profile to itself', () => {
+  const a = { schema: 'dk.profile/1', run: { case_id: 'a' } };
+  const b = { schema: 'dk.profile/1', run: { case_id: 'b' } };
+  assert.deepEqual(expandCaptures({ schema: 'dk.calcaptures/1', captures: [a, b] }), [a, b]);
+  assert.deepEqual(expandCaptures(a), [a]);
+  assert.throws(() => expandCaptures({ schema: 'dk.calcaptures/1' }), /without captures/);
+});
 import { MidiOut, type Clock } from '@digi/dk-session';
 
 const cap = (unit: 'insn' | 'cycles', caseId: string, rows: [number, number, number][]): CalProfileDoc => ({

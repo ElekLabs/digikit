@@ -41,7 +41,7 @@ Native and browser speed are separate questions. A native gain proves no browser
 - **Module DSP code is never AOT.** It loads into L2 at run time and runs in the fast tier or the interpreter.
 - **Device:** the debug module answers host polls (LOG, PEEK, LOGCFG); a 512-event ring, at most 27 events per read. The probe module owns
   `dl_set_tick_cb`. The crash record holds PC, registers, 32 stack words and the module index. The device transport (`dklog`, `dkupload`)
-  has not run on hardware [O].
+  has not run on hardware [O], except the debug-module DSP stats reads (PROFILE_DSP) over USB MIDI, proven on DN2 1.12 (finding 157).
 
 ## 3. Address map
 
@@ -357,6 +357,7 @@ Steps 1 and 3 built (prof/c4-calibrate); the rest waits for P8d and the device. 
 
 - Same counter on both sides: the P8d DSP stats rows read EMUCLK around each dispatch (`sdk/dsp/contract/dk_trace.inc:48-69`). On the device EMUCLK counts core cycles (SHARC+ PRM p.28-18). In the emulator it advances one per instruction plus modelled jump costs (finding 125, finding 103 section 8). Calibration is the device/emulator ratio per stats row.
 - Model: one factor per device for module rows, fitted on worst-case statistics (largest call, largest block), not means. The budget factor is the worst observed device/emulator ratio in the calibration set, so it never underpredicts a measured case. Move to a per-class model (instructions plus weighted taken jumps and calls, from per-PC counts and the dksharc class of each PC) only if the spread exceeds 10%. Cache-set conflicts are reported as outliers, not modelled.
+- Measured (DN2 1.12, finding 157): the device/emulator factor of five synthetic kernels spreads from 1.01 (ALU) to 2.69 (memory), so one factor per device is not enough and the per-class model is needed. Plan item, not started: per-module instruction class counts (memory, branch, other) from per-PC counts and the class of each PC (the SHARC rig runs each module exactly); estimate = sum of count x class factor; check it with the mix kernel and the `modules` profile.
 - Error per calibration: e_i = (f*insn_i - cyc_i)/cyc_i. Report n, mean, worst underprediction and worst leave-one-module-out. Each case is captured more than once (device block jitter is about +-2.7%, finding 103 section 8).
 - Stock load and block size come from the device. Stock = the P8d header's largest stock block delta minus the module rows. Block cycles are measured (about 666,582 DT2 / 666,784 DN2, finding 103 sections 8 and 10). The absolute core clock is not needed; TPERIOD/TCOUNT are a cross-check. Two stock baselines are captured (a held note, a heavier project); the budget uses the higher.
 - Data: device cycles come from P8d rows via PROFILE_DSP (the emulator answers the same command over the same dk-session and debug-module path). Instruction-class costs come from the dsp-facts probe rerun (TPERIOD, TCOUNT, MMASK, real dual MAC, SSFR). Rig per-PC counts are model input only, after one case proves that rig instructions per call equal the emulator row.
@@ -373,5 +374,5 @@ Steps 1 and 3 built (prof/c4-calibrate); the rest waits for P8d and the device. 
 - Answered by `packages/dksharc` (3.3): a module DSP section is analysed in Rust. The DSP load address per run is still open (3.2).
 - Answered by item 1 (emulator): load addresses come from a PEEK of the runtime's module table `DKRT_STATE` (`mem.cf.peek`); no event field. On a device the same table is read by the debug module's PEEK (`dklog crash --image`); not run on hardware [O].
 - Answered by P8d (13.1): the host reads the DSP stats window through the new command `PROFILE_DSP`.
-- [O] The device transport (`dklog`, `dkupload`) has not run on hardware.
+- [O] The device transport (`dklog`, `dkupload`) has not run on hardware; the debug-module DSP stats reads over USB MIDI have (DN2 1.12, finding 157).
 - Answered by the clock audit ([finding 125](../findings/125-dsp-cycle-counter-consumers.md), [D]): EMUCLK reads only report. One reader per image, the SHARC block handler; its low-word cycle delta feeds the HEALTH page through `core/health`. Nothing branches on it.

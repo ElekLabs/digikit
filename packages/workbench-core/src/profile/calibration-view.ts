@@ -189,6 +189,14 @@ export function captureSetFile(set: { profile: string; captures: readonly Pick<C
   };
 }
 
+/** The captures a fit input file stands for: a `dk.calcaptures/1` file gives its captures, any other document stands for itself. */
+export function expandCaptures(doc: unknown): unknown[] {
+  const o = doc as { schema?: string; captures?: unknown } | null;
+  if (o?.schema !== CAPTURES_SCHEMA) return [doc];
+  if (!Array.isArray(o.captures)) throw new Error(`${CAPTURES_SCHEMA} without captures`);
+  return o.captures;
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
 
