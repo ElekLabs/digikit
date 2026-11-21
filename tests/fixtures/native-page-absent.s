@@ -19,3 +19,18 @@ mf_native_draw:
     .globl mf_native_overlay
 mf_native_overlay:
     rts
+    .globl mf_native_register
+mf_native_register:
+    moveq #-1,%d0
+    rts
+    .globl mf_native_register_v2
+mf_native_register_v2:
+    moveq #-1,%d0
+    rts
+    .globl mf_native_remove
+mf_native_remove:
+    rts
+    .globl mf_native_turn
+mf_native_turn:
+    moveq #0,%d0
+    rts
