@@ -198,7 +198,7 @@ def _type_number(mid: str, man: dict, device: str, literal: str | None) -> int:
     ):
         return int(literal, 0)
     types = tomllib.loads(
-        (ROOT / "modules/core/adapters/machines/types.toml").read_text()
+        (ROOT / "image-modules/points/machines/types.toml").read_text()
     )[device]
     # a module: the id of module.toml
     mach = man["machine"][0]["id"] if man.get("machine") else None

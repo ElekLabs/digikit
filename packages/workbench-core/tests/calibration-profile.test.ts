@@ -90,13 +90,10 @@ test('the shipped profiles and step files are valid and resolve on every device 
       return [s.name, s];
     }),
   );
-  const found = ['machines', 'fx', 'tools'].flatMap((kind) =>
-    fs
-      .readdirSync(path.join(root, 'modules', kind))
-      .map((n) => path.join(root, 'modules', kind, n, 'calibration.toml'))
-      .filter((f) => fs.existsSync(f))
-      .map((f) => parseCalCase(fs.readFileSync(f, 'utf8'), f)),
-  );
+  const found = fs.globSync('modules/*/*/*/calibration.toml', { cwd: root }).map((f) => {
+    const file = path.join(root, f);
+    return parseCalCase(fs.readFileSync(file, 'utf8'), file);
+  });
   assert.deepEqual(found.map((c) => c.id).sort(), ['analog', 'bd', 'freqshift', 'pluck', 'shot', 'tb303']);
   const profiles = read('profiles').map(([f, t]) => addModuleCases(parseCalProfile(t, f), found));
   assert.deepEqual(profiles.map((p) => p.name).sort(), ['heavy', 'kernels', 'light', 'modules']);

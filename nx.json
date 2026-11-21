@@ -40,6 +40,7 @@
     }
   },
   "namedInputs": {
+    "dspTestTooling": ["{workspaceRoot}/packages/sharc-rig-kit/src/**/*"],
     "hostTests": [
       "{projectRoot}/**/*",
       "jsToolchain",

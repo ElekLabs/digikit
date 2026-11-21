@@ -1,6 +1,6 @@
 # Taxonomy: layers, terms, card layout, repo layout, names
 
-This file fixes the words, the layers, the card layout and the target repository tree. [ARCHITECTURE.md](../ARCHITECTURE.md) describes the layers in detail; where the two differ, this file is the target and ARCHITECTURE.md follows it. The repository moves to the tree below in E8 ([extension model](../plans/extension-model.md)).
+This file defines the terms, layers and card layout. [Architecture](../ARCHITECTURE.md) describes the layers in detail. [Repository layout](../LAYOUT.md) shows the tree after the E8 move.
 
 ## Layers
 
@@ -25,7 +25,7 @@ One meaning per word. A second use gets a new word.
 | image | the patched firmware only. Qualify the others: module code image, DSP image, card image. The repo folder for image modules is `image-modules/`. |
 | image module | a `module.toml` unit patched into the image. Its role gives its class. |
 | platform | the `Platform` trait and the image modules behind it. |
-| adapter | an image module for one device function that is no service half and no runtime part: usb-bulk, plusdrive-write, sdhc-large. ARCHITECTURE.md still uses "adapter" for all L1 image code (platform glue, hooks) until E8 renames the classes; read it as "image module" there. |
+| adapter | an image module for one device function that is no service half and no runtime part: usb-bulk, plusdrive-write, sdhc-large. Image-module manifests currently use `role = "adapter"` for a wider set of L1 modules. |
 | image half | the part of a service that must be in the image (class `image-half`). |
 | stub | image code at a site that calls a filled pointer slot. The fallback for an absent optional import is the "absent-import fallback". |
 | slot | a pointer word that a service fills. Always qualified (`<service>_<site>`). |
@@ -48,7 +48,7 @@ One meaning per word. A second use gets a new word.
   modules/<kind>/<author>-<name>.dkm   file name = module id with "/" as "-"
   services/<service>.dks       stem = service name
   ports/<device>-<version>.dkport   <version> is the firmware version string; picked by the FW hash == fw_id
-  projects/<slot>-<name>.dkp   slot 000..127; header: device, slot, name, save stamp
+  projects/<number>-<name>.dkp number 001..128 (slot + 1); header: device, slot, name, save stamp
   projects/archive/<name>-<stamp>.dkp   archived project files of the project service, kept for good; stamp as 8 hex digits ([digikit-project](digikit-project.md))
   samples/<folder>/<name>      devices with card = "slots" only
   data/<module id>/...         reserved for files that a module writes; not enforced
@@ -56,12 +56,12 @@ One meaning per word. A second use gets a new word.
 fixed sectors outside the table, two copies each: the settings record, the selection record
 ```
 
-- A project file is `projects/<slot>-<name>.dkp`. The slot is the identity, the name is for reading ([plan](../plans/digikit-project.md), Architecture "File name and identity").
+- A project file is `projects/<number>-<name>.dkp`. The number (firmware slot + 1, as the menus show it) is the identity, the name is for reading ([plan](../plans/digikit-project.md), Architecture "File name and identity").
 - The folder shows the role. The role word in the header decides. A file in the wrong folder is not found.
 - Port files of several firmware versions sit side by side. `<version>` is only the firmware version string, for people; the match is on the `FW` hash (the first 8 bytes of the stock image's SHA-256), which must equal the image `fw_id`. The runtime ignores the other files. With no match, the planner refuses every service that needs `port`. It never loads a non-matching port file.
 - Module files are grouped by module kind (machine, fx, filter, lfo-shape, tool). The file name is the module id with "/" replaced by "-" (`modules/machine/fadedlimes-analog.dkm`, `modules/lfo-shape/digikit-lfo_shapes_1.dkm`, `modules/tool/digikit-remote.dkm`; `tools/bootscreen` is `modules/tool/tools-bootscreen.dkm`). The author is in the name, so two authors can use the same module name. Path length: at most 8 (`modules/`) + 10 (kind and `/`) + 31 (id) + 4 (`.dkm`) = 53 characters, under the 55 of a selection entry (`SEL_PATH` 56 with the NUL, `gen_abi.rs`).
 - Trade-off: the kind is derived from a module's records at pack time. If a later version of a module changes its kind, Transfer moves the file to the new folder with the same one-time RENAME it uses for the migration, and rewrites the selection.
-- Scopes: device scope is the settings record. Project scope is a section of the `.dkp`. Keys are `<owner>/<key>`, with a service name or a module id as owner. Elektron files stay stock.
+- Scopes: device scope is the settings record. The runtime offers a settings overlay over module keys, and the project service is its only user: while it is loaded a module's keys are also per project, the `.dkp` holds the entries it wrote there and a read prefers them. Keys are `<owner>/<key>`, with a service name or a module id as owner. Elektron files stay stock.
 - A store belongs to one device. Each structure keeps its own version; paths carry none.
 - Migration: Transfer renames existing module files once with the store's RENAME and rewrites the selection. Sticky maps and settings are keyed by module id, not by path, so nothing else moves. `services/port.dks` was never shipped.
 - To check in the port-file PR 3: `store::list("modules/")` and the DIGIKIT menu with one more folder level.
@@ -69,7 +69,9 @@ fixed sectors outside the table, two copies each: the settings record, the selec
 
 ## Repo layout
 
-Target tree (E8):
+The E8 move uses the [directory map](../plans/e8-moves.json). Firmware plug-in points live in `image-modules/points/`. Proofs, including `dsp-stereo-proof`, live in `image-modules/proofs/`. The manifest roles follow [Architecture](../ARCHITECTURE.md#roles).
+
+The tree and table below record the original target, including proposed follow-up moves.
 
 ```text
 runtime/{core, platform/<name>, apps/digikit-menu}
@@ -108,7 +110,7 @@ What does not move or change name: module ids, Nx project names (a module id or 
 
 Code that reads the paths and must change with the move: `tools/nx/modules.mjs` (the glob and `startsWith('modules/')`), `tools/devtools/layercheck.py`, literal paths in `modules/core/runtime/project.json`, Cargo path dependencies, the patchkit manifest roots. Before the move, check that the Rust objects embed no source path.
 
-Roles in `module.toml` after the move: `runtime`, `installer`, `platform`, `image-half` (with `service = "<x>"`), `adapter`, `fix`, `proof`, `app`, `service`.
+Proposed roles in `module.toml`: `runtime`, `installer`, `platform`, `image-half` (with `service = "<x>"`), `adapter`, `fix`, `proof`, `app`, `service`.
 
 ## Naming rules
 

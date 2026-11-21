@@ -193,7 +193,7 @@ stack base and size) from the calls of the firmware's one task-create function a
 the queue pop that the runtime hooks); it reads the Ghidra dump of the image. `uv run python -m tools.coldfire.digikit_menu_proof run
 --image IMAGE --quick --stack` measures the UI stack during the DIGIKIT proof scripts and prints the high-water outside requests and
 inside LOAD/UNLOAD requests; `--stack-stock` does it for the stock SETTINGS and project scripts. `uv run python -m
-tools.coldfire.frame_depth modules/core/runtime/build/runtime.dko.json dkrt_load` adds the other side: the static worst-case depth of a
+tools.coldfire.frame_depth runtime/core/build/runtime.dko.json dkrt_load` adds the other side: the static worst-case depth of a
 module's functions from their frame sizes and calls (findings 34).
 
 ## PC probe (ColdFire)
@@ -245,7 +245,7 @@ Two ways to run it:
 ### R12 checks 1 and 2
 
 The inputs are `tools/emulator/pc_probe_r12.json` (four specs: `dt2-check1`, `dn2-check1`, `dt2-check2`, `dn2-check2`; the PCs
-are the hook sites of `devices/ports/dt2-1.17.toml` and `dn2-1.12.toml`, listed in each spec's `note`) and
+are the hook sites of `ports/dt2-1.17.toml` and `dn2-1.12.toml`, listed in each spec's `note`) and
 `tests/scenarios/r12-probe.json` (`r12-check1-*` and `r12-check2-*`). Build `coupled-run` once for each device, then run the
 four commands from the repository root. The stock images are `firmware/Digitakt_II_OS1.17.syx` and
 `firmware/Digitone_II_OS1.12.syx`; `--cold-base` takes the image's own SHA-256.

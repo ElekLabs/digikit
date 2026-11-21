@@ -72,7 +72,7 @@ const CRUMB_STAGES = [
   'D_AFTER_L4_L5_STORES',
   'D_AFTER_MODE1_READ',
 ];
-// The 32 words of dl_diag (modules/core/adapters/dsp-link/README.md), in order.
+// The 32 words of dl_diag (runtime/platform/dsp-link/README.md), in order.
 const DIAG_NAMES = (
   'magic_count link_beat voice_beat M5 M6 M7 M13 M14 M15 I6 I7 B7 L7 MODE1 crumb dispatches returns guard_faults guard_last ' +
   'guard_p01 guard_p23 guard_p45 guard_p67 guard_disabled_type fx_last module_step fx_master_calls fx_send_calls fx_faults ' +

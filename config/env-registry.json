@@ -73,6 +73,10 @@
    "owner": "ts:packages/sharc-rig-kit",
    "purpose": "Directory of the conformance reports of the SHARC-only rig (default dist/conformance-rig of the worktree)"
   },
+  "DIGI_CONFORM_ROOT": {
+   "owner": "ts:packages/sharc-rig-kit",
+   "purpose": "Single module root scanned by a scoped merge conformance rig target"
+  },
   "DIGI_COUPLED_DSP_EXPORT": {
    "owner": "rust:packages/emulator",
    "purpose": "Output file path: the pinned coupled ready workload test writes the DSP export there"
@@ -140,6 +144,10 @@
   "DIGI_DSP_PERIOD": {
    "owner": "rust:packages/emulator",
    "purpose": "DSP instructions per DSPI2 frame; experiment override of the coupled DSP scheduling"
+  },
+  "DIGI_DSP_PGO": {
+   "owner": "python:tools/emulator",
+   "purpose": "The launcher passes per-device DSP profile states to the desktop status display as JSON."
   },
   "DIGI_DSP_RX_PHASE": {
    "owner": "rust:packages/emulator",

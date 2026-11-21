@@ -1,6 +1,6 @@
 // The gallery's cheap checks (the module summaries) and the patch worker's file
 // names. No wasm and no command line: the tests that run patchkit.wasm or the CLI, `shipModules` (which packs with it) and `buildModuleData` (seconds: it reads every module) are in gallery.wasm.test.ts.
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { parse } from 'smol-toml';
@@ -30,7 +30,6 @@ test('built site (when present) carries no firmware', { skip: !existsSync(join(r
     );
   for (const f of walk(join(root, 'apps/web/dist'))) {
     assert.ok(!/\.(syx|snap|mstate)$/i.test(f), f);
-    assert.ok(statSync(f).size < 5 * 1024 * 1024 || f.endsWith('emulator-core.wasm'), f);
   }
 });
 

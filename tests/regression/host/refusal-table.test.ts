@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { LOAD_STATUS } from '@digi/dk-session/gen_proto';
 import { expect, test } from 'vitest';
-import { ROWS, type Proof } from '../../../modules/core/runtime/tests/refusal/refusal-table.ts';
+import { ROWS, type Proof } from '../../../runtime/core/tests/refusal/refusal-table.ts';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const text = (file: string): string => {

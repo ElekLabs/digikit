@@ -36,7 +36,7 @@ def test_excludes_outside_empty_or_overlapping_are_refused(bad):
 def test_each_port_holds_its_firmware_entrys_excludes():
     # The port files are generated; this keeps a hand-resolved port and its device entry from drifting apart.
     for prof in R.load_profiles().values():
-        path = ROOT / "devices" / "ports" / f"{prof['device']}-{prof['version']}.toml"
+        path = ROOT / "ports" / f"{prof['device']}-{prof['version']}.toml"
         if not prof["port"] or not path.exists():
             continue
         port = tomllib.loads(path.read_text())

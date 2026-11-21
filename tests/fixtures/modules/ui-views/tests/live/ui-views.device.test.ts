@@ -10,11 +10,11 @@ import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 /**
  * What only the firmware shows of the module screens of core/ui (docs/plans/track-manager.md, "core/ui"). The fixture `test/ui-views` is a content module: in `init` it adds two
  * SETTINGS rows (`dk_ui_settings_row`); the first opens a full-screen view (frame and text; YES opens the stock text input, NO closes), the second an overlay.
- * Everything else is a unit test: the pool, the row registry and the canvas mapping (`modules/core/adapters/ui/host/tests`), the observer list and the owner id of a context
+ * Everything else is a unit test: the pool, the row registry and the canvas mapping (`runtime/platform/ui/host/tests`), the observer list and the owner id of a context
  * (`core/runtime` `spans_tests.rs`, `cleanup_tests.rs`).
  *
  * The screen is read from firmware state, never from pixels: the view stack (Brain, view manager, list of nodes, the View of each node and its vptr: the `[ui]` facts of the device
- * files, `viewStackFacts`) and the item list of the stock SETTINGS menu (the Menu object's item vector; the offsets are the structs of `devices/fw/menu.toml`).
+ * files, `viewStackFacts`) and the item list of the stock SETTINGS menu (the Menu object's item vector; the offsets are the structs of `ports/fw/menu.toml`).
  * - the rows are in SETTINGS after the stock rows (two more items while the module is loaded), and YES on a row runs its function;
  * - the full-screen view is a new top view of the stack (its vptr is not the one below), draws on every frame and gets the keys; YES opens the stock NameView (another top view);
  *   YES on it calls `done` with the text, NO calls nothing; NO closes the view and `closed` runs;

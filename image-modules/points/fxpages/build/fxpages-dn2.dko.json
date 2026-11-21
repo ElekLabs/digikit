@@ -1,0 +1,58 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".rodata",
+   "symbol": "_fp_p_first",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 168,
+   "section": ".rodata",
+   "symbol": "_fp_p_send",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "465850470000000400000002000000000000002c000000250000000300000000000000080000000000000000000000000000000000000008000048e400000018000000750000007300000079800052a0464748494a4b4c4d4e4f505152535455565758595a5b5c5d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000064000046a700000001000000000000000000000000000000640000000000000044000000340000048b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000ca00000060",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 256
+  }
+ ],
+ "source_sha256": "23ffc0eb5e9b350cfd6cfa85d87669d961c8d670a2dbcec46d8b1e0fc93f14de",
+ "symbols": [
+  {
+   "global": true,
+   "name": "_fp_p_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_fp_p_send",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "fxpages_info",
+   "section": ".rodata",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "0",
+  "isa_check": "5549cd0c64250d512b46d707e409091af18bff5b0afb592eee12efd58e468e0a",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

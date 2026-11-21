@@ -444,7 +444,7 @@ export interface FreeRegion {
   hi: number;
 }
 
-/** Free ColdFire regions of devices/ports/<device>-<firmware>.toml: every `[[region]]` with
+/** Free ColdFire regions of ports/<device>-<firmware>.toml: every `[[region]]` with
  * `cpu = "cf"` (e.g. `cf.flash_cave`, `cf.expansion`), minus its `excludes` (`[lo, hi]` pairs).
  * `hi` is the file's `end`. */
 export function freeRegions(device: Device, firmware: string): FreeRegion[] {

@@ -12,11 +12,11 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
-        "{workspaceRoot}/modules/*/*/module.toml",
+        "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/calibration/**/*",
-        "{workspaceRoot}/modules/*/*/calibration.toml"
+        "{workspaceRoot}/modules/*/*/*/calibration.toml"
       ],
       "outputs": ["{projectRoot}/ui/dist"]
     },
@@ -33,7 +33,13 @@
           "target": "ports"
         },
         {
-          "projects": ["core/services/machines", "core/services/fx", "core/services/lfo", "core/services/samples"],
+          "projects": [
+            "core/services/machines",
+            "core/services/fx",
+            "core/services/lfo",
+            "core/services/samples",
+            "core/services/project"
+          ],
           "target": "pack"
         }
       ]
@@ -47,11 +53,11 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
-        "{workspaceRoot}/modules/*/*/module.toml",
+        "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/calibration/**/*",
-        "{workspaceRoot}/modules/*/*/calibration.toml"
+        "{workspaceRoot}/modules/*/*/*/calibration.toml"
       ],
       "outputs": []
     },
@@ -87,8 +93,8 @@
         "{workspaceRoot}/packages/dksharc/Cargo.toml",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/calibration/**/*",
-        "{workspaceRoot}/modules/*/*/calibration.toml",
-        "{workspaceRoot}/modules/*/*/module.toml",
+        "{workspaceRoot}/modules/*/*/*/calibration.toml",
+        "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],

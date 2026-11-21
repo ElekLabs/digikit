@@ -51,16 +51,18 @@ SOURCE_GLOBS = (
     "packages/dksample/**",
     "packages/dkupload/**",
     "packages/patchkit/**",
-    "modules/core/runtime/fit/Cargo.toml",
-    "modules/core/runtime/fit/build.rs",
-    "modules/core/runtime/fit/src/**",
-    "modules/core/runtime/sdk/Cargo.toml",
-    "modules/core/runtime/sdk/build.rs",
-    "modules/core/runtime/sdk/src/**",
+    "runtime/core/fit/Cargo.toml",
+    "runtime/core/fit/build.rs",
+    "runtime/core/fit/src/**",
+    "runtime/core/sdk/Cargo.toml",
+    "runtime/core/sdk/build.rs",
+    "runtime/core/sdk/src/**",
     "devices/**",
+    "ports/*.toml",
+    "ports/fw/**",
     "tests/scenarios/dn2.json",
     "sdk/sdk.toml",
-    "modules/core/runtime/abi.toml",
+    "runtime/core/abi.toml",
     "tools/patchkit/toolchain/**",
     "tools/sharc_dev/sharc_core/seed_tables.py",
 )
@@ -294,7 +296,7 @@ def non_cell_device_prefixes(
         out += [
             f"devices/{stem}",
             f"devices/cf-native/{stem}-",
-            f"devices/ports/{t['device']['short']}-",
+            f"ports/{t['device']['short']}-",
         ]
     return tuple(out)
 
@@ -436,6 +438,8 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
 
     environ = os.environ if environ is None else environ
     files = repo_files()
+    # The developer guide is also excluded from the Nx daemon and gate inputs.
+    files.pop("packages/emulator/README.md", None)
     gen = pk_emud_pgo.generated_core(device)  # selects the profile only
     flags = {
         "device": device,

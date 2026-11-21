@@ -1,7 +1,7 @@
 //! Embeds the device files (`devices/*.toml`) so that the device list is data: a new device file is one more entry here after a
 //! rebuild, with no change to the Rust sources. The file list is written to `$OUT_DIR/device_files.rs` (see `src/devdata.rs`).
 //! The files are embedded whole, `[[firmware]]` tables included: the web app ships device files with their stock-image hashes to
-//! identify the firmware a user selects, so the browser build may carry them. The patch anchors (`devices/ports/`) are not embedded;
+//! identify the firmware a user selects, so the browser build may carry them. The patch anchors (`ports/`) are not embedded;
 //! they come at run time (`apps/web/tests/patchkit.wasm.test.ts`).
 
 use std::fmt::Write;

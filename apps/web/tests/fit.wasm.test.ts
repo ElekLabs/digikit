@@ -1,5 +1,5 @@
-// The fit rule through patchkit.wasm (`pk_fit`, packages/patchkit/src/fit.rs): a round trip over a few shared vectors of modules/core/runtime/vectors/fit-vectors.json.
-// The rule itself is tested once, in Rust (modules/core/runtime/fit). Skips when patchkit.wasm is not built.
+// The fit rule through patchkit.wasm (`pk_fit`, packages/patchkit/src/fit.rs): a round trip over a few shared vectors of runtime/core/vectors/fit-vectors.json.
+// The rule itself is tested once, in Rust (runtime/core/fit). Skips when patchkit.wasm is not built.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ type SetCase = {
   want: [number, string, number, number];
 };
 const V: { caps_base: Record<string, number[]>; cases: Case[]; sets: SetCase[] } = JSON.parse(
-  readFileSync(new URL('../../../modules/core/runtime/vectors/fit-vectors.json', import.meta.url), 'utf8'),
+  readFileSync(new URL('../../../runtime/core/vectors/fit-vectors.json', import.meta.url), 'utf8'),
 );
 const capsOf = (over?: Record<string, number[] | null>): Caps =>
   Object.fromEntries(

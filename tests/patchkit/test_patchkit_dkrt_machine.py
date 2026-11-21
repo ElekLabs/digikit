@@ -2,7 +2,7 @@
 
 Static checks: the committed objects are current, the DSP section is deterministic, its relocation agrees in three places
 (the Rust reference loader behind `patchkit dkm-dsp-image`, this file's own, and the loader's checks), and the two sides of the
-DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (equiv-dyn-* in tests/digikit and modules/core/adapters/dynreg/tests/equiv.device.test.ts: a selected
+DSP area's size agree. The emulator proofs are the boot-time equivalence scenarios (equiv-dyn-* in tests/digikit and image-modules/points/dynreg/tests/equiv.device.test.ts: a selected
 module against the patched-in one, PCM sample for sample); the hot-load proof that was here is archived."""
 
 import json
@@ -16,6 +16,7 @@ ROOT = REPO_ROOT
 
 from tools.patchkit import (  # noqa: E402
     modroots,
+    pk_device,
     pk_dkrt,
     pk_dkrt_machine,
     pk_toolchains,
@@ -99,13 +100,15 @@ def test_runtime_watch_env_preserves_dma_holes_and_sequential_mode(
 ):
     from tools.coldfire import arena_safety
 
+    device = "dt2"
+    stage = 0x20000
     plan = tmp_path / "runtime.plan.json"
     plan.write_text(
         json.dumps(
             {
-                "base": {"device": "dt2", "version": "1.17"},
+                "base": {"device": device, "version": "1.17"},
                 "regions": {"cf.expansion": [0x180]},
-                "symbols": {"core/runtime@0.1.0:DKRT_STAGE": 0x20000},
+                "symbols": {"core/runtime@0.1.0:DKRT_STAGE": stage},
             }
         )
     )
@@ -113,7 +116,8 @@ def test_runtime_watch_env_preserves_dma_holes_and_sequential_mode(
     env = pk_dkrt_machine.runtime_watch_env(
         plan, tmp_path / "watch.jsonl", sequential=True
     )
-    assert env["DIGI_WRITE_WATCH"] == "0x1000-0x20000,0x30000-0x80000"
+    stage_end = stage + pk_device.load(device)["limits"]["stage_bytes"]
+    assert env["DIGI_WRITE_WATCH"] == f"0x1000-{stage:#x},{stage_end:#x}-0x80000"
     assert env["DIGI_WRITE_WATCH_ALLOW_PC"] == "0x1000-0x1180"
     assert env["DIGI_WRITE_WATCH_AFTER"] == "cacr" and env["DIGI_FLUSH_CHECK"] == "1"
     assert env["DIGI_WRITE_WATCH_SEQ"] == "1"

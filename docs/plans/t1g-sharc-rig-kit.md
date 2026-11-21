@@ -114,13 +114,10 @@ The reports keep their shape, so only the writer moves: add `patchkit uses set -
   binary exists beside the other rust-env builds; its hash covers the generated core.
 - `@digi/sharc-rig-kit:test-host` (cache true): kit source, its tests, the binary hash, patchkit binary
   (`patchkit:cli`), `sdk/**` includes through the module inputs. No daemon, no firmware, no emulator.
-- Per module `<id>:test-rig` (inferred by `tools/nx/modules.mjs` when `tests/rig/*.toml` exists): inputs are the module's
-  production files, its `tests/rig/**`, the kit source, the two binary hashes, `modules/core/adapters/dsp-voice` and `fx`
-  sources (the wrapper is part of the run). It has no `dependsOn` on `digi-control:daemons`, so a daemon key change does
-  not select it, and a rig edit does not select device tests (checked: `show target inputs digi-control:daemons --check`).
-- `@digi/sharc-rig-kit:test-conformance-rig` (cache true, in the merge gate) runs all machines and effects on the rig; it replaces the Python
-  pytest files in `affected` when they are retired (phase 6). Its inputs are the module manifests, DSP sources (`*.s`, `*.inc`) and
-  `build/gen`, the two adapters, the SDK, the device profiles and the hashes of the two binaries (`dependentTasksOutputFiles`).
+- Per module `<id>:test-dsp` (inferred by `tools/nx/modules.mjs` from `tests/*.rig.test.ts`) runs the module's sound or adapter checks.
+- `pnpm nx:pilot run-many -t test-dsp-conformance` runs the cached module contract checks and the shared FX write-set check. The merge gate
+  selects those targets from changed inputs. The full gate uses the kit's uncached `test-dsp-conformance-all` target, which also accepts manual
+  selectors. See [The Vitest kit](../TESTING.md#the-vitest-kit) for the current inputs and commands.
 - The slice's root `Cargo.toml` and `Cargo.lock` edit changed the daemon key once; later rig edits do not.
 
 ## Retirement list and proofs

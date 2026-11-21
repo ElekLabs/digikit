@@ -10,7 +10,7 @@ patchkit works and how to run it: [docs/PATCHING.md](../docs/PATCHING.md). Rules
 
 - **No firmware bytes in a module.** A `write` carries the SHA-256 of the bytes it replaces, never the bytes.
   Tables of the stock firmware are copied from the user's image at patch time (`[[section]]`).
-- **No addresses in a module.** Every firmware site is a named anchor, found by a rule declared in `devices/fw/`.
+- **No addresses in a module.** Every firmware site is a named anchor, found by a rule declared in `ports/fw/`.
 - **Do not name or copy the vendor DSP toolchain or its files.** Cite public manuals only
   ([docs/sharc/SOURCES.md](../docs/sharc/SOURCES.md)).
 - Nothing patched has run on a device. Say "emulator only" in the gallery text until it has.
@@ -74,7 +74,7 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 | `version` | module version, `major.minor.patch` |
 | `name` | display name in the gallery |
 | `category` | `core`, `fx`, `machines`, `ui`, `tools` or `test` |
-| `role` | layer of a `core` module, required for them: `runtime` (`core/runtime`), `installer` (`core/expansion`), `adapter` (`core/adapters/*`) or `app` (`core/apps/*`). It must fit the folder; `tools/devtools/layercheck.py` checks it ([docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)) |
+| `role` | layer of a `core` module, required for them: `runtime` (`runtime/core`), `installer` (`runtime/platform/expansion`), `adapter` (`runtime/platform` and `image-modules`) or `app` (`runtime/apps`). It must fit the folder; `tools/devtools/layercheck.py` checks it ([docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)) |
 | `type` | `machine`, `fx`, `service`, `raw` or `framework` (`framework` is internal, for core modules) |
 | `author` | who wrote the module (`digikit` for the modules of this repository) |
 | `status` | `experimental` or `stable` |
@@ -83,7 +83,7 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 | `conflicts` | module ids that must not be selected |
 | `ports` | optional: only these ports, for example `["dt2-1.17"]` (empty: any firmware whose anchors resolve) |
 | `needs_device` | optional: tables of the device file the module reads, as dotted paths (`["input.keys"]`). Every device whose patch sets include the module (as a root or through `requires`) must have them; `patchkit gen` refuses a device without one, naming the table, the set and the module |
-| `dynamic` | optional, default false: a run-time module (a content module, see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). It is never patched into an image (patchkit refuses it). `patchkit pack` makes a `.dkm` from it. Its machines have no number in `modules/core/adapters/machines/types.toml`: the runtime assigns a type in 16 to 23 when it loads the module (docs/design/digikit-registry.md "Machine keys") |
+| `dynamic` | optional, default false: a run-time module (a content module, see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). It is never patched into an image (patchkit refuses it). `patchkit pack` makes a `.dkm` from it. Its machines have no number in `image-modules/points/machines/types.toml`: the runtime assigns a type in 16 to 23 when it loads the module (docs/design/digikit-registry.md "Machine keys") |
 
 ```toml
 [module]
@@ -173,8 +173,8 @@ value = "image.u32(this + 2) + params.count"
 width = 4
 ```
 
-`op = "hook"`: attach a routine of the module to a hook declared in `devices/fw/` (see
-[devices/fw/README.md](../devices/fw/README.md)). The declaration gives the site, the offset, the CPU, the `mode` and
+`op = "hook"`: attach a routine of the module to a hook declared in `ports/fw/` (see
+[ports/fw/README.md](../ports/fw/README.md)). The declaration gives the site, the offset, the CPU, the `mode` and
 the register contract. `mode = "before"` runs the routine, then the displaced instructions (copied to
 `hook.<site>[.<offset>].tail`, which jumps back to `.return`). `replace` drops the displaced instructions.
 `retarget` changes the target of an existing call at the site.
@@ -248,12 +248,12 @@ A module that unpacks a container section of a read-only role before the firmwar
 | `len`, `sha256` | the decoded length and SHA-256 of the stock section: patchkit refuses an image whose section differs (the module would refuse it at every boot) |
 | `devices` | optional device filter |
 
-### Anchor rules (`devices/fw/`)
+### Anchor rules (`ports/fw/`)
 
-A module manifest has no rules. Rules are declared in `devices/fw/*.toml` ([design](../docs/design/firmware-decls.md)).
+A module manifest has no rules. Rules are declared in `ports/fw/*.toml` ([design](../docs/design/firmware-decls.md)).
 To look up anchors, addresses and binding names, run `mise run fw:reference`.
 They tell `mise run patch:port` how to find a firmware site. It writes the result (address, length, SHA-256) into
-`devices/ports/*.toml`. The same anchor name may have one rule per device (`devices = [...]`). A rule that finds no
+`ports/*.toml`. The same anchor name may have one rule per device (`devices = [...]`). A rule that finds no
 match or two matches is an error. The keys below go in the `rule` table of a declaration.
 
 Common keys: `name`, `cpu` (`cf` or `sharc`), `kind`, `devices`, `mark` (`"D"`: measured or read once; use `"V"` only
@@ -272,7 +272,7 @@ after a second agent checked it), `offset`, `len` (bytes).
 | `cf_reset_init_calls`, `cf_reset_helper` | `which = "copy"\|"clear"` | the reset-path calls (used by `core/expansion`) |
 
 ```toml
-# devices/fw/<subsystem>.toml
+# ports/fw/<subsystem>.toml
 [[site]]
 name = "dsp.master.site.q31_converter.call"
 cpu = "sharc"
@@ -283,7 +283,7 @@ mark = "D"
 To write a SHARC rule for a site: `uv run python -m tools.patchkit.port_resolve rule-sharc dt2-1.17 0x1c7734 --len 6` prints the
 hash and offset. ColdFire rules come from the function hashes of the `cfdb` database (`tools/coldfire/cf.py`; the
 `catalog emit-rule` command will print them, see the design). Then run `mise run patch:port` and check that the diff of
-`devices/ports/` shows your anchors on every firmware you claim. Full syntax: the docstring of `tools/patchkit/port_resolve.py`.
+`ports/` shows your anchors on every firmware you claim. Full syntax: the docstring of `tools/patchkit/port_resolve.py`.
 
 ### `[[registry]]` and `[[registry.field]]`
 
@@ -398,7 +398,7 @@ what each kind holds, which fact lives where and what a new device needs are in 
 
 `sdk/sdk.toml` is the one source of the runtime version (0.1.0, packed `major<<16|minor<<8|patch`; runtimes 1 to 5 read as 0.0.1 to 0.0.5), the
 contract versions (api, machine, fx, service) and the log kinds. `gen` writes the SDK headers in `sdk/include/dk/gen/` (`imports.h`, `machine.h`, `fx.h`
-and their constants) and the SHARC+ includes in `sdk/dsp/contract/`, `modules/core/runtime/sdk/src/gen_sdk.rs` and
+and their constants) and the SHARC+ includes in `sdk/dsp/contract/`, `runtime/core/sdk/src/gen_sdk.rs` and
 `tools/device/dklog_kinds.py` from it, and the per-type limits (`[limits]` in `devices/*.toml`: modules, machine_rows, arena_bytes,
 stage_bytes) into the runtime's `device.rs`. The patchkit tests fail on a stale file. `runtime_min` (header byte 0x30) is informational;
 a module is refused only on a contract mismatch (`E_CONTRACT` -48: rebuild the module). The runtime refuses further loads when its
@@ -406,7 +406,7 @@ module table is inconsistent (`E_TABLE` -49). `patchkit pack` and `dkm-info` pri
 include the note of each constant is on the line before its `#define`: a trailing comment would become part of the macro.
 
 Example (pluck, Digitakt II): `R1 = FRAME_BASE;` and `R0 = R13 + PLUCK_DECAY_FRAME_OFF;` instead of `0x6d` and `1`.
-`modules/core/adapters/dsp-voice/tests/test_pk_gen_include.py` shows that this assembles to the committed object, byte for byte.
+`image-modules/points/dsp-voice/tests/test_pk_gen_include.py` shows that this assembles to the committed object, byte for byte.
 
 ### `[[section]]`
 
@@ -468,7 +468,7 @@ Workflow:
 
 1. Copy a similar patched-in module (`tests/fixtures/modules/registry-demo`) and fill in the manifest and the sources.
 2. `mise run module:dev -- --modules category/name`: edit, see one summary line per save.
-3. Add module tests; a `smoke.toml` like the one of `modules/core/adapters/fx` only checks that the patched firmware is audible and does not fault.
+3. Add module tests; a `smoke.toml` like the one of `image-modules/points/fx` only checks that the patched firmware is audible and does not fault.
 4. Add a cell to `tests/patchkit/smoke/matrix.toml` for each device and firmware you support, then
    `mise run patch:test -- --cell "dt2-1.17:category/name" --update` records the frame goldens (hashes only) once,
    and later runs compare against them. A change that is invisible on screen must give the stock frames.
@@ -478,7 +478,7 @@ Workflow:
 
 ## Worked example 1: `core/fx` (SHARC+ only, both devices)
 
-`modules/core/adapters/fx/` runs the effect chain on the final stereo block: the master block (64 floats) goes through the chain
+`image-modules/points/fx/` runs the effect chain on the final stereo block: the master block (64 floats) goes through the chain
 before the firmware packs it for USB and converts it to the 24-bit output. With an empty chain the audio is the stock audio.
 
 - **Object.** `src/dsp/fx.s` is placed in `dsp.l2`. `[object.externs]` maps its undefined symbols: the rows of the `fx` registry
@@ -489,12 +489,12 @@ before the firmware packs it for USB and converts it to the 24-bit output. With 
   jumps back to the second instruction of the stock function. The header of the source lists the registers that are free at this site
   ([finding 55](../docs/findings/55-fx-adapter.md)).
 - **Claim.** `dsp.fx.hook`, so that no other module can take the same site.
-- **Anchor rules.** One `sharc_func` rule per device (`devices/fw/dsp/fx.toml`), found by the relocation-insensitive hash of the
+- **Anchor rules.** One `sharc_func` rule per device (`ports/fw/dsp/fx.toml`), found by the relocation-insensitive hash of the
   function. The object is the same on the Digitakt II and the Digitone II.
 - **Test.** `tests/smoke.toml`: expect audible output and no fault.
 
 ```sh
-mise run module:build -- modules/core/adapters/fx --check
+mise run module:build -- image-modules/points/fx --check
 mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx -o out/patch/fx.syx
 mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
 mise run module:dev -- --modules core/fx
@@ -503,18 +503,18 @@ mise run patch:test -- --cell "dt2-1.17:core/fx"
 
 ## Worked example 2: a machine
 
-A machine is a run-time module, not a patch-time row: write it with the builder calls in `init` (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`; the fixtures `tests/fixtures/modules/sine` and `dyn-dn2` show them) and pack it as a `.dkm`. `machines.dks` on the card gives it its type, its page and its knobs. patchkit refuses an `[[entry]]` row of the `machines` registry in a patched-in module. The permanent numbers in `types.toml` are of the framework's own rows only. Device proof: `modules/core/runtime/tests/machines/`.
+A machine is a run-time module, not a patch-time row: write it with the builder calls in `init` (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`; the fixtures `tests/fixtures/modules/sine` and `dyn-dn2` show them) and pack it as a `.dkm`. `machines.dks` on the card gives it its type, its page and its knobs. patchkit refuses an `[[entry]]` row of the `machines` registry in a patched-in module. The permanent numbers in `types.toml` are of the framework's own rows only. Device proof: `runtime/core/tests/machines/`.
 
 ### An effect: run-time module
 
-An effect is a run-time module (`dynamic = true`, a `.dkm`), like a machine. It builds its effect in `init` with builder calls (`dk_module_ctx_add_fx`, `dk_fx_routes`; `modules/fx/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
-and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `modules/core/adapters/fx/`); `core/fxpages` reserves the pages. The chain runs in module order, at most
+An effect is a run-time module (`dynamic = true`, a `.dkm`), like a machine. It builds its effect in `init` with builder calls (`dk_module_ctx_add_fx`, `dk_fx_routes`; `modules/fx/digikit/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
+and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `image-modules/points/fx/`); `core/fxpages` reserves the pages. The chain runs in module order, at most
 `DK_FX_MAX` (4) effects. patchkit refuses an `[[entry]] registry = "fx"` of any module except `core/dynfx`. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object
 (`<dk/gen/fx.h>`, [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.4 and 7.2). An empty chain plays the stock audio.
 The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.
 Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 
-The frameworks themselves are ordinary modules: `modules/core/adapters/machines/` (about 24 ColdFire anchors, six copied
-tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `modules/core/adapters/params/` and
-`modules/core/adapters/dsp-voice/`. Their routines are unit-tested on the emulated ColdFire core (`tools/patchkit/pk_cfunit.py`,
-`modules/core/adapters/machines/tests/test_pk_machines_fw.py`, `modules/core/adapters/params/tests/test_pk_params_fw.py`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).
+The frameworks themselves are ordinary modules: `image-modules/points/machines/` (about 24 ColdFire anchors, six copied
+tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `image-modules/points/params/` and
+`image-modules/points/dsp-voice/`. Their routines are unit-tested on the emulated ColdFire core (`tools/patchkit/pk_cfunit.py`,
+`image-modules/points/machines/tests/test_pk_machines_fw.py`, `image-modules/points/params/tests/test_pk_params_fw.py`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).

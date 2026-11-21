@@ -33,7 +33,7 @@ import {
   type SharcObject,
 } from './toolchain.ts';
 
-export const STEREO_ADAPTER = path.join(ROOT, 'modules/core/adapters/dsp-voice');
+export const STEREO_ADAPTER = path.join(ROOT, 'image-modules/points/dsp-voice');
 export const STEREO_SOURCE = path.join(STEREO_ADAPTER, 'src/dsp/dsp-voice-dn2-stereo.s');
 
 export const CODE = 0xb90000; // the stereo object (short-word address)

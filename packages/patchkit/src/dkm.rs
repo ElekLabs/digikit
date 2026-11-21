@@ -1,7 +1,7 @@
 //! `.dkm`: a module file the digikit runtime loads from the card store at run time (docs/design/digikit-dkm.md).
 //!
 //! `pack` turns a ColdFire `.dko` object into the file; `Dkm::parse` reads and checks one; `Dkm::image` is the reference
-//! loader (copy, relocate) that the runtime's own Rust loader (modules/core/runtime) must agree with. All integers are big
+//! loader (copy, relocate) that the runtime's own Rust loader (runtime/core) must agree with. All integers are big
 //! endian. The file holds no firmware address: absolute references are `base + offset` (kind 0) or a named import (kind 1).
 
 use crate::dko::Dko;

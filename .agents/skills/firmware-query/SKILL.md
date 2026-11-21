@@ -119,8 +119,8 @@ Needs `out/sharcdb/<image>.sqlite` (also of the old image, for `stable`). Writes
     uv run python -m tools.firmware.catalog emit-rule dt2-1.17 0x40113dc8 --other dn2-1.12    # rule, where it resolves, same on both?
     uv run python -m tools.firmware.catalog declare dt2-1.17 0x40113dc8 cf.text.fn.draw_fmt --other dn2-1.12 [--write]
 
-ADDR below 0x1000000 is a SHARC pc. `emit-rule` prints the `devices/fw` rule of the function that contains ADDR (hash, `ordinal` if the hash is not unique, offset, `--len`) and checks it on the image and, with `--other`, on the other device against the catalogue `pair_addr`. `declare` builds a `mark = "O"` entry from it (shared rule, or one rule per device) and with `--write` inserts it into `devices/fw/<subsystem>.toml`. Needs the atlas catalogue for the pair.
-To look up declared anchors, use `modules/core/fw/reference.json` or `mise run fw:reference`.
+ADDR below 0x1000000 is a SHARC pc. `emit-rule` prints the `ports/fw` rule of the function that contains ADDR (hash, `ordinal` if the hash is not unique, offset, `--len`) and checks it on the image and, with `--other`, on the other device against the catalogue `pair_addr`. `declare` builds a `mark = "O"` entry from it (shared rule, or one rule per device) and with `--write` inserts it into `ports/fw/<subsystem>.toml`. Needs the atlas catalogue for the pair.
+To look up declared anchors, use `ports/bindings/reference.json` or `mise run fw:reference`.
 
 Marks stay [D]/[O] until a second check against image bytes. "No callers" needs `tools/coldfire/refscan.py`.
 

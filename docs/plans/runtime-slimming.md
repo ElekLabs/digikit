@@ -109,7 +109,7 @@ Levels (calls go down only): 5 `tick` and the `dkrt_*` entry points; 4 transport
 | `gen_services::ORDER` | the planner's dependency order; `STATIC = 0` |
 | samples: the crate link, the C entry points in `handlers.rs`, `SampleCore`, `SampleHost`, the entry glue, the platform `SamplePool` | `samples.dks` |
 | `worker.rs` (the job queue on the stock sample-loader task) | `samples.dks`, its only shipped user; `dk_job_post` becomes a samples export; needs B1's firmware address imports |
-| `dkrt_project_changed` | deleted (no caller; confirm with `tools/coldfire/refscan.py` first) |
+| `dkrt_project_changed` | deleted (done: no caller; the per-project rows of `sample_tracks.rs` went with it, the picker keeps the pool list in settings) |
 
 Optional cleanup, done when convenient: `dk_debug_selected_params` to a machines export; the device tables in `src/cf/{dt2,dn2}/` and `tramp.s` to the `core/platform` adapter; the SDK files `sample*.rs` to the samples crate, `sticky.rs` to machines, `capacity.rs` to `dkrt-fit`.
 

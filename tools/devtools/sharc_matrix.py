@@ -160,7 +160,7 @@ def tree_hashes(folder: Path) -> dict[str, str]:
 def tool_hashes() -> dict[str, str]:
     # Includes transitive Python helpers and module inputs used by the pluck render.
     paths = [p for p in (ROOT / "tools").rglob("*.py")]
-    paths.extend((ROOT / "devices" / "ports").rglob("*.toml"))
+    paths.extend((ROOT / "ports").rglob("*.toml"))
     for base in (
         "modules",
         "sdk",

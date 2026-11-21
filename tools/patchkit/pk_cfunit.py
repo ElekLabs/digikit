@@ -6,7 +6,7 @@ that site, and leaves through a tail or an exit of the stock code. This harness 
 
     unit = CfUnit(
         "Digitakt_II_OS1.17.syx",
-        sources=[Path("modules/core/adapters/machines/src/cf/dt2/machines.s")],
+        sources=[Path("image-modules/points/machines/src/cf/dt2/machines.s")],
         stubs=["_mf_t_dispatch", ("_mf_site", 6)],  # undefined symbols the routine jumps to: each ends the call
         symbols={"_mf_first": 7, "_mf_rows": ROWS},  # every other undefined symbol: an absolute value
         routines=["mf_dispatch", ...],

@@ -24,6 +24,7 @@ from pathlib import Path
 import grimp
 
 from tools import python_env
+from tools.patchkit.modroots import SHIPPED_ROOTS
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 PY = ["uv", "run", "python"]
@@ -55,7 +56,7 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
             "packages/dkaddrmap/",
             "packages/dksharc/",
             "packages/dkneeds/",
-            "devices/ports/",
+            "ports/",
             "tools/patchkit/pk_",
             "tools/patchkit/modroots.py",
             "tools/patchkit/port_resolve.py",
@@ -63,13 +64,6 @@ PY_SUITES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
             "tests/patchkit/",
         ),
         ("tests/patchkit",),
-    ),
-    (
-        # the tests inside the modules (modules/<group>/<name>/tests/test_*.py): found by globbing, so a new module test needs no entry;
-        # a change in a module selects its own tests through the Nx module projects
-        "module-tests",
-        (),
-        ("modules/**/tests/test_*.py",),
     ),
     (
         "digikit-boot",
@@ -188,15 +182,19 @@ def is_python_source(path: str) -> bool:
 
 
 def is_module_test_dir(path: str) -> bool:
-    """Whether PATH is inside a module's own tests/ directory (modules/**/<name>/tests/)."""
+    """Whether PATH is inside a shipped module's tests/ directory."""
     parts = path.split("/")
-    return len(parts) > 4 and parts[0] == "modules" and "tests" in parts[3:-1]
+    return parts[0] in SHIPPED_ROOTS and "tests" in parts[2:-1]
 
 
 def module_root(path: str) -> str | None:
-    """The module directory of PATH: the nearest ancestor below modules/ that holds a module.toml."""
+    """The nearest module directory containing a file below a shipped module root."""
+    tree = path.split("/", 1)[0]
+    if tree not in SHIPPED_ROOTS:
+        return None
+    base = ROOT / tree
     parent = (ROOT / path).parent
-    while parent != ROOT / "modules" and ROOT in parent.parents:
+    while base in parent.parents:
         if (parent / "module.toml").is_file():
             return parent.relative_to(ROOT).as_posix()
         parent = parent.parent
@@ -242,15 +240,13 @@ def resolve_tests(paths: tuple[str, ...]) -> list[str]:
 
 
 def support_users(path: str) -> list[str]:
-    """The test files (of tests/ and modules/) that import the changed helper module tests/support/NAME.py."""
+    """The test files that import the changed helper module tests/support/NAME.py."""
     if not (path.startswith("tests/support/") and path.endswith(".py")):
         return []
     module = "support." + path.removeprefix("tests/support/").removesuffix(".py")
-    tests = sorted((ROOT / "tests").rglob("test_*.py")) + sorted(
-        p
-        for p in (ROOT / "modules").rglob("test_*.py")
-        if is_module_test_dir(p.relative_to(ROOT).as_posix())
-    )
+    tests = sorted((ROOT / "tests").rglob("test_*.py")) + [
+        ROOT / p for p in module_test_files() if Path(p).name.startswith("test_")
+    ]
     users = [t for t in tests if module in t.read_text(encoding="utf-8")]
     return [t.relative_to(ROOT).as_posix() for t in users]
 
@@ -341,10 +337,11 @@ def graph(*, local_imports: bool = False) -> grimp.ImportGraph:
 
 
 def module_test_files() -> list[str]:
-    """Every .py file in a module's own tests/ directory (modules/<kind>/<name>/tests/), tests and helpers."""
+    """Every .py file in a shipped module's tests/ directory, tests and helpers."""
     return sorted(
         p.relative_to(ROOT).as_posix()
-        for p in (ROOT / "modules").glob("**/tests/**/*.py")
+        for tree in SHIPPED_ROOTS
+        for p in (ROOT / tree).glob("**/tests/**/*.py")
         if "__pycache__" not in p.parts
     )
 
@@ -518,14 +515,13 @@ def python_test_plan(files: list[str], full: bool) -> list[tuple[str, str]]:
     module_roots = {
         root
         for f in files
-        if f.startswith("modules/")
-        and (root := module_root(f))
+        if (root := module_root(f))
         and (not f.startswith(f"{root}/tests/") or is_module_test_helper(f))
     }
     for root in sorted(module_roots):
         plan_ += [
-            (path, "module-source")
-            for path in resolve_tests((f"{root}/tests/test_*.py",))
+            (path.relative_to(ROOT).as_posix(), "module-source")
+            for path in sorted((ROOT / root / "tests").glob("test_*.py"))
         ]
     if "conftest.py" in files:
         plan_ += [(t, "conftest") for t in conftest_tests("conftest.py")]
@@ -537,6 +533,12 @@ def python_test_plan(files: list[str], full: bool) -> list[tuple[str, str]]:
         hit = by_dir if any((ROOT / t).is_dir() for t in tests) else files
         if full or any(f.startswith(triggers) for f in hit):
             plan_ += [(path, name) for path in resolve_tests(tests)]
+    if full:
+        plan_ += [
+            (path, "module-tests")
+            for path in module_test_files()
+            if Path(path).name.startswith("test_")
+        ]
     plan_ += [(t, "imports") for t in graph_tests]
     plan_ += [(f, "changed") for f in files if is_changed_test(f)]
     plan_ += [(t, "support") for f in files for t in support_users(f)]

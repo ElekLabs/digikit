@@ -61,7 +61,8 @@ const lap = (what) => console.error(`${((Date.now() - t0) / 1000).toFixed(1)} s 
 
 // 1. objects
 const buildArgs = force ? ['--force'] : [];
-for (const tree of ['modules/core', 'modules', 'tests/fixtures/modules']) {
+const coreRoots = ['runtime', 'services', 'image-modules'];
+for (const tree of [...coreRoots, 'modules', 'tests/fixtures/modules']) {
   try {
     run(['build', ...buildArgs, '--tree', tree]);
   } catch (e) {
@@ -96,7 +97,10 @@ await Promise.all(
 lap(`pack ${jobs.length} jobs`);
 
 // 3. core objects
-for (const f of globSync('modules/core/**/build/*.dko.json', { cwd: root }).sort()) {
+for (const f of globSync(
+  coreRoots.map((tree) => `${tree}/**/build/*.dko.json`),
+  { cwd: root },
+).sort()) {
   const o = JSON.parse(readFileSync(join(root, f), 'utf8'));
   delete o.source_sha256;
   result.core[f] = sha(JSON.stringify(o));
@@ -132,6 +136,13 @@ if (mode === 'record') {
   console.log(`recorded ${file} at ${result.head.slice(0, 8)}: ${count(result)}`);
 } else {
   const base = JSON.parse(readFileSync(file, 'utf8'));
+  const moves = Object.entries(JSON.parse(readFileSync(join(root, 'docs/plans/e8-moves.json'), 'utf8')));
+  base.core = Object.fromEntries(
+    Object.entries(base.core).map(([key, hash]) => {
+      const move = key.startsWith('modules/core/') && moves.find(([from]) => key.startsWith(`${from}/`));
+      return [move ? move[1] + key.slice(move[0].length) : key, hash];
+    }),
+  );
   let diffs = 0;
   for (const kind of ['dkm', 'core', 'image']) {
     for (const key of new Set([...Object.keys(base[kind]), ...Object.keys(result[kind])])) {

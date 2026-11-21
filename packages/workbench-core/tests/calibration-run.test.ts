@@ -270,7 +270,7 @@ test('BOOT_START dropped from the ring: the probe event alone decides against th
 });
 
 test('the default stable period is the runtime ABI constant', () => {
-  const abi = readFileSync(new URL('../../../modules/core/runtime/abi.toml', import.meta.url), 'utf8');
+  const abi = readFileSync(new URL('../../../runtime/core/abi.toml', import.meta.url), 'utf8');
   const m = /name = "STABLE_BLOCKS"\s*\ntype = "u32"\s*\nvalue = (\d+)/.exec(abi);
   assert.equal(DEFAULT_STABLE_BLOCKS, Number(m![1]));
 });

@@ -245,7 +245,7 @@ def pattern_temp() -> Script:
     return s.chord(FUNC, YES, gap=20_000_000).frame("pattern_saved")
 
 
-# --- SETTINGS > DIGIKIT (modules/core/apps/digikit-menu, finding 28) ---------------------------------------------------
+# --- SETTINGS > DIGIKIT (runtime/apps/digikit-menu, finding 28) ---------------------------------------------------
 # Only meaningful on an image patched with core/digikit-menu: DIGIKIT is the 9th SETTINGS entry (8 DOWN from PROJECT;
 # DN2 and DT2 alike while OUTBOX 8 is hidden).
 

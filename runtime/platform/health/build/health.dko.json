@@ -1,0 +1,533 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text",
+   "symbol": "health_create_main",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text",
+   "symbol": "health_idle_line",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "health_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text",
+   "symbol": "health_block_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_off",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.health_block",
+   "symbol": "health_rec_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 32,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 46,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 52,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 58,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 66,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 72,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 80,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 96,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_idle_line",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 110,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 116,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 122,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 128,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 134,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 140,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 150,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 160,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 168,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 174,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 180,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 186,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 194,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 202,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 208,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 214,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 220,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 226,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 232,
+   "section": ".text.health_block",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 12,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 18,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 24,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 34,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 48,
+   "offset": 40,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 56,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 80,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_idle_line",
+   "type": "cf.32"
+  },
+  {
+   "addend": 52,
+   "offset": 104,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 118,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 138,
+   "section": ".text.health_read",
+   "symbol": ".sec..bss.health_hs",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text.health_heap",
+   "symbol": "health_desc_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text.health_heap",
+   "symbol": "health_lock_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.health_heap",
+   "symbol": "health_unlock_lit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text.health_heap",
+   "symbol": "health_mutex_lit",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4eb90000000052b90000000060f84feffff048d703034eb9000000004cd703034fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 42
+  },
+  {
+   "align": 2,
+   "hex": "2f024ab900000000660000e22079000000002010220052b900000000538123c0000000000c81003d08fe621ad1b90000000052b900000000b0b900000000630623c000000000203900000000528023c0000000000c80000005db6300009041f900000000223900000000200190b90000000023c10000000052b90000000023c00000000023d0000000002239000000004a81670a2239000000004c50100123c100000000720141f90000000023d00000000052b900000000b2b900000000640eb0b900000000630623c00000000052b90000000042b90000000042b90000000042b90000000042b900000000241f4e75",
+   "kind": "text",
+   "name": ".text.health_block",
+   "size": 240
+  },
+  {
+   "align": 2,
+   "hex": "518f2f0a2f02206f00142039000000002239000000002279000000002f4100082239000000002439000000002f42000c0800000066d4b0b90000000066cc45f9000000007001214000042152000845f9000000002152000c45f900000000214200142152001045f900000000215200182149002043f9000000002151002820bc484c5448214100244ab90000000056c0216f0008001c241f245f710044802140002c508f4e75",
+   "kind": "text",
+   "name": ".text.health_read",
+   "size": 166
+  },
+  {
+   "align": 2,
+   "hex": "4fefffd448d73cfc267900000000207900000000227900000000246f00302839000000004a8b670000cc4a88670000c64a89670000c04a84670000ba2f042f49002c4e90588f226f00284a93660e2f4400304cd73cfc4fef002c4ed1202b0010721f2a6b0004286b000c206b0014b2806512428252804283428542864a82670a740860404280740860ea53807e10e1af73c022341c004a816c064a8066de6024b1c1631a0c8300000fff62165283dc87be8563022a07e9892235180860d8740860d874042008e988256b0018003c254000302f044e9184aa002c25460034254500387002588f254300402543004480822540002c4cd73cfc4fef002c4e75",
+   "kind": "text",
+   "name": ".text.health_heap",
+   "size": 254
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.health_hs",
+   "size": 64
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.health_off",
+   "size": 4
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.health_idle_line",
+   "size": 16
+  }
+ ],
+ "source_sha256": "d3029ca00bac8098a439be5bcbd255763b08cb96599cde8059c72aa357a0e548",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.health_hs",
+   "section": ".bss.health_hs",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.health_idle_line",
+   "section": ".bss.health_idle_line",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.health_off",
+   "section": ".bss.health_off",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_block",
+   "section": ".text.health_block",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_block_hook",
+   "section": ".text",
+   "value": 14
+  },
+  {
+   "global": true,
+   "name": "health_block_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_create_main",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_desc_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_heap",
+   "section": ".text.health_heap",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_hs",
+   "section": ".bss.health_hs",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_idle_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_idle_line",
+   "section": ".bss.health_idle_line",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_lock_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_mutex_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_off",
+   "section": ".bss.health_off",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_read",
+   "section": ".text.health_read",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_rec_lit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "health_unlock_lit",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "189",
+  "isa_check": "8e6a640c2f70a6d9ec672d35e8b0c8902c1a436afed4d98b0f1bfaa621306164",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

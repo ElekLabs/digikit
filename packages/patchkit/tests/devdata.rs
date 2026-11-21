@@ -298,7 +298,7 @@ fn a_fact_that_devices_disagree_on_becomes_data_of_the_device_object() {
 #[test]
 fn the_code_knows_the_devices_of_the_device_files() {
     // every port names a device the code knows, and the limits a port records are the device's `[patch]` limits
-    let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let reg = Registry::from_dir(&root().join("ports")).unwrap();
     assert!(!reg.ports.is_empty());
     for p in &reg.ports {
         let d = devdata::by_short(&p.port.device).unwrap_or_else(|| panic!("{}", p.id()));

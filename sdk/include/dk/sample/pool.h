@@ -112,16 +112,17 @@ typedef struct dk_sample_peak {
    shared); index >= 16: E_CONTRACT. add returns the first UNUSED index. A file that is already in the pool (the same path) returns its index and loads nothing; if that
    entry has a sticky error, the add selects it again. Indexes are stable: clear leaves a hole and never moves another entry, so a value
    saved in a sound or a p-lock keeps its meaning. A full pool returns DK_SAMPLE_E_POOL. An entry that is not READY (UNUSED, QUEUED,
-   LOADING, an error) is silent in the DSP: note_on is denied and the voice ends. The pool is kept per project; a project change
-   reloads the list. Calls are legal from init and service/UI callbacks. A runtime image without a sample backing returns
+   LOADING, an error) is silent in the DSP: note_on is denied and the voice ends. The pool has no project code: a module that
+   keeps its list in its settings (the sample picker, <dk/sample/picker.h>) gets the list of the current project through the settings overlay, and a project
+   change reloads the module, whose init sets the list again. Calls are legal from init and service/UI callbacks. A runtime image without a sample backing returns
    DK_SAMPLE_E_CONTRACT from dk_sample_pool_add.
 
    Paths. dk_sample_pool_add takes the root-relative path of a DK_FILES_SAMPLES listing
    row, as <dk/platform/files.h> gives it ("KICKS/K1", no leading slash); the runtime adds the device's
    root. A DT2 path that already starts with '/' (an older form) is accepted as it is.
    dk_sample_pool_path returns the path of an entry in the root-relative form, in
-   every state but UNUSED (E_NOT_FOUND): it is what a UI shows after a project change
-   reloaded the list. It copies the NUL-terminated path into buf and returns its length
+   every state but UNUSED (E_NOT_FOUND): it is what a UI shows after the module
+   loaded its list again (after a project change reloaded it). It copies the NUL-terminated path into buf and returns its length
    without the NUL; if length + 1 > cap it returns DK_SAMPLE_E_SEL_PATH and leaves buf alone.
    */
 #endif

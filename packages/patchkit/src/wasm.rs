@@ -3,7 +3,7 @@
 //! ports and modules, and a comma-separated module list, and reads the results back by pointer and length.
 //!
 //! Bundle: `{"ports": ["<port toml>", ...], "modules": [{"manifest": "<module.toml>", "files": {"build/x.dko.json": "<json>"}}]}`.
-//! (`tools/patchkit/patchkit.py bundle` and the gallery's build step, `apps/web/scripts/gen-modules.mjs`, make it from `devices/ports/` and `modules/`.)
+//! (`tools/patchkit/patchkit.py bundle` and the gallery's build step, `apps/web/scripts/gen-modules.mjs`, make it from `ports/` and the committed module roots.)
 
 use crate::apply;
 use crate::error::{Error, Result, sha256_hex};

@@ -1,6 +1,6 @@
 # The digikit module store
 
-Status: built (builder and reader in `packages/emulator/plusdrive/src/store.rs`, runtime in `modules/core/runtime/sdk/src/store.rs`), 2026-10-16; version 2 (two header copies, for
+Status: built (builder and reader in `packages/emulator/plusdrive/src/store.rs`, runtime in `runtime/core/sdk/src/store.rs`), 2026-10-16; version 2 (two header copies, for
 module upload, `docs/design/digikit-upload.md`) 2026-10-18; **the settings record** (a fixed area of 32 sectors before the selection record: header copy B moved from `sectors - 3` to `sectors - 35`, runtime 0.5.1) 2026-10-25; **version 3** (a per-device area of 82 MiB / 22 GiB, folders, reusable space, 159-byte paths, a streamed table; runtime 0.3.0) 2026-10-22; **version 4** (the table's hash slot holds the +Drive content hash, not a SHA-256; capability FILEHASH) 2026-11-07.
 Plan: `docs/plans/storage.md`. Area choice: `docs/findings/59-storage-regions.md` (the older range choice, `docs/findings/23-digikit-runtime-spikes.md` S6, is superseded).
 
@@ -31,7 +31,7 @@ The area is not a path filesystem: **folders are in the paths.** The folders and
 | `modules/<kind>/<author>-<name>.dkm` | content modules, grouped by module kind; the file name is the module id with "/" as "-" |
 | `services/<service>.dks` | service files; the stem is the service name |
 | `ports/<device>-<version>.dkport` | port files, several side by side; `<version>` is the firmware version string, the runtime picks the one whose `FW` hash equals the image `fw_id` |
-| `projects/<slot>-<name>.dkp` | project files of the `project` service, slot 000 to 127 (the identity) and the project name ([digikit-project](../plans/digikit-project.md)) |
+| `projects/<number>-<name>.dkp` | project files of the `project` service, number 001 to 128 (firmware slot + 1, the identity) and the project name ([digikit-project](../plans/digikit-project.md)) |
 | `projects/archive/<name>-<stamp>.dkp` | archived project files of the `project` service, kept for good (a file that no longer belongs to its slot); stamp as 8 hex digits ([digikit-project](digikit-project.md)) |
 | `samples/<folder>/<name>` | samples, for devices with `card = "slots"` only |
 | `data/<module id>/` | reserved for files that a module writes; not enforced |
@@ -131,16 +131,16 @@ A header sector with our magic and a version other than 4 (a version 3 store, wh
 card check still calls the card ours, and the first upload writes version 4 headers into both header sectors and reuses the old table and file sectors as free space (the old bytes are overwritten; files of the old store
 are uploaded again). What stays on the card: the **selection record** and the **settings record** are not part of the store structure, so they are kept as they are, and the next boot loads the modules the kept selection names once their files are uploaded again.
 Foreign bytes in a header sector are still refused (`E_NOSTORE` for the upload commands, the area is somebody's data), and a version 4 header that fails its checks is a damaged store, refused as before (`E_NOSTORE`, CLEAR works).
-`patchkit store dump` and `plusdrive store ls` refuse a version 3 store. Test: `modules/core/runtime/tests/store-format.device.test.ts` (both devices), `dkrt_sdk::store` unit test `a_store_of_another_version_is_no_store_a_damaged_current_one_is_refused`.
+`patchkit store dump` and `plusdrive store ls` refuse a version 3 store. Test: `runtime/core/tests/store-format.device.test.ts` (both devices), `dkrt_sdk::store` unit test `a_store_of_another_version_is_no_store_a_damaged_current_one_is_refused`.
 
 ## Who writes and who reads
 
 - **The builder** (`plusdrive build`, the desktop card job): every regular file under `digikit/` (recursive; symbolic links and `.DS_Store` skipped; an empty folder is not built: folder entries are made by the runtime and exported). It writes both header copies (`seq` 1) and lays the data out in path order after the table. An image that holds store files or a selection reaches the end of the area (a sparse file).
 - **The exporter** (`card.export`, the end of a session) reads the store and writes its files back to `digikit/` (a folder with nothing in it too). The firmware never writes these
-  sectors; only the runtime's upload does. A path-filesystem entry named `digikit` that the firmware's user made on the device is exported as `digikit~<id>` so it cannot land in the store folder.
+  sectors; only the runtime writes them (the upload, the settings record and, with the `project` service, the `.dkp` files). A path-filesystem entry named `digikit` that the firmware's user made on the device is exported as `digikit~<id>` so it cannot land in the store folder.
 - **A reader** for tests: `plusdrive store ls IMAGE [--device dt2|dn2] [--cat PATH]` prints `path first_sector size hash` by path (a folder with nothing in it as `path/ - 0 folder`; `--cat` writes one file's bytes).
   The runtime reads it with the firmware's block read; `mise run plusdrive:check` calls that function on a booted DT2 and DN2 and compares the header, table and every file with the image and the folder.
-- **The runtime** (`modules/core/runtime`, Rust): `dkrt_sdk::store` is the format, the reader and the one writer; `upload.rs` is its commands (docs/design/digikit-upload.md); the device's area comes
+- **The runtime** (`runtime/core`, Rust): `dkrt_sdk::store` is the format, the reader and the one writer; `upload.rs` is its commands (docs/design/digikit-upload.md); the device's area comes
   from its device object (`dkrt_store_first`, `dkrt_store_sectors`, written by `patchkit gen` from the device file). The runtime's one card-write function refuses a write outside the area (`E_RANGE`).
 
 ## `digikit/` and the path filesystem
@@ -155,7 +155,7 @@ A sample in `samples/` is the DT2 native sample file, byte for byte what the +Dr
 
 The runtime keeps one writable record in the store range: which modules to load at the next boot, and the boot counter of safe
 mode. It is the only thing the runtime ever writes to the card (finding 37). Layout fixed 2026-10-17; the +Drive round trip
-(lane D) and the runtime (`modules/core/runtime`, `dkrt_sdk::DkrtSelection`) both rely on it.
+(lane D) and the runtime (`runtime/core`, `dkrt_sdk::DkrtSelection`) both rely on it.
 
 **Where.** The last `selection_sectors` (2) sectors of the area (`devices/<device>.toml` `[card.store] selection_sectors`):
 copy A at `end_sector - 2`, copy B at `end_sector - 1` (absolute sectors `0x2E19FFE` and `0x2E19FFF` on both devices: the area ends with the card). The store builder
@@ -223,14 +223,17 @@ The runtime reads the placement from the layout (`store::Layout::set_a`, `set_b`
 
 The bytes after `used` are not part of the record (a shorter record written over a longer one leaves old bytes there; the crc32 ignores them). A copy is **valid** when its magic, version, `used` (18 to 8192),
 crc32 and entries hold (every entry inside `used`, every key legal, no key twice). A reader takes the valid copy with the higher `seq` (equal: A); no valid copy is an empty record. The shared vectors
-`modules/core/runtime/vectors/settings-vectors.json` (valid records with their decoded entries and a refused record for each rule, with the first rule it breaks) are checked by the Rust SDK tests, by `patchkit store dump` and by the Python reader.
+`runtime/core/vectors/settings-vectors.json` (valid records with their decoded entries and a refused record for each rule, with the first rule it breaks) are checked by the Rust SDK tests, by `patchkit store dump` and by the Python reader.
 
-**Keys by owner.** A key is `<owner prefix><module id>` or, later, `<module id>/...`. Now: `fx/route/<module id>` (1 byte: 0 master, 1 send; absent, or a route the effect's manifest does not allow: the manifest's default `route`; written by DIGIKIT > FX ROUTES) and `fx/send/<module id>` (16 bytes: the amount 0 to 127 of each track). The
-prefixes and how a reader prints their values are `[[settings.key]]` of `sdk/sdk.toml` (generated). A key of another shape is stored and printed as text or hex. **Reserved, not built:** a run-time module (a `.dkm`) will
-reach only the keys that start with its own module id and a `/`; there is no module API yet (the runtime-internal functions below and the exported C functions for `core/*` modules are all there is).
+**Keys by owner.** A key is `<owner prefix><module id>` or, later, `<module id>/...`. Now: `<module id>/pool.0` to `<module id>/pool.15` (the pool list of a sampler module that uses the sample picker: the path of the entry, no NUL, removed at CLEAR; per project through the overlay) and `fx/route/<module id>` (1 byte: 0 master, 1 send; absent, or a route the effect's manifest does not allow: the manifest's default `route`; written by DIGIKIT > FX ROUTES) and `fx/send/<module id>` (16 bytes: the amount 0 to 127 of each track). The
+prefixes and how a reader prints their values are `[[settings.key]]` of `sdk/sdk.toml` (generated). A key of another shape is stored and printed as text or hex. A run-time module (a `.dkm`) reaches only the keys that start with its own module id and a `/`, through `dk_settings_*`; the runtime-internal functions below and the exported C functions for `core/*` modules are the only other way in.
 Unloaded modules keep their entries: nothing removes a key but `remove`.
 
-**Runtime rules** (`modules/core/runtime/src/rs/src/settings.rs`).
+**Budget.** The record is 8 KiB for all modules and the runtime together. The sample picker keeps one path per pool entry (`dk_settings_put`, up to 255 bytes, `DK_CHOOSER_PATH`, under `pool.0` to `pool.15`): a full pool is about 16 x (255 + key) = 4.3 KB at worst and about 0.5 KB with typical paths. A full record refuses the puts of every module and of the runtime (`fx/route`, ...) with `E_SET_FULL`; the picker then removes the key of the entry and shows the toast "SETTINGS FULL".
+
+**Module settings and projects.** A module's keys (`<module id>/<key>`, through `dk_settings_*`) are device scope. The runtime offers a settings overlay (a layer over module-owned keys; the project service is its only user). While the `project` service is loaded the keys are also per project: a read takes the current project's `.dkp` entry first and falls back to the record, and every write goes to the project and then to the record (the last used value, which a new project starts from) ([digikit-project](digikit-project.md) section 1). The runtime's own keys (`fx/route/...`, `fx/send/...`, the selection) are not module settings and stay device scope. The `.dkp` uses the same entry format and key limits.
+
+**Runtime rules** (`runtime/core/src/rs/src/settings.rs`).
 
 0. **Off:** at the boot the runtime opens the store first (`store::open`). A card with no store header has no files: the settings store is on. A store that opens is clean (nothing of it reaches the tail). A store whose headers do not read, or
    that reaches into the tail (see above), turns the settings store **off**: `SETTINGS_LOAD` state 4 (an error event, argument 3 is the store's status), CAPACITY `SETTINGS` limit 0 and used 0, `put`, `get` and `remove` and the SETTINGS command answer

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Device facts, pristine-card settings seeds and OLED rendering for FX route suites.
 
-Device execution lives in modules/core/adapters/fx/tests/fx-routes-panel.device.test.ts,
-fx-routes-persist.device.test.ts and modules/core/adapters/fxpages/tests/fx-track-route.device.test.ts.
+Device execution lives in image-modules/points/fx/tests/fx-routes-panel.device.test.ts,
+fx-routes-persist.device.test.ts and image-modules/points/fxpages/tests/fx-track-route.device.test.ts.
 """
 
 from __future__ import annotations

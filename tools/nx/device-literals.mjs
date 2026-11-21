@@ -8,7 +8,7 @@
 // Binary files (a NUL byte) are skipped and counted.
 //
 // Allowed without a baseline entry:
-//   - devices/** and docs/**;
+//   - devices/**, ports/*.toml, ports/fw/** and docs/**;
 //   - a path with a segment that is, or has a separator-bounded token equal to, a device id or name word (`dt2/`, `device-dt2.inc`,
 //     `foo_dn2.py`, `digitakt/`): per-device adapter sources, single-device RE tools, tests pinned to one device. `digitakt2/` and
 //     `dt2fx.py` are not such tokens;
@@ -83,7 +83,13 @@ export function countLiterals(path, text, re) {
 }
 
 export function allowedPath(path, pathRe) {
-  return path.startsWith('devices/') || path.startsWith('docs/') || pathRe.test(path);
+  return (
+    path.startsWith('devices/') ||
+    /^ports\/[^/]+\.toml$/.test(path) ||
+    path.startsWith('ports/fw/') ||
+    path.startsWith('docs/') ||
+    pathRe.test(path)
+  );
 }
 
 /** `found`: path to count, for the files `readText` can read as text (it returns undefined for a binary file). */

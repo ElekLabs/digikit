@@ -10,7 +10,7 @@ modules. Fixtures and patched-in core adapters are excluded. Nx derives their `r
 from the manifest category and shipped root; the `modules` release group uses those tags.
 
 The runtime release also defines the SDK release: `[runtime].version` in `sdk/sdk.toml` is canonical,
-and `modules/core/runtime/module.toml` mirrors it. The `runtime` group versions that one identity;
+and `runtime/core/module.toml` mirrors it. The `runtime` group versions that one identity;
 the adapter refuses a missing or mismatched mirror. SDK contract numbers are a separate internal check.
 Versioning one module or the runtime does not bump dependents or rewrite dependency declarations.
 

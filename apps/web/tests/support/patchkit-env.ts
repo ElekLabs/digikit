@@ -41,8 +41,10 @@ export function writeBundle(dir: string): string {
 /** A file as plain bytes (what the wasm loaders take). */
 export const readBytes = (path: string): Uint8Array<ArrayBuffer> => new Uint8Array(readFileSync(path));
 
-/** Every module.toml under `dir` (default: modules/). */
-export const manifestFiles = (dir = join(root, 'modules')): string[] =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
-    e.isDirectory() ? manifestFiles(join(dir, e.name)) : e.name === 'module.toml' ? [join(dir, e.name)] : [],
-  );
+/** Every module.toml under `dir` (default: the repository's module roots, excluding test fixtures). */
+export const manifestFiles = (dir?: string): string[] =>
+  dir === undefined
+    ? ['modules', 'runtime', 'services', 'image-modules'].flatMap((r) => manifestFiles(join(root, r)))
+    : readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? manifestFiles(join(dir, e.name)) : e.name === 'module.toml' ? [join(dir, e.name)] : [],
+      );

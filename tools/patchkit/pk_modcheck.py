@@ -3,7 +3,7 @@
 
     uv run python -m tools.patchkit.pk_modcheck NAME [--device dt2|dn2] [--trace]      (mise run module:check NAME)
 
-NAME is a module id (`<author/name>`) or its last part (`<name>`), or `service/<name>` for a service crate of the runtime (`modules/core/services/<name>`: the structure check, `patchkit service-check`, then the crate's `rust-tests`). A machine or effect module runs the conformance suite on the SHARC-only rig
+NAME is a module id (`<author/name>`) or its last part (`<name>`), or `service/<name>` for a service crate of the runtime (`services/<name>`: the structure check, `patchkit service-check`, then the crate's `rust-tests`). A machine or effect module runs the conformance suite on the SHARC-only rig
 (packages/sharc-rig-kit, docs/TESTING.md "The Vitest kit"), for its devices, then `patchkit uses set` writes its measured DSP cost. Then one pytest process runs the module's own tests: `modules/<group>/<name>/tests/**/test_*.py` and its scenarios in `tests/scenarios/*.toml` (only those run, at every tier). Module-owned Nx `test-device-all` targets (full inputs) then run their declared TypeScript device acceptance; any failing stage stops the check before size/fit.
 Own tests may build or launch an emulator. A service/raw module with no Python tests has its objects checked against their sources, then runs its owned device target if present. Size and fit follow only after both stages pass. This command does not prove every module loads in patched firmware.
 """
@@ -606,7 +606,7 @@ def service_check(name: str) -> int:
     """A service crate: the structure check (layout, one exported entry, declarations equal to sdk.toml), then its own host tests."""
     from tools.patchkit import patchkit
 
-    crate = ROOT / "modules/core/services" / name
+    crate = ROOT / "services" / name
     if not (crate / "Cargo.toml").is_file():
         print(
             f"service/{name}: no such service crate ({crate.relative_to(ROOT)})",

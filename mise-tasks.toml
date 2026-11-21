@@ -21,7 +21,7 @@ description = "Build once and open the desktop app with nothing loaded (DN2 and 
 ["workbench:inputs"]
 hide = true
 run = "pnpm nx:pilot run @digi/desktop:workbench-inputs --output-style=stream"
-description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist), apps/web/public/{patchkit,dkupload,dksample}.wasm. Also packs the services the Transfer page offers (dist/modules/<device>/*.dks, the `pack` targets of core/services/*)"
+description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist), apps/web/public/{patchkit,dkupload,dksample}.wasm. Also packs the services the Transfer page offers (dist/modules/<device>/*.dks, the `pack` targets for services/*/dks)"
 
 ["emu:serve"]
 run = "uv run python -m tools.emulator.native_emu --daemon"
@@ -269,7 +269,7 @@ description = "Write the generated module sources from devices/*.toml and sdk/sd
 
 ["fw:reference"]
 run = "uv run python -m tools.patchkit.patchkit reference"
-description = "Write the searchable firmware reference page out/reference/fw.html from modules/core/fw/reference.json"
+description = "Write the searchable firmware reference page out/reference/fw.html from ports/bindings/reference.json"
 
 ["gen:core"]
 run = "uv run python -m tools.sharc_dev.sharc_transpile --strict --out out/native/shared-core/gen --work out/native/shared-core/work"
@@ -306,7 +306,7 @@ description = "Create a run-time module from a template in sdk/templates and bui
 
 ["module:build"]
 run = "uv run python -m tools.patchkit.patchkit build"
-description = "Compile module sources to objects (core/* modules: build/*.dko.json, committed; every other module: the cache out/cache/dko): mise run module:build [-- modules/fx/NAME] [--check]. Pack, dk:run and the Rust tests build stale objects themselves"
+description = "Compile module sources to objects (core/* modules: build/*.dko.json, committed; every other module: the cache out/cache/dko): mise run module:build [-- modules/fx/OWNER/NAME] [--check]. Pack, dk:run and the Rust tests build stale objects themselves"
 
 ["module:check"]
 run = "uv run python -m tools.patchkit.pk_modcheck"
@@ -314,7 +314,7 @@ description = "Check one module: module:check ID [--device dt2|dn2] [--trace]; a
 
 ["module:audit"]
 run = "sh tools/devtools/module_audit.sh"
-description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (modules/core/runtime/tests/memaudit-module.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
+description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (runtime/core/tests/memaudit-module.manual.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
 
 ["lfo:report"]
 run = "sh tools/devtools/lfo_report.sh"
@@ -395,7 +395,7 @@ description = "Every emulator proof on its quick tier, in sequence (DT2: voice, 
 
 ["patch:port"]
 run = "uv run python -m tools.patchkit.port_resolve"
-description = "Resolve the anchors and regions of a firmware into devices/ports/*.toml: mise run patch:port [-- X.syx] (no argument: the supported firmwares: DT2 1.17, DN2 1.12, DN2 1.11)"
+description = "Resolve the anchors and regions of a firmware into ports/*.toml: mise run patch:port [-- X.syx] (no argument: the supported firmwares: DT2 1.17, DN2 1.12, DN2 1.11)"
 
 # --- dk: the digikit runtime on a device or the emulator ---
 
@@ -421,7 +421,7 @@ description = "Press keys through the digikit remote, record the device's USB au
 
 ["services:pack"]
 hide = true
-run = "pnpm nx:pilot run-many -t pack -p core/services/machines,core/services/fx,core/services/lfo,core/services/samples --output-style=stream"
+run = "pnpm nx:pilot run-many -t pack -p core/services/machines,core/services/fx,core/services/lfo,core/services/samples,core/services/project --output-style=stream"
 description = "Pack the services (dist/modules/<device>/*.dks) from the committed objects; Transfer and wb:cli read them there"
 
 [transfer]

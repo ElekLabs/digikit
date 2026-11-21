@@ -365,6 +365,11 @@ export const LOG_KIND = {
   TEXT_INPUT_OPENED: 56,
   TEXT_INPUT_DONE: 57,
   CARD_GUARD_REFUSED: 58,
+  PROJECT_LOADED: 59,
+  PROJECT_SAVED: 60,
+  PROJECT_IGNORED: 61,
+  PROJECT_DEFERRED: 62,
+  PROJECT_MODULE: 63,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -425,6 +430,11 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   56: ['TEXT_INPUT_OPENED', ['owner', 'max_len', '-', '-', '-']],
   57: ['TEXT_INPUT_DONE', ['owner', '-', '-', '-', '-']],
   58: ['CARD_GUARD_REFUSED', ['sector', 'sectors', 'class_kind', 'refused_writes', 'refused_erases']],
+  59: ['PROJECT_LOADED', ['slot', 'bytes', 'modules', 'counter', '-']],
+  60: ['PROJECT_SAVED', ['slot', 'bytes', 'counter', 'result', '-']],
+  61: ['PROJECT_IGNORED', ['slot', 'reason', 'status', '-', '-']],
+  62: ['PROJECT_DEFERRED', ['slot', 'status', 'seconds', '-', '-']],
+  63: ['PROJECT_MODULE', ['slot', 'what', 'status', 'index', 'id_hash']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

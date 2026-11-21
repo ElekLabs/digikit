@@ -86,6 +86,8 @@ mise run patch:mem -- core/machines core/params --device dt2 --firmware 1.17    
 
 ### Compare two objects after a move
 
+Cargo uses the staged dependency path when identifying a Rust crate. If a directory rename must preserve ColdFire object bytes, set `staged-dir = "old-name"` under `[package.metadata.patchkit]` in the moved dependency’s Cargo manifest. Use its previous directory name. Patchkit accepts ASCII letters, digits, hyphens and underscores. The E8 [byte manifest](TESTING.md#byte-manifests-for-repository-moves) verifies the resulting build.
+
 `patchkit objdiff OLD.dko.json NEW.dko.json [--format text|json] [--strict] [--erase TYPE]...` proves that two ColdFire objects hold the same code when only
 names, order and addresses differ (the check for moving Rust items between modules of the runtime crate). A byte compare of such
 objects always fails: mangled names contain the module path, functions change order, and relocations name section symbols.
@@ -108,10 +110,10 @@ objects always fails: mangled names contain the module path, functions change or
 - Exit 0 and `identical: N functions, M data objects` (then `ignored: N panic locations` when there are any), or exit 1 and the list.
 
 ```text
-$ patchkit objdiff modules/core/runtime/build/runtime.dko.json modules/core/runtime/build/runtime.dko.json
+$ patchkit objdiff runtime/core/build/runtime.dko.json runtime/core/build/runtime.dko.json
 identical: 666 functions, 291 data objects
 
-$ patchkit objdiff modules/core/runtime/build/runtime.dko.json R2A-DELETIONS.dko.json
+$ patchkit objdiff runtime/core/build/runtime.dko.json R2A-DELETIONS.dko.json
 differences: 57 (638 functions and 276 data objects match)
 ...
 differs   dkrt_poll_add
@@ -140,7 +142,7 @@ hook name hash and the entry of the routine that the site jumps to. A service th
 The firmware specifics are in the port file (`.dkport`, role 2), one for each device and firmware version, built from committed data only (see "Port file" below). The
 runtime picks the port file whose `FW` item equals the image's `fw_id`, resolves the imports of a service against it at load, copies the displaced bytes of the tail and
 stock sites from flash after it compared them with the check value, and installs the hooks at the sites that the port file lists. There is no binding step, no trampoline
-in a service file and no firmware byte in any file that goes on a card or into the repository. A service takes raw hooks only: a hook with a `handler` in `devices/fw/` is
+in a service file and no firmware byte in any file that goes on a card or into the repository. A service takes raw hooks only: a hook with a `handler` in `ports/fw/` is
 refused when the port file is built.
 
 The test fixture `test/svc-test` takes one hook, `cf.menu.hook.settings_list.test`, on the site of the last step of the SETTINGS list rebuild. That hook is in the port file of
@@ -219,7 +221,7 @@ midir; it starts no process). The Transfer page then lists, installs and deletes
 firmware's Screenshot, polled) on the faceplate, and its keys and knobs press and turn on the target through `digikit/remote`, a run-time module:
 install it on the Transfer page (`out/modules/<device>/digikit/remote.dkm`; the workbench app builds and packs it when it reads the library), select it in MODULES on the device, apply and
 restart. The commands work while the module is loaded; its check mark in MODULES is the only switch, and its SETTINGS... page (in the MODULES side panel) shows the held keys and
-has RELEASE ALL KEYS (`modules/tools/remote/README.md`). From a terminal: `uv run python -m tools.device.dkupload --emu remote state|key CODE|turn ENC N`
+has RELEASE ALL KEYS (`modules/tool/digikit/remote/README.md`). From a terminal: `uv run python -m tools.device.dkupload --emu remote state|key CODE|turn ENC N`
 (`--port NAME` for a device).
 
 ### Developer loop
@@ -262,7 +264,7 @@ and `diff.png` under `out/runs/patchkit/frames/<cell>/mismatch/` and prints the 
 from the last passing frame of that golden, kept locally in `out/cache/smoke-frames/` (filled by a passing run or `--update`,
 never committed). `run --goldens FILE` compares against a copy of the goldens. Our own screens are better checked by the state they
 are drawn from: `expect_text` (rows a module keeps in RAM) and `expect_mem` with `symbol` (a symbol of the image's plan), see
-`modules/core/apps/digikit-menu/tests/menu.toml`. Details: the docstring of `tools/patchkit/pk_harness.py`
+`runtime/apps/digikit-menu/tests/menu.toml`. Details: the docstring of `tools/patchkit/pk_harness.py`
 and [finding 17](findings/17-emulator-control.md). The proof tools `tools/patchkit/pk_proof_*.py` (PCM and behaviour proofs per
 module family) are slower and are run before a merge, not in the loop.
 
@@ -272,7 +274,7 @@ module family) are slower and are run before a merge, not in the loop.
 mise run module:new -- machine alice/drone     # a run-time machine
 mise run module:new -- fx alice/crunch         # a run-time effect
 mise run module:new -- tool alice/hello     # a ColdFire service in C
-mise run module:build                         # rebuild all objects (`-- modules/fx/my-effect` for one, `-- --check` only checks)
+mise run module:build                         # rebuild all objects (`-- modules/fx/alice/my_effect` for one, `-- --check` only checks)
 ```
 
 The command writes `modules/<category>/<name>/` (manifest, source stubs, `tests/smoke.toml`, `README.md`, `gallery/icon.svg`) and
@@ -307,21 +309,21 @@ from 0x40139872 (strict)
     D1 live: read at 0x401398a6: tst.l D1
 ```
 
-`strict` counts a register that reaches a call, a return or an indirect jump untouched as live; `gcc` (default: both are printed) assumes the call convention of compiled code and shows more dead registers. It is a guess about the code, not a fact of the image: decide a scratch register, a register to save or a register that stays stable from `strict`, `--stable` and `--writes` only. `--stable` and `--writes` assume no convention: a call writes a register only when its callee (direct callees included, `jsr (An)` after one `lea (ABS).l,An` resolved) does; `--skip ADDR` leaves a named callee out (for example a fault reporter on an error branch), and the finding that uses it says so. A port hook carries the `regs.clobbers` of its declaration (`clobbers` in `devices/ports/*.toml`); patchkit refuses a `when` stub whose `scratch` is not in it. The results for the six LFO sites are in [findings/146](findings/149-lfo-waveforms.md#registers-at-the-six-sites) and in the `regs` of the hooks of `devices/fw/lfo.toml`. `--match` also proves that the bytes an assembler gives for a routine (`mac.l`, `movclr.l`) are the stock instructions they stand for.
+`strict` counts a register that reaches a call, a return or an indirect jump untouched as live; `gcc` (default: both are printed) assumes the call convention of compiled code and shows more dead registers. It is a guess about the code, not a fact of the image: decide a scratch register, a register to save or a register that stays stable from `strict`, `--stable` and `--writes` only. `--stable` and `--writes` assume no convention: a call writes a register only when its callee (direct callees included, `jsr (An)` after one `lea (ABS).l,An` resolved) does; `--skip ADDR` leaves a named callee out (for example a fault reporter on an error branch), and the finding that uses it says so. A port hook carries the `regs.clobbers` of its declaration (`clobbers` in `ports/*.toml`); patchkit refuses a `when` stub whose `scratch` is not in it. The results for the six LFO sites are in [findings/146](findings/149-lfo-waveforms.md#registers-at-the-six-sites) and in the `regs` of the hooks of `ports/fw/lfo.toml`. `--match` also proves that the bytes an assembler gives for a routine (`mac.l`, `movclr.l`) are the stock instructions they stand for.
 
 ### Resolve a port for a firmware
 
 ```sh
-mise run patch:port -- firmware/Digitakt_II_OS1.17.syx   # one firmware -> devices/ports/dt2-1.17.toml
+mise run patch:port -- firmware/Digitakt_II_OS1.17.syx   # one firmware -> ports/dt2-1.17.toml
 mise run patch:port                             # the supported firmwares (DT2 1.17, DN2 1.12, DN2 1.11)
 ```
 
 A port records the anchors that modules need (address, length, SHA-256 of the bytes there) and the free regions of
-one stock image. It is generated from the rules declared in `devices/fw/` and is deterministic: resolving a
+one stock image. It is generated from the rules declared in `ports/fw/` and is deterministic: resolving a
 supported firmware again leaves `git status` clean. A rule that matches nothing, or more than one place, is an error;
 that is how a new firmware shows which rules need work. A firmware without a port file has no compatible modules.
 
-`port_resolve` also writes the site facts of the hooks that a service uses (`users` of the hook in `devices/fw/` names `core/services/*`): `len` (bytes of the
+`port_resolve` also writes the site facts of the hooks that a service uses (`users` of the hook in `ports/fw/` names `core/services/*`): `len` (bytes of the
 displaced whole instructions), `kind` (`raw`, `tail` from `tail = true`, `stock` from `stock = true`) and `check` (the first 8 bytes of the sha256 of the displaced
 bytes, 16 hex digits). The decoder is patchkit's, so `port_resolve` calls `dist/patchkit/patchkit port facts` (build it with `pnpm nx:pilot run patchkit:cli`, or set
 `PATCHKIT_BIN`). A `tail` or `stock` site must be a plain copy: the resolve fails when its displaced instructions need a fixup. A hook that a service reaches with
@@ -334,13 +336,13 @@ pnpm nx:pilot run patchkit:ports                                   # dist/ports/
 pnpm nx:pilot run patchkit:ports-test                              # dist/ports-test/...: the same plus the hooks of the test fixture service (test image only)
 dist/patchkit/patchkit port build --all --out DIR                  # the same without Nx; --device SHORT --version V for one; --with-test-hooks
 dist/patchkit/patchkit port check SERVICE.dks...                   # every firmware name and hook of a service is in the port file of every committed port
-dist/patchkit/patchkit port stock --firmware FW.syx --port devices/ports/NAME.toml   # the sites' stock bytes as TOML, for host tests (firmware bytes: never commit)
+dist/patchkit/patchkit port stock --firmware FW.syx --port ports/NAME.toml   # the sites' stock bytes as TOML, for host tests (firmware bytes: never commit)
 ```
 
 The port file (docs/plans/port-file.md) is a `.dkport` of role 2 that provides the name `port` (a provider, not a service), with the firmware identity (`FW`) and two entries of a
 version 3 header table: FWNAMES (name and exit hash to address, with an `absent` flag for a name that only another device's firmware has) and SITES (per hook: site address,
 displaced length, kind, check value). Its image is an `rts` and its bss holds the copies of the displaced bytes of the tail and stock sites, which the runtime fills.
-`port build` reads only `devices/ports` and `devices/fw`: no firmware, so CI builds it. `port check` reads no firmware either: for each service file it prints how many
+`port build` reads only `ports` and `ports/fw`: no firmware, so CI builds it. `port check` reads no firmware either: for each service file it prints how many
 firmware references are outside the port set and how many hooks are not listed, and exits 1 on any. A `patchkit apply` image carries the `fw_id` entry, and the INFO reply
 of the runtime carries it too (capability `FW_ID`), which is how Transfer picks the port file for a device.
 
@@ -355,7 +357,7 @@ in, checks the image and offers it as a download, flashes it over Web MIDI, or r
 starts the patched image in the browser core (screen and controls, no DSP audio yet). Machines and effects are installed over USB on
 `/transfer/`. The page reads module.toml at build time. `patchkit.wasm` reads
 `public/modules/bundle.json`, which `apps/web/scripts/gen-modules.mjs` generates from the committed `modules/` and
-`devices/ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.wasm.test.ts`). The
+`ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.wasm.test.ts`). The
 first `pnpm dev` in a fresh tree compiles the browser cores and takes several minutes.
 
 ## How it works
@@ -364,11 +366,11 @@ first `pnpm dev` in a fresh tree compiles the browser cores and takes several mi
 
 | Layer | Holds | Examples |
 |---|---|---|
-| Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `devices/ports/dt2-1.17.toml` |
+| Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `ports/dt2-1.17.toml` |
 | Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
 | Content module | Own code and declarative registry entries. No addresses. | `test/registry-demo` |
 
-Device, board and firmware facts are data (`devices/*.toml`, `devices/ports/*.toml`, `modules/core/adapters/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
+Device, board and firmware facts are data (`devices/*.toml`, `ports/*.toml`, `image-modules/points/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 
 patchkit itself (`packages/patchkit`, Rust) has no framework-specific code. It provides generic primitives, and the
 frameworks are modules built on them. One implementation serves the command line and `patchkit.wasm`.
@@ -376,7 +378,7 @@ frameworks are modules built on them. One implementation serves the command line
 ### Ports and anchors
 
 Modules never contain addresses. A firmware site is a named **anchor** (`dsp.master.site.q31_converter.call`,
-`cf.machine.fn.dispatch`). A rule in `devices/fw/` ([design](design/firmware-decls.md)) declares how to find it, and
+`cf.machine.fn.dispatch`). A rule in `ports/fw/` ([design](design/firmware-decls.md)) declares how to find it, and
 `patch:port` turns the rules into the lockfile. Rule kinds:
 
 - SHARC+: `sharc_func` (a function found by its relocation-insensitive hash, plus an offset), `sharc_literal`,
@@ -384,6 +386,11 @@ Modules never contain addresses. A firmware site is a named **anchor** (`dsp.mas
 - ColdFire: `cf_func` (a function found by a hash that masks address operands, so one rule serves relinked builds,
   plus an offset), `cf_ptr`, `cf_words` (a masked word signature), `cf_params_t1`, `cf_params_refs` and
   `cf_params_bounds` (many anchors from one rule), `cf_reset_init_calls`, `cf_reset_helper`.
+- `cf_call` finds a function through its caller, for a function whose own hash differs between firmwares (an immediate that the hash does not mask) while the caller's hash does
+  not: `hash` and `ordinal` name the caller as `cf_func` does, `call` is the byte offset from the caller's entry to a `jsr (xxx).l` (`4eb9`) or `jsr d16(pc)` (`4eba`), and the
+  anchor is a code anchor of `len` bytes at `offset` (default 0) in the function that call reaches; the port anchor's `src` is the call. The rule that finds the project paste
+  in `ports/fw/project.toml`: `rule.dt2 = { kind = "cf_call", hash = "74201c46da5dc856daae9e5957420079", call = 0x16, len = 8 }`.
+  `cf_literal` is `cf_ptr` for a RAM variable outside the image: a `value` anchor whose address is the literal and whose `src` is the instruction that reads it.
 
 The lockfile stores, per anchor, the address, the length and the SHA-256 of the bytes, never the bytes. At patch time
 patchkit checks every anchor a module uses against the user's image; a mismatch refuses the patch. This is why one
@@ -414,7 +421,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 - **Writes.** `write` replaces bytes at an anchor plus an offset. It carries `expect_sha256` of the bytes it replaces
   (never the bytes), or a typed `value` with a width of 1, 2 or 4 bytes and a range check. `anchors = "PREFIX.*"`
   repeats one write over many anchors.
-- **Hooks.** A hook is declared in `devices/fw/` (site, `mode`, register contract). A `hook` op names it
+- **Hooks.** A hook is declared in `ports/fw/` (site, `mode`, register contract). A `hook` op names it
   (`hook = "<hook name>"`, `to = "<symbol>"`). Mode `before` copies the displaced instructions to a tail
   (`hook.<site>[.<offset>].tail`; PC-relative forms are re-encoded or refused) so that the routine can run them and
   return (`.return`). Mode `replace` drops them. Mode `retarget` rewrites the target of an existing call.
@@ -425,7 +432,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   behaves as stock; a non-zero slot is jumped to. Use it for interrupt-level sites that a service loaded later has to
   serve (the service writes its handler address into the slot, and clears it to go back to stock). The hook's `mode` is
   ignored; `retarget` hooks are refused. `scratch` (required) is `d0`..`d7` or `a0`..`a6`: pick a register of the hook's
-  `regs.clobbers` in `devices/fw/` (the stub also changes the condition codes, so `ccr` must be listed). patchkit refuses a
+  `regs.clobbers` in `ports/fw/` (the stub also changes the condition codes, so `ccr` must be listed). patchkit refuses a
   register that a displaced instruction reads before it writes it. The handler is entered with `scratch` holding its own
   address. Address registers use `movea.l slot,aN; tst.l aN; beq.b +2; jmp (aN)`; data registers use `move.l slot,dN;
   beq.b +4; move.l dN,-(sp); rts` (12 bytes each). A site whose displaced code patchkit cannot re-encode (a `(d8,PC,Xn)`
@@ -453,7 +460,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   (it wins and owns `used`), else the `cap_<kind>` entry as the limit with `used` 0, else zeros. The planner therefore knows the
   limits before any service file is loaded. The runtime names no adapter or service: it builds the entry name from the generic
   kind table (`CAP_INFO_HASHES`).
-- **Raw hooks and their tails.** A hook with no `handler` in `devices/fw/` is a raw hook: its entry takes the whole control
+- **Raw hooks and their tails.** A hook with no `handler` in `ports/fw/` is a raw hook: its entry takes the whole control
   flow of the site (mode `replace`), so the entry itself is the target of the jump that the runtime writes
   `jmp entry` at the site. When the entry falls through to the displaced stock instructions, the hook declares the exit
   `tail = true`. The asm refers to the tail by the undefined symbol `dk_tail_<8 hex digits of name_hash(hook)>`, which `patchkit pack` keeps as an import. The runtime resolves it at load to the copy of the
@@ -576,7 +583,7 @@ SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 
 manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
 A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
 prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
-([README](../modules/core/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
+([README](../image-modules/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 over `container_max`; with it the container fits (`flash` and `verify` print the free space).
 
 ### The bootstrap's in-place unpack of MAIN
@@ -617,8 +624,7 @@ Firmware (`*.syx`), sections extracted from it, snapshots, ready states, card im
 `explain` output of a real patch, databases derived from firmware, and users' sample audio. Ports hold addresses and
 SHA-256 values. Modules hold our code, our objects and SHA-256 of the bytes they replace. Frame goldens are SHA-256
 only. Modules that need firmware words (oracles) are generated under `out/modules/` and read through `--modules-dir`
-or `PATCHKIT_MODULES`. The web page builds its module data from committed files only, and the build guard rejects
-`.syx`, `.snap` and `.mstate` files.
+or `PATCHKIT_MODULES`. The web page builds its module data from committed files only.
 
 ## Safety and hardware
 
@@ -844,7 +850,7 @@ presses from the top of the list in the rehearsal), press **YES**. The track pag
 bug of an image built before 2026-10-19 (finding 50). Rebuild the image to get one page.
 (The emulator rig pressed YES twice, 300 ms apart; if the track page does not show those parameters after one press, press YES once more.)
 
-**8. Play:** press **TRIG 1** (hold it for a few seconds). Expected: a plucked-string tone, decaying (the rehearsal's note matched the retired patched-in twin sample for sample; its PCM is pinned in `modules/machines/pluck/tests/equiv.device.test.ts`). Keep the key down for 10 to 20 seconds once, then read the log again (command of step 6, new `--out`):
+**8. Play:** press **TRIG 1** (hold it for a few seconds). Expected: a plucked-string tone, decaying (the rehearsal's note matched the retired patched-in twin sample for sample; the former `equiv.device.test.ts` pinned its PCM). Keep the key down for 10 to 20 seconds once, then read the log again (command of step 6, new `--out`):
 
 Good log (dispatches and returns rise together; this is the rehearsal's):
 
@@ -1119,7 +1125,7 @@ Image: 1,887,392 bytes, sha256 `ced22f18eb8c1a955be440b3d6bffe8b776fd00d0ce1d200
 **4. Run the pluck with an LFO on TUNE** (`dk run` as for runtime 4, then the LFO on the TUNE knob of the SRC page, depth over the whole range, a note held on track 1):
 the sound follows the pitch to the limits of the string and stays; no track goes silent. Read the log (`uv run --with python-rtmidi python -m tools.device.dklog --port Digitakt`):
 there should be **no** `MACHINE_FAULT` (the clamp in the routine prevents the cause). A `MACHINE_FAULT` names the type, the track, the kind (`nonfinite`, `overlevel`) and the knob words of the call; a
-`MACHINE_DISABLED` says the guard switched that machine off (it plays silence until the next restart). ABOUT and the `DSP_DIAG` events carry the guard's words 17 to 23 (`modules/core/adapters/dsp-link/README.md`).
+`MACHINE_DISABLED` says the guard switched that machine off (it plays silence until the next restart). ABOUT and the `DSP_DIAG` events carry the guard's words 17 to 23 (`runtime/platform/dsp-link/README.md`).
 
 ### Status
 

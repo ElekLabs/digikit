@@ -41,8 +41,8 @@ test('patchkit.wasm carries the device files but no port', () => {
     const sha = m[1]!;
     assert.equal(Buffer.from(bytes).includes(Buffer.from(sha)), true, `device file hash ${sha.slice(0, 12)} missing`);
   }
-  for (const f of readdirSync(join(root, 'devices/ports'))) {
-    const text = readFileSync(join(root, 'devices/ports', f), 'utf8');
+  for (const f of readdirSync(join(root, 'ports')).filter((f) => f.endsWith('.toml'))) {
+    const text = readFileSync(join(root, 'ports', f), 'utf8');
     for (const m of text.matchAll(/_sha256 = "([0-9a-f]{64})"/g)) {
       const sha = m[1]!;
       if (deviceText.includes(sha)) continue;

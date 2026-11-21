@@ -17,8 +17,8 @@ const makeRepo = (files: Record<string, string> = {}) => {
     'devices/bb.toml': toml('bb'),
     'devices/aa-leds.toml': 'leds = "a"\n',
     'devices/bb-leds.toml': 'leds = "b"\n',
-    'devices/ports/aa-1.toml': 'pa',
-    'devices/ports/bb-1.toml': 'pb',
+    'ports/aa-1.toml': 'pa',
+    'ports/bb-1.toml': 'pb',
     'Cargo.toml': 'w',
     'Cargo.lock': 'l',
     'packages/patchkit/Cargo.toml': 'p',
@@ -57,7 +57,7 @@ describe('patchkit key of a device', () => {
   it('follows the sources, the device itself and the build facts, not the other devices or test-only files', () => {
     const repo = makeRepo();
     const base = keys(repo);
-    expect(base.get('aa')).toContain('devices/ports/aa-1.toml'); // not in the dependency file: added from the device's files
+    expect(base.get('aa')).toContain('ports/aa-1.toml'); // not in the dependency file: added from the device's files
     expect(base.get('aa')).not.toContain('devices/bb');
     expect(base.get('aa')).not.toContain('tests.rs');
     expect(base.get('aa')).not.toContain('device_files.rs'); // build output
@@ -65,7 +65,7 @@ describe('patchkit key of a device', () => {
     expect(keys(repo).get('aa')).toBe(base.get('aa'));
     expect(keys(repo).get('bb')).not.toBe(base.get('bb'));
     const afterB = keys(repo);
-    edit(repo, 'devices/ports/aa-1.toml');
+    edit(repo, 'ports/aa-1.toml');
     expect(keys(repo).get('aa')).not.toBe(afterB.get('aa'));
     expect(keys(repo).get('bb')).toBe(afterB.get('bb'));
     const afterPorts = keys(repo);

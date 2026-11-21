@@ -13,7 +13,7 @@ import {
   RAMP_SAMPLES,
   SINE_OK,
   type Sample,
-} from '../../../modules/core/runtime/tests/lfo/lfo-fit.ts';
+} from '../../../runtime/core/tests/lfo/lfo-fit.ts';
 
 /**
  * The fit of the LFO shape tests, on synthetic reads with what a device read has: a rate of 6 to 14 cycles per second (the window of `tuneSpeed`), a 12 ms read gap,

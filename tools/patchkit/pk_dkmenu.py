@@ -187,10 +187,7 @@ class Menu:
 
         port = tomllib.loads(
             (
-                ROOT
-                / "devices"
-                / "ports"
-                / f"{self.cell.device}-{self.cell.firmware}.toml"
+                ROOT / "ports" / f"{self.cell.device}-{self.cell.firmware}.toml"
             ).read_text()
         )
         for a in port["anchor"]:

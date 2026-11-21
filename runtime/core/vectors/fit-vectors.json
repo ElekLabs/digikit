@@ -1,0 +1,155 @@
+{
+  "about": "Test vectors of the fit rule (docs/plans/what-fits.md): dkrt_fit (Rust, runtime/core/fit: the one copy of the rule) and packages/patchkit (the host wordings) read this file. needs: the needs of a .dkm as `dkneeds` infers them (the names of Needs::fields, plus file_size); missing = 0. caps: a CAPACITY reply as [limit, used, largest] per kind (names of [capacity.kinds]), laid over caps_base. want: null (fits) or [resource, need, free] of the first short resource; for a set: null or [index, resource, need, free]. shorts: a short resource with its texts: text and brief are dkrt_fit `short_text` (the device popup and list row); describe and describe_by are the host wordings of patchkit (fit.rs). load_lines: the MODULES page's load line (dkrt_fit `load_line`): always the DSP memory and then the CPU memory; caps is the whole capacity as [limit, used, largest] per kind, want the text.",
+  "caps_base": {
+    "MODULES": [8, 0, 0],
+    "SELECTION": [8, 0, 0],
+    "ARENA": [524288, 0, 524272],
+    "STAGE": [65536, 0, 65536],
+    "DSP_AREA": [524288, 0, 524284],
+    "MACHINE_ROWS": [8, 0, 0],
+    "VOICE_ROWS": [8, 0, 0],
+    "PARAM_ROWS": [16, 0, 0],
+    "PAGE_ROWS": [0, 0, 0],
+    "FX_SLOTS": [0, 0, 0],
+    "DSP_COST": [1000, 0, 0],
+    "DSP_VOICES": [4, 0, 0]
+  },
+  "cases": [
+    {"name": "a small ColdFire module", "needs": {"file_size": 300, "ARENA": 48}, "want": null},
+    {
+      "name": "a machine with DSP code (pluck-like)",
+      "needs": {"file_size": 2308, "ARENA": 32, "ARENA_XFER": 1392, "DSP_AREA": 265600, "DSP_ALIGN": 8, "MACHINE_ROWS": 1, "VOICE_ROWS": 1, "PARAM_ROWS": 4},
+      "want": null
+    },
+    {"name": "the DSP range is the largest free range", "needs": {"ARENA": 32, "DSP_AREA": 524284, "DSP_ALIGN": 8}, "want": null},
+    {"name": "one byte over the largest free range", "needs": {"ARENA": 32, "DSP_AREA": 524288, "DSP_ALIGN": 8}, "want": ["DSP_AREA", 524288, 524284]},
+    {"name": "alignment 64 costs up to 56 bytes: it still fits", "needs": {"DSP_AREA": 524224, "DSP_ALIGN": 64}, "want": null},
+    {
+      "name": "alignment 64 costs up to 56 bytes: one short",
+      "needs": {"DSP_AREA": 524224, "DSP_ALIGN": 64},
+      "caps": {"DSP_AREA": [524288, 0, 524279]},
+      "want": ["DSP_AREA", 524280, 524279]
+    },
+    {"name": "the DSP area is limited by limit - used as well as by largest", "needs": {"DSP_AREA": 128, "DSP_ALIGN": 8}, "caps": {"DSP_AREA": [1000, 900, 500]}, "want": ["DSP_AREA", 128, 100]},
+    {"name": "used DSP area leaves less than the largest range says", "needs": {"DSP_AREA": 258688, "DSP_ALIGN": 8}, "caps": {"DSP_AREA": [524288, 265600, 258684]}, "want": ["DSP_AREA", 258688, 258684]},
+    {"name": "the arena holds the block and the DSP image's block at once", "needs": {"ARENA": 300000, "ARENA_XFER": 300000}, "want": ["ARENA", 600000, 524288]},
+    {"name": "the arena: a block larger than the largest free block", "needs": {"ARENA": 2000}, "caps": {"ARENA": [524288, 100000, 1000]}, "want": ["ARENA", 2000, 1016]},
+    {"name": "the arena: a block exactly as large as the largest free block (its payload plus the 16-byte header)", "needs": {"ARENA": 1016}, "caps": {"ARENA": [524288, 100000, 1000]}, "want": null},
+    {"name": "no free module record", "needs": {"ARENA": 32}, "caps": {"MODULES": [8, 8, 0]}, "want": ["MODULES", 1, 0]},
+    {"name": "no free selection path", "needs": {"ARENA": 32}, "caps": {"SELECTION": [8, 8, 0]}, "want": ["SELECTION", 1, 0]},
+    {"name": "a file larger than the staging buffer", "needs": {"file_size": 65537, "ARENA": 32}, "want": ["STAGE", 65537, 65536]},
+    {"name": "a file as large as the staging buffer", "needs": {"file_size": 65536, "ARENA": 32}, "want": null},
+    {"name": "voice rows", "needs": {"VOICE_ROWS": 2}, "caps": {"VOICE_ROWS": [8, 7, 0]}, "want": ["VOICE_ROWS", 2, 1]},
+    {"name": "machine rows", "needs": {"MACHINE_ROWS": 9}, "want": ["MACHINE_ROWS", 9, 8]},
+    {"name": "parameter rows", "needs": {"PARAM_ROWS": 3}, "caps": {"PARAM_ROWS": [16, 14, 0]}, "want": ["PARAM_ROWS", 3, 2]},
+    {"name": "page rows on a device that has none", "needs": {"PAGE_ROWS": 1}, "want": ["PAGE_ROWS", 1, 0]},
+    {"name": "page rows on a device that has them", "needs": {"PAGE_ROWS": 1}, "caps": {"PAGE_ROWS": [8, 7, 0]}, "want": null},
+    {"name": "a kind the capacity lacks is not judged", "needs": {"PAGE_ROWS": 3, "FX_SLOTS": 1}, "caps": {"PAGE_ROWS": null, "FX_SLOTS": null}, "want": null},
+    {"name": "effect slots on a device that has none", "needs": {"FX_SLOTS": 1}, "want": ["FX_SLOTS", 1, 0]},
+    {"name": "an effect fits a free slot", "needs": {"FX_SLOTS": 1}, "caps": {"FX_SLOTS": [3, 2, 0]}, "want": null},
+    {"name": "a fourth effect is refused: the three slots are taken", "needs": {"FX_SLOTS": 1}, "caps": {"FX_SLOTS": [3, 3, 0]}, "want": ["FX_SLOTS", 1, 0]},
+    {"name": "two effects in one module need two slots", "needs": {"FX_SLOTS": 2}, "caps": {"FX_SLOTS": [3, 2, 0]}, "want": ["FX_SLOTS", 2, 1]},
+    {"name": "DSP load: a machine at the per-voice limit (headroom 1000, 4 voices) fits", "needs": {"DSP_COST_VOICE": 250}, "want": null},
+    {"name": "DSP load: one instruction per voice more does not", "needs": {"DSP_COST_VOICE": 251}, "want": ["DSP_COST", 1004, 1000]},
+    {"name": "DSP load: a smaller machine next to a larger one adds nothing (the largest counts for every voice)", "needs": {"DSP_COST_VOICE": 100}, "caps": {"DSP_COST": [1000, 800, 200]}, "want": null},
+    {"name": "DSP load: a larger machine raises the load of every voice", "needs": {"DSP_COST_VOICE": 200}, "caps": {"DSP_COST": [1000, 400, 100]}, "want": null},
+    {"name": "DSP load: a larger machine that no longer fits", "needs": {"DSP_COST_VOICE": 251}, "caps": {"DSP_COST": [1000, 400, 100]}, "want": ["DSP_COST", 604, 600]},
+    {"name": "DSP load: an effect alone fits up to the headroom", "needs": {"DSP_COST_FX": 1000}, "want": null},
+    {"name": "DSP load: an effect alone over the headroom", "needs": {"DSP_COST_FX": 1001}, "want": ["DSP_COST", 1001, 1000]},
+    {"name": "DSP load: effects add to the voices' load", "needs": {"DSP_COST_FX": 201}, "caps": {"DSP_COST": [1000, 800, 200]}, "want": ["DSP_COST", 201, 200]},
+    {"name": "DSP load: a module without a measured cost passes even on a full headroom", "needs": {"ARENA": 32}, "caps": {"DSP_COST": [1000, 1000, 250]}, "want": null},
+    {"name": "DSP load: a capacity without the voices is not judged", "needs": {"DSP_COST_VOICE": 9999}, "caps": {"DSP_VOICES": null}, "want": null},
+    {
+      "name": "the first short resource is reported: the module record before the DSP area",
+      "needs": {"DSP_AREA": 524288, "DSP_ALIGN": 8, "PARAM_ROWS": 17},
+      "caps": {"MODULES": [8, 8, 0]},
+      "want": ["MODULES", 1, 0]
+    },
+    {"name": "the first short resource is reported: the DSP area before the arena", "needs": {"ARENA": 600000, "DSP_AREA": 524288, "DSP_ALIGN": 8}, "want": ["DSP_AREA", 524288, 524284]},
+    {"name": "the first short resource is reported: the arena before the rows", "needs": {"ARENA": 600000, "PARAM_ROWS": 17}, "want": ["ARENA", 600000, 524288]}
+  ],
+  "empty": {
+    "from": {"MODULES": [8, 3, 0], "SELECTION": [8, 2, 0], "ARENA": [524288, 9000, 100], "STAGE": [65536, 0, 65000], "DSP_AREA": [524288, 265600, 258684], "PARAM_ROWS": [16, 5, 0], "PAGE_ROWS": [0, 0, 0]},
+    "want": {"MODULES": [8, 0, 8], "SELECTION": [8, 0, 8], "ARENA": [524288, 0, 524272], "STAGE": [65536, 0, 65000], "DSP_AREA": [524288, 0, 524280], "PARAM_ROWS": [16, 0, 16], "PAGE_ROWS": [0, 0, 0]}
+  },
+  "sets": [
+    {
+      "name": "three small modules fit",
+      "needs": [{"ARENA": 48}, {"ARENA": 48}, {"ARENA": 48}],
+      "want": null
+    },
+    {
+      "name": "two pluck-like modules: the second finds half the DSP area",
+      "needs": [
+        {"file_size": 2308, "ARENA": 32, "ARENA_XFER": 1392, "DSP_AREA": 265600, "DSP_ALIGN": 8, "MACHINE_ROWS": 1, "VOICE_ROWS": 1, "PARAM_ROWS": 4},
+        {"file_size": 2308, "ARENA": 32, "ARENA_XFER": 1392, "DSP_AREA": 265600, "DSP_ALIGN": 8, "MACHINE_ROWS": 1, "VOICE_ROWS": 1, "PARAM_ROWS": 4}
+      ],
+      "want": [1, "DSP_AREA", 265600, 258684]
+    },
+    {
+      "name": "nine modules: the ninth has no module record",
+      "needs": [{"ARENA": 48, "times": 9}],
+      "want": [8, "MODULES", 1, 0]
+    },
+    {
+      "name": "the arena sums the blocks and the DSP images' blocks",
+      "needs": [{"ARENA": 200000, "ARENA_XFER": 100000}, {"ARENA": 200000, "ARENA_XFER": 100000}],
+      "want": [1, "ARENA", 300000, 224288]
+    },
+    {
+      "name": "machine rows are taken in turn",
+      "needs": [{"ARENA": 48, "MACHINE_ROWS": 2, "times": 5}],
+      "want": [4, "MACHINE_ROWS", 2, 0]
+    },
+    {
+      "name": "four effects: the fourth finds the three slots taken",
+      "caps": {"FX_SLOTS": [3, 0, 0]},
+      "needs": [{"ARENA": 48, "DSP_AREA": 64, "DSP_ALIGN": 8, "ARENA_XFER": 64, "FX_SLOTS": 1, "times": 4}],
+      "want": [3, "FX_SLOTS", 1, 0]
+    },
+    {
+      "name": "DSP load: the machines share the voices, the largest counts for all of them",
+      "needs": [{"DSP_COST_VOICE": 100}, {"DSP_COST_VOICE": 250}, {"DSP_COST_VOICE": 60}],
+      "want": null
+    },
+    {
+      "name": "DSP load: an effect after a machine at the limit finds nothing left",
+      "needs": [{"DSP_COST_VOICE": 250}, {"DSP_COST_FX": 1}],
+      "want": [1, "DSP_COST", 1, 0]
+    },
+    {
+      "name": "DSP load: effects of several modules are summed",
+      "needs": [{"DSP_COST_FX": 400}, {"DSP_COST_FX": 400}, {"DSP_COST_FX": 201}],
+      "want": [2, "DSP_COST", 201, 200]
+    },
+    {
+      "name": "the capacity left by modules already loaded is the start",
+      "caps": {"MODULES": [8, 7, 0]},
+      "needs": [{"ARENA": 48, "times": 2}],
+      "want": [1, "MODULES", 1, 0]
+    }
+  ],
+  "shorts": [
+    {"resource": "DSP_AREA", "need": 409600, "free": 260096, "text": "DSP 400K > 254K FREE", "brief": "DSP 400K>254K", "describe": "DSP memory 400 KiB needed, 254 KiB free", "describe_by": "DSP memory 146 KiB short"},
+    {"resource": "DSP_AREA", "need": 409601, "free": 260096, "text": "DSP 401K > 254K FREE", "brief": "DSP 401K>254K", "describe": "DSP memory 401 KiB needed, 254 KiB free", "describe_by": "DSP memory 147 KiB short"},
+    {"resource": "DSP_AREA", "need": 400, "free": 50, "text": "DSP 1K > 0K FREE", "brief": "DSP 1K>0K", "describe": "DSP memory 400 bytes needed, 50 bytes free", "describe_by": "DSP memory 350 bytes short"},
+    {"resource": "DSP_AREA", "need": 307200, "free": 266240, "text": "DSP 300K > 260K FREE", "brief": "DSP 300K>260K", "describe": "DSP memory 300 KiB needed, 260 KiB free", "describe_by": "DSP memory 40 KiB short"},
+    {"resource": "DSP_AREA", "need": 600064, "free": 524280, "text": "DSP 586K > 511K FREE", "brief": "DSP 586K>511K", "describe": "DSP memory 586 KiB needed, 511 KiB free", "describe_by": "DSP memory 75 KiB short"},
+    {"resource": "ARENA", "need": 600000, "free": 100, "text": "CPU 586K > 0K FREE", "brief": "CPU 586K>0K", "describe": "CPU memory 586 KiB needed, 100 bytes free", "describe_by": "CPU memory 586 KiB short"},
+    {"resource": "ARENA", "need": 5120, "free": 2049, "text": "CPU 5K > 2K FREE", "brief": "CPU 5K>2K", "describe": "CPU memory 5 KiB needed, 2 KiB free", "describe_by": "CPU memory 3 KiB short"},
+    {"resource": "PARAM_ROWS", "need": 3, "free": 2, "text": "PARAMS 3 > 2 FREE", "brief": "PARAMS 3>2", "describe": "parameter rows 3 needed, 2 free", "describe_by": "parameter rows 1 short"},
+    {"resource": "DSP_COST", "need": 2000, "free": 1000, "text": "DSP LOAD 2000 > 1000 FREE", "brief": "DSP LOAD 2000>1000", "describe": "DSP load 2000 needed, 1000 free", "describe_by": "DSP load 1000 short"},
+    {"resource": "STAGE", "need": 70000, "free": 65536, "text": "FILE 69K > 64K MAX", "brief": "FILE 69K>64K", "describe": "file 69 KiB needed, 64 KiB at most", "describe_by": "file 5 KiB too large"}
+  ],
+  "load_lines": [
+    {"name": "always the DSP memory and the CPU memory, however full the rows are", "caps": {"MODULES": [8, 8, 0], "ARENA": [524288, 6000, 0], "DSP_AREA": [524288, 445000, 0], "MACHINE_ROWS": [8, 8, 0], "PARAM_ROWS": [16, 16, 0], "PAGE_ROWS": [8, 8, 0]}, "want": "DSP 85% CPU 2%"},
+    {"name": "a small use reads at least 1 %", "caps": {"MODULES": [8, 0, 0], "ARENA": [524288, 1, 0], "DSP_AREA": [524288, 0, 0]}, "want": "DSP 0% CPU 1%"},
+    {"name": "DSP first, then CPU, whichever is fuller", "caps": {"ARENA": [524288, 524288, 0], "DSP_AREA": [524288, 0, 0]}, "want": "DSP 0% CPU 100%"},
+    {"name": "nothing taken: two zero entries", "caps": {"DSP_AREA": [524288, 0, 0], "ARENA": [524288, 0, 0], "MODULES": [8, 0, 0]}, "want": "DSP 0% CPU 0%"},
+    {"name": "full reads 100 %", "caps": {"ARENA": [100, 100, 0], "DSP_AREA": [100, 100, 0], "MODULES": [8, 8, 0]}, "want": "DSP 100% CPU 100%"},
+    {"name": "no limit is left out", "caps": {"DSP_AREA": [1000, 10, 0], "ARENA": [0, 0, 0], "PAGE_ROWS": [0, 0, 0]}, "want": "DSP 1%"},
+    {"name": "a capacity without the two resources: empty", "caps": {"STAGE": [65536, 0, 0], "SELECTION": [8, 8, 0], "VOICE_ROWS": [8, 8, 0], "MODULES": [8, 9, 0]}, "want": ""},
+    {"name": "used above the limit reads 100 %", "caps": {"ARENA": [100, 150, 0], "DSP_AREA": [100, 0, 0]}, "want": "DSP 0% CPU 100%"},
+    {"name": "a device without page rows", "caps": {"MODULES": [8, 2, 0], "ARENA": [524288, 300000, 0], "DSP_AREA": [524288, 265656, 0], "MACHINE_ROWS": [8, 1, 0], "PARAM_ROWS": [16, 4, 0], "PAGE_ROWS": [0, 0, 0]}, "want": "DSP 51% CPU 58%"}
+  ]
+}

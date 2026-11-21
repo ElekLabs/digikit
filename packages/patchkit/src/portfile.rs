@@ -1,5 +1,5 @@
 //! The port file (docs/plans/port-file.md): one `.dkport` of role 2 ("port") per device and firmware version, built from committed data only: the anchors,
-//! hooks and site facts of `devices/ports/<device>-<version>.toml` and the declarations of `devices/fw/`. It holds no firmware bytes: addresses, lengths and
+//! hooks and site facts of `ports/<device>-<version>.toml` and the declarations of `ports/fw/`. It holds no firmware bytes: addresses, lengths and
 //! a truncated sha256 of each site.
 //!
 //! The file has the container of a `.dkm` (header, sha256, table) with no code. It provides the name `port`, carries the identity of the firmware
@@ -764,7 +764,7 @@ mod tests {
 
     fn committed() -> (Registry, Vec<String>) {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let reg = Registry::from_dir(&root.join("devices/ports")).unwrap();
+        let reg = Registry::from_dir(&root.join("ports")).unwrap();
         (reg, crate::fwgen::fw_texts(&root).unwrap())
     }
 

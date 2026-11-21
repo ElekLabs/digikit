@@ -678,8 +678,9 @@ def runtime_fingerprint(modules: list[str], device: str, syx: Path) -> str | Non
         Path(modroots.__file__),
         patchkit.binary(),
     }
-    for tree in (ROOT / "devices", ROOT / "packages/patchkit/src"):
+    for tree in (ROOT / "devices", ROOT / "ports/fw", ROOT / "packages/patchkit/src"):
         paths.update(p for p in tree.rglob("*") if p.is_file())
+    paths.update(p for p in (ROOT / "ports").glob("*.toml") if p.is_file())
     digest = hashlib.sha256(f"preview-runtime-v1:{device}".encode())
     try:
         for mid in closure(modules):

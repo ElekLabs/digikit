@@ -42,7 +42,7 @@ Never commit these files.
 Check the setup after you create your first module (section 3):
 
 ```sh
-mise run module:build -- modules/machines/NAME --check     # fails when the built object in out/cache/dko is stale
+mise run module:build -- modules/machine/AUTHOR/NAME --check     # fails when the built object in out/cache/dko is stale
 ```
 
 ## 3. Start a module
@@ -53,7 +53,7 @@ mise run module:new -- KIND AUTHOR/NAME [--dir DIR] [--title T] [--short S] [--n
 
 | Part | Meaning |
 | --- | --- |
-| `KIND` | `machine`, `fx`, `tool` or `lfo-shape` (an LFO shape module; it goes to `modules/lfo/NAME`). |
+| `KIND` | `machine`, `fx`, `tool` or `lfo-shape` (an LFO shape module; it goes to `modules/lfo-shape/AUTHOR/NAME`). |
 | `AUTHOR/NAME` | The module id. The author has lowercase letters, digits and dashes. The name is lower snake case. `core` and `framework` are refused. |
 | `--dir DIR` | Write `DIR/NAME` instead of the repository folder. |
 | `--title T` | Display name, 1 to 23 characters. Default: the name in Title Case. |
@@ -72,9 +72,9 @@ The command copies the template, replaces the names and builds it. You start fro
 
 | Kind | Folder | Files you get |
 | --- | --- | --- |
-| machine | `modules/machines/NAME` | `module.toml`, `README.md`, `src/module.c` (the declaration), `src/dsp/NAME.s` (a sine voice with one level parameter) |
-| effect | `modules/fx/NAME` | `module.toml`, `README.md`, `src/module.c` (the declaration), `src/NAME.h` (the parameter words), `src/dsp/NAME.s` (a gain effect with one knob and a page) |
-| tool | `modules/tools/NAME` | `module.toml`, `README.md`, `src/c/NAME.c` (`init` logs a line, `fini` is empty) |
+| machine | `modules/machine/AUTHOR/NAME` | `module.toml`, `README.md`, `src/module.c` (the declaration), `src/dsp/NAME.s` (a sine voice with one level parameter) |
+| effect | `modules/fx/AUTHOR/NAME` | `module.toml`, `README.md`, `src/module.c` (the declaration), `src/NAME.h` (the parameter words), `src/dsp/NAME.s` (a gain effect with one knob and a page) |
+| tool | `modules/tool/AUTHOR/NAME` | `module.toml`, `README.md`, `src/c/NAME.c` (`init` logs a line, `fini` is empty) |
 
 The command ends with the next commands: `module:check`, `module:pack` and `dk:run -- AUTHOR/NAME --emu --seconds 10` (section 8).
 `dk:run --emu` needs a running emulator: start `mise run workbench` in another shell first. To change a module and see it on the screen in a few
@@ -171,7 +171,7 @@ A manifest with `[[voice]]`, `[[param]]` or `[[page]]` is refused: parameters an
 
 ### 5.2 Declaring a machine
 
-A machine is declared in `init`. This is `modules/machines/analog/src/module.c`:
+A machine is declared in `init`. This is `modules/machine/fadedlimes/analog/src/module.c`:
 
 ```c
 #include <dk/core/module.h>
@@ -262,7 +262,7 @@ The glyph constants are in `<dk/gen/page_consts.h>`:
 Glyphs on effect parameters are not supported yet.
 
 Scaling the word: the stock DSP converts a word to a float with the scale 1/32512 (0x7f00 = 1.0). Your routine may use any scale. Document
-it in the source header, as `modules/machines/pluck/src/dsp/pluck.s` does.
+it in the source header, as `modules/machine/digikit/pluck/src/dsp/pluck.s` does.
 
 Put the word numbers in a header in the module's `src/` when C and assembly both need them (`shot_params.h` of SHOT). Use only decimal
 `#define`s and `//` comments on their own line: the SHARC+ assembler keeps a trailing comment in the macro text and upper-cases macro text.
@@ -288,7 +288,7 @@ Rules that follow:
 
 ### 5.4 Declaring an effect
 
-An effect is declared in `init` too. This is `modules/fx/freqshift/src/module.c`:
+An effect is declared in `init` too. This is `modules/fx/digikit/freqshift/src/module.c`:
 
 ```c
 #include <dk/core/module.h>
@@ -345,7 +345,7 @@ it, because the build searches `src/` for both (same rules for `#define` as in s
 
 ### 5.5 Canvas pages
 
-A machine page may be drawn by the module instead of the stock knob display. SHOT is the example (`modules/machines/shot/src/module.c`):
+A machine page may be drawn by the module instead of the stock knob display. SHOT is the example (`modules/machine/digikit/shot/src/module.c`):
 
 ```c
 dk_page *controls = dk_machine_add_page(m, "SHOT", "SHT");
@@ -445,13 +445,13 @@ in `init`, then call it.
 - A fault in `frame` reaches the firmware's handler. The boot counter stays raised, so repeated failed boots end in safe mode.
 - In a safe boot no module loads, so `dk_intro_take` is never called. The runtime itself replaces the stock intro with a fixed safe-mode screen for 4 s: `SAFE MODE`, the reason (`REC HELD`, `2 FAILED BOOTS`, `SAFE ONCE`, `DSP FAULT`, `CRASH` or `SELECTION UNREADABLE`) and `NO MODULES LOADED`.
 
-See `modules/tools/bootscreen`.
+See `modules/tool/tools/bootscreen`.
 
 
 ### 5.10 An LFO shape module
 
 ```sh
-mise run module:new -- lfo-shape alice/wobble     # modules/lfo/wobble
+mise run module:new -- lfo-shape alice/wobble     # modules/lfo-shape/alice/wobble
 mise run module:check -- alice/wobble
 ```
 
@@ -476,7 +476,7 @@ dk_page_add_param(p, "SPRD", "SPRD", 64);    /* knob 2 */
 dk_page_add_param(p, "Q", "Q", 20);          /* knob 3; a third is DK_E_PAGE_FULL */
 ```
 
-Knob 1 of every module filter is the stock cutoff (FREQ); the module owns knobs 2 and 3 only. `dk_filter` is a typed handle: a machine handle given to `dk_filter_add_page`, or a filter handle given to `dk_machine_add_page`, is refused with `DK_E_FORMAT`. `dk_param_range` and `dk_param_glyph` work on a filter parameter. The runtime numbers a filter 16 to 31 (sticky, in the settings key `machines.filters`); the sound keeps a stock filter as its fallback. A filter takes no machine or page row and one parameter row for each of its own knobs: declare them in `[uses]` as `param_rows` (the fixture has one). The module's knob 2 and 3 sit in the words the stock knobs 2 and 3 of Multi-Mode use, so the stock page shows, edits and sends them. The filter shows in the chooser of the FLTR page after the stock filters, and a kit or sound that holds its number keeps it while the module is loaded (a stock firmware, or the module missing, loads Multi-Mode). The DSP object exports `_<id>_coef`, `_<id>_process` and `_<id>_desc` (the optional `dsp` prefix overrides the id). The descriptor gives the size of one voice state. The loader reserves 32 states and passes the relocated callbacks and state stride to the machines service. The machines service initializes each voice state on first use. It passes the normalized, modulated stock cutoff and the two knob words to `coef`, then gives `process` the same state and a 32-sample in-place buffer. Unused knob words are zero. A failing callback or invalid sample silences the block. Eight faults in the machines service’s 1,500-block window disable the type until reload. To draw the response on FLTR, call `dk_page_canvas(p, 0, draw, 0, 0)` on the filter page in `init`. The callback receives a clipped 51×17 canvas. Its `word_values` hold the current stock cutoff followed by the declared filter knobs, all in page units (0..32512 for ordinary percent controls). A filter with a graph adds four bytes to its committed record. The firmware draws its envelope and knob labels separately. See `tests/fixtures/modules/filter-gain` for the minimal ABI example and `modules/filters/resonator-bank` for a module using an SDK kernel.
+Knob 1 of every module filter is the stock cutoff (FREQ); the module owns knobs 2 and 3 only. `dk_filter` is a typed handle: a machine handle given to `dk_filter_add_page`, or a filter handle given to `dk_machine_add_page`, is refused with `DK_E_FORMAT`. `dk_param_range` and `dk_param_glyph` work on a filter parameter. The runtime numbers a filter 16 to 31 (sticky, in the settings key `machines.filters`); the sound keeps a stock filter as its fallback. A filter takes no machine or page row and one parameter row for each of its own knobs: declare them in `[uses]` as `param_rows` (the fixture has one). The module's knob 2 and 3 sit in the words the stock knobs 2 and 3 of Multi-Mode use, so the stock page shows, edits and sends them. The filter shows in the chooser of the FLTR page after the stock filters, and a kit or sound that holds its number keeps it while the module is loaded (a stock firmware, or the module missing, loads Multi-Mode). The DSP object exports `_<id>_coef`, `_<id>_process` and `_<id>_desc` (the optional `dsp` prefix overrides the id). The descriptor gives the size of one voice state. The loader reserves 32 states and passes the relocated callbacks and state stride to the machines service. The machines service initializes each voice state on first use. It passes the normalized, modulated stock cutoff and the two knob words to `coef`, then gives `process` the same state and a 32-sample in-place buffer. Unused knob words are zero. A failing callback or invalid sample silences the block. Eight faults in the machines service’s 1,500-block window disable the type until reload. To draw the response on FLTR, call `dk_page_canvas(p, 0, draw, 0, 0)` on the filter page in `init`. The callback receives a clipped 51×17 canvas. Its `word_values` hold the current stock cutoff followed by the declared filter knobs, all in page units (0..32512 for ordinary percent controls). A filter with a graph adds four bytes to its committed record. The firmware draws its envelope and knob labels separately. See `tests/fixtures/modules/filter-gain` for the minimal ABI example and `modules/filter/digikit/resonator-bank` for a module using an SDK kernel.
 
 ## 6. Generated files
 
@@ -625,7 +625,7 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
 - Clamp the output to +-7.9. An input at the level bound times a filter's overshoot would otherwise refuse the block. Use an integer phase
   accumulator for anything that must not drift.
 - Fixtures: `dyn-fx-gain` (insert), `dyn-fx-gain-send`, `-both`, `-sendonly`, `-bipolar` ([fixture table](TESTING.md#fixture-table)). A real effect with a
-  float32 reference model: `modules/fx/freqshift`.
+  float32 reference model: `modules/fx/digikit/freqshift`.
 - The instruction budget of the conformance suite is `patchkit budget` (about 31,000 for the effect today, 900 for the adapter). Read it
   from the report in `dist/conformance-rig`. The worst call it measures is written as `dsp_cost_fx`.
 
@@ -691,13 +691,12 @@ the DSP section. `dk_sample_pool_open(ctx, &pool)` gives the handle in `init`;
 root-relative path of a `DK_FILES_SAMPLES` listing row (`KICKS/K1`); the runtime adds the device root (DT2 `/`, DN2 `samples/`), and a DT2 path
 that already starts with `/` stays as it is. `dk_sample_pool_set(pool, index, path)` loads a file into that entry and replaces what was there (the old file is released; a file another entry holds is shared). `dk_sample_pool_clear(pool, index)` leaves a hole: indexes are stable, nothing moves. A machine picks
 the entry of a note in its DSP, usually from a parameter (SHOT: SMP, word 0, `word >> 8`); an entry that is not READY is silent.
-`dk_sample_pool_path(pool, index, buf, cap)` gives the path back in the same form, in every state but UNUSED. The pool list is kept per
-project. The runtime closes an entry's old generation before it publishes a new record.
+`dk_sample_pool_path(pool, index, buf, cap)` gives the path back in the same form, in every state but UNUSED. The pool list is not kept by the runtime: a sampler that uses the picker below gets it in its settings, per project while the `project` service is loaded. The runtime closes an entry's old generation before it publishes a new record.
 
-A sampler machine can add the on-device sample picker with `<dk/sample/picker.h>`: include the header and call `dk_sample_picker_init(pool, files, ui)` in `init` (with the handles from `dk_sample_pool_open`, `dk_files_open` and `dk_ui_open`) and `dk_sample_picker_fini()` in
+A sampler machine can add the on-device sample picker with `<dk/sample/picker.h>`: include the header and call `dk_sample_picker_init(pool, files, ui, settings)` in `init` (with the handles from `dk_sample_pool_open`, `dk_files_open`, `dk_ui_open` and `dk_settings_open`; the picker keeps the 16 paths under the settings keys `pool.0` to `pool.15` and sets them again at the next init) and `dk_sample_picker_fini()` in
 `fini`, and call `dk_sample_picker_open_pool(current, pick, arg)` from the click action of the SMP parameter. The picker shows the 16
 slots; YES on a slot opens the file browser for that slot, and YES on a file loads it there (`dk_sample_pool_set`). `pick(arg, index)` runs after a file was loaded, and the machine sets its SMP value to `index`.
-`modules/machines/shot` is the example (design: [sample picker](design/sample-picker.md)). Without `core/ui` the picker does nothing.
+`modules/machine/digikit/shot` is the example (design: [sample picker](design/sample-picker.md)). Without `core/ui` the picker does nothing.
 
 For reusable browsing, include `<dk/platform/files.h>` and open the `dk_files` handle in `init` (`dk_chooser_*` of `<dk/chooser/chooser.h>` is the ready-made list).
 `dk_files_list(files, root, path, notify, arg)` copies a canonical root-relative NUL-terminated path and returns a positive request ticket;
@@ -753,7 +752,7 @@ wait. The request body is at most 160 bytes. The reply body is at most 879 bytes
 | --- | --- | --- |
 | Build | `mise run module:build -- PATH [--check]` | Compiles the sources to objects in `out/cache/dko/<id>/` (`patchkit build`). `PATH` is the module folder or the module id; no path builds every module. An object whose sources did not change is skipped. `--check` fails when the objects are stale; `--force` compiles anyway. `patchkit dko show FILE` prints what an object holds. |
 | Check | `mise run module:check -- ID [--device dt2\|dn2]` | See below. |
-| Memory audit | `mise run module:audit -- NAME [--device dt2\|dn2]` | Packs the module and the run-time modules it requires, loads them on a ColdFire-only emulator, drives the UI and reports ColdFire stores outside the module's blocks (pc, address, the code it belongs to). It runs the Vitest device test `modules/core/runtime/tests/memaudit-module.device.test.ts` through `tools/devtools/module_audit.sh`, which first builds the patchkit CLI and the daemons when they are stale. About 1 to 2 minutes per device. |
+| Memory audit | `mise run module:audit -- NAME [--device dt2\|dn2]` | Packs the module and the run-time modules it requires, loads them on a ColdFire-only emulator, drives the UI and reports ColdFire stores outside the module's blocks (pc, address, the code it belongs to). It runs the Vitest device test `runtime/core/tests/memaudit-module.manual.device.test.ts` through `tools/devtools/module_audit.sh`, which first builds the patchkit CLI and the daemons when they are stale. About 1 to 2 minutes per device. |
 | Pack | `mise run module:pack -- ID --device dt2\|dn2 [-o FILE]` | Builds the objects that are stale and makes the `.dkm` from them in one command (no separate build step). Default: `out/patch/NAME-DEVICE.dkm`. It refuses a module that cannot be packed, for example one with no `dk_module`. |
 | Pack all | the workbench app | Builds and packs the run-time modules of a device in-process when its library is read (the Transfer page, the memory panel, the default modules), into `out/modules/<device>/<id>.dkm`. |
 | Emulator | `mise run workbench` | Starts the emulator. Run it in another shell. |
@@ -823,7 +822,7 @@ At boot the runtime gives each selected module a state: SELECTED, then PLANNED o
 - `E_INIT`: `init` returned non-zero. `E_DECL_KIND`: the header table has record kinds, slots, hooks or exports that `init` did not declare. Both end FAILED.
 - other codes (`E_NOMEM`, `E_DSP_*`): the load failed after the plan accepted the module.
 
-In safe mode no module loads and every one is SKIPPED. The table of every code with the tests that prove it is `modules/core/runtime/tests/refusal/refusal-table.ts`.
+In safe mode no module loads and every one is SKIPPED. The table of every code with the tests that prove it is `runtime/core/tests/refusal/refusal-table.ts`.
 
 ## 10. Versions and compatibility
 

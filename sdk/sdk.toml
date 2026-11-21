@@ -1,12 +1,12 @@
 # The module contract: version numbers, log kinds and the SysEx protocol numbers. `patchkit gen` writes
-# modules/core/runtime/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
+# runtime/core/sdk/src/gen_sdk.rs, tools/device/dklog_kinds.py, tools/device/dkproto.py and
 # packages/dkupload/src/gen_proto.rs, packages/dk-session/src/gen_proto.ts, sdk/dsp/contract/dk_machine.inc, sdk/dsp/contract/dk_fx.inc,
-# sdk/dsp/contract/dk_sample_pool.inc, modules/core/services/<service>/dks/src/gen_exports.rs (a service file's export list and pure builder wrappers), sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
+# sdk/dsp/contract/dk_sample_pool.inc, services/<service>/dks/src/gen_exports.rs (a service file's export list and pure builder wrappers), sdk/include/dk/core/status.h and sdk/include/dk/gen/machine_consts.h, fx_consts.h, machine.h, fx.h, imports.h, page_consts.h, limits.h
 # and sample.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
-table = "0.10.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.10.6"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+table = "0.11.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
+version = "0.11.1"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -30,7 +30,7 @@ order = [
 
 [handle]
 types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_filter", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
-services = ["runtime", "samples", "machines", "fx", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
+services = ["runtime", "samples", "machines", "fx", "project", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
 # The callback types of the service imports (docs/plans/sdk.md section 10, Naming). The key ends in `_fn`; the C type is `dk_<key>` (the generated
@@ -242,7 +242,7 @@ consts = [
 ]
 
 # The names a module may import. The service imports (`service`, `since` and `context` set) are the SDK of the entry point `dk_module` (docs/plans/sdk.md
-# section 5.1). The runtime's table (modules/core/runtime/src/rs/src/lib.rs `IMPORTS`) holds the imports without `requires`, in this order; those with `requires`
+# section 5.1). The runtime's table (runtime/core/src/rs/src/lib.rs `IMPORTS`) holds the imports without `requires`, in this order; those with `requires`
 # are symbols of another module that the runtime links by name (`optional` in its module.toml). `kind` `helper`: a compiler helper that gcc calls by itself, or a
 # call whose prototype is in another header (<dk/platform/ui.h>), so none in <dk/gen/imports.h>. `requires`: the module whose absence makes the address 0 (the
 # import is then not found). `absent`: with `requires`, the runtime hands out a stub instead of 0 and the module loads: the stub returns this value ("0", "-1"),
@@ -250,7 +250,7 @@ consts = [
 # `provided = true`: the import is a function of a service file (`.dks`), not of the runtime's table; the file exports it, and its export list is these imports in this
 # order (the header table sorts them by name hash). `wrapper = "<module>"`: with `provided`, the function is written by hand in that module of the service's `dks/src`
 # (`fw`, `builder`, `glue`: it converts a callback, takes the click state or a client handle). Without `wrapper` the function is a pure wrapper: `patchkit gen` writes
-# it to `modules/core/services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
+# it to `services/<service>/dks/src/gen_exports.rs` as a call of `build::<name without dk_ and a leading module_ctx_>(&ImportCore, args...)` (so `dk_module_ctx_add_machine`
 # calls `build::add_machine`) and a callback argument is an error. If the service crate's function has another name, or the call is not a plain forward, use `wrapper`.
 # `internal = true`: with `provided` and `wrapper`, an export that only the runtime calls, by name, through the loader's export table (`handlers::exports`): it is in the file's export
 # list and `gen_exports.rs`, and in no header, document or import table of a module. It is a plain `extern "C"` function with no core argument (the file reaches the core through `ImportCore`).
@@ -474,7 +474,7 @@ doc = "The firmware's eMMC block read: `bytes` (a multiple of 512) from `sector`
 name = "dk_files_read"
 service = "runtime"
 since = "0.7.0"
-context = "init"
+context = "ui"
 sig = "i32 (dk_files *files, const char *path, void *buf, u32 cap)"
 doc = "Read a store file into `buf` (at most `cap` bytes); returns the file size, or a negative code: `E_NOT_FOUND` for a missing file or a folder, `E_SEL_PATH` for an empty path, `E_TOO_BIG` for a path over 159 bytes or a file larger than `cap`. It uses the runtime's staging buffer. `files` is the handle of `dk_files_open`."
 
@@ -516,7 +516,7 @@ service = "runtime"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_settings *s, const char *key, void *out, u32 cap)"
-doc = "Read the value of `key` (NUL-terminated, own key space) into `out` (`cap` bytes): returns its length (0 is valid), DK_E_SET_NOKEY when there is none, DK_E_SET_VALUE when `cap` is too small (nothing is written), DK_E_SET_KEY for a bad handle or key, DK_E_SET_OFF when the settings store is off."
+doc = "Read the value of `key` (NUL-terminated, own key space; per project while the `project` service is loaded: the current project's value if its `.dkp` holds one, else the value of the settings record) into `out` (`cap` bytes): returns its length (0 is valid), DK_E_SET_NOKEY when there is none, DK_E_SET_VALUE when `cap` is too small (nothing is written), DK_E_SET_KEY for a bad handle or key, DK_E_SET_OFF when the settings store is off."
 
 [[import]]
 name = "dk_settings_put"
@@ -524,7 +524,7 @@ service = "runtime"
 since = "0.7.0"
 context = "ui"
 sig = "i32 (dk_settings *s, const char *key, const void *value, u32 len)"
-doc = "Set `key` to the `len` bytes (0 to 1024) at `value`; the card is written 2 s after the last change. Returns 0, DK_E_SET_KEY, DK_E_SET_VALUE, DK_E_SET_FULL or DK_E_SET_OFF. Not from a host command handler."
+doc = "Set `key` to the `len` bytes (0 to 1024) at `value`; the card is written 2 s after the last change (with the `project` service loaded the value also goes to the current project, written to its `.dkp` at the next stock save). Returns 0, DK_E_SET_KEY, DK_E_SET_VALUE, DK_E_SET_FULL or DK_E_SET_OFF. Not from a host command handler."
 
 [[import]]
 name = "dk_settings_remove"
@@ -711,6 +711,26 @@ sig = "i32 (intro_frame_fn frame, intro_done_fn done, void *arg, u32 ticks)"
 doc = "Replace the stock boot animation. `frame(tick, arg)` returns the 1024-byte native bitmap of tick 0 .. ticks-1 (30 ticks a second), or NULL to end the animation; it runs on the intro task, must not block and must not call any import. `done(arg)` (may be NULL) runs once in the UI task at the first UI pass. `ticks` is 1 to 300. Returns 0, DK_E_NOT_FOUND outside init, DK_E_CONTRACT, DK_E_BUSY (taken already) or DK_E_BOOT_ONLY. See <dk/platform/intro.h>."
 
 [[import]]
+name = "dk_project_current"
+service = "project"
+provided = true
+wrapper = "glue"
+since = "0.11.0"
+context = "ui"
+sig = "i32 (u32 *slot, u8 *name)"
+doc = "The current project: its slot (0 to 127) in `*slot` and its name, as the firmware lists it (16 bytes, zero padded), in `name`. DK_E_NOT_FOUND when there is no current project (nothing is written then). A module that calls it needs the `project` service (a hard need, as every provided import); a module that only keeps settings calls nothing: its settings are per project while the service is loaded, and it does not need the service."
+
+[[import]]
+name = "dk_project_status"
+service = "project"
+provided = true
+wrapper = "glue"
+since = "0.11.0"
+context = "ui"
+sig = "u32 ()"
+doc = "The state of the project service as bits: bit 0 a `.dkp` file is loaded for the current project, bit 1 the data has changes the file does not hold (written at the next successful stock save), bit 2 a write was deferred after 30 s of a busy store, bit 3 a file of the slot was not used (a stamp, device, version or crc mismatch)."
+
+[[import]]
 name = "dk_param_get"
 service = "machines"
 provided = true
@@ -754,7 +774,7 @@ doc = "Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (buil
 name = "dk_module_ctx_add_filter"
 service = "machines"
 provided = true
-since = "0.10.6"
+since = "0.11.1"
 context = "init"
 sig = "dk_filter *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
 doc = "Declare a filter of this module: `index` is its DK_FILTER_ID_<ID> (build/gen/module_ids.h): the position of the id in the `[[filter]]` list of module.toml, which is the row of its key in the keys table. `name` is the long name (the chooser row), `short_name` the short one. The runtime numbers the filter 16 to 31 (sticky, like a machine type) and keeps a stock filter (Multi-Mode) as the sound's fallback. A module has at most 8 filters and the device 16 in all. Returns the filter handle; on an error a placeholder, and the error is reported when `init` returns."
@@ -763,7 +783,7 @@ doc = "Declare a filter of this module: `index` is its DK_FILTER_ID_<ID> (build/
 name = "dk_filter_add_page"
 service = "machines"
 provided = true
-since = "0.10.6"
+since = "0.11.1"
 context = "init"
 sig = "dk_page *(dk_filter *f)"
 doc = "The page of the filter: the FLTR page of the stock filter, whose knob 1 is always the stock cutoff (FREQ); the module owns knobs 2 and 3 and adds them with `dk_page_add_param` (at most two; a third is refused with DK_E_PAGE_FULL). A filter has one page; a second call is refused with DK_E_PAGE_FULL. Passing a machine handle is refused with DK_E_FORMAT. Returns the page handle (a placeholder on an error)."
@@ -1828,9 +1848,40 @@ id = 58
 name = "CARD_GUARD_REFUSED"
 args = ["sector", "sectors", "class_kind", "refused_writes", "refused_erases"]
 
+# the project service (docs/design/digikit-project.md section 6; info level, kept in the small ring). LOADED: the install of the data of the current project ended, also for a slot
+# without a file (bytes 0). SAVED: the write step of a `.dkp` ended (`result` 0 or the status of the step: DK_E_BUSY when it ended deferred, the store's code otherwise).
+# IGNORED: a file of the slot is not used (reason 1 CRC or format, 2 other device, 3 version, 4 save stamp; 5 the store refused the slot's listing or read, status in the third argument; 6 a stock save into the slot whose load failed was skipped; 7 a save was dropped: the firmware's listing had no record of the slot within 2 s). DEFERRED: once after 30 s of a busy store.
+[[log.kind]]
+id = 59
+name = "PROJECT_LOADED"
+args = ["slot", "bytes", "modules", "counter", "-"]
+
+[[log.kind]]
+id = 60
+name = "PROJECT_SAVED"
+args = ["slot", "bytes", "counter", "result", "-"]
+
+[[log.kind]]
+id = 61
+name = "PROJECT_IGNORED"
+args = ["slot", "reason", "status", "-", "-"]
+
+[[log.kind]]
+id = 62
+name = "PROJECT_DEFERRED"
+args = ["slot", "status", "seconds", "-", "-"]
+
+# the project service restores the module list of a project after the install of its data (docs/design/digikit-project.md section 3, "Module list and restore"): one event for each listed module that is not loaded.
+# `what`: 1 the live load was queued, 2 it ended well (`status` is the result of adding the module to the saved selection), 3 the module is not on the card (`status` 0), 4 the load was refused or
+# failed (`status` is the refusal). `index` is the place in the list and `id_hash` the FNV-1a of the module id (the `name_hash` of the SDK).
+[[log.kind]]
+id = 63
+name = "PROJECT_MODULE"
+args = ["slot", "what", "status", "index", "id_hash"]
+
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
-phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (modules/core/runtime/abi/src/service.rs)
-polls = 4                            # the poll slots, owner 0x200 | i: POLLS of modules/core/runtime/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
+phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (runtime/core/abi/src/service.rs)
+polls = 4                            # the poll slots, owner 0x200 | i: POLLS of runtime/core/src/rs/src/state.rs. A slot holds whichever function registered with `dkrt_poll_add`, so the host names a poll by the function at that slot (address map), not from this file
 
 [protocol]          # the digikit SysEx protocol (F0 7D 64 6B ...); docs/design/digikit-upload.md
 version = 1         # the request version byte; a request with another version gets E_PROTO
@@ -1991,8 +2042,8 @@ DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machin
 # The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
 # voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before
 # effect pages, and the removal runs the other way round). `rust` is the full path of the type that implements `Service`: the type of a service crate linked into
-# the runtime (`dkrt_svc_NAME::records::Type`, `modules/core/services/NAME`).
-# `patchkit gen` writes the static table of these rows (modules/core/runtime/src/rs/src/gen_services.rs); a new service is a row here, its crate
+# the runtime (`dkrt_svc_NAME::records::Type`, `services/NAME`).
+# `patchkit gen` writes the static table of these rows (runtime/core/src/rs/src/gen_services.rs); a new service is a row here, its crate
 # and its `[records.kinds]`.
 [[service]]
 name = "samples"
@@ -2008,6 +2059,10 @@ name = "lfo"
 
 [[service]]
 name = "shortcuts"
+
+# The project service (docs/design/digikit-project.md): the `.dkp` files under `projects/`, the overlay that makes module settings per project and the five hooks of the stock project paths.
+[[service]]
+name = "project"
 
 # A `[[service]]` without `rust` is provided by a `.dks` provider (a module with `role = "service"`), not by a runtime row: it is in no generated table.
 # `test = true`: a test-only service; it and its `[[import]]` rows (also `test = true`) are left out of the public SDK headers, docs and templates.
@@ -2046,7 +2101,7 @@ DSP_COST_FX = { id = 6, capacity = "DSP_COST" }   # DSP instructions per block o
 
 [limits.max]        # contract maxima (capacity plan, docs/plans/capacity-isolation.md): a device's `[limits]` value in devices/*.toml may not exceed them
                     # (`patchkit gen` refuses it). Names are the keys of `[limits]` and, for dsp_area_bytes, of `[digikit]`.
-modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, modules/core/runtime/sdk/src/lib.rs)
+modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, runtime/core/sdk/src/lib.rs)
 map_entries = 8     # sticky machine-type map entries: MAP_N = 8 (record format: bytes 28-31 and 480-507)
 fx_slots = 4        # effects in the chain: DK_FX_MAX of [fx] (kept equal by packages/patchkit/tests/sdkgen.rs)
 send_slots = 2      # effects on a send bus: the Sound array's free indices a send page can use, [fx] send_indices (at most SEND_MAX = 2 in core/fxpages)
@@ -2056,7 +2111,7 @@ page_rows = 8       # page rows core/dynreg reserves (Digitone II)
 machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 stage_bytes = 131072  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
 
-[limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, modules/core/runtime/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
+[limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, runtime/core/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).
 dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick offsets, the keys table pair at 0x90/0x94, then the tables follow); `dkneeds::HEADER`
 # The header table of a `.dkm` (spec: packages/dkneeds/src/keys.rs; patchkit writes it, the runtime, the boot planner, dkneeds and the host tools read it). The header

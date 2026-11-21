@@ -311,7 +311,7 @@ pub fn preflight(
                     }
                 }
                 None => o.fail(format!(
-                    "no port lockfile for the base {} (devices/ports/)",
+                    "no port lockfile for the base {} (ports/)",
                     base.syx_sha256
                 )),
             }

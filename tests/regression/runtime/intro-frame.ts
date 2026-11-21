@@ -17,7 +17,7 @@ export function introFramebuffer(native: Uint8Array): Buffer {
 
 /** The safe-mode frame of a reason as the host test of `safe_screen.rs` checks it in (`core/runtime/tests/fixtures/safe-<name>.bin`), in framebuffer layout. */
 export function safeFrame(name: 'key' | 'counter'): Buffer {
-  const file = new URL(`../../../modules/core/runtime/tests/fixtures/safe-${name}.bin`, import.meta.url);
+  const file = new URL(`../../../runtime/core/tests/fixtures/safe-${name}.bin`, import.meta.url);
   return introFramebuffer(fs.readFileSync(file));
 }
 

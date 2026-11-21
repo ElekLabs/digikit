@@ -20,7 +20,7 @@ export default defineConfig({
         alias?: Record<string, string>;
         testTimeout?: number;
       }) => ({
-        // modules/ has no node_modules: its tests reach the workspace packages by path
+        // Module tests reach workspace packages by path.
         resolve: {
           alias: {
             '@digi/dkbs': fileURLToPath(new URL('packages/dkbs/src/index.ts', import.meta.url)),

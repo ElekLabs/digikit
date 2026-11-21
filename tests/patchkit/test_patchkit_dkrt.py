@@ -18,7 +18,7 @@ from tools.firmware import config  # noqa: E402
 from tools.patchkit import modroots, pk_dkrt, pk_toolchains  # noqa: E402
 from tools.patchkit import patchkit as front_end  # noqa: E402
 
-RUNTIME = ROOT / "modules/core/runtime"
+RUNTIME = ROOT / "runtime/core"
 DEMO = ROOT / "tests/fixtures/modules/dyn-demo"
 
 

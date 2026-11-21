@@ -11,7 +11,7 @@ fn root() -> PathBuf {
 
 fn patched(file: &str, modules: &[&str]) -> Option<Vec<u8>> {
     let raw = std::fs::read(root().join("firmware").join(file)).ok()?;
-    let registry = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let registry = Registry::from_dir(&root().join("ports")).unwrap();
     let ids: Vec<String> = modules.iter().map(|m| m.to_string()).collect();
     // builds the content modules the image needs, no others (skipped without the toolchain)
     let library = Library::scan_repo_for_or_skip(&root(), Some(&ids))?;

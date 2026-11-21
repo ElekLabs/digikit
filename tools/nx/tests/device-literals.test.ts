@@ -58,16 +58,24 @@ describe('countLiterals', () => {
 });
 
 describe('scan and compare', () => {
-  test('docs, devices/ and bounded path tokens are not scanned; a name that only starts with a literal is', () => {
+  test('exempts device data, docs and bounded path tokens', () => {
     for (const path of [
       'devices/x.toml',
+      'ports/st-1.42.toml',
+      'ports/fw/samples.toml',
       'docs/a.md',
       'tools/foo_dt2.py',
       'tests/regression/dn2/a.ts',
       'a/device-dt2.inc',
     ])
       expect(allowedPath(path, p.path), path).toBe(true);
-    for (const path of ['README.md', 'tools/foo.py', 'digitakt2/a.ts', 'tools/dt2fx.py'])
+    for (const path of [
+      'README.md',
+      'tools/foo.py',
+      'digitakt2/a.ts',
+      'tools/dt2fx.py',
+      'ports/bindings/include/dk_fw_samples.h',
+    ])
       expect(allowedPath(path, p.path), path).toBe(false);
     const { found, binary } = scan(
       ['tools/foo.py', 'tools/foo_dt2.py', 'b.bin'],

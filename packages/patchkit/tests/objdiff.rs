@@ -196,8 +196,8 @@ fn removed_function_and_extern_are_reported() {
 }
 
 fn runtime_object() -> Dko {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../modules/core/runtime/build/runtime.dko.json");
+    let p =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/build/runtime.dko.json");
     Dko::parse(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 

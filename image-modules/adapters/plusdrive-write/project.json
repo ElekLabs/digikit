@@ -1,0 +1,37 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/plusdrive-write",
+  "implicitDependencies": ["core/runtime"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/plusdrive-write-files.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["A:core/plusdrive-write", "C:storage"],
+        "modules": ["test/file-write"],
+        "plusdrive": true
+      },
+      {
+        "files": ["tests/plusdrive-write-hash.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["A:core/plusdrive-write", "C:storage"],
+        "modules": ["test/file-write"],
+        "plusdrive": true
+      },
+      {
+        "files": ["tests/plusdrive-write-levers.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["A:core/plusdrive-write", "C:storage"],
+        "modules": ["test/file-write"],
+        "plusdrive": true
+      },
+      {
+        "files": ["tests/plusdrive-write-cuts.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["A:core/plusdrive-write", "C:storage"],
+        "modules": ["test/file-write"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

@@ -1,14 +1,14 @@
-// Which modules the site ships as prebuilt .dkm files (the Transfer page's library): the run-time content modules of modules/machines,
-// modules/fx and modules/tools. The shared rule is `ModuleInfo::is_runtime`
+// Which modules the site ships as prebuilt .dkm files (the Transfer page's library): the run-time content modules of modules/machine,
+// modules/fx and modules/tool. The shared rule is `ModuleInfo::is_runtime`
 // (packages/patchkit/src/module.rs, the desktop library's rule); the site adds its own filters (module roots, `site = false`, targets).
 // Written without TS-only syntax: scripts/gen-modules.mjs (node) and data/modules.ts (vite) both import it.
 
-const ROOTS = ['modules/machines/', 'modules/fx/', 'modules/tools/'];
+export const SHIPPED_KINDS = ['machine', 'fx', 'tool'];
 
 /** `manifest` is the parsed module.toml; `dir` the module's directory relative to the repository root, with `/`. */
 export function isShipped(manifest, dir) {
   const m = manifest.module ?? {};
-  if (!ROOTS.some((r) => `${dir}/`.startsWith(r))) return false;
+  if (!SHIPPED_KINDS.some((kind) => `${dir}/`.startsWith(`modules/${kind}/`))) return false;
   if (m.category === 'core' || m.type === 'framework') return false;
   // A developer tool sets `site = false`: the public site is for end users.
   if (m.site === false) return false;

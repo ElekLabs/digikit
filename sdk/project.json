@@ -41,14 +41,14 @@
         "cwd": "."
       }
     },
-    "test-rig": {
+    "test-dsp": {
       "executor": "nx:run-commands",
       "cache": true,
       "dependsOn": ["patchkit:cli", "sharc-rig:build"],
       "inputs": [
         "jsToolchain",
         "{projectRoot}/**/*",
-        "{workspaceRoot}/packages/sharc-rig-kit/src/**/*",
+        "dspTestTooling",
         "{workspaceRoot}/packages/sharc-rig-kit/package.json",
         "{workspaceRoot}/vitest.host.config.ts",
         "{workspaceRoot}/vitest.host.projects.json",
@@ -90,12 +90,14 @@
         "{workspaceRoot}/sdk/include/dk/gen/**/*",
         "{workspaceRoot}/sdk/include/dk/core/status.h",
         "{workspaceRoot}/devices/**/*",
-        "{workspaceRoot}/modules/core/runtime/abi.toml",
-        "{workspaceRoot}/modules/core/runtime/include/dkrt.h",
-        "{workspaceRoot}/modules/core/runtime/sdk/src/gen_*.rs",
-        "{workspaceRoot}/modules/core/runtime/src/rs/src/gen_abi_check.rs",
-        "{workspaceRoot}/modules/core/services/*/dks/src/gen_exports.rs",
-        "{workspaceRoot}/modules/core/fw/**/*",
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/ports/fw/**/*",
+        "{workspaceRoot}/runtime/core/abi.toml",
+        "{workspaceRoot}/runtime/core/include/dkrt.h",
+        "{workspaceRoot}/runtime/core/sdk/src/gen_*.rs",
+        "{workspaceRoot}/runtime/core/src/rs/src/gen_abi_check.rs",
+        "{workspaceRoot}/services/*/dks/src/gen_exports.rs",
+        "{workspaceRoot}/ports/bindings/**/*",
         "{workspaceRoot}/tools/device/dklog_kinds.py",
         "{workspaceRoot}/tools/device/dkproto.py",
         "{workspaceRoot}/packages/dkneeds/src/gen_limits.rs",

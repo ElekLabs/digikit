@@ -3,7 +3,7 @@
 A service of the digikit runtime, made by `mise run module:new -- service __NAME__`. Every service has this shape:
 
 ```text
-modules/core/services/__NAME__/
+services/__NAME__/
   Cargo.toml        package dkrt-svc-__KEBAB__: the neutral crate, host-tested over FakeCore
   src/lib.rs        pub mod records, slots (and dsp when there is a src/dsp/ folder)
   src/records.rs    the Service handlers (declare, validate_records, check, apply, remove, tick ...)
@@ -17,7 +17,7 @@ modules/core/services/__NAME__/
 ```
 
 The neutral crate exports only `dk_module` and `DKRT_*` state symbols, has no assembler and names no firmware (no `cf.` hook or anchor names, no `dkfw`). What the service
-needs from the image comes from the image adapter `modules/core/adapters/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
+needs from the image comes from the image adapter `image-modules/points/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
 with `dkc_info` (`CoreApi::info`). The image half is the adapter's; the runtime names neither the service nor the adapter's table.
 
 Every service implements `validate_records` (no default): the rule for the records of a kind it owns, as far as the record bodies alone decide it. `check` runs it at load and
@@ -28,7 +28,7 @@ Make it a real service:
 1. Add a `[[service]]` row (no `rust`: the service is the file `__NAME__.dks`) and its `[records.kinds]` entries (`service = "__NAME__"`) to `sdk/sdk.toml`, then `patchkit gen`.
 2. Add the workspace member in `Cargo.toml`. A service file needs no entry in the runtime's dependencies or `owners.toml`.
 3. A service that takes hooks: one `[[hook]]` in `dks/module.toml` for each, the `service!(..., setup = f, hooks = [("cf.x.hook.y", hooks::entry), ("cf.x.hook.z", hooks::z_dn2, dn2)])` list (an entry with `dt2` or `dn2` is for that device),
-   and the entry as assembler in `dks/src/hooks.rs`. A hook that takes the whole control flow of its site (no handler in `devices/fw/`) may continue in the stock code of the site with the exit `tail = true`;
+   and the entry as assembler in `dks/src/hooks.rs`. A hook that takes the whole control flow of its site (no handler in `ports/fw/`) may continue in the stock code of the site with the exit `tail = true`;
    its assembler refers to `dk_tail_<8 hex digits of name_hash(hook)>`, which the port file resolves to code generated from the user's firmware (docs/PATCHING.md "Raw hooks").
    Firmware references (resolved by the port file; one example each, aliases in `[object.externs]` of `dks/module.toml`, H = hash of the hook):
    `_blit = "cf.draw.fn.blit"` then `jsr _blit` (`dk_fw_`, a firmware address; Rust takes `dkfw::draw::blit` and needs no alias);

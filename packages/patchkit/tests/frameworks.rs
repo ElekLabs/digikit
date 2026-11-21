@@ -19,7 +19,7 @@ const DT2_117: &str = "Digitakt_II_OS1.17.syx";
 const DN2_112: &str = "Digitone_II_OS1.12.syx";
 
 fn registry() -> Registry {
-    Registry::from_dir(&root().join("devices/ports")).unwrap()
+    Registry::from_dir(&root().join("ports")).unwrap()
 }
 
 fn library(extra: Vec<Module>) -> Option<Library> {

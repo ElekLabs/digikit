@@ -20,7 +20,7 @@ def test_machine_parameters_come_from_the_manifest_and_the_device_frame():
     assert dn2.frame.hw(3, 1) == dn2.frame.base + 3 * dn2.frame.stride + 1
     # a run-time machine has no fixed number: the rig takes the first number of the run-time range of the device (core/machines types.toml)
     types = tomllib.loads(
-        (c.ROOT / "modules/core/adapters/machines/types.toml").read_text()
+        (c.ROOT / "image-modules/points/machines/types.toml").read_text()
     )
     assert dt2.machine_type == types["dt2"]["dynamic_first"]
     assert dn2.machine_type == types["dn2"]["dynamic_first"]
