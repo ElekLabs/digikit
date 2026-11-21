@@ -153,12 +153,7 @@ records = ["effect"]
 resources = { "fx.effect_slots" = 1, "fx.fx_cost" = 1800 }
 ```
 
-```toml
-# the selection may pin a service
-[[selection]]
-path = "services/project.dks"
-pin = true
-```
+A service path in the selection is a pin (no new field; the selection's paths are shared by modules and pinned services).
 
 ## 6. Service contract
 
@@ -494,7 +489,7 @@ The tool is `patchkit size` (built first in RC1; section 14 has the baseline). "
 Taken (Em, 2026-11-22):
 
 - `fixes/overdrive` is deleted.
-- The selection may pin a service.
+- The selection may pin a service: a service path in the selection is a pin; the record gains no field (decided 2026-11-22).
 - A `rows` service owns the claim policy for the reserved parameter, machine and page rows.
 - The enlarged parameter table stays one flashed reservation, owned by the platform. It replaces today's copy in the `params` point and adds no bytes.
 - Two installers behind one `Installer` interface: `ColdFireInstaller` in the core, `SharcInstaller` beside `dsp-link`.
@@ -516,15 +511,27 @@ Each item is one PR or a small stack, lands green and merges before the next sta
 | --- | --- | --- | --- | --- |
 | **RC0 Plan and baseline** | This plan; size baseline and gate commands | Em's review | baseline | 0.5 day, high |
 | **RC1 Contract and fixtures** | `patchkit size` (section 14); `Provider`, parts, `ProviderRow`, `Installer`, manifest schema (`[[service.resource]]`, `[[service.record]]`; entries keep the existing `[[hook]]` and `[[fill]]`) parsed and validated in patchkit, not packed; `PackageGraph` and `ResourceLedger` test-first, not wired; `PackageGraph::from_tables` over the packed `local-ping` fixtures | `core/runtime:rust-tests`, patchkit tests, fixture pack checks | no change in the image | 1-2 days, high |
-| **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; replaces the loader's two inline version checks (loader/mod.rs, `[[service_import]]` and live plan) with `dkrt_abi::version::version_satisfies`; reload of services from the menu; services listed in MODULES; orphans; pins (the selection record has no free field: a record version 2 or a settings key); MIDI snapshot | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
-| **RC3 Service contract v2** | Owner-object services; tagged parts; provider-local record kinds and resources; `Describe` and query replace both bridges; `svc_rows` fallback, `[records.kinds]` owners and domain capacity ids deleted; header table version 4 with the new schema packed (provider-qualified resources with aggregate and parent, provider-local record kinds, entries); `.dkm` record format version bump; the fixtures gain resources, records, a query, a hook and one settings field of each scope; the `Settings` part (6.6) with FX's route choice moved to it and the menu's FX route panel deleted; all 6 services and content modules repacked | Service unit tests, assembly, the device tests `test:plan` selects for the services | must shrink | 4-6 days, medium |
+| **RC1g Device test diet** | Inventory of every device test (what it proves, firmware-only or logic, lowest layer that sees it, minutes); a smoke set per device approved by Em, run only for changes to inputs every device test reads (runtime image, SDK, patchkit, platform), in place of every selected device test; a change local to one owner runs only that owner's device tests; from RC2 on, each item moves the device assertions of the area it touches to unit or assembly tests and deletes the redundant device tests (adversarial review, Em decides); Nx keys simplified once device tests are few. The gate target `gate-device-smoke` runs the 8 smoke tests on DT2 and DN2; AGENTS.md states the rule. | Inventory reviewed; smoke set approved | none | inventory 0.5 day, then per item |
+| **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; replaces the loader's two inline version checks (loader/mod.rs, `[[service_import]]` and live plan) with `dkrt_abi::version::version_satisfies`; reload of services from the menu; services listed in MODULES; orphans; pins (decided 2026-11-22: no new field; a service path in the selection is a pin, sharing the selection's paths with modules); MIDI snapshot. Splits the device tests of ledger item RC2 (loading and lifecycle; 17 files, see [ledgers/device-test-inventory.md](ledgers/device-test-inventory.md)). | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
+| **RC3 Service contract v2** | Owner-object services; tagged parts; provider-local record kinds and resources; `Describe` and query replace both bridges; `svc_rows` fallback, `[records.kinds]` owners and domain capacity ids deleted; header table version 4 with the new schema packed (provider-qualified resources with aggregate and parent, provider-local record kinds, entries); `.dkm` record format version bump; the fixtures gain resources, records, a query, a hook and one settings field of each scope; the `Settings` part (6.6) with FX's route choice moved to it and the menu's FX route panel deleted; all 6 services and content modules repacked. Splits the device tests of ledger item RC3 (FX, services, settings; 16 files, see the ledger). | Service unit tests, assembly, the device tests `test:plan` selects for the services | must shrink | 4-6 days, medium |
 | **RC3m Module settings schema** | SDK builder calls for module settings fields, packed as records and rendered by the RC3 renderer; values keep the SDK get/put calls; `menu` stays supported | SDK header tests, assembly (packed fields reach the renderer), one menu device test per device | small | 1-2 days, medium |
-| **RC4 Installers and ColdFire points** | `Installers` with both backends; `lfo` first (deletes `points/lfo`), then `machines`, `dynreg`, `params` content, `fxpages` into their services and `services/rows` | Backend unit tests; the existing device tests of each service | the image shrinks | 3-5 days, medium (lfo 1 day, high) |
-| **RC5 Remove image-modules and tidy runtime/core** | SHARC slot catalogue and drivers to `runtime/platform`; platform stops naming services; proofs to tests; `overdrive` deleted; the crates of `runtime/core` move to `runtime/core/crates/<name>` (the runtime crate from `src/rs` to `crates/dkrt`, assembly from `src/cf` to `asm/`); the runtime crate's remaining flat files grouped into concept folders | Byte manifest for pure moves; named tests for the de-naming | neutral or smaller | 1-2 days, high |
+| **RC4 Installers and ColdFire points** | `Installers` with both backends; `lfo` first (deletes `points/lfo`), then `machines`, `dynreg`, `params` content, `fxpages` into their services and `services/rows`. Splits the LFO, machine and row device tests (ledger item RC4). | Backend unit tests; the existing device tests of each service | the image shrinks | 3-5 days, medium (lfo 1 day, high) |
+| **RC5 Remove image-modules and tidy runtime/core** | SHARC slot catalogue and drivers to `runtime/platform`; platform stops naming services; proofs to tests; `overdrive` deleted; the crates of `runtime/core` move to `runtime/core/crates/<name>` (the runtime crate from `src/rs` to `crates/dkrt`, assembly from `src/cf` to `asm/`); the runtime crate's remaining flat files grouped into concept folders. Splits the platform, storage, +Drive, upload and fault device tests (ledger item RC5). | Byte manifest for pure moves; named tests for the de-naming | neutral or smaller | 1-2 days, high |
 | **RC6 Runtime size** (only if the Syntakt still does not fit) | First candidate: load `digikit-menu` from the card (19.1 KB stored on the Syntakt). Then move optional core parts to services, ranked by measured bytes; Transfer and recovery stay in the core | Per moved part | Syntakt fits | sized after RC5 |
 | **RC-D DSP-side installer** (deferred) | A resident DSP installer that patches sites at block tail; `SharcInstaller` v2; SHARC slots leave the image | Static design, emulator, one hardware test | the image shrinks | 2-4 days, low-medium |
 
 Before RC2 and RC3 start: state payoff and confidence again with the RC1 results, and stop if they are weak.
+
+### Status (for a restart)
+
+Update this block whenever the state changes.
+
+- PR #692 (the FX route query and RC1) merged into main as `82e5f39ee` on 2026-11-22. Lane `fx-route-policy` (worktree `/Users/em/src/digi/lanes/fx-route-policy`, branch `lane/fx-route-policy`) continues with RC1g.
+- Working rules from Em: no commits until Em has reviewed the step; every step ends with the static checks, `test:plan` against the phase base, an independent reviewer, then Em; plan rows are kept current.
+- RC1g: the inventory is [ledgers/device-test-inventory.md](ledgers/device-test-inventory.md) (105 device test files, 173 halves; 44 firmware-only, 11 logic, 46 mixed). Proposed smoke set (same 8 per device): boot-restart, live, services/providers, dynreg/equiv, settings-api, safe-mode, transfer-live, digikit-menu zero menu; approved by Em 2026-11-22. Each logic or mixed file is mapped to the item that splits it (ledger column `item`); AGENTS.md states the rule.
+- RC2 is split into RC2a manager over fakes, RC2b real seams and boot, RC2c service reload and unload with orphans and MODULES listing, RC2d pins (service paths in the selection), RC2e MIDI snapshot; each step splits its ledger device tests.
+- RC1g done (PR `rc/rc1g-device-tests`): `gate-device-smoke:device` (tools/gate/device-smoke/project.json, 16 halves), TESTING.md "Device smoke set", the ledger, generic AGENTS.md wording. Not yet part of `mise run test` (a later step after one measured run).
+- Next: RC2a from main (after the RC1g PR merges, or stacked on it).
 
 ### Progress
 
@@ -537,13 +544,14 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | Item or step | Status | Commits, PR |
 | --- | --- | --- |
 | RC0 Plan and baseline | done | `57b861aaa` (finding 158), `3d6a6bc49` (plan, baseline); approved by Em 2026-11-22 |
-| RC1 Contract and fixtures | done (not merged) | lane `fx-route-policy`, `dd211d711`..`a4d2ecfcb` |
+| RC1 Contract and fixtures | done, merged in PR #692 (`82e5f39ee`) | lane `fx-route-policy`, `dd211d711`..`a4d2ecfcb` |
 | RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | `dd211d711` |
 | RC1b crate `dkrt-lifecycle` (`runtime/core/lifecycle`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | done | `65bb121db` |
 | RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-lifecycle`) | done | `4b48e0de9` |
 | RC1f rename `dkrt-packages` to `dkrt-lifecycle` (`runtime/core/lifecycle`): the crate holds the lifecycle logic, RC2's `PackageManager` included | done | `1066f6351` |
 | RC1d `PackageGraph::from_tables` over the existing header table (NEEDS, PROVIDES; shared `dkneeds` parser); `[[service.resource]]` and `[[service.record]]` parsed and validated in patchkit, not packed (packing is RC3; entries keep `[[hook]]` and `[[fill]]`); the `local-ping` fixtures extended (second consumer, incompatible consumer); one host test that packs them and checks bring-up and take-down orders (a newer provider minor is a `from_tables` unit test) | done | `a4d2ecfcb` (objects refreshed in `890092c7d`) |
 | RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | done | `b62328998` |
+| RC1g Device test diet: inventory and smoke set | done | branch `rc/rc1g-device-tests` (PR number in the next progress update) |
 | RC2 One lifecycle | todo | |
 | RC3 Service contract v2 | todo | |
 | RC3m Module settings schema | todo | |
