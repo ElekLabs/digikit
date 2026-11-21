@@ -8,6 +8,7 @@
 #![no_std]
 
 mod graph;
+mod install;
 mod live;
 mod node;
 mod refusal;
@@ -23,6 +24,9 @@ pub const MAX_PACKAGES: usize = REC_MAX;
 pub const MAX_NEEDS: usize = PROVIDER_MAX;
 
 pub use graph::PackageGraph;
+pub use install::{
+    Cpu, Entry, InstallError, Installer, Installers, PatchBytes, SiteRef, SlotRef, MAX_PATCH,
+};
 pub use live::LiveSet;
 pub use node::{Api, Need, Node};
 pub use refusal::Refusal;

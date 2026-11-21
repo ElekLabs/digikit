@@ -27,6 +27,7 @@ pub mod package;
 pub mod plan;
 pub mod platform;
 pub mod profiles;
+pub mod provider;
 pub mod regcheck;
 pub mod registry;
 pub mod service;
