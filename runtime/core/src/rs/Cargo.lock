@@ -47,6 +47,7 @@ name = "dkrt-fit"
 version = "0.1.0"
 dependencies = [
  "dkneeds",
+ "dkrt-abi",
  "dkrt-sdk",
 ]
 

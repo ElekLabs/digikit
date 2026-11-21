@@ -23,6 +23,7 @@ pub mod gen_svc_abi;
 pub mod keys;
 pub mod link;
 pub mod mem;
+pub mod package;
 pub mod plan;
 pub mod platform;
 pub mod profiles;
@@ -31,6 +32,7 @@ pub mod registry;
 pub mod service;
 pub mod state;
 pub mod storage;
+pub mod version;
 
 /// Module records of the runtime: the selection record's size (`SEL_MAX`, `[limits.max] modules` of sdk/sdk.toml); the device files' `[limits] modules` may not exceed it.
 pub const MAX_MODULES: usize = dkrt_sdk::SEL_MAX;

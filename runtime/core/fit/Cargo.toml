@@ -10,6 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 dkrt-sdk = { path = "../sdk" }
+dkrt-abi = { path = "../abi" }
 dkneeds = { path = "../../../packages/dkneeds" }
 
 [dev-dependencies]

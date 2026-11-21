@@ -89,6 +89,24 @@ tests/fixtures/modules/ref-*   the reference contract fixtures (RC1)
 
 `image-modules/` is removed in RC5. Section 9 lists where each item goes.
 
+### Code layout
+
+Every RC change follows the "Code layout" rule of [AGENTS.md](../../AGENTS.md): one file per concept named after its noun, no logic in `lib.rs` or `mod.rs`, behaviour of a large type split into a folder of `impl` blocks, private state, tests beside the code. The RC crates:
+
+```text
+runtime/core/abi/src/package.rs      PackageId (shared by dkrt-fit and dkrt-packages)
+runtime/core/abi/src/version.rs      version_satisfies
+runtime/core/packages/src/           dkrt-packages
+  lib.rs                             crate doc, mod lines, pub use
+  graph.rs                           PackageGraph: construction, the acyclic rule, lookups
+  graph/bring_up.rs                  bring_up_order
+  graph/take_down.rs                 take_down_order, the orphan rule
+  node.rs, live.rs, steps.rs, refusal.rs
+runtime/core/fit/src/ledger.rs       ResourceLedger
+runtime/core/src/rs/src/packages/    RC2: manager.rs (PackageManager), the Placer, Linker and ProviderHost seams
+runtime/core/src/rs/src/install/     RC4: mod.rs (Installer, Entry, Installers), coldfire.rs, sharc.rs
+```
+
 ## 5. Package manifests
 
 The packer derives every table from these manifests and from the module's `init` calls. The core reads only the packed header tables.
@@ -473,7 +491,7 @@ Each item is one PR or a small stack, lands green and merges before the next sta
 | --- | --- | --- | --- | --- |
 | **RC0 Plan and baseline** | This plan; size baseline and gate commands | Em's review | baseline | 0.5 day, high |
 | **RC1 Contract and fixtures** | `patchkit size` (section 14); `Provider`, parts, `ProviderRow`, `Installer`, manifest schema (`[[need]]`, `[[service.resource]]`, `[[service.record]]`, `[[entry]]`, `pin`) in the ABI crate and patchkit; `PackageGraph` and `ResourceLedger` test-first, not wired; the `ref-*` fixtures pack | `core/runtime:rust-tests`, patchkit tests, fixture pack checks | no change in the image | 1-2 days, high |
-| **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; reload of services from the menu; orphans; pins; MIDI snapshot | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
+| **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; replaces the loader's two inline version checks (loader/mod.rs, `[[service_import]]` and live plan) with `dkrt_abi::version::version_satisfies`; reload of services from the menu; orphans; pins; MIDI snapshot | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
 | **RC3 Service contract v2** | Owner-object services; tagged parts; provider-local record kinds and resources; `Describe` and query replace both bridges; `svc_rows` fallback, `[records.kinds]` owners and domain capacity ids deleted; `.dkm` record format version bump; all 6 services and content modules repacked | Service unit tests, assembly, the device tests `test:plan` selects for the services | must shrink | 4-6 days, medium |
 | **RC4 Installers and ColdFire points** | `Installers` with both backends; `lfo` first (deletes `points/lfo`), then `machines`, `dynreg`, `params` content, `fxpages` into their services and `services/rows` | Backend unit tests; the existing device tests of each service | the image shrinks | 3-5 days, medium (lfo 1 day, high) |
 | **RC5 Remove image-modules** | SHARC slot catalogue and drivers to `runtime/platform`; platform stops naming services; proofs to tests; `overdrive` deleted | Byte manifest for pure moves; named tests for the de-naming | neutral or smaller | 1-2 days, high |
@@ -487,17 +505,18 @@ Before RC2 and RC3 start: state payoff and confidence again with the RC1 results
 Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way:
 
 1. The worker leaves its changes uncommitted and marks the row `review`.
-2. An independent reviewer sub-agent reviews the diff (ranked findings with `file:line` and a failure scenario; boundaries, separation of concerns and device specifics behind capabilities included). Findings are fixed or answered.
+2. The worker runs `mise run test:plan` with `DIGI_GATE_BASE` at the start of the phase and states whether the selection matches what the change can reach; a selection that is wider is fixed in the inputs and edges, not run. An independent reviewer sub-agent reviews the diff and the selection (ranked findings with `file:line` and a failure scenario; boundaries, separation of concerns and device specifics behind capabilities included). Findings are fixed or answered.
 3. Em reviews the phase or deliverable. Only then is it committed and the row set to `done` with the commit.
 
 | Item or step | Status | Commits, PR |
 | --- | --- | --- |
 | RC0 Plan and baseline | done | `57b861aaa` (finding 158), `3d6a6bc49` (plan, baseline); approved by Em 2026-11-22 |
 | RC1 Contract and fixtures | active | lane `fx-route-policy` |
-| RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | commit "Add patchkit size" (hash in the next progress update) |
-| RC1b crate `dkrt-packages` (`runtime/core/packages`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | todo | |
+| RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | `dd211d711` |
+| RC1b crate `dkrt-packages` (`runtime/core/packages`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | done | commit "Add the package graph and the resource ledger" (hash in the next progress update) |
 | RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-packages`) | todo | |
 | RC1d manifest schema in patchkit (`[[service.resource]]`, `[[service.record]]`, `[[entry]]`, derived `[[need]]`, selection `pin`) and the `ref-*` fixtures; `PackageGraph::from_tables` over the packed fixtures | todo | |
+| RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | review | |
 | RC2 One lifecycle | todo | |
 | RC3 Service contract v2 | todo | |
 | RC4 Installers and ColdFire points | todo | |

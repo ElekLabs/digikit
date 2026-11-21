@@ -1198,12 +1198,21 @@ name = "dkrt-fit"
 version = "0.1.0"
 dependencies = [
  "dkneeds",
+ "dkrt-abi",
  "dkrt-sdk",
  "serde_json",
 ]
 
 [[package]]
 name = "dkrt-link"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-packages"
 version = "0.1.0"
 dependencies = [
  "dkrt-abi",

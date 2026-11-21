@@ -1,0 +1,13 @@
+[package]
+name = "dkrt-packages"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The package graph of the digikit runtime: which services a package needs, in which order packages come up and go down. Pure, no allocation, not yet used by the runtime"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+dkrt-abi = { path = "../abi" }
+dkrt-sdk = { path = "../sdk" }
