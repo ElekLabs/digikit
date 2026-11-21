@@ -69,19 +69,22 @@ export const createNodesV2 = [
         .map(([id]) => id),
     );
     // Patch image composition follows module.requires, not acceptance-fixture graph edges.
-    const imageModules = new Set();
-    const includeImageModule = (id) => {
-      if (imageModules.has(id)) return;
+    // imageModules: id -> Set of device shorts whose patch-set images hold the module.
+    const imageModules = new Map();
+    const includeImageModule = (id, device) => {
       const manifest = byId.get(id)?.manifest;
       if (!manifest) throw new Error(`Unknown acceptance patch-set module ${id}`);
-      imageModules.add(id);
-      for (const required of manifest.requires ?? []) includeImageModule(required);
+      if (imageModules.get(id)?.has(device)) return;
+      if (!imageModules.has(id)) imageModules.set(id, new Set());
+      imageModules.get(id).add(device);
+      for (const required of manifest.requires ?? []) includeImageModule(required, device);
     };
     // The patch sets of the device profiles; arbitrary overrides need separate input review.
     for (const profile of globSync('devices/*.toml', { cwd: ctx.workspaceRoot }).sort()) {
-      const sets = read(ctx.workspaceRoot, profile).patch_sets ?? {};
+      const doc = read(ctx.workspaceRoot, profile);
+      const sets = doc.patch_sets ?? {};
       // every set: tools/nx/device-bytes.mjs hashes each one, so their objects are built first
-      for (const ids of Object.values(sets)) for (const id of ids) includeImageModule(id);
+      for (const ids of Object.values(sets)) for (const id of ids) includeImageModule(id, doc.device?.short ?? profile);
     }
     // Only the modules the gate packs get a pack target: patched-in core modules and static fixtures
     // (several ColdFire objects, no dkm_ symbols) cannot be packed as .dkm.
@@ -194,7 +197,7 @@ export const createNodesV2 = [
           },
         },
       ]);
-    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, moduleInfo, coreBuilds, importInputs, pythonInputs, nodes);
+    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, moduleInfo, coreBuilds, importInputs, pythonInputs, nodes, imageModules);
     if (matched.includes('tests/regression/project.json')) nodes.push(regressionNode(ctx.workspaceRoot, importInputs));
     return nodes;
   },

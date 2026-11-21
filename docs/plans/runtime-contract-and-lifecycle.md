@@ -513,10 +513,10 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | RC0 Plan and baseline | done | `57b861aaa` (finding 158), `3d6a6bc49` (plan, baseline); approved by Em 2026-11-22 |
 | RC1 Contract and fixtures | active | lane `fx-route-policy` |
 | RC1a `patchkit size`: stored container per device, runtime with its `requires`, drop-one per module, runtime groups, compare with a saved baseline | done | `dd211d711` |
-| RC1b crate `dkrt-packages` (`runtime/core/packages`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | done | commit "Add the package graph and the resource ledger" (hash in the next progress update) |
-| RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-packages`) | todo | |
+| RC1b crate `dkrt-packages` (`runtime/core/packages`): `PackageGraph` and `ResourceLedger`, test-first, pure, not a runtime dependency yet | done | `65bb121db` |
+| RC1c contract types: `Provider`, parts, `ProviderRow`, `PartRef` (a new `dkrt-abi` file outside `SVC_ABI_FILES`); `Installer`, `Entry` (in `dkrt-packages`) | review | |
 | RC1d manifest schema in patchkit (`[[service.resource]]`, `[[service.record]]`, `[[entry]]`, derived `[[need]]`, selection `pin`) and the `ref-*` fixtures; `PackageGraph::from_tables` over the packed fixtures | todo | |
-| RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | review | |
+| RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | done | commit "Key packs and runtime device tests on what they read" (hash in the next progress update) |
 | RC2 One lifecycle | todo | |
 | RC3 Service contract v2 | todo | |
 | RC4 Installers and ColdFire points | todo | |
