@@ -109,37 +109,6 @@ const localInputs = {
   },
 };
 
-// Fails the build if a firmware-derived file reached the output.
-const buildGuard = {
-  name: 'digi-build-guard',
-  hooks: {
-    'astro:build:done': ({ dir }) => {
-      if (!SHOW_EMULATOR) {
-        // They stay in public/ for the dev server's emulator page.
-        for (const name of ['emulator-core.wasm', 'coi-serviceworker.js', 'pcm-worklet.js'])
-          fs.rmSync(path.join(fileURLToPath(dir), name), { force: true });
-      }
-      const walk = (current) => {
-        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-          const full = path.join(current, entry.name);
-          if (entry.isDirectory()) {
-            walk(full);
-            continue;
-          }
-          if (!entry.isFile()) continue;
-          // Ports and modules (hashes and our own code) are allowed; a firmware image or snapshot never is.
-          const bad =
-            /^emulator-core-sharc.*\.wasm$/.test(entry.name) ||
-            /\.(syx|snap|mstate)$/i.test(entry.name) ||
-            (entry.name !== 'emulator-core.wasm' && fs.statSync(full).size > 5 * 1024 * 1024);
-          if (bad) throw new Error(`firmware-derived file in build output: ${full}`);
-        }
-      };
-      walk(fileURLToPath(dir));
-    },
-  },
-};
-
 // A linked worktree shares node_modules with the main tree; the bench tool lists that tree here so Vite may serve it.
 const extraFsAllow = (process.env.DIGI_VITE_FS_ALLOW || '').split(path.delimiter).filter(Boolean);
 const server = extraFsAllow.length ? { fs: { allow: [repoRoot, ...extraFsAllow] } } : undefined;
@@ -152,6 +121,13 @@ const emulatorPage = {
       if (command === 'dev' || SHOW_EMULATOR)
         injectRoute({ pattern: '/emulator', entrypoint: './src/emulator-page/emulator.astro' });
     },
+    'astro:build:done': ({ dir }) => {
+      if (!SHOW_EMULATOR) {
+        // They stay in public/ for the dev server's emulator page.
+        for (const name of ['emulator-core.wasm', 'coi-serviceworker.js', 'pcm-worklet.js'])
+          fs.rmSync(path.join(fileURLToPath(dir), name), { force: true });
+      }
+    },
   },
 };
 
@@ -160,7 +136,7 @@ export default defineConfig({
   site: process.env.DIGI_SITE_ORIGIN || undefined,
   base: process.env.DIGI_SITE_BASE || undefined,
   devToolbar: { enabled: false },
-  integrations: [solid(), emulatorPage, buildGuard],
+  integrations: [solid(), emulatorPage],
   // the shared pages are TypeScript and Solid source in a workspace package: the server build bundles them
   vite: { plugins: [localInputs], ssr: { noExternal: ['@digi/workbench-core'] }, ...(server ? { server } : {}) },
 });

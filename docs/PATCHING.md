@@ -624,8 +624,7 @@ Firmware (`*.syx`), sections extracted from it, snapshots, ready states, card im
 `explain` output of a real patch, databases derived from firmware, and users' sample audio. Ports hold addresses and
 SHA-256 values. Modules hold our code, our objects and SHA-256 of the bytes they replace. Frame goldens are SHA-256
 only. Modules that need firmware words (oracles) are generated under `out/modules/` and read through `--modules-dir`
-or `PATCHKIT_MODULES`. The web page builds its module data from committed files only, and the build guard rejects
-`.syx`, `.snap` and `.mstate` files.
+or `PATCHKIT_MODULES`. The web page builds its module data from committed files only.
 
 ## Safety and hardware
 

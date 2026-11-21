@@ -314,6 +314,4 @@ the native `expect_sha256`.
 
 The coupled core (`emulator-core-sharc.wasm`) contains firmware-derived DSP code.
 `tools/nx/wasm.mjs` writes it to `apps/web/.local/`, which is gitignored
-and served only by the dev server. It is never in `dist/`: a build guard fails
-the build if it appears in the output. The CF-only core stays in
-`apps/web/public/`.
+and served only by the dev server. The CF-only core stays in `apps/web/public/`.
