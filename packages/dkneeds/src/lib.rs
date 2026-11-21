@@ -232,14 +232,7 @@ fn keys_table<B: Bytes>(src: &mut B, off: u32, size: u32, n: &mut Needs) -> Resu
         let tg = u16::from_be_bytes([e[0], e[1]]);
         let count = u16::from_be_bytes([e[2], e[3]]) as u32;
         let len = u32::from_be_bytes([e[4], e[5], e[6], e[7]]);
-        let top = if version >= 3 {
-            keys::tag::SITES
-        } else if version >= 2 {
-            keys::tag::FW
-        } else {
-            keys::tag::RESOURCES
-        };
-        if !(keys::tag::NEEDS..=top).contains(&tg)
+        if !keys::valid_tag(version, tg, count as usize)
             || tg <= last
             || len % 4 != 0
             || len > size - at - e.len() as u32

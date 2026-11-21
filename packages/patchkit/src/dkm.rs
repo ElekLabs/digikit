@@ -252,6 +252,9 @@ fn table_with_needs(
     hooks_add: &[dkneeds::keys::Pair],
     slots_add: &[dkneeds::keys::Slot],
     kinds_add: &[dkneeds::keys::KindDecl],
+    callback_order: Option<dkneeds::keys::Pair>,
+    local: &LocalImports,
+    registration_floor: u32,
 ) -> Result<Vec<u8>> {
     use dkneeds::keys::{KeyGroup, Keys, Pair, Table, write_table};
     let keys = if reg.is_empty() {
@@ -277,6 +280,22 @@ fn table_with_needs(
         let kinds: Vec<u32> = k.key_groups().map(|g| g.0).collect();
         record_kind_needs(&mut needs, &kinds);
     }
+    needs.extend_from_slice(&local.needs);
+    if registration_floor != 0 {
+        let service = dkneeds::keys::name_hash("runtime");
+        match needs.iter_mut().find(|n| n.service == service) {
+            Some(n) => {
+                n.min_version = n.min_version.max(registration_floor);
+                n.hard = true;
+            }
+            None => needs.push(dkneeds::keys::Need {
+                service,
+                min_version: registration_floor,
+                hard: true,
+            }),
+        }
+    }
+    needs.sort_by_key(|n| n.service);
     let (mut uses, mut kinds, mut slots, mut hooks, mut exports, mut resources) =
         (vec![], vec![], vec![], vec![], vec![], vec![]);
     let mut groups: Vec<(u32, Vec<u32>)> = vec![];
@@ -312,6 +331,8 @@ fn table_with_needs(
         hooks: &hooks,
         exports: &exports,
         resources: &resources,
+        callback_order,
+        service_imports: &local.owners,
         ..Table::default()
     };
     let mut out = vec![0u8; dkneeds::keys::table_size(&t)];
@@ -397,6 +418,7 @@ pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Provided {
     pub service: String,
+    pub callback_order: Option<u32>,
     pub exports: Vec<String>,
     /// The hooks the service takes (`[[hook]]`): (hook name of the port, global function of the object that handles it, devices it is for; empty: every
     /// device). The runtime installs a jump to the entry at the hook's site from the port file; the devices are the device mask in the top byte of the `HOOKS` entry
@@ -477,7 +499,7 @@ fn valid_name(n: &str) -> bool {
 /// Pack a ColdFire object. The entry points are the fields of its `dk_module` constant. Every undefined symbol is an import resolved by the
 /// runtime's table at load time; only 32-bit absolute relocations may name one.
 pub fn pack(obj: &Dko, o: &Options) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), false, &[], &[], o, max_file())
+    pack_inner(Some(obj), false, &[], &[], o, max_file(), &[])
 }
 
 /// The image of a data-only module: `init` is `moveq #0,d0; rts`. The `register` records do the work.
@@ -519,14 +541,101 @@ pub fn pack_full_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file)
+    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file, &[])
 }
 
 /// Pack an object (or none), the keys table and a DSP section (see [`crate::dkmdsp`]; empty: none). The table at the header's 0x90 pair is the
 /// keys table (`dkneeds::keys`, from `dkneeds::keys::write_keys`; size 0 for a module with no machine and no effect). The module declares its
 /// machines, pages and parameters with builder calls in `init`.
 pub fn pack_keys(obj: Option<&Dko>, keys: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
-    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file())
+    pack_keys_with_service_imports(obj, keys, dsp, o, &[])
+}
+
+/// Pack a manifest's objects with its locally declared service imports.
+pub(crate) fn pack_keys_with_service_imports(
+    obj: Option<&Dko>,
+    keys: &[u8],
+    dsp: &[u8],
+    o: &Options,
+    service_imports: &[crate::module::ServiceImport],
+) -> Result<Vec<u8>> {
+    pack_inner(
+        obj,
+        obj.is_none(),
+        keys,
+        dsp,
+        o,
+        max_file(),
+        service_imports,
+    )
+}
+
+#[derive(Default)]
+struct LocalImports {
+    needs: Vec<dkneeds::keys::Need>,
+    owners: Vec<dkneeds::keys::Pair>,
+}
+
+impl LocalImports {
+    fn of(
+        o: &Options,
+        imports: &[&str],
+        declared: &[crate::module::ServiceImport],
+    ) -> Result<Self> {
+        use dkneeds::keys::{Need, Pair, name_hash};
+        let mut local = Self::default();
+        let mut services: BTreeMap<u32, &str> = BTreeMap::new();
+        for d in declared {
+            let service = name_hash(&d.service);
+            if !crate::module::local_service_name(&d.service)
+                || o.service
+                    .as_ref()
+                    .is_some_and(|p| name_hash(&p.service) == service)
+                || services.insert(service, &d.service).is_some()
+            {
+                return Err(err!(
+                    "{}: invalid, repeated, or self-provided [[service_import]] {:?}",
+                    o.name,
+                    d.service
+                ));
+            }
+            let min_version = parse_version(&d.min_version)?;
+            if min_version == 0 || d.names.is_empty() {
+                return Err(err!(
+                    "{}: [[service_import]] {:?} needs a nonzero min_version and at least one import name",
+                    o.name,
+                    d.service
+                ));
+            }
+            local.needs.push(Need {
+                service,
+                min_version,
+                hard: true,
+            });
+            for name in &d.names {
+                crate::module::validate_local_import(&o.name, name)?;
+                if !imports.contains(&name.as_str()) {
+                    return Err(err!(
+                        "{}: [[service_import]] {name:?} is not linked by the ColdFire object",
+                        o.name
+                    ));
+                }
+                let hash = name_hash(name);
+                if local.owners.iter().any(|p| p.a == hash) {
+                    return Err(err!(
+                        "{}: repeated or colliding [[service_import]] symbol {name:?}",
+                        o.name
+                    ));
+                }
+                local.owners.push(Pair {
+                    a: hash,
+                    b: service,
+                });
+            }
+        }
+        local.owners.sort_by_key(|p| p.a);
+        Ok(local)
+    }
 }
 
 /// [`pack_full_max`] for an object that is only data: its `.text` starts with the stub (`moveq #0,d0; rts`) that is `init`, there is no `dk_module`, and
@@ -538,7 +647,7 @@ pub fn pack_data_only_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), true, keys, dsp, o, max_file)
+    pack_inner(Some(obj), true, keys, dsp, o, max_file, &[])
 }
 
 fn pack_inner(
@@ -548,6 +657,7 @@ fn pack_inner(
     dsp: &[u8],
     o: &Options,
     max_file: usize,
+    service_imports: &[crate::module::ServiceImport],
 ) -> Result<Vec<u8>> {
     if let Some(obj) = obj {
         obj.require_isa_checked()?;
@@ -607,6 +717,7 @@ fn pack_inner(
         }
     }
     let imports: Vec<&str> = imports.into_iter().collect();
+    let local = LocalImports::of(o, &imports, service_imports)?;
     for n in &imports {
         if n.len() >= IMPORT_LEN {
             return Err(err!("import name {n} is longer than {}", IMPORT_LEN - 1));
@@ -755,15 +866,39 @@ fn pack_inner(
             }
             sl.sort_by_key(|p| p.id);
             let mut ex: Vec<dkneeds::keys::Pair> = vec![];
+            let bound = !crate::sdkgen::provider_services().contains(&s.service);
             for n in &s.exports {
                 let at = sym(n)?.ok_or_else(|| {
                     err!("the service exports {n}, which the object does not define")
                 })?;
+                if !linked.globals.contains(n) {
+                    return Err(err!(
+                        "the service exports {n}, which is no global symbol of the object"
+                    ));
+                }
                 let a = dkneeds::keys::name_hash(n);
                 if ex.iter().any(|p| p.a == a) {
                     return Err(err!("the service exports {n} twice"));
                 }
-                ex.push(dkneeds::keys::Pair { a, b: at });
+                if bound
+                    && !obj.symbols.iter().any(|s| {
+                        s.name == *n
+                            && s.section.as_deref().and_then(|sec| kind_of.get(sec))
+                                == Some(&"text")
+                    })
+                {
+                    return Err(err!(
+                        "the service exports {n}, which is not a function in the object's text"
+                    ));
+                }
+                ex.push(dkneeds::keys::Pair {
+                    a,
+                    b: if bound {
+                        at | dkneeds::keys::EXPORT_BOUND
+                    } else {
+                        at
+                    },
+                });
             }
             ex.sort_by_key(|p| p.a);
             (
@@ -778,6 +913,22 @@ fn pack_inner(
             )
         }
     };
+    let callback_order = o.service.as_ref().and_then(|s| {
+        s.callback_order.map(|b| dkneeds::keys::Pair {
+            a: dkneeds::keys::name_hash(&s.service),
+            b,
+        })
+    });
+    let registration_floor = if !local.owners.is_empty()
+        || callback_order.is_some()
+        || svc_exports
+            .iter()
+            .any(|e| e.b & dkneeds::keys::EXPORT_BOUND != 0)
+    {
+        crate::sdkgen::service_registration_runtime()
+    } else {
+        0
+    };
     let table = table_with_needs(
         reg,
         &imports,
@@ -786,7 +937,17 @@ fn pack_inner(
         &svc_hooks,
         &svc_slots,
         &svc_kinds,
+        callback_order,
+        &local,
+        registration_floor,
     )?;
+    if registration_floor != 0 && table.len() > dkneeds::keys::BOOT_TABLE_MAX {
+        return Err(err!(
+            "service registration needs a {}-byte header table, over the boot planner's {}-byte limit",
+            table.len(),
+            dkneeds::keys::BOOT_TABLE_MAX
+        ));
+    }
     emit(&EmitParts {
         name: &o.name,
         version: o.version,
@@ -797,7 +958,9 @@ fn pack_inner(
         },
         // the runtime version the module needs: the newest `since` of its service imports, at least the version that introduced the header table,
         // and the trace flag
-        runtime_word: needed_runtime(imports.iter().copied()).max(crate::sdkgen::table_runtime())
+        runtime_word: needed_runtime(imports.iter().copied())
+            .max(crate::sdkgen::table_runtime())
+            .max(registration_floor)
             | if o.trace { FLAG_TRACE } else { 0 },
         svc_abi,
         image: &image,
@@ -1232,6 +1395,7 @@ mod tests {
         let opts = Options {
             service: Some(Provided {
                 service: service.into(),
+                callback_order: None,
                 exports: vec![],
                 hooks: vec![],
                 fills: vec![],
@@ -1270,6 +1434,7 @@ mod tests {
         let opts = Options {
             service: Some(Provided {
                 service: "svc-test".into(),
+                callback_order: None,
                 exports: vec![],
                 hooks: vec![],
                 fills: vec![("frametype".into(), "tick_fn".into(), vec![])],
@@ -1287,6 +1452,7 @@ mod tests {
         let bad = Options {
             service: Some(Provided {
                 service: "svc-test".into(),
+                callback_order: None,
                 exports: vec![],
                 hooks: vec![],
                 fills: vec![("frametype".into(), "no_such_function".into(), vec![])],
@@ -1306,6 +1472,7 @@ mod tests {
                 service: Some(
                     Provided {
                         service: "svc-test".into(),
+                        callback_order: None,
                         exports: vec![],
                         hooks: vec![],
                         fills: vec![
@@ -1806,11 +1973,32 @@ mod tests {
     fn provided() -> Provided {
         Provided {
             service: "svc-test".into(),
+            callback_order: None,
             exports: vec![],
             hooks: vec![],
             fills: vec![],
             dsp_fills: vec![],
         }
+    }
+
+    #[test]
+    fn service_registration_rejects_a_table_the_boot_planner_cannot_capture() {
+        use dkneeds::keys::{Table, Use, table_size, write_table};
+        let table = Table {
+            uses: &[Use {
+                resource: 1,
+                count: 1,
+            }; 80],
+            ..Table::default()
+        };
+        let mut reg = vec![0; table_size(&table)];
+        write_table(&table, &mut reg).unwrap();
+        let opts = service_of(Provided {
+            callback_order: Some(100),
+            ..provided()
+        });
+        let error = pack_keys(Some(&object()), &reg, &[], &opts).unwrap_err();
+        assert!(error.0.contains("boot planner's 640-byte limit"), "{error}");
     }
 
     #[test]

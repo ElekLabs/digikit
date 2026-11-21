@@ -108,6 +108,16 @@ function scratch(device: string): string {
 cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS }, (h) => {
   const modules = () => ({ debug: h.mod('digikit/debug', 'debug'), user: h.mod('test/svc-test-user', 'user') });
 
+  test('a selected client calls a service declared outside the SDK', async () => {
+    const { debug } = modules();
+    const client = h.mod('test/local-ping-user', 'local-ping-user');
+    const provider = { name: 'services/local-ping.dks', file: moduleArtifact(h.device, 'test/local-ping') };
+    const rt = await h.load('local-ping', { modules: [debug, client, provider], selection: [debug.name, client.name] });
+    const log = await h.usb(rt, (dk) => dk.readLog());
+    expect(providers(log).map((p) => [p.hash, p.result])).toEqual([[nameHash('local-ping'), 0]]);
+    expect(logged(log, 'local-ping')).toEqual([42]);
+  });
+
   test('a provider installs its hook and the consumer calls it; a safe boot leaves the site stock', async () => {
     const bound = bind(h);
     const { debug, user } = modules();

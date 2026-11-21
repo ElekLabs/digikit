@@ -37,9 +37,10 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          with --fx-max the effect budget of the tightest device): JSON from devices/*.toml and devices/cycle-factors.json
   uses    set --id MODULE --device SHORT [--dsp-cost-voice N] [--dsp-cost-fx N]   write the measured DSP cost (instructions per block) into
                                          [uses.<device>] of the module's module.toml (only those lines change; comments stay); prints wrote/unchanged PATH
-  services --device SHORT [--pack-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...   the card services that the .dkm files need (the NEEDS of their header
+  services --device SHORT [--pack-dir DIR] [--module ID]... [--service NAME]... [FILE.dkm]...   the card services that the .dkm files need, including transitive local dependencies (the NEEDS of their header
                                          tables, matched to the modules with `role = \"service\"` and `service = NAME`) and those named by --module (id) or --service (name): one JSON line each
-                                         {service, module_id, store_path}; with --pack-dir each is also packed as DIR/<name>.dks and the line has file
+                                         {service, module_id, store_path}; with --pack-dir each is also written as DIR/<name>.dks and the line has file;
+                                         explicit names alone without files or --pack-dir are a manifest lookup
   pack    MODULE_ID -o OUT.dkm [--addrmap map.json] [--name N] [--device SHORT] [--trace] [--manifest PATH]...   the module's ColdFire object as a run-time .dkm
                                          (a `role = \"service\"` module packs to a .dks: OUT must end in .dks; any other module: not .dks);
                                          builds the objects that are stale first (content modules: cache out/cache/dko)

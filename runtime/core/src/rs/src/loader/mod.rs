@@ -66,12 +66,15 @@ pub(crate) struct ProvRec {
     pub block: Option<Block>,
     pub len: u32,
     pub image_size: u32,
+    /// The PROVIDES identity and optional callback order, read before the staged bytes can change.
+    pub provides: Option<(u32, u32)>,
+    pub callback_order: Option<u32>,
     /// Bytes of the DSP image of the file (0: it has no DSP section): the bound of the entries of its DSP slot fills.
     pub dsp_image: u32,
 }
 
 impl ProvRec {
-    pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, dsp_image: 0 };
+    pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, provides: None, callback_order: None, dsp_image: 0 };
 }
 
 /// Which loads the loader accepts. The boot hook loads the module set; after it only a live job loads (docs/plans/extension-model.md E5c).
@@ -605,22 +608,54 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return r;
         }
-        // imports: every name must be in the runtime's table
+        // An explicit service import names its provider; legacy SDK imports keep the global lookup.
+        let (reg_off, reg_size) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
+        let import_owners = if import_n != 0 && in_file(reg_off, reg_size, size) {
+            Keys::parse(core::slice::from_raw_parts(f.add(reg_off as usize), reg_size as usize)).ok()
+        } else {
+            None
+        };
         let mut i = 0;
         while i < import_n as usize {
             let p = f.add(import_off as usize + i * dkneeds::CF_IMPORT_LEN as usize);
-            if cstr_len(p, dkneeds::CF_IMPORT_LEN as usize) == dkneeds::CF_IMPORT_LEN as usize {
+            let n = cstr_len(p, dkneeds::CF_IMPORT_LEN as usize);
+            if n == dkneeds::CF_IMPORT_LEN as usize {
                 return E_FORMAT;
             }
+            let name = core::slice::from_raw_parts(p, n);
+            let name_hash = dkneeds::keys::name_hash_bytes(name);
             let mut a = self.m.import_addr(p);
             if a == 0 && role == 1 {
                 // a service file also links the service-only imports (`SVC_IMPORTS`)
                 a = self.m.svc_import_addr(p);
             }
+            if let Some(keys) = import_owners {
+                let service = match service_import_owner(keys, name_hash) {
+                    Ok(s) => s,
+                    Err(e) => return e,
+                };
+                if let Some((service, minimum)) = service {
+                    if a != 0 || port::parse_import(name).is_some() {
+                        return E_IMPORT;
+                    }
+                    match self.exports.owned(name_hash) {
+                        Some((addr, rec)) => {
+                            if let Some((owner, version)) = self.provs[rec - MAX_MODULES].provides {
+                                if owner == service && version >= minimum && version >> 16 == minimum >> 16 {
+                                    c.import_addrs[i] = addr;
+                                    i += 1;
+                                    continue;
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                    return E_IMPORT;
+                }
+            }
             if a == 0 && role == 1 {
                 // the firmware references of a service file are the port file's: an address, 0 for a name that this firmware lacks, or a refusal
-                let n = cstr_len(p, dkneeds::CF_IMPORT_LEN as usize);
-                let found = self.port_lookup(core::slice::from_raw_parts(p, n));
+                let found = self.port_lookup(name);
                 if let port::Lookup::Addr(x) = found {
                     a = x;
                 } else if found == port::Lookup::Absent {
@@ -634,8 +669,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             }
             if a == 0 {
                 // the runtime's table has no such name: a loaded provider may export it
-                let n = cstr_len(p, dkneeds::CF_IMPORT_LEN as usize);
-                a = self.exports.resolve(dkneeds::keys::name_hash_bytes(core::slice::from_raw_parts(p, n))).unwrap_or(0);
+                a = self.exports.resolve(name_hash).unwrap_or(0);
             }
             if a == 0 {
                 // the first import that belongs to a module that is not in the image: the boot keeps its name (`MISSING`)
@@ -657,7 +691,6 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             return e;
         }
         // `register` records (machines, parameters): validated now, written after the copy
-        let (reg_off, reg_size) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
         c.reg_off = reg_off;
         c.reg_size = reg_size;
         if !in_file(reg_off, reg_size, size) {
@@ -947,7 +980,18 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         // a service file declares its row in `init` (`dk_service_declare_row`); a module declares none. `fail` takes whatever was added down again
         let row = c.decl.row_ptr().map(|p| &*p);
-        let r = self.r.add(rec, row);
+        let mut order = None;
+        if let Some(row) = row {
+            if rec < MAX_MODULES {
+                return E_DECL_KIND;
+            }
+            let provider = &self.provs[rec - MAX_MODULES];
+            if provider.provides.map(|p| p.0) != Some(dkneeds::keys::name_hash(row.name())) {
+                return E_DECL_KIND;
+            }
+            order = provider.callback_order;
+        }
+        let r = self.r.add(rec, row, order);
         if r != OK {
             return r;
         }
@@ -1833,6 +1877,25 @@ pub(crate) fn table_keys(table: &[u8], out: &mut [u32; 8]) -> usize {
 
 /// The header tables of the first `n` providers the search found.
 #[inline(never)]
+fn service_import_owner(keys: Keys<'_>, name: u32) -> Result<Option<(u32, u32)>, i32> {
+    use dkneeds::keys::tag;
+    let mut i = 0;
+    while let Some((hash, service, _)) = keys.words(tag::SERVICE_IMPORTS, i) {
+        if hash == name {
+            let mut j = 0;
+            while let Some((needed, version, flags)) = keys.words(tag::NEEDS, j) {
+                if needed == service && version != 0 && flags & 1 != 0 {
+                    return Ok(Some((service, version)));
+                }
+                j += 1;
+            }
+            return Err(E_IMPORT);
+        }
+        i += 1;
+    }
+    Ok(None)
+}
+
 fn parse_provs(found: &Found, n: usize) -> [Option<Keys<'_>>; PROVIDER_MAX] {
     let mut provs: [Option<Keys>; PROVIDER_MAX] = [None; PROVIDER_MAX];
     let mut j = 0;

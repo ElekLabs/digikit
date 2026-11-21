@@ -31,13 +31,13 @@ This file says who owns which part of the repository and which moves are planned
 | Folder | Role | What |
 | --- | --- | --- |
 | `runtime/core` | `runtime` | Loads `.dkm` modules, links their imports, owns store, selection and policy |
-| `services/NAME`, `services/NAME/dks` | `service` (in `dks/`) | A neutral crate and its loadable service module, whose manifest has ID `core/services/NAME`. Create one with `module:new -- service NAME` and check it with `module:check service/NAME`. |
+| `services/NAME`, `services/NAME/dks` | `service` (in `dks/`) | A service crate and its boot-loaded package, whose manifest has ID `core/services/NAME`. Create one with `module:new -- service NAME` and check it with `module:check service/NAME`. |
 | `services/{bitmap,rows}` | none | Libraries shared by service crates. The crate in `services/rows` is named `dkrt-svc-params`. |
 | `runtime/platform/expansion` | `installer` | Reset-time installer of all patched-in code |
 | `ports/bindings` | none | Generated firmware bindings (a library, not a module) |
 | `runtime/platform/*` (except `expansion`) | `adapter` | Runtime platform modules, including UI, input, health and the DSP link |
 | `runtime/apps/*` | `app` | Menus and screens on the platform API (digikit-menu) |
-| `image-modules/points/*` | `adapter` | Firmware plug-in points, including machines, FX, LFO shapes and the sample pool |
+| `image-modules/points/*` | `adapter` | Firmware plug-in points. The [ownership inventory](ARCHITECTURE.md#firmware-plug-in-points) covers all nine points and their service interfaces. |
 | `image-modules/{adapters,fixes,proofs}/*` | `adapter` | Other patched-in code, including USB and storage adapters, fixes and test proofs |
 | `modules/<kind>/<author>/<name>` | none | Content modules. The kind folders are `machine`, `fx`, `tool` and `lfo-shape`. |
 

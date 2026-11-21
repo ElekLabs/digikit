@@ -733,6 +733,55 @@ Another range is a change to `sdk/sdk.toml`. Run `mise run gen:modules` after it
 wait. The request body is at most 160 bytes. The reply body is at most 879 bytes. Return the reply length, or a negative status.
 
 
+#### Card services with a local API
+
+A service and its consumers can share an API without adding SDK entries. The provider uses
+`role = "service"` and `service = "my-service"` in `[module]`. Its module ID ends in
+`/my-service`, and it installs as `services/my-service.dks`. Choose an unreserved name of at
+most 50 lowercase ASCII letters, digits, hyphens or underscores. The module version is the version
+of the API it provides.
+
+The provider lists each exported global ColdFire function in its manifest and declares the same
+exports from `init`. For Rust providers using `dkrt_svc_rt::service!`, use its
+`exports = [("my_service_ping", api::my_service_ping)]` form.
+
+```toml
+[[export]]
+name = "my_service_ping"
+```
+
+The consumer declares the provider and minimum compatible version in its manifest. Its ColdFire
+object must link every listed symbol. Put the ABI declaration in a header or Rust module shared
+with consumers. The packer writes a hard service dependency and the loader binds the function
+to that provider. A compatible provider has the same major version and is at least the declared
+minimum. Loading the consumer selects the service. Merely placing the provider on the card does
+not load it.
+
+```toml
+[[service_import]]
+service = "my-service"
+min_version = "1.2.0"
+names = ["my_service_ping"]
+```
+
+The optional `callback_order` in the provider's `[module]` is an unsigned integer. The core
+walks registered service rows after its in-image rows, in ascending order, breaking ties by service
+name. It does not use this order to initialize packages or resolve dependencies. A service without
+an order follows the explicitly ordered services. The six shipped services carry orders 100
+through 600. Metadata-less copies of those six retain their previous positions.
+
+Pack the service with `patchkit pack test/local-ping --device dn2 -o /tmp/local-ping.dks`.
+The working provider and consumer are under `tests/fixtures/modules/local-ping` and
+`tests/fixtures/modules/local-ping-user`. Use `patchkit services --device dn2 FILE.dkm`
+to show the providers a packed consumer needs. Add `--pack-dir DIR` to pack those providers and
+their dependencies for a fresh card. For a repo service under `services/`,
+`mise run module:check service/NAME` checks the crate and its declarations.
+
+Runtime 0.11.1 adds the callback-order and local API metadata. Build these files with its
+patchkit. Transfer checks that runtime minimum before uploading a selection with those
+dependencies. Older metadata-less SDK packages still load on 0.11.1, and SDK-provided imports
+retain their usual declarations and inference.
+
 ## 8. Build, check, pack, run
 
 | Task | Command | What it does |

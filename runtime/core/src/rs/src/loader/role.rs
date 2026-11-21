@@ -194,6 +194,9 @@ pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loade
     let (mut from, mut to) = (0, 0);
     while from < d.n {
         let mut it = d.items[from];
+        if it.tag == tag::EXPORTS {
+            it.b &= !dkneeds::keys::EXPORT_BOUND;
+        }
         from += 1;
         if it.tag == tag::SLOTS {
             if !dkneeds::keys::slot_for_device(it.b, l.p.device_id()) {
@@ -231,10 +234,12 @@ unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
         Ok(k) => k,
         Err(e) => return e,
     };
+    l.provs[idx].provides = keys.words(tag::PROVIDES, 0).map(|(name, version, _)| (name, version));
+    l.provs[idx].callback_order = keys.words(tag::CALLBACK_ORDER, 0).map(|w| w.1);
     // the exports are image offsets
     let mut i = 0;
     while let Some(w) = keys.words(tag::EXPORTS, i) {
-        if w.1 >= a.image_size {
+        if w.1 & !dkneeds::keys::EXPORT_BOUND >= a.image_size {
             return E_FORMAT;
         }
         i += 1;
@@ -342,7 +347,9 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
     };
     let mut i = 0;
     while let Some(w) = keys.words(tag::EXPORTS, i) {
-        if let Err(e) = l.exports.publish(rec, w.0, base.wrapping_add(w.1)) {
+        let bound = w.1 & dkneeds::keys::EXPORT_BOUND != 0;
+        let addr = base.wrapping_add(w.1 & !dkneeds::keys::EXPORT_BOUND);
+        if let Err(e) = l.exports.publish_with_scope(rec, w.0, addr, bound) {
             return e;
         }
         i += 1;
@@ -423,7 +430,7 @@ pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     // the entries the table has, one bit per tag
     let mut has = 0u32;
     let mut t = tag::NEEDS;
-    while t <= tag::SITES {
+    while t <= tag::SERVICE_IMPORTS {
         if keys.count(t) != 0 {
             has |= 1 << t;
         }
@@ -434,7 +441,7 @@ pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     if role == 0 {
         // No packer writes HOOKS, KINDS or SLOTS for a module (patchkit major3.rs writes only USES and KEYS, dkm.rs adds NEEDS): they are a service's (role 1).
         // A content module owns no firmware hook, record kind or plug-in point, so two modules can clash only on keys and capacity.
-        let service = bit(tag::PROVIDES) | bit(tag::HOOKS) | bit(tag::KINDS) | bit(tag::SLOTS) | bit(tag::BIND) | bit(tag::FW);
+        let service = bit(tag::CALLBACK_ORDER) | bit(tag::PROVIDES) | bit(tag::HOOKS) | bit(tag::KINDS) | bit(tag::SLOTS) | bit(tag::BIND) | bit(tag::FW);
         if has & (service | port) != 0 {
             return Err(E_FORMAT);
         }
@@ -442,6 +449,11 @@ pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     } else if role == 1 {
         if keys.version() != 2 || keys.count(tag::PROVIDES) != 1 || has & (port | bit(tag::BIND) | bit(tag::FW)) != 0 {
             return Err(E_FORMAT);
+        }
+        if let Some(order) = keys.words(tag::CALLBACK_ORDER, 0) {
+            if keys.words(tag::PROVIDES, 0).map(|w| w.0) != Some(order.0) {
+                return Err(E_FORMAT);
+            }
         }
         Ok(())
     } else if role == 2 {
@@ -463,7 +475,7 @@ mod tests {
     use std::vec::Vec;
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[] };
 
     fn bytes(t: &Table) -> Vec<u8> {
         let mut b = vec![0u8; dkneeds::keys::table_size(t)];
@@ -500,6 +512,15 @@ mod tests {
         assert_eq!(check(0, &Table { kinds: &[KindDecl { kind: 90, len: 16, entry: 8 }], ..KEEP }), Err(E_FORMAT));
         assert_eq!(check(0, &Table { slots: &[Slot { id: 7, flags: 0, entry: 0 }], ..KEEP }), Err(E_FORMAT));
         assert_eq!(check(0, &Table { fw: &[[0; 8]], ..KEEP }), Err(E_FORMAT));
+    }
+
+    #[test]
+    fn callback_order_must_belong_to_the_providing_service() {
+        let order = Table { provides: ONE, callback_order: Some(Pair { a: ONE[0].a, b: 100 }), ..KEEP };
+        assert_eq!(check(1, &order), Ok(()));
+        assert_eq!(check(0, &order), Err(E_FORMAT));
+        let mismatch = Table { callback_order: Some(Pair { a: 42, b: 100 }), ..order };
+        assert_eq!(check(1, &mismatch), Err(E_FORMAT));
     }
 
     #[test]

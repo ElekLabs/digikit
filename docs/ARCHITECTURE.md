@@ -4,75 +4,45 @@ This file is the reference for the layers (L0 to L4), what each layer may depend
 
 ## Layers
 
-Five layers, L0 to L4, and the port file beside them. The [taxonomy](design/taxonomy.md) defines the terms and card layout. The [repository layout](LAYOUT.md) shows where the layers live. Calls go down. The diagram shows the target architecture; "today and target" below gives its implementation history.
+Five layers, L0 to L4, and the port file beside them. The [taxonomy](design/taxonomy.md) defines the terms and card layout. The [repository layout](LAYOUT.md) shows where the layers live.
 
 ```
- L4  Content modules (.dkm, loaded from the card)          apps
-     machines: pluck, shot, analog, bd …                   digikit-menu (runtime UI)
-     fx: freqshift …   tools: bootscreen, debug
-        │ A: sdk.toml imports by service group,                │ dkrt_* runtime API
-        │    dk_<service>_open handles                         │
- ───────┼──────────────────────────────────────────────────────┼──────────
- L3  Services (crates linked into the runtime; .dks at R12)   │
-     services/machines       machine/dp/page/voice rows, keys, │
-                             native pages, page key/turn slot  │
-     services/fx             FX pages, sends, FX param/send/   │
-                             effect rows, FX DSP parts         │
-     services/samples        tracks, peak windows, sample-     │
-                             pool calls, track-table DSP       │
-     services/lfo            lfo_shape records                 │
-     each: records.rs · slots.rs · dsp/ · tests/               │
-        │ C: sdk.toml imports        ▲ B: only declared:       │
-        │    + service-only set      │    lifecycle, record-kind handlers,
-        ▼                            │    slots/hooks, resources, sinks
- ───────────────────────────────────────────────────────────────┴──────────
- L2  Runtime core (kind-free: never names a machine, effect or service; `layercheck` rule `kind-free`)
-     state      State, statics, imports, C API (api.rs), mailbox
-     boot       selection, safe mode, boot plan (dependencies, fit, refusals)
-     loading    loader, collect (relocate, commit records),
-                registry walker + record-kind handler table, params (param-table writer)
-     dsp core   DSP area allocator, dsp-link + windows, row table,
-                DSP load state machine   (R6a: its transfers go through the link queue)
-     storage    store, files, card, scan, arena, worker, settings (broker)
-     transport  SysEx/USB: transport, store/admin/module commands
-     diagnostics dlog, sinks log/span (R2d), fault (crash), watch, invariants,
-                health, report (status, capacity, diag)
-     tick       scheduler: service ticks, poll table
-        │ platform calls only
- ───────┼─────────────────────────────────────────────────────────────────
- L1  Platform and other image modules (in the patched image)
-     platform glue     st, flush, block timing, MIDI send, raw memory
-                       (platform.rs: RealPlatform behind the Platform trait; the
-                       hooks are in the platform adapter, core/platform)
-     image modules     ColdFire hooks and *_info tables: platform (UI loop,
-                       main-OS entry, MIDI receive, exception hook), dynreg, dyndsp,
-                       dynfx, fxpages, ui, input, health, dsp-link …
-                       SHARC hook stubs with pointer slots (finding 128)
-     device profiles / anchors  per-device and per-firmware addresses
- ───────┼─────────────────────────────────────────────────────────────────
- L0  Stock firmware and hardware: ColdFire OS, SHARC DSP image, card, USB
+ L4  Content modules (.dkm, loaded from the card)       Apps (digikit-menu)
+        │ A: SDK or service-local imports                  │ dkrt_* and UI APIs
+ ───────┼──────────────────────────────────────────────────┼─────────
+ L3  Versioned services (.dks, loaded at boot)             │
+     samples, machines, fx, lfo, shortcuts, project        │
+        │ C: SDK and service-only imports                  │
+        ▼                         ▲ B: declared callbacks │
+ ──────────────────────────────────────────────────────────┴─────────
+ L2  Runtime core (patched in)
+     boot, selection, safe mode, planning, loading, registry, DSP
+     loading and link, store, settings broker, transport, diagnostics, tick
+        │ platform interface
+ ───────┼────────────────────────────────────────────────────────────
+ L1  Installer, platform adapters and firmware plug-in points (patched in)
+     reset and boot entry, UI/MIDI/exception hooks, shared tables,
+     firmware-time stubs, DSP link and stock fallbacks
+        │ bindings and device facts             Port file (.dkport)
+ ───────┼────────────────────────────────────────────────────────────
+ L0  Stock firmware and hardware (ColdFire, SHARC, card, USB)
 ```
 
-Rules between layers:
+- **A, consumer to service.** A content module or another service calls an SDK import or an explicitly declared service-local import. An SDK import can resolve to the core, an image capability or a service export. A local import declares the provider, minimum API version and function names. Services use these declared imports for cross-service calls.
+- **B, runtime to service.** The loader checks declarations from `init` against the packed metadata before accepting a provider. A service can register a `ServiceRow` for lifecycle, record handling and DSP work. Other optional facets include exports, hooks, slot fills, resources and diagnostic sinks. Firmware-facing callers enter loaded services through a validated installed hook or a filled slot.
+- **C, service to runtime.** The service implementation uses `CoreApi` in `dkrt-abi`. The card wrapper implements it with service-only `dkc_*` imports, while host tests can supply `FakeCore`. `Service` and the C-ABI `ServiceRow` in `dkrt-abi` define the callback boundary. `gen_services.rs` reserves a prefix for in-image rows, currently empty, and `svc_rows.rs` registers the loaded rows.
 
-- Calls go down only.
-- The one upward path is L2 to L3, through what services declared (interface B). The runtime resolves it at boot planning from a static table that `module:check` writes. It is derived and declarative, the same as S3 for modules: the service's `init` declares through builder calls, and the table is written from them.
-- L3 never calls L3 directly. If a service needs another, it imports the other's exports through `sdk.toml` (interface A) and declares the dependency. The boot plan orders them and refuses the first if the second is missing.
-- L4 modules reach services only through `sdk.toml` imports. The digikit menu is an app on the runtime's C API.
-- The port file is the port layer: the facts of one device and one firmware, loaded at run time. It is a provider (the boot plan orders it first and refuses its dependents when it is missing), not a service. After its step 3, a call from one of its routines into a service goes through a pointer slot that the service fills, the same pattern as the image interrupt slots today (for example the slot `frametype` of `image-modules/points/machines/module.toml`, which `services/machines/dks/module.toml` fills with `mf_frametype`). L1 never calls a service by address.
-- Everything that depends on the device or the firmware version sits in L1: adapters, device profiles and anchors, and the port file ([port file plan](plans/port-file.md); a `.dkport` file on the card, one per device and firmware, picked by the `FW` hash), which holds the firmware names, the hook sites and, after its step 3, the device-specific hook routines of all services. It is not in the SDK, in L2 or in modules. Services are neutral after step 3; until then they keep hook routines per device, and machines and fx keep per-device SHARC dispatch until the SHARC section of the port file is decided.
+The core owns shared mechanisms and safety policy, including admission, hook installation, scheduling, storage, diagnostics and generic settings and reload operations. A service owns its domain policy and state, including the meaning of any records it declares. A static library such as `services/rows` supplies code at build time. It creates no provider identity or managed lifetime. Shared live state, such as reserved descriptor rows, needs an owner even when multiple services use the same library to write it. The menu renders state and sends requests through runtime and UI APIs. It should leave domain decisions and persistence formats with their owners.
 
-Three interfaces (details in [runtime and services](plans/runtime-and-services.md) section 5.12):
+A service needs an image capability only where its contract calls for one. `project.dks` and `shortcuts.dks` install hooks from the port file and have no separate image module. Image capabilities can support more than one service. The port file matches the stock firmware hash and supplies firmware names, hook sites and check values. The installer, platform entry points, firmware-time fallback paths and shared tables that stock code needs remain image-owned. A service wrapper can still contain device-specific hook or DSP routines that bind through the port or the image.
 
-- **A, module to service:** `sdk.toml` imports by service group and `dk_<service>_open` handles.
-- **B, runtime to service:** only what a service declared: lifecycle, record-kind handlers, slots and hooks, resources, and the log and span sinks.
-- **C, service to runtime:** the same `sdk.toml` imports as modules, plus a small service-only set.
+### Implementation history
 
-The interfaces are Rust traits in the crate `dkrt-abi` (`runtime/core/abi`): `CoreApi` (C), `Service` and `ServiceList` (B), with the pure types and constants they share (`DspState`, `RegState`, the DSP section types, the row and word constants, memory helpers). The core implements `CoreApi` as `RealCore` and services as `Services`, the static list in `handlers.rs`. A service never calls another service and never names a core module: it calls the core through `crate::core_api` (`REAL_CORE`, or a generic `C: CoreApi` where a host test drives it), and the core calls a service only through `Services` or the C entry points listed in `handlers::exports`.
+These stages record the architecture at the time they landed. The current ownership and packaging are described above and in the inventories below.
 
-The crossings of the R2b code, and what R2c made of them:
+R2b crossings and their replacements:
 
-| R2b crossing | Now |
+| R2b crossing | Replacement |
 | --- | --- |
 | `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | The DSP link queue of the core (R6a, `link.rs`): live values with `link_set`, owner requests with `link_submit`. No writer asks whether the link is busy |
 | `fx` needs `machines` rows | Both write parameter rows with the shared crate `dkrt-svc-params` and find `dynreg_info` through `CoreApi::info`; neither calls a function of the other (RS-C: no registry state or table in `CoreApi`) |
@@ -81,54 +51,87 @@ The crossings of the R2b code, and what R2c made of them:
 | `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Service::settle` plans the numbers once per boot from the machine keys of the selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |
 | core calls of `assign`, `fxpage::tick`, `pageclick::tick`, `tracks::tick`, the `dk_fx_routes_entry` export, the nativepage kinds | `Service::tick(phase)`, `handlers::exports`, `dkrt_abi::registry::KIND_NATIVE*` |
 
-### Today and target
-
-The runtime core is in `runtime/core`. The service crates in `services/` use the interfaces of `dkrt-abi` and package their own `.dks` files. The platform modules, app and installer are patched into the image, along with the modules in `image-modules/`. The runtime reached this layout in stages.
-
 - **R2b** moved files into L2 and L3 folders inside the runtime crate.
 - **R2c** is done: the interfaces exist with fakes (`FakeCore`, `FakeService`), the shims of R2b are gone, and `check:layers` enforces the arrows (rule 6). What Cargo enforces: `dkrt-abi` cannot see the runtime. What only `check:layers` enforces: that services see only `core_api`. A separate service crate takes the core by reference (`core: &C`, `C: CoreApi`; R9). Exceptions left for R3b and later: the optional `fxpages_info`, `dkpool_*` and `dkpw_*` symbols of the adapters are still declared where they are used; the DSP row table (`DspState`: voice, effect and track rows) is service data inside a core-owned object, because `DKRT_DSP` is read by host tools (`DKRT_REG` likewise); the walkers of `registry.rs` and `dsp/mod.rs` still hold the machine-only tables (`counts`, `types_of`, `free_rows`, `profile`) that R9 and R10 move.
 - **R3a** is done: the `Platform` trait (`dkrt-abi`: device profile, block clock, interrupt mask, flush, card block calls, MIDI, OS upgrade flag, soft reset, with `Tasking`, `SamplePool` and `StagedWriter`) and `RealPlatform`, a zero-sized type in `platform.rs`. `platform.rs` is the only runtime file that names `dkfw`, besides `fw.rs` (R10: the implementation of `dkrt_abi::fw::Fw`). The runtime is one image for all devices and holds no device value. The device files give the facts (`[board]`, `[digikit]`, `[capabilities]`), and `patchkit gen` writes them as the data object `dkrt_dev` (struct `DkrtDevice` in `runtime/core/abi.toml`), which patchkit places in `cf.expansion` with the runtime. `rs/dev.rs` is the one private reader of the object; `RealPlatform` fills its `DeviceProfile` from it (cached DDR window, keep RAM, SD host, DSP block cycles, run-time machine types, safe key). A service gets its facts through `DeviceProfile::by_id(core.device_id())`, from the table `abi/src/profiles.rs` that `patchkit gen` writes from the same files. A device without a profile has no DDR window and no run-time types. `FakePlatform` drives the host tests, and the contract table `runtime/core/tests/platform/contract.toml` is checked against it and by `platform-contract.device.test.ts` on the device (rule 7).
-- **R3b** is done: the hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task` and `cf.midi.hook.rx`, their trampolines and the exception hook install (`dkplat_exc_install`, which `Platform::install_exception_hook` calls every UI pass) are the L1 adapter `core/platform` (`runtime/platform/platform`). Same hook sites, the same stock-byte checks and the same trampoline code as before; the runtime requires the adapter, and the two link by name (the adapter calls `dkrt_tick`, `dkrt_boot`, `dkrt_midi_rx` and `dkrt_exc`), so every image with the runtime has it and `requires` has no cycle. The runtime module keeps only the machine page hooks (finding 128: runtime-owned, with slots); the hooks that must exist before the main OS starts stay patched in the image. Rule 7 checks it.
-- **R7** is done: the record kinds, resources and the in-crate services are one table generated from `sdk/sdk.toml` (`gen_services.rs`, `records::`); the core walks a `ServiceTable` of `ServiceRow` function pointers, not a tuple of types; a module emits a record of a generic kind with `dk_record_add`; the `.dkm` header carries a tagged table (needs, uses, keys, and the entries R12 needs); a pure boot planner (`plan.rs`) returns one `Verdict` for each module before anything loads; a service declares its kinds and the runtime compares them with its table. The `lfo` service (`services/lfo`) is the proof: a new kind with no edit to the registry, the collector, the loader or dkneeds. Patchkit needed one line later, when `patchkit records --check` came: the owner map in `packages/patchkit/src/record_rules.rs` names the crate of each service that owns a kind (written by hand, a test fails for an owner without a line). R11 added module states and their reasons (LOADS v2), shown in Transfer and the DIGIKIT menu. What is still target: services loaded from `.dks` files, and a kind or hook that a module provides (R12).
-- **R9** is built: the `fx` service is the crate `dkrt-svc-fx` (`services/fx`), linked into the runtime object. Its functions take the core by reference (`core: &C`, `C: CoreApi`: static dispatch, the runtime passes its zero-sized `RealCore`); `Service<C>` methods take it as their first argument, and the service table (`ServiceTable<RealCore>`) holds `&REAL_CORE` and passes it to each call, so `ServiceRow::of::<Fx>` instantiates the fx code once for `RealCore`. `handlers::exports::fx_entry` calls the export `dk_fx_routes_entry` of the fx file, found by name in the loader's export table (an `internal` import of `sdk/sdk.toml`: the runtime calls it, no module can); the guard counts and the machine types of the MODULES reply are the same kind of export of the machines file, and the `Service` trait names no kind. The fx crate has host tests over `FakeCore`. `CoreApi` gained `device_id`. The link queue is the crate `dkrt-link` and `FakeCore` is in `dkrt-test-support` (`runtime/core/{link,test-support}`), so the service crate tests without the runtime. The code is the same up to inlining of the generic functions into the runtime crate (`lto = false`): text 216,286 to 214,994 bytes (-0.6%).
-- **R10** is built: the `machines` service is the crate `dkrt-svc-machines` (`services/machines`), linked into the runtime object, and `layercheck` asserts the layout. The same pattern as R9: `Machines` implements `Service<C>`, its statics (the click state in `pageclick.rs`, `APPLIED` in `records.rs`) are statics of the crate, and no `REAL_CORE` is named in it. Two interfaces carry what the service needed from the runtime. The firmware's parameter page is the trait `dkrt_abi::fw::Fw` (`mode_key_held`, `page_value`, `object`, `object_value`, `store`, `view_track`, `param_code`): the runtime implements it once as `RuntimeFw` (`fw.rs`: the page's vtable slots, the key state, the stock setter), a function that needs it takes `fw: &impl Fw`, and `FakeFw` (`dkrt-test-support`) fakes it. The native page registration of the firmware adapter (`mf_native_*`) is `CoreApi::native_available`, `native_register`, `native_remove` and `native_turn` (`native.rs` of the runtime), because the `Service` methods have a core argument and no `Fw`. The hooks stay in the runtime: `dkrt_page_key` and `dkrt_page_turn` (`handlers.rs`, called from `tramp.s`) are `#[no_mangle]` wrappers that call `pageclick::page_key` and `page_turn` with `&REAL_CORE` and `&RuntimeFw`, and `handlers::exports` has `param_get`, `param_set` and `machine_types_of` (the module list asks it; the old `registry::types_of` and the unused `registry::counts` are gone). The crate has host tests over `FakeCore` and `FakeFw`: the click detector, the parameter rules, the native page checks, and the record checks, `apply`, `remove`, `cap` and the native page record of the service (a machine or page row is written at absolute firmware addresses, which a host cannot reach: the device tests cover it). The code is the same up to inlining of the generic functions into the runtime crate (`objdiff --erase RealCore` reports 34 differences, all in the moved machines code, its service entry points and the hook wrappers); text 215,268 to 216,132 bytes (+0.4%).
+- **R3b** is done: the hooks `cf.view.hook.ui_loop`, `cf.rtos.hook.main_os_task` and `cf.midi.hook.rx`, their trampolines and the exception hook install (`dkplat_exc_install`, which `Platform::install_exception_hook` calls every UI pass) are the L1 adapter `core/platform` (`runtime/platform/platform`). Same hook sites, the same stock-byte checks and the same trampoline code as before; the runtime requires the adapter, and the two link by name (the adapter calls `dkrt_tick`, `dkrt_boot`, `dkrt_midi_rx` and `dkrt_exc`), so every image with the runtime has it and `requires` has no cycle. At this stage the runtime still installed the machine page hooks (finding 128). R12 moved them to `machines.dks`.
+- **R7** is done: the record kinds, resources and the in-crate services are one table generated from `sdk/sdk.toml` (`gen_services.rs`, `records::`); the core walks a `ServiceTable` of `ServiceRow` function pointers, not a tuple of types; a module emits a record of a generic kind with `dk_record_add`; the `.dkm` header carries a tagged table (needs, uses, keys, and the entries R12 needs); a pure boot planner (`plan.rs`) returns one `Verdict` for each module before anything loads; a service declares its kinds and the runtime compares them with its table. The `lfo` service (`services/lfo`) is the proof: a new kind with no edit to the registry, the collector, the loader or dkneeds. Patchkit needed one line later, when `patchkit records --check` came: the owner map in `packages/patchkit/src/record_rules.rs` names the crate of each service that owns a kind (written by hand, a test fails for an owner without a line). R11 added module states and their reasons (LOADS v2), shown in Transfer and the DIGIKIT menu. R12 later moved service loading to `.dks` files.
+- **R9** is built: the `fx` service moved into the crate `dkrt-svc-fx` (`services/fx`), initially linked into the runtime object. Its functions take the core by reference (`core: &C`, `C: CoreApi`: static dispatch, the runtime passes its zero-sized `RealCore`); `Service<C>` methods take it as their first argument, and the service table (`ServiceTable<RealCore>`) holds `&REAL_CORE` and passes it to each call, so `ServiceRow::of::<Fx>` instantiates the fx code once for `RealCore`. `handlers::exports::fx_entry` calls the export `dk_fx_routes_entry` of the fx file, found by name in the loader's export table (an `internal` import of `sdk/sdk.toml`: the runtime calls it, no module can); the guard counts and the machine types of the MODULES reply are the same kind of export of the machines file, and the `Service` trait names no kind. The fx crate has host tests over `FakeCore`. `CoreApi` gained `device_id`. The link queue is the crate `dkrt-link` and `FakeCore` is in `dkrt-test-support` (`runtime/core/{link,test-support}`), so the service crate tests without the runtime. The code is the same up to inlining of the generic functions into the runtime crate (`lto = false`): text 216,286 to 214,994 bytes (-0.6%).
+- **R10** is built: the `machines` service moved into the crate `dkrt-svc-machines` (`services/machines`), initially linked into the runtime object, and `layercheck` asserted the layout. The same pattern as R9: `Machines` implements `Service<C>`, its statics (the click state in `pageclick.rs`, `APPLIED` in `records.rs`) are statics of the crate, and no `REAL_CORE` is named in it. Two interfaces carry what the service needed from the runtime. The firmware's parameter page is the trait `dkrt_abi::fw::Fw` (`mode_key_held`, `page_value`, `object`, `object_value`, `store`, `view_track`, `param_code`): the runtime implements it once as `RuntimeFw` (`fw.rs`: the page's vtable slots, the key state, the stock setter), a function that needs it takes `fw: &impl Fw`, and `FakeFw` (`dkrt-test-support`) fakes it. The native page registration of the firmware adapter (`mf_native_*`) is `CoreApi::native_available`, `native_register`, `native_remove` and `native_turn` (`native.rs` of the runtime), because the `Service` methods have a core argument and no `Fw`. The hooks stay in the runtime: `dkrt_page_key` and `dkrt_page_turn` (`handlers.rs`, called from `tramp.s`) are `#[no_mangle]` wrappers that call `pageclick::page_key` and `page_turn` with `&REAL_CORE` and `&RuntimeFw`, and `handlers::exports` has `param_get`, `param_set` and `machine_types_of` (the module list asks it; the old `registry::types_of` and the unused `registry::counts` are gone). The crate has host tests over `FakeCore` and `FakeFw`: the click detector, the parameter rules, the native page checks, and the record checks, `apply`, `remove`, `cap` and the native page record of the service (a machine or page row is written at absolute firmware addresses, which a host cannot reach: the device tests cover it). The code is the same up to inlining of the generic functions into the runtime crate (`objdiff --erase RealCore` reports 34 differences, all in the moved machines code, its service entry points and the hook wrappers); text 215,268 to 216,132 bytes (+0.4%).
 - **R12-1** is built: `samples` and `lfo` are crates too (`dkrt-svc-samples`, `dkrt-svc-lfo`), no service is a folder of the runtime crate any more (`layercheck`), and all four crates have one layout (`src/lib.rs`, `records.rs`, `slots.rs`, `dsp/` when needed, `tests/`). `module:new -- service NAME` writes it from `sdk/templates/service`; `module:check -- service/NAME` runs `patchkit service-check` (layout, at most one exported symbol `dk_module`, declarations equal to `sdk.toml`) and the crate's tests. `CoreApi` gained `host()` (`dkrt_abi::platform::SampleHost`: pool present, files in the store, interrupt mask, the sample storage) for the platform facts `samples` reads; `FakeCore` has a `FakeHost`, a job queue (`job_pump`) and the `dkpool_*` stubs live in `dkrt-test-support`. The page key and turn slot code of `machines` is `slots.rs`.
-- **R12** makes the L3 services real modules (`.dks`). The movable ColdFire hooks go from L1 into their services, and the runtime shrinks to L2.
+- **R12** moved services into `.dks` packages. Service-owned ColdFire hooks moved with them, and the SHARC hooks kept resident stubs with service-owned dispatch behind slots. Six services now ship as card packages.
 
 `core/expansion` is the reset-time installer: it runs at reset and copies all patched-in code to its place. `ports/bindings` holds the generated firmware bindings (a library, not a module).
 
 A service file (`.dks`) holds no firmware address and no firmware bytes. It names firmware through `dk_fw_` (an anchor), `dk_exit_` (the end of a hook's site or an `exits` entry of the hook in `ports/fw`), `dk_ret_` (an `rts`), `dk_stock_` (the stock path, called from the hook) and `dk_tail_` imports ([PATCHING.md](PATCHING.md) "Firmware references"). The port file for the device's firmware (the card file `ports/<device>-<version>.dkport` whose `FW` equals the image `fw_id`) resolves them at load: it carries the name table, the hook sites with a stock check value, and the table item `FW` (the first 8 bytes of the stock image's SHA-256). The loader compares `FW` with the `fw_id` entry that `patchkit apply` puts in the image's info table and refuses a port file for another firmware with `E_HOOK_STOCK`. The port file is built from committed data and carries no firmware bytes. The image info tables hold only what the patched image owns: `machines_info` (version 2, 16 words: registry rows and counts, `mf_ensure`, the native page functions, the slot map, the page rows) and `fxpages_info` (version 4: device numbers, value indices and send cells; its former firmware words are 0).
 
+## Service contract and boot
+
+The target minimum core reads card and selection data needed for bootstrap, manages the generic package lifecycle, and maintains health, crash capture and boot-loop recovery. It can boot and recover without any card service. Directory clients and their listing buffers, along with project-specific policy, are optional users of shared primitives. Today the core also implements store scanning, settings brokering and the live reload queue.
+
+The reset installer and platform hooks bring up the runtime before it can read the card. The core reads the selection and decides safe mode before loading any provider or content module. In safe mode the provider installer stays disarmed and resident service entry points retain their stock fallback. The platform and recovery UI still run. In normal mode the planner follows hard needs from the selection, orders the matching port and providers before their consumers, and refuses a consumer whose required provider cannot load. Placing a `.dks` on the card alone does not select it.
+
+Callback order governs the walk of registered service rows. It is independent of the dependency order used for package initialization. Runtime 0.11.1 adds optional `callback_order` and service-local API metadata. Loaded rows follow any in-image rows, with ascending explicit order and ties broken by service name. Unordered services follow them. Metadata-less copies of the six shipped packages keep their positions through the name fallback in `svc_rows.rs`. Legacy SDK imports keep their existing lookup and inference. Explicit local imports bind to the named provider and require a compatible API version. Transfer checks the runtime minimum for the new metadata.
+
+A local API can add a provider and ColdFire function exports without a central SDK entry. SDK-wide imports and record kinds still use the SDK contract. A provider that registers a row must match the runtime's service ABI. Discovery and admission use bounded tables, with eight provider slots in the boot plan, including the port when needed. Service and port replacement take effect on restart. For the manifest and working provider/consumer example, see [card services with a local API](MODULE-AUTHORING.md#card-services-with-a-local-api).
+
+### Shipped services
+
+| Service | Callback order | Owns | Optional facets used |
+| --- | --- | --- | --- |
+| [samples](../services/samples/dks/module.toml) | 100 | Per-module sample pools, track state and peak windows | Sample-pool API, pool completion/loss fills, DSP track-table parts |
+| [machines](../services/machines/dks/module.toml) | 200 | Machine types, parameters and pages, native pages, sticky type assignment | Record handlers and builders, module diagnostics, ColdFire hooks, DN2 frame-type fill and DSP voice dispatch |
+| [fx](../services/fx/dks/module.toml) | 300 | Effect records, pages, parameters, kit values and routes | Record handler and builders, route enumeration, ColdFire page hooks and DSP dispatch fills |
+| [lfo](../services/lfo/dks/module.toml) | 400 | LFO shape records, numbering and wave bounds | Record handler, six interrupt fills per device and MOD UI hooks |
+| [shortcuts](../services/shortcuts/dks/module.toml) | 500 | Shortcut records and dispatch | Record handler, shortcut builder and a port-resolved key-walker hook |
+| [project](../services/project/dks/module.toml) | 600 | `.dkp` files and project-scoped module settings | Project API, settings overlay, tick and port-resolved project hooks |
+
+### Firmware plug-in points
+
+The inventory covers DT2 1.17 and DN2 1.12. Residency is a property of the executing code, data and fallback path. Moving a source file or a manifest does not change it.
+
+| Point | Resident responsibility | Service ownership and extraction boundary |
+| --- | --- | --- |
+| [machines](../image-modules/points/machines/module.toml) | Stock-compatible table construction, dispatch, chooser/list adaptation and DN2 frame-type stub | `machines.dks` owns type assignment, record/row lifecycle, page hooks and the frame-type slot target. Retain the chooser and stock table path for boots without the service. |
+| [params](../image-modules/points/params/module.toml) | Patch-time descriptor-table copy with device-specific slot mappings and reader/reference patches | `machines.dks` and `fx.dks` build and manage disjoint rows. Keep the shared descriptor layout and reader bounds together. |
+| [dynreg](../image-modules/points/dynreg/module.toml) | Machine, parameter and DN2 page reservations, `dynreg_info`, and stock chooser/rebuild integration | `machines.dks` populates and clears its records and rows. `fx.dks` reads the parameter-row layout from `dynreg_info` and writes only the parameter rows reserved by `core/fxpages`. Reservations and empty-row handling are part of the image contract. |
+| [dsp-voice](../image-modules/points/dsp-voice/module.toml) | SHARC hook sites, stock fallback, heartbeat, adapter data and DN2 stereo context | `machines.dks` fills render and DT2 unpack slots with dispatch and guard code. Any further split must preserve timing and the live DSP state shared with the resident paths. |
+| [fx](../image-modules/points/fx/module.toml) | Post-master and send entry stubs, stock fallback, chain data and registry | `fx.dks` supplies master and send dispatch and output guards. Keep the stubs and check which data has stock or shared callers before moving it. |
+| [dynfx](../image-modules/points/dynfx/module.toml) | Empty DSP effect rows and `dynfx_info` over the shared DSP area | `fx.dks` admits effects and publishes rows into the reservation. Moving their policy requires no change to the image allocation. |
+| [fxpages](../image-modules/points/fxpages/README.md) | Device page/send tables and reserved parameter rows | `fx.dks` owns nine page and kit hooks and writes effect data. Route-choice policy can move independently of the resident reservation. |
+| [lfo](../image-modules/points/lfo/module.toml) | Six interrupt stubs per device with stock behavior when slots are zero | `lfo.dks` fills the slots, evaluates shapes and installs the MOD name and graph hooks. The firmware-time entry stays resident. |
+| [sample-pool](../image-modules/points/sample-pool/module.toml) | DT2 stock pool/loader or DN2 DDR and LP0/DSP transfer, with a shared `sample_pool_info` interface | `samples.dks` owns the user API and fills completion/loss slots. Keep the device-specific backing behind the adapter interface. |
+
+### Remaining ownership work
+
+The [runtime export bridges](../runtime/core/src/rs/src/handlers.rs) still name `dk_fx_routes_entry` and `dk_machines_module_info` for the FX list and the MODULES report. The menu also enforces allowed FX routes and send limits and writes `fx/route/` keys. [The settings reload queue](../runtime/core/src/rs/src/settings_reload.rs) still owns policy for overlay-driven reloads, including when a settings client is eligible and when a refusal is retried. The core's serialized live job and settings broker are shared mechanisms. The project service identifies changed settings owners. A future change to the reload policy should make its owner explicit at that boundary.
+
+The first extraction candidate is the FX route-choice policy in [the DIGIKIT menu](../runtime/apps/digikit-menu/src/menu.c). Have `fx.dks` answer which routes are valid given an effect and pending choices, using its capacity data. Keep the menu's pending edits and presentation in the app. Verify allowed routes and the send-slot boundary in the FX host tests, then run the existing FX route panel and persistence tests on DT2 and DN2 (`core/fx:test-device--fx-routes-panel`, `core/fx:test-device--fx-routes-persist`). Keep the `dkrt_fx` C entry point for its existing callers and check that the list stays empty when the provider is absent.
+
+When a service dependency, runtime guarantee or firmware-resident responsibility changes, update this contract or inventory in the same change and link its lowest-layer proof.
+
 ## Boundaries and tests
-
-This section is the target. Interface B exists as the `Service` trait and its static table (`ServiceTable`, generated into `gen_services.rs`; `handlers.rs` hands it out), with `FakeService` in `handlers/tests.rs`. C is `CoreApi` in `dkrt-abi`, with `RealCore` and `FakeCore` in `core_api.rs`, and the Platform interface is `Platform` in `dkrt-abi`, with `RealPlatform` and `FakePlatform` (`fake_platform.rs`). After R3, test-speed item 7 moves logic tests from the device to the host. The rule for review of deleted tests applies to each move: a host test replaces a device test only when it covers the same path.
-
-Each layer has entry points (what the layer above calls) and exit points (what the layer calls), and is tested at those points.
 
 | Layer | Entry points | Exit points | Tested how |
 | --- | --- | --- | --- |
-| L1 platform | The Platform interface: time and blocks, flush, MIDI send, raw memory, the `*_info` tables | Stock firmware | A contract suite, run once per device and firmware in the emulator. Everything above uses a `FakePlatform` |
-| L2 core | The C API `dkrt_*`, the boot and tick entries, the static service tables | Platform, Storage, the interface B handler tables, the DSP link | Host unit tests with `FakePlatform`, `FakeStorage` and `FakeService` (it records handler calls): loader, boot plan, fit, refusals, registry walker, later the R6 queue |
-| L3 services | The interface B handlers | Interface C, a `CoreApi`: params, rows, link, settings, log | Host unit tests of each service against a `FakeCore` (crate `dkrt-test-support`: it records row writes and runs the real link queue of `dkrt-link` over a model of the link) |
-| L4 modules | The `dk_module` lifecycle and the kind contract | `sdk.toml` imports | Conformance tests, and module host tests against fake services |
+| L1 platform | `Platform`, resident hooks and image info tables | Stock firmware | Platform contract on the emulator for each supported device, with `FakePlatform` for host callers |
+| L2 core | `dkrt_*`, boot and tick, provider declarations | Platform, storage, registered rows, DSP link | Host tests for planning, fit, refusal, registry and link; assembly tests with real packed providers and image tables for declaration and installation seams |
+| L3 services | Declared row callbacks, exports, hook and slot targets | `CoreApi`, SDK imports and declared firmware bindings | Host tests against `FakeCore`; device tests for effects on firmware and DSP paths |
+| L4 modules | `dk_module` lifecycle and module-kind contract | SDK and declared service-local imports | Conformance and module tests |
 
-Rules:
-
-- Parts inside a layer depend on small interfaces, not on each other's internals, so each part has its own unit tests.
-- Each interface has one contract test suite. It runs against the fake and against the real implementation, so the fake cannot drift.
-- Target pyramid: many host tests per layer, one contract suite per boundary (the only emulator part, once per device), and a small set of end-to-end device scenarios.
+Use the lowest layer that sees the behavior. A host test replaces device coverage only when it exercises the same path. See [test levels and targets](TESTING.md).
 
 ## Roles
 
 | Layer | Folder | `role` | Runs | May depend on |
 | --- | --- | --- | --- | --- |
 | L2 Runtime core | `runtime/core` | `runtime` | At boot and in the UI and block loops | Firmware bindings, SDK crate `dkrt-sdk`, interface crate `dkrt-abi`, adapters through optional symbols |
-| L3 Service | `services/NAME` (module manifest in `dks/`) | `service` (checked by `patchkit service-check`) | Loaded from a `.dks` file | The core through `CoreApi` (interface C) and `dkrt-abi`, other services through imports (interface A) |
+| L3 Service | `services/NAME` (module manifest in `dks/`) | `service` (checked by `patchkit service-check`) | Loaded from a `.dks` file | The core through `CoreApi` (interface C) and `dkrt-abi`, other services through declared imports (interface A) |
 | L1 Installer | `runtime/platform/expansion` | `installer` | At reset, once | Firmware bindings |
 | L1 Firmware bindings | `ports/bindings` | none (not a module) | Never; generated by `patchkit gen` from `ports/fw/` | Anchors |
 | L1 Platform or other image module | `runtime/platform/NAME` (except `expansion`), `image-modules/{points,adapters,fixes,proofs}/NAME` | `adapter` | Inside firmware hooks, in the firmware's contexts | Firmware bindings, runtime exports, other adapters' headers |
 | L4 App | `runtime/apps/NAME` | `app` | In the task context, called by an adapter | SDK, `dkrt.h`, `dk_ui_core.h` |
-| L4 Content module | `modules/<kind>/<author>/<name>`, `tests/fixtures/modules` | none | Loaded at run time from the card (a `.dkm`) | SDK only |
+| L4 Content module | `modules/<kind>/<author>/<name>`, `tests/fixtures/modules` | none | Loaded at run time from the card (a `.dkm`) | SDK and declared service-local imports |
 | SDK contract | `sdk/` | none | Not code that runs; the contract between L4 and L2 and L3 | Nothing |
 
 ## Rules
@@ -137,17 +140,17 @@ Rules:
 
 1. **Roles.** Manifests under `runtime/`, `services/` and `image-modules/` set `[module].role` according to the table above.
 2. **Sources.** Content modules and apps include only their own files and the SDK (`<dk/...>`, `sdk/dsp/contract`). An app may also include `dkrt.h` and `dk_ui_core.h`. Only the runtime (its `platform.rs`, rule 7), the installer and adapters include `dk_fw_*` headers or depend on the `dkfw` crate. C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are checked.
-3. **Objects.** The undefined symbols of the built objects of apps and content modules are SDK imports (`sdk/sdk.toml` `[[import]]`), `dkrt_*`, `dk_ui_*`, `dk_app_*` or the SHARC externs the SDK documents. They never name a firmware anchor (`cf.*`, `dsp.*`, `hook.*`, `pk.*`), and `[object.externs]` never maps a symbol to one.
+3. **Objects.** The undefined symbols of the built objects of apps and content modules are SDK imports (`sdk/sdk.toml` `[[import]]`), declared service-local imports (`[[service_import]]`), `dkrt_*`, `dk_ui_*`, `dk_app_*` or the SHARC externs the SDK documents. They never name a firmware anchor (`cf.*`, `dsp.*`, `hook.*`, `pk.*`), and `[object.externs]` never maps a symbol to one.
 4. **Apps do not patch.** An app has no `[[op]]` and no `[[claim]]`. If an app needs a firmware hook, the adapter that owns that plug-in point installs the hook and calls the app through an optional symbol (`dk_app_*`).
 5. **Capabilities cost nothing unused.** A module asks for capabilities; adapters implement them per device. Prefer data (a field an adapter already passes) to a new firmware hook. A hook must cost at most one flag check on a hot path when no loaded module asks for its capability ([capabilities plan](plans/capabilities.md)).
 
-6. **Arrows inside the runtime.** Every service is a crate (`services/NAME`); no service is a folder of the runtime crate. A service crate (`services/NAME`) depends only on `dkrt-abi`, `dkrt-sdk` and `dkneeds`, and on `dkrt-test-support` as a dev-dependency; it takes the core as a `&C` argument with `C: CoreApi`. Test fakes (`dkrt-test-support`, the `fake` feature of `dkrt-link`) are dev-dependencies of the runtime crate and of services only; `check:layers` reads renamed and `[target.*]` dependencies too. The core names a service only in `handlers.rs` and the generated `gen_services.rs`.
+6. **Arrows inside the runtime.** Service implementations live in their own crates and take the core through `CoreApi`. Card wrappers bind service-only imports and declare their callbacks to the loader. `check:layers` checks allowed crate dependencies and test-only fakes, including renamed and target-specific dependencies. Service-specific runtime bridges are confined to `handlers.rs` and the generated registration code.
 
-7. **Platform.** The runtime module installs no firmware hook except the machine page hooks (`cf.page.hook.source_key`, `source_turn`); the rest are in the platform adapter. Only `platform.rs` and `fw.rs` (at the source root of the runtime crate; it must implement `dkrt_abi::fw::Fw`) name the firmware crate `dkfw`; the rest of the core and the services use the `Platform` and `Fw` traits. Only `rs/dev.rs` reads `dkrt_dev`. No runtime or service file compares the device id with a number: the runtime asks the device profile (`crate::profile()`, `Platform::has_dsp`, `samples_in_store`, `sample_path_max`), and a service asks `DeviceProfile::by_id(core.device_id())`. The values come from the device files.
+7. **Platform.** The runtime manifest installs no firmware hooks. The platform adapter installs boot, UI-loop and MIDI hooks, and the machines service owns the source-page key and turn hooks. The runtime's `platform.rs` and `fw.rs` adapt firmware through the platform and firmware traits. Only `rs/dev.rs` reads `dkrt_dev`. Runtime and service code use profiles and capabilities for device values, which come from `devices/*.toml`.
 
-8. **Kind-free core.** The runtime's own code (the runtime crate's sources without its host tests, `handlers.rs` and the generated `gen_services.rs`) names no machine or effect: no builder call, no record kind of a machine or an effect, no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`, `fxpages_info`, `mf_native_*`) and no machines registry state. The machines and fx service files export the builder calls (`provided = true` in `sdk/sdk.toml`), keep the state of a module's `init` and write their records in `Service::module_commit`: two passes (`PREPARE` checks and measures, `WRITE` writes and declares the DSP rows) over the one record block of the module; the loader appends the generic records and runs the registry walker (`check`, `apply`, `apply_record`, `remove` of the services that own the kinds). Every service also has `validate_records` (required, no default): the rule for the records of its kinds as far as the bodies of one module's records of a kind decide it; what needs the device, the module's image, another kind or the registry state stays in `check`. `check` calls the same code at load, and `patchkit records --check` calls the service's inherent `validate` (which the trait method calls) on a built module, so one rule serves both. A service without a rule writes `dkrt_abi::accepts_records!();`. The DSP row tables are the services' own: the voice rows and the guard's counts are `DKRT_VROWS` and `DKRT_GUARD` of `machines`, the effect rows `DKRT_FROWS` and `DKRT_FXGUARD` of `fx`; each service reads its adapter's table (`dyndsp_info`, `dynfx_info`) through `CoreApi::info`, logs the DSP words it owns in `Service::diag`, and checks its tables against the module records in `Service::table_check` (invariant 3). `DspState` keeps only the loader's state (the module ranges, the link request, the loads in flight). What is left in the core of this kind is the area allocator (it reads `dyndsp_info` itself), the effect list of the FX ROUTES menu (the export `dk_fx_routes_entry`) and the sample worker (`job_post`, until `samples.dks`).
+8. **Kind-free core.** Builders, record semantics and machine or effect state belong to services. The core walks generic records and calls the owning row for checks, application and teardown. `patchkit records --check` and the service share the rules for records a module can validate before it loads. Device- and registry-dependent checks run at load. The core owns generic DSP allocation and load state, while services own voice and effect rows, guard counts and diagnostics. See [remaining ownership work](#remaining-ownership-work) for the current compatibility bridges and policy seams.
 
-Today `check:layers` enforces these eight rules: roles, which sources and objects each role may use (so L4 never reaches firmware names and L1 is the only layer with `dk_fw_*`), no patching by apps, the capability cost, the arrows between L2 and L3 (including the dependencies and sources of the service crates), the platform boundary of the runtime, and a core that names no machine or effect (`kind-free`).
+`check:layers` enforces the source and object boundaries it can inspect. The assembly and device checks cover declaration and execution behavior.
 
 Exceptions are listed in `layercheck.py` with a reason: `test/registry-demo` patches the firmware itself (it is patchkit's example of a hook), and `test/ui-demo` stands in for an app.
 

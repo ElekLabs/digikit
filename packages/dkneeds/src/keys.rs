@@ -10,7 +10,7 @@
 //! ```
 //!
 //! The writer picks the version by content: 3 if the table has `FWNAMES` or `SITES` items (the port file), else 2 if it has `PROVIDES`, `BIND` or `FW` items,
-//! else 1. A reader accepts all three. `PROVIDES`, `BIND` and `FW` are valid only in a table of version 2 or 3, `FWNAMES` and `SITES` only in a version 3
+//! else 1. A reader accepts all three. A service can include a callback order in version 2. `PROVIDES`, `BIND` and `FW` are valid only in a table of version 2 or 3, `FWNAMES` and `SITES` only in a version 3
 //! table, and the `SLOTS` item has 12 bytes from version 2 (8 in version 1).
 //!
 //! Entries (the payload of each of `count` items):
@@ -22,7 +22,8 @@
 //! - `SLOTS` (8, or 12 in version 2): u32 slot id, u32 flags, and in version 2 u32 entry (image offset): the plug-in points the module takes
 //!   (one owner each).
 //! - `HOOKS` (8): u32 hook site, u32 entry (image offset): the hook sites the module takes (one owner each).
-//! - `EXPORTS` (8): u32 name hash, u32 entry (image offset): the functions the module offers to other modules.
+//! - `EXPORTS` (8): u32 name hash, u32 entry (image offset): the functions the module offers to other modules. Bit 31 of the entry makes the export
+//!   visible only to a consumer that declares the service as its owner in `SERVICE_IMPORTS`.
 //! - `RESOURCES` (8): u32 resource id, u32 limit: the resources a service module adds.
 //! - `PROVIDES` (8, version 2): u32 service name hash, u32 version: the services the module provides.
 //! - `BIND` (`count` items of u32 site hash, u32 firmware address, u32 stock length, u32 trampoline offset (image offset), then the stock
@@ -33,6 +34,8 @@
 //!   hash, n); flag bit 0 `absent` (a name that only another device has: it resolves to 0).
 //! - `SITES` (20, version 3): u32 hook hash, u32 site address, u16 displaced length, u8 kind (0 raw, 1 tail, 2 stock), u8 flags (bit 0 absent; bits 4 to 7 the
 //!   number of fixups that follow: reserved, 0), 8 bytes: the first 8 bytes of the SHA-256 of the displaced bytes. Sorted by hash.
+//! - `CALLBACK_ORDER` (8, version 2): the service name hash from `PROVIDES` and its unsigned callback order. A service file may have one item.
+//! - `SERVICE_IMPORTS` (8, versions 1 and 2): ColdFire import name hash and the service name hash that must own it.
 //!
 //! The packer always writes a table (a module that needs and keeps nothing has the 8-byte head). A file with no table or another magic is the
 //! format of runtime 0.7: the loader refuses it with `E_CONTRACT`.
@@ -51,6 +54,8 @@ pub const VERSION: u16 = crate::TABLE_VERSION as u16;
 /// Bytes of the table head and of an entry head.
 pub const HEAD: usize = 8;
 pub const ENTRY_HEAD: usize = 8;
+/// Most bytes of an ordinary header table the boot planner captures. The port file is trimmed before capture.
+pub const BOOT_TABLE_MAX: usize = 640;
 
 /// The entry tags.
 pub mod tag {
@@ -67,6 +72,8 @@ pub mod tag {
     pub const FW: u16 = 11;
     pub const FWNAMES: u16 = 12;
     pub const SITES: u16 = 13;
+    pub const CALLBACK_ORDER: u16 = 14;
+    pub const SERVICE_IMPORTS: u16 = 15;
 }
 
 /// Bytes of one `FWNAMES` item and of one `SITES` item.
@@ -75,6 +82,8 @@ pub const SITE_BYTES: usize = 20;
 /// The low 24 bits of a `HOOKS` entry of a service file are the image offset of the entry; the top byte is the device mask the packer wrote (the port file's `absent`
 /// flag does the work of the mask at run time, so the loader drops it).
 pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
+/// Bit 31 of an `EXPORTS` entry limits it to consumers that specify its provider.
+pub const EXPORT_BOUND: u32 = 1 << 31;
 /// Bit 0 of the flags of a `FWNAMES` or `SITES` item: the name or hook is absent on this firmware.
 pub const FLAG_ABSENT: u8 = 1;
 /// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).
@@ -111,6 +120,18 @@ pub fn item_bytes_v(t: u16, version: u16) -> Option<usize> {
     } else {
         Some(8)
     }
+}
+
+/// Whether a table version can use a tag and item count.
+pub(crate) fn valid_tag(version: u16, tag: u16, count: usize) -> bool {
+    let top = match version {
+        1 => tag::RESOURCES,
+        2 => tag::FW,
+        _ => tag::SITES,
+    };
+    (tag::NEEDS..=top).contains(&tag)
+        || (version == 2 && tag == tag::CALLBACK_ORDER && count == 1)
+        || (version <= 2 && tag == tag::SERVICE_IMPORTS)
 }
 
 /// The 32-bit name hash of a service or an export (FNV-1a), the identity in `NEEDS` and `EXPORTS`.
@@ -263,6 +284,9 @@ pub struct Table<'a> {
     pub names: &'a [NameRec],
     /// The hook sites of a port file. A table with any is written as version 3.
     pub sites: &'a [SiteRec],
+    /// The service identity and the order of its runtime callbacks.
+    pub callback_order: Option<Pair>,
+    pub service_imports: &'a [Pair],
 }
 
 impl Table<'_> {
@@ -270,7 +294,11 @@ impl Table<'_> {
     pub fn version(&self) -> u16 {
         if !self.names.is_empty() || !self.sites.is_empty() {
             3
-        } else if self.provides.is_empty() && self.bind.is_empty() && self.fw.is_empty() {
+        } else if self.provides.is_empty()
+            && self.bind.is_empty()
+            && self.fw.is_empty()
+            && self.callback_order.is_none()
+        {
             1
         } else {
             2
@@ -278,7 +306,7 @@ impl Table<'_> {
     }
 
     /// (tag, items, payload bytes) of each entry, in tag order.
-    fn entries(&self) -> [(u16, usize, usize); 13] {
+    fn entries(&self) -> [(u16, usize, usize); 15] {
         let kb: usize = self.keys.iter().map(|g| 8 + 4 * g.keys.len()).sum();
         let bb: usize = self
             .bind
@@ -308,6 +336,16 @@ impl Table<'_> {
                 NAME_BYTES * self.names.len(),
             ),
             (tag::SITES, self.sites.len(), SITE_BYTES * self.sites.len()),
+            (
+                tag::CALLBACK_ORDER,
+                usize::from(self.callback_order.is_some()),
+                8 * usize::from(self.callback_order.is_some()),
+            ),
+            (
+                tag::SERVICE_IMPORTS,
+                self.service_imports.len(),
+                8 * self.service_imports.len(),
+            ),
         ]
     }
 }
@@ -359,6 +397,9 @@ pub fn write_table(t: &Table, out: &mut [u8]) -> Result<usize, KeysError> {
         out[at + 2..at + 4].copy_from_slice(&(count as u16).to_be_bytes());
         at += 4;
         put32(out, &mut at, bytes as u32);
+        if !valid_tag(version, tg, count) {
+            return Err(KeysError::Tag);
+        }
         if tg == tag::NEEDS {
             for x in t.needs {
                 put32(out, &mut at, x.service);
@@ -432,6 +473,10 @@ pub fn write_table(t: &Table, out: &mut [u8]) -> Result<usize, KeysError> {
                 t.exports
             } else if tg == tag::PROVIDES {
                 t.provides
+            } else if tg == tag::CALLBACK_ORDER {
+                t.callback_order.as_slice()
+            } else if tg == tag::SERVICE_IMPORTS {
+                t.service_imports
             } else {
                 t.resources
             };
@@ -498,14 +543,7 @@ impl<'a> Keys<'a> {
             let tg = u16_at(bytes, at);
             let count = u16_at(bytes, at + 2) as usize;
             let len = u32_at(bytes, at + 4) as usize;
-            let top = if version >= 3 {
-                tag::SITES
-            } else if version >= 2 {
-                tag::FW
-            } else {
-                tag::RESOURCES
-            };
-            if !(tag::NEEDS..=top).contains(&tg) || tg <= last {
+            if !valid_tag(version, tg, count) || tg <= last {
                 return Err(KeysError::Tag);
             }
             last = tg;

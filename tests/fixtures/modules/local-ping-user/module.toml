@@ -1,0 +1,25 @@
+[module]
+id = "test/local-ping-user"
+version = "0.1.0"
+name = "Local ping client"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture for a hard, versioned need on an API declared outside the SDK"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[service_import]]
+service = "local-ping"
+min_version = "1.2.0"
+names = ["local_ping_value"]
+
+[[object]]
+path = "build/local-ping-user.dko.json"
+sources = ["src/c/user.c"]
+place = "cf.expansion"

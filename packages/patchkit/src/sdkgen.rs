@@ -589,11 +589,6 @@ fn rust_services(sdk: &Sdk) -> String {
         s,
         "];\n\n/// The number of in-crate services: the static prefix of the table.\npub const STATIC: usize = {n};\n\n"
     );
-    let order = sdk
-        .service
-        .iter()
-        .map(|d| format!("{:?}", d.name))
-        .collect::<Vec<_>>();
     // Without in-crate rows there is no `HEAD`: a static of zero size has no section, and a pointer to it would be a relocation against nothing.
     let (head, table) = if n == 0 {
         (
@@ -608,9 +603,7 @@ fn rust_services(sdk: &Sdk) -> String {
     };
     let _ = write!(
         s,
-        "/// The name of every `[[service]]`, in file order: the ordinal of a service. The rows a `.dks` adds follow the in-crate rows sorted by it (`svc_rows.rs`).\npub const ORDER: [&str; {}] = [{}];\n\n/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the null tail is not part of any table).\npub static mut ROWS: [*const ServiceRow; ROWS_LEN] = rows_with_tail(&SERVICES);\n\n{head}/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = {table};\n",
-        order.len(),
-        order.join(", ")
+        "/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the null tail is not part of any table).\npub static mut ROWS: [*const ServiceRow; ROWS_LEN] = rows_with_tail(&SERVICES);\n\n{head}/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = {table};\n"
     );
     s
 }
@@ -882,6 +875,8 @@ struct Runtime {
     version: String,
     /// The runtime version that introduced the header table of a `.dkm`.
     table: String,
+    /// The runtime version that introduced local service registration.
+    service_registration: String,
 }
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
@@ -926,6 +921,12 @@ fn pack_runtime((a, b, c): (u8, u8, u8)) -> u32 {
 pub fn table_runtime() -> u32 {
     let sdk = parse(include_str!("../../../sdk/sdk.toml")).expect("sdk/sdk.toml parses");
     parse_runtime(&sdk.runtime.table).expect("sdk/sdk.toml [runtime] table")
+}
+
+/// Minimum runtime for packages using service registration metadata.
+pub fn service_registration_runtime() -> u32 {
+    parse_runtime(&sdk_embedded().runtime.service_registration)
+        .expect("sdk/sdk.toml [runtime] service_registration")
 }
 
 pub fn embedded_runtime() -> u32 {
@@ -1071,6 +1072,12 @@ fn parse(text: &str) -> Result<Sdk> {
                 "{SOURCE}: [runtime] table is not a version, or is newer than version"
             ));
         }
+    }
+    let registration = parse_runtime(&sdk.runtime.service_registration)?;
+    if registration > parse_runtime(&sdk.runtime.version)? {
+        return Err(err!(
+            "{SOURCE}: [runtime] service_registration is newer than version"
+        ));
     }
     for (i, (n, k)) in sdk.records.kinds.iter().enumerate() {
         if k.id == 0
@@ -2487,6 +2494,32 @@ pub fn provider_services() -> std::collections::BTreeSet<String> {
         .filter(|d| d.rust.is_none())
         .map(|d| d.name)
         .collect()
+}
+
+/// Whether a name's identity belongs to the runtime or the SDK, including a collision with an SDK service.
+pub fn reserved_service(name: &str) -> bool {
+    use dkneeds::keys::name_hash;
+    let sdk = sdk_embedded();
+    let hash = name_hash(name);
+    ["runtime", crate::portfile::PORT_SERVICE]
+        .into_iter()
+        .chain(sdk.handle.services.iter().map(String::as_str))
+        .chain(sdk.service.iter().map(|d| d.name.as_str()))
+        .any(|n| name_hash(n) == hash)
+}
+
+/// Whether an import's identity belongs to the SDK, including compiler helpers.
+pub fn reserved_service_import(name: &str) -> bool {
+    let hash = dkneeds::keys::name_hash(name);
+    sdk_embedded()
+        .import
+        .iter()
+        .any(|i| dkneeds::keys::name_hash(&i.name) == hash)
+        || name.starts_with("dkc_")
+        || name.starts_with("dk_service_")
+        || name.starts_with("dkrt_")
+        || matches!(name, "dk_module" | "dk_svc_abi")
+        || crate::fwnames::parse_import(name).is_some()
 }
 
 /// The functions the file of `service` exports: its `provided` imports (test-only ones too), in `sdk/sdk.toml` order.

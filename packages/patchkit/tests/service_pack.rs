@@ -156,13 +156,13 @@ fn the_output_name_must_match_the_role() {
 }
 
 #[test]
-fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
+fn a_service_with_a_reserved_service_or_a_foreign_export_is_refused() {
     let d = scratch("bad");
     let cases: [(&str, &dyn Fn(&str) -> String, &str); 8] = [
         (
-            "unknown service",
-            &|t| t.replace("service = \"svc-test\"", "service = \"no-such\""),
-            "not a [[service]]",
+            "reserved service",
+            &|t| t.replace("service = \"svc-test\"", "service = \"port\""),
+            "unreserved service name",
         ),
         (
             "no service",
@@ -216,6 +216,52 @@ fn a_service_with_an_unknown_service_or_a_foreign_export_is_refused() {
         assert!(e.contains(want), "{what}: {e}");
     }
     let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn local_service_packages_declare_the_export_order_and_a_bound_versioned_need() {
+    if !toolchain() {
+        return;
+    }
+    use dkneeds::keys::tag;
+    let d = scratch("local");
+    let service = name_hash("local-ping");
+    let symbol = name_hash("local_ping_value");
+    let provider = packed(&root(), "test/local-ping", &d.join("local-ping.dks"));
+    let provider = Dkm::parse(&provider).unwrap();
+    let keys = Keys::parse(&provider.register).unwrap();
+    assert_eq!(keys.provides().collect::<Vec<_>>(), [(service, 0x010200)]);
+    assert_eq!(keys.exports().map(|e| e.a).collect::<Vec<_>>(), [symbol]);
+    assert_eq!(keys.words(tag::CALLBACK_ORDER, 0), Some((service, 450, 0)));
+    assert!(
+        keys.exports()
+            .all(|e| e.b & dkneeds::keys::EXPORT_BOUND != 0)
+    );
+    let floor = patchkit::sdkgen::service_registration_runtime();
+    assert!(
+        keys.needs()
+            .any(|n| n.service == name_hash("runtime") && n.hard && n.min_version == floor)
+    );
+
+    let user = packed(
+        &root(),
+        "test/local-ping-user",
+        &d.join("local-ping-user.dkm"),
+    );
+    let user = Dkm::parse(&user).unwrap();
+    let keys = Keys::parse(&user.register).unwrap();
+    let need = keys.needs().find(|need| need.service == service).unwrap();
+    assert!(need.hard);
+    assert_eq!(need.min_version, 0x010200);
+    assert_eq!(
+        keys.words(tag::SERVICE_IMPORTS, 0),
+        Some((symbol, service, 0))
+    );
+    assert!(
+        keys.needs()
+            .any(|n| n.service == name_hash("runtime") && n.hard && n.min_version == floor)
+    );
+    let _ = std::fs::remove_dir_all(d);
 }
 
 /// The big-endian bytes of `word` occur in a section of the committed object `path` (a `.dko.json`).

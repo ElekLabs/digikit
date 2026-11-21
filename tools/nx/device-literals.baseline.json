@@ -732,6 +732,8 @@
   "tests/fixtures/modules/intro-ticks/module.toml": 2,
   "tests/fixtures/modules/lfo-shape-b/module.toml": 2,
   "tests/fixtures/modules/lfo-shape/module.toml": 2,
+  "tests/fixtures/modules/local-ping-user/module.toml": 2,
+  "tests/fixtures/modules/local-ping/module.toml": 2,
   "tests/fixtures/modules/native-page/build/gen/gallery.json": 4,
   "tests/fixtures/modules/native-page/tests/native-page.device.test.ts": 2,
   "tests/fixtures/modules/project-user/module.toml": 2,

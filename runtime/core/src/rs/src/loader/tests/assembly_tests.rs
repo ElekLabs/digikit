@@ -142,8 +142,8 @@ impl Registry for DeviceRegistry {
     fn abi_ok(&self, fingerprint: u32) -> bool {
         fingerprint == 0 || self.runtime.contains(&std::format!("0c80{fingerprint:08x}"))
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>) -> i32 {
-        RealRegistry.add(rec, row)
+    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32 {
+        RealRegistry.add(rec, row, order)
     }
     unsafe fn remove(&mut self, rec: usize) {
         // a module's registry rows are the scripted cleanup tests' (`registry_remove` asserts their event order); a provider's row is real
@@ -425,7 +425,7 @@ impl Images for Card {
             } else if d.tag == Declare::HOOK {
                 crate::collect::dk_service_declare_hook(ctx, d.a, at(d.b))
             } else if d.tag == Declare::EXPORT {
-                crate::collect::dk_service_declare_export(ctx, d.a, at(d.b))
+                crate::collect::dk_service_declare_export(ctx, d.a, at(d.b & !dkneeds::keys::EXPORT_BOUND))
             } else {
                 crate::collect::dk_service_declare_resource(ctx, d.a, d.b)
             };
@@ -473,7 +473,7 @@ impl Drop for Clean {
             for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
                 crate::svc_rows::remove(rec);
             }
-            crate::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::handlers::exports::machines_row());
+            crate::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None);
         }
     }
 }
@@ -489,6 +489,8 @@ const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
+const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/local-ping" };
+const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };
 /// A module that binds a key combination with `dk_shortcut_add`: a user of the shortcuts service file, no DSP section.
 const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortcut-demo" };
 /// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
@@ -708,6 +710,51 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
 }
 
 // ---- the cases ------------------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_selected_consumer_loads_a_service_declared_outside_the_sdk() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (l, plan) = planned(dev, &image, &[], &[], &[LOCAL_PING]);
+            assert!(found(&l, &plan).is_empty(), "an unneeded provider on the card is not loaded");
+
+            let (l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[]);
+            assert!(found(&l, &plan).is_empty());
+            let service = name_hash("local-ping");
+            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(service)));
+
+            let (mut l, mut plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            assert_eq!(found(&l, &plan), BTreeSet::from(["services/local-ping.dks".into()]));
+            assert_eq!(plan.verdicts[0], Verdict::Accepted);
+
+            let mut newer_client = packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx);
+            let table = table_of(&newer_client);
+            let at = table.windows(8).position(|w| w[..4] == service.to_be_bytes() && w[4..] == 0x010200u32.to_be_bytes()).unwrap()
+                + be(&newer_client, dkneeds::H_REG_OFF) as usize + 4;
+            newer_client[at..at + 4].copy_from_slice(&0x010201u32.to_be_bytes());
+            seal(&mut newer_client);
+            l.capture(0, &newer_client);
+            let too_new = l.plan_with_caps(1, &capacity(&l.p));
+            assert_eq!(too_new.verdicts[0], Verdict::Refused(Reason::NeedVersion));
+            newer_client[at..at + 4].copy_from_slice(&0x000100u32.to_be_bytes());
+            seal(&mut newer_client);
+            l.capture(0, &newer_client);
+            let different_major = l.plan_with_caps(1, &capacity(&l.p));
+            assert_eq!(different_major.verdicts[0], Verdict::Refused(Reason::NeedVersion));
+
+            l.capture(0, &packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx));
+            l.load_providers(&plan);
+            assert!(l.loaded[0]);
+            assert!(crate::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
+            l.settle(&mut plan, 1);
+            l.phase = Phase::Boot;
+            assert_eq!(l.load(b"modules/local-ping-user.dkm\0".as_ptr()), OK);
+        }
+        clean_state();
+    }
+}
 
 #[test]
 fn a_machine_loads_with_the_machines_service_file() {

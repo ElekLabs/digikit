@@ -11,7 +11,7 @@
 //!   `src/fw.rs` (firmware calls). It is required when the service's `[[service]]` row has no `rust` (the service is a file), and checked whenever it exists.
 //!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`).
 //!   The exports of the file are the `provided = true` imports of the service in `sdk.toml`: `service!` takes `exports = gen_exports::exports()` (the file `patchkit gen`
-//!   writes) when there are any, never a literal list, and `dks/module.toml` has no `[[export]]`.
+//!   writes) for SDK services. A service outside the SDK declares its export names in `dks/module.toml` and in the literal `exports` list.
 //!   Assembler (`asm!`, `global_asm!`, `naked`) is only in `dks/src/hooks.rs`, and firmware names (`cf.` hook and anchor names, `dkfw`) only under `dks/`.
 //! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`image-modules/**/module.toml`). When the
 //!   slot must exist (a typo is an error). When the slot exists only on some devices (`devices` in its `[[slot]]`), the fill names `devices` too and only devices the slot has.
@@ -235,6 +235,34 @@ fn provided_imports(sdk: &Path, name: &str) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Rust tokenization drops comments before the service declaration is inspected.
+fn local_exports_in_rust(src: &str) -> Result<Vec<String>> {
+    use proc_macro2::{Delimiter, TokenStream, TokenTree};
+    let tokens: TokenStream = src
+        .parse()
+        .map_err(|e| err!("cannot tokenize dks/src/lib.rs: {e}"))?;
+    let mut tokens = tokens.into_iter().peekable();
+    while let Some(token) = tokens.next() {
+        if !matches!(token, TokenTree::Ident(id) if id == "service")
+            || !matches!(tokens.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '!')
+        {
+            continue;
+        }
+        tokens.next();
+        if let Some(TokenTree::Group(body)) = tokens
+            .next()
+            .filter(|t| matches!(t, TokenTree::Group(g) if g.delimiter() == Delimiter::Parenthesis))
+        {
+            return Ok(service_list(&format!("service!{body}"), "exports")
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect());
+        }
+    }
+    Ok(vec![])
+}
+
 /// The entries of the list `key` (`hooks` or `fills`) of the `service!` call in `dks/src/lib.rs`: (first string, device filter: `None` for every
 /// device, or `dt2` / `dn2`).
 fn service_list(lib: &str, key: &str) -> Option<Vec<(String, Option<String>)>> {
@@ -260,9 +288,10 @@ fn service_list(lib: &str, key: &str) -> Option<Vec<(String, Option<String>)>> {
             _ => {}
         }
     }
-    let entry =
-        Regex::new(r#"\(\s*"([^"]+)"\s*,\s*[A-Za-z_][\w:]*\s*(?:,\s*([A-Za-z0-9_]+)\s*)?\)"#)
-            .unwrap();
+    let entry = Regex::new(
+        r#"\(\s*"([^"]+)"\s*,\s*[A-Za-z_]\w*(?:\s*::\s*\w+)*\s*(?:,\s*([A-Za-z0-9_]+)\s*)?\)"#,
+    )
+    .unwrap();
     Some(
         entry
             .captures_iter(&body[open + 1..end])
@@ -330,6 +359,7 @@ fn check_dks(
     dir: &Path,
     needs_dks: bool,
     provided: &[String],
+    local_service: bool,
     neutral: &[(String, String)],
 ) -> Vec<String> {
     let mut out = vec![];
@@ -366,6 +396,7 @@ fn check_dks(
         .and_then(|t| t.parse().ok());
     let mut hooks: Vec<(String, Vec<String>)> = vec![];
     let mut fills: Vec<(String, Vec<String>)> = vec![];
+    let mut local_exports = vec![];
     if let Some(m) = &manifest {
         let list = |table: &str, key: &str| -> Vec<(String, Vec<String>)> {
             m.get(table)
@@ -485,7 +516,17 @@ fn check_dks(
         if !dsp_fills.is_empty() {
             fills.retain(|(n, _)| !dsp_fills.contains(n));
         }
-        if m.get("export").is_some() {
+        if local_service {
+            match std::fs::read_to_string(dks.join("module.toml"))
+                .ok()
+                .and_then(|text| toml::from_str::<crate::module::Manifest>(&text).ok())
+                .map(|m| m.provided_service())
+            {
+                Some(Ok(Some(service))) => local_exports = service.exports,
+                Some(Err(e)) => out.push(format!("dks/module.toml: {e}")),
+                _ => out.push("dks/module.toml does not declare a service".into()),
+            }
+        } else if m.get("export").is_some() {
             out.push("dks/module.toml: [[export]] is not read: the exports of the file are the `provided = true` imports of its service in sdk/sdk.toml".into());
         }
         let module = m.get("module").and_then(|t| t.as_table());
@@ -544,7 +585,24 @@ fn check_dks(
         let generated = Regex::new(r"\bexports\s*=\s*gen_exports::exports\(\)")
             .unwrap()
             .is_match(lib);
-        if literal {
+        if local_service {
+            let src = std::fs::read_to_string(dks.join("src/lib.rs")).unwrap_or_default();
+            let mut declared = match local_exports_in_rust(&src) {
+                Ok(names) => names,
+                Err(e) => {
+                    out.push(e.0);
+                    vec![]
+                }
+            };
+            declared.sort();
+            local_exports.sort();
+            if declared != local_exports {
+                out.push(
+                    "dks/src/lib.rs: service! exports must match the names in dks/module.toml"
+                        .into(),
+                );
+            }
+        } else if literal {
             out.push("dks/src/lib.rs: service! has a literal `exports = [...]` list: write `exports = gen_exports::exports()` (the list `patchkit gen` writes from the `provided` imports of sdk/sdk.toml)".into());
         } else if !provided.is_empty() && !generated {
             out.push(format!("dks/src/lib.rs: the service has {} `provided` imports in sdk/sdk.toml, so service! needs `exports = gen_exports::exports()`", provided.len()));
@@ -879,7 +937,13 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     // declarations equal the manifest
     let (kinds, row) = manifest(sdk, &name)?;
     let provided = provided_imports(sdk, &name)?;
-    for p in check_dks(dir, matches!(row, Some(None)), &provided, &srcs) {
+    for p in check_dks(
+        dir,
+        matches!(row, Some(None)),
+        &provided,
+        row.is_none(),
+        &srcs,
+    ) {
         problem(p);
     }
     for p in fill_problems(dir, adapters) {
@@ -889,7 +953,7 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
         problem(p);
     }
     match row {
-        None => problem(format!(
+        None if !dir.join("dks/module.toml").is_file() => problem(format!(
             "{} has no [[service]] row named `{name}`",
             sdk.display()
         )),

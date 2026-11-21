@@ -5,6 +5,7 @@ name = "samples service"
 category = "core"
 role = "service"
 service = "samples"
+callback_order = 100
 type = "raw"
 author = "digikit"
 status = "experimental"

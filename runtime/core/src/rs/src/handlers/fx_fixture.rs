@@ -27,7 +27,7 @@ pub(crate) struct LoadedFx;
 impl LoadedFx {
     pub(crate) fn new() -> LoadedFx {
         static ROW: ServiceRow = ServiceRow::of::<Fx, RealCore>("fx", &KINDS_FX);
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW) }, OK);
+        assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW, None) }, OK);
         LoadedFx
     }
 }

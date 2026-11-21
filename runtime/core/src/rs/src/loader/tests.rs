@@ -228,7 +228,7 @@ impl Registry for FakeRegistry {
         self.asked.borrow_mut().push(Ev::AbiOk(fingerprint));
         self.abi
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&dkrt_abi::service::ServiceRow>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<&dkrt_abi::service::ServiceRow>, _order: Option<u32>) -> i32 {
         self.log.push(match row {
             None => Ev::Add(rec),
             Some(r) => Ev::AddRow(rec, r as *const _),
@@ -591,7 +591,7 @@ unsafe fn put_port(l: &mut Fake, sites: &[((&str, u32, u16, u8, [u8; 8]), u8)]) 
     write_table(&t, &mut bytes).unwrap();
     let j = PROVIDER_MAX - 1;
     let bytes: &'static mut [u8] = Box::leak(bytes.into_boxed_slice());
-    l.provs[j] = ProvRec { block: Some(Block { ptr: bytes.as_mut_ptr(), addr: 0 }), len: bytes.len() as u32, image_size: 16, dsp_image: 0 };
+    l.provs[j] = ProvRec { block: Some(Block { ptr: bytes.as_mut_ptr(), addr: 0 }), len: bytes.len() as u32, image_size: 16, ..ProvRec::EMPTY };
     l.roles[MAX_MODULES + j] = 2;
     records::module(MAX_MODULES + j).used = 1;
     records::module(MAX_MODULES + j).base = 0x7000_0000;
@@ -746,14 +746,14 @@ fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
         // the host tests of the runtime run with the machines row loaded (`svc_rows::test_machines`): the loaded rows start at one
         let fixed = crate::gen_services::STATIC + 1;
         assert_eq!(services().rows.len(), fixed);
-        assert_eq!(r.add(0, None), OK);
-        assert_eq!(r.add(2, Some(&TEST_ROW)), OK);
+        assert_eq!(r.add(0, None, None), OK);
+        assert_eq!(r.add(2, Some(&TEST_ROW), None), OK);
         let t = services();
         assert_eq!(t.rows.len(), fixed + 1);
         assert!(core::ptr::eq(t.rows[fixed], &TEST_ROW));
         // the in-crate prefix and its failed mask are as before, and one row has one owner
         assert_eq!(t.failed, services().failed);
-        assert_eq!(r.add(3, Some(&TEST_ROW)), E_PLAN_OWNER);
+        assert_eq!(r.add(3, Some(&TEST_ROW), None), E_PLAN_OWNER);
         // (`RealRegistry::remove` also runs the registry's own remove, which the cleanup tests count: the row part alone here)
         crate::svc_rows::remove(3);
         assert_eq!(services().rows.len(), fixed + 1);
@@ -951,7 +951,11 @@ fn a_module_import_that_the_runtime_lacks_resolves_to_a_published_export_and_not
 
 /// A module file (role 0) whose header table is `table`, with the relocation `(12, import 0)` of the import `dk_svctest_ping`.
 fn consumer_file(table: &dkneeds::keys::Table) -> Vec<u8> {
-    let mut v = module_file_with(&[(12, 1 << 24)], &[b"dk_svctest_ping"]);
+    consumer_file_with_import(table, b"dk_svctest_ping")
+}
+
+fn consumer_file_with_import(table: &dkneeds::keys::Table, name: &[u8]) -> Vec<u8> {
+    let mut v = module_file_with(&[(12, 1 << 24)], &[name]);
     let keys_off = v.len() - 8;
     v.truncate(keys_off);
     let mut t = vec![0u8; dkneeds::keys::table_size(table)];
@@ -961,6 +965,44 @@ fn consumer_file(table: &dkneeds::keys::Table) -> Vec<u8> {
     v[IMAGE_OFF + 15] = 4;
     seal(&mut v);
     v
+}
+
+#[test]
+fn a_bound_export_requires_the_named_provider_and_compatible_version() {
+    use dkneeds::keys::{name_hash, Need, Pair, Table};
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let symbol = b"local_ping_value";
+    let hash = dkneeds::keys::name_hash_bytes(symbol);
+    let owner = name_hash("local-ping");
+    let wrong_owner = name_hash("other-service");
+    let need = Need { service: owner, min_version: 0x010200, hard: true };
+    let imports = [Pair { a: hash, b: owner }];
+    let empty = Table::default();
+    let missing_need = Table { service_imports: &imports, ..empty };
+    let bound = Table { needs: &[need], ..missing_need };
+    unsafe {
+        for (table, provides, want) in [
+            (&empty, (owner, 0x010200), E_IMPORT),
+            (&missing_need, (owner, 0x010200), E_IMPORT),
+            (&bound, (wrong_owner, 0x010200), E_IMPORT),
+            (&bound, (owner, 0x010100), E_IMPORT),
+            (&bound, (owner, 0x020000), E_IMPORT),
+            (&bound, (owner, 0x010300), OK),
+        ] {
+            let mut l = loader_of(Init::Ok, consumer_file_with_import(table, symbol));
+            l.provs[0].provides = Some(provides);
+            l.exports.publish_with_scope(MAX_MODULES, hash, 0x7000, true).unwrap();
+            assert_eq!(l.load(PATH.as_ptr()), want);
+        }
+        // A declared binding cannot take over a name the runtime already resolves.
+        let known = &KNOWN_IMPORT[..KNOWN_IMPORT.len() - 1];
+        let hash = dkneeds::keys::name_hash_bytes(known);
+        let table = Table { service_imports: &[Pair { a: hash, b: owner }], ..bound };
+        let mut l = loader_of(Init::Ok, consumer_file_with_import(&table, known));
+        l.provs[0].provides = Some((owner, 0x010200));
+        l.exports.publish_with_scope(MAX_MODULES, hash, 0x7000, true).unwrap();
+        assert_eq!(l.load(PATH.as_ptr()), E_IMPORT);
+    }
 }
 
 /// A capacity with room for everything the tests take.

@@ -6,6 +6,7 @@ name = "project service"
 category = "core"
 role = "service"
 service = "project"
+callback_order = 600
 type = "raw"
 author = "digikit"
 status = "experimental"

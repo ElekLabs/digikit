@@ -6,7 +6,8 @@
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
 table = "0.11.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-version = "0.11.0"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+service_registration = "0.11.1" # minimum runtime for callback ordering and service-local APIs
+version = "0.11.1"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -2004,7 +2005,7 @@ DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machin
 # effect pages, and the removal runs the other way round). `rust` is the full path of the type that implements `Service`: the type of a service crate linked into
 # the runtime (`dkrt_svc_NAME::records::Type`, `services/NAME`).
 # `patchkit gen` writes the static table of these rows (runtime/core/src/rs/src/gen_services.rs); a new service is a row here, its crate
-# and its `[records.kinds]`.
+# and its `[records.kinds]`. Card services declare callback order in their own manifests.
 [[service]]
 name = "samples"
 

@@ -189,7 +189,7 @@ fn order_of(mods: &[Option<Keys>], order: &mut [u8; SEL_MAX], cyclic: &mut [bool
 
 /// The most bytes of a header table the boot planner keeps (a module with eight machines, three effects and nine needs has about 260; a larger table is not planned and the loader decides). A provider file's table without its FW, FWNAMES and SITES entries
 /// holds its hooks and exports too: `machines.dks` with its builder exports needs about 480.
-pub(crate) const TABLE_MAX: usize = 640;
+pub(crate) const TABLE_MAX: usize = dkneeds::keys::BOOT_TABLE_MAX;
 
 /// The needs of a module, as the fit function counts them.
 fn needs_of_uses(t: &Keys) -> fit::Needs {
@@ -203,6 +203,23 @@ fn needs_of_uses(t: &Keys) -> fit::Needs {
         arena: if rb != 0 { dkneeds::arena_block(rb).unwrap_or(u32::MAX) } else { 0 },
         ..fit::Needs::default()
     }
+}
+
+/// Local API needs follow the provider's semantic major version. Legacy SDK needs carry a runtime version.
+fn provider_version_fits(t: &Keys, service: u32, have: u32, need: u32) -> bool {
+    if have < need {
+        return false;
+    }
+    if need != 0 && have >> 16 != need >> 16 {
+        let mut i = 0;
+        while let Some((_, owner, _)) = t.words(tag::SERVICE_IMPORTS, i) {
+            if owner == service {
+                return false;
+            }
+            i += 1;
+        }
+    }
+    true
 }
 
 /// The refusal for the hard needs of entry `t`, if one is not met: a service of the runtime (at most the runtime's version) or one an accepted provider
@@ -229,7 +246,7 @@ fn check_needs(env: &Env, t: &Keys, provs: &[Option<Keys>], pdone: &[bool; PROVI
                 if let Some(ti) = &provs[i] {
                     if let Some(v) = provided_version(ti, service) {
                         found = true;
-                        if v >= min_version {
+                        if provider_version_fits(t, service, v, min_version) {
                             met = true;
                         }
                     }
@@ -514,7 +531,7 @@ pub fn failed_need(services: &ServiceTable, t: &Keys, provs: &[Option<Keys>], lo
         let mut i = 0;
         while i < provs.len() {
             if let Some(ti) = &provs[i] {
-                if provided_version(ti, n.0).is_some() {
+                if provided_version(ti, n.0).is_some_and(|v| provider_version_fits(t, n.0, v, n.1)) {
                     offered = true;
                     if loaded[i] {
                         met = true;
@@ -680,7 +697,7 @@ mod tests {
     }
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[] };
 
     #[test]
     fn a_module_with_no_table_and_a_module_with_nothing_to_share_are_accepted_in_selection_order() {

@@ -3319,6 +3319,7 @@ dependencies = [
  "midir",
  "object",
  "plusdrive-format",
+ "proc-macro2",
  "regex-lite",
  "rustc-demangle",
  "selas",

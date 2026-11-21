@@ -69,6 +69,8 @@
         "test/shortcut-demo:pack",
         "test/svc-test-user:pack",
         "test/svc-test:pack",
+        "test/local-ping:pack",
+        "test/local-ping-user:pack",
         "test/project-user:pack",
         "core/services/fx:pack",
         "core/services/machines:pack",

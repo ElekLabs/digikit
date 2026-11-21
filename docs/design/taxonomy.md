@@ -7,13 +7,14 @@ This file defines the terms, layers and card layout. [Architecture](../ARCHITECT
 | Layer | Holds | Must not hold | Calls and is called by | File |
 | --- | --- | --- | --- | --- |
 | Host | patchkit, workbench-core, desktop, site, wb, dk-session | device logic that exists nowhere else; imports of apps from below `apps/` | reaches the device only through SysEx, USB and the card | patched `.syx`, `dist/` |
-| Modules (L4) | content, behaviour and own UI: machine, fx, filter, lfo-shape, tool | hooks, PROVIDES, KINDS and SLOTS items (`role_ok` refuses them); firmware names; device ids; another module's data | imports SDK functions by name; the runtime calls `init`, `fini`, `tick` and `menu`; the service calls it; UI work runs in the UI task only | `.dkm`, role 0 |
-| Services (L3) | mechanism: record kinds, validation, lifecycle, exports, sticky numbers, the meaning of hooks, data per domain | firmware addresses and bytes; device literals; calls into another service; after port step 3, device routines | uses `CoreApi` and SDK imports; the core calls it through Service rows, modules call its exports by name, stubs and port routines call it through slots it fills | `.dks`, role 1; crate `dkrt-svc-<x>` and `dks/` |
-| Port | the facts of one device and one firmware: anchors, hook sites with check values, the firmware identity; after step 3 the hook routines of all services | service logic, state, record kinds, firmware bytes | read by the loader; a routine reaches a service only through a pointer slot | `.dkport`, role 2 |
-| Runtime (image, L2 and L1) | the kind-free core (load, plan, store, settings, transport, safe mode, tick, DSP load), platform modules, the installer, the image halves of services, adapters, fixes | a machine, effect or service name in the core; a hook that a `.dks` could own | reaches stock firmware through bindings; goes up only through declared Service rows and slots | patched firmware from committed `.dko.json` |
-| Stock (L0) | Elektron firmware, DSP image, Elektron files | any digikit value that stock code cannot handle | | |
+| Modules (L4) | Content, behavior and own UI: machine, fx, filter, lfo-shape, tool | Provider declarations, firmware hooks or names, device IDs or another module's data | Uses SDK or service-local imports. The runtime calls the module lifecycle and services call the module's domain callbacks | `.dkm`, role 0 |
+| Services (L3) | Versioned domain APIs and policy. May own record kinds, validation, state, hooks and slot targets | Embedded firmware addresses or bytes, direct calls into another service's implementation | Uses `CoreApi` and declared imports. The core calls declared rows and consumers call exports | `.dks`, role 1; shipped crates under `services/NAME` |
+| Runtime core (L2) | Discovery, planning, loading, registry, safe mode, tick, generic DSP loading, store, settings broker and transport | Domain builders, domain record semantics and stock patch sites | Uses platform interfaces and dispatches declared service callbacks | `runtime/core`, patched into the image |
+| Port | The identity of one device and firmware version, named anchors and hook sites with check values | Service state, record kinds and firmware bytes | Read by the loader. Supplies bindings for a matching image | `.dkport`, role 2 |
+| Image capabilities (L1) | Reset installer, adapters, stock fallback code, shared reservations and firmware-time plug-in points | Content behavior that belongs to a loaded module | Reaches stock firmware through bindings. Slots can dispatch to a loaded service | `runtime/platform/` and `image-modules/`, patched into the image |
+| Stock (L0) | Elektron firmware, DSP image, Elektron files | Digikit values outside the stock contract | | |
 
-What can change while the device runs: content modules (E5, E5c). A service can be loaded but not replaced, until port step 3 and S3. The port file and the image need a restart or a flash.
+Supported content modules can change while the device runs. Card services and port files take effect at boot. Image changes require flashing. The [architecture inventories](../ARCHITECTURE.md#shipped-services) show the current division between services and image capabilities.
 
 ## Terms
 
@@ -25,13 +26,14 @@ One meaning per word. A second use gets a new word.
 | image | the patched firmware only. Qualify the others: module code image, DSP image, card image. The repo folder for image modules is `image-modules/`. |
 | image module | a `module.toml` unit patched into the image. Its role gives its class. |
 | platform | the `Platform` trait and the image modules behind it. |
-| adapter | an image module for one device function that is no service half and no runtime part: usb-bulk, plusdrive-write, sdhc-large. Image-module manifests currently use `role = "adapter"` for a wider set of L1 modules. |
-| image half | the part of a service that must be in the image (class `image-half`). |
+| adapter | an image module implementing platform or firmware integration. Manifests also use `role = "adapter"` for plug-in points, fixes and proofs. |
+| image capability | a resident facility offered by the patched image. A capability can support multiple services, and a service can use the port without a dedicated image module. |
+| library | code linked into its callers at build time. A library has no provider identity or runtime registration. A shared live resource still needs an owner. |
 | stub | image code at a site that calls a filled pointer slot. The fallback for an absent optional import is the "absent-import fallback". |
 | slot | a pointer word that a service fills. Always qualified (`<service>_<site>`). |
 | port | one device with one firmware version: id `<device>-<version>`, identity `fw_id`. `DkInfoFull.port` (today the device name) is renamed `device`. A MIDI port is a "MIDI port". |
 | port file | the role-2 file of one port. |
-| service | a named, versioned L3 unit that owns record kinds, exports and hooks. `type = "service"` on content modules goes. The import groups of sdk.md are "API groups". SysEx service commands are "module commands". |
+| service | a named, versioned L3 provider. Its contract can include exports, callback rows, record kinds, hooks or slot fills. SDK import groups are API groups. |
 | provider | a file that the boot plan orders and refuses by a name it provides: a service file or the port file. |
 | module | a content module: `.dkm`, role 0, from the card. The other units are "image module" and "service file". |
 | module kind | derived from the keys: machine, fx, filter, lfo-shape, tool. One vocabulary: the template names. `category` takes the same value; `type` goes. |
@@ -69,9 +71,9 @@ fixed sectors outside the table, two copies each: the settings record, the selec
 
 ## Repo layout
 
-The E8 move uses the [directory map](../plans/e8-moves.json). Firmware plug-in points live in `image-modules/points/`. Proofs, including `dsp-stereo-proof`, live in `image-modules/proofs/`. The manifest roles follow [Architecture](../ARCHITECTURE.md#roles).
+The E8 move uses the [directory map](../plans/e8-moves.json). Firmware plug-in points live in `image-modules/points/`, shared libraries in `services/{bitmap,rows}/` and proofs in `image-modules/proofs/`. See the [manifest roles](../ARCHITECTURE.md#roles) and [plug-in point inventory](../ARCHITECTURE.md#firmware-plug-in-points) for current ownership.
 
-The tree and table below record the original target, including proposed follow-up moves.
+The following tree and table preserve the original E8 proposal and its proposed follow-up moves.
 
 ```text
 runtime/{core, platform/<name>, apps/digikit-menu}
@@ -110,7 +112,7 @@ What does not move or change name: module ids, Nx project names (a module id or 
 
 Code that reads the paths and must change with the move: `tools/nx/modules.mjs` (the glob and `startsWith('modules/')`), `tools/devtools/layercheck.py`, literal paths in `modules/core/runtime/project.json`, Cargo path dependencies, the patchkit manifest roots. Before the move, check that the Rust objects embed no source path.
 
-Proposed roles in `module.toml`: `runtime`, `installer`, `platform`, `image-half` (with `service = "<x>"`), `adapter`, `fix`, `proof`, `app`, `service`.
+Roles proposed at the time in `module.toml`: `runtime`, `installer`, `platform`, `image-half` (with `service = "<x>"`), `adapter`, `fix`, `proof`, `app`, `service`.
 
 ## Naming rules
 
@@ -120,9 +122,11 @@ These extend [sdk.md](../plans/sdk.md) section 10.
 | --- | --- |
 | SDK contract | `dk_<group>_<verb>`, `dk_<thing>`, `DK_<GROUP>_<NAME>` |
 | Runtime core | C API `dkrt_<noun>_<verb>`, statics `DKRT_<NAME>`, crates `dkrt-<part>` |
-| Service | crate `dkrt-svc-<x>`, file `<x>.dks`, id `core/services/<x>`; exports for the core only: `dk_<x>_<what>` with `internal = true` |
+| Shipped service | crate `dkrt-svc-<x>`, file `<x>.dks`, id `core/services/<x>`, core-only exports `dk_<x>_<what>` with `internal = true` |
 | Image module | id `core/<name>`; symbols with the module's short prefix; slots `<service>_<site>` (after port step 3 the device part goes: `lfo_dt2_tick_call` becomes `lfo_tick_call`) |
 | Port | anchors `cf.<area>.<class>.<name>`; imports `dk_fw_`, `dk_exit_`, `dk_ret_`, `dk_stock_`, `dk_tail_`; routines `port_<service>_<hook>`; callbacks into a service `dk_<service>_<verb>` in a declared group |
+
+A local service package may use a different ID prefix. The last component of its ID must match the `service` name in `[module]` and the stem of its `.dks` file. The [local-ping fixture](../../tests/fixtures/modules/local-ping/module.toml) uses ID `test/local-ping` for service `local-ping`.
 
 Rules:
 
@@ -134,7 +138,7 @@ Rules:
 6. Module kind names are the template names. `category` has the same value where it can change (E8 checks that). `type` goes.
 7. Extensions: `.dkm` role 0, `.dks` role 1, `.dkport` role 2, `.dkp` project file.
 
-## Order
+## Original rollout order
 
 1. This document and the plan edits.
 2. E5 (merged).

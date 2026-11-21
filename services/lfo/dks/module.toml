@@ -5,6 +5,7 @@ name = "lfo service"
 category = "core"
 role = "service"
 service = "lfo"
+callback_order = 400
 type = "raw"
 author = "digikit"
 status = "experimental"

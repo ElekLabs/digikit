@@ -5,6 +5,7 @@ name = "machines service"
 category = "core"
 role = "service"
 service = "machines"
+callback_order = 200
 type = "raw"
 author = "digikit"
 status = "experimental"
