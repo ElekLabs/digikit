@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   firmwareDir as stockFirmwareDir,
-  STOCK_SYX,
+  stockSyx,
   stockImage as stockImageOf,
 } from '@digi/workbench-core/node/stock-image.ts';
 import { parse as parseToml } from 'smol-toml';
@@ -28,8 +28,8 @@ function firmwareTable(): Record<string, { syx: string; ready: string }> {
   }
   const ready = (device: Device) => readyDirs.get(device) ?? '';
   return {
-    'dt2 1.17': { syx: STOCK_SYX.dt2, ready: ready('dt2') },
-    'dn2 1.12': { syx: STOCK_SYX.dn2, ready: ready('dn2') },
+    'dt2 1.17': { syx: stockSyx('dt2'), ready: ready('dt2') },
+    'dn2 1.12': { syx: stockSyx('dn2'), ready: ready('dn2') },
   };
 }
 
