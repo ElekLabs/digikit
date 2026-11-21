@@ -182,8 +182,9 @@ export default function RemotePage(props: {
           No firmware is loaded in the emulator. Open one on the Emulator page, or choose a MIDI device as the target.
         </p>
       </Show>
-      {/* the body stays mounted while hidden, so the side panels keep their state (the loops above ask nothing while noEmulator) */}
-      <div hidden={noEmulator()}>
+      {/* the body stays mounted while hidden, so the side panels keep their state (the loops above ask nothing while noEmulator);
+          display: contents keeps the page's flex layout as if the wrapper were not there */}
+      <div style={{ display: noEmulator() ? 'none' : 'contents' }}>
         <Show when={remotePaused(busy())}>
           <p class="note" role="status">
             Paused during the transfer.
