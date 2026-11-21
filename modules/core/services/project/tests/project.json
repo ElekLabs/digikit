@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/services/project-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/runtime"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["project.device.test.ts"],
+        "dsp": "sharc",
+        "plusdrive": true,
+        "tags": ["C:state", "C:storage", "C:loading"],
+        "modules": ["digikit/debug", "test/project-user", "test/sine", "core/services/project", "core/services/machines"],
+        "sources": [
+          "packages/dk-session/src/dkupload-core.ts",
+          "packages/dk-session/src/gen_proto.ts"
+        ]
+      }
+    ]
+  }
+}

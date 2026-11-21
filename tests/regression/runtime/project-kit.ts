@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { deviceError, type DkSession } from '@digi/dk-session';
+import { deviceError, LogCursor, runtimeEvent, type Clock, type DkSession, type RuntimeEvent } from '@digi/dk-session';
 import { CMD, READ_MAX } from '@digi/dk-session/gen_proto';
-import { button, encoder, type Device, type Session } from '@digi/test-support';
+import { button, encoder, pollUntil, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { postRaw, readSectors } from './card-kit.ts';
 import { REDRAW, SETTLE, bounded, dspBytes, pickSine, word, type Rt } from './fx-live.ts';
@@ -248,24 +248,370 @@ export async function buildPanelProject(
   await rt.ui.tap('RECORD', { until: { ms: 200, why: REDRAW } });
 }
 
-/** Save the project to slot 001 through FUNC+SETTINGS. */
-export async function savePanelProject(rt: Rt): Promise<void> {
-  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW }, held: 'FUNC' });
-  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // slot 001: opens the name editor
-  await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save
-  // No state shows the end of the write: the card overlay of a repeated save may be byte-equal, and the firmware has no save-done word. Measure before shortening.
-  await rt.ui.wait({ ms: 3500, why: SETTLE });
+// ---- the runtime log, for waits on the project service ---------------------------------------------------------------------------------
+
+/** Protocol calls on the paused emulator (`CardRig.usb` of a runtime). */
+export type ProtocolRun = <T>(run: (dk: DkSession) => Promise<T>) => Promise<T>;
+
+/**
+ * The events of the runtime log kept in a list, so a test can look at an event after a wait for another one (`RuntimeEvents.until` drops what it passes). `since` of every call is a
+ * `mark()` taken before the action. Module messages (`dk_log` of a module, MOD_LOG) arrive only for a module whose log level is raised: `watch` names those modules (by id) and
+ * `raise()` sets them again after a load, which gives the module a new record.
+ */
+export class ProjectLog {
+  private readonly cursor: LogCursor;
+  private readonly list: RuntimeEvent[] = [];
+  private readonly usb: ProtocolRun;
+  private readonly clock: Clock;
+  private readonly watch: string[];
+
+  private constructor(usb: ProtocolRun, clock: Clock, watch: string[]) {
+    this.usb = usb;
+    this.clock = clock;
+    this.watch = watch;
+    this.cursor = new LogCursor({ logPage: (from, quick) => usb((dk) => dk.logPage(from, quick)) });
+  }
+
+  /** The log from the newest event on. */
+  static async open(usb: ProtocolRun, clock: Clock, watch: string[] = []): Promise<ProjectLog> {
+    const log = new ProjectLog(usb, clock, watch);
+    await log.cursor.fromNewest();
+    await log.raise();
+    return log;
+  }
+
+  /** The log of a boot that just started: from its first event. */
+  static async openBoot(usb: ProtocolRun, clock: Clock, watch: string[] = []): Promise<ProjectLog> {
+    const log = new ProjectLog(usb, clock, watch);
+    log.cursor.fromBoot();
+    await log.raise();
+    return log;
+  }
+
+  /** The log level of the watched modules that are loaded goes to DEBUG (3); the other levels stay. */
+  async raise(): Promise<void> {
+    if (!this.watch.length) return;
+    await this.usb(async (dk) => {
+      const config = await dk.logConfig();
+      const levels = [...config.modules];
+      for (const m of await dk.modules())
+        if (this.watch.includes(m.name) && m.index < levels.length) levels[m.index] = 3;
+      await dk.setLogConfig(config.level, levels);
+    });
+  }
+
+  /** Read what is new; true when the cursor saw a new boot (the list then holds only the new boot's events). */
+  async pump(): Promise<boolean> {
+    const r = await this.cursor.read();
+    if (r.lost > 0) throw new Error(`the runtime log lost ${r.lost} events before they were read`);
+    if (r.newBoot) this.list.length = 0;
+    this.list.push(...r.events.map(runtimeEvent));
+    return r.newBoot;
+  }
+
+  /** The place in the list to pass as `since`: after everything read so far. */
+  async mark(): Promise<number> {
+    await this.pump();
+    return this.list.length;
+  }
+
+  /** The events of `kind` (all that match) from `since` on, as read so far (call `pump` or a wait first). */
+  all(kind: string, match: (e: RuntimeEvent) => boolean = () => true, since = 0): RuntimeEvent[] {
+    return this.list.slice(since).filter((e) => e.kind === kind && match(e));
+  }
+
+  /** `MOD_LOG` lines of a module message (`dk_log` text) from `since` on: the `value` of each. */
+  messages(msg: string, since = 0): number[] {
+    return this.all('MOD_LOG', (e) => e.fields.msg === msg, since).map((e) => Number(e.fields.value) >>> 0);
+  }
+
+  /** The first event of `kind` that matches, from `since` on; waits in emulated time. */
+  async until(
+    kind: string,
+    match: (e: RuntimeEvent) => boolean,
+    { since = 0, withinMs = 30_000, what = kind }: { since?: number; withinMs?: number; what?: string } = {},
+  ): Promise<RuntimeEvent> {
+    const found = await pollUntil(
+      this.clock,
+      async () => {
+        await this.pump();
+        return this.all(kind, match, since)[0];
+      },
+      (e) => e !== undefined,
+      { withinMs, message: () => `the event ${what} (seen from ${since}: ${this.summary(since)})`, intervalMs: 50 },
+    );
+    return found!;
+  }
+
+  /** A short account of the events read from `since` on: the count of each kind, then the last few events. */
+  summary(since = 0): string {
+    const tail = this.list.slice(since);
+    const counts = new Map<string, number>();
+    for (const e of tail) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1);
+    const last = tail
+      .filter((e) => e.kind.startsWith('PROJECT_'))
+      .concat(tail.slice(-3))
+      .map((e) => `${e.kind} ${JSON.stringify(e.fields)}`);
+    return `${tail.length} events [${[...counts].map(([k, n]) => `${k} x${n}`).join(', ')}]; last: ${last.join(' | ') || 'none'}`;
+  }
+
+  /** The events seen so far from `since` on, one per line (for a failure message). */
+  seen(since = 0): string {
+    return this.list
+      .slice(since)
+      .map((e) => `#${e.seq} ${e.kind} ${JSON.stringify(e.fields)}`)
+      .join('\n');
+  }
 }
 
-/** Load slot 001 through SETTINGS; with `health` (default) check the session has no fault afterwards. */
-export async function loadPanelProject(rt: Rt, { health = true } = {}): Promise<void> {
+/** `PROJECT_SAVED`, `PROJECT_LOADED` of `slot`. */
+export const forSlot = (slot: number) => (e: RuntimeEvent) => Number(e.args[0]) === slot;
+
+/** The FNV-1a (32 bits) of a module id, the `id_hash` of PROJECT_MODULE (`name_hash` of the SDK). */
+export function idHash(id: string): number {
+  let h = 0x811c9dc5;
+  for (const b of Buffer.from(id)) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+  return h;
+}
+
+/** The paths of the store below `projects/` (the files of the slots and `projects/archive/`). */
+export const projectPaths = async (usb: ProtocolRun): Promise<string[]> =>
+  (await usb((dk) => dk.list('projects/'))).map((e) => e.path);
+
+/** The store path of the file of `slot` (`projects/<slot as 3 digits>-<name>.dkp`) among `paths`, or undefined. */
+export const slotFile = (paths: string[], slot: number): string | undefined =>
+  paths.find((p) => p.startsWith(`projects/${String(slot).padStart(3, '0')}-`) && p.endsWith('.dkp'));
+
+/** A whole store file, read in pieces of `READ_MAX`. */
+export async function readStoreFile(dk: Pick<DkSession, 'read'>, path: string): Promise<Buffer> {
+  let out = Buffer.alloc(0);
+  for (;;) {
+    const r = await dk.read(path, out.length, READ_MAX);
+    out = Buffer.concat([out, r.bytes]);
+    if (out.length >= r.size || r.bytes.length === 0) return out.subarray(0, r.size);
+  }
+}
+
+/** The fields of the header of a `.dkp` (docs/design/digikit-project.md section 4) and its sections (offset 42 to `used`). */
+export function dkpOf(file: Buffer) {
+  const used = file.readUInt32BE(34);
+  const nameLen = file[9]!;
+  return {
+    slot: file[8]!,
+    name: file.subarray(10, 10 + nameLen).toString('latin1'),
+    stamp: file.readUInt32BE(26),
+    counter: file.readUInt32BE(30),
+    used,
+    sections: file.subarray(42, used),
+  };
+}
+
+/** A module's live job that ends: UNLOAD of `modulePath`, then wait (emulated time) until the job counter `DKRT_BOOT + 252` moved and the job is done. The job needs the DSP, and the paused protocol's short steps do not reach its end (as in the reload round-trip test). */
+export async function unloadLive(rt: Rt, usb: ProtocolRun, plan: RuntimePlan, modulePath: string): Promise<void> {
+  const reloads = planSymbol(plan, 'DKRT_BOOT') + 252;
+  const before = await word(rt.session, reloads);
+  await usb((dk) => dk.unload(modulePath));
+  const end = await pollUntil(
+    rt.clock,
+    async () => ({ st: await usb((dk) => dk.reloadState()), n: await word(rt.session, reloads) }),
+    (v) => v.st.phase === 2 && v.n > before,
+    { withinMs: 20_000, message: `the unload of ${modulePath} finished` },
+  );
+  expect({ result: end.st.result, unloaded: end.st.unloaded }, `the unload of ${modulePath}`).toEqual({
+    result: 0,
+    unloaded: true,
+  });
+}
+
+// ---- the project menus of the panel ------------------------------------------------------------------------------------------------------
+
+/**
+ * Options of the project flows. `events`: with the project service loaded, the flow waits on its event (PROJECT_SAVED, PROJECT_LOADED) instead of a fixed time. `from`: the slot of the
+ * current project (default 0): SAVE PROJECT AS and LOAD PROJECT open with the cursor on it (on the first slot when there is none); MANAGE PROJECTS always opens on the first slot. Slots are the
+ * firmware's numbers (0 to 127, the events' slot): the list shows slot 0 as 001.
+ */
+export interface ProjectFlow {
+  events?: ProjectLog;
+  from?: number;
+}
+
+/** The stock save and load dialogs stay up a moment after the service's event (it is logged at the end of the firmware's work, before the dialog closes): emulated ms to let them close before the next key. */
+const DIALOG_MS = 2000;
+
+/** Move the list cursor from slot `from` to slot `to` with UP and DOWN (the lists do not wrap). */
+async function slotCursor(rt: Rt, from: number, to: number): Promise<void> {
+  for (let i = 0; i < Math.abs(to - from); i++) {
+    await rt.ui.tap(to > from ? 'DOWN' : 'UP', { until: { drained: true } });
+    await rt.ui.wait({ ms: 80, why: REDRAW });
+  }
+}
+
+/**
+ * SETTINGS, PROJECT, then item `item` of it (0 LOAD PROJECT, 1 SAVE PROJECT AS, 2 MANAGE PROJECTS) opened. The PROJECT menu keeps its cursor between visits and does not wrap, so
+ * two UP presses first put it on LOAD PROJECT.
+ */
+async function openProjectItem(rt: Rt, item: number): Promise<void> {
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // PROJECT
+  for (let i = 0; i < 2; i++) await rt.ui.tap('UP', { until: { ms: 200, why: REDRAW } });
+  for (let i = 0; i < item; i++) await rt.ui.tap('DOWN', { until: { ms: 200, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
+}
+
+/**
+ * Leave a project list for the main screen: NO five times. Three reach the main screen from a list (list, PROJECT, SETTINGS); a message still shown after a paste takes one more;
+ * a NO on the main screen does nothing, so the extra presses are safe.
+ */
+async function leaveMenus(rt: Rt): Promise<void> {
+  for (let i = 0; i < 5; i++) await rt.ui.tap('NO', { until: { ms: 300, why: REDRAW } });
+}
+
+/**
+ * In MANAGE PROJECTS (which always opens on the first slot, whatever the current project): open the command panel of `slot` (RIGHT) and take command `index` (0 CLEAR, 1 DELETE,
+ * 2 RENAME, 3 LOAD FROM, 4 SAVE TO, 5 TOGGLE lock, 6 PURGE ALL). The panel stays open after a command; `closeManage` closes it (LEFT) and leaves the menus.
+ */
+async function manage(rt: Rt, slot: number, index: number): Promise<void> {
+  await openProjectItem(rt, 2);
+  await slotCursor(rt, 0, slot);
+  await rt.ui.tap('RIGHT', { until: { ms: 500, why: REDRAW } });
+  for (let i = 0; i < index; i++) await rt.ui.tap('DOWN', { until: { ms: 200, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
+}
+
+async function closeManage(rt: Rt): Promise<void> {
+  await rt.ui.tap('LEFT', { until: { ms: 300, why: REDRAW } });
+  await leaveMenus(rt);
+}
+
+/**
+ * Save the current project through FUNC+SETTINGS. A project that has no slot yet gets the slot list (cursor on 001), YES opens the name editor and YES saves; a project with a slot
+ * gets "SAVE ALL PATTERNS AND PROJ SETTINGS? Y/N", YES saves and the second YES lands on the main screen, where it does nothing. `from` is the slot the save goes to (default 0).
+ * With `events` the end is PROJECT_SAVED of that slot (the event is returned); without, a fixed wait.
+ */
+export async function savePanelProject(
+  rt: Rt,
+  { events, from = 0 }: ProjectFlow = {},
+): Promise<RuntimeEvent | undefined> {
+  const since = await events?.mark();
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW }, held: 'FUNC' });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // the slot (opens the name editor), or the confirmation (saves)
+  await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save; or nothing on the main screen
+  if (events) {
+    const saved = await events.until('PROJECT_SAVED', forSlot(from), { since, what: `PROJECT_SAVED slot ${from}` });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+    return saved;
+  }
+  // No state shows the end of the write: the card overlay of a repeated save may be byte-equal, and the firmware has no save-done word. Measure before shortening.
+  await rt.ui.wait({ ms: 3500, why: SETTLE });
+  return undefined;
+}
+
+/** Load slot 001 through SETTINGS; with `health` (default) check the session has no fault afterwards. With `events` the end is PROJECT_LOADED of slot 1. */
+export async function loadPanelProject(
+  rt: Rt,
+  { health = true, events }: { health?: boolean } & ProjectFlow = {},
+): Promise<RuntimeEvent | undefined> {
   const { session } = rt;
+  const since = await events?.mark();
   await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } });
   for (let i = 0; i < 3; i++) await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
   await rt.ui.tap('YES', { until: { drained: true } });
   // No firmware word or runtime event marks the end of `loadProjectFromMmc` (only the popup text); callers read the loaded state afterwards. Measure before shortening.
-  await rt.ui.wait({ ms: 6000, why: SETTLE });
+  let loaded: RuntimeEvent | undefined;
+  if (events) {
+    loaded = await events.until('PROJECT_LOADED', forSlot(1), { since, what: 'PROJECT_LOADED slot 1' });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+  } else await rt.ui.wait({ ms: 6000, why: SETTLE });
   if (health) await bounded(() => session.expectNoFault('project loaded'));
+  return loaded;
+}
+
+// The flows below follow the stock menus as seen on screen (the same on both devices): SETTINGS > PROJECT holds LOAD PROJECT, SAVE PROJECT AS, MANAGE
+// PROJECTS. SAVE PROJECT AS and MANAGE PROJECTS list all 128 slots; LOAD PROJECT lists the saved projects only, then CREATE NEW. A slot number is the firmware's (0 to 127),
+// as in the log events; the list shows slot 0 as 001.
+
+/**
+ * SAVE PROJECT AS slot `slot`: the slot, YES (the name editor with the project's name), YES. With `events` the end is PROJECT_SAVED of the slot. The flow ends on the main screen
+ * after the save returns to it.
+ */
+export async function saveProjectAs(
+  rt: Rt,
+  slot: number,
+  { events, from = 0 }: ProjectFlow = {},
+): Promise<RuntimeEvent | undefined> {
+  const since = await events?.mark();
+  await openProjectItem(rt, 1);
+  await slotCursor(rt, from, slot);
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // the slot: opens the name editor
+  await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save (the save returns to the PROJECT menu)
+  let saved: RuntimeEvent | undefined;
+  if (events) {
+    saved = await events.until('PROJECT_SAVED', forSlot(slot), { since, what: `PROJECT_SAVED slot ${slot}` });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+  } else await rt.ui.wait({ ms: 3500, why: SETTLE });
+  await leaveMenus(rt);
+  return saved;
+}
+
+/**
+ * LOAD PROJECT slot `slot`. The list holds the saved projects in slot order (`saved`), the cursor starts on the current one (`from`), and YES loads at once (no confirmation when
+ * nothing is unsaved). With `events` the end is PROJECT_LOADED of the slot.
+ */
+export async function loadProject(
+  rt: Rt,
+  slot: number,
+  { events, from = 0, saved }: ProjectFlow & { saved: readonly number[] },
+): Promise<RuntimeEvent | undefined> {
+  const rows = [...saved].sort((a, b) => a - b);
+  const at = rows.indexOf(from);
+  const to = rows.indexOf(slot);
+  if (at < 0 || to < 0)
+    throw new Error(`loadProject: slots ${from} and ${slot} must be in the saved list ${rows.join(',')}`);
+  const since = await events?.mark();
+  await openProjectItem(rt, 0);
+  await slotCursor(rt, at, to);
+  await rt.ui.tap('YES', { until: { drained: true } }); // the project: loads
+  let loaded: RuntimeEvent | undefined;
+  if (events) {
+    loaded = await events.until('PROJECT_LOADED', forSlot(slot), { since, what: `PROJECT_LOADED slot ${slot}` });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+  } else await rt.ui.wait({ ms: 6000, why: SETTLE });
+  await leaveMenus(rt);
+  return loaded;
+}
+
+/**
+ * RENAME of the project in slot `slot`: MANAGE PROJECTS, the slot, RIGHT, RENAME, the PROJECT NAME editor, SETTINGS for a random name, YES. The test reads the new name from the
+ * firmware or the store after the next save (the store follows the save, not the rename).
+ */
+export async function renameProject(rt: Rt, slot: number): Promise<void> {
+  await manage(rt, slot, 2);
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } }); // a random name
+  await rt.ui.tap('YES', { until: { drained: true } });
+  await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE }); // the rename writes the slot header
+  await closeManage(rt);
+}
+
+/**
+ * COPY of slot `source` and PASTE to slot `to` in MANAGE PROJECTS: FUNC+RECORD on the source ("COPY PROJECT"), FUNC+STOP on the destination, YES to "Replace ... CONFIRM Y/N".
+ */
+export async function copyPasteProject(rt: Rt, source: number, to: number): Promise<void> {
+  await openProjectItem(rt, 2);
+  await slotCursor(rt, 0, source);
+  await rt.ui.tap('RECORD', { until: { ms: 500, why: REDRAW }, held: 'FUNC' });
+  await slotCursor(rt, source, to);
+  await rt.ui.tap('STOP', { until: { ms: 500, why: REDRAW }, held: 'FUNC' });
+  await rt.ui.tap('YES', { until: { drained: true } }); // Replace ... CONFIRM Y/N
+  await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE }); // the paste runs with a progress dialog that takes the keys
+  await leaveMenus(rt);
+}
+
+/** CLEAR of slot `slot`: MANAGE PROJECTS, the slot, RIGHT, CLEAR, YES to "CLEAR '<name>'? Y/N". */
+export async function clearProject(rt: Rt, slot: number): Promise<void> {
+  await manage(rt, slot, 0);
+  await rt.ui.tap('YES', { until: { drained: true } }); // the confirmation
+  await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE }); // the clear writes the card with a progress dialog
+  await closeManage(rt);
 }
 
 /** Choose each of the first `positions` entries of the machine list on the selected track and turn the encoders of its page. */
