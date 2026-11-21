@@ -31,7 +31,7 @@ pub trait CoreApi: crate::mem::FwMem {
     fn legacy_state(&self) -> [u8; 32];
     /// Zero those bytes in the record on the card, once the service has its state in its own settings key; `OK` or an error (the service tries again at the next boot).
     unsafe fn legacy_state_clear(&self) -> i32;
-    /// The keys of record kind `kind` in the header table of the module at selection index `at` of the boot's plan (`out` takes at most 8): the keys a service numbers
+    /// The keys of record kind `kind` in the header table at selection index `at` of the active or proposed selection (`out` takes at most 8): the keys a service numbers
     /// or checks a record against. None for an index the plan refused, one without a table, and a kind the table does not list. The core reads the table and names no kind.
     fn keys_of(&self, at: u32, kind: u32, out: &mut [u32; 8]) -> usize;
 

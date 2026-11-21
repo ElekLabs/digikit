@@ -1033,6 +1033,118 @@
   },
   {
    "addend": 0,
+   "offset": 60,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi7keys_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRSmNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 146,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi7keys_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRSmNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 134,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 146,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 22,
    "section": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records12apply_recordNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3mem4rd32",
@@ -1216,280 +1328,280 @@
   {
    "addend": 0,
    "offset": 134,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 144,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 150,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 160,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 172,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky8repeated",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 308,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 316,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky10referenced",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 328,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 336,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky11lowest_free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 446,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 462,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi3log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 552,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 550,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6wanted",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 620,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 626,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi3log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 654,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 660,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 664,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 708,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 718,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 670,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 724,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 734,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 752,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky10referenced",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 772,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky11lowest_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 820,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 740,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 830,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 750,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 782,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky10referenced",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 802,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky11lowest_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 850,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 860,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 134,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 144,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 150,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 160,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 172,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky8repeated",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 308,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 316,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky10referenced",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 328,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 336,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky11lowest_free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 446,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 462,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi3log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 552,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 550,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6wanted",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 620,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 626,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi3log",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 654,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 660,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 664,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 708,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 718,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 670,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 724,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 734,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 752,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky10referenced",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 772,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky11lowest_free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 820,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 740,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 830,
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "offset": 750,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 782,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky10referenced",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 802,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky11lowest_free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 850,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.11",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 860,
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
@@ -3714,198 +3826,261 @@
   },
   {
    "addend": 0,
-   "offset": 24,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
+   "offset": 22,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4saveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
-   "addend": 4,
-   "offset": 30,
+   "addend": 0,
+   "offset": 10,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 48,
+   "offset": 38,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_preview",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx9is_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter6storedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
-   "addend": 12,
-   "offset": 58,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
-   "type": "cf.32"
-  },
-  {
    "addend": 0,
-   "offset": 78,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
-   "type": "cf.32"
-  },
-  {
-   "addend": 76,
-   "offset": 94,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 204,
-   "offset": 100,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 116,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 332,
    "offset": 126,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
+   "symbol": "memcpy",
    "type": "cf.32"
   },
   {
-   "addend": 204,
+   "addend": 12,
    "offset": 136,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 12,
-   "offset": 146,
+   "addend": 0,
+   "offset": 158,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN_FILTERS",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 168,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
    "offset": 174,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 12,
-   "offset": 198,
+   "addend": 4,
+   "offset": 180,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 4,
+   "offset": 186,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 76,
+   "offset": 196,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 204,
    "offset": 206,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4saveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 218,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 260,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi7keys_of",
    "type": "cf.32"
   },
   {
    "addend": 332,
-   "offset": 284,
+   "offset": 216,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
    "addend": 4,
-   "offset": 290,
+   "offset": 272,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 4,
-   "offset": 314,
+   "addend": 332,
+   "offset": 282,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 4,
+   "addend": 204,
+   "offset": 292,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 302,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 324,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
    "offset": 330,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 4,
-   "offset": 346,
+   "addend": 0,
+   "offset": 348,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 360,
+   "offset": 358,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 374,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 380,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter14BEFORE_PREVIEW",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 392,
+   "offset": 386,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 396,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 398,
+   "offset": 406,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 416,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 410,
+   "offset": 438,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 464,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 474,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 484,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN_FILTERS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 506,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
    "type": "cf.32"
   },
   {
@@ -6969,6 +7144,41 @@
   },
   {
    "addend": 0,
+   "offset": 34,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi12legacy_state",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..rodata.global.19",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RNvXs7_NtNtCs6uNbiqmv1Ak_4core5array8equalityhINtB5_11SpecArrayEqhKj20_E7spec_neCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4saveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi18legacy_state_clear",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 14,
    "section": ".text._RNvXs7_NtNtCs6uNbiqmv1Ak_4core5array8equalitymINtB5_11SpecArrayEqmKj8_E7spec_neCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "memcmp",
@@ -6976,240 +7186,366 @@
   },
   {
    "addend": 0,
-   "offset": 24,
+   "offset": 10,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_restore",
    "type": "cf.32"
   },
   {
-   "addend": 4,
-   "offset": 30,
+   "addend": 0,
+   "offset": 26,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 42,
+   "offset": 38,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 60,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign6storedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 106,
+   "offset": 126,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_preview",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 140,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx9is_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 222,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign5rangeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 124,
+   "offset": 240,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 142,
+   "offset": 258,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 180,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 44,
-   "offset": 186,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 300,
-   "offset": 192,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 556,
-   "offset": 198,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 4,
-   "offset": 216,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 556,
-   "offset": 226,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 300,
-   "offset": 236,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 12,
-   "offset": 246,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "DKRT_ASSIGN",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 268,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
    "offset": 274,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 4,
+   "offset": 280,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 286,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 44,
+   "offset": 296,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 300,
    "offset": 306,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi12legacy_state",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 556,
+   "offset": 316,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 312,
+   "offset": 342,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 372,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 556,
+   "offset": 382,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 300,
+   "offset": 392,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 402,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 424,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 430,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 456,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 320,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RNvXs7_NtNtCs6uNbiqmv1Ak_4core5array8equalityhINtB5_11SpecArrayEqhKj20_E7spec_neCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 344,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.19",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 354,
+   "offset": 466,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RNvXs7_NtNtCs6uNbiqmv1Ak_4core5array8equalitymINtB5_11SpecArrayEqmKj8_E7spec_neCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 480,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 490,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 508,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 514,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 520,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
    "addend": 12,
-   "offset": 366,
+   "offset": 526,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 374,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4saveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 8,
-   "offset": 388,
+   "addend": 16,
+   "offset": 536,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
-   "addend": 8,
-   "offset": 396,
+   "addend": 20,
+   "offset": 546,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 406,
+   "addend": 24,
+   "offset": 556,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvXs_Cs1H2YknomaMO_11dkrt_svc_rtNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi18legacy_state_clear",
+   "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 416,
+   "addend": 28,
+   "offset": 566,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
+   "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 430,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 562,
-   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
+   "addend": 32,
    "offset": 576,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 586,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 596,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 582,
+   "offset": 610,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign5rangeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 628,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 594,
+   "offset": 646,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 668,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 678,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 688,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 698,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 708,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 718,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 728,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 738,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 600,
+   "offset": 752,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..rodata.global.11",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign5rangeNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 770,
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "DKRT_ASSIGN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 612,
+   "offset": 788,
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "_RNvNtCscYw7BUUnwGb_8dkrt_sdk6sticky5clean",
    "type": "cf.32"
   },
   {
@@ -7445,37 +7781,58 @@
   },
   {
    "addend": 0,
-   "offset": 2,
+   "offset": 6,
    "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records10PARK_TRIES",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_preview",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 8,
-   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records11BUSY_PASSES",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 14,
-   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records6LOGGED",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 28,
+   "offset": 26,
    "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 42,
+   "offset": 40,
    "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx9is_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 84,
+   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records10PARK_TRIES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records11BUSY_PASSES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines7records6LOGGED",
    "type": "cf.32"
   },
   {
@@ -11241,6 +11598,20 @@
   },
   {
    "align": 2,
+   "hex": "4fefffb448d77cfc2a6f00542c2f00582c6f005c41ef002c4298704cd08fb08866f6206f005028107208b284640278084282260f06830000002c47f90000000045f9000000006016487900000000487800082f0042a74eb9000000005282b882670000862f032f062f022f0d4e934fef00107a08ba8065d02f002f034e922040508f6026487900000000487800402f004eb900000000487900000000487800402f004eb9000000005888b1c167ae4a8867aa285620147e3fbe8065ec2e10226e000423820c0020147a3fba8065b6226e000823870c002014ba8065ba226e000c42b10c00529460c04cd77cfc4fef004c4e75",
+   "kind": "text",
+   "name": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 242
+  },
+  {
+   "align": 2,
+   "hex": "4fefffb448d77cfc2a6f00542c2f00582c6f005c41ef002c4298704cd08fb08866f6206f005028107208b284640278084282260f06830000002c47f90000000045f9000000006016487900000000487800082f0042a74eb9000000005282b882670000862f032f062f022f0d4e934fef00107a08ba8065d02f002f034e922040508f6026487900000000487800202f004eb900000000487900000000487800202f004eb9000000005888b1c167ae4a8867aa285620147e1fbe8065ec2e10226e000423820c0020147a1fba8065b6226e000823870c002014ba8065ba226e000c42b10c00529460c04cd77cfc4fef004c4e75",
+   "kind": "text",
+   "name": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 242
+  },
+  {
+   "align": 2,
    "hex": "4fefffdc48d73c7c266f0028286f002c486b000c4eb9000000002c00588f4a80670000844285761045f900000000603a2f0d4e922054588fb09066267014240dd4804bf5082060162f024e92206c0004221008c1001f588fb28067405882bbc266e6d6845285ba86673c487338004e922400487338044e9228004bf33808508f7002b08267aa7003b08266d62f0d4e922054588fb09066ca700460a2206c000810bc000160b64cd73c7c4fef00244e75",
    "kind": "text",
    "name": ".text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCstpYEnbxcXX_17dkrt_svc_machines7records12apply_recordNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
@@ -11283,17 +11654,17 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff9c48d73cfc2e2e0014282e001c246e0020286e00242a6e002c202e00304a80672e206e00284283b68d670002a442985283b68066f2428242aeffca2d47ffd42d4dffce2a6e0018600001862e2effd420044a846722246e0018226e001091c84280221ab1c7671ab29956c17301448180815288b1c466ea4cee3cfcff9c4e5e4e754879000000002f072f084eb9000000004879000000002f0c2f024eb9000000002f022f0c2f0a4eb9000000004fef000c4a00660001324a8467000224204d42aeffc6600c588852aeffc6b8aeffc6674620104a8067eebd800c80000000ff62e4206effc6b88863000246202effc62c350c007d86220692ae0008701fc2807001e3a8c0aeffca4a80670000e272013d41ffd24287600c42aeffc642413d41ffd242872f042f0d2f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002c004fef001c4a80670000b24a6effd26700013eb8aeffc6630e2005e1888086206effc62b808c00220692ae0008701fc2807001e3a881aeffcab4aeffce64000132206e002821862c002d45ffec2d46fff02d47fff42d47fff842aefffc486effec487800044878001e206e00342f104eb900000000200252804fef00105282b6806300fe7eb48c6700febe2c322c002a06e08d6600fec22002528060e02002528060da4a86670001327e016000ff7a2d46ffc62e0642403d40ffd2264d42866008588b5286bc84677020134a8067f2e0882f002f032f0c2f0a4eb9000000004fef00104a0066dabc84645447f56c0020132c007d86e0882d40ffd82d46ffdc42aeffe042aeffe442aeffe8486effd8487800014878001f206e00342f104eb90000000042934fef00104a866700ff0c4a6effd26600fede601c42866000fefc4879000000002f042f064eb9000000004a846700fed4204d42aeffc64a906700feb4588852aeffc6b8aeffc666ee6000feb82a6effce4879000000002f0d2f024eb9000000004879000000002f0d2f034eb9000000002f042f0d2f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002c004fef001c4a80660e4a846600fee62e042c046000fe682e046000fe5072013d41ffd27e016000fdf64879000000002f042f084eb900000000",
+   "hex": "4e56ff9c48d73cfc2e2e0014282e001c246e0020286e00242a6e002c202e00304a80672e206e00284283b68d670002b442985283b68066f2428242aeffca2d47ffd42d4dffd02a6e0034600001962e2effd420044a846722246e0018226e001091c84280221abe88671ab29956c17301448180815288b1c466ea4cee3cfcff9c4e5e4e754879000000002f072f084eb9000000004879000000002f0c2f024eb9000000002f022f0c2f0a4eb9000000004fef000c4a00660001424a8467000240206e001842aeffc6600c588852aeffc6b8aeffc6674a20104a8067eebd800c80000000ff62e4206effc6b88863000262202effc6206e00182c300c007d86220692ae0008701fc2807001e3a8c0aeffca4a80670000ec72013d41ffce4287600c42aeffc642413d41ffce42872f042f2e00182f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002c004fef001c4a80670001e04a6effce6700013cb8aeffc663122005e1888086222effc6206e001821801c00220692ae0008701fc2807001e3a881aeffcab4aeffd064000136206e002821862c0020554a10662e2d45ffec2d46fff02d47fff42d47fff842aefffc486effec487800044878001e2f2d00044eb9000000004fef0010200252805282b6806300fe6eb48c6700feae2c322c002a06e08d6600feb22002528060e02002528060da4a86670000ee7e016000ff76588b5286bc84677820134a8067f2e0882f002f032f0c2f0a4eb9000000004fef00104a0066dabc84645c206e001847f06c0020132c007d8620554a106630e0882d40ffd82d46ffdc42aeffe042aeffe442aeffe8486effd8487800014878001f2f2d00044eb9000000004fef001042934a866700ff124a6effce6600fee0601c42866000ff024879000000002f042f064eb9000000004a846700feda206e001842aeffc64a906700feb4588852aeffc6b8aeffc666ee6000febc2e042c046000fec62a6effd04879000000002f0d2f024eb9000000004879000000002f0d2f034eb90000000072013d41ffce7e016000fe302f042f2e00182f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002e004fef001c4a8066184a8467922d47ffc642403d40ffce266e001842866000fece2c002e046000fe324879000000002f042f084eb900000000",
    "kind": "text",
-   "name": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 834
+   "name": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 864
   },
   {
    "align": 2,
-   "hex": "4e56ff9c48d73cfc2e2e0014282e001c246e0020286e00242a6e002c202e00304a80672e206e00284283b68d670002a442985283b68066f2428242aeffca2d47ffd42d4dffce2a6e0018600001862e2effd420044a846722246e0018226e001091c84280221ab1c7671ab29956c17301448180815288b1c466ea4cee3cfcff9c4e5e4e754879000000002f072f084eb9000000004879000000002f0c2f024eb9000000002f022f0c2f0a4eb9000000004fef000c4a00660001324a8467000224204d42aeffc6600c588852aeffc6b8aeffc6674620104a8067eebd800c80000000ff62e4206effc6b88863000246202effc62c350c007d86220692ae0008701fc2807001e3a8c0aeffca4a80670000e272013d41ffd24287600c42aeffc642413d41ffd242872f042f0d2f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002c004fef001c4a80670000b24a6effd26700013eb8aeffc6630e2005e1888086206effc62b808c00220692ae0008701fc2807001e3a881aeffcab4aeffce64000132206e002821862c002d45ffec2d46fff02d47fff42d47fff842aefffc486effec487800044878001e206e00342f104eb900000000200252804fef00105282b6806300fe7eb48c6700febe2c322c002a06e08d6600fec22002528060e02002528060da4a86670001327e016000ff7a2d46ffc62e0642403d40ffd2264d42866008588b5286bc84677020134a8067f2e0882f002f032f0c2f0a4eb9000000004fef00104a0066dabc84645447f56c0020132c007d86e0882d40ffd82d46ffdc42aeffe042aeffe442aeffe8486effd8487800014878001f206e00342f104eb90000000042934fef00104a866700ff0c4a6effd26600fede601c42866000fefc4879000000002f042f064eb9000000004a846700fed4204d42aeffc64a906700feb4588852aeffc6b8aeffc666ee6000feb82a6effce4879000000002f0d2f024eb9000000004879000000002f0d2f034eb9000000002f042f0d2f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002c004fef001c4a80660e4a846600fee62e042c046000fe682e046000fe5072013d41ffd27e016000fdf64879000000002f042f084eb900000000",
+   "hex": "4e56ff9c48d73cfc2e2e0014282e001c246e0020286e00242a6e002c202e00304a80672e206e00284283b68d670002b442985283b68066f2428242aeffca2d47ffd42d4dffd02a6e0034600001962e2effd420044a846722246e0018226e001091c84280221abe88671ab29956c17301448180815288b1c466ea4cee3cfcff9c4e5e4e754879000000002f072f084eb9000000004879000000002f0c2f024eb9000000002f022f0c2f0a4eb9000000004fef000c4a00660001424a8467000240206e001842aeffc6600c588852aeffc6b8aeffc6674a20104a8067eebd800c80000000ff62e4206effc6b88863000262202effc6206e00182c300c007d86220692ae0008701fc2807001e3a8c0aeffca4a80670000ec72013d41ffce4287600c42aeffc642413d41ffce42872f042f2e00182f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002c004fef001c4a80670001e04a6effce6700013cb8aeffc663122005e1888086222effc6206e001821801c00220692ae0008701fc2807001e3a881aeffcab4aeffd064000136206e002821862c0020554a10662e2d45ffec2d46fff02d47fff42d47fff842aefffc486effec487800044878001e2f2d00044eb9000000004fef0010200252805282b6806300fe6eb48c6700feae2c322c002a06e08d6600feb22002528060e02002528060da4a86670000ee7e016000ff76588b5286bc84677820134a8067f2e0882f002f032f0c2f0a4eb9000000004fef00104a0066dabc84645c206e001847f06c0020132c007d8620554a106630e0882d40ffd82d46ffdc42aeffe042aeffe442aeffe8486effd8487800014878001f2f2d00044eb9000000004fef001042934a866700ff124a6effce6600fee0601c42866000ff024879000000002f042f064eb9000000004a846700feda206e001842aeffc64a906700feb4588852aeffc6b8aeffc666ee6000febc2e042c046000fec62a6effd04879000000002f0d2f024eb9000000004879000000002f0d2f034eb90000000072013d41ffce7e016000fe302f042f2e00182f2e000c2f2e00084eb90000000080aeffca2f002f2e000c2f2e00084eb9000000002e004fef001c4a8066184a8467922d47ffc642403d40ffce266e001842866000fece2c002e046000fe324879000000002f042f084eb900000000",
    "kind": "text",
-   "name": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 834
+   "name": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 864
   },
   {
    "align": 2,
@@ -11780,10 +12151,17 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff7c48d73c3c262e0008286e000c203c444b414623c00000000042b9000000002f03240e0682ffffff9c20424eb90000000048780010487900000000487800102f024878001f487800104eb9000000004fef001c4a946710428247f90000000045f900000000607e2d43fffc486efffc2f390000000048780020487900000000487800204879000000004878001048790000000048780010486eff9c4878001f487800104eb90000000023c0000000004fef00304a80660a4cee3c3cff7c4e5e4e754879000000002f034eb9000000007201b380718023c000000000508f60d85282b494648241eeffdc200e59804298b08866fa486effdc4878000a2f022f034eb9000000004fef00104a8067d241eeffdc7809988070094bf9000000002239000000007a1fba8165b627821c0053804a80673022582239000000007a1fba81653625891c002239000000007a1fba81653842b51c0052b900000000b08466be6000ff7e48790000000048780008487800084eb900000000487900000000487800202f014eb900000000487900000000487800202f014eb900000000",
+   "hex": "206f00084aa8000866024e754868000c2f2f00084eb9000000007201b3807180206f001021400008508f60de",
+   "kind": "text",
+   "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 44
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff602f2e000c4eb900000000588f4a00671e487801cc4879000000004879000000004eb9000000004fef000c4e5e4e752f2e000c4eb9000000001d40ff672f2e000c4eb9000000001d40ff632f2e000841eeff684eb9000000004fef000c4a2eff676600010a4a2eff636600015c48780040486eff68486effa84eb9000000004878001048790000000048780010486effa84878001f487800104eb9000000004fef0024203c444b414623c00000000042b90000000041f9000000002d48ffe8203c000000002d40ffec41f9000000002d48fff0203c000000002d40fff4486effe84878000a2f2e00082f2e000c4eb9000000004fef001041eeff672d48fff8202e00082d40fffc486efff82f390000000048780020487900000000487800204879000000004878001048790000000048780010486eff684878001f487800104eb90000000023c0000000004fef00304a2eff676600fed64879000000002f2e00084eb900000000508f6000fec0487801cc4879000000004879000000004eb90000000048780040487900000000486effa84eb9000000004878001048790000000048780010486effa84878001f487800104eb9000000004fef00304a2eff636600ff366000fede48780040487900000000486effa84eb9000000004878001048790000000048780010486effa84878001f487800104eb9000000004fef00246000fef6",
    "kind": "text",
    "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 414
+   "size": 518
   },
   {
    "align": 2,
@@ -12214,6 +12592,13 @@
   },
   {
    "align": 2,
+   "hex": "4fefffe02f0e2c6f002c4aae000866344a2f0033662e2f2f00284def0008204e4eb9000000004879000000002f0e4eb9000000004fef000c4a00662a2c5f4fef00204e75486e000c2f2f002c4eb900000000508f4a00660870012d40000860dc42ae000860b02f2f00284eb900000000588f60c8",
+   "kind": "text",
+   "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "size": 116
+  },
+  {
+   "align": 2,
    "hex": "487800202f2f000c2f2f000c4eb9000000004fef000c4a8056c044804e75",
    "kind": "text",
    "name": ".text._RNvXs7_NtNtCs6uNbiqmv1Ak_4core5array8equalitymINtB5_11SpecArrayEqmKj8_E7spec_neCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
@@ -12221,10 +12606,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff5c48d73cfc262e0008246e000c203c444b415323c00000000042b9000000002f0341eeffba4eb9000000002d6effbaff9a2d6effbeff9e2d6effc2ffa22d6effc6ffa62d6effcaffaa2d6effceffae2d6effd2ffb22d6effd6ffb6182effda1d44ff972f034eb9000000002d40ff922d41ff8e4878000848790000000048780008486eff9a2f012f004eb9000000002e124fef00204a8767322a0a5885240a06820000002c42802c0a06860000000c41f9000000004bf90000000049f90000000047f900000000600001002d43ffdc486effdc2f390000000048780040487900000000487800404879000000004878000848790000000048780008486eff9a2f2eff8e2f2eff924eb90000000023c0000000004fef00304a80664e4a2eff9766322f03240e0682ffffffe020424eb9000000004879000000002f024eb9000000004fef000c4a0066464cee3cfcff5c4e5e4e75487900000000486eff9a4eb900000000508f4a0067b84879000000002f034eb900000000508f4a00660a780123c40000000060c242b90000000060922f034eb900000000588f60ae48790000000048780008487800084eb9000000002a2eff8a5280b0876700ff1252850682000000207208b28067d22245181167e4224243e9ffe02d49ff8679842200e789d284224645f11c002d45ff8a226eff8622280004783fb88165b62b801c00b3c2672c2819222800047a3fba81653429841c0022280004783fb881653842b31c0052a80004b5c966c82a2eff8a608648790000000048780008487800084eb900000000487900000000487800402f014eb900000000487900000000487800402f014eb900000000",
+   "hex": "4e56ff782f2e000c4eb900000000588f4a00671e4878032c4879000000004879000000004eb9000000004fef000c4e5e4e752f2e000841eeffa44eb9000000002d6effa4ff842d6effa8ff882d6effacff8c2d6effb0ff902d6effb4ff942d6effb8ff982d6effbcff9c2d6effc0ffa0102effc41d40ff832f2e000c4eb9000000001d40ffc72f2e000c4eb9000000001d40ff824fef000c4a2effc7660001584a2eff82660001f42d6eff84ffc82d6eff88ffcc2d6eff8cffd02d6eff90ffd42d6eff94ffd82d6eff98ffdc2d6eff9cffe02d6effa0ffe42f2e00084eb9000000002d40ff7a2d41ff7e4878000848790000000048780008486effc82f012f004eb9000000004fef001c203c444b415323c00000000042b900000000223c000000002d41ffe841f9000000002d48ffec203c000000002d40fff0223c000000002d41fff4486effe8487800022f2e00082f2e000c4eb9000000004fef001041eeffc72d48fff8202e00082d40fffc486efff82f390000000048780040487900000000487800404879000000004878000848790000000048780008486eff842f2eff7e2f2eff7a4eb90000000023c0000000004fef00304a2effc76600fe724a2eff836700015c487900000000486eff844eb900000000508f7201c2802f014879000000002f2e00084eb9000000004fef000c6000fe3a4878032c4879000000004879000000004eb90000000041f9000000002d50ffc841f9000000002d50ffcc41f9000000002d50ffd041f9000000002d50ffd441f9000000002d50ffd841f9000000002d50ffdc41f9000000002d50ffe041f9000000002d50ffe42f2e00084eb9000000002d40ff7a2d41ff7e4878000848790000000048780008486effc82f012f004eb9000000004fef00284a2eff826600feca6000fe7241f9000000002d50ffc841f9000000002d50ffcc41f9000000002d50ffd041f9000000002d50ffd441f9000000002d50ffd841f9000000002d50ffdc41f9000000002d50ffe041f9000000002d50ffe42f2e00084eb9000000002d40ff7a2d41ff7e4878000848790000000048780008486effc82f012f004eb9000000004fef001c6000fe4042006000feb4",
    "kind": "text",
    "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 616
+   "size": 806
   },
   {
    "align": 2,
@@ -12298,10 +12683,10 @@
   },
   {
    "align": 2,
-   "hex": "42b90000000042b90000000042b9000000002f2f00082f2f00084eb9000000002f2f00102f2f00104eb9000000004fef00104e75",
+   "hex": "2f2f00084eb900000000588f4a0067222f2f00082f2f00084eb9000000002f2f00102f2f00104eb9000000004fef00104e752f2f00084eb900000000588f4a0066ce2f2f00084eb900000000588f4a0066be42b90000000042b90000000042b90000000060aa",
    "kind": "text",
    "name": ".text._RNvXs_NtCstpYEnbxcXX_17dkrt_svc_machines7recordsNtB4_8MachinesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE6settleCs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 52
+   "size": 102
   },
   {
    "align": 2,
@@ -12760,7 +13145,7 @@
   },
   {
    "align": 2,
-   "hex": "3cbfeafc",
+   "hex": "282488e4",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -13501,11 +13886,25 @@
    "size": 1536
   },
   {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter14BEFORE_PREVIEW",
+   "size": 460
+  },
+  {
    "align": 2,
    "hex": "",
    "kind": "bss",
    "name": ".bss._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter10STOCK_ROW0",
    "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "size": 812
   },
   {
    "align": 2,
@@ -13751,6 +14150,27 @@
    "kind": "text",
    "name": ".text._RNvMs5_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "size": 14
+  },
+  {
+   "align": 2,
+   "hex": "206f00047201b2a8000457c044804e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_preview",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "206f00047202b2a8000457c044804e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_restore",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "206f00047203b2a8000457c044804e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx9is_commit",
+   "size": 16
   },
   {
    "align": 2,
@@ -14005,6 +14425,13 @@
    "size": 12
   },
   {
+   "align": 2,
+   "hex": "206f00042008222f000841f01c0022084e75",
+   "kind": "text",
+   "name": ".text._RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRSmNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
+   "size": 18
+  },
+  {
    "align": 1,
    "hex": "26636f70795f66726f6d5f736c6963653a20736f7572636520736c696365206c656e6774682028c02b2920646f6573206e6f74206d617463682064657374696e6174696f6e20736c696365206c656e6774682028c0012900",
    "kind": "data",
@@ -14096,7 +14523,7 @@
    "size": 24
   }
  ],
- "source_sha256": "842cb54b65058323b48edbbb70ecb663b8fbdb6567c7735dd4daeea9214eacfc",
+ "source_sha256": "80d379a0aacb82fdc32bb937eb6296f9a25de4505255cae615e6a3730b12ef9d",
  "symbols": [
   {
    "global": false,
@@ -14616,6 +15043,18 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_9SettleCtx12for_each_keyNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planB15_E0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RINvNtCs6uNbiqmv1Ak_4core3ptr12align_offsethEB4_",
    "section": ".text._RINvNtCs6uNbiqmv1Ak_4core3ptr12align_offsethEB4_",
    "value": 0
@@ -14736,14 +15175,14 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "name": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreE0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "name": ".sec..text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCscYw7BUUnwGb_8dkrt_sdk6sticky6assignNCINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter4planNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreEs_0ECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "value": 0
   },
   {
@@ -15078,6 +15517,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6assign7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "value": 0
@@ -15122,6 +15567,12 @@
    "global": false,
    "name": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter6storedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter6storedNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "section": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7persistNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "value": 0
   },
   {
@@ -16188,6 +16639,24 @@
   },
   {
    "global": false,
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_preview",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_preview",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_restore",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx10is_restore",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx9is_commit",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB4_9SettleCtx9is_commit",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvMs_NtCstpYEnbxcXX_17dkrt_svc_machines5buildNtB4_5Build10add_filter",
    "section": ".text._RNvMs_NtCstpYEnbxcXX_17dkrt_svc_machines5buildNtB4_5Build10add_filter",
    "value": 0
@@ -16494,6 +16963,12 @@
   },
   {
    "global": false,
+   "name": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "section": ".bss._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign14BEFORE_PREVIEW",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign5holds",
    "section": ".text._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6assign5holds",
    "value": 0
@@ -16532,6 +17007,12 @@
    "global": false,
    "name": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter10knob_count",
    "section": ".text._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter10knob_count",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter14BEFORE_PREVIEW",
+   "section": ".bss._RNvNtCstpYEnbxcXX_17dkrt_svc_machines6filter14BEFORE_PREVIEW",
    "value": 0
   },
   {
@@ -16754,6 +17235,12 @@
    "global": false,
    "name": "_RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRShNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
    "section": ".text._RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRShNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRSmNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
+   "section": ".text._RNvXs_NtNtCs6uNbiqmv1Ak_4core5slice4iterRSmNtNtNtNtB8_4iter6traits7collect12IntoIterator9into_iterB8_",
    "value": 0
   },
   {
@@ -17449,8 +17936,8 @@
  ],
  "toolchain": {
   "exports": "MF_TAB dk_filter_add_page dk_machine_add_page dk_machines_module_info dk_module dk_module_ctx_add_filter dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_filter_graph dks_filter_list dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_draw_hook mf_flt_acc mf_flt_graph mf_flt_list mf_flt_load_dn2 mf_flt_load_dt2 mf_flt_name mf_frametype mf_group mf_key_hook mf_owner mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
-  "instructions_redecoded": "16578",
-  "isa_check": "d04a8b0804c77674ee18b537f75207c5256338e60277d411df5e5b9ab2931402",
+  "instructions_redecoded": "16859",
+  "isa_check": "d91c80c6ebc24bd85f245dc8d82bf2fcafc4c22ec415b59bca1a1107caf92ce2",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

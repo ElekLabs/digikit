@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { pollUntil } from '@digi/test-support';
 import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { sendCc } from '@digi/regression/runtime/midi.ts';
-import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
+import { bootWith, shapeWords, SHAPE_A, SHAPE_B } from './lfo-cards.ts';
 import {
   BAD,
   evalSine,
@@ -32,7 +32,7 @@ import {
  *
  * Four cases, one boot of the runtime each:
  * - stock: `core/lfo` is in the image and no lfo service runs: waves 0 to 5 are the stock shapes (item 7);
- * - table: with `lfo.dks` and the RAMP shape loaded, WAVE reaches 7 and the output follows the shape's table, not TRI (item 1);
+ * - table: boot with STEP to prime `lfo.dks`, then load RAMP live. WAVE reaches its new slot and the output follows its table;
  * - start phase: on a note in MODE TRG the shape starts at the phase of SPH (item 4); each note takes a voice slot (with voice rotation the next slot, with one voice per track slot 0), whose phase is checked exactly;
  * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5).
  */
@@ -81,13 +81,31 @@ cardRigs(
       await rt.session.expectNoFault('stock waves with core/lfo in the image');
     }, 900_000);
 
-    test('table: WAVE reaches the shape number and the output follows its table, not TRI', async () => {
-      const rt = await bootWith(h, 'shape', [SHAPE_A]);
-      const [first] = await shapeWords(h, rt);
-      expect(first! & 0xff, 'the first shape gets the first number above RAND').toBe(FIRST_SHAPE);
+    test('the first live shape extends the WAVE range and produces modulation from its table', async () => {
+      const rampPath = h.mod(SHAPE_A).name;
+      const stepPath = h.mod(SHAPE_B).name;
+      const rt = await h.load('shape-live', { modules: [SHAPE_A, SHAPE_B], selection: [stepPath] });
       const rig = new LfoRig(rt);
+      const wave = FIRST_SHAPE + 1;
+      await rig.setWave(WAVE.RAND);
+      await sendCc(rt, 1, 106, wave);
+      await pollUntil(rt.clock, () => rig.word(KNOB_WORD.WAVE), (got) => got === FIRST_SHAPE << 8, {
+        withinMs: 1000,
+        intervalMs: 20,
+        message: 'before the live load WAVE stops at the boot shape STEP',
+      });
+
+      await h.usb(rt, async (dk) => {
+        expect((await dk.modules()).map((m) => m.name), 'only the boot shape is active').toEqual([SHAPE_B]);
+        expect(await dk.loadAndWait(rampPath), 'the first live shape loads').toEqual({ result: 0, unloaded: false });
+        const row = (await dk.loadStates()).find((m) => m.name === rampPath.split('/').at(-1));
+        expect(row, 'the shape is active after the live job').toMatchObject({ state: 'ACTIVE' });
+      });
+      expect((await rt.session.status()).epoch, 'the load kept the boot epoch').toBe(rt.epoch);
+
+      await rig.open();
+      await rig.turnWaveTo(wave);
       const dest = await rig.run();
-      await rig.setWave(FIRST_SHAPE);
       const samples = await rig.sample(dest, READS, GAP_MS);
       const shape = fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p));
       const tri = fitShape(samples, evalTri);
@@ -102,12 +120,7 @@ cardRigs(
       const rand = await rig.sample(dest, READS, GAP_MS);
       expect(fitShape(rand, (p) => evalTable(RAMP_SAMPLES, p)).err, 'RAND is not the table').toBeGreaterThan(BAD);
       // O8: with a shape loaded the MIDI CC path reaches the shape numbers
-      await sendCc(rt, 1, 106, FIRST_SHAPE);
-      await pollUntil(rt.clock, () => rig.word(KNOB_WORD.WAVE), (got) => got === FIRST_SHAPE << 8, {
-        withinMs: 1000,
-        intervalMs: 20,
-        message: 'CC 106 = 7 stores WAVE 0x0700 with a shape loaded',
-      });
+      await rig.setWave(wave);
       await rt.session.expectNoFault('shape output');
     }, 900_000);
 

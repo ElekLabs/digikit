@@ -573,8 +573,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         for (i, m) in mods.iter().enumerate() {
             let k = (m.keys)();
             sel.count = i + 1;
-            sel.nkeys[i] = k.nm.min(8) as u8;
-            sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+            l.core.set_keys(i as u32, dkrt_sdk::records::KIND_MACHINE, &k.mk[..k.nm.min(8)]);
             for (kind, keys) in m.groups {
                 l.core.set_keys(i as u32, *kind, keys);
             }
@@ -589,8 +588,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         for (i, m) in mods.iter().enumerate() {
             let k = (m.keys)();
             sel.count = i + 1;
-            sel.nkeys[i] = k.nm.min(8) as u8;
-            sel.keys[i][..k.nm.min(8)].copy_from_slice(&k.mk[..k.nm.min(8)]);
+            self.core.set_keys(i as u32, dkrt_sdk::records::KIND_MACHINE, &k.mk[..k.nm.min(8)]);
             for (kind, keys) in m.groups {
                 self.core.set_keys(i as u32, *kind, keys);
             }

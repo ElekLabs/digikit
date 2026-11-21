@@ -12,6 +12,7 @@ use std::vec::Vec;
 // the seams between the real packed artifacts (`core/runtime:test-assembly`)
 mod assembly_tests;
 mod dsp_provider_tests;
+mod live_preview_tests;
 
 const PATH: &[u8] = b"mods/a.dkm\0";
 const IMAGE_OFF: usize = 160;
@@ -74,6 +75,8 @@ const SVC_IMPORT: &[u8] = b"dkc_device_id\0";
 const SVC_ADDR: u32 = 0x5000;
 
 impl Images for FakeImages {
+    type Selection = SelectionKeys;
+
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         self.log.push(Ev::Stage);
         self.boot_at_stage.push(core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)));
@@ -337,7 +340,7 @@ unsafe fn loader_of(init: Init, file: Vec<u8>) -> Fake {
         service: FakeService { record: 0, skew: 0, refuse: None },
     };
     ORDER.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    let mut l = Loader::new(FakePlatform::new(profiles::DT2), imgs, reg);
+    let mut l = Loader::new(FakePlatform::new(profiles::DT2), imgs, reg, SelectionKeys::new());
     l.phase = Phase::Boot;
     l
 }
@@ -1173,8 +1176,8 @@ fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty
         l.reset_plan();
         let file = module_file();
         l.capture(0, &file);
-        assert_eq!(l.table_len[0], 8);
-        assert_eq!(l.tables[0][..8], file[file.len() - 8..]);
+        assert_eq!(l.selection.table_len[0], 8);
+        assert_eq!(l.selection.tables[0][..8], file[file.len() - 8..]);
         // nothing is kept for a file shorter than the header, an index past the selection, an empty table or one that lies outside the file
         l.reset_plan();
         l.capture(1, &file[..dkneeds::HEADER as usize - 4]);
@@ -1187,16 +1190,16 @@ fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty
         let end = outside.len() as u32;
         put(&mut outside, dkneeds::H_REG_OFF, end - 4);
         l.capture(3, &outside);
-        assert_eq!(l.table_len, [0; SEL_MAX]);
+        assert_eq!(l.selection.table_len, [0; SEL_MAX]);
         // a table of the planner's limit is kept, one byte more is not (the loader decides about such a file)
         let mut long = file.clone();
         long.resize(long.len() + crate::plan::TABLE_MAX, 0);
         put(&mut long, dkneeds::H_REG_SIZE, crate::plan::TABLE_MAX as u32);
         l.capture(4, &long);
-        assert_eq!(l.table_len[4], crate::plan::TABLE_MAX);
+        assert_eq!(l.selection.table_len[4], crate::plan::TABLE_MAX);
         put(&mut long, dkneeds::H_REG_SIZE, crate::plan::TABLE_MAX as u32 + 1);
         l.capture(5, &long);
-        assert_eq!(l.table_len[5], 0);
+        assert_eq!(l.selection.table_len[5], 0);
     }
 }
 
@@ -1240,13 +1243,13 @@ fn the_search_list_keeps_the_first_24_distinct_hard_needs_the_runtime_does_not_m
     }
     let mods: Vec<Option<Keys>> = tables.iter().map(|b| Some(Keys::parse(b).unwrap())).collect();
     let mut out = [0u32; WANT_MAX];
-    let n = unmet_needs(&mods, &mut out);
+    let n = unmet_needs(&services(), &mods, &mut out);
     assert_eq!(n, WANT_MAX);
     let first: Vec<u32> = (0..WANT_MAX).map(|i| name_hash(&svc(i))).collect();
     assert_eq!(out.to_vec(), first, "in the order of the selection, each once; the runtime's service and the soft need are not in it");
     // a module with no table adds nothing
     let none: [Option<Keys>; 2] = [None, None];
-    assert_eq!(unmet_needs(&none, &mut out), 0);
+    assert_eq!(unmet_needs(&services(), &none, &mut out), 0);
 }
 
 /// A service whose table holds `slots` (one `SLOTS` item of the entry `entry`) and whose `init` declares what the table says.
@@ -1413,9 +1416,17 @@ fn settle_hands_the_services_the_keys_of_accepted_modules_only() {
         provider_order: [0; dkrt_sdk::PROVIDER_MAX],
     };
     plan.verdicts[1] = Verdict::Refused(Reason::DuplicateKey(dkneeds::KIND_MACHINE, 0x100));
-    let sel = settle_ctx(&plan, &tables, &lens, 2);
-    assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 2, 0));
-    assert_eq!(sel.keys[0][..2], keys);
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = loader(Init::Ok);
+        l.selection.tables = tables;
+        l.selection.table_len = lens;
+        l.settle(&mut plan, 2);
+        let mut got = [0; 8];
+        assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut got), keys.len());
+        assert_eq!(got[..keys.len()], keys);
+        assert_eq!(l.keys_of(1, dkneeds::KIND_MACHINE, &mut got), 0);
+    }
 }
 
 #[test]
@@ -1436,13 +1447,13 @@ fn keys_of_gives_the_keys_of_a_kind_for_an_accepted_module_only() {
         let mut l = loader(Init::Ok);
         l.reset_plan();
         for k in 0..2 {
-            l.tables[k][..bytes.len()].copy_from_slice(&bytes);
-            l.table_len[k] = bytes.len();
+            l.selection.tables[k][..bytes.len()].copy_from_slice(&bytes);
+            l.selection.table_len[k] = bytes.len();
         }
         // before settle nothing is accepted
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(0, dkneeds::KIND_LFO_SHAPE, &mut out), 0);
-        l.accepted[0] = true;
+        l.selection.accepted[0] = true;
         assert_eq!(l.keys_of(0, dkneeds::KIND_LFO_SHAPE, &mut out), 3);
         assert_eq!(out[..3], shapes);
         // another kind, a kind the table does not list, a module the plan refused and an index past the selection
@@ -1481,7 +1492,7 @@ unsafe fn booted(l: &mut Fake, k: usize, path: &[u8]) {
     let staged = l.m.stage(path.as_ptr()).unwrap();
     let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize).to_vec();
     l.capture(k, &file);
-    l.accepted[k] = true;
+    l.selection.accepted[k] = true;
     assert_eq!(l.load(path.as_ptr()), OK);
     crate::selection::BOOT_IDX = u32::MAX;
 }
@@ -1512,7 +1523,7 @@ fn a_reload_check_accepts_a_file_that_keeps_the_keys_and_changes_nothing() {
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
         assert_eq!((l.m.live.len(), l.m.allocs, st().modules[0].used, st().modules[0].base), (live, allocs, 1, base));
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))));
-        assert_eq!(l.table_len[0], dkneeds::keys::table_size(&dkneeds::keys::Table { keys: &[dkneeds::keys::KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &[1, 2] }], ..Default::default() }), "the old table stays");
+        assert_eq!(l.selection.table_len[0], dkneeds::keys::table_size(&dkneeds::keys::Table { keys: &[dkneeds::keys::KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &[1, 2] }], ..Default::default() }), "the old table stays");
     }
 }
 
@@ -1609,7 +1620,7 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
             assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
             assert_eq!(l.unload_rec(0), OK);
             assert_eq!(st().modules[0].used, 0);
-            assert_eq!(l.reload_load(0, PATH.as_ptr()), OK, "round {round}");
+            assert_eq!(l.reload_load(0, PATH.as_ptr(), &wide()), OK, "round {round}");
             // the same record, owner and selection index; the table is the new one; the phase is closed again
             assert_eq!((st().modules[0].used, l.sel_of(0), l.phase == Phase::Closed), (1, 0, true));
             assert_eq!(crate::entry::tick_of(0), st().modules[0].base + 8);
@@ -1622,7 +1633,7 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
         // a reload is the only load after the boot: the same call in the closed phase through `load` is refused
         assert_eq!(l.load(PATH.as_ptr()), E_BOOT_ONLY);
         assert_eq!(l.unload_rec(0), OK);
-        assert_eq!(l.reload_load(MAX_MODULES, PATH.as_ptr()), E_NOT_FOUND, "a provider record is not reloaded");
+        assert_eq!(l.reload_load(MAX_MODULES, PATH.as_ptr(), &wide()), E_NOT_FOUND, "a provider record is not reloaded");
     }
 }
 
@@ -1724,16 +1735,13 @@ fn a_reloads_settle_gets_the_keys_of_the_live_modules_and_the_new_file_in_its_sl
         assert_eq!(l.unload_rec(0), OK);
         let staged = l.m.stage(PATH.as_ptr()).unwrap();
         l.capture(0, core::slice::from_raw_parts(staged.ptr, staged.size as usize));
-        let sel = live_settle_ctx(&l.tables, &l.table_len, &l.live_at(0));
-        assert_eq!(sel.count, 2);
-        assert_eq!((sel.nkeys[0], sel.keys[0][..3].to_vec()), (3, vec![1, 2, 5]));
-        assert_eq!((sel.nkeys[1], sel.keys[1][0]), (1, 9));
-        // a selection index with no live module hands over nothing, and the count stops at the last live one
-        assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false], "the unloaded record is not live");
-        let mut only_b = [false; SEL_MAX];
-        only_b[1] = true;
-        let sel = live_settle_ctx(&l.tables, &l.table_len, &only_b);
-        assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 0, 1));
+        assert_eq!(l.live_at(0), [true, true, false, false, false, false, false, false]);
+        let mut keys = [0; 8];
+        assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut keys), 3);
+        assert_eq!(&keys[..3], &[1, 2, 5]);
+        assert_eq!(l.keys_of(1, dkneeds::KIND_MACHINE, &mut keys), 1);
+        assert_eq!(keys[0], 9);
+        assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false]);
     }
 }
 
@@ -1767,7 +1775,7 @@ fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
         let mut l = live_a();
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
         assert_eq!(l.unload_rec(0), OK);
-        let table_before = (l.table_len[0], l.tables[0]);
+        let table_before = (l.selection.table_len[0], l.selection.tables[0]);
         // the file is replaced while the module drains: one that drops a key, one of another module, one whose table is gone
         let mut hollow = keyed_file(b'a', &[1, 2]);
         put(&mut hollow, dkneeds::H_REG_SIZE, 0);
@@ -1778,13 +1786,13 @@ fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
             ("no table", hollow, E_FORMAT),
         ] {
             l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), f);
-            assert_eq!(l.reload_load(0, PATH.as_ptr()), want, "{what}");
+            assert_eq!(l.reload_load(0, PATH.as_ptr(), &wide()), want, "{what}");
             assert_eq!(st().modules[0].used, 0, "{what}: nothing loaded");
-            assert_eq!((l.table_len[0], l.tables[0]), table_before, "{what}: the kept table is the old one");
+            assert_eq!((l.selection.table_len[0], l.selection.tables[0]), table_before, "{what}: the kept table is the old one");
         }
         // the bytes that pass the rules load
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 3]));
-        assert_eq!(l.reload_load(0, PATH.as_ptr()), OK);
+        assert_eq!(l.reload_load(0, PATH.as_ptr(), &wide()), OK);
     }
 }
 
@@ -1794,17 +1802,17 @@ fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_o
     unsafe {
         let mut l = live_a();
         l.m.boot_at_stage.clear();
-        let table = (l.table_len[0], l.tables[0]);
+        let table = (l.selection.table_len[0], l.selection.tables[0]);
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 7]));
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
-        // the first stage reads the table (numbering of the new keys), the second is the file checks: the services' checks of the DSP section read the index of the module that loads
+        // The preview may reuse the card stage; the check reacquires the file under the candidate index.
         assert_eq!(l.m.boot_at_stage, vec![u32::MAX, 0]);
         assert_eq!(crate::selection::BOOT_IDX, u32::MAX, "the index is as it was");
-        assert_eq!((l.table_len[0], l.tables[0]), table, "the kept table is the old one: the numbering used the new table for a moment only");
+        assert_eq!((l.selection.table_len[0], l.selection.tables[0]), table, "the kept table is the old one: the numbering used the new table for a moment only");
         // a file that drops a key is refused without numbering anything (the table is not touched either)
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1]));
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), E_RELOAD_KEYS);
-        assert_eq!((l.table_len[0], l.tables[0]), table);
+        assert_eq!((l.selection.table_len[0], l.selection.tables[0]), table);
     }
 }
 
@@ -1827,18 +1835,18 @@ fn a_live_load_takes_the_first_free_record_at_the_given_index_and_the_check_chan
         let (live, allocs) = (l.m.live.len(), l.m.allocs);
         // the check: no record, no table, no acceptance of the index, the selection index as it was
         assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
-        assert_eq!((l.m.live.len(), l.m.allocs, st().modules[1].used, l.table_len[1], l.accepted[1]), (live, allocs, 0, 0, false));
+        assert_eq!((l.m.live.len(), l.m.allocs, st().modules[1].used, l.selection.table_len[1], l.selection.accepted[1]), (live, allocs, 0, 0, false));
         assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
         // the load: the record is the first free one, whatever the index; the table and the acceptance are kept at the index
-        assert_eq!(l.live_load(4, PATH_B.as_ptr()), OK);
-        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
+        assert_eq!(l.live_load(4, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!((st().modules[1].used, l.sel_of(1), l.selection.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
         assert_eq!(crate::entry::tick_of(1), st().modules[1].base + 8);
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(4, dkneeds::KIND_MACHINE, &mut out), 1);
         assert_eq!(out[0], 9);
         assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
         // the module that was live is untouched, and both are live at their indices
-        assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true));
+        assert_eq!((st().modules[0].used, l.sel_of(0), l.selection.accepted[0]), (1, 0, true));
         assert_eq!(l.live_at(SEL_MAX), [true, false, false, false, true, false, false, false]);
         assert!(cstr_eq(records::path(1).as_ptr(), PATH_B.as_ptr()), "the record keeps the path it was loaded from");
     }
@@ -1868,9 +1876,9 @@ fn a_live_check_refuses_a_loaded_name_a_key_clash_a_full_capacity_a_damaged_file
         assert_eq!(check(&mut l, None, &wide()), E_NOT_FOUND, "no such file");
         assert_eq!(check(&mut l, Some(keyed_file(b'c', &[5])), &wide()), OK);
         assert_eq!(l.live_check_load(SEL_MAX, PATH_C.as_ptr(), &wide()), E_SEL_COUNT);
-        assert_eq!(l.live_load(SEL_MAX, PATH_C.as_ptr()), E_SEL_COUNT);
+        assert_eq!(l.live_load(SEL_MAX, PATH_C.as_ptr(), &wide()), E_SEL_COUNT);
         // nothing was loaded, and no refused file left a table or an acceptance behind
-        assert_eq!((st().modules[1].used, l.m.live.len(), l.table_len[1], l.accepted[1]), (0, 1, 0, false));
+        assert_eq!((st().modules[1].used, l.m.live.len(), l.selection.table_len[1], l.selection.accepted[1]), (0, 1, 0, false));
     }
 }
 
@@ -1880,8 +1888,8 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
     unsafe {
         let mut l = live_a_with_b();
         l.m.init = Init::Fails(E_INIT);
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_INIT);
-        assert_eq!((st().modules[1].used, l.accepted[1], l.sel_of(1), l.phase == Phase::Closed), (0, false, u8::MAX, true));
+        assert_eq!(l.live_load(1, PATH_B.as_ptr(), &wide()), E_INIT);
+        assert_eq!((st().modules[1].used, l.selection.accepted[1], l.sel_of(1), l.phase == Phase::Closed), (0, false, u8::MAX, true));
         assert_eq!(l.m.live.len(), 1, "nothing leaked: the image block of module a only");
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(1, dkneeds::KIND_MACHINE, &mut out), 0);
@@ -1892,15 +1900,15 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
         put(&mut hollow, dkneeds::H_REG_SIZE, 0);
         seal(&mut hollow);
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), hollow);
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_FORMAT);
-        assert_eq!((st().modules[1].used, l.accepted[1]), (0, false));
+        assert_eq!(l.live_load(1, PATH_B.as_ptr(), &wide()), E_FORMAT);
+        assert_eq!((st().modules[1].used, l.selection.accepted[1]), (0, false));
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
-        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[1]), (1, 1, true));
+        assert_eq!(l.live_load(1, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!((st().modules[1].used, l.sel_of(1), l.selection.accepted[1]), (1, 1, true));
         // a loaded name is refused by the loader itself, with the index free again
         l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), keyed_file(b'b', &[11]));
-        assert_eq!(l.live_load(2, PATH_C.as_ptr()), E_LOADED);
-        assert_eq!((l.accepted[2], st().modules[2].used), (false, 0));
+        assert_eq!(l.live_load(2, PATH_C.as_ptr(), &wide()), E_LOADED);
+        assert_eq!((l.selection.accepted[2], st().modules[2].used), (false, 0));
     }
 }
 
@@ -1909,13 +1917,13 @@ fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_ag
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
+        assert_eq!(l.live_load(1, PATH_B.as_ptr(), &wide()), OK);
         // the unload half of a job (no block clock: the drain is over at once), then its end state
         l.p.clock.set(None);
         assert_eq!(l.reload_quiesce(0), OK);
         assert_eq!(l.unload_rec(0), OK);
         l.retire_index(0);
-        assert_eq!((st().modules[0].used, l.accepted[0], l.sel_of(0)), (0, false, u8::MAX));
+        assert_eq!((st().modules[0].used, l.selection.accepted[0], l.sel_of(0)), (0, false, u8::MAX));
         assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false], "only b is live");
         assert_eq!(crate::entry::tick_of(0), 0);
         let mut out = [0u32; 8];
@@ -1923,12 +1931,12 @@ fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_ag
         assert_eq!(l.m.live.len(), 1, "its image block is freed");
         // another module's retire leaves b alone
         l.retire_index(3);
-        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[1]), (1, 1, true));
+        assert_eq!((st().modules[1].used, l.sel_of(1), l.selection.accepted[1]), (1, 1, true));
         // the same file loads again into the free record, at the same index, and again after another unload
         for round in 0..2 {
             assert_eq!(l.live_check_load(0, PATH.as_ptr(), &wide()), OK, "round {round}");
-            assert_eq!(l.live_load(0, PATH.as_ptr()), OK, "round {round}");
-            assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true), "round {round}");
+            assert_eq!(l.live_load(0, PATH.as_ptr(), &wide()), OK, "round {round}");
+            assert_eq!((st().modules[0].used, l.sel_of(0), l.selection.accepted[0]), (1, 0, true), "round {round}");
             assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), 2);
             assert_eq!(l.unload_rec(0), OK);
             l.retire_index(0);
@@ -1985,7 +1993,7 @@ fn a_live_check_answers_e_missing_for_a_service_nobody_provides_before_it_looks_
         let soft = Need { hard: false, ..need };
         l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), machine(&[], &[soft]));
         assert_eq!(l.live_check_load(1, PATH_C.as_ptr(), &wide()), OK);
-        assert_eq!((st().modules[1].used, l.table_len[1], l.accepted[1]), (0, 0, false), "nothing was kept");
+        assert_eq!((st().modules[1].used, l.selection.table_len[1], l.selection.accepted[1]), (0, 0, false), "nothing was kept");
     }
 }
 

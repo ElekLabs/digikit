@@ -7,9 +7,10 @@
 //! Before this service owned it, the map was in the reserved bytes of the selection record: `legacy_state` is read when the settings key is not there yet,
 //! the map is saved to the key as soon as it is read, and the old bytes are zeroed once the key holds it (the migration, one release).
 //!
-//! `settle` (`Service::settle`) runs once per boot, after the services are loaded and before the first module: it reads the machine keys of every selected module,
+//! At boot, `settle` (`Service::settle`) runs after the services are loaded and before the first module: it reads the machine keys of every selected module,
 //! assigns all numbers in load order and leaves the table `resolve` answers from. Doing it for the whole selection first is what lets the eviction rule see which
-//! map entries belong to modules that load in this boot. The map is saved at once, and only when it changed (`dirty`).
+//! map entries belong to modules that load in this boot. Live loads use the same rules with the current map and a prospective selection. They save the map
+//! after accepting the load and restore the old assignment on refusal.
 //!
 //! Rules of the assignment, per machine in load order (`dkrt_sdk::sticky`):
 //! 1. the map has an entry for its hash and that number is not taken in this boot: use it (sticky; logged as rule 1);
@@ -18,6 +19,7 @@
 //!
 //! The keys of one boot are unique: the boot planner refuses a key that two modules provide or one module provides twice (`E_PLAN_KEY`), so the assignment has no rule for a repeat.
 use core::ptr::addr_of_mut;
+use dkneeds::KIND_MACHINE;
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::service::SettleCtx;
 use dkrt_sdk::sel::MAP_N;
@@ -28,6 +30,7 @@ use dkrt_sdk::*;
 pub const SETTING: &[u8] = b"machines.types";
 
 /// The boot's assignment, peekable by the proof tools (`DKRT_ASSIGN`): `magic` "DKAS", `n` machines planned, `dirty` 1 when the map changed.
+#[derive(Clone, Copy)]
 #[repr(C, align(4))]
 pub struct State {
     magic: u32,
@@ -41,16 +44,21 @@ pub struct State {
     ty: [u32; MAX_KEYS],
 }
 
+impl State {
+    const EMPTY: Self = Self {
+        magic: 0,
+        n: 0,
+        dirty: 0,
+        map: [0; MAP_N],
+        idx: [0; MAX_KEYS],
+        key: [0; MAX_KEYS],
+        ty: [0; MAX_KEYS],
+    };
+}
+
 #[no_mangle]
-pub static mut DKRT_ASSIGN: State = State {
-    magic: 0,
-    n: 0,
-    dirty: 0,
-    map: [0; MAP_N],
-    idx: [0; MAX_KEYS],
-    key: [0; MAX_KEYS],
-    ty: [0; MAX_KEYS],
-};
+pub static mut DKRT_ASSIGN: State = State::EMPTY;
+static mut BEFORE_PREVIEW: State = State::EMPTY;
 
 fn st() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_ASSIGN) }
@@ -150,23 +158,35 @@ unsafe fn save<C: CoreApi>(core: &C, map: &[u32; MAP_N]) -> bool {
 /// Assign the numbers of every machine of the selected modules (`Service::settle`).
 pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
     let a = st();
-    a.magic = 0x444b_4153; // "DKAS"
-    a.n = 0;
+    if sel.is_restore() {
+        *a = *addr_of_mut!(BEFORE_PREVIEW);
+        return;
+    }
     let (from, legacy) = stored(core);
+    let preview = sel.is_preview();
+    let commit = sel.is_commit();
+    let base = if preview {
+        *addr_of_mut!(BEFORE_PREVIEW) = *a;
+        a.map
+    } else if commit {
+        (*addr_of_mut!(BEFORE_PREVIEW)).map
+    } else {
+        from
+    };
     let r = range(core);
-    clean(r, &from, &mut a.map);
-    // the machines of the selection, in load order
-    let mut k = 0;
-    while k < sel.count {
-        let mut i = 0;
-        while i < sel.nkeys[k] as usize && a.n < MAX_KEYS {
-            a.idx[a.n] = k as u32;
-            a.key[a.n] = sel.keys[k][i];
-            a.ty[a.n] = 0;
-            a.n += 1;
-            i += 1;
-        }
-        k += 1;
+    clean(r, &base, &mut a.map);
+    if !commit {
+        a.magic = 0x444b_4153; // "DKAS"
+        a.n = 0;
+        // the machines of the selection, in load order
+        sel.for_each_key(core, KIND_MACHINE, |at, key| {
+            if a.n < MAX_KEYS {
+                a.idx[a.n] = at;
+                a.key[a.n] = key;
+                a.ty[a.n] = 0;
+                a.n += 1;
+            }
+        });
     }
     let n = a.n;
     a.dirty = assign(
@@ -177,14 +197,22 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
         &mut a.ty,
         n,
         &mut |ev: &Event| {
-            let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
-            core.log(ev.kind, flags, ev.args);
+            if !preview {
+                let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
+                core.log(ev.kind, flags, ev.args);
+            }
         },
     );
+    if !preview {
+        persist(core, a, legacy && from != [0; MAP_N]);
+    }
+}
+
+unsafe fn persist<C: CoreApi>(core: &C, a: &mut State, migrate: bool) {
     // Save when the map changed or still comes from the old place. A refused write leaves `dirty` set and the old place as it is: the next boot reads the same map, assigns the
     // same numbers and tries again. Once the key holds the map the old bytes are zeroed, so that a later erase of the key cannot bring back a stale map; a refused zeroing
     // is tried again at every boot while the old bytes are not 0.
-    if a.dirty != 0 || (legacy && from != [0; MAP_N]) {
+    if a.dirty != 0 || migrate {
         if save(core, &a.map) {
             a.dirty = 0;
         } else {

@@ -8,7 +8,7 @@
         "files": ["tests/filter-graph.device.test.ts"],
         "dsp": "sharc",
         "tags": ["S:machines", "C:state"],
-        "modules": ["digikit/resonator-bank", "core/services/machines"],
+        "modules": ["digikit/resonator-bank", "core/services/machines", "digikit/debug", "digikit/remote", "test/cal-kernels"],
         "plusdrive": true
       }
     ]

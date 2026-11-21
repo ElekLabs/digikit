@@ -151,10 +151,12 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn settle(core: &C, s: &SettleCtx) {
-        // a new plan of the numbers: the parking state of the earlier one is not carried over
-        PARK_TRIES = 0;
-        BUSY_PASSES = 0;
-        LOGGED = 0;
+        if !s.is_preview() && !s.is_restore() && !s.is_commit() {
+            // A boot starts a new parking cycle. Live assignment keeps the existing cycle.
+            PARK_TRIES = 0;
+            BUSY_PASSES = 0;
+            LOGGED = 0;
+        }
         crate::assign::plan(core, s);
         crate::filter::plan(core, s)
     }

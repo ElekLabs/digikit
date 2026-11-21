@@ -2,12 +2,15 @@
 import { scheduledTurns } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
-import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { bounded, REDRAW, stableFrameHash, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
 import { halfword, selectTrack } from '@digi/regression/runtime/fx-track-ui.ts';
+import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
 
 const BANK = 'digikit/resonator-bank';
+// CAL KERNELS activates machines.dks before the first filter is loaded.
+const BOOT_MODULES = [DEBUG_MODULE, 'digikit/remote', 'test/cal-kernels'];
 const STOCK_FILTERS = 6;
 const BANK_TYPE = 16; // The only module filter on this card takes the first module type.
 const MIN_CHANGED_PIXELS = 20;
@@ -36,20 +39,29 @@ cardRigs(
   {
     devices: ['dt2', 'dn2'],
     dsp: 'sharc', // The real Bank pack contains a DSP section that must be acknowledged at load.
-    roots: RT,
     hold: true,
-    initial: ({ mod }) => ({ modules: [BANK], selection: [mod(BANK).name] }),
+    initial: ({ mod }) => ({ modules: [...BOOT_MODULES, BANK], selection: BOOT_MODULES.map((id) => mod(id).name) }),
   },
   (rig) => {
-    test('the FLTR response moves with FREQ, SPRD and Q', async () => {
+    test('the first live filter can be selected and its response moves with FREQ, SPRD and Q', async () => {
       const rt = await rig.first();
       const { session, ui } = rt;
       const boot = await bootInfo(session, rig.plan);
       expect({ loaded: boot.loaded, safe: boot.safe, results: boot.results.slice(0, boot.count) }).toEqual({
-        loaded: 1,
+        loaded: BOOT_MODULES.length,
         safe: 0,
-        results: [0],
+        results: BOOT_MODULES.map(() => 0),
       });
+
+      const bankPath = rig.mod(BANK).name;
+      await rig.usb(rt, async (dk) => {
+        const names = (await dk.modules()).map((m) => m.name).sort();
+        expect(names, 'only the boot modules are active').toEqual([...BOOT_MODULES].sort());
+        expect(await dk.loadAndWait(bankPath), 'the first live filter loads').toEqual({ result: 0, unloaded: false });
+        const row = (await dk.loadStates()).find((m) => m.name === bankPath.split('/').at(-1));
+        expect(row, 'the filter is active after the live job').toMatchObject({ state: 'ACTIVE' });
+      });
+      expect((await session.status()).epoch, 'the load kept the boot epoch').toBe(rt.epoch);
 
       const { fx } = deviceProfile(rig.device);
       const layout = LAYOUT[rig.device as keyof typeof LAYOUT];
@@ -95,6 +107,11 @@ cardRigs(
         );
         previous = pixels;
       }
+      await rig.usb(rt, async (dk) => {
+        expect(await dk.reloadAndWait(bankPath), 'the selected filter can be replaced').toEqual({ result: 0, unloaded: true });
+        expect((await dk.modules()).map((m) => m.name).sort()).toEqual([...BOOT_MODULES, BANK].sort());
+      });
+      expect(await types(), 'replacement keeps the assigned filter type').toBe((before & 0xff00) | BANK_TYPE);
     }, 900_000);
   },
 );

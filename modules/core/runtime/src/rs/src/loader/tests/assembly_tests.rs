@@ -320,6 +320,8 @@ impl Card {
 }
 
 impl Images for Card {
+    type Selection = SelectionKeys;
+
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         let key = core::slice::from_raw_parts(path, cstr_len(path, 64)).to_vec();
         match self.files.iter().find(|(n, _)| *n == key) {
@@ -509,7 +511,7 @@ unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fix
     for (addr, bytes) in stock_sites(dev).values() {
         p.put_code(*addr, bytes);
     }
-    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: runtime_object() });
+    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: runtime_object() }, SelectionKeys::new());
     l.reset_plan();
     for (k, m) in modules.iter().enumerate() {
         l.capture(k, &packed(dev, m.leaf, "dkm", m.nx));
@@ -929,7 +931,7 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
             for round in 0..2 {
                 assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
                 assert_eq!(l.unload_rec(0), OK, "{} round {round}", dev.name);
-                assert_eq!(l.reload_load(0, path.as_ptr()), OK, "{} round {round}", dev.name);
+                assert_eq!(l.reload_load(0, path.as_ptr(), &[]), OK, "{} round {round}", dev.name);
                 assert_eq!((records::module(0).used, l.sel_of(0)), (1, 0));
             }
         }
@@ -965,20 +967,20 @@ fn a_packed_module_is_unloaded_loaded_under_a_new_path_and_loaded_again_at_run_t
             };
             // the module of that name is loaded: its copy is refused by name, before anything changes
             assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), E_LOADED, "{}", dev.name);
-            assert_eq!((records::module(1).used, l.accepted[1]), (0, false));
+            assert_eq!((records::module(1).used, l.selection.accepted[1]), (0, false));
             // an unload, then the copy at a new index (its file name was not in the boot's selection)
             assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
             l.retire_index(0);
-            assert_eq!((records::module(0).used, l.accepted[0], l.sel_of(0)), (0, false, u8::MAX), "{}", dev.name);
+            assert_eq!((records::module(0).used, l.selection.accepted[0], l.sel_of(0)), (0, false, u8::MAX), "{}", dev.name);
             assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), OK, "{}", dev.name);
-            assert_eq!(l.live_load(1, copy.as_ptr()), OK, "{}", dev.name);
-            assert_eq!((records::module(0).used, l.sel_of(0), l.accepted[1]), (1, 1, true), "{}", dev.name);
+            assert_eq!(l.live_load(1, copy.as_ptr(), &[]), OK, "{}", dev.name);
+            assert_eq!((records::module(0).used, l.sel_of(0), l.selection.accepted[1]), (1, 1, true), "{}", dev.name);
             // and down again, then the first path at its index
             assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
             l.retire_index(1);
             assert_eq!(l.live_check_load(0, path.as_ptr(), &caps(&l)), OK, "{}", dev.name);
-            assert_eq!(l.live_load(0, path.as_ptr()), OK, "{}", dev.name);
-            assert_eq!((records::module(0).used, l.sel_of(0), l.accepted[0], l.accepted[1]), (1, 0, true, false), "{}", dev.name);
+            assert_eq!(l.live_load(0, path.as_ptr(), &[]), OK, "{}", dev.name);
+            assert_eq!((records::module(0).used, l.sel_of(0), l.selection.accepted[0], l.selection.accepted[1]), (1, 0, true, false), "{}", dev.name);
         }
         let _ = clean_state();
     }

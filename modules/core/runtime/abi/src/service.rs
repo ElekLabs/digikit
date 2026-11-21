@@ -12,7 +12,7 @@
 //! - capacity counts (`caps`), the module behind a fault site (`attribute`), the DSP diagnostics words it owns (`diag`) and the check of its tables (`table_check`);
 //! - `on_loaded` (every row of a module is in the DSP);
 //! - the module lifecycle: `module_begin` before a module's `init`, `module_commit` after it (a `PREPARE`, a `WRITE` and a `DECLARE` pass over a `RecordSink`), and `remove`;
-//! - the boot: `settle`, once, after the services are loaded and before the first module, with the keys of the boot's selection.
+//! - selection assignment: `settle` for boot, and preview followed by commit or restore for a live candidate.
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
 use core::ffi::c_void;
@@ -261,23 +261,66 @@ pub struct ModuleCommitCtx<'a> {
     pub sink: *mut RecordSink,
 }
 
-/// What the loader gives `settle`: the keys of each module of the boot's selection that a service numbers (the keys table of its header; `nkeys[k]` of the 8 words of
-/// `keys[k]`), in selection order. A module whose file could not be read has none. What the keys name is the service's business.
+/// The selection being numbered. During this callback all services query the same
+/// typed header keys through `CoreApi::keys_of`. Holes and refused modules expose no keys.
 #[repr(C)]
 pub struct SettleCtx {
-    /// The modules of the selection.
     pub count: usize,
-    pub nkeys: [u8; dkrt_sdk::SEL_MAX],
-    pub keys: [[u32; 8]; dkrt_sdk::SEL_MAX],
+    phase: SettlePhase,
+}
+
+#[repr(u32)]
+#[derive(Clone, Copy, PartialEq)]
+enum SettlePhase {
+    Boot,
+    Preview,
+    Restore,
+    Commit,
 }
 
 impl SettleCtx {
-    pub const fn new() -> SettleCtx {
-        SettleCtx {
+    pub const fn new() -> Self {
+        Self {
             count: 0,
-            nkeys: [0; dkrt_sdk::SEL_MAX],
-            keys: [[0; 8]; dkrt_sdk::SEL_MAX],
+            phase: SettlePhase::Boot,
         }
+    }
+    pub const fn preview(count: usize) -> Self {
+        Self {
+            count,
+            phase: SettlePhase::Preview,
+        }
+    }
+    pub const fn restore(count: usize) -> Self {
+        Self {
+            count,
+            phase: SettlePhase::Restore,
+        }
+    }
+    pub const fn commit(count: usize) -> Self {
+        Self {
+            count,
+            phase: SettlePhase::Commit,
+        }
+    }
+    /// Visit a service's keys in selection order, with the owning module's selection index.
+    pub fn for_each_key<C: CoreApi>(&self, core: &C, kind: u32, mut visit: impl FnMut(u32, u32)) {
+        let mut keys = [0; 8];
+        for at in 0..self.count.min(dkrt_sdk::SEL_MAX) {
+            let count = core.keys_of(at as u32, kind, &mut keys);
+            for &key in &keys[..count] {
+                visit(at as u32, key);
+            }
+        }
+    }
+    pub fn is_preview(&self) -> bool {
+        self.phase == SettlePhase::Preview
+    }
+    pub fn is_restore(&self) -> bool {
+        self.phase == SettlePhase::Restore
+    }
+    pub fn is_commit(&self) -> bool {
+        self.phase == SettlePhase::Commit
     }
 }
 
@@ -623,8 +666,9 @@ pub trait Service<C: CoreApi> {
     unsafe fn module_commit(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
         OK
     }
-    /// The boot has loaded every service its selection needs and loads no module yet; `s` has the keys of each selected module. Called once per boot
-    /// on every service that is loaded. A service that keeps state across boots (the machines service: its type numbers) plans and saves it here.
+    /// Boot assigns its accepted selection once. A live candidate receives a preview followed by
+    /// restore or commit. Preview may calculate provisional numbers but cannot persist or publish them.
+    /// Restore gives back the exact active assignments. Commit keeps the accepted assignments.
     unsafe fn settle(core: &C, s: &SettleCtx) {}
 
     /// DSP section: the entries of the tables this service owns (called in list order, after the header is validated), and the header's counts of them. The service

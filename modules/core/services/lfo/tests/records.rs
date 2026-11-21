@@ -156,6 +156,33 @@ fn the_numbers_are_kept_in_the_settings_key_across_boots() {
 }
 
 #[test]
+fn live_shape_numbering_preserves_active_shapes_and_saves_only_on_commit() {
+    let (_g, core) = fresh();
+    settle(&core, &[&[KEY_A]]);
+    load(&core, 1, KEY_A, b"RAMP");
+    let writes = core.calls().len();
+    core.set_keys(1, KIND_LFO_SHAPE, &[KEY_B]);
+    let settle = |sel: &SettleCtx| unsafe { <Lfo as Service<FakeCore>>::settle(&core, sel) };
+
+    settle(&SettleCtx::preview(2));
+    assert_eq!(number_of(1, KEY_B), 8);
+    assert_eq!(name_of(7), Some(*b"RAMP"));
+    assert_eq!(core.calls().len(), writes);
+
+    settle(&SettleCtx::restore(1));
+    assert_eq!(number_of(1, KEY_B), 0);
+    assert_eq!(name_of(7), Some(*b"RAMP"));
+    assert_eq!(core.calls().len(), writes);
+
+    settle(&SettleCtx::preview(2));
+    settle(&SettleCtx::commit(2));
+    assert_eq!(number_of(1, KEY_B), 8);
+    let settings = core.settings.borrow();
+    let (_, map) = settings.iter().find(|(k, _)| k == SETTING).unwrap();
+    assert_eq!(u32::from_be_bytes(map[4..8].try_into().unwrap()), KEY_B | 8);
+}
+
+#[test]
 fn a_key_that_the_module_does_not_provide_or_a_bad_name_or_a_key_twice_is_refused() {
     let (_g, core) = fresh();
     settle(&core, &[&[KEY_A, 0x00c3_0300]]);

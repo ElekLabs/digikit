@@ -592,6 +592,7 @@ pub unsafe fn extend_list<M: FwMem>(
 // ---- the sticky numbers ----------------------------------------------------------------------------------------------------------
 
 /// The boot's assignment, peekable by the proof tools (`DKRT_ASSIGN_FILTERS`): `magic` "DKAF", `n` filters planned, `dirty` 1 when the map changed.
+#[derive(Clone, Copy)]
 #[repr(C, align(4))]
 pub struct State {
     magic: u32,
@@ -604,16 +605,21 @@ pub struct State {
     ty: [u32; MAX_KEYS],
 }
 
+impl State {
+    const EMPTY: Self = Self {
+        magic: 0,
+        n: 0,
+        dirty: 0,
+        map: [0; ROWS],
+        idx: [0; MAX_KEYS],
+        key: [0; MAX_KEYS],
+        ty: [0; MAX_KEYS],
+    };
+}
+
 #[no_mangle]
-pub static mut DKRT_ASSIGN_FILTERS: State = State {
-    magic: 0,
-    n: 0,
-    dirty: 0,
-    map: [0; ROWS],
-    idx: [0; MAX_KEYS],
-    key: [0; MAX_KEYS],
-    ty: [0; MAX_KEYS],
-};
+pub static mut DKRT_ASSIGN_FILTERS: State = State::EMPTY;
+static mut BEFORE_PREVIEW: State = State::EMPTY;
 
 fn st() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_ASSIGN_FILTERS) }
@@ -659,23 +665,33 @@ unsafe fn save<C: CoreApi>(core: &C, map: &[u32; ROWS]) -> bool {
 /// Assign the numbers of every filter of the selected modules (`Service::settle`), by the rules of the machines' assignment (`assign.rs`) over the filter range.
 pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
     let a = st();
-    a.magic = 0x444b_4146; // "DKAF"
-    a.n = 0;
+    if sel.is_restore() {
+        *a = *addr_of_mut!(BEFORE_PREVIEW);
+        return;
+    }
+    let preview = sel.is_preview();
+    let commit = sel.is_commit();
     let from = stored(core);
-    clean(RANGE, &from, &mut a.map);
-    let mut k = 0;
-    while k < sel.count {
-        let mut keys = [0u32; 8];
-        let n = core.keys_of(k as u32, KIND_FILTER, &mut keys);
-        let mut i = 0;
-        while i < n && a.n < MAX_KEYS {
-            a.idx[a.n] = k as u32;
-            a.key[a.n] = keys[i];
-            a.ty[a.n] = 0;
-            a.n += 1;
-            i += 1;
-        }
-        k += 1;
+    let base = if preview {
+        *addr_of_mut!(BEFORE_PREVIEW) = *a;
+        a.map
+    } else if commit {
+        (*addr_of_mut!(BEFORE_PREVIEW)).map
+    } else {
+        from
+    };
+    clean(RANGE, &base, &mut a.map);
+    if !commit {
+        a.magic = 0x444b_4146; // "DKAF"
+        a.n = 0;
+        sel.for_each_key(core, KIND_FILTER, |at, key| {
+            if a.n < MAX_KEYS {
+                a.idx[a.n] = at;
+                a.key[a.n] = key;
+                a.ty[a.n] = 0;
+                a.n += 1;
+            }
+        });
     }
     let n = a.n;
     a.dirty = assign(
@@ -686,10 +702,18 @@ pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
         &mut a.ty,
         n,
         &mut |ev: &Event| {
-            let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
-            core.log(ev.kind, flags, ev.args);
+            if !preview {
+                let flags = if ev.error { logk::F_ERROR } else { LOG_INFO };
+                core.log(ev.kind, flags, ev.args);
+            }
         },
     );
+    if !preview {
+        persist(core, a);
+    }
+}
+
+unsafe fn persist<C: CoreApi>(core: &C, a: &mut State) {
     if a.dirty != 0 {
         a.dirty = !save(core, &a.map) as u32; // a refused write stays dirty: the next boot assigns the same numbers and tries again
     }

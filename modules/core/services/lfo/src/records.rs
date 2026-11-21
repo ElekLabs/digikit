@@ -66,8 +66,11 @@ const FREE: Shape = Shape {
 // (the arena's alignment is 16). A shape is freed by clearing `owner` alone: every reader tests it first.
 static mut SHAPES: [Shape; MAX_SHAPES] = [FREE; MAX_SHAPES];
 
-/// The keys of the boot's selection and the numbers `settle` gave them.
+/// The keys of the selection and the numbers `settle` gave them.
+#[derive(Clone, Copy)]
 struct Settled {
+    map: [u32; MAX_SHAPES],
+    dirty: u32,
     n: usize,
     /// selection index of the module of each key
     at: [u8; MAX_KEYS],
@@ -76,13 +79,20 @@ struct Settled {
     /// modules of the selection
     modules: usize,
 }
-static mut SETTLED: Settled = Settled {
-    n: 0,
-    at: [0; MAX_KEYS],
-    key: [0; MAX_KEYS],
-    num: [0; MAX_KEYS],
-    modules: 0,
-};
+impl Settled {
+    const EMPTY: Self = Self {
+        map: [0; MAX_SHAPES],
+        dirty: 0,
+        n: 0,
+        at: [0; MAX_KEYS],
+        key: [0; MAX_KEYS],
+        num: [0; MAX_KEYS],
+        modules: 0,
+    };
+}
+
+static mut SETTLED: Settled = Settled::EMPTY;
+static mut BEFORE_PREVIEW: Settled = Settled::EMPTY;
 
 fn settled() -> &'static mut Settled {
     unsafe { &mut *addr_of_mut!(SETTLED) }
@@ -400,6 +410,12 @@ unsafe fn save<C: CoreApi>(core: &C, map: &[u32; MAX_SHAPES]) -> bool {
     core.settings_put(SETTING, &raw) == OK
 }
 
+unsafe fn persist<C: CoreApi>(core: &C, s: &mut Settled) {
+    if s.dirty != 0 {
+        s.dirty = !save(core, &s.map) as u32;
+    }
+}
+
 /// Is `key` among the shape keys the module at selection index `at` provides (its `KEYS` entry)? True when no `settle` ran for that index (a host without a boot).
 fn provided(at: u32, key: u32) -> bool {
     let s = unsafe { &*addr_of!(SETTLED) };
@@ -442,39 +458,45 @@ impl<C: CoreApi> Service<C> for Lfo {
 
     unsafe fn settle(core: &C, sel: &SettleCtx) {
         let s = settled();
+        if sel.is_restore() {
+            *s = *addr_of!(BEFORE_PREVIEW);
+            return;
+        }
+        if sel.is_commit() {
+            persist(core, s);
+            return;
+        }
+        let preview = sel.is_preview();
+        let from = stored(core);
+        let base = if preview {
+            *addr_of_mut!(BEFORE_PREVIEW) = *s;
+            s.map
+        } else {
+            from
+        };
         s.n = 0;
         s.modules = sel.count.min(dkrt_sdk::SEL_MAX);
-        let from = stored(core);
-        let mut map = [0u32; MAX_SHAPES];
-        clean(RANGE, &from, &mut map);
-        let mut k = 0;
-        while k < s.modules {
-            // the shape keys of the module (none for one the plan refused)
-            let mut keys = [0u32; 8];
-            let have = core.keys_of(k as u32, KIND_LFO_SHAPE, &mut keys);
-            let mut i = 0;
-            while i < have && s.n < MAX_KEYS {
-                s.at[s.n] = k as u8;
-                s.key[s.n] = keys[i];
+        clean(RANGE, &base, &mut s.map);
+        sel.for_each_key(core, KIND_LFO_SHAPE, |at, key| {
+            if s.n < MAX_KEYS {
+                s.at[s.n] = at as u8;
+                s.key[s.n] = key;
                 s.num[s.n] = 0;
                 s.n += 1;
-                i += 1;
             }
-            k += 1;
-        }
+        });
         let n = s.n;
-        let dirty = assign(
+        s.dirty = assign(
             RANGE,
             &from,
-            &mut map,
+            &mut s.map,
             &s.key,
             &mut s.num,
             n,
             &mut |_: &Event| {},
         );
-        // a refused write is tried again at the next boot: the same map gives the same numbers
-        if dirty != 0 {
-            save(core, &map);
+        if !preview {
+            persist(core, s);
         }
     }
 

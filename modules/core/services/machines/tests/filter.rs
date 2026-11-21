@@ -367,6 +367,39 @@ fn a_filter_keeps_its_number_when_an_earlier_filter_leaves() {
 }
 
 #[test]
+fn live_filter_numbering_preserves_active_rows_and_saves_only_on_commit() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let extra = KEY + 0x100;
+    let (core, sel) = core_with(&[&[KEY]]);
+    core.boot_index.set(0);
+    let settle = |sel: &SettleCtx| unsafe { <Machines as Service<FakeCore>>::settle(&core, sel) };
+    settle(&sel);
+    let reg = section(KEY);
+    unsafe { filter::apply(&core, 1, reg.as_ptr(), 0) };
+    let writes = core.calls().len();
+    core.set_keys(1, KIND_FILTER, &[extra]);
+    core.boot_index.set(1);
+
+    settle(&SettleCtx::preview(2));
+    assert_eq!(unsafe { filter::resolve(&core, extra) }, 17);
+    assert_eq!(filter::rows()[0].owner, 1);
+    assert_eq!(core.calls().len(), writes);
+
+    settle(&SettleCtx::restore(1));
+    assert_eq!(unsafe { filter::resolve(&core, extra) }, 0);
+    assert_eq!(filter::rows()[0].owner, 1);
+    assert_eq!(core.calls().len(), writes);
+
+    settle(&SettleCtx::preview(2));
+    settle(&SettleCtx::commit(2));
+    assert_eq!(unsafe { filter::resolve(&core, extra) }, 17);
+    let settings = core.settings.borrow();
+    let (_, map) = settings.iter().find(|(k, _)| k == SETTING).unwrap();
+    assert_eq!(rd(map, 4), extra | 17);
+    filter::remove(1);
+}
+
+#[test]
 fn filter_graph_offsets_must_be_aligned_and_within_the_coldfire_image() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let (core, sel) = core_with(&[&[KEY]]);

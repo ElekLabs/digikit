@@ -1,5 +1,6 @@
 //! The sticky machine type numbers over a `FakeCore`: the plan of `settle` from the keys of the selection, the stored map (settings key, migration of the selection
 //! record's old bytes) and the answer of `resolve` for the module being loaded. The assignment rules themselves are tested in `dkrt_sdk::sticky`.
+use dkneeds::KIND_MACHINE;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::service::{Service, SettleCtx};
 use dkrt_sdk::sel::MAP_N;
@@ -25,12 +26,11 @@ fn dt2_core() -> FakeCore {
 }
 
 /// A selection of modules, each with its machine keys.
-fn selection(modules: &[&[u32]]) -> SettleCtx {
+fn selection(core: &FakeCore, modules: &[&[u32]]) -> SettleCtx {
     let mut s = SettleCtx::new();
     s.count = modules.len();
     for (k, keys) in modules.iter().enumerate() {
-        s.nkeys[k] = keys.len() as u8;
-        s.keys[k][..keys.len()].copy_from_slice(keys);
+        core.set_keys(k as u32, KIND_MACHINE, keys);
     }
     s
 }
@@ -73,7 +73,7 @@ fn settle(core: &FakeCore, sel: &SettleCtx) {
 fn a_boot_without_a_map_gives_the_lowest_numbers_in_load_order_and_saves_the_map() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = dt2_core();
-    settle(&core, &selection(&[&[A, B]]));
+    settle(&core, &selection(&core, &[&[A, B]]));
     core.boot_index.set(0);
     unsafe {
         assert_eq!((resolve(&core, A), resolve(&core, B)), (FIRST, FIRST + 1));
@@ -96,7 +96,7 @@ fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_sa
     let mut old = [0u32; MAP_N];
     old[0] = A | (FIRST + 2);
     set_legacy(&core, old);
-    settle(&core, &selection(&[&[B]]));
+    settle(&core, &selection(&core, &[&[B]]));
     core.boot_index.set(0);
     unsafe {
         assert_eq!(resolve(&core, B), FIRST + 5, "sticky");
@@ -108,7 +108,7 @@ fn a_stored_map_keeps_a_machine_on_its_number_and_a_boot_that_changes_nothing_sa
     // a new machine takes the lowest number no entry references
     let core = dt2_core();
     stored(&core, map);
-    settle(&core, &selection(&[&[B, A]]));
+    settle(&core, &selection(&core, &[&[B, A]]));
     core.boot_index.set(0);
     unsafe {
         assert_eq!((resolve(&core, B), resolve(&core, A)), (FIRST + 5, FIRST));
@@ -124,7 +124,7 @@ fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() 
     old[0] = A | (FIRST + 2);
     set_legacy(&core, old);
     core.boot_index.set(0);
-    settle(&core, &selection(&[&[A]]));
+    settle(&core, &selection(&core, &[&[A]]));
     unsafe {
         assert_eq!(resolve(&core, A), FIRST + 2, "the number of the old map");
     }
@@ -135,7 +135,7 @@ fn the_map_of_the_selection_record_is_read_once_and_moved_to_the_settings_key() 
     );
     // nothing to migrate: nothing is saved for a boot without machines
     let core = dt2_core();
-    settle(&core, &selection(&[&[]]));
+    settle(&core, &selection(&core, &[&[]]));
     assert!(saved(&core).is_empty());
 }
 
@@ -144,7 +144,7 @@ fn a_key_is_resolved_for_the_module_being_loaded_only_and_a_pinned_number_is_its
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = dt2_core();
     // the keys of the boot are unique (the planner refuses a repeat): each module resolves its own
-    settle(&core, &selection(&[&[A], &[B]]));
+    settle(&core, &selection(&core, &[&[A], &[B]]));
     unsafe {
         core.boot_index.set(0);
         assert_eq!(resolve(&core, A), FIRST);
@@ -170,7 +170,7 @@ fn a_refused_write_is_tried_again_at_the_next_boot_with_the_same_numbers_and_the
     set_legacy(&core, old);
     core.put_result.set(E_BUSY);
     core.boot_index.set(0);
-    settle(&core, &selection(&[&[A, B]]));
+    settle(&core, &selection(&core, &[&[A, B]]));
     let first = unsafe { (resolve(&core, A), resolve(&core, B)) };
     assert_eq!(
         first,
@@ -186,7 +186,7 @@ fn a_refused_write_is_tried_again_at_the_next_boot_with_the_same_numbers_and_the
     assert!(core.settings.borrow().is_empty());
     // the next boot: the same numbers, and the write is tried again
     core.put_result.set(OK);
-    settle(&core, &selection(&[&[A, B]]));
+    settle(&core, &selection(&core, &[&[A, B]]));
     assert_eq!(unsafe { (resolve(&core, A), resolve(&core, B)) }, first);
     assert_eq!(saved(&core).len(), 2);
     assert_eq!(
@@ -204,21 +204,21 @@ fn after_the_migration_an_erased_key_does_not_bring_back_the_old_map() {
     old[0] = A | (FIRST + 2);
     set_legacy(&core, old);
     core.boot_index.set(0);
-    settle(&core, &selection(&[&[A]]));
+    settle(&core, &selection(&core, &[&[A]]));
     assert_eq!(unsafe { resolve(&core, A) }, FIRST + 2);
     assert_eq!(core.legacy.get(), [0u8; 32]);
     // the key is erased: the machine takes the lowest number, not the old one
     core.settings.borrow_mut().clear();
-    settle(&core, &selection(&[&[A]]));
+    settle(&core, &selection(&core, &[&[A]]));
     assert_eq!(unsafe { resolve(&core, A) }, FIRST);
     // a refused zeroing is tried again while the key holds the map
     let again = FakeCore::new();
     set_legacy(&again, old);
     again.legacy_clear_result.set(E_BUSY);
-    settle(&again, &selection(&[&[A]]));
+    settle(&again, &selection(&again, &[&[A]]));
     assert_ne!(again.legacy.get(), [0u8; 32]);
     again.legacy_clear_result.set(OK);
-    settle(&again, &selection(&[&[A]]));
+    settle(&again, &selection(&again, &[&[A]]));
     assert_eq!(again.legacy.get(), [0u8; 32]);
 }
 
@@ -227,20 +227,63 @@ fn a_second_settle_over_the_live_set_keeps_every_number_and_gives_a_key_a_reload
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     const C: u32 = 0x00cc_00;
     let core = dt2_core();
-    settle(&core, &selection(&[&[A, B]]));
+    settle(&core, &selection(&core, &[&[A, B]]));
     core.boot_index.set(0);
     let first = unsafe { (resolve(&core, A), resolve(&core, B)) };
     assert_eq!(first, (FIRST, FIRST + 1));
     assert_eq!(saved(&core).len(), 1);
     // the same live set again (idempotent): the numbers stay, nothing more is written
-    settle(&core, &selection(&[&[A, B]]));
+    settle(&core, &selection(&core, &[&[A, B]]));
     assert_eq!(unsafe { (resolve(&core, A), resolve(&core, B)) }, first);
     assert_eq!(saved(&core).len(), 1, "nothing changed, nothing is saved");
     // a reload of module 0 whose new file adds key C: A and B keep their numbers, C takes the next free one
-    settle(&core, &selection(&[&[A, B, C]]));
+    settle(&core, &selection(&core, &[&[A, B, C]]));
     assert_eq!(
         unsafe { (resolve(&core, A), resolve(&core, B), resolve(&core, C)) },
         (FIRST, FIRST + 1, FIRST + 2)
     );
     assert_eq!(saved(&core).len(), 2);
+}
+
+#[test]
+fn live_numbering_preserves_unsaved_types_until_restore_or_commit() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    const C: u32 = 0x00cc_00;
+    let core = dt2_core();
+    let mut old = [0u32; MAP_N];
+    old[0] = A | (FIRST + 2);
+    set_legacy(&core, old);
+    core.put_result.set(E_BUSY);
+    settle(&core, &selection(&core, &[&[A], &[B]]));
+    let calls = core.calls().len();
+
+    core.put_result.set(OK);
+    let candidate = selection(&core, &[&[C], &[B]]);
+    settle(&core, &SettleCtx::preview(candidate.count));
+    core.boot_index.set(0);
+    assert_eq!(unsafe { resolve(&core, C) }, FIRST + 1);
+    core.boot_index.set(1);
+    assert_eq!(unsafe { resolve(&core, B) }, FIRST);
+    assert_eq!(core.calls().len(), calls);
+    assert_ne!(core.legacy.get(), [0; 32]);
+
+    settle(&core, &SettleCtx::restore(2));
+    core.boot_index.set(0);
+    assert_eq!(
+        unsafe { (resolve(&core, A), resolve(&core, C)) },
+        (FIRST + 2, 0)
+    );
+    core.boot_index.set(1);
+    assert_eq!(unsafe { resolve(&core, B) }, FIRST);
+    assert_eq!(core.calls().len(), calls);
+
+    settle(&core, &SettleCtx::preview(candidate.count));
+    settle(&core, &SettleCtx::commit(candidate.count));
+    core.boot_index.set(0);
+    assert_eq!(unsafe { resolve(&core, C) }, FIRST + 1);
+    assert_eq!(core.legacy.get(), [0; 32]);
+    assert_eq!(
+        saved(&core)[1][..3],
+        [A | (FIRST + 2), B | FIRST, C | (FIRST + 1)]
+    );
 }
