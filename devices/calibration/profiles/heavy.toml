@@ -1,6 +1,6 @@
 schema = "dk.calprofile/1"
 name = "heavy"
-description = "Every audio track (DT2 8, DN2 16) holds a note with the longest amp release and the delay, reverb and chorus sends open, no modules: the stock engine at its heaviest. RECEIVE NOTES and RECEIVE CC/NRPN on."
+description = "Every audio track plays a note with a long release and the delay, reverb and chorus sends open. No modules: the largest stock load. Needs RECEIVE NOTES and RECEIVE CC/NRPN on."
 warmup_s = 2
 capture_s = 5
 repeats = 3

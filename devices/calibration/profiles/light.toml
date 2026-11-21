@@ -1,6 +1,6 @@
 schema = "dk.calprofile/1"
 name = "light"
-description = "One track holds a note through the default Multi-Mode filter, no modules: the smallest stock load. The track must be an audio track whose factory MIDI channel is set, with RECEIVE NOTES on."
+description = "One track plays a note through the stock filter. No modules: the smallest stock load. Needs RECEIVE NOTES on."
 warmup_s = 2
 capture_s = 5
 repeats = 3
