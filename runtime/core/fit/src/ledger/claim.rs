@@ -1,8 +1,7 @@
 //! Claims on pools.
 
-use super::pool::PoolKey;
+use super::pool::{OwnerId, PoolKey};
 use core::num::NonZeroU8;
-use dkrt_abi::package::PackageId;
 
 /// A claim of `units` on a pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,10 +26,10 @@ pub(super) struct Claim {
 }
 
 const _: () = assert!(super::MAX_POOLS < u8::MAX as usize);
-const _: () = assert!(dkrt_abi::REC_MAX <= u8::MAX as usize + 1);
+const _: () = assert!(super::MAX_CONSUMERS <= u8::MAX as usize + 1);
 
 impl Claim {
-    pub(super) fn new(consumer: PackageId, pool: usize, units: u32) -> Claim {
+    pub(super) fn new(consumer: OwnerId, pool: usize, units: u32) -> Claim {
         Claim {
             consumer: consumer.0,
             pool: NonZeroU8::new(pool as u8 + 1).unwrap(),
@@ -38,8 +37,8 @@ impl Claim {
         }
     }
 
-    pub(super) fn consumer(&self) -> PackageId {
-        PackageId(self.consumer)
+    pub(super) fn consumer(&self) -> OwnerId {
+        OwnerId(self.consumer)
     }
 
     pub(super) fn pool(&self) -> usize {

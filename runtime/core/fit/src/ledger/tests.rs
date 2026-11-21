@@ -5,8 +5,8 @@ use crate::check_selection;
 use serde_json::Value;
 use std::vec::Vec;
 
-fn pkg(n: u8) -> PackageId {
-    PackageId(n)
+fn pkg(n: u8) -> OwnerId {
+    OwnerId(n)
 }
 
 fn key(owner: Owner, name: u32) -> PoolKey {
@@ -455,22 +455,23 @@ fn full_claims_table_is_not_a_pool_shortage() {
         .collect();
     // the bound: every package of the loader claims every pool
     let every_pool: Vec<Want> = pools.iter().map(|&p| want(p, 1)).collect();
-    for n in 0..REC_MAX as u8 {
+    for n in 0..MAX_CONSUMERS as u8 {
         l.claim(pkg(n), &every_pool).unwrap();
     }
     // past it the table is full: a distinct error, and nothing changes
     assert_eq!(
-        l.claim(pkg(REC_MAX as u8), &every_pool),
+        l.claim(pkg(MAX_CONSUMERS as u8), &every_pool),
         Err(ClaimError::Full)
     );
     assert_eq!(
-        l.claim(pkg(REC_MAX as u8), &[want(pools[0], 1)]),
+        l.claim(pkg(MAX_CONSUMERS as u8), &[want(pools[0], 1)]),
         Err(ClaimError::Full)
     );
     // a consumer that holds rows adds to them without a new row
     l.claim(pkg(0), &[want(pools[0], 1)]).unwrap();
     l.release(pkg(0));
-    l.claim(pkg(REC_MAX as u8), &[want(pools[0], 1)]).unwrap();
+    l.claim(pkg(MAX_CONSUMERS as u8), &[want(pools[0], 1)])
+        .unwrap();
 }
 
 #[test]

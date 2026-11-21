@@ -5,15 +5,15 @@
 //! Pure and fixed-size, like the rest of this crate. The planner asks [`ResourceLedger::fits`] from header tables before any code runs; the package
 //! manager (RC2) claims on bring-up and releases on take-down. Nothing in the runtime uses it yet. The device-facing fit rule in `lib.rs` is unchanged.
 
-use dkrt_abi::package::PackageId;
-use dkrt_abi::REC_MAX;
-use dkrt_sdk::CAP_MAX;
+use dkrt_sdk::{CAP_MAX, PROVIDER_MAX, SEL_MAX};
 
 /// Most pools: the CAPACITY reply has room for this many entries.
 pub const MAX_POOLS: usize = CAP_MAX;
-/// Most claims: one row per (consumer, pool) pair. A consumer is a package (at most `REC_MAX`, the loader's records) and claims each pool at most once (rows
+/// Most consumers: the loader's records (`dkrt_abi::REC_MAX`: the selectable modules plus the providers).
+pub const MAX_CONSUMERS: usize = SEL_MAX + PROVIDER_MAX;
+/// Most claims: one row per (consumer, pool) pair. A consumer is a package (at most `MAX_CONSUMERS`, the loader's records) and claims each pool at most once (rows
 /// of one pair add up), so no consumer holds more rows than there are pools (`MAX_POOLS`).
-pub const MAX_CLAIMS: usize = REC_MAX * MAX_POOLS;
+pub const MAX_CLAIMS: usize = MAX_CONSUMERS * MAX_POOLS;
 
 mod claim;
 mod error;
@@ -22,7 +22,7 @@ mod report;
 
 pub use claim::Want;
 pub use error::{ClaimError, LedgerError};
-pub use pool::{Aggregate, Owner, PoolKey, ResourceDecl};
+pub use pool::{Aggregate, Owner, OwnerId, PoolKey, ResourceDecl};
 pub use report::{PoolReport, PoolShort};
 
 use claim::Claim;
@@ -78,7 +78,7 @@ impl ResourceLedger {
     }
 
     /// The claim of `consumer` on pool `i`, with `extra` units of `wants` added when `extra_for` is that consumer (or a new consumer when it has no claim).
-    fn own(&self, i: usize, wants: &[Want], extra_for: Option<PackageId>) -> u32 {
+    fn own(&self, i: usize, wants: &[Want], extra_for: Option<OwnerId>) -> u32 {
         let pool = self.pools[i].unwrap();
         let mut extra = 0u32;
         for w in wants {
@@ -110,7 +110,7 @@ impl ResourceLedger {
 
     /// The value of pool `i` with the wants applied: its own value plus the value of every pool that draws from it. A parent is declared before its children,
     /// so the recursion ends.
-    fn value(&self, i: usize, wants: &[Want], extra_for: Option<PackageId>) -> u32 {
+    fn value(&self, i: usize, wants: &[Want], extra_for: Option<OwnerId>) -> u32 {
         let mut v = self.own(i, wants, extra_for);
         for j in 0..MAX_POOLS {
             if matches!(self.pools[j], Some(p) if p.parent == Some(i)) {
@@ -120,7 +120,7 @@ impl ResourceLedger {
         v
     }
 
-    fn check(&self, wants: &[Want], extra_for: Option<PackageId>) -> Result<(), PoolShort> {
+    fn check(&self, wants: &[Want], extra_for: Option<OwnerId>) -> Result<(), PoolShort> {
         for w in wants {
             if self.find(w.pool).is_none() {
                 return Err(PoolShort {
@@ -151,7 +151,7 @@ impl ResourceLedger {
     }
 
     /// Claims `wants` for `consumer`, all or nothing. A consumer that claims a pool again adds to its claim.
-    pub fn claim(&mut self, consumer: PackageId, wants: &[Want]) -> Result<(), ClaimError> {
+    pub fn claim(&mut self, consumer: OwnerId, wants: &[Want]) -> Result<(), ClaimError> {
         self.check(wants, Some(consumer))
             .map_err(ClaimError::Short)?;
         // room for the new (consumer, pool) rows first, so that a full table changes nothing
@@ -190,7 +190,7 @@ impl ResourceLedger {
     }
 
     /// Returns every unit `consumer` claimed.
-    pub fn release(&mut self, consumer: PackageId) {
+    pub fn release(&mut self, consumer: OwnerId) {
         for c in self.claims.iter_mut() {
             if matches!(c, Some(x) if x.consumer() == consumer) {
                 *c = None;

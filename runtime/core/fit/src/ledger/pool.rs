@@ -1,12 +1,14 @@
 //! Pools: who declares them, how their claims add up.
 
-use dkrt_abi::package::PackageId;
+/// The id of a pool owner or consumer: a package of the runtime (the same byte as `dkrt_abi::package::PackageId`; the lifecycle converts at its edge).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct OwnerId(pub u8);
 
 /// Who declared a pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Owner {
     Core,
-    Package(PackageId),
+    Package(OwnerId),
 }
 
 /// A pool: its owner and the hash of its name.
