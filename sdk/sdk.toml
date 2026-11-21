@@ -906,7 +906,7 @@ wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, u32 flags, page_draw_fn draw, page_event_fn event, void *arg)"
-doc = "Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`."
+doc = "Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. On a filter page, register the response graph with a draw callback, flags 0, and NULL for `event` and `arg`."
 
 [[import]]
 name = "dk_page_bind"
@@ -2030,6 +2030,7 @@ ACTION = { id = 5, len = 0x10, service = "machines" }
 NATIVE_PAGE = { id = 6, len = 0x90, service = "machines" }
 NATIVE_PAGE_V2 = { id = 7, len = 0x98, service = "machines" }
 FILTER = { id = 10, len = 0xc0, service = "machines" }
+FILTER_V2 = { id = 11, len = 0xc4, service = "machines" }   # FILTER plus a ColdFire image-relative draw callback offset
 SHORTCUT = { id = 9, len = 68, service = "shortcuts" }   # id (16 bytes, NUL padded), label (24), two logical keys (`dk_key`), `on` and `off` as image offsets (0: none), `arg` as given (the builder `dk_shortcut_add` writes it)
 LFO_SHAPE = { id = 8, len = 80, service = "lfo", generic = true }   # u32 key (`DK_KEY_<ID>`: not 0), 4 characters of name (space to tilde), 32 samples of i16 (big-endian)
 

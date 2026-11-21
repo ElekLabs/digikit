@@ -180,12 +180,13 @@ mf_list_entry:
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 3, 2                | magic MACH, version, device
+    .long   0x4d414348, 4, 2                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   0, _mf_pgrows, _mf_pgn          | (the slot map: Digitakt II), the page rows and their count
     .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry
+    .long   mf_native_filter_graph
 
     .bss
     .balign 4

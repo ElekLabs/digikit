@@ -17,9 +17,9 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::iw;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::records::{
-    KIND_ACTION, KIND_FILTER, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE,
-    KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE,
-    LEN_PARAM,
+    KIND_ACTION, KIND_FILTER, KIND_FILTER_V2, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2,
+    KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_FILTER_V2, LEN_MACHINE, LEN_NATIVE_PAGE,
+    LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
 use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
@@ -413,7 +413,11 @@ impl Build {
     pub fn page_canvas(&mut self, p: *mut u8, flags: u32, draw: u32, event: u32, arg: u32) {
         if let Some(i) = find(&self.pages, p) {
             if self.pages[i].owner >= FILTER_OWNER {
-                self.fail(E_FORMAT); // a filter page is the stock FLTR page: no canvas
+                if flags != 0 || draw == 0 || event != 0 || arg != 0 {
+                    self.fail(E_FORMAT); // a filter graph takes only a draw callback
+                } else {
+                    self.pages[i].draw = draw;
+                }
                 return;
             }
             let g = &mut self.pages[i];
@@ -917,7 +921,12 @@ pub fn lower(
             Some(g) => b.pages[g].nparam as u32,
             None => 0,
         };
-        o.head(KIND_FILTER, LEN_FILTER as usize);
+        let draw = page.map_or(0, |g| b.pages[g].draw);
+        if draw == 0 {
+            o.head(KIND_FILTER, LEN_FILTER as usize);
+        } else {
+            o.head(KIND_FILTER_V2, LEN_FILTER_V2 as usize);
+        }
         o.p32(fc.key);
         o.p32(nknob);
         o.text(&fc.name, TEXT);
@@ -963,6 +972,9 @@ pub fn lower(
                 }
             }
             j += 1;
+        }
+        if draw != 0 {
+            o.p32(draw.wrapping_sub(base));
         }
         f += 1;
     }

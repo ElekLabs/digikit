@@ -286,7 +286,7 @@ void dk_param_latched(dk_param *prm);
 /* Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page. Context: init. Since runtime 0.7.0. */
 void dk_param_on_click(dk_param *prm, dk_param_click_fn *fn, void *arg);
 
-/* Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. Context: init. Since runtime 0.7.0. */
+/* Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. On a filter page, register the response graph with a draw callback, flags 0, and NULL for `event` and `arg`. Context: init. Since runtime 0.7.0. */
 void dk_page_canvas(dk_page *p, uint32_t flags, dk_page_draw_fn *draw, dk_page_event_fn *event, void *arg);
 
 /* On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7). Context: init. Since runtime 0.7.0. */

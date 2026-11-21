@@ -191,9 +191,10 @@ mf_native_type:
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 3, 1                | magic MACH, version, device
+    .long   0x4d414348, 4, 1                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   mf_slotmap, 0, 0                | the slot map, (page rows, page count: Digitone II)
     .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry
+    .long   mf_native_filter_graph

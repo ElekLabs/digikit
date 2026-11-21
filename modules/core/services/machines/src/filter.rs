@@ -3,8 +3,7 @@
 //! module owns knobs 2 and 3 (the stock FLTR1 page has three type-specific fields; field 4 is the cutoff).
 //!
 //! The service's own state is `DKRT_FILTERS`; what the ColdFire hooks read is `DKS_FLT` (below): the descriptor rows the stock FLTR page reads through its accessor, the
-//! names, the answers of the parameter-code function and the mask of loaded rows. The hooks are in `dks/src/hooks-*.s`; the response graph and the DSP come in later steps
-//! (E7b, E7c).
+//! names, the answers of the parameter-code function and the mask of loaded rows. The hooks are in `dks/src/hooks-*.s`; the graph hook passes the filter row’s callback and control codes to the image adapter.
 //!
 //! The descriptor row of a module filter is a copy of the stock row of type 0 (Multi-Mode: the service reads it through `STOCK_ROW0`) with the names of the module, field
 //! 4 (knob 1) = the stock cutoff code of that row and fields 5 and 6 = the parameter rows of the module's knobs 2 and 3. Those rows are ordinary run-time parameter rows
@@ -12,7 +11,7 @@
 //!
 //! Record body (big endian words, `LEN_FILTER` less the 8-byte header = 184 bytes): the key (`hash24 << 8`), the number of own knobs (0 to 2), the name and the short
 //! name (24 bytes each), then two knob slots of 64 bytes: glyph, minimum, maximum, default (u32, raw = unit * 256), name (32 bytes), short name (16 bytes). A slot
-//! that is not used is all zero.
+//! that is not used is all zero. A `FILTER_V2` body appends one ColdFire image-relative draw callback offset.
 //!
 //! The numbers: a second sticky range (`dkrt_sdk::sticky`) of 16 numbers with its own settings key and map of 16 entries, so that every number can be remembered. The range
 //! is a constant: it is the same on both devices (finding 148) and no stock table holds a filter type of 16 or more.
@@ -22,7 +21,7 @@ use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::mem::{iw, rd32, FwMem};
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{Problem, SettleCtx};
-use dkrt_sdk::records::{KIND_FILTER, LEN_FILTER};
+use dkrt_sdk::records::{KIND_FILTER, KIND_FILTER_V2, LEN_FILTER, LEN_FILTER_V2};
 use dkrt_sdk::sticky::{assign, clean, Event, Range};
 use dkrt_sdk::*;
 use dkrt_svc_params::dynreg::w;
@@ -42,6 +41,7 @@ const MAX_KEYS: usize = 32;
 
 const TEXT: usize = 24;
 const BODY: usize = LEN_FILTER as usize - 8;
+const BODY_V2: usize = LEN_FILTER_V2 as usize - 8;
 const NAME: usize = 8;
 const SHORT: usize = 8 + TEXT;
 const KNOB0: usize = 8 + 2 * TEXT;
@@ -56,6 +56,7 @@ pub mod what {
     pub const COUNT: &str = "more filters than one module may have";
     pub const SIZE: &str = "the body has the wrong size";
     pub const FILTER: &str = "a filter has a key without a hash, more than two knobs, or a name or knob text that is not printable ASCII, a knob with minimum above maximum, or a used slot beyond its knobs";
+    pub const DRAW: &str = "the draw callback offset is not word-aligned";
     pub const KEY_TWICE: &str = "same filter key as an earlier filter";
 }
 
@@ -101,36 +102,42 @@ pub unsafe fn body_ok(b: *const u8) -> bool {
     true
 }
 
-/// The rule for the filter records of one module (`Service::validate_records` and the service's check): count, size, fields, a key once.
-pub fn validate(bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+pub fn is_kind(kind: u32) -> bool {
+    kind == KIND_FILTER || kind == KIND_FILTER_V2
+}
+
+/// Check both filter record versions together so count and key uniqueness cover the whole module.
+pub fn validate<'a>(
+    records: impl IntoIterator<Item = (u32, &'a [u8])>,
+    report: &mut dyn FnMut(Problem),
+) {
     let mut keys = [0u32; PER_MODULE];
-    let mut i = 0;
-    while i < bodies.len() {
-        let body = bodies[i];
+    for (i, (kind, body)) in records.into_iter().enumerate() {
         if i == PER_MODULE {
             report(Problem::set(KIND_FILTER, E_FORMAT, what::COUNT));
         }
-        if body.len() != BODY {
-            report(Problem::record(KIND_FILTER, i, E_FORMAT, what::SIZE));
-            i += 1;
+        let size = if kind == KIND_FILTER_V2 {
+            BODY_V2
+        } else {
+            BODY
+        };
+        if body.len() != size {
+            report(Problem::record(kind, i, E_FORMAT, what::SIZE));
             continue;
         }
-        // SAFETY: the body has `BODY` bytes, which every read stays inside
+        // SAFETY: the length has been checked for this record version
         unsafe {
             if !body_ok(body.as_ptr()) {
-                report(Problem::record(KIND_FILTER, i, E_FORMAT, what::FILTER));
+                report(Problem::record(kind, i, E_FORMAT, what::FILTER));
+            }
+            if kind == KIND_FILTER_V2 && rd32(body.as_ptr().add(BODY)) & 1 != 0 {
+                report(Problem::record(kind, i, E_FORMAT, what::DRAW));
             }
             let key = rd32(body.as_ptr());
             let mut with = 0;
             while with < i && with < PER_MODULE {
                 if keys[with] == key {
-                    report(Problem::clash(
-                        KIND_FILTER,
-                        i,
-                        with,
-                        E_FORMAT,
-                        what::KEY_TWICE,
-                    ));
+                    report(Problem::clash(kind, i, with, E_FORMAT, what::KEY_TWICE));
                     break;
                 }
                 with += 1;
@@ -139,7 +146,6 @@ pub fn validate(bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
                 keys[i] = key;
             }
         }
-        i += 1;
     }
 }
 
@@ -167,6 +173,8 @@ pub struct Row {
     pub knob: [Knob; OWN_KNOBS],
     /// the parameter code of each own knob (0: no knob or no registry)
     pub code: [u32; OWN_KNOBS],
+    /// Relocated ColdFire graph callback, or 0 when this filter has none.
+    pub draw: u32,
 }
 
 /// The loaded filters, row `t - FIRST` for filter type `t` (zero at the start: a `.bss` of the service file).
@@ -252,17 +260,24 @@ pub fn remove(owner: u8) {
 }
 
 /// The check of the filter records of a section (the RECORDS step): the rule, a number for every key, no number taken by another module or twice in the file.
-pub unsafe fn check<C: CoreApi>(core: &C, reg: *const u8) -> i32 {
+pub unsafe fn check<C: CoreApi>(core: &C, reg: *const u8, image_size: u32) -> i32 {
     let mut bad = OK;
     let mut seen = [0u32; PER_MODULE];
     let mut n = 0usize;
     each(reg, |kind, b| {
-        if kind != KIND_FILTER || bad != OK {
+        if !is_kind(kind) || bad != OK {
             return;
         }
         if n >= PER_MODULE || !body_ok(b) {
             bad = E_FORMAT;
             return;
+        }
+        if kind == KIND_FILTER_V2 {
+            let draw = rd32(b.add(BODY));
+            if draw >= image_size || draw & 1 != 0 {
+                bad = E_FORMAT;
+                return;
+            }
         }
         let t = resolve(core, rd32(b));
         if t == 0 {
@@ -287,16 +302,20 @@ pub unsafe fn check<C: CoreApi>(core: &C, reg: *const u8) -> i32 {
 }
 
 /// Fill the rows of the (checked) filter records of module record `owner`: the service's row, the parameter rows of its knobs and the hook table.
-pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, reg: *const u8) {
+pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, reg: *const u8, base: u32) {
     let inf = dkrt_svc_params::dynreg(core);
     each(reg, |kind, b| {
-        if kind != KIND_FILTER {
+        if !is_kind(kind) {
             return;
         }
         let t = resolve(core, rd32(b));
         if t >= FIRST && t <= LAST {
             let i = (t - FIRST) as usize;
-            rows()[i] = row_of(owner, b);
+            let mut row = row_of(owner, b);
+            if kind == KIND_FILTER_V2 {
+                row.draw = base + rd32(b.add(BODY));
+            }
+            rows()[i] = row;
             let mut j = 0;
             while j < rows()[i].knobs as usize {
                 rows()[i].code[j] = knob_row(core, inf, owner, i, j);
@@ -311,7 +330,7 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, reg: *const u8) {
 pub unsafe fn knob_count(reg: *const u8) -> u32 {
     let mut n = 0;
     each(reg, |kind, b| {
-        if kind == KIND_FILTER {
+        if is_kind(kind) {
             n += rd32(b.add(4)).min(OWN_KNOBS as u32);
         }
     });
@@ -323,7 +342,7 @@ pub unsafe fn knob_count(reg: *const u8) -> u32 {
 /// Words of a descriptor row (0x2c bytes): the long and short name (string characters), nine parameter codes (fields 0 to 8; fields 4 to 6 are the knobs of the FLTR1 page).
 pub const DESC_WORDS: usize = 11;
 /// The first knob word of a descriptor row (field 4) and the stock cutoff among them.
-const KNOB_WORD: usize = 6;
+pub const KNOB_WORD: usize = 6;
 /// Knob requests of the parameter-code function: three consecutive mirror indexes.
 const REQUESTS: usize = 3;
 /// The size of a string representation of the firmware (`make_rep`).

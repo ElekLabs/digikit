@@ -43,6 +43,7 @@ dkrt_svc_rt::service!(
         ("cf.machine.hook.owner_type_load", hooks::mf_owner, dn2),
         ("cf.filter.hook.accessor", hooks::mf_flt_acc),
         ("cf.filter.hook.name", hooks::mf_flt_name),
+        ("cf.filter.hook.graph", hooks::mf_flt_graph),
         ("cf.filter.hook.list", hooks::mf_flt_list),
         ("cf.filter.hook.loader.dt2", hooks::mf_flt_load_dt2, dt2),
         ("cf.filter.hook.loader.dn2", hooks::mf_flt_load_dn2, dn2),

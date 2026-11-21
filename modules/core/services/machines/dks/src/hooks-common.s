@@ -114,6 +114,26 @@ mf_flt_name:
     jmp     mf_ret_flt_name
 9:  jmp     dk_tail_b13bb53a
 
+| Stock filter cases use the original jump table. Extended types draw into the page bitmap before its shared tail.
+    .globl mf_flt_graph
+mf_flt_graph:
+    moveq   #5,%d0
+    cmp.l   %d4,%d0
+    bcs.s   1f
+    jmp     mf_graph_stock
+1:  move.l  %d1,-(%sp)
+    move.l  %a0,-(%sp)
+    move.l  %a1,-(%sp)
+    move.l  %d4,-(%sp)
+    move.l  %d3,-(%sp)
+    move.l  %a2,-(%sp)
+    jsr     dks_filter_graph
+    lea     12(%sp),%sp
+    movea.l (%sp)+,%a1
+    movea.l (%sp)+,%a0
+    move.l  (%sp)+,%d1
+    jmp     mf_graph_done
+
 | The chooser's order vector: the target of the list builder's call (a0 = the vector object the callee fills). The stock function builds its copy of the six stock types, then the
 | routine in Rust appends the loaded module filters. The builder reads neither d0 nor a0 after the call: it loads a3 and d5 from the vector object (DT2 0x40061174 and 0x40061178,
 | DN2 0x4005b4e4 and 0x4005b4e8) and d2 (the address of a local) is kept by the C routine.

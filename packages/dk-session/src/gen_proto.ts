@@ -46,6 +46,7 @@ export const RECORD_KIND = {
   LFO_SHAPE: 8,
   SHORTCUT: 9,
   FILTER: 10,
+  FILTER_V2: 11,
 } as const;
 
 /** The resources of a module's `uses` (`[records.resources]`). */

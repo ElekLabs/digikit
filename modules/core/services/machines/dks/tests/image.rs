@@ -18,6 +18,7 @@ fn table(device: u32) -> Vec<u32> {
     t[w::FIRST] = 7;
     t[w::COUNT] = 3;
     t[w::N_CODE] = 0x4000_2000;
+    t[w::N_FILTER_GRAPH] = 0x4000_3000;
     t
 }
 
@@ -58,7 +59,8 @@ fn an_image_without_the_table_another_device_or_no_registry_is_refused() {
         dkrt_sdk::E_NO_REGISTRY
     );
     let mut old = table(2);
-    old[w::VERSION] = VERSION + 1;
+    old[w::VERSION] = VERSION - 1;
+    old.truncate(w::N_FILTER_GRAPH);
     assert_eq!(
         unsafe { bind_table(&core_with(Some(old), 2), dst.as_mut_ptr()) },
         dkrt_sdk::E_NO_REGISTRY

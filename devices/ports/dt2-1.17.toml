@@ -4352,6 +4352,15 @@ kind = "tail"
 check = "ee3af96091c4b93c"
 
 [[hook]]
+name = "cf.filter.hook.graph"
+site = "cf.filter.site.graph_switch"
+mode = "replace"
+clobbers = ["d0", "ccr"]
+len = 8
+kind = "raw"
+check = "64e7d850317c6f86"
+
+[[hook]]
 name = "cf.filter.hook.list"
 site = "cf.filter.site.list_call"
 mode = "retarget"

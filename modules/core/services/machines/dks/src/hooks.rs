@@ -37,6 +37,7 @@ entries! {
     // both devices: the run-time filters (the accessor, the name, the chooser's list)
     mf_flt_acc,
     mf_flt_name,
+    mf_flt_graph,
     mf_flt_list,
     // Digitakt II
     mf_flt_load_dt2,

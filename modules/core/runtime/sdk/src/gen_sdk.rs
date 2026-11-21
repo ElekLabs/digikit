@@ -109,8 +109,10 @@ pub mod records {
     pub const LEN_SHORTCUT: u32 = 0x44;
     pub const KIND_FILTER: u32 = 10;
     pub const LEN_FILTER: u32 = 0xc0;
+    pub const KIND_FILTER_V2: u32 = 11;
+    pub const LEN_FILTER_V2: u32 = 0xc4;
     /// Every record kind in the order of its number: (kind, record length with its header, owning service).
-    pub const KINDS: [(u32, u32, &str); 10] = [
+    pub const KINDS: [(u32, u32, &str); 11] = [
         (KIND_PARAM, LEN_PARAM, "machines"),
         (KIND_MACHINE, LEN_MACHINE, "machines"),
         (KIND_PAGE, LEN_PAGE, "machines"),
@@ -121,9 +123,10 @@ pub mod records {
         (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
         (KIND_SHORTCUT, LEN_SHORTCUT, "shortcuts"),
         (KIND_FILTER, LEN_FILTER, "machines"),
+        (KIND_FILTER_V2, LEN_FILTER_V2, "machines"),
     ];
     /// The kinds of the `machines` service: (kind, record length).
-    pub const KINDS_MACHINES: [(u32, u32); 7] = [
+    pub const KINDS_MACHINES: [(u32, u32); 8] = [
         (KIND_PARAM, LEN_PARAM),
         (KIND_MACHINE, LEN_MACHINE),
         (KIND_PAGE, LEN_PAGE),
@@ -131,6 +134,7 @@ pub mod records {
         (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE),
         (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2),
         (KIND_FILTER, LEN_FILTER),
+        (KIND_FILTER_V2, LEN_FILTER_V2),
     ];
     /// The kinds of the `fx` service: (kind, record length).
     pub const KINDS_FX: [(u32, u32); 1] = [
@@ -154,7 +158,7 @@ pub mod records {
         "sdhc_large",
     ];
     /// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
-    pub const KIND_NAMES: [(&str, u32); 10] = [
+    pub const KIND_NAMES: [(&str, u32); 11] = [
         ("param", KIND_PARAM),
         ("machine", KIND_MACHINE),
         ("page", KIND_PAGE),
@@ -165,6 +169,7 @@ pub mod records {
         ("lfo_shape", KIND_LFO_SHAPE),
         ("shortcut", KIND_SHORTCUT),
         ("filter", KIND_FILTER),
+        ("filter_v2", KIND_FILTER_V2),
     ];
     /// The kinds a module emits with `dk_record_add`.
     pub const GENERIC_KINDS: [u32; 1] = [
@@ -1039,7 +1044,7 @@ pub mod api {
     /// `dk_param_on_click`: Run `fn(arg, track)` when the parameter's knob is clicked on the machine's page.
     pub type DkParamOnClickFn = unsafe extern "C" fn(prm: *mut u8, r#fn: Option<ParamClickFn>, arg: *mut u8);
 
-    /// `dk_page_canvas`: Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`.
+    /// `dk_page_canvas`: Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or DK_PAGE_WIDE_CANVAS (or 0), `draw` and `event` run in the UI task with `arg`. On a filter page, register the response graph with a draw callback, flags 0, and NULL for `event` and `arg`.
     pub type DkPageCanvasFn = unsafe extern "C" fn(p: *mut u8, flags: u32, draw: Option<PageDrawFn>, event: Option<PageEventFn>, arg: *mut u8);
 
     /// `dk_page_bind`: On a canvas page, bind a shared parameter of the machine to the encoder `slot` (0 to 7).

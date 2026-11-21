@@ -551,7 +551,9 @@ fn filter_gain(i: &mut Init) {
     }
 }
 
-/// A second filter with two knobs, one with its own range: what `filter_gain` is for another module key.
+const FILTER_DRAW: u32 = 0x4100;
+
+/// A second filter with two knobs, one with its own range, and a response graph callback.
 fn filter_two(i: &mut Init) {
     unsafe {
         let f = build::add_filter(i.core, i.ctx(), 0, c(b"Filter Two\0"), c(b"FTWO\0"));
@@ -559,6 +561,7 @@ fn filter_two(i: &mut Init) {
         build::page_add_param(i.core, p, c(b"Spread\0"), c(b"SPRD\0"), 10);
         let q = build::page_add_param(i.core, p, c(b"Q\0"), c(b"Q\0"), 20);
         build::param_range(i.core, q, 0, 100);
+        build::page_canvas(i.core, p, 0, FILTER_DRAW, 0, 0);
     }
 }
 
@@ -599,6 +602,7 @@ fn filter_state(_core: &FakeCore) -> Vec<u32> {
         v.push(row.owner as u32);
         v.push(row.key);
         v.push(row.knobs as u32);
+        v.push(row.draw);
         let sum = |b: &[u8]| {
             b.iter()
                 .fold(0u32, |a, x| a.wrapping_mul(31).wrapping_add(*x as u32))
@@ -1532,6 +1536,7 @@ fn two_knob_filter(device: u32) {
     let i = (0..16)
         .find(|i| t.mask & (1 << i) != 0)
         .expect("a row is published");
+    assert_eq!(filter::rows()[i].draw, FILTER_DRAW);
     let row = t.rows[i];
     let word = |a: u32| unsafe { core.rd(a) };
     let (long, short) = (row[0], row[1]);
@@ -1569,6 +1574,7 @@ fn two_knob_filter(device: u32) {
     assert_eq!(t.mask.count_ones(), 1);
     l.unload(1);
     assert_eq!(filter::tab().mask, 0, "the row is withdrawn");
+    assert_eq!(filter::rows()[i].draw, 0, "the graph callback is released");
     assert!(
         rstate().param_owner.iter().all(|o| *o == 0),
         "the knob rows are free"

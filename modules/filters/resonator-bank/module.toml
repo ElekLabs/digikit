@@ -19,16 +19,16 @@ conflicts = []
 [[filter]]
 id = "rbnk"
 
-# One fixed-size FILTER record (192 bytes) plus the 16-byte header.
+# One FILTER_V2 record with the graph callback (196 bytes) plus the 16-byte header.
 [uses.dt2]
 param_rows = 2
-record_bytes = 208
+record_bytes = 212
 machine_rows = 0
 page_rows = 0
 
 [uses.dn2]
 param_rows = 2
-record_bytes = 208
+record_bytes = 212
 machine_rows = 0
 page_rows = 0
 

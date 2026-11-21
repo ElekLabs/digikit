@@ -52,14 +52,14 @@ fn gain() -> Box<Build> {
 }
 
 /// The records `lower` writes (header words not written) and how many.
-fn lowered(b: &Build) -> (Vec<u8>, u32) {
+fn lowered(b: &Build, base: u32) -> (Vec<u8>, u32) {
     let k = dkrt_abi::keys::KeysCopy::empty();
     let mut plan = Plan::new();
     let mut measured = RecordSink::measure();
-    lower(b, &DT2, &k, &[true; MAX_M], 0, &mut measured, &mut plan).unwrap();
+    lower(b, &DT2, &k, &[true; MAX_M], base, &mut measured, &mut plan).unwrap();
     let mut buf = std::vec![0u8; measured.at];
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
-    lower(b, &DT2, &k, &[true; MAX_M], 0, &mut out, &mut plan).unwrap();
+    lower(b, &DT2, &k, &[true; MAX_M], base, &mut out, &mut plan).unwrap();
     assert_eq!((out.at, out.count), (measured.at, measured.count));
     (buf[RecordSink::HEADER..].to_vec(), out.count) // the sink leaves room for the 16-byte section header
 }
@@ -71,7 +71,7 @@ fn text(b: &[u8], at: usize, len: usize) -> &str {
 
 #[test]
 fn a_filter_lowers_to_one_record_with_its_key_names_and_own_knob() {
-    let (buf, n) = lowered(&gain());
+    let (buf, n) = lowered(&gain(), 0);
     assert_eq!(
         n, 1,
         "a filter adds a FILTER record and no parameter, machine or page record"
@@ -147,10 +147,35 @@ fn a_machine_handle_is_no_filter_and_a_filter_handle_is_no_machine() {
 }
 
 #[test]
-fn a_filter_page_has_no_canvas_bind_or_click() {
+fn a_filter_page_lowers_a_draw_only_callback_to_a_module_relative_offset() {
     let mut b = gain();
     let page = &mut b.pages[0] as *mut CPage as *mut u8;
-    b.page_canvas(page, 0, 1, 2, 3);
+    b.page_canvas(page, 0, 0x4020, 0, 0);
+    let (v2, n) = lowered(&b, 0x4000);
+    let (v1, _) = lowered(&gain(), 0x4000);
+    assert_eq!(n, 1);
+    assert_eq!((rd(&v2, 0), rd(&v2, 4)), (KIND_FILTER_V2, LEN_FILTER_V2));
+    assert_eq!(&v2[8..v1.len()], &v1[8..]);
+    assert_eq!(&v2[v1.len()..], &0x20u32.to_be_bytes());
+    assert_eq!(counts_of(&b, &DT2), (0, 1, 0));
+}
+
+#[test]
+fn a_filter_graph_refuses_flags_an_event_an_argument_or_a_missing_draw() {
+    for (flags, draw, event, arg) in [(1, 2, 0, 0), (0, 2, 4, 0), (0, 2, 0, 6), (0, 0, 0, 0)] {
+        let mut b = gain();
+        let page = &mut b.pages[0] as *mut CPage as *mut u8;
+        b.page_canvas(page, flags, draw, event, arg);
+        assert_eq!(b.err, E_FORMAT);
+    }
+}
+
+#[test]
+fn a_filter_page_has_no_bind_or_click() {
+    let mut b = gain();
+    let page = &mut b.pages[0] as *mut CPage as *mut u8;
+    let prm = prm_of(&mut b);
+    b.page_bind(page, prm, 0);
     assert_eq!(b.err, E_FORMAT);
     let mut b = gain();
     let prm = prm_of(&mut b);
@@ -209,7 +234,7 @@ fn problems(bodies: &[Vec<u8>]) -> Vec<Problem> {
 }
 
 fn body_of_gain() -> Vec<u8> {
-    lowered(&gain()).0[8..].to_vec()
+    lowered(&gain(), 0).0[8..].to_vec()
 }
 
 #[test]
@@ -257,7 +282,7 @@ fn the_record_rule_refuses_a_bad_size_key_knob_count_text_and_a_repeated_key() {
 fn section(key: u32) -> Vec<u8> {
     let mut b = gain();
     b.filters[0].key = key;
-    let (recs, n) = lowered(&b);
+    let (recs, n) = lowered(&b, 0);
     let mut s = std::vec![0u8; 16];
     s[12..16].copy_from_slice(&n.to_be_bytes());
     s.extend_from_slice(&recs);
@@ -296,10 +321,13 @@ fn the_numbers_are_16_to_31_sticky_in_their_own_map_and_the_17th_filter_gets_non
     unsafe { assert_eq!(filter::resolve(&core, k(16)), 0, "the range is used up") };
     // the filter's check refuses it and passes the one that has a number
     let reg = section(k(16));
-    assert_eq!(unsafe { filter::check(&core, reg.as_ptr()) }, E_TYPE_USED);
+    assert_eq!(
+        unsafe { filter::check(&core, reg.as_ptr(), 0) },
+        E_TYPE_USED
+    );
     core.boot_index.set(1);
     let reg = section(k(9));
-    assert_eq!(unsafe { filter::check(&core, reg.as_ptr()) }, OK);
+    assert_eq!(unsafe { filter::check(&core, reg.as_ptr(), 0) }, OK);
     // the map is saved under its own key (16 words), not the machines' key
     let saved = core
         .settings
@@ -336,4 +364,38 @@ fn a_filter_keeps_its_number_when_an_earlier_filter_leaves() {
     unsafe { <Machines as Service<FakeCore>>::settle(&core2, &sel2) };
     core2.boot_index.set(0);
     unsafe { assert_eq!(filter::resolve(&core2, b), 17) };
+}
+
+#[test]
+fn filter_graph_offsets_must_be_aligned_and_within_the_coldfire_image() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let (core, sel) = core_with(&[&[KEY]]);
+    unsafe { <Machines as Service<FakeCore>>::settle(&core, &sel) };
+    core.boot_index.set(0);
+    let mut b = gain();
+    let page = &mut b.pages[0] as *mut CPage as *mut u8;
+    b.page_canvas(page, 0, 0x4020, 0, 0);
+    let (recs, n) = lowered(&b, 0x4000);
+    let mut reg = vec![0u8; RecordSink::HEADER];
+    reg[12..16].copy_from_slice(&n.to_be_bytes());
+    reg.extend_from_slice(&recs);
+
+    assert_eq!(unsafe { filter::check(&core, reg.as_ptr(), 0x100) }, OK);
+    assert_eq!(
+        unsafe { filter::check(&core, reg.as_ptr(), 0x20) },
+        E_FORMAT
+    );
+    *reg.last_mut().unwrap() = 0x21;
+    assert_eq!(
+        unsafe { filter::check(&core, reg.as_ptr(), 0x100) },
+        E_FORMAT
+    );
+    *reg.last_mut().unwrap() = 0x20;
+
+    reg[12..16].copy_from_slice(&2u32.to_be_bytes());
+    reg.extend_from_slice(&lowered(&gain(), 0x4000).0);
+    assert_eq!(
+        unsafe { filter::check(&core, reg.as_ptr(), 0x100) },
+        E_FORMAT
+    );
 }

@@ -148,3 +148,24 @@ pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
 pub unsafe extern "C" fn dk_param_set(track: u32, word: u32, raw: i32) -> i32 {
     slots::param_set(&ImportCore, &tab(), track, word, raw)
 }
+
+/// Draw the loaded filter's response into the stock FLTR bitmap before the shared page tail.
+#[no_mangle]
+pub unsafe extern "C" fn dks_filter_graph(view: *mut u8, bitmap: *mut u8, ty: u32) {
+    use crate::image::{w, MF_TAB};
+    use dkrt_svc_machines::filter;
+
+    if !(filter::FIRST..=filter::LAST).contains(&ty) {
+        return;
+    }
+    let index = (ty - filter::FIRST) as usize;
+    let row = &filter::rows()[index];
+    let adapter = MF_TAB[w::N_FILTER_GRAPH];
+    if row.owner == 0 || row.draw == 0 || adapter == 0 {
+        return;
+    }
+    let draw: unsafe extern "C" fn(*mut u8, *mut u8, u32, *const u32, u32) =
+        core::mem::transmute(adapter as usize);
+    let codes = &filter::tab().rows[index][filter::KNOB_WORD..];
+    draw(view, bitmap, row.draw, codes.as_ptr(), 1 + u32::from(row.knobs));
+}

@@ -43,6 +43,7 @@ RECORD_KIND: dict[str, int] = {
     "LFO_SHAPE": 8,
     "SHORTCUT": 9,
     "FILTER": 10,
+    "FILTER_V2": 11,
 }
 
 # the resources of a module's uses ([records.resources])

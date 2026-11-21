@@ -211,8 +211,10 @@ pub const KIND_SHORTCUT: u32 = 9;
 pub const LEN_SHORTCUT: u32 = 0x44;
 pub const KIND_FILTER: u32 = 10;
 pub const LEN_FILTER: u32 = 0xc0;
+pub const KIND_FILTER_V2: u32 = 11;
+pub const LEN_FILTER_V2: u32 = 0xc4;
 /// Every record kind in the order of its number: (kind, record length with its header, owning service).
-pub const KINDS: [(u32, u32, &str); 10] = [
+pub const KINDS: [(u32, u32, &str); 11] = [
     (KIND_PARAM, LEN_PARAM, "machines"),
     (KIND_MACHINE, LEN_MACHINE, "machines"),
     (KIND_PAGE, LEN_PAGE, "machines"),
@@ -223,9 +225,10 @@ pub const KINDS: [(u32, u32, &str); 10] = [
     (KIND_LFO_SHAPE, LEN_LFO_SHAPE, "lfo"),
     (KIND_SHORTCUT, LEN_SHORTCUT, "shortcuts"),
     (KIND_FILTER, LEN_FILTER, "machines"),
+    (KIND_FILTER_V2, LEN_FILTER_V2, "machines"),
 ];
 /// The kinds of the `machines` service: (kind, record length).
-pub const KINDS_MACHINES: [(u32, u32); 7] = [
+pub const KINDS_MACHINES: [(u32, u32); 8] = [
     (KIND_PARAM, LEN_PARAM),
     (KIND_MACHINE, LEN_MACHINE),
     (KIND_PAGE, LEN_PAGE),
@@ -233,6 +236,7 @@ pub const KINDS_MACHINES: [(u32, u32); 7] = [
     (KIND_NATIVE_PAGE, LEN_NATIVE_PAGE),
     (KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2),
     (KIND_FILTER, LEN_FILTER),
+    (KIND_FILTER_V2, LEN_FILTER_V2),
 ];
 /// The kinds of the `fx` service: (kind, record length).
 pub const KINDS_FX: [(u32, u32); 1] = [
@@ -256,7 +260,7 @@ pub const HANDLE_SERVICES: [&str; 6] = [
     "sdhc_large",
 ];
 /// The kind names of `[records.kinds]` in lower case with their numbers: the `kind` of a `[[record]]` of a module.toml.
-pub const KIND_NAMES: [(&str, u32); 10] = [
+pub const KIND_NAMES: [(&str, u32); 11] = [
     ("param", KIND_PARAM),
     ("machine", KIND_MACHINE),
     ("page", KIND_PAGE),
@@ -267,6 +271,7 @@ pub const KIND_NAMES: [(&str, u32); 10] = [
     ("lfo_shape", KIND_LFO_SHAPE),
     ("shortcut", KIND_SHORTCUT),
     ("filter", KIND_FILTER),
+    ("filter_v2", KIND_FILTER_V2),
 ];
 /// The kinds a module emits with `dk_record_add`.
 pub const GENERIC_KINDS: [u32; 1] = [

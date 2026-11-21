@@ -60,6 +60,10 @@ name = "cf.filter.hook.name"
 entry = "mf_flt_name"
 
 [[hook]]
+name = "cf.filter.hook.graph"
+entry = "mf_flt_graph"
+
+[[hook]]
 name = "cf.filter.hook.list"
 entry = "mf_flt_list"
 
@@ -185,6 +189,8 @@ mf_x_rd = "hook.cf.machine.hook.type_reader.load.exit.1"
 mf_x_ow = "hook.cf.machine.hook.owner_type_load.exit"
 mf_ret_flt_acc = "hook.cf.filter.hook.accessor.ret"
 mf_ret_flt_name = "hook.cf.filter.hook.name.ret"
+mf_graph_stock = "hook.cf.filter.hook.graph.exit.1"
+mf_graph_done = "hook.cf.filter.hook.graph.exit.2"
 mf_stock_flt_list = "cf.filter.fn.list_vector"
 mf_x_flt_list = "hook.cf.filter.hook.list.exit"
 mf_x_ldr_dt2 = "hook.cf.filter.hook.loader.dt2.exit.1"

@@ -107,8 +107,7 @@ mark = "D"
 users = ["core/services/machines"]
 doc = "`move.b #7,D2b` in the sound loader (DT2 FUN_400db3b2 at 0x400db484, DN2 FUN_400dd34e at 0x400dd420): the bound of the next compare, which keeps a stored filter type below 7 and resets any other to 0 (the filter byte is rec[0xd3] on DT2 and rec[0xf5] on DN2; the machine byte uses an earlier bound). The immediate is the low byte of the word at +2."
 
-# The sites and hooks the machines service takes for run-time filters (plan E7a). The graph switch has no hook yet: a type of 6 or more already takes the stock default
-# (no response curve), which is what a module filter shows until E7c draws it.
+# The sites and hooks the machines service installs for runtime filters.
 
 [[site]]
 name = "cf.filter.site.list_call"
@@ -151,6 +150,18 @@ devices = ["dt2", "dn2"]
 mark = "D"
 users = ["core/services/machines"]
 doc = "Entry of the filter name function (type at 4(sp); d0, d1 free); the hook returns the long name of a loaded module filter."
+
+[[hook]]
+name = "cf.filter.hook.graph"
+site = "cf.filter.site.graph_switch"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.filter.site.graph_switch + 8", "cf.filter.site.graph_switch + 154"]
+regs = { in = ["a2", "d3", "d4"], clobbers = ["d0", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "FLTR response graph: A2 is the page view, D3 the destination bitmap, D4 the filter type. Stock types enter their jump table at +8. Module and fallback types continue at the shared draw tail at +154."
 
 [[hook]]
 name = "cf.filter.hook.list"

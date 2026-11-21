@@ -75,3 +75,11 @@ For every pair, both ordinals equalled the zero-based slot and both byte address
 **[D]** With generated blocks disabled on DN2 (`SHARC_AOT=0`), the SDK bank and sine module also ran together. Increasing SPRD from 0 to 12800 with FREQ at 32258 and Q at zero raised the captured RMS from 0.001565 to 0.005777. Both 250 ms captures were finite and the fault counter stayed at zero. The standard DT2 gain regression passed. The same DN2 regression under default acceleration reached full gain on the panel but failed its restored-audio assertion.
 
 The identical DN2 Vitest gain regression passed with `SHARC_AOT=0`. A DT2 reload of the selected `modules/resonator-bank.dkm` returned result 0 with `unloaded=true`. The next note initialized both voice slots and the fault count remained zero. The bank's `test-rig` target exercises the captured DN2 external audio address and checks that two voices retain independent histories.
+
+## Accelerated playback and the FLTR response display
+
+**[C]** The DN2 gain failure above was traced to generated SHARC blocks with overlapping instruction ranges. Invalidating only to the next entry left an earlier compiled copy of the bound at 7. The emulator now invalidates overlapping candidates inside the affected code range. The ordinary DN2 gain regression passes with acceleration enabled. With the bank active, the same two sine captures on DN2 gave RMS 0.001565 and 0.005777 as in the interpreted run.
+
+**[D]** The machines service dispatches the filter's registered draw callback at the FLTR response switch. On DT2 1.17 and DN2 1.12 the view is in A2, the destination bitmap in D3 and the selected filter type in D4. Stock cases resume at the jump table; the callback rejoins the shared page tail. In top-down OLED coordinates the graph covers x21..71 and y40..56. The SDK frame supplies the displayed cutoff, spread and Q from the current view, so an idle track redraws when its controls change.
+
+The bank's device test selects it through the chooser, checks the response rectangle at FREQ 127, SPRD 29 and Q 3, and turns each of the three encoders independently. The native Workbench's module list and its memory readout alone cannot establish that the firmware drew the curve or ran the audio callbacks.

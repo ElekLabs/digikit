@@ -43,6 +43,8 @@ pub const LEN_EFFECT: usize = dkneeds::LEN_EFFECT as usize;
 pub const LEN_ACTION: usize = dkneeds::LEN_ACTION as usize;
 pub const LEN_NATIVE_PAGE: usize = dkneeds::LEN_NATIVE_PAGE as usize;
 pub const LEN_NATIVE_PAGE_V2: usize = dkneeds::LEN_NATIVE_PAGE_V2 as usize;
+const LEN_FILTER: usize = dkneeds::LEN_FILTER as usize;
+const LEN_FILTER_V2: usize = dkneeds::LEN_FILTER_V2 as usize;
 /// Knobs of an effect page (the 8th word of its parameters is MIX), the text fields, and the MIX default's range (the knob's raw 0 .. 127).
 pub const EFFECT_KNOBS: usize = 7;
 pub const EFFECT_TAB: usize = 8;
@@ -939,7 +941,7 @@ impl Register {
                         knobs,
                     })
                 }
-                (dkneeds::KIND_FILTER, len) if len == dkneeds::LEN_FILTER as usize => {
+                (dkneeds::KIND_FILTER, LEN_FILTER) | (dkneeds::KIND_FILTER_V2, LEN_FILTER_V2) => {
                     if b.get(rec..at + len).is_none() {
                         return Err(err!("register section: read past the end"));
                     }

@@ -14,9 +14,9 @@ fn f32_of(bits: u32) -> f64 {
     f32::from_bits(bits) as f64
 }
 
-/// The records of the block BYTES grouped by kind, each kind's bodies in file order. The block's layout is the register table's (header of 16 bytes, then kind, length, body).
+/// The records of the block BYTES in file order. The block's layout is the register table's (header of 16 bytes, then kind, length, body).
 #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
-fn bodies_by_kind(bytes: &[u8]) -> Result<Vec<(u32, Vec<&[u8]>)>> {
+fn record_bodies(bytes: &[u8]) -> Result<Vec<(u32, &[u8])>> {
     let word = |at: usize| -> Result<u32> {
         bytes
             .get(at..at + 4)
@@ -26,7 +26,7 @@ fn bodies_by_kind(bytes: &[u8]) -> Result<Vec<(u32, Vec<&[u8]>)>> {
     if word(0)? != crate::register::MAGIC || word(4)? != crate::register::VERSION {
         return Err(Error("record block: magic or version".into()));
     }
-    let mut groups: Vec<(u32, Vec<&[u8]>)> = vec![];
+    let mut records = vec![];
     let mut at = crate::register::HEADER;
     for _ in 0..word(12)? {
         let (kind, len) = (word(at)?, word(at + 4)? as usize);
@@ -34,28 +34,42 @@ fn bodies_by_kind(bytes: &[u8]) -> Result<Vec<(u32, Vec<&[u8]>)>> {
             .get(at + 8..at + len)
             .filter(|_| len >= 8)
             .ok_or_else(|| Error("record block: a record runs past the end".into()))?;
-        match groups.iter_mut().find(|g| g.0 == kind) {
-            Some(g) => g.1.push(body),
-            None => groups.push((kind, vec![body])),
-        }
+        records.push((kind, body));
         at += len;
     }
-    Ok(groups)
+    Ok(records)
 }
 
 /// The problems the owning services find in the block BYTES, one sentence each (empty when the block is good). Needs the feature `record-rules` (not for wasm32).
 #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
 pub fn block_problems(bytes: &[u8]) -> Result<Vec<String>> {
-    let mut out = vec![];
-    for (kind, bodies) in bodies_by_kind(bytes)? {
-        let name = dkneeds::KIND_NAMES
-            .iter()
-            .find(|k| k.1 == kind)
-            .map_or("?", |k| k.0);
-        for p in crate::record_rules::validate(kind, &bodies) {
-            out.push(format!("{name}: {p}"));
+    use dkrt_svc_machines::filter;
+
+    let mut groups: Vec<(u32, Vec<&[u8]>)> = vec![];
+    let mut filters = vec![];
+    for (kind, body) in record_bodies(bytes)? {
+        if filter::is_kind(kind) {
+            filters.push((kind, body));
+        } else if let Some(group) = groups.iter_mut().find(|g| g.0 == kind) {
+            group.1.push(body);
+        } else {
+            groups.push((kind, vec![body]));
         }
     }
+    let mut out = vec![];
+    let mut report = |p: dkrt_abi::service::Problem| {
+        let name = dkneeds::KIND_NAMES
+            .iter()
+            .find(|k| k.1 == p.kind)
+            .map_or("?", |k| k.0);
+        out.push(format!("{name}: {p}"));
+    };
+    for (kind, bodies) in groups {
+        crate::record_rules::validate(kind, &bodies)
+            .into_iter()
+            .for_each(&mut report);
+    }
+    filter::validate(filters, &mut report);
     Ok(out)
 }
 
@@ -235,6 +249,24 @@ mod tests {
         #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
         assert_eq!(decoded["problems"], json!([]));
         assert!(records_json(&block[..block.len() - 1]).is_err());
+
+        let mut graph = block.clone();
+        let at = crate::register::HEADER;
+        graph[at..at + 4].copy_from_slice(&dkneeds::KIND_FILTER_V2.to_be_bytes());
+        graph[at + 4..at + 8].copy_from_slice(&dkneeds::LEN_FILTER_V2.to_be_bytes());
+        graph.extend_from_slice(&0x20u32.to_be_bytes());
+        let decoded = records_json(&graph).unwrap();
+        assert_eq!(decoded["counts"]["param_rows"], 2);
+        #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
+        assert_eq!(decoded["problems"], json!([]));
+        assert!(records_json(&graph[..graph.len() - 1]).is_err());
+
+        block[12..16].copy_from_slice(&2u32.to_be_bytes());
+        block.extend_from_slice(&graph[at..]);
+        let decoded = records_json(&block).unwrap();
+        assert_eq!(decoded["counts"]["param_rows"], 4);
+        #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]
+        assert!(block_problems(&block).unwrap()[0].contains("same filter key"));
     }
 
     #[cfg(all(feature = "record-rules", not(target_arch = "wasm32")))]

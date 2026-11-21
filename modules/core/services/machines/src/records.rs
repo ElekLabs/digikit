@@ -13,8 +13,8 @@ use dkrt_abi::service::{
     Problem, RowWrite, Service, SettleCtx, TableFault,
 };
 use dkrt_sdk::records::{
-    KIND_ACTION, KIND_FILTER, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE,
-    KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE,
+    KIND_ACTION, KIND_FILTER, KIND_FILTER_V2, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE,
+    KIND_PARAM, LEN_ACTION, LEN_FILTER, LEN_FILTER_V2, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE,
     LEN_PARAM,
 };
 use dkrt_sdk::*;
@@ -147,6 +147,7 @@ impl<C: CoreApi> Service<C> for Machines {
         d.kind(KIND_NATIVE_PAGE, LEN_NATIVE_PAGE);
         d.kind(KIND_NATIVE_PAGE_V2, LEN_NATIVE_PAGE_V2);
         d.kind(KIND_FILTER, LEN_FILTER);
+        d.kind(KIND_FILTER_V2, LEN_FILTER_V2);
     }
 
     unsafe fn settle(core: &C, s: &SettleCtx) {
@@ -162,7 +163,7 @@ impl<C: CoreApi> Service<C> for Machines {
         use check_step as st;
         if step == st::RECORDS {
             // the filter records need no firmware row, so they are checked before the registry is looked at
-            let r = crate::filter::check(core, c.reg);
+            let r = crate::filter::check(core, c.reg, c.image_size);
             if r != OK {
                 return r;
             }
@@ -202,7 +203,7 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn apply(core: &C, c: &ApplyCtx) -> i32 {
-        crate::filter::apply(core, c.owner, c.reg);
+        crate::filter::apply(core, c.owner, c.reg, c.base);
         let inf = dkrt_svc_params::dynreg(core);
         if inf.is_null() {
             return if counts_of(c.reg) == (0, 0, 0, 0, 0) && crate::filter::knob_count(c.reg) == 0 {
