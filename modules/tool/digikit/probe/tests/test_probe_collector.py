@@ -9,7 +9,7 @@ import subprocess
 import pytest
 from support.paths import REPO_ROOT
 
-MOD = REPO_ROOT / "modules/tools/probe"
+MOD = REPO_ROOT / "modules/tool/digikit/probe"
 
 HARNESS = r"""
 #include <stdio.h>

@@ -13,7 +13,7 @@ const steps = import.meta.glob('../../../../devices/calibration/steps/*.toml', {
   import: 'default',
   eager: true,
 }) as Record<string, string>;
-const cases = import.meta.glob('../../../../modules/*/*/calibration.toml', {
+const cases = import.meta.glob('../../../../modules/*/*/*/calibration.toml', {
   query: '?raw',
   import: 'default',
   eager: true,

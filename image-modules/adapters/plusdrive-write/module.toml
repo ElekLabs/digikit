@@ -15,7 +15,7 @@ conflicts = []
 [targets]
 "dt2-1.17" = "experimental"
 
-# The +Drive write plug-in point (modules/core/runtime/include/dkrt_pdw.h, docs/plans/usb-fast.md 3.1). The runtime lists the dkpw_* symbols as
+# The +Drive write plug-in point (runtime/core/include/dkrt_pdw.h, docs/plans/usb-fast.md 3.1). The runtime lists the dkpw_* symbols as
 # optional imports; without this module the SDK's file_* calls on DK_FILES_SAMPLES return E_CONTRACT on the Digitakt II. No hook, no claim: the
 # runtime calls the adapter from its I/O task, and the adapter calls the firmware's file functions (finding 120). Files are written under the hidden
 # folder /.dkstage and renamed into place after the firmware's close hash (a replace), or, for a new file, written at its final name with no boot cleanup

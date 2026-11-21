@@ -43,7 +43,7 @@ export async function expectRuntimeReady(session: Session): Promise<void> {
   await timePhase('ready', () => expectRuntimeUi(session, plan, artifacts), timingContext(session));
 }
 
-/** DkrtBootInfo word offsets, owned by modules/core/runtime/abi.toml (checked in modules/core/runtime/sdk/src/gen_abi.rs). */
+/** DkrtBootInfo word offsets, owned by runtime/core/abi.toml (checked in runtime/core/sdk/src/gen_abi.rs). */
 export const BOOT_FIELDS = {
   magic: 0,
   version: 4,

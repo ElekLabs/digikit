@@ -1,4 +1,4 @@
-//! Host-test fakes of the runtime interfaces, shared by the crate `dkrt` and the service crates (`modules/core/services/*`).
+//! Host-test fakes of the runtime interfaces, shared by the crate `dkrt` and the service crates (`services/*`).
 //!
 //! `FakeCore` implements `CoreApi` (interface C) and records the calls a service makes. Its link is the real queue (`dkrt-link`) over a model of
 //! `core/dsp-link`. It lives in a crate of its own, below the services and the runtime, so a service crate tests against it without naming the runtime.

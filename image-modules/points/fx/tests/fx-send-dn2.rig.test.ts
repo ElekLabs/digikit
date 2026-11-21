@@ -1,5 +1,5 @@
 /**
- * core/fx, the send route on the Digitone II (modules/core/adapters/fx/src/dsp/fxsend-dn2.s, finding 67): the slot mix on the SHARC-only rig.
+ * core/fx, the send route on the Digitone II (image-modules/points/fx/src/dsp/fxsend-dn2.s, finding 67): the slot mix on the SHARC-only rig.
  * Port of test_fx_send_dn2.py (T1g phase 5).
  *
  * The Digitone II has no track buses before its master function: the send bus is the sum over the 16 voice slots of the gain of the slot's

@@ -28,9 +28,9 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  * row or send cell that leaks in a reload (the real loader's `dsp_clear` and `fxsend::remove`); the contract suite of the fx service runs a FakeCore.
  *
  * The test shows what only the firmware shows: the audio of the effect and of the send bus, the capacity counts of the real loader, the DSP row taking the knob value, the swap windows and the page
- * frame. The rest is a unit test and not asserted here: the residue of an unload and the soak of many reloads (the contract suite of the fx service, `modules/core/runtime/test-support/src/contract.rs`:
+ * frame. The rest is a unit test and not asserted here: the residue of an unload and the soak of many reloads (the contract suite of the fx service, `runtime/core/test-support/src/contract.rs`:
  * cases 3, 6, 7, 11 and 12; no soak loop here), the parked knob values per module and kit (case 13), the send cell and the page row that come back with a reload
- * (`modules/core/services/fx/tests/contract.rs` `a_reloaded_effect_gets_its_send_cell_and_page_row_back`), and that no load or unload writes a setting (cases 3 and 7 compare the settings).
+ * (`services/fx/tests/contract.rs` `a_reloaded_effect_gets_its_send_cell_and_page_row_back`), and that no load or unload writes a setting (cases 3 and 7 compare the settings).
  *
  * Test 1 (master route, `test/sine` on the track, a note held 600 emulated ms per capture; the levels are peaks of the left and right channels over the span 250 .. 700 blocks after the trigger):
  * - the level with the effect is `wet`; after `UNLOAD` it is `dry` and `dry / wet` is 2 within 5% (the gain 0.5: the row is gone, the chain passes the signal); after `LOAD` the level is `wet` again within 3%
@@ -53,7 +53,7 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  */
 const MASTER_ID = 'test/dyn-fx-gain';
 const SEND_ID = 'test/dyn-fx-gain-send';
-/** Byte offsets in DkrtBootInfo (modules/core/runtime/abi.toml). */
+/** Byte offsets in DkrtBootInfo (runtime/core/abi.toml). */
 const BOOT_RELOADS = 252;
 const MIDI_CHANNEL = 1;
 const AMP_CC = { dt2: { hold: 80, decay: 81 }, dn2: { hold: 85, decay: 86 } } as const;
@@ -204,7 +204,7 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   await mainPage(rt);
 
   // a kit load while the module is gone: the parked values are not the new kit's, so the load gives the defaults (the real kit-load hook of the fx service counts the load
-  // although no row holds an effect: `fxp_load` in modules/core/services/fx/dks/src/hooks.rs bumps DKRT_FXP_NLOAD before it looks at any row)
+  // although no row holds an effect: `fxp_load` in services/fx/dks/src/hooks.rs bumps DKRT_FXP_NLOAD before it looks at any row)
   await createFxKitUi(rt, plan, profile, artifacts).saveKit(2, 'other-kit'); // the kit holds the turned value now, in a slot to load back
   await job(rt, plan, 'unload', MASTER_PATH, 'unload before a kit load', epoch, 0);
   const nload = await serviceSymbol(rt, plan, 'fx', 'DKRT_FXP_NLOAD');

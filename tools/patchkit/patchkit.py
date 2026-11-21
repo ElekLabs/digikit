@@ -220,10 +220,10 @@ GALLERY = "build/gen/gallery.json"
 def bundle(extra: list[Path] | None = None) -> dict:
     """Ports and modules as texts: the input of `pk_apply` in patchkit.wasm.
 
-    Only the committed module roots by default (modules/ and the fixtures); `extra` roots (e.g. out/modules for generated
+    Only the committed module roots by default; `extra` roots (e.g. out/modules for generated
     oracles) are for tests, never for the published page. Builds the content modules' objects first (they are cached in out/cache/dko).
     """
-    ports = [p.read_text() for p in sorted((ROOT / "devices" / "ports").glob("*.toml"))]
+    ports = [p.read_text() for p in sorted((ROOT / "ports").glob("*.toml"))]
     modules = []
     roots = [*(ROOT / r for r in modroots.REPO_ROOTS), *(extra or [])]
     manifests = [

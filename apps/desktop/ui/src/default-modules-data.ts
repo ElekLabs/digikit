@@ -7,7 +7,7 @@ import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { DefaultModuleEntry } from '@digi/workbench-core/firmware/default-modules-core.ts';
 
 // the one-line summary of a module is in its own module.toml
-const manifests = import.meta.glob('../../../../modules/*/*/module.toml', {
+const manifests = import.meta.glob('../../../../modules/*/*/*/module.toml', {
   query: '?raw',
   import: 'default',
   eager: true,

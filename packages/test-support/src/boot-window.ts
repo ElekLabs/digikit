@@ -243,13 +243,13 @@ export async function readViewStack(read: ReadMemory, facts: ViewStackFacts, max
 /** The size of one item of a stock menu's item vector: a shared_ptr<MenuItem>. */
 const MENU_ITEM_BYTES = 8;
 
-/** The offset of field `field` in the struct `struct` of devices/fw/menu.toml. */
+/** The offset of field `field` in the struct `struct` of ports/fw/menu.toml. */
 function menuField(struct: string, field: string): number {
-  const rules = parseToml(fs.readFileSync(path.join(repoRoot(), 'devices/fw/menu.toml'), 'utf8')) as {
+  const rules = parseToml(fs.readFileSync(path.join(repoRoot(), 'ports/fw/menu.toml'), 'utf8')) as {
     struct: { name: string; fields: { name: string; off: number }[] }[];
   };
   const f = rules.struct.find((x) => x.name === struct)?.fields.find((x) => x.name === field);
-  if (!f) throw new Error(`devices/fw/menu.toml: no ${struct}.${field}`);
+  if (!f) throw new Error(`ports/fw/menu.toml: no ${struct}.${field}`);
   return f.off;
 }
 

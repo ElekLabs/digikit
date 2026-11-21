@@ -9,7 +9,7 @@ import {
   TAG,
   unhashed,
   usesCountAt,
-} from '../../../modules/core/runtime/tests/refusal/dkm-patch.ts';
+} from '../../../runtime/core/tests/refusal/dkm-patch.ts';
 
 /** A file with the header fields the edits touch and a header table of a NEEDS, a USES and a KEYS entry (the layout of packages/dkneeds/src/keys.rs). */
 function fixture(): Buffer {

@@ -77,7 +77,7 @@ slot = "lfo_dn2_read_start"
 entry = "lfo_dn2_read_start"
 devices = ["dn2"]
 
-# The hooks it takes (devices/fw/lfo.toml): UI-task sites of the MOD page, listed in the port file. They have no `handler`: each is a routine of this file (`src/hooks-ui.s`) that runs in
+# The hooks it takes (ports/fw/lfo.toml): UI-task sites of the MOD page, listed in the port file. They have no `handler`: each is a routine of this file (`src/hooks-ui.s`) that runs in
 # place of the first six bytes of a stock function and leaves into the stock code through the end of its site. DT2 binds two sites, DN2 three. `init` repeats them with dk_service_declare_hook (`service!`).
 [[hook]]
 name = "cf.lfo.hook.wave_name"
@@ -98,7 +98,7 @@ path = "build/lfo.dko.json"
 sources = ["Cargo.toml"]
 place = "cf.expansion"
 
-# The exits of the hooks of devices/fw/lfo.toml (`hook.<hook>.exit` is the end of the site, `.exit.N` the Nth entry of its `exits`), as aliases `patchkit pack` makes into imports.
+# The exits of the hooks of ports/fw/lfo.toml (`hook.<hook>.exit` is the end of the site, `.exit.N` the Nth entry of its `exits`), as aliases `patchkit pack` makes into imports.
 [object.externs]
 lfo_x_tick_rand = "hook.cf.lfo.hook.tick_call.exit.1"
 lfo_x_tick_done = "hook.cf.lfo.hook.tick_call.exit.2"

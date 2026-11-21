@@ -66,7 +66,7 @@ try {
           addrmap,
         ];
         await run(pk, args, { cwd: root });
-        // The info table of a patch set's image, as text for the host assembly tests (modules/core/runtime, `test-assembly`)
+        // The info table of a patch set's image, as text for the host assembly tests (runtime/core, `test-assembly`)
         if (!keep) writeInfo(cell.dev, label, JSON.parse(readFileSync(plan, 'utf8')).info ?? []);
         const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
         lines[index] = `${cell.dev}-${cell.ver} ${label} image ${sha(out)} plan ${sha(plan)} addrmap ${sha(addrmap)}`;

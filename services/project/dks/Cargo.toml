@@ -9,11 +9,11 @@ description = "The project service as a service file (.dks): the crate dkrt-svc-
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-dkrt-abi = { path = "../../../runtime/abi" }
-dkrt-sdk = { path = "../../../runtime/sdk" }
-dkrt-svc-rt = { path = "../../../runtime/svc-rt" }
+dkrt-abi = { path = "../../../runtime/core/abi" }
+dkrt-sdk = { path = "../../../runtime/core/sdk" }
+dkrt-svc-rt = { path = "../../../runtime/core/svc-rt" }
 dkrt-svc-project = { path = ".." }
-dkfw = { path = "../../../fw/rs" }
+dkfw = { path = "../../../ports/bindings/rs" }
 
 # This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).
 [workspace]

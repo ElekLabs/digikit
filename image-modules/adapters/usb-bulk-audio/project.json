@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/usb-bulk-audio",
   "implicitDependencies": ["core/runtime", "core/usb-bulk"],
   "metadata": {

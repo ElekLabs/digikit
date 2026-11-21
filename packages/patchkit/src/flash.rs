@@ -254,7 +254,7 @@ pub fn prepare_in_repo(
     restore_stock: bool,
     set: &str,
 ) -> Result<Prepared> {
-    let reg = Registry::from_dir(&root.join("devices/ports"))?;
+    let reg = Registry::from_dir(&root.join("ports"))?;
     if restore_stock {
         return restore(stock, &reg);
     }
@@ -291,7 +291,7 @@ fn known_port<'a>(fw: &Firmware, raw: &[u8], reg: &'a Registry) -> Result<&'a cr
             err!("this file is a patched image; give the stock file it was made from (sha256 {})", fw.syx_sha256)
         } else {
             err!(
-                "this file ({}) is not a stock firmware patchkit knows (no port in devices/ports/ has its sha256 {})",
+                "this file ({}) is not a stock firmware patchkit knows (no port in ports/ has its sha256 {})",
                 fw.device.short(),
                 fw.syx_sha256
             )

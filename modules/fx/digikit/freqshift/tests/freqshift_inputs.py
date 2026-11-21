@@ -1,4 +1,4 @@
-"""The input block of the frequency shifter reference tables (`tests/rig/freqshift.toml`, `uv run python -m tools.devtools.rig_refs modules/fx/freqshift`):
+"""The input block of the frequency shifter reference tables (`tests/rig/freqshift.toml`, `uv run python -m tools.devtools.rig_refs modules/fx/digikit/freqshift`):
 numpy draws it, which a TypeScript run cannot."""
 
 import numpy as np

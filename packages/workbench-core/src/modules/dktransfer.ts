@@ -594,7 +594,7 @@ const isProvider = (path: string): boolean => path.endsWith(SERVICE_EXT) || path
 /** The store folder of a module's own files (sdk/include/dk/platform/data.h): `data/<module id>/`. */
 export const moduleFilesFolder = (moduleId: string): string => `data/${moduleId}/`;
 
-/** The module chooser keeps a file name in 48 bytes, NUL included (modules/tools/bootscreen/src/module.c, NAME_MAX_BYTES). */
+/** The module chooser keeps a file name in 48 bytes, NUL included (modules/tool/tools/bootscreen/src/module.c, NAME_MAX_BYTES). */
 export const MODULE_FILE_NAME_LIMIT = 48;
 
 /**

@@ -23,4 +23,4 @@ How it works:
 - The hook does not call modules. It queues `on` (when the binding completes) and `off` (when either key is released); the service's tick runs the queue in the UI task.
 - When a module unloads, its bindings and its queued calls are removed (a held binding gets its `off` first).
 
-The neutral crate exports only `dk_module` and `DKRT_*` state symbols, names no firmware, and has no assembler; the hook and the site come from `devices/fw/input.toml` and the port files.
+The neutral crate exports only `dk_module` and `DKRT_*` state symbols, names no firmware, and has no assembler; the hook and the site come from `ports/fw/input.toml` and the port files.

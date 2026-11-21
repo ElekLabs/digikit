@@ -26,7 +26,7 @@ import {
   type RigPort,
 } from '@digi/sharc-rig-kit';
 
-const MOD = path.join(ROOT, 'modules/core/adapters/dsp-link');
+const MOD = path.join(ROOT, 'runtime/platform/dsp-link');
 const [REC, RING, FRAME, DVDIAG, FXDIAG, DVREC, FXREC] = [
   0x20090000, 0x20092000, 0x20093800, 0x20094000, 0x20094100, 0x20094200, 0x20094210,
 ];

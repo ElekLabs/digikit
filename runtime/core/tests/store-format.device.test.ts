@@ -25,9 +25,9 @@ import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
-import { installDefaults, type DefaultOps } from '../../../../packages/workbench-core/src/firmware/default-modules-core.ts';
-import { deleteFiles, install, libraryModule } from '../../../../packages/workbench-core/src/modules/dktransfer.ts';
-import { nameHash, portFileOf, serviceFileOf } from '../../../../packages/workbench-core/src/modules/services.ts';
+import { installDefaults, type DefaultOps } from '../../../packages/workbench-core/src/firmware/default-modules-core.ts';
+import { deleteFiles, install, libraryModule } from '../../../packages/workbench-core/src/modules/dktransfer.ts';
+import { nameHash, portFileOf, serviceFileOf } from '../../../packages/workbench-core/src/modules/services.ts';
 
 /**
  * The store's file hash (version 4: the +Drive content hash in the table's 32-byte slot) and what a store of another version is. Both devices.

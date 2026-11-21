@@ -1,7 +1,7 @@
 """Writes split.inc, the frame split of src/dsp/overdrive.s unrolled over the 16 tracks (no index register, so no L register
 to depend on at the hook site), and consts.inc / k.inc, the curve constants: their indexes and the words of `_od_k`.
 
-    uv run python modules/core/adapters/overdrive/src/dsp/gen_split.py
+    uv run python image-modules/fixes/overdrive/src/dsp/gen_split.py
 """
 
 import math

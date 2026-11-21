@@ -5,12 +5,12 @@ a private arena, and calls the `tick` of every loaded record (content modules, t
 
 - Design, C ABI, sizes, hook: `docs/design/digikit-runtime.md`. File format: `docs/design/digikit-dkm.md`. Results:
   `docs/findings/29-runtime-v0.md`.
-- Build: `mise run module:build -- modules/core/runtime` (needs `uv run python -m tools.patchkit.pk_toolchains codegen-gcc` once).
+- Build: `mise run module:build -- runtime/core` (needs `uv run python -m tools.patchkit.pk_toolchains codegen-gcc` once).
 - Proof in the emulator: `uv run python -m tools.patchkit.pk_dkrt proof [--image dt2-1.17|dn2-1.12]`
   (about 25 s); tests: `tests/patchkit/test_patchkit_dkrt.py`.
 - Try it by hand: `patchkit pack test/dyn-demo -o plus_drive/dt2/digikit/modules/dyn-demo.dkm`, patch with `--modules core/runtime`,
   boot with that `plus_drive/`; put `modules/dyn-demo.dkm` in `plus_drive/dt2/digikit/selection.txt` (or use DIGIKIT > MODULES), and the boot loads it.
-- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (the runtime links no service: the services are crates in `modules/core/services/NAME` (`machines`, `fx`, `samples`, `lfo`), packed as `.dks` files that the runtime loads from the card at boot; the parameter row writers are the crate `dkrt-svc-params`, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler;
+- Layout: `sdk/` is the crate both the runtime and modules use (the imports, result codes); `src/rs/` the runtime (the runtime links no service: the services are crates in `services/NAME` (`machines`, `fx`, `samples`, `lfo`), packed as `.dks` files that the runtime loads from the card at boot; the parameter row writers are the crate `dkrt-svc-params`, `dsp/` the DSP loader core); `src/rs/src/lib.rs` has the module list, the panic handler;
   `state.rs` (`State` and the `DKRT_*` statics), `platform.rs` (device, block read and write, MIDI send, helpers), `imports.rs` (the import table),
   `api.rs` (the C ABI), `health.rs`, `report.rs` (status, capacity, diag, debug imports), `tick.rs`, `mailbox.rs`; boot: `boot.rs`, `selection.rs`, `safe_mode.rs`;
   upload: `transport.rs`, `store_cmds.rs`, `admin_cmds.rs`, `module_cmds.rs`; `fault.rs` (crash, hang and panic records), `invariants.rs` (the module table check); `src/cf/tramp.s` the
@@ -25,7 +25,7 @@ a private arena, and calls the `tick` of every loaded record (content modules, t
   selection, uploads answer `E_INUSE`, ABOUT shows CARD READ-ONLY and NO BOOT COUNTER); a card too small for the store, or a device without one, has no counter either (ABOUT has no card row for it; the MODULES page says NO STORE).
   `dkrt_diag` reports it. On a blank card the boot's own record write (the boot counter) marks the area ours, so no header claim is needed; a write of data into a blank range that no record marks
   still claims it with an empty store header pair first.
-- Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dk_debug_log_sink_set`); the module `digikit/debug` (`modules/tools/debug`) holds the
+- Debug (finding 46): `dlog.rs` has a ring of 32 boot and error events and one sink pointer (`dk_debug_log_sink_set`); the module `digikit/debug` (`modules/tool/digikit/debug`) holds the
   512-event ring and answers LOG 0x20, PEEK 0x21 (over `[digikit] peek` of the device file) and LOGCFG 0x22 for `tools/device/dklog.py`; the DSP diagnostics poll (`dl_diag`, optional) and its
   heartbeat watch (`watch.rs`); the firmware's exception hook (`cf.rtos.site.exc_hook_lit`) records a crash in kept RAM (`[digikit] keep_base`) and soft-resets, the next boot
   reports it and counts the boot as bad. Test knob: `CMD_CARD_PROBE`; test module `test/dyn-crash`.

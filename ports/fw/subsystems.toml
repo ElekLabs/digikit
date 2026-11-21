@@ -1,5 +1,5 @@
 # The allowed subsystem words of a declaration name <cpu>.<subsystem>.<kind>.<name>, with their meaning.
-# Each subsystem has one file: devices/fw/<subsystem>.toml for ColdFire, devices/fw/dsp/<subsystem>.toml for the DSP.
+# Each subsystem has one file: ports/fw/<subsystem>.toml for ColdFire, ports/fw/dsp/<subsystem>.toml for the DSP.
 
 [cf]
 rtos = "tasks, queues, mutexes, idle, interrupts, the reset and boot path"

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 
 const module = path.join(import.meta.dirname, '..');
-const root = path.join(module, '../../../..');
+const root = path.join(module, '../../..');
 
 // The stock section 7 and its SHA-256: the firmware file is not in the repository, so that part runs only when `out/sections` has it.
 const section = path.join(root, 'out/sections/st-1.42/section_7_BLOB.bin');
@@ -19,7 +19,7 @@ test('the adapter C code: SHA-256, the section 6 pass-through, the section 7 unp
       'cc',
       [
         '-std=c11', '-Wall', '-Wextra', '-Werror',
-        '-I', path.join(root, 'modules/core/fw/include'),
+        '-I', path.join(root, 'ports/bindings/include'),
         '-I', path.join(module, 'src/cf'),
         '-I', path.join(module, 'build/gen'),
         path.join(module, 'tests/peer-host.c'),

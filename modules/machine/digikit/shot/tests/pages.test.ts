@@ -17,7 +17,7 @@ test('pages draw the region, cache failed peak fetches per token and show the zo
         '-Wextra',
         '-Werror',
         '-I',
-        path.join(module, '../../../sdk/include'),
+        path.join(module, '../../../../sdk/include'),
         '-I',
         path.join(module, 'src'),
         path.join(module, 'tests/pages-host.c'),

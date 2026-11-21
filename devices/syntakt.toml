@@ -26,7 +26,7 @@ symbol_profile = "elektron-rtos-v1"
 # MAIN has no filesystem worker (finding 70).
 readiness_contract = "main-panel-v1"
 softfloat_abi = false
-# Has a port lockfile (devices/ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
+# Has a port lockfile (ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
 port = true
 # Regions of the port that the analysis (tools/coldfire/regions.py) cannot find on this image, kept by hand from static evidence **[D]**
 # (docs/findings/70-syntakt-1-42.md "Regions"). cf_flash_cave: the zero run (2256 bytes) that ends at the reset clear start 0x4033a000, after
@@ -73,7 +73,7 @@ byte_order = "big"
 apply = "restart"
 
 # What patchkit needs of this device (the DT2 and DN2 files explain each key; tools/patchkit/port_resolve.py copies the limits into
-# devices/ports/st-1.42.toml). There are no dsp_* keys: the device has no DSP (`[capabilities] dsp = "none"`).
+# ports/st-1.42.toml). There are no dsp_* keys: the device has no DSP (`[capabilities] dsp = "none"`).
 [patch]
 # The container (the OS image in the NOR flash) is at most 0x1FFE00 bytes: the OS-upgrade receiver stages it in RAM at 0x403d10d0, 2 MiB, 101 bytes per
 # message and no size check (finding 146 section 4), so 20763 messages of 101 bytes = 2,097,063 bytes fit the stage, rounded down to a 0x200 page: 0x1FFE00. The stock container is

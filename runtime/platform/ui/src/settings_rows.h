@@ -1,5 +1,5 @@
 /* The SETTINGS rows of modules (dk_ui_settings_row of <dk/platform/ui.h>): a small registry with no firmware and no runtime call, so the host can test
-   it (modules/core/adapters/ui/host/tests/settings_rows.rs). ui.c owns the one registry, fills it from dk_ui_settings_row, empties it for an owner on unload
+   it (runtime/platform/ui/host/tests/settings_rows.rs). ui.c owns the one registry, fills it from dk_ui_settings_row, empties it for an owner on unload
    and, from the hook at the end of the SETTINGS rebuild, adds one stock row for each entry in load order. A stock row is found again by a key, not by its
    place (a removal moves the rows after it) and not by a number of one load: the key is the module's name and the row's number within the module, which a
    reload of the module gives again. So after a reload the stock row that was built before runs the reloaded module's row, and after a plain unload (no row with

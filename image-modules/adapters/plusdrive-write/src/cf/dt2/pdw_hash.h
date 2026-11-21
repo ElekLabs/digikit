@@ -1,6 +1,6 @@
 /* The +Drive content hash of the firmware (its close hash FUN_4015b1e8: lookup3 over big-endian words, all three state words start at the
  * seed 0x43fa243a, no length in the seed, the last 1 to 12 bytes are the tail), as a streaming hash. The same function as
- * modules/core/runtime/src/rs/src/hash32.rs and packages/dksample/src/hash.rs; tests/pdw-hash.test.ts checks this file against vectors of dksample.
+ * runtime/core/src/rs/src/hash32.rs and packages/dksample/src/hash.rs; tests/pdw-hash.test.ts checks this file against vectors of dksample.
  * Plain C with no firmware include, so that a host test can compile it. */
 #ifndef PDW_HASH_H
 #define PDW_HASH_H

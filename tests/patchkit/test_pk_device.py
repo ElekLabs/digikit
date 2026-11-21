@@ -13,7 +13,7 @@ from tools.patchkit import modroots, pk_device, port_resolve
 
 ROOT = REPO_ROOT
 TYPES = tomllib.loads(
-    (ROOT / "modules" / "core" / "adapters" / "machines" / "types.toml").read_text()
+    (ROOT / "image-modules" / "points" / "machines" / "types.toml").read_text()
 )
 
 
@@ -77,7 +77,7 @@ def test_digikit_ids_and_names_are_unique_and_fit_the_info_reply() -> None:
 
 def test_port_resolve_reads_its_tables_from_the_device_files() -> None:
     # every firmware that has a port lockfile is flagged, and the other way round
-    ports = {p.stem for p in (ROOT / "devices" / "ports").glob("*.toml")}
+    ports = {p.stem for p in (ROOT / "ports").glob("*.toml")}
     flagged = {
         f"{p['device']}-{p['version']}"
         for p in port_resolve.load_profiles().values()
@@ -86,7 +86,7 @@ def test_port_resolve_reads_its_tables_from_the_device_files() -> None:
     assert flagged == ports
     assert len(port_resolve.ported_firmware()) == len(ports)
     # the limits written into a port are the device's `[patch]` (a device without a DSP has no dsp_* limits)
-    for pf in (ROOT / "devices" / "ports").glob("*.toml"):
+    for pf in (ROOT / "ports").glob("*.toml"):
         port = tomllib.loads(pf.read_text())
         patch = pk_device.load(port["port"]["device"])["patch"]
         assert port["limits"] == {
@@ -95,7 +95,7 @@ def test_port_resolve_reads_its_tables_from_the_device_files() -> None:
 
 
 def test_the_harness_inputs_come_from_the_device_files() -> None:
-    ports = {p.stem for p in (ROOT / "devices" / "ports").glob("*.toml")}
+    ports = {p.stem for p in (ROOT / "ports").glob("*.toml")}
     assert {f"{s}-{v}" for s, v in pk_device.port_firmware()} == ports
     for short, version in pk_device.acceptance_firmware().items():
         acc = pk_device.load(short)["acceptance"]

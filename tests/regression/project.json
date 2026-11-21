@@ -85,8 +85,8 @@
         "^hostTests",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/modules/core/runtime/vectors/**/*",
-        "{workspaceRoot}/modules/core/runtime/tests/lfo/lfo-fit.ts",
+        "{workspaceRoot}/runtime/core/vectors/**/*",
+        "{workspaceRoot}/runtime/core/tests/lfo/lfo-fit.ts",
         {
           "runtime": "shasum -a 256 dist/plusdrive/plusdrive 2>/dev/null || echo no-plusdrive"
         }

@@ -15,7 +15,7 @@ fn hex(s: &str) -> Vec<u8> {
 
 fn vectors() -> Value {
     Parser {
-        b: include_str!("../../../../runtime/vectors/dkp-vectors.json").as_bytes(),
+        b: include_str!("../../../../runtime/core/vectors/dkp-vectors.json").as_bytes(),
         at: 0,
     }
     .value()

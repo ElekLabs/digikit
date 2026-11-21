@@ -77,6 +77,6 @@ the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.1
   that address or relocated by the runtime (`docs/design/digikit-dkm.md`, "DSP section"). The emulator does not model the DSP caches, so the cache invalidate after the last chunk has not run on
   a device.
 
-Design, measurements and open points: [docs/findings/31-dsp-link.md](../../../../docs/findings/31-dsp-link.md) and, for the windows and
-the wider chunk header, [docs/findings/32-runtime-dsp-machines.md](../../../../docs/findings/32-runtime-dsp-machines.md). Proof:
+Design, measurements and open points: [docs/findings/31-dsp-link.md](../../../docs/findings/31-dsp-link.md) and, for the windows and
+the wider chunk header, [docs/findings/32-runtime-dsp-machines.md](../../../docs/findings/32-runtime-dsp-machines.md). Proof:
 `uv run python -m tools.patchkit.pk_dsplink proof --device dt2|dn2`; tests: `tests/test_dsplink.py`.

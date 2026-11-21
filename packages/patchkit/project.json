@@ -6,7 +6,7 @@
       "cache": false,
       "inputs": [
         "default",
-        "{workspaceRoot}/modules/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         {
           "dependentTasksOutputFiles": "**/*",
@@ -23,21 +23,21 @@
     "objects-check": {
       "executor": "nx:run-commands",
       "cache": false,
-      "description": "Fails when a committed core object (modules/core/**/build/*.dko.json) is older than its sources. Content-module objects are not read.",
+      "description": "Fails when a committed core object (under runtime/, services/ or image-modules/) is older than its sources. Content-module objects are not read.",
       "inputs": [
-        "{workspaceRoot}/modules/core/**/src/**/*",
-        "{workspaceRoot}/modules/core/**/module.toml",
-        "{workspaceRoot}/modules/core/**/build/*.dko.json",
-        "{workspaceRoot}/modules/core/runtime/sdk/**/*",
-        "{workspaceRoot}/modules/core/runtime/fit/**/*",
-        "{workspaceRoot}/modules/core/fw/rs/**/*",
+        "{workspaceRoot}/{runtime,services,image-modules}/**/src/**/*",
+        "{workspaceRoot}/{runtime,services,image-modules}/**/module.toml",
+        "{workspaceRoot}/{runtime,services,image-modules}/**/build/*.dko.json",
+        "{workspaceRoot}/runtime/core/sdk/**/*",
+        "{workspaceRoot}/runtime/core/fit/**/*",
+        "{workspaceRoot}/ports/bindings/rs/**/*",
         "{workspaceRoot}/packages/dkneeds/**/*",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/sdk/sdk.toml",
         "{workspaceRoot}/sdk/include/**/*",
         "{workspaceRoot}/sdk/dsp/contract/**/*",
         "{workspaceRoot}/sdk/dsp/**/*",
-        "{workspaceRoot}/modules/core/runtime/vectors/**/*",
+        "{workspaceRoot}/runtime/core/vectors/**/*",
         "{workspaceRoot}/tools/patchkit/toolchain/**/*",
         "{workspaceRoot}/tools/patchkit/pk_toolchains.py",
         "{workspaceRoot}/Cargo.toml",
@@ -53,17 +53,17 @@
       "dependsOn": ["cli"],
       "outputs": [],
       "options": {
-        "command": "dist/patchkit/patchkit --root . build --check --tree modules/core || { echo 'A committed core object is stale: run dist/patchkit/patchkit --root . build modules/core (or nx run <core module>:build-objects) and commit the result.' >&2; exit 1; }",
+        "command": "for dir in runtime services image-modules; do dist/patchkit/patchkit --root . build --check --tree \"$dir\" || { echo \"A committed object under $dir is stale: run dist/patchkit/patchkit --root . build --tree $dir and commit the result.\" >&2; exit 1; }; done",
         "cwd": "."
       }
     },
     "ports": {
       "executor": "nx:run-commands",
       "cache": true,
-      "description": "The port file (role 2, docs/plans/port-file.md) of every committed port: dist/ports/<device>-<version>.dkport, from devices/ports and devices/fw only (no firmware).",
+      "description": "The port file (role 2, docs/plans/port-file.md) of every committed port: dist/ports/<device>-<version>.dkport, from ports and ports/fw only (no firmware).",
       "inputs": [
-        "{workspaceRoot}/devices/ports/*.toml",
-        "{workspaceRoot}/devices/fw/**/*.toml",
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/ports/fw/**/*.toml",
         {
           "dependentTasksOutputFiles": "**/*",
           "transitive": true
@@ -81,8 +81,8 @@
       "cache": true,
       "description": "The port file of the test image: dist/ports-test/<device>-<version>.dkport, as `ports` plus the hooks of the test fixture service (test/svc-test), whose site is a site that image modules patch. Only the test fixtures and the device tests of providers use it; a production port file lists none of them.",
       "inputs": [
-        "{workspaceRoot}/devices/ports/*.toml",
-        "{workspaceRoot}/devices/fw/**/*.toml",
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/ports/fw/**/*.toml",
         {
           "dependentTasksOutputFiles": "**/*",
           "transitive": true
@@ -139,7 +139,7 @@
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
         "{workspaceRoot}/sdk/sdk.toml",
-        "{workspaceRoot}/modules/core/runtime/vectors/**/*",
+        "{workspaceRoot}/runtime/core/vectors/**/*",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/tools/patchkit/toolchain/**/*",
         {

@@ -9,10 +9,10 @@ description = "The fx service of the digikit runtime: effect pages, FX parameter
 path = "src/lib.rs"
 
 [dependencies]
-dkrt-abi = { path = "../../runtime/abi" }
-dkrt-sdk = { path = "../../runtime/sdk" }
-dkrt-svc-params = { path = "../params" }
-dkneeds = { path = "../../../../packages/dkneeds" }
+dkrt-abi = { path = "../../runtime/core/abi" }
+dkrt-sdk = { path = "../../runtime/core/sdk" }
+dkrt-svc-params = { path = "../rows" }
+dkneeds = { path = "../../packages/dkneeds" }
 
 [dev-dependencies]
-dkrt-test-support = { path = "../../runtime/test-support" }
+dkrt-test-support = { path = "../../runtime/core/test-support" }

@@ -1,5 +1,5 @@
 """The cases and the float32 model run of tom/tb303: the source of the reference tables of `tests/rig/tb303.toml`
-(`uv run python -m tools.devtools.rig_refs modules/machines/tb303`, see rig_refs_gen.py). The routine itself is checked on the SHARC-only rig."""
+(`uv run python -m tools.devtools.rig_refs modules/machine/tom/tb303`, see rig_refs_gen.py). The routine itself is checked on the SHARC-only rig."""
 
 import numpy as np
 import tb303_ref

@@ -12,8 +12,8 @@ import subprocess
 import pytest
 from support.paths import REPO_ROOT
 
-SRC = REPO_ROOT / "modules" / "core" / "adapters" / "sample-pool" / "src"
-RUNTIME_INC = REPO_ROOT / "modules" / "core" / "runtime" / "include"
+SRC = REPO_ROOT / "image-modules" / "points" / "sample-pool" / "src"
+RUNTIME_INC = REPO_ROOT / "runtime" / "core" / "include"
 HARNESS = REPO_ROOT / "tests" / "fixtures" / "sample-pool-dn2" / "harness.c"
 CC = shutil.which("cc") or shutil.which("gcc")
 

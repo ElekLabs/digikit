@@ -45,7 +45,7 @@ export type Rt = Pick<TestRuntime, 'session' | 'ui' | 'clock'>;
 export const REDRAW = 'firmware redraw after a panel input (no page-change event)';
 /** The reason of a fixed wait for the firmware to act on its own (a timer, a retry, a save): nothing observable yet. */
 export const SETTLE = 'emulated time for the firmware to act (no observable state)';
-// core/fx's published registry row: modules/core/adapters/fx/module.toml.
+// core/fx's published registry row: image-modules/points/fx/module.toml.
 export const ROW_WORDS = 24;
 export const FREE_PC = 0xffffffff;
 export const bounded = <T>(operation: () => Promise<T>) => withinRuntimeDeadline(Date.now() + 30_000, operation);
@@ -482,7 +482,7 @@ export async function inspect(
   await rpc(session, 'run.mode', { mode: 'paused' });
   const boot = planSymbol(plan, 'DKRT_BOOT');
   const fields = await Promise.all(Array.from({ length: 10 + names.length }, (_, i) => word(session, boot + i * 4)));
-  // modules/core/runtime/abi.toml DkrtBootInfo: magic/version/safe/reason, count/loaded/UI, results.
+  // runtime/core/abi.toml DkrtBootInfo: magic/version/safe/reason, count/loaded/UI, results.
   expect(fields.slice(0, 4)).toEqual([0x444b4254, 1, 0, 0]);
   expect(fields.slice(7, 10)).toEqual([names.length, names.length, 1]);
   expect(fields.slice(10)).toEqual(names.map(() => 0));

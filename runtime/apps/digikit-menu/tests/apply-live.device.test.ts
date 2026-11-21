@@ -17,7 +17,7 @@ import { packSynth } from '@digi/regression/runtime/synth.ts';
  * - untick `a`: the runtime unloads it (LOADS says UNLOADED), still the same boot;
  * - the transport plays, tick `a`: the dialog "A NOT APPLIED" with the text STOP PLAYBACK, then "RESTART TO APPLY?"; NO leaves the device running, `a` is not loaded;
  * - with the transport still playing, tick `c` the same way and YES on "RESTART TO APPLY?": the device restarts (the epoch rises).
- * The host cases of the batch (order, texts, refusals, the settings cache, the boot results by index) are in modules/core/adapters/ui/host/tests/menu.rs.
+ * The host cases of the batch (order, texts, refusals, the settings cache, the boot results by index) are in runtime/platform/ui/host/tests/menu.rs.
  * Run only with the go of the owner.
  */
 

@@ -74,7 +74,7 @@ from tools.patchkit import pk_dkrt_machine as M  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
 # a module's own scenarios: modules/<group>/<name>/tests/scenarios/*.toml
-MODULE_SCENARIOS = "modules/*/*/tests/scenarios"
+MODULE_SCENARIOS = "modules/*/*/*/tests/scenarios"
 # DIGIKIT_CACHE moves the cache: the cards are sparse files of the card's full size (16.7 GiB for a
 # DN2), and a file system without sparse files (WSL's mount of a Windows drive) writes each one out in full
 CACHE = (
@@ -740,7 +740,7 @@ def run_dkrun(
 
 
 def memory_rows(cap: dict[str, dict[str, int]]) -> list[str]:
-    """The rows the MEMORY page shows for a CAPACITY reply (modules/core/apps/digikit-menu `fill_mem`): label, ten-character bar, percent or used/limit."""
+    """The rows the MEMORY page shows for a CAPACITY reply (runtime/apps/digikit-menu `fill_mem`): label, ten-character bar, percent or used/limit."""
     out = []
     for kind, label, pct in (
         ("DSP_AREA", "DSP   ", True),

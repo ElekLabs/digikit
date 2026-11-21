@@ -5732,7 +5732,7 @@ mod tests {
             eprintln!("skipped: Digitakt_II_OS1.17.syx not in firmware/");
             return;
         };
-        let port = std::fs::read_to_string("../../../devices/ports/dt2-1.17.toml").unwrap();
+        let port = std::fs::read_to_string("../../../ports/dt2-1.17.toml").unwrap();
         let anchor = |name: &str| -> u32 {
             let at = port
                 .find(&format!("name = \"cf.storage.value.{name}\""))

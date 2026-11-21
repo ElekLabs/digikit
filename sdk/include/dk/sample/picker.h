@@ -29,7 +29,7 @@
    without a key, so the list of the settings is the pool after init. While the `project` service is loaded the runtime keeps the settings per
    project and reloads the module when a project change gives it other values, so init reads the list of the new project; the module and the
    picker know nothing about projects. When the stock firmware resets the borrowed sample memory, the runtime reloads the entries from the paths they
-   are bound to (modules/core/runtime/sdk/src/sample_tracks.rs, Core::lost): the picker does nothing for it. */
+   are bound to (runtime/core/sdk/src/sample_tracks.rs, Core::lost): the picker does nothing for it. */
 #ifndef DK_SAMPLE_PICKER_H
 #define DK_SAMPLE_PICKER_H
 #include <stdint.h>

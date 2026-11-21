@@ -81,7 +81,7 @@ def test_native_page_dot_order_in_bottom_origin_bitmap(tmp_path):
         r"""
 #include <assert.h>
 #include <string.h>
-#include "modules/core/adapters/machines/src/cf/native-page-dots.h"
+#include "image-modules/points/machines/src/cf/native-page-dots.h"
 static uint8_t pixels[64][128];
 static void rect(uint8_t *canvas, int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t color) {
     (void)canvas;
@@ -128,7 +128,7 @@ def test_native_overlay_mask_preserves_stock_and_clips(tmp_path):
     source.write_text(
         r"""
 #include <assert.h>
-#include "modules/core/adapters/machines/src/cf/native-page-mask.h"
+#include "image-modules/points/machines/src/cf/native-page-mask.h"
 static uint32_t mask[99*2];
 static int visible(int x,int y) {
     int row=52-y;

@@ -44,7 +44,7 @@ mise run module:pack -- digikit/lfo_shapes_1 --device dt2      # make the .dkm (
 
 ## Output report
 
-`mise run lfo:report -- digikit/lfo_shapes_1 [--device dt2|dn2]` (default device dn2; about 5 minutes). What it does, the verdicts and the output files are in [the template README, "Output report"](../../../sdk/templates/lfo-shape/README.md#output-report). The fit is shape-only; the scale check uses a 5 percentage point tolerance on the swing. Output of the last run:
+`mise run lfo:report -- digikit/lfo_shapes_1 [--device dt2|dn2]` (default device dn2; about 5 minutes). What it does, the verdicts and the output files are in [the template README, "Output report"](../../../../sdk/templates/lfo-shape/README.md#output-report). The fit is shape-only; the scale check uses a 5 percentage point tolerance on the swing. Output of the last run:
 
 ```text
 lfo shape report: digikit/lfo_shapes_1 on dn2 (100 reads, 12 emulated ms apart; swing is the measured peak-to-peak over the full swing 0x4000, "table" the declared one)

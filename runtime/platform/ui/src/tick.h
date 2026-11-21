@@ -1,5 +1,5 @@
 /* The timers behind dk_ui_tick (<dk/platform/ui.h>): a small table and its due check, with no firmware and no runtime call, so the host can test it
-   (modules/core/adapters/ui/host/tests/tick.rs). ui.c owns the table, feeds it the runtime's block clock and calls `ui_ticks_run` from its
+   (runtime/platform/ui/host/tests/tick.rs). ui.c owns the table, feeds it the runtime's block clock and calls `ui_ticks_run` from its
    one function of dkrt_poll_add. Times are counted in clock units: `per_s` units make a second (blocks 1500, or UI-loop passes 120 when the
    runtime has no block clock). A period is rounded up to whole units and is at least one. The clock may wrap. */
 #ifndef DK_UI_TICK_H

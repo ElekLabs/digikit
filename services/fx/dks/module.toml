@@ -16,7 +16,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The hooks it takes (the firmware sites of the effect pages, devices/fw/page.toml). They have no `handler`: each is a routine of this file that runs in place
+# The hooks it takes (the firmware sites of the effect pages, ports/fw/page.toml). They have no `handler`: each is a routine of this file that runs in place
 # of the stock instructions at the site and leaves into the stock code through the exits the port file resolves (it makes the site jump straight to the
 # entry; there is no trampoline). `init` repeats the hooks with dk_service_declare_hook (`service!`).
 [[hook]]
@@ -86,7 +86,7 @@ sources = ["Cargo.toml"]
 place = "cf.expansion"
 
 # The firmware names of the assembler (`hooks.rs`), as aliases that `patchkit pack` turns into the imports the port file resolves (docs/PATCHING.md "Firmware references"): the hooks
-# leave by `jmp` to `exit` (the end of the site) or `exit.<n>` (the exit n of the hook in `devices/fw/page.toml`), `ret` is an `rts` and `stock` the stock path called from the hook.
+# leave by `jmp` to `exit` (the end of the site) or `exit.<n>` (the exit n of the hook in `ports/fw/page.toml`), `ret` is an `rts` and `stock` the stock path called from the hook.
 [object.externs]
 fx_x_acc = "hook.cf.page.hook.page_desc.exit"
 fx_ret_acc = "hook.cf.page.hook.page_desc.ret"

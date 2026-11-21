@@ -207,12 +207,11 @@ interface Manifest {
   machine?: unknown;
 }
 
-/** Module id -> manifest over `modules/`, `tests/fixtures/modules/` and the `PATCHKIT_MODULES` roots (the ids of module.toml files). */
+/** Module id -> manifest over the shipped module roots, `tests/fixtures/modules/` and the `PATCHKIT_MODULES` roots (the ids of module.toml files). */
 export function moduleManifests(): Map<string, Manifest> {
   const root = repoRoot();
   const roots = [
-    path.join(root, 'modules'),
-    path.join(root, 'tests/fixtures/modules'),
+    ...['modules', 'runtime', 'services', 'image-modules', 'tests/fixtures/modules'].map((dir) => path.join(root, dir)),
     ...(process.env.PATCHKIT_MODULES ?? '').split(path.delimiter).filter(Boolean),
   ];
   const out = new Map<string, Manifest>();

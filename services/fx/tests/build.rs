@@ -365,7 +365,7 @@ fn mine(line: &str) -> bool {
 #[test]
 fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../tests/fixtures/records/lowered.golden");
+        .join("../../tests/fixtures/records/lowered.golden");
     let text = golden_text();
     let want = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let want: Vec<&str> = want.lines().filter(|l| mine(l)).collect();

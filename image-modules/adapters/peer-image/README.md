@@ -3,7 +3,7 @@
 The Syntakt has a second ColdFire CPU. Its program is section 7 of the OS container (383,760 bytes), stored raw by Elektron. MAIN reads it from the NOR flash into a
 transmit buffer and streams the buffer to the second CPU byte for byte. With the section raw, the patched image is 32,672 bytes over the 2 MiB stage of the OS upgrade.
 This adapter lets patchkit store section 7 packed (264,194 bytes, the image is then about 85 KB under the limit) and unpacks it in MAIN before the stream starts.
-Runs on the hardware: the `device-peer` image and the full `device` image boot on a unit, and the second CPU loads the unpacked section. Facts and the address evidence: [finding 151](../../../../docs/findings/151-syntakt-section7-pack.md).
+Runs on the hardware: the `device-peer` image and the full `device` image boot on a unit, and the second CPU loads the unpacked section. Facts and the address evidence: [finding 151](../../../docs/findings/151-syntakt-section7-pack.md).
 
 - **Hook.** The peer thread loads A2 with the NOR read routine (`lea`, 6 bytes, anchor `cf.peer.site.nor_read_lea`) and calls `jsr (a2)` for section 6 and section 7. A `hook`
   op (mode `replace`) loads A2 with `peer_read` instead. Same stack signature `[ret][src][len][dst]`.

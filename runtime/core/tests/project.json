@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-tests",
   "tags": ["test-only"],
   "implicitDependencies": ["core/runtime"],
@@ -202,7 +202,7 @@
         "files": ["platform-contract.device.test.ts"],
         "tags": ["C:boot", "C:device-facts", "C:storage", "C:tick", "C:transport"],
         "modules": [],
-        "sources": ["modules/core/runtime/tests/platform/contract.toml"]
+        "sources": ["runtime/core/tests/platform/contract.toml"]
       },
       {
         "files": ["addrmap.device.test.ts"],

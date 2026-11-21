@@ -23,7 +23,7 @@ export const DEVICE_BYTES = 'patchkit:device-bytes';
 export const DEVICE_IMAGES = 'patchkit:device-images';
 // Writes the `needs` verdict of the packs in tests/regression/runtime/needs-packs.json (tools/nx/pack-verdicts.mjs).
 export const PACK_VERDICTS = 'patchkit:pack-verdicts';
-// The host assembly tests of the runtime (modules/core/runtime): the seams between the real packed outputs. No device task starts while they fail.
+// The host assembly tests of the runtime (runtime/core): the seams between the real packed outputs. No device task starts while they fail.
 export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
 // Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
 // shared inputs of every device test (`test:subset --base` cannot select by path for them).

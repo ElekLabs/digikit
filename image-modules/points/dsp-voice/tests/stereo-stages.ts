@@ -31,7 +31,7 @@ import {
 
 export const SLOT = 5;
 // ADM_RING_R_BASE of the generated adapter constants ([adapter.sample_pool] ring_r_base): the 16 R rings of 32 KiB
-const inc = readFileSync(path.join(ROOT, 'modules/core/adapters/dsp-voice/build/gen/adapter-dn2.inc'), 'utf8');
+const inc = readFileSync(path.join(ROOT, 'image-modules/points/dsp-voice/build/gen/adapter-dn2.inc'), 'utf8');
 export const RING_R_BASE = Number(/#define ADM_RING_R_BASE (\d+)/.exec(inc)![1]);
 export const R_RING = RING_R_BASE + 0x8000 * SLOT;
 export const RING_L = 0x80100000; // the L ring of the L record in the tests (any DDR address of the model)

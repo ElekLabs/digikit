@@ -17,19 +17,9 @@ from tools.patchkit import (  # noqa: E402
 
 SYX = config.stock("Digitakt_II_OS1.17.syx")
 SRC = (
-    ROOT
-    / "modules"
-    / "core"
-    / "adapters"
-    / "machines"
-    / "src"
-    / "cf"
-    / "dn2"
-    / "machines.s"
+    ROOT / "image-modules" / "points" / "machines" / "src" / "cf" / "dn2" / "machines.s"
 )
-HOOKS = (
-    ROOT / "modules" / "core" / "services" / "machines" / "dks" / "src" / "hooks-dn2.s"
-)
+HOOKS = ROOT / "services" / "machines" / "dks" / "src" / "hooks-dn2.s"
 TAB = ROOT / "tests" / "fixtures" / "machines-info-dn2.s"
 # the stock tail the port file makes, by hook: what the type maps continue in
 TAILS = {

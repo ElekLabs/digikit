@@ -2,7 +2,7 @@
 //! the DN2) live in the implementation; callers name a root and a root-relative path.
 //!
 //! Every call runs in task context (the UI task or the I/O task) and never in an interrupt. Errors are the `dkrt_sdk` `E_*` codes. The same rules hold on
-//! every implementation (`modules/core/runtime/tests/storage/contract.toml`): an unknown root is `E_FORMAT`; a path longer than `path_max` of its root is
+//! every implementation (`runtime/core/tests/storage/contract.toml`): an unknown root is `E_FORMAT`; a path longer than `path_max` of its root is
 //! `E_TOO_BIG`; a path with a NUL is `E_SEL_PATH`. Only the root (the empty path) is a directory for `stat`; below it a directory is not found.
 
 use dkrt_sdk::files::{HASH_ELEKTRON32 as SDK_HASH_ELEKTRON32, SAMPLES, STORE};

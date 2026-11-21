@@ -1,8 +1,8 @@
 # The C ABI of the digikit runtime (core/runtime): the exports that the DIGIKIT menu, core/ui and other callers link against, with the structs and
 # constants they pass. `patchkit gen` writes from it:
-#   modules/core/runtime/include/dkrt.h             the C header (structs with size and offset checks, constants, prototypes)
-#   modules/core/runtime/sdk/src/gen_abi.rs         the same for Rust (`dkrt-sdk`), and one function type per export (`sig`)
-#   modules/core/runtime/src/rs/src/gen_abi_check.rs  the runtime's functions checked against those types: a changed signature fails the build
+#   runtime/core/include/dkrt.h             the C header (structs with size and offset checks, constants, prototypes)
+#   runtime/core/sdk/src/gen_abi.rs         the same for Rust (`dkrt-sdk`), and one function type per export (`sig`)
+#   runtime/core/src/rs/src/gen_abi_check.rs  the runtime's functions checked against those types: a changed signature fails the build
 # The result codes (`E_*`) and the CAPACITY kinds (`CAPK_*`) are in sdk/sdk.toml ([load.status], [capacity.kinds]) and `SEL_MAX` is
 # [limits.max] modules there; the C header repeats them with the prefix DKRT_.
 #

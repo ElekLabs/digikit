@@ -60,7 +60,7 @@ it('infers core producers from category and source-backed objects, independently
     if (module.category === 'core') expect(producer.inputs).toContain(input);
     else expect(producer.inputs).not.toContain(input);
   }
-  expect(producer.inputs).not.toContain('{workspaceRoot}/modules/**/module.toml');
+  expect(producer.inputs).not.toContain('{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml');
   expect(producer.inputs).not.toContain('{workspaceRoot}/tests/fixtures/modules/**/module.toml');
 
   expect(producer.outputs).toEqual([`{workspaceRoot}/${modules[0].dir}/build/object.dko.json`]);

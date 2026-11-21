@@ -42,7 +42,9 @@ fn find_objects(dir: &Path, out: &mut Vec<PathBuf>) {
 #[test]
 fn committed_objects_are_in_the_canonical_form() {
     let mut files = vec![];
-    find_objects(&root().join("modules/core"), &mut files);
+    for dir in patchkit::module::CORE_MODULE_ROOTS {
+        find_objects(&root().join(dir), &mut files);
+    }
     assert!(files.len() > 20, "{} objects", files.len());
     for f in files {
         let text = std::fs::read_to_string(&f).unwrap();
@@ -901,10 +903,10 @@ fn the_source_hash_of_a_crate_covers_the_sources_of_its_path_dependencies() {
 fn every_service_and_the_runtime_object_is_built_from_the_abi_boundary_files() {
     let r = root();
     let manifests = [
-        "modules/core/services/fx/dks/Cargo.toml",
-        "modules/core/services/machines/dks/Cargo.toml",
-        "modules/core/services/lfo/dks/Cargo.toml",
-        "modules/core/runtime/src/rs/Cargo.toml",
+        "services/fx/dks/Cargo.toml",
+        "services/machines/dks/Cargo.toml",
+        "services/lfo/dks/Cargo.toml",
+        "runtime/core/src/rs/Cargo.toml",
     ];
     for m in manifests {
         let files: Vec<PathBuf> = rust::crate_files(&r.join(m))
@@ -927,9 +929,9 @@ fn every_service_and_the_runtime_object_is_built_from_the_abi_boundary_files() {
     }
     // (the runtime module also has assembly objects, whose hash needs the toolchain: `objects-check` covers them)
     for dir in [
-        "modules/core/services/fx/dks",
-        "modules/core/services/machines/dks",
-        "modules/core/services/lfo/dks",
+        "services/fx/dks",
+        "services/machines/dks",
+        "services/lfo/dks",
     ] {
         for (object, current) in build::module_status(&r, &r.join(dir)).unwrap() {
             assert!(

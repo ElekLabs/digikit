@@ -14,8 +14,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RawRig } from '@digi/sharc-rig-kit';
 
-const REPO = path.resolve(import.meta.dirname, '../../../../..');
-const MOD = path.join(REPO, 'modules/core/adapters/sample-pool');
+const REPO = path.resolve(import.meta.dirname, '../../../..');
+const MOD = path.join(REPO, 'image-modules/points/sample-pool');
 const FIX = path.join(REPO, 'tests/fixtures/sample-pool-dn2');
 const BACK = 0xbb0000;
 const PORT = 0x20070000;
@@ -172,7 +172,7 @@ beforeAll(() => {
   execFileSync('sh', ['-c', `cat > ${src}`], { input: REF_C });
   execFileSync(
     'cc',
-    ['-Wall', '-Werror', `-I${path.join(MOD, 'src')}`, `-I${path.join(REPO, 'modules/core/runtime/include')}`, src, '-o', exe],
+    ['-Wall', '-Werror', `-I${path.join(MOD, 'src')}`, `-I${path.join(REPO, 'runtime/core/include')}`, src, '-o', exe],
     { timeout: 25_000 },
   );
 });

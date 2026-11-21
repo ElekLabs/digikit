@@ -2,7 +2,7 @@
 | Each image stub ran the stock `moveq 6,Dn; cmp.l D3,Dn; b<cc>` and enters here only when the wave clamped to 0..6 is 6, with the stock stack; its scratch register (the one the slot test
 | overwrote) and the flags are dead on every path from here, proved from the stock bytes (docs/findings/149-lfo-waveforms.md, "Registers"). The clamp turned a raw wave byte of 6 or more into 6,
 | so each routine reads the raw byte again: 7 to 14 (the numbers of the shapes: `RANGE` of dkrt-svc-lfo) is a shape, 6 and 15 to 127 are RAND as stock. Every path leaves by `jmp` to the stock code:
-| `lfo_x_*` are the exits of the hooks of devices/fw/lfo.toml (`[object.externs]` of module.toml).
+| `lfo_x_*` are the exits of the hooks of ports/fw/lfo.toml (`[object.externs]` of module.toml).
 | The routines wait for nothing and call nothing but `dk_lfo_eval`, which reads the shape table and writes nothing but d0, d1, a0, a1 and the flags. The hand-encoded words of the first version are gone: the assembler's
 | `mac.l`, `movclr.l` and `muls.l` give the stock bytes (`uv run python -m tools.coldfire.liveness PORT SITE --match HEX` finds them in the stock code).
     .text

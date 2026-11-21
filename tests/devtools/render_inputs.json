@@ -76,7 +76,7 @@
     "packages/patchkit/src/devgen.rs": "Device-constant generation reads devices/*.toml and module sources at patch time; coupled-run only receives the patched firmware (covered through --syx and the device TOML digest).",
     "packages/patchkit/src/fit.rs": "Inline unit-test include_str vectors; covered by the binary digest.",
     "packages/patchkit/src/flash_cli.rs": "Flash CLI stock-image input; this source is scanned but not called by coupled-run.",
-    "packages/patchkit/src/fwgen.rs": "Firmware binding/reference generation reads devices/fw TOMLs and ports; not called by coupled-run.",
+    "packages/patchkit/src/fwgen.rs": "Firmware binding/reference generation reads ports/fw TOMLs and ports; not called by coupled-run.",
     "packages/patchkit/src/module.rs": "Repository loader reads manifests/objects; catalog_check and read_headers read manifest headers only (catalog validation, not called by coupled-run). The include_str and cache read are inline unit-test fixtures. Coupled rendering only uses patchkit verification of the supplied firmware bytes.",
     "packages/patchkit/src/sdkgen.rs": "Embedded SDK contract is covered by the binary digest; filesystem contract and ABI reads are SDK generation/packing inputs, not coupled-run reads."
   }

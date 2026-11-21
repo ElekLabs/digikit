@@ -733,7 +733,7 @@ def test_runtime_cache_key_tracks_patch_inputs(monkeypatch, tmp_path, changed):
         "manifest": manifest,
         "object": folder / "object.json",
         "sdk": tmp_path / "sdk/sdk.toml",
-        "port": tmp_path / "devices/ports/current.toml",
+        "port": tmp_path / "ports/current.toml",
         "packer": tmp_path / "patchkit-bin",
         "stock": tmp_path / "stock.syx",
     }

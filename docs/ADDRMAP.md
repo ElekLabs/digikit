@@ -9,7 +9,7 @@ A lookup uses the most specific layer that holds the address and falls back to t
 | Layer | `layer` | Holds | Written by | Ships |
 | --- | --- | --- | --- | --- |
 | 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address; the DSP code of loaded modules, rebased to the start of their DSP image | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
-| 2 Anchors | `anchor` | Code anchors of `devices/ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
+| 2 Anchors | `anchor` | Code anchors of `ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
 | 3 Firmware names | `fw` | Functions of the firmware databases (cfdb: ColdFire; sharcdb: SHARC) | `tools/coldfire/addrmap_export.py` | no, developer machines only |
 
 Names of Rust symbols are demangled without the hash (`dkrt::card::gate`). A return address is looked up at the address minus 2: a call to a
@@ -64,7 +64,7 @@ Hosts do not decode the table. They read raw memory and `dkaddrmap::snapshot` (o
 - `patchkit addr --map SHIP --snapshot SYMBOL=HEX ... [--format loads]` takes the bytes (hex, one flag per symbol) and decodes them; `--format loads` prints
   the table, any other format names addresses with it.
 
-Layout: `DKRT_STATE` (`State` in `modules/core/runtime/src/rs/src/lib.rs`) has ten header words, then one record of 13 words per slot: used, name[32], version,
+Layout: `DKRT_STATE` (`State` in `runtime/core/src/rs/src/lib.rs`) has ten header words, then one record of 13 words per slot: used, name[32], version,
 base, size, fini. `DKRT_DSP` (`DspState` in `.../dsp.rs`) has 13 words, then `mod_off[slots]` and `mod_len[slots]`. The record index of `DKRT_STATE` is the index in
 `DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]` (`area` is word 3 of `dyndsp_info`); `dsp_base` is
 `l2_sw_base + (that address - l2_byte_base) / 2`. The slot count is read from the length of the `DKRT_STATE` bytes. No firmware or runtime change.
@@ -143,7 +143,7 @@ The desktop Log pane names addresses of the **emulator** and of a **device** (`p
 `packages/dk-session/src/runtime-log.ts`. One path serves both origins: the load table is read through the dk-session protocol with PEEK of the debug module
 (`DkSession.peek`; the capability PEEK, so `digikit/debug` must be loaded), on the session the follower already uses, and `dkprof.wasm` decodes it. `mem.cf.peek` is not used.
 Only the source of the ship map differs. **Hardware proof is a later, explicit step**: the device path runs in the emulator over the same code
-(`modules/core/runtime/tests/log-names.device.test.ts`, registered, run in the batched gate), and the host tests use a fake session for both origins.
+(`runtime/core/tests/log-names.device.test.ts`, registered, run in the batched gate), and the host tests use a fake session for both origins.
 
 - Emulator: the controller call `runtime.maps` ([CONTROL.md](CONTROL.md)) returns the ship map of the running image, made from its patch record where `dev.reload` makes its plan, and
   the addresses of `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info`; it follows a module swap.

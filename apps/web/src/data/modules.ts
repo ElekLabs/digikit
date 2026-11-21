@@ -1,4 +1,4 @@
-// The module gallery, read at build time from the committed modules/**/module.toml and each module's
+// The module gallery, read at build time from the committed module manifests and each module's
 // gallery/icon.svg (line art on a 48 grid; apps/web/tests/icons.test.ts checks what an icon may contain).
 import { siteDevices } from '../firmware/site-policy';
 import { parse } from 'smol-toml';
@@ -6,12 +6,12 @@ import type { DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { isShipped } from './shipped.mjs';
 import type { Category } from './module-labels';
 
-const manifests = import.meta.glob('../../../../modules/**/module.toml', {
+const manifests = import.meta.glob('../../../../{modules,runtime,services,image-modules}/**/module.toml', {
   query: '?raw',
   import: 'default',
   eager: true,
 }) as Record<string, string>;
-const icons = import.meta.glob('../../../../modules/**/gallery/icon.svg', {
+const icons = import.meta.glob('../../../../{modules,runtime,services,image-modules}/**/gallery/icon.svg', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -19,7 +19,7 @@ const icons = import.meta.glob('../../../../modules/**/gallery/icon.svg', {
 
 // `patchkit gen` writes build/gen/gallery.json for a module with typed sections ([[machine]], [[param]]): the
 // machines it adds and their parameters, per device. Committed; apps/web/tests/gallery.test.ts checks the shape.
-const galleries = import.meta.glob('../../../../modules/**/build/gen/gallery.json', {
+const galleries = import.meta.glob('../../../../{modules,runtime,services,image-modules}/**/build/gen/gallery.json', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -69,7 +69,7 @@ export interface ModuleInfo {
   version: string;
   /** The manifest `author`, empty when absent. */
   author: string;
-  /** The module's path in the repository, such as `modules/<kind>/<name>`. */
+  /** The module's path in the repository, such as `modules/<kind>/<author>/<name>`. */
   dir: string;
   category: Category;
   status: string;
@@ -116,7 +116,7 @@ const order = siteDevices() as readonly DeviceId[];
 export const modules: ModuleInfo[] = Object.entries(manifests)
   .map(([path, text]) => {
     const { module: m, targets = {}, claim = [] } = parse(text) as unknown as Manifest;
-    // TODO: the device is the prefix of the port name; the port file format (devices/ports/) has no device field (as `targets_device` in devgen.rs; finding 153)
+    // TODO: the device is the prefix of the port name; the port file format (ports/) has no device field (as `targets_device` in devgen.rs; finding 153)
     const named = new Set(Object.keys(targets).map((port) => port.split('-')[0]));
     const dir = path.replace(/^(\.\.\/)+/, '').replace(/\/module\.toml$/, '');
     return {

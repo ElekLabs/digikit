@@ -140,7 +140,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("digikit-prepare-maps-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        for d in ["modules", "devices", "tests"] {
+        for d in [
+            "modules",
+            "runtime",
+            "services",
+            "image-modules",
+            "ports",
+            "devices",
+            "tests",
+        ] {
             std::os::unix::fs::symlink(repo.join(d), dir.join(d)).unwrap();
         }
         prepare(&dir, &stock, false, "device").unwrap();

@@ -31,7 +31,7 @@ How (firmware 1.17, docs in `src/dsp/overdrive.s`):
   driver's countdown (R14 = 32 - voice) and runs the stock record handling with the boosted drive and the flavour's curve
   (flavour 0 is a copy of the stock curve). Only a block that is not 32 samples goes to the stock routine.
 
-The firmware facts are declared in `devices/fw/dsp/frame.toml` and `devices/fw/dsp/voice.toml`. `src/dsp/gen_split.py`
+The firmware facts are declared in `ports/fw/dsp/frame.toml` and `ports/fw/dsp/voice.toml`. `src/dsp/gen_split.py`
 writes `split.inc` (the split, unrolled over the 16 tracks) and the curve constants (`consts.inc`, `k.inc`).
 
 Tests: `tests/overdrive.rig.test.ts` runs `_od_sat` and the split on the concrete SHARC core (every curve against a float reference,

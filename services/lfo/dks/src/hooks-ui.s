@@ -1,6 +1,6 @@
 | lfo.dks, the hooks of the UI task (both devices, the same code): the name of a shape on the MOD page, and the tile vector of its graph.
 | They are `.dks` hooks (`HOOKS` of the service, listed in the port file of the firmware it runs on), not interrupt slots: the UI task runs them, one at a time. Each runs in place of the first
-| 6 bytes of a stock function and leaves by `jmp` to `lfo_x_*`, the end of its site (`[object.externs]` of module.toml, the hooks of devices/fw/lfo.toml). With no shape loaded, the stock code
+| 6 bytes of a stock function and leaves by `jmp` to `lfo_x_*`, the end of its site (`[object.externs]` of module.toml, the hooks of ports/fw/lfo.toml). With no shape loaded, the stock code
 | runs unchanged. Register facts (docs/findings/149-lfo-waveforms.md, "The panel hooks", from `tools/coldfire/liveness.py` on the stock bytes): at the entry of each function the displaced
 | instructions leave d0 written before they are read, and the flags dead; every other register the routines use is saved.
 
@@ -100,7 +100,7 @@ lfo_ui_graph:
     jmp     lfo_t_graph
 
 | The firmware words of the WAVE maximum (`setup` of hooks.rs): the stock parameter table and the stock rows of the WAVE parameters of the three LFOs. `bind` resolves the four names
-| (`[object.externs]` of module.toml; anchors of devices/fw/lfo.toml and param.toml). The service writes the maximum into the RAM copy of the table at run time (docs/plans/extension-model.md E6c).
+| (`[object.externs]` of module.toml; anchors of ports/fw/lfo.toml and param.toml). The service writes the maximum into the RAM copy of the table at run time (docs/plans/extension-model.md E6c).
     .data
     .balign 4
     .globl DKRT_LFO_FW

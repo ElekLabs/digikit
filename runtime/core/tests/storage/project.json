@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-storage-tests",
   "tags": ["test-only"],
   "implicitDependencies": ["core/runtime"],
@@ -9,7 +9,7 @@
         "files": ["storage.device.test.ts"],
         "tags": ["C:storage"],
         "modules": ["test/files-proof"],
-        "sources": ["modules/core/runtime/tests/storage/contract.toml"]
+        "sources": ["runtime/core/tests/storage/contract.toml"]
       }
     ]
   }

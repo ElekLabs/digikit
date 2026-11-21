@@ -555,7 +555,7 @@ fn assembler_and_firmware_names_stay_in_their_place() {
 fn the_service_crates_of_the_repository_pass() {
     let sdk = repo().join("sdk/sdk.toml");
     for name in ["fx", "machines", "samples", "lfo"] {
-        let dir = repo().join("modules/core/services").join(name);
+        let dir = repo().join("services").join(name);
         assert_eq!(problems(&dir, &sdk), Vec::<String>::new(), "{name}");
     }
 }
@@ -569,10 +569,7 @@ fn with_dsp_fill(test: &str, asm_name: &str, asm: &str) -> (PathBuf, PathBuf, Pa
         "[[slot]]\nname = \"voice_render\"\nspace = \"dsp\"\ndevices = [\"dt2\"]\n",
     )
     .unwrap();
-    let table = dir
-        .parent()
-        .unwrap()
-        .join("modules/core/adapters/dyndsp/src/cf");
+    let table = dir.parent().unwrap().join("runtime/platform/dyndsp/src/cf");
     fs::create_dir_all(&table).unwrap();
     fs::write(
         table.join("dyndsp-dt2.s"),

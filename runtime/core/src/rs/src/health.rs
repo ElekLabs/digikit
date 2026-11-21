@@ -13,7 +13,7 @@ extern "C" {
     fn health_heap();
 }
 
-/// What core/health fills (`HealthRaw` of modules/core/adapters/health/src/cf/health.c): 20 words.
+/// What core/health fills (`HealthRaw` of runtime/platform/health/src/cf/health.c): 20 words.
 #[repr(C)]
 struct HealthRaw {
     magic: u32,

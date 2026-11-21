@@ -1,6 +1,6 @@
 /* The one place that turns a module's `dk_canvas` calls (<dk/platform/canvas.h>: top-left origin, clipped) into the firmware's drawing calls
    (text y counted from the screen bottom; rectangle origin set by `rect_from_bottom`). No firmware call is here: ui.c gives the firmware side as a
-   `ui_canvas_fw`, the host test gives a recorder (modules/core/adapters/ui/host/tests/canvas.rs).
+   `ui_canvas_fw`, the host test gives a recorder (runtime/platform/ui/host/tests/canvas.rs).
    Clipping: a rectangle is cut to the screen; a frame draws only the edges that lie on the screen (its corners are not moved); a text whose box
    (its width, the `font_h` rows of its font) does not touch the screen is not drawn; a text that touches it is passed on whole, and the firmware cuts it. */
 #ifndef DK_UI_CANVAS_MAP_H

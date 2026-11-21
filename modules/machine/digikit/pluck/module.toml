@@ -23,7 +23,7 @@ conflicts = []
 id = "pluck"
 dsp = "pk"
 
-# The equiv-dyn-pluck cells pin the PCM of a note (modules/machines/pluck/tests/equiv.device.test.ts): a change of the sound here moves the pins.
+# The equiv-dyn-pluck cells pin the PCM of a note (modules/machine/digikit/pluck/tests/equiv.device.test.ts): a change of the sound here moves the pins.
 [[object]]
 path = "build/pluck-cf.dko.json"
 sources = ["src/module.c"]

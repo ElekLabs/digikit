@@ -173,7 +173,7 @@ mf_list_entry:
     jmp     _mf_t_list
 
 
-| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (modules/core/services/machines/dks/src/
+| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (services/machines/dks/src/
 | image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows (version 3: and the native page calls of the registry). The firmware
 | addresses are not here: the file names them and the port file resolves them. 2 = the Digitone II.
     .section .rodata

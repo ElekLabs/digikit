@@ -23,7 +23,7 @@ Design: `docs/plans/remote-control.md`.
 The deterministic host C pacing check uses the actual command handler with a controlled block clock:
 
 ```sh
-pnpm test:host       # includes modules/tools/remote/tests/pacing.test.ts
+pnpm test:host       # includes modules/tool/digikit/remote/tests/pacing.test.ts
 ```
 
 It requires host `cc` with C11 and 32-bit unsigned int, performs only a tiny bounded compile/run,

@@ -27,7 +27,7 @@ reason = "linked from libgcc into the module, not imported (test/c-demo takes 64
 
 # Services declare what they provide with dk_service_declare_*; the packed services link kind, slot, hook and export. No manifest field writes a RESOURCES
 # header entry yet, so a packed module that calls resource is refused with E_DECL_KIND.
-# modules/core/runtime/src/rs/src/collect/tests.rs covers the declare check.
+# runtime/core/src/rs/src/collect/tests.rs covers the declare check.
 [[allow]]
 name = "dk_service_declare_resource"
 reason = "needs a RESOURCES header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"

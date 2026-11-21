@@ -3,13 +3,13 @@
 | indices) are the device file's, through build/gen/device-dt2.inc (`patchkit gen`).
 |
 | The image holds data only. The hooks of the effect pages (the page accessor, the FX view's page list, the tab label, the filter graph, the send page's list, the sound
-| load count and the three kit hooks) are in the service file `fx.dks` (modules/core/services/fx/dks): it installs them at their stock sites when it is loaded and reads
+| load count and the three kit hooks) are in the service file `fx.dks` (services/fx/dks): it installs them at their stock sites when it is loaded and reads
 | this table through the core (`CoreApi::info`, the import `dkc_info`), so the runtime and the image know nothing of the hooks' code. This table has what the hooks and the
 | service need from the firmware and nothing that changes at run time: the state words (rows, page list, counters) are 0 here; the service keeps them in its own bss and
 | fills them into its copy of the table (`fxpage::bind_table`).
 |
 | The firmware addresses of version 3 (the stock page lists and the return words from 196: where each hook continues in the stock code) are not here: the service file
-| names them and the port file resolves them for the user's firmware (devices/fw `exits`); their words are 0.
+| names them and the port file resolves them for the user's firmware (ports/fw `exits`); their words are 0.
 |
 | fxpages_info is the table the service reads (all words big endian).
 

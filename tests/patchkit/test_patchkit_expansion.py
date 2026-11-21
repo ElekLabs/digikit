@@ -44,11 +44,11 @@ def patchkit(*args):
 
 
 def test_loader_copies_segments_and_zeroes_bss():
-    """Run modules/core/expansion's loader on the core with stub helpers, over a region filled with 0xA5."""
+    """Run runtime/platform/expansion's loader on the core with stub helpers, over a region filled with 0xA5."""
     base, segs, h1, h2 = REGION, REGION + 0x1000, REGION + 0x2000, REGION + 0x2002
     d1, d2 = REGION + 0x4000, REGION + 0x5000
     linked = front_end.cf_link(
-        [ROOT / "modules/core/expansion/src/cf/loader.s"],
+        [ROOT / "runtime/platform/expansion/src/cf/loader.s"],
         base,
         {"pk_segs": segs, "pk_copy_helper": h1, "pk_clear_helper": h2},
     )

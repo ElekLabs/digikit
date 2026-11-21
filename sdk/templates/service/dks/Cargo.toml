@@ -9,8 +9,8 @@ description = "The __NAME__ service as a service file (.dks): the crate dkrt-svc
 crate-type = ["staticlib"]
 
 [dependencies]
-dkrt-sdk = { path = "../../../runtime/sdk" }
-dkrt-svc-rt = { path = "../../../runtime/svc-rt" }
+dkrt-sdk = { path = "../../../runtime/core/sdk" }
+dkrt-svc-rt = { path = "../../../runtime/core/svc-rt" }
 dkrt-svc-__KEBAB__ = { path = ".." }
 
 # This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).

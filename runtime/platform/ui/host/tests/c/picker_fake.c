@@ -3,8 +3,8 @@
    that pf_reset can clear its statics between tests. The pure functions (logic.c) are linked. */
 #include <stdint.h>
 #include <string.h>
-#include "../../../../../../../sdk/src/chooser/chooser.c"
-#include "../../../../../../../sdk/src/sample/picker.c"
+#include "../../../../../../sdk/src/chooser/chooser.c"
+#include "../../../../../../sdk/src/sample/picker.c"
 
 #define MAXE 400
 

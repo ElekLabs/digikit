@@ -4,7 +4,7 @@
 //! "Needs are inferred from the contents") gives what a load takes. `fits_now` compares them and names the first short resource; `take` takes a module's needs out of a capacity,
 //! so a set is checked by loading its modules in turn (the sum rule: fragmentation is not modelled, so it is conservative). The rule exists only here:
 //! the web app uses it through patchkit.wasm and the device tools through `patchkit fit` (packages/patchkit/src/fit.rs).
-//! `modules/core/runtime/vectors/fit-vectors.json` holds its test vectors.
+//! `runtime/core/vectors/fit-vectors.json` holds its test vectors.
 //!
 //! DSP load is not a sum: every voice may run any selected machine, so the largest per-voice cost counts for all voices, and the effects add up. The rule is
 //! [`check_selection`]: `max(machine costs) * voices + sum(effect costs) <= headroom` (instructions per block; docs/plans/sdk.md section 9). A capacity carries it

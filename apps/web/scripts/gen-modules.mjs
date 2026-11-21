@@ -1,5 +1,5 @@
 // Build step of the patch gallery: writes public/modules/bundle.json (what patchkit.wasm reads: ports + modules as
-// texts) from the COMMITTED devices/ports/, modules/ and tests/fixtures/modules/. Never reads out/modules (generated oracles hold firmware
+// texts) from the committed ports and module roots. Never reads out/modules (generated oracles hold firmware
 // words). The bundle equals `tools/patchkit/patchkit.py bundle` (the node test compares them).
 //
 // The objects of content modules (every module but category "core") are build output, not committed: `patchkit build` (the Rust CLI, run through cargo) makes them
@@ -17,7 +17,7 @@ import { join, dirname, resolve, sep, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
-import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { isShipped, shippedDevices, SHIPPED_KINDS } from '../src/data/shipped.mjs';
 import { SITE_DEVICES } from '../src/data/site-devices.mjs';
 import { loadDevices } from '@digi/devices/node';
 
@@ -113,13 +113,14 @@ const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.target
  * @param {readonly string[]} [offered]
  */
 export function buildModuleData(root = repoRoot, offered = undefined) {
-  const ports = readdirSync(join(root, 'devices', 'ports'))
+  const ports = readdirSync(join(root, 'ports'))
     .filter((f) => f.endsWith('.toml') && (!offered || offered.includes(f.split('-')[0])))
     .sort()
-    .map((f) => readFileSync(join(root, 'devices', 'ports', f), 'utf8'));
+    .map((f) => readFileSync(join(root, 'ports', f), 'utf8'));
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
   // The published site leaves out the test fixtures: only the site's tests use them, and some need the Rust toolchain for ColdFire.
-  const roots = process.env.DIGI_SITE_NO_FIXTURES ? ['modules'] : ['modules', join('tests', 'fixtures', 'modules')];
+  const roots = ['modules', 'runtime', 'services', 'image-modules'];
+  if (!process.env.DIGI_SITE_NO_FIXTURES) roots.push('tests/fixtures/modules');
   const manifests = roots.flatMap((r) => walk(join(root, r), 'module.toml').sort(byParts));
   const parsed = manifests
     .map((file) => {
@@ -206,9 +207,7 @@ export function shipModules(out, root = repoRoot) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
   for (const sub of [...loadDevices().runtimeIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
-  const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
-    walk(join(root, 'modules', r), 'module.toml').sort(byParts),
-  );
+  const manifests = SHIPPED_KINDS.flatMap((r) => walk(join(root, 'modules', r), 'module.toml').sort(byParts));
   const shipped = [];
   const idsByDevice = {};
   for (const file of manifests) {
@@ -253,7 +252,7 @@ export function shipModules(out, root = repoRoot) {
   // the .dks services as built (packed here, no firmware in them) and the port files of the firmware versions the repository has a port for: Transfer uploads a service
   // as it is, with the port file whose FW item equals the device's fw_id. The build fails when either is missing: a site without them installs no service.
   const services = {};
-  const serviceManifests = walk(join(root, 'modules', 'core', 'services'), 'module.toml')
+  const serviceManifests = walk(join(root, 'services'), 'module.toml')
     .sort(byParts)
     .map((file) => parse(readFileSync(file, 'utf8')))
     .filter((d) => d.module.role === 'service');
@@ -314,9 +313,7 @@ const MODULE_FILES_TS = join(
  */
 export function moduleFilesSource(root = repoRoot) {
   const entries = [];
-  const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
-    walk(join(root, 'modules', r), 'module.toml').sort(byParts),
-  );
+  const manifests = SHIPPED_KINDS.flatMap((r) => walk(join(root, 'modules', r), 'module.toml').sort(byParts));
   for (const file of manifests) {
     const d = parse(readFileSync(file, 'utf8'));
     if (!d.files) continue;

@@ -30,7 +30,7 @@ import {
 } from '@digi/sharc-rig-kit';
 
 const TYPE = VOICE_TYPE;
-const FIX = path.resolve(import.meta.dirname, '../../../../../tests/fixtures/modules/dyn-guard-nan/src/dsp');
+const FIX = path.resolve(import.meta.dirname, '../../../../tests/fixtures/modules/dyn-guard-nan/src/dsp');
 const BASE = 0xb93800;
 const CL_SEEN = VOICE_STATE; // the clean fixture's copy of the knob words it saw
 const RAMP = Array.from({ length: 32 }, (_, k) => k * 0.125);

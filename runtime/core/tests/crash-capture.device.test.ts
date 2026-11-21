@@ -11,7 +11,7 @@ import { rpc } from '@digi/regression/runtime/fx-live.ts';
  * records the fault in RAM that the soft reset keeps, and resets; the next boot logs the record. EARLY: the crash is before the stable period ends (the boot
  * counter stays raised); LATE: after it (the counter was cleared, the crashed boot is counted bad at the next boot).
  *
- * Both clocks start at the same block: the stable period counts from the first UI-loop pass of the runtime (`ui_pass`, modules/core/runtime/src/rs/src/safe_mode.rs,
+ * Both clocks start at the same block: the stable period counts from the first UI-loop pass of the runtime (`ui_pass`, runtime/core/src/rs/src/safe_mode.rs,
  * `DKRT_UI_START`), the card's selection record shortens it to STABLE_BLOCKS (`DKRT_STABLE_BLOCKS`), and dyn-crash counts its delay from its first tick, which
  * is in the same pass (UI_FIRST and the first tick lie at the same block in the log). The cold boot is ready about 3,300 blocks after that block, and the test pauses
  * there, so the early delay must be above that with room for a slower boot (1,200 blocks, about 0.8 s); the late delay lies 1,000 blocks above the period, the

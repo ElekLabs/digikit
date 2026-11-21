@@ -11,7 +11,7 @@
 
 #include <dk/core/module.h>
 
-/* The state of modules/core/runtime/src/rs/src/hash32.rs (a, b, c, n, buf). Opaque: use dk_hash32_*. */
+/* The state of runtime/core/src/rs/src/hash32.rs (a, b, c, n, buf). Opaque: use dk_hash32_*. */
 typedef struct dk_hash32 {
     uint32_t a, b, c, n;
     uint8_t buf[12];

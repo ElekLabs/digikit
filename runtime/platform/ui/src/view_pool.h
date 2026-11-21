@@ -1,6 +1,6 @@
 /* The pool of module screens (dk_ui_view_open of <dk/platform/ui.h>): one owner object for the state of every open view and for the rules of its
    life. It holds no firmware: everything that touches a firmware View goes through `ui_view_fw`, which ui.c implements and the host test fakes
-   (modules/core/adapters/ui/host/tests/views.rs).
+   (runtime/platform/ui/host/tests/views.rs).
 
    Life of a slot: FREE, then OPEN (the firmware view is on the stack; OPENING first when a key callback opened it: the push waits for the key release, see
    key_defer.h), then CLOSING (a close was asked, the firmware has not removed the view yet: it only

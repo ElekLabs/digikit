@@ -1,5 +1,5 @@
 // Example boot screen: an expanding ring and a short bar. Canvas 2D only; 128x64, 30 ticks per second.
-// Pack it with: mise run bootscreen -- sheet modules/tools/bootscreen/examples/pulse.mjs
+// Pack it with: mise run bootscreen -- sheet modules/tool/tools/bootscreen/examples/pulse.mjs
 export const ticks = 90;
 
 export function draw(ctx, t) {

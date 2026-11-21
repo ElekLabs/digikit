@@ -19,20 +19,10 @@ from tools.patchkit import (  # noqa: E402
 
 SYX = config.stock("Digitakt_II_OS1.17.syx")
 SRC = (
-    ROOT
-    / "modules"
-    / "core"
-    / "adapters"
-    / "machines"
-    / "src"
-    / "cf"
-    / "dt2"
-    / "machines.s"
+    ROOT / "image-modules" / "points" / "machines" / "src" / "cf" / "dt2" / "machines.s"
 )
 # the hooks of the machines service file (the image keeps the table builder, dispatch, list entry and rank) and the table they read
-HOOKS = (
-    ROOT / "modules" / "core" / "services" / "machines" / "dks" / "src" / "hooks-dt2.s"
-)
+HOOKS = ROOT / "services" / "machines" / "dks" / "src" / "hooks-dt2.s"
 TAB = ROOT / "tests" / "fixtures" / "machines-info-dt2.s"
 ROWSIZE = 64
 FIRST = 7
@@ -360,9 +350,7 @@ def test_stock_table_copies_append_the_clones_row():
     from tools.patchkit.pk_expr import evaluate
 
     m = tomllib.loads(
-        (
-            ROOT / "modules" / "core" / "adapters" / "machines" / "module.toml"
-        ).read_text()
+        (ROOT / "image-modules" / "points" / "machines" / "module.toml").read_text()
     )
     secs = {s["name"]: s for s in m["section"]}
     # a fake image: the anchors' tables
@@ -411,9 +399,7 @@ def test_row_size_of_the_manifest_matches_the_assembly():
     import tomllib
 
     m = tomllib.loads(
-        (
-            ROOT / "modules" / "core" / "adapters" / "machines" / "module.toml"
-        ).read_text()
+        (ROOT / "image-modules" / "points" / "machines" / "module.toml").read_text()
     )
     fields = m["registry"][0]["field"]
     assert all(f["kind"] in ("u32", "cstr") for f in fields)

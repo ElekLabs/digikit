@@ -18,7 +18,7 @@ const DEVICES: [(&str, u32); 2] = [("dt2", 1), ("dn2", 2)];
 const AREA_BYTES: u32 = 65536;
 
 fn root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../..")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
 fn fixture_text(path: &str) -> String {

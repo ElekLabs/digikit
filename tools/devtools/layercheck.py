@@ -8,9 +8,8 @@ Every violation prints as `file:line: rule: what is wrong. Instead: what to do.`
 
 Rules:
 
-  roles     Every module under modules/core has `role` in [module], and the role fits the folder: adapters/ -> adapter,
-            apps/ -> app, runtime/ -> runtime, expansion/ -> installer.
-  sources   Content modules (modules/machines, modules/fx, modules/tools, modules/lfo, tests/fixtures/modules) and apps include only
+  roles     Each image module has `role` in [module], and the role fits its runtime/, services/ or image-modules/ folder.
+  sources   Content modules (modules/ and tests/fixtures/modules) and apps include only
             their own files and the SDK (sdk/include, sdk/dsp/contract); a fixture may also include the source of another fixture (a variant of its base). Apps may also include dkrt.h (runtime) and dk_ui_core.h
             (core/ui). Only the runtime's platform file, the installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
             C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are read.
@@ -21,16 +20,16 @@ Rules:
             dispatcher takes around its per-row call: the runtime's services and the image's stub (adapters) use them, and the runtime measures every module that way.
   apps      An app has no `[[op]]` and no `[[claim]]`: it never patches the firmware.
   self-contained
-            No tracked file outside a user content module's own directory (modules/machines|fx|tools) names its id
-            (`AUTHOR/NAME`) or its path (`machines/NAME`). Allowed: docs/**, any *.md, .agents/**, the fixtures
+            No tracked file outside a user content module's own directory (modules/<kind>/AUTHOR/NAME) names its id
+            (`AUTHOR/NAME`) or its path (`<kind>/AUTHOR/NAME`). Allowed: docs/**, any *.md, .agents/**, the fixtures
             (tests/fixtures/modules) and a module with `host = true` in [module] (the workbench speaks
             its protocol).
-  arrows    Inside the runtime crate (modules/core/runtime/src/rs/src), a service (services/NAME) names no other service folder and no core
+  arrows    Inside the runtime crate (runtime/core/src/rs/src), a service (services/NAME) names no other service folder and no core
             module except `crate::core_api` (the interface to the core: CoreApi, RealCore, FakeCore and the few core functions it re-exports); pure types
             come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`exports`) and the generated table `gen_services.rs`. A service's own
             host tests (`tests.rs` or a `tests/` folder in the service) may name core modules: they drive the walkers and the planner over the service.
   service-crates
-            A service crate (modules/core/services/NAME, linked into the runtime object) depends only on dkrt-abi, dkrt-sdk and dkneeds, and on
+            A service crate (services/NAME, linked into the runtime object) depends only on dkrt-abi, dkrt-sdk and dkneeds, and on
             dkrt-test-support as a dev-dependency; it names no firmware crate and no device id (only its `dks/` service file may name `dkfw`, in `dks/src/fw.rs`), and has no path into the runtime crate. The runtime
             names a service crate (`dkrt_svc_*`) only in `gen_services.rs`, `handlers.rs` and the host-test files under `handlers/`. Final state (R12-1): no service is a folder of the
             runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
@@ -62,27 +61,22 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from tools.patchkit.modroots import CORE_ROOTS, REPO_ROOTS
+
 ROOT = Path(__file__).resolve().parents[2]
 
-CORE = "modules/core"
-# the include search path of the module builds: the tool's own copy, whatever tree is checked
-PINS = Path(__file__).resolve().parents[2] / "tools/patchkit/toolchain/pins.toml"
-# Content module roots (relative to the repository root).
-CONTENT_ROOTS = (
-    "modules/machines",
-    "modules/fx",
-    "modules/tools",
-    "modules/lfo",
-    "tests/fixtures/modules",
-)
-# The role that fits a folder under modules/core.
+# The include search path of the module builds: the tool's own copy, whatever tree is checked.
+PINS = ROOT / "tools/patchkit/toolchain/pins.toml"
+# The moved folders keep their manifest roles.
 FOLDER_ROLES = {
-    "adapters": "adapter",
-    "apps": "app",
-    "runtime": "runtime",
-    "expansion": "installer",
-    # a service file: modules/core/services/NAME/dks (the neutral crate above it is no module)
-    "services": "service",
+    "runtime/core": "runtime",
+    "runtime/platform/expansion": "installer",
+    "runtime/platform": "adapter",
+    "runtime/apps": "app",
+    "image-modules/adapters": "adapter",
+    "image-modules/fixes": "adapter",
+    "image-modules/points": "adapter",
+    "image-modules/proofs": "adapter",
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
 # example of a hook; the test service takes a raw hook like a core service file does). They are exempt from the objects and apps rules.
@@ -142,8 +136,8 @@ def line_of(text: str, needle: str, default: int = 1) -> int:
 
 def load_modules(root: Path) -> list[Module]:
     out = []
-    for base in (root / "modules", root / "tests/fixtures/modules"):
-        for toml in sorted(base.rglob("module.toml")):
+    for base in REPO_ROOTS:
+        for toml in sorted((root / base).rglob("module.toml")):
             text = toml.read_text(encoding="utf-8")
             try:
                 manifest = tomllib.loads(text)
@@ -155,9 +149,9 @@ def load_modules(root: Path) -> list[Module]:
 
 
 def classify(root: Path, m: Module) -> str:
-    """core:<role dir> for modules under modules/core, `content` for the content roots."""
+    """Core or content according to its repository root."""
     r = rel(root, m.dir)
-    if r.startswith(CORE + "/"):
+    if r.split("/", 1)[0] in CORE_ROOTS:
         return "core"
     return "content"
 
@@ -168,11 +162,12 @@ def check_roles(root: Path, mods: list[Module]) -> list[Violation]:
         if classify(root, m) != "core":
             continue
         r = rel(root, m.dir)
-        parts = r.split("/")[2:]  # below modules/core
-        want = FOLDER_ROLES.get(parts[0]) if parts else None
-        # the `services` folder holds modules only as modules/core/services/NAME/dks (the service file of the crate NAME)
-        if parts[:1] == ["services"] and not (len(parts) == 3 and parts[2] == "dks"):
-            want = None
+        parts = r.split("/")
+        folder = next((f for f in FOLDER_ROLES if r == f or r.startswith(f + "/")), r)
+        want = FOLDER_ROLES.get(folder)
+        # The neutral service crate contains a separate module at services/NAME/dks.
+        if len(parts) == 3 and parts[0] == "services" and parts[2] == "dks":
+            want = "service"
         where = f"{r}/module.toml:{line_of(m.text, 'category', 1)}"
         have = m.mod.get("role")
         if want is None:
@@ -181,7 +176,7 @@ def check_roles(root: Path, mods: list[Module]) -> list[Violation]:
                     where,
                     "roles",
                     f"{m.id} sits in {r}, which is no role folder",
-                    "move it to modules/core/adapters/NAME, modules/core/apps/NAME, modules/core/runtime or modules/core/expansion",
+                    "move it to a role folder under runtime/, services/ or image-modules/",
                 )
             )
         elif have is None:
@@ -190,7 +185,7 @@ def check_roles(root: Path, mods: list[Module]) -> list[Violation]:
                     where,
                     "roles",
                     f"{m.id} has no `role` in [module]",
-                    f'add role = "{want}" (the role of the folder {parts[0]})',
+                    f'add role = "{want}" (the role of the folder {folder})',
                 )
             )
         elif have != want:
@@ -198,7 +193,7 @@ def check_roles(root: Path, mods: list[Module]) -> list[Violation]:
                 Violation(
                     f"{r}/module.toml:{line_of(m.text, 'role', 1)}",
                     "roles",
-                    f'{m.id} has role = "{have}" but sits in {parts[0]}/, whose role is "{want}"',
+                    f'{m.id} has role = "{have}" but sits in {folder}/, whose role is "{want}"',
                     f'set role = "{want}" or move the module to the folder of role "{have}"',
                 )
             )
@@ -261,9 +256,15 @@ def module_sources(mod: Module) -> list[Path]:
 def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
     out = []
     res = Resolver(root)
-    fw_dirs = [(root / CORE / "fw").resolve()]
-    runtime_inc = (root / CORE / "runtime/include").resolve()
-    adapters = (root / CORE / "adapters").resolve()
+    fw_dir = (root / "ports/bindings").resolve()
+    runtime_inc = (root / "runtime/core/include").resolve()
+    adapter_dirs = [
+        (root / folder).resolve()
+        for folder, role in FOLDER_ROLES.items()
+        if role == "adapter"
+    ]
+    core_dirs = [(root / folder).resolve() for folder in CORE_ROOTS] + [fw_dir]
+    runtime_sdk = (root / "runtime/core/sdk").resolve()
     all_mod_dirs = [(m.dir.resolve(), m) for m in mods]
     fixtures = (root / "tests/fixtures/modules").resolve()
     for m in mods:
@@ -308,7 +309,7 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                 if sdk in target.parents:
                     continue
                 base = Path(name).name
-                if any(d in target.parents for d in fw_dirs):
+                if fw_dir in target.parents:
                     out.append(
                         Violation(
                             where,
@@ -317,11 +318,11 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                             "use the SDK (<dk/...>) or move the firmware access into an adapter and call it by an exported function",
                         )
                     )
-                elif (runtime_inc in target.parents or adapters in target.parents) and (
-                    is_app and base in APP_HEADERS
+                elif runtime_inc in target.parents or any(
+                    d in target.parents for d in adapter_dirs
                 ):
-                    continue
-                elif runtime_inc in target.parents or adapters in target.parents:
+                    if is_app and base in APP_HEADERS:
+                        continue
                     out.append(
                         Violation(
                             where,
@@ -375,8 +376,8 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
                         target is not None
                         and target != own
                         and own not in target.parents
-                        and (root / CORE).resolve() in target.parents
-                        and target != (root / CORE / "runtime/sdk").resolve()
+                        and any(d in target.parents for d in core_dirs)
+                        and target != runtime_sdk
                     )
                     if bad:
                         out.append(
@@ -583,7 +584,7 @@ def check_imports(root: Path) -> list[Violation]:
                     "declare it in <dk/platform/ui.h> or remove the [[import]]",
                 )
             )
-    runtime = root / CORE / "runtime/module.toml"
+    runtime = root / RT_MANIFEST
     if runtime.is_file():
         runtime_text = runtime.read_text(encoding="utf-8")
         optional: set[str] = set()
@@ -593,7 +594,7 @@ def check_imports(root: Path) -> list[Violation]:
         for n in sorted(needed - optional):
             out.append(
                 Violation(
-                    f"{CORE}/runtime/module.toml:{line_of(runtime_text, 'optional')}",
+                    f"{RT_MANIFEST}:{line_of(runtime_text, 'optional')}",
                     "imports",
                     f"{n} is an import of another module but is not in the runtime's optional list",
                     "add it to `optional`, or patchkit cannot link the runtime when that module is missing",
@@ -602,12 +603,6 @@ def check_imports(root: Path) -> list[Violation]:
     return out
 
 
-USER_MODULE_ROOTS = (
-    "modules/machines/",
-    "modules/fx/",
-    "modules/tools/",
-    "modules/lfo/",
-)
 # Files that may name any module: documentation, agent notes and the fixtures.
 SC_ALLOWED_PREFIXES = (
     "docs/",
@@ -618,10 +613,8 @@ SC_ALLOWED_PREFIXES = (
 # and the runtimeAcceptance metadata may name them; runtime implementation may not.
 # The device-literal baseline lists file paths, among them module directories.
 SC_PATH_LIST = "tools/nx/device-literals.baseline.json"
-SC_RUNTIME_TEST = (
-    "modules/core/runtime/tests/capacity/inferred/inferred-needs.device.test.ts"
-)
-SC_RUNTIME_PROJECT = "modules/core/runtime/tests/capacity/inferred/project.json"
+SC_RUNTIME_TEST = "runtime/core/tests/capacity/inferred/inferred-needs.device.test.ts"
+SC_RUNTIME_PROJECT = "runtime/core/tests/capacity/inferred/project.json"
 SC_SKIP_DIRS = {".git", "out", "node_modules", "target", "firmware", ".venv", "dist"}
 SC_HINT = (
     "move the test or model into the module's tests/ directory, use a fixture module (tests/fixtures/modules), "
@@ -629,7 +622,7 @@ SC_HINT = (
 )
 
 
-RT_SRC = "modules/core/runtime/src/rs/src"
+RT_SRC = "runtime/core/src/rs/src"
 RT_CRATE_REF = re.compile(
     r"\bcrate::(?:\{([^}]*)\}|([A-Za-z_]\w*)(?:::([A-Za-z_]\w*))?)"
 )
@@ -727,9 +720,9 @@ RT_DEVICE_COMPARE = re.compile(
 
 
 # The firmware hooks that the runtime module patches in itself: none. Every hook (UI loop, main-OS task entry, MIDI receive) belongs to the platform adapter; the machine
-# page hooks are the machines service file's (modules/core/services/machines/dks).
+# page hooks are the machines service file's (services/machines/dks).
 RT_OWN_HOOKS: set[str] = set()
-RT_MANIFEST = "modules/core/runtime/module.toml"
+RT_MANIFEST = "runtime/core/module.toml"
 
 
 def check_runtime_platform(root: Path) -> list[Violation]:
@@ -749,7 +742,7 @@ def check_runtime_platform(root: Path) -> list[Violation]:
                         f"{RT_MANIFEST}:{line_of(text, hook)}",
                         "platform",
                         f"the runtime installs the firmware hook {hook} itself",
-                        "put the hook and its trampoline in the platform adapter (modules/core/adapters/platform); the runtime exports the function it calls",
+                        "put the hook and its trampoline in the platform adapter (runtime/platform/platform); the runtime exports the function it calls",
                     )
                 )
     for f in sorted(src.rglob("*.rs")):
@@ -797,17 +790,17 @@ def check_runtime_platform(root: Path) -> list[Violation]:
     return out
 
 
-SERVICE_CRATES = "modules/core/services"
+SERVICE_CRATES = "services"
 # dkrt-svc-params is the parameter row writers that machines and fx share (no service names the other); dkrt-svc-bitmap the firmware tile objects of lfo
 SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-params", "dkrt-svc-bitmap"}
 SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support"}
-# `dkrt_svc_rt` is the support crate of a service file (modules/core/runtime/svc-rt), not a service
+# `dkrt_svc_rt` is the support crate of a service file (runtime/core/svc-rt), not a service
 SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")
 SERVICE_RUNTIME_FILES = ("handlers.rs", "gen_services.rs")
-# The services that are folders of the runtime crate (`services/NAME`): none since R12-1; every service is a crate (`modules/core/services/NAME`).
+# The services that are folders of the runtime crate (`services/NAME`): none since R12-1; every service is a crate (`services/NAME`).
 RT_LOCAL_SERVICES: set[str] = set()
 SERVICE_RUNTIME_REF = re.compile(r"\bdkrt::|\bextern\s+crate\s+dkrt\b")
-RUNTIME_MANIFEST = "modules/core/runtime/src/rs/Cargo.toml"
+RUNTIME_MANIFEST = "runtime/core/src/rs/Cargo.toml"
 DEP_TABLES = ("dependencies", "build-dependencies", "dev-dependencies")
 
 
@@ -934,7 +927,7 @@ def check_service_crates(root: Path) -> list[Violation]:
                     rel(root, d),
                     "service-crates",
                     f"the service {d.name} is a folder of the runtime crate",
-                    f"no service is a folder of the runtime crate; put a service in a crate modules/core/services/{d.name}",
+                    f"no service is a folder of the runtime crate; put a service in a crate services/{d.name}",
                 )
             )
     mod_rs = local / "mod.rs"
@@ -948,7 +941,7 @@ def check_service_crates(root: Path) -> list[Violation]:
                         f"{RT_SRC}/services/mod.rs:{n}",
                         "service-crates",
                         f"services/mod.rs declares the service {m.group(1)}",
-                        "no service is a folder of the runtime crate; every service is a crate in modules/core/services",
+                        "no service is a folder of the runtime crate; every service is a crate in services",
                     )
                 )
     for f in sorted(src.rglob("*.rs")) if src.is_dir() else []:
@@ -995,7 +988,7 @@ def rt_kind_free(root: Path) -> re.Pattern[str]:
 
 
 KIND_FREE_EXEMPT = ("handlers.rs", "gen_services.rs")
-KIND_FREE_HINT = "the machines or the fx service owns it (modules/core/services/machines, fx): the core runs the generic part and calls the service through `Service` or `CoreApi`"
+KIND_FREE_HINT = "the machines or the fx service owns it (services/machines, fx): the core runs the generic part and calls the service through `Service` or `CoreApi`"
 
 
 def is_runtime_test_file(r: Path) -> bool:
@@ -1042,7 +1035,7 @@ KIND_FREE_TEST_FILES = (
     "handlers/dks_decls.rs",
 )
 # The abi crate is the core's boundary: it too names no machine or effect.
-RT_ABI_SRC = "modules/core/runtime/abi/src"
+RT_ABI_SRC = "runtime/core/abi/src"
 
 
 def check_core_kind_free(root: Path) -> list[Violation]:
@@ -1110,7 +1103,7 @@ def user_modules(root: Path, mods: list[Module]) -> list[tuple[Module, str]]:
     out = []
     for m in mods:
         r = rel(root, m.dir)
-        if r.startswith(USER_MODULE_ROOTS) and not m.mod.get("host", False):
+        if r.startswith("modules/") and not m.mod.get("host", False):
             out.append((m, r))
     return out
 

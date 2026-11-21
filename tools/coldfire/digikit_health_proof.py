@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emulator proof of SETTINGS > DIGIKIT > HEALTH (modules/core/adapters/health, finding 41-digikit-health.md).
+"""Emulator proof of SETTINGS > DIGIKIT > HEALTH (runtime/platform/health, finding 41-digikit-health.md).
 
     uv run python -m tools.coldfire.digikit_health_proof run [--image dt2-1.16] [--quick] [--no-cost]
 
@@ -300,12 +300,10 @@ class HealthProof:
         return res
 
     def desc_addr(self) -> int:
-        """The allocator descriptor the module reads: the literal at its anchor (devices/ports) in the running image."""
+        """The allocator descriptor the module reads: the literal at its anchor (ports) in the running image."""
         import tomllib
 
-        port = tomllib.loads(
-            (ROOT / "devices" / "ports" / f"{self.image}.toml").read_text()
-        )
+        port = tomllib.loads((ROOT / "ports" / f"{self.image}.toml").read_text())
         for a in port["anchor"]:
             if a["name"] == "cf.mem.site.heap.desc_lit":
                 return self.w(a["addr"])
@@ -322,9 +320,7 @@ class HealthProof:
     def anchor_addr(self, name: str) -> int:
         import tomllib
 
-        port = tomllib.loads(
-            (ROOT / "devices" / "ports" / f"{self.image}.toml").read_text()
-        )
+        port = tomllib.loads((ROOT / "ports" / f"{self.image}.toml").read_text())
         return next(a["addr"] for a in port["anchor"] if a["name"] == name)
 
     def sites_check(self) -> None:
@@ -441,9 +437,7 @@ class HealthProof:
         # the DSP's count read from the record copy by the module is the DSP's own record, word 0: read it from the record directly
         import tomllib
 
-        port = tomllib.loads(
-            (ROOT / "devices" / "ports" / f"{self.image}.toml").read_text()
-        )
+        port = tomllib.loads((ROOT / "ports" / f"{self.image}.toml").read_text())
         rec_lit = next(
             a["addr"]
             for a in port["anchor"]
@@ -578,7 +572,7 @@ class HealthProof:
             self.sym("dk_poll") in polls and r0 >= 1,
             f"polls {polls} redraws {r0}",
         )
-        # DK_HEALTH_MENU is the core/ui menu object (dk_ui_menu, modules/core/adapters/ui/src/ui.c): the firmware's view is the pointer at +4
+        # DK_HEALTH_MENU is the core/ui menu object (dk_ui_menu, runtime/platform/ui/src/ui.c): the firmware's view is the pointer at +4
         view = self.w(self.w(self.sym("DK_HEALTH_MENU")) + 4)
         dirty_off, parent_off = 0x38 + 0x14, 0x38 + 0x2C
         p0, i0 = self.w(self.sym("DK_POLLS")), self.icount()

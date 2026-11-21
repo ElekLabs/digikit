@@ -14,7 +14,7 @@ example). On its own it changes nothing: a patched image with no registered mach
   takes effect from the next block. On the Digitakt II the voices write no breadcrumb while the mask is empty.
 - The DSP records, once per block, a heartbeat and the context registers it found (see `core/dsp-link`, `dl_diag`).
   It also writes a breadcrumb (the step, the voice and the machine type) before each step of a registered machine's path, and counts the calls and
-  returns of the routines, so that a halt inside a routine names its place ([docs/findings/48-dsp-breadcrumbs.md](../../../../docs/findings/48-dsp-breadcrumbs.md)).
+  returns of the routines, so that a halt inside a routine names its place ([docs/findings/48-dsp-breadcrumbs.md](../../../docs/findings/48-dsp-breadcrumbs.md)).
 - Build option `DV_BISECT_C2` (not part of any shipped image): types of 7 or more take the stock path with the breadcrumb written inline and are never dispatched. It exists to
   separate the wrapper's call path from the stock pipeline on a device (docs/PATCHING.md "Rung C2", `tools/patchkit/pk_variant.py`).
 - Build options `DV_C3_FINE`, `DV_C3_DB`, `DV_C3_NOIRQ`, `DV_C3_NOSYS` (not part of any shipped image): the rung C3 variants of finding 49 section 9 (fine breadcrumbs 8 to 10 on the registered path,
@@ -52,6 +52,6 @@ routine runs it saves them and **sets** them, and it puts the caller's values ba
 
 Register rules for the routine: `sdk/dsp/REGISTERS.md`. Details, the entry registers and the voice record: the header of
 `src/dsp/dsp-voice.s` (Digitakt II) and `src/dsp/dsp-voice-dn2.s` (Digitone II); the audit and its tests:
-[docs/findings/45-dsp-voice-context.md](../../../../docs/findings/45-dsp-voice-context.md).
+[docs/findings/45-dsp-voice-context.md](../../../docs/findings/45-dsp-voice-context.md).
 
 The gallery shows the text above the rule. Keep it free of firmware bytes and vendor tool names.

@@ -1,4 +1,4 @@
-"""Float32 model of tom/tb303 (modules/machines/tb303/src/dsp/tb303.s), operation for operation, and `Open303`, a float64
+"""Float32 model of tom/tb303 (modules/machine/tom/tb303/src/dsp/tb303.s), operation for operation, and `Open303`, a float64
 port of rosic::Open303's voice (oscillator, pre-filter high-pass, TeeBeeFilter TB_303, filter envelope, accent, amp gain,
 output filters) at any oversampling, to measure how far the machine is from it."""
 

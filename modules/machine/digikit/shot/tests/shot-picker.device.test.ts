@@ -14,7 +14,7 @@ import { RATE, selectDynamicMachine, trackApi, wav } from './shot-support.ts';
 
 // DT2 1.17: the glue of digikit/shot with the shared sample picker (docs/design/sample-picker.md): a click on knob D (SMP) opens shot's slot list;
 // YES on a slot, a folder and a file loads the file into that pool slot and sets SMP; a held TRIG refuses SMP but the file still loads; NO goes back
-// one level; a press with a turn opens no list. The picker logic (order, levels, cursor) is tested once, in modules/core/adapters/ui/host/tests/picker.rs;
+// one level; a press with a turn opens no list. The picker logic (order, levels, cursor) is tested once, in runtime/platform/ui/host/tests/picker.rs;
 // this test is the only one that runs the real hooks (the page click, `smp_pick`, the keys). State comes from the pool API (`sample_pool_status`) and
 // SMP (word 0 of `_dv_params`); only which view is on top is read as a screen hash. It cannot run on zero DSP: shot's DSP part is part of its pack, and without a DSP the load fails with E_DSP_XFER (-35).
 

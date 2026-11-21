@@ -11,4 +11,4 @@ itself, and the exception hook install:
   calls it every UI pass through `Platform::install_exception_hook`.
 
 The runtime requires this module and the two link by name; the trampolines are the code that was in `core/runtime`'s `tramp.s`, unchanged. The machine page
-hooks stay in the runtime (finding 128). Tests: the runtime's host tests (`FakePlatform`) and `modules/core/runtime/tests/platform-contract.device.test.ts`.
+hooks stay in the runtime (finding 128). Tests: the runtime's host tests (`FakePlatform`) and `runtime/core/tests/platform-contract.device.test.ts`.

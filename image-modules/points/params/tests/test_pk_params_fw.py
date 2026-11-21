@@ -20,18 +20,8 @@ from tools.patchkit import (  # noqa: E402
 from tools.patchkit.pk_expr import evaluate as eval_expr  # noqa: E402
 
 SYX = config.stock("Digitakt_II_OS1.17.syx")
-SRC = (
-    ROOT
-    / "modules"
-    / "core"
-    / "adapters"
-    / "params"
-    / "src"
-    / "cf"
-    / "dt2"
-    / "params.s"
-)
-MANIFEST = ROOT / "modules" / "core" / "adapters" / "params" / "module.toml"
+SRC = ROOT / "image-modules" / "points" / "params" / "src" / "cf" / "dt2" / "params.s"
+MANIFEST = ROOT / "image-modules" / "points" / "params" / "module.toml"
 FIRST = 0x113
 ROWS = 0x47EC0000
 ROWSIZE = 28  # name, short, template, slot, min, max, default

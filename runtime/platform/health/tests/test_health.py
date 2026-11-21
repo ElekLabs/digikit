@@ -14,7 +14,7 @@ from tools.device.dkproto import ARENA_HDR  # noqa: E402
 from tools.patchkit import patchkit as front_end  # noqa: E402
 from tools.patchkit import pk_toolchains  # noqa: E402
 
-MODULE = ROOT / "modules/core/adapters/health"
+MODULE = ROOT / "runtime/platform/health"
 IMAGES = ("dt2-1.17", "dn2-1.11", "dn2-1.12")
 ANCHORS = {
     "cf.rtos.site.idle": 6,
@@ -38,7 +38,7 @@ def test_committed_object_is_current_and_plain_coldfire():
 
 @pytest.mark.parametrize("image", IMAGES)
 def test_every_anchor_resolves_on_every_port(image):
-    port = tomllib.loads((ROOT / "devices" / "ports" / f"{image}.toml").read_text())
+    port = tomllib.loads((ROOT / "ports" / f"{image}.toml").read_text())
     have = {a["name"]: a for a in port["anchor"]}
     for name, n in ANCHORS.items():
         assert name in have, (image, name)
@@ -64,7 +64,7 @@ def test_module_toml_declares_what_the_object_needs():
         "cf.link.hook.block_isr",
     }
     for image in IMAGES:
-        port = tomllib.loads((ROOT / "devices" / "ports" / f"{image}.toml").read_text())
+        port = tomllib.loads((ROOT / "ports" / f"{image}.toml").read_text())
         modes = {h["name"]: h["mode"] for h in port["hook"]}
         assert modes["cf.rtos.hook.idle"] == "replace"
     assert {c["resource"] for c in t["claim"]} == {

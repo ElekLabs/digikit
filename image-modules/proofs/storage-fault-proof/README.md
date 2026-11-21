@@ -50,7 +50,7 @@ These are static artifact checks. Default native storage completion uses Oracle
 semaphore posting rather than establishing stock ISR execution; the full native
 fault-history check remains **failed/open** with zero observer writes.
 
-The opt-in [controlled ISR fixture](../../../../packages/patchkit/tests/storage_fault_isr.rs)
+The opt-in [controlled ISR fixture](../../../packages/patchkit/tests/storage_fault_isr.rs)
 loads the exact stock DT2 1.17 `.syx` at runtime (SHA-256
 `26c22f6652625ac2cfd47f7ee970d388ed8b6427dae3563c0a6a2f2d334350d5`),
 verifies each original hook-site hash and installs assembled hooks only in the
@@ -211,5 +211,5 @@ compatibility remains unaudited; no exploited mismatch is claimed. No snapshot
 format migration or daemon change is included. The coordinator's scoped
 `test:changed` passed pathcheck/layers before final prose; final docs pathcheck is
 coordinator-owned and the full gate remains deferred. See the
-[plan](../../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
-and [scope finding](../../../../docs/findings/107-storage-interrupt-emulation-scope.md).
+[plan](../../../docs/plans/dsp-sdk-and-sampler.md#next-proof-private-early-dt2-storage-fault-observer)
+and [scope finding](../../../docs/findings/107-storage-interrupt-emulation-scope.md).

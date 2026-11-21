@@ -1046,11 +1046,11 @@ class CatImg:
 def _anchor_functions(
     image: str, fn: dict[int, tuple[str, int, int]]
 ) -> dict[int, list[str]]:
-    """Existing ColdFire anchors of devices/ports/<image>.toml by containing function."""
+    """Existing ColdFire anchors of ports/<image>.toml by containing function."""
     import bisect
     import tomllib
 
-    path = os.path.join(ROOT, "devices", "ports", image + ".toml")
+    path = os.path.join(ROOT, "ports", image + ".toml")
     if not os.path.exists(path):
         return {}
     with open(path, "rb") as fh:

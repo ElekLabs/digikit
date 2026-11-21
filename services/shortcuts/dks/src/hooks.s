@@ -1,5 +1,5 @@
 | shortcuts.dks, the key hook (both devices, the same code): the entry of the firmware's key walker `bool f(ViewController *vc, KeyEvent *ev)`, which every key event of the panel passes once
-| in the UI task, before the release callbacks and the views (devices/fw/input.toml, `cf.input.hook.key_event`). The hook runs in place of the first 8 bytes of the walker
+| in the UI task, before the release callbacks and the views (ports/fw/input.toml, `cf.input.hook.key_event`). The hook runs in place of the first 8 bytes of the walker
 | (`lea -0x60(sp),sp; movem.l d2-d7/a2-a6,(sp)`) and leaves in one of two ways:
 |   consume: `moveq #1,d0; rts`. The stack is as the caller left it, so nothing of the displaced code has to be undone; d0 = 1 is the stock "a view took the key" value, which the caller ignores.
 |   pass: `jmp shortcuts_t_key`, the tail of the site (the displaced instructions, then the stock walker).

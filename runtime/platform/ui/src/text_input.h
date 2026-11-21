@@ -1,5 +1,5 @@
 /* dk_ui_text_input (<dk/platform/ui.h>): the owner object of the one open text input and the checks of its desc, with no firmware, so the host can test them
-   (modules/core/adapters/ui/host/tests/text_input.rs). The screen itself is the firmware's NameView, built in ui.c behind `ui_text_fw`.
+   (runtime/platform/ui/host/tests/text_input.rs). The screen itself is the firmware's NameView, built in ui.c behind `ui_text_fw`.
    One input at a time. Its life: `ui_text_open` takes the input (busy), the firmware screen calls `ui_text_done` on YES (before it closes) and `ui_text_gone` when it left the
    stack in any way (NO has no done). When the module that opened it unloads, `ui_text_drop_owner` keeps the screen but never calls the module's `done`: the code is gone. */
 #ifndef DK_UI_TEXT_INPUT_H

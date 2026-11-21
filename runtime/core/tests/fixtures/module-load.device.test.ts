@@ -1,5 +1,5 @@
-import { expectModuleLoad } from '../../../../../tests/conformance/assert-load.ts';
-import type { RuntimeModule } from '../../../../../tests/conformance/manifests.ts';
+import { expectModuleLoad } from '../../../../tests/conformance/assert-load.ts';
+import type { RuntimeModule } from '../../../../tests/conformance/manifests.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 

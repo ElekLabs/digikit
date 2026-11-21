@@ -1,4 +1,4 @@
-"""core/fx (modules/core/adapters/fx): the effects adapter, on the concrete SHARC+ core (tests/support/fx_rig.py) and through patchkit.
+"""core/fx (image-modules/points/fx): the effects adapter, on the concrete SHARC+ core (tests/support/fx_rig.py) and through patchkit.
 
 The first group needs only the assembler; the last one patches the stock images (skipped when they are not in the repository)."""
 
@@ -502,7 +502,7 @@ def test_the_dsp_diff_of_the_patched_image_is_the_hook_and_the_placed_code(
 
 
 def test_a_module_call_leaves_its_site_in_both_reply_records():
-    """The fault table (modules/core/adapters/dsp-link/src/dsp/dsp-link.inc): the core writes `last` (stage | site << 8 | row byte offset << 16) into its own
+    """The fault table (runtime/platform/dsp-link/src/dsp/dsp-link.inc): the core writes `last` (stage | site << 8 | row byte offset << 16) into its own
     word and, at once, into both reply records with the header; it clears the module step word `_dk_step` (`_fx_rec[2]`) before the call, and does not
     touch the records' word 25 (the block tail copies the step there)."""
     for route, site in ((0, 2), (1, 3)):

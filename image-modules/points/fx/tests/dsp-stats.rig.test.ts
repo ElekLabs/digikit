@@ -2,7 +2,7 @@
  * The effect spans of the DSP stats window (docs/plans/profiling.md 13.1, P8d) in the dispatch code of the fx service, on the SHARC-only rig, DT2 and DN2.
  *
  * The window is the one core/dsp-link writes the address of into `_fx_diag` word 7 when stats are on (the rig pokes it). The rig runs no block tail: the rows
- * hold running sums (core/dsp-link folds the blocks: modules/core/adapters/dsp-link/tests/dsp-stats.rig.test.ts). Effect rows are the stats rows 8 to 15.
+ * hold running sums (core/dsp-link folds the blocks: runtime/platform/dsp-link/tests/dsp-stats.rig.test.ts). Effect rows are the stats rows 8 to 15.
  */
 import { describe, expect, it } from 'vitest';
 import { FxRig, buildFx, nw, type FxBlock } from '@digi/sharc-rig-kit';

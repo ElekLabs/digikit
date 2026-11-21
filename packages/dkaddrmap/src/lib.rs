@@ -4,7 +4,7 @@
 //! names an address with the most specific layer that holds it:
 //!
 //! 1. `our`: the runtime, core adapters and loaded `.dkm` modules (modules are link-relative and rebased by the load table),
-//! 2. `anchor`: the firmware anchors of `devices/ports/`,
+//! 2. `anchor`: the firmware anchors of `ports/`,
 //! 3. `fw`: names from the reverse-engineering databases (developer machines only).
 //!
 //! No layer holding the address: the lookup answers nothing and the caller prints the raw address. For a return address the caller asks for

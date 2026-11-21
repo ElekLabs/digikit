@@ -24,7 +24,7 @@ CLI:
 
 A firmware function name (the address map, tools/devtools/addrnames.py) is shown next to `regs`' pc/a-registers and `tasks`' entry/tcb
 when the CLI prints them. The image comes from the snapshot's path (dt2-1.17, dn2-1.12, ...) or `--image IMAGE`; an image without a
-port (devices/ports/) has no names.
+port (ports/) has no names.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Reference tables of the shot sound checks: the output of its float32 Python model, the data that the old Python tests compared the routine with.
 
-    uv run python -m tools.devtools.rig_refs modules/machines/shot [--check]
+    uv run python -m tools.devtools.rig_refs modules/machine/digikit/shot [--check]
 
 Run through tools/devtools/rig_refs.py. The tables are the pin once the model is retired."""
 

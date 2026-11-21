@@ -64,6 +64,26 @@ const fileBytes = (file) => {
   return bytes;
 };
 
+export const trackedObjectHashes = (root, paths) =>
+  new Map(
+    [...paths].map((path) => {
+      const file = join(root, path);
+      const isFile = statSync(file, { throwIfNoEntry: false })?.isFile();
+      return [path, isFile ? sha(readFileSync(file)) : null];
+    }),
+  );
+
+export const assertTrackedObjectsUnchanged = (before, after) => {
+  const refreshed = [...before]
+    .filter(([path, hash]) => hash !== after.get(path))
+    .map(([path]) => path)
+    .sort();
+  if (refreshed.length)
+    throw new Error(
+      `Preparation refreshed tracked objects. Review these changes before rerunning the byte manifest:\n${refreshed.join('\n')}`,
+    );
+};
+
 const lines = (file) => {
   const text = decoder.decode(fileBytes(file));
   if (!text.endsWith('\n')) throw new Error(`${file}: missing final newline`);
@@ -170,8 +190,7 @@ const collectPacks = (root, projects, entries) => {
   return { kind: 'verdicts', path: verdictFile, sha256: sha(verdictBytes) };
 };
 
-const collectObjects = (root, scratch, projects) => {
-  const tracked = trackedObjects(root);
+const collectObjects = (root, scratch, projects, tracked) => {
   const declared = new Map();
   for (const project of projects.filter((p) => p.tags?.includes('module'))) {
     const manifest = read(root, join(project.root, 'module.toml'));
@@ -290,7 +309,7 @@ export const compareManifests = (baseline, current, device, moves = {}) => {
   return problems;
 };
 
-const collect = (root, scratch) => {
+const collect = (root, scratch, tracked) => {
   const invoke = (cmd, args) => execFileSync(cmd, args, { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 ** 2 });
   const pk = (...args) => invoke(join(root, 'dist/patchkit/patchkit'), ['--root', root, ...args]);
   const graphFile = join(scratch, 'graph.json');
@@ -302,7 +321,7 @@ const collect = (root, scratch) => {
   const generated = JSON.parse(pk('gen', '--check', '--paths'));
   for (const path of generated)
     shared.push({ kind: 'generated', path: checkedPath(path), sha256: sha(fileBytes(join(root, path))) });
-  shared.push(...collectObjects(root, scratch, projects));
+  shared.push(...collectObjects(root, scratch, projects, tracked));
   return new Map(
     [...entries].map(([device, own]) => {
       const ordered = [...own, ...shared].sort((a, b) => {
@@ -343,14 +362,18 @@ const main = () => {
       baselineFiles.set(dev, manifest);
     }
   }
+  const tracked = trackedObjects(root);
+  // Use raw hashes within this checkout so even a source_sha256 refresh fails preparation.
+  const objectHashes = trackedObjectHashes(root, tracked.keys());
   // Service packs can read tracked core objects. Finish their producers before starting any pack or image task.
   // Nx owns both preparation locks. The scratch build takes its own lock after preparation exits.
   for (const targets of ['build-objects', 'pack,pack-aliases,device-images,device-bytes,pack-verdicts']) {
     execFileSync(process.execPath, ['tools/nx/nx.mjs', 'run-many', '-t', targets], { cwd: root, stdio: 'inherit' });
+    assertTrackedObjectsUnchanged(objectHashes, trackedObjectHashes(root, tracked.keys()));
   }
   const scratch = mkdtempSync(join(tmpdir(), 'digi-byte-manifest-'));
   try {
-    const current = collect(root, scratch);
+    const current = collect(root, scratch, tracked);
     if (command === 'write') {
       mkdirSync(baseline, { recursive: true });
       for (const [dev, manifest] of current) {

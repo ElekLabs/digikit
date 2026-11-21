@@ -5,7 +5,7 @@ prototype itself). To fit the runtime's 64 KB module stage: level 0, which Open3
 level 1 (band-limited) here, and levels 3 and up are stored shorter (TB_LEN): at least 8 samples per cycle of their top
 harmonic, still finer than Open303 reads levels 1 and 2 (4).
 
-    uv run python modules/machines/tb303/src/dsp/gen_tables.py   # writes tables.inc next to this file
+    uv run python modules/machine/tom/tb303/src/dsp/gen_tables.py   # writes tables.inc next to this file
 """
 
 from __future__ import annotations

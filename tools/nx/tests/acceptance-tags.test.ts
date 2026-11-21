@@ -2,9 +2,9 @@ import { expect, it } from 'vitest';
 import { checkAcceptanceTags } from '../acceptance-tags.mjs';
 
 const modules = new Map([
-  ['core/fx', { category: 'core', root: 'modules/core/adapters/fx' }],
+  ['core/fx', { category: 'core', root: 'image-modules/points/fx' }],
   ['digikit/debug', { category: 'tools', root: 'relocated/tools/debug' }],
-  ['example/machine', { category: 'machine', root: 'modules/machines/example' }],
+  ['example/machine', { category: 'machine', root: 'modules/machine/example/machine' }],
 ]);
 const rec = (files: string[], tags?: unknown) => ({ files, ...(tags === undefined ? {} : { tags }) });
 

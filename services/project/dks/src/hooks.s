@@ -36,7 +36,7 @@
     lea     24(%sp),%sp
     .endm
 
-| The slot setter `void set(int slot)` (sites and check values: devices/fw/project.toml). 4(sp) = slot (-1: no project). The displaced `mvs.b (slot byte).l,D1` writes D1 and the flags first. The
+| The slot setter `void set(int slot)` (sites and check values: ports/fw/project.toml). 4(sp) = slot (-1: no project). The displaced `mvs.b (slot byte).l,D1` writes D1 and the flags first. The
 | call with the slot that is current is recorded too: the stock setter ignores it, the service does.
     .globl project_hook_slot
 project_hook_slot:

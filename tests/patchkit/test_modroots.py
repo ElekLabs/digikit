@@ -55,7 +55,7 @@ def test_a_duplicate_id_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_an_extra_root_inside_a_repository_root_is_not_scanned_twice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    inside = ROOT / "modules" / "lfo"
+    inside = ROOT / "modules" / "lfo-shape"
     assert modroots.covered(inside)
     assert not modroots.covered(ROOT / "tools")
     monkeypatch.setenv("PATCHKIT_MODULES", str(inside))

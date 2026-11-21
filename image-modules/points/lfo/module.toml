@@ -20,10 +20,10 @@ conflicts = []
 # six-byte `moveq 6,Dn; cmp.l D3,Dn; beq|bne` that compares the clamped wave with 6. An `op = "stub"` with `when` puts a jump there to a generated stub that runs the moveq, the compare
 # and the stock branch as stock, and looks at its pointer slot only on the outcome "clamped wave is 6" (`when = "taken"` for a beq, `"fallthrough"` for a bne). A zero slot continues the stock
 # path of that outcome, so without the lfo service (or in safe mode) the image behaves as stock, and a wave of 0 to 5 costs the stock instructions and two `jmp`s (the site jump and the jump back). The lfo service fills the
-# slots with routines (modules/core/services/lfo/dks) that read the raw wave byte again and call the shape table for a value of 7 to 14; any other value takes the stock RAND path. The routines
+# slots with routines (services/lfo/dks) that read the raw wave byte again and call the shape table for a value of 7 to 14; any other value takes the stock RAND path. The routines
 # run in the interrupt: they wait for nothing and call only the table lookup.
-# `scratch` is the register the slot test overwrites: dead where the "clamped wave is 6" outcome continues, found from the stock bytes (devices/fw/lfo.toml, tools/coldfire/liveness.py).
-# The same six sites exist on both devices (the rules are in devices/fw/lfo.toml); each device has its own six slots, because a service file may fill a slot name once. The image stub of the slot comes with the module `core/lfo`, E8 of
+# `scratch` is the register the slot test overwrites: dead where the "clamped wave is 6" outcome continues, found from the stock bytes (ports/fw/lfo.toml, tools/coldfire/liveness.py).
+# The same six sites exist on both devices (the rules are in ports/fw/lfo.toml); each device has its own six slots, because a service file may fill a slot name once. The image stub of the slot comes with the module `core/lfo`, E8 of
 # docs/plans/extension-model.md moves it into services/lfo/image/.
 [[slot]]
 name = "lfo_dt2_tick_call"

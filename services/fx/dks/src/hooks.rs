@@ -4,10 +4,10 @@
 //!
 //! Each hook runs in place of the first whole instructions of its stock site (6 bytes, or 8 for two of them) and ends in the stock code behind them: the displaced
 //! instructions are redone by the hook, and it leaves by `jmp` to an exit that the port file resolves (`dk_exit_<hook>_<n>`, an absolute address: `fx_x_*`; n = 0 is the
-//! site plus its length, n >= 1 another place of the stock routine, the `exits` of the hook in `devices/fw/page.toml`). A routine that ends the hooked function leaves by
+//! site plus its length, n >= 1 another place of the stock routine, the `exits` of the hook in `ports/fw/page.toml`). A routine that ends the hooked function leaves by
 //! `jmp fx_ret_acc` (`dk_ret_`), and `fxp_acc` calls the stock accessor with `jsr fx_stock_acc` (`dk_stock_`). `jmp abs.l` leaves every register and flag (the code behind
 //! `fxp_label` tests the flags of the compare). The aliases are the `[object.externs]` of module.toml; the stock page lists are `fx_stock` and `fx_keystock` (`dk_fw_`).
-//! Registers: the hook may clobber what `devices/fw/page.toml` lists for it.
+//! Registers: the hook may clobber what `ports/fw/page.toml` lists for it.
 //!
 //! - `fxp_acc`: the page descriptor accessor `row = f(int page)`. A page number `first + k` (k below the effect slots) answers with row k of `DKRT_FXP_ROWS`; the number
 //!   `first + slots` answers with the send row; every other number runs the stock code.

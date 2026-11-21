@@ -15,7 +15,7 @@ from tools.firmware import config  # noqa: E402
 from tools.patchkit import patchkit as front_end  # noqa: E402
 from tools.patchkit import pk_toolchains  # noqa: E402
 
-MODULE = ROOT / "modules/core/apps/digikit-menu"
+MODULE = ROOT / "runtime/apps/digikit-menu"
 IMAGES = {
     "dt2-1.17": "Digitakt_II_OS1.17.syx",
     "dn2-1.12": "Digitone_II_OS1.12.syx",

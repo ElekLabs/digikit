@@ -47,7 +47,7 @@ readiness_contract = "main-panel-v1"
 # The softfloat ABI shortcuts (packages/emulator/boot softfloat) are verified on this MAIN OS.
 softfloat_abi = true
 # The SHARC+ DSP the coupled audio runs (see devices/digitakt-ii.toml).
-# Has a port lockfile (secondary port: devices/ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
+# Has a port lockfile (secondary port: ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
 port = true
 dsp = { image = "dn2-1.11", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab }
 
@@ -64,7 +64,7 @@ readiness_contract = "main-panel-v1"
 # The softfloat ABI shortcuts (packages/emulator/boot softfloat) are verified on this MAIN OS.
 softfloat_abi = true
 # Section 7 is byte-identical to 1.11, so the idle loop addresses carry over.
-# Has a port lockfile (devices/ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
+# Has a port lockfile (ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
 port = true
 # Audited LP0 bulk-transport capability (finding 92), not stock sampling support.
 dsp = { image = "dn2-1.12", idle_start = 0xb88a49, idle_end = 0xb88abb, idle_head = 0xb88aab, sample_link = "lp0" }
@@ -147,7 +147,7 @@ windows = [
 
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
 # constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: it reads these facts at
-# run time from the device object `dkrt_dev` (DkrtDevice in modules/core/runtime/abi.toml). Register offsets inside a peripheral
+# run time from the device object `dkrt_dev` (DkrtDevice in runtime/core/abi.toml). Register offsets inside a peripheral
 # are CPU facts (MCF5441x) and stay in the code, named as such.
 [board]
 # The console UART (UART8): the firmware drains it before its own soft reset (finding 36 section 3). The status register is at +4.
@@ -251,7 +251,7 @@ lfo_frame_words = 41
 send_template = 0x44
 send_indices = [100]
 
-# The Brain pointer global (the global that the Brain getter tests; the port anchor cf.view.value.brain, checked against devices/ports by tests/regression/host/device-facts.test.ts). This device has no
+# The Brain pointer global (the global that the Brain getter tests; the port anchor cf.view.value.brain, checked against ports by tests/regression/host/device-facts.test.ts). This device has no
 # window that ends its boot, so it has no [ui.boot_window] table and the view stack offsets of the Digitakt II file are not needed here.
 [ui]
 brain_ptr = 0x44648900
@@ -264,7 +264,7 @@ list_next_off = 0
 list_prev_off = 4
 node_view_off = 8
 
-# What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
+# What patchkit needs of this device: the container and section limits of a port (written into ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.
 [patch]
 # The container (the OS image) is staged in RAM by the OS-upgrade receiver: 0x200000 bytes, copied in 101-byte messages with no size check

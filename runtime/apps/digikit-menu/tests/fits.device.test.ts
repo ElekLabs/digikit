@@ -10,7 +10,7 @@ import { packSynth, type SynthSpec } from '@digi/regression/runtime/synth.ts';
 
 /**
  * The MODULES page of SETTINGS > DIGIKIT tells before a selection whether a module will load (docs/plans/what-fits.md; ledger
- * docs/plans/ledgers/debug-card-safe.md, section fits). The fit rule (modules/core/runtime/fit) and the page logic (modules/core/adapters/ui/host/tests/menu.rs)
+ * docs/plans/ledgers/debug-card-safe.md, section fits). The fit rule (runtime/core/fit) and the page logic (runtime/platform/ui/host/tests/menu.rs)
  * are tested on the host; this test is the real runtime scan path on the real page: a store of four synthetic modules (one small, two a little over half the
  * DSP area each, one larger than the area), the rows read from DK_LOAD. Each row shows the memory the module takes and its kind; YES on the larger one
  * opens the confirm "HUGE DOES NOT FIT" with the reason and ticks nothing; with the first half-size one ticked, the second is refused the same way; unticking

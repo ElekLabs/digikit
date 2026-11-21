@@ -144,7 +144,7 @@ unsafe fn firmware_mmcfs() -> u32 {
     0
 }
 
-/// The listing record of a slot in the firmware's `MmcFs` object (finding 110, `cf.project.fn.mmcfs` in devices/fw/project.toml; the same on both devices): the record of
+/// The listing record of a slot in the firmware's `MmcFs` object (finding 110, `cf.project.fn.mmcfs` in ports/fw/project.toml; the same on both devices): the record of
 /// slot s is at `MmcFs + REC_BASE + s * REC_SIZE`; byte 0 is nonzero when the slot exists (the firmware's own test), the 16 name bytes are at `REC_NAME`, the save stamp
 /// (u32) at `REC_STAMP`.
 const REC_BASE: u32 = 0x10;
@@ -153,7 +153,7 @@ const REC_NAME: usize = 8;
 const REC_STAMP: usize = 0x18;
 
 /// The slot of the current project as the firmware stores it (`cf.project.value.slot_byte`: one byte, -1 for none); `None` on a host build and for no project. The byte holds the
-/// last persisted slot, read before the stock project load (devices/fw/project.toml). The extern is declared here and not in `dkfw` (the value is `codegen = false`), and
+/// last persisted slot, read before the stock project load (ports/fw/project.toml). The extern is declared here and not in `dkfw` (the value is `codegen = false`), and
 /// `[object.externs]` of `dks/module.toml` names it, as it names the hook tails: `patchkit pack` makes it the import `dk_fw_<hash>`, which the loader resolves from the
 /// port file. The address is 0 only when the port marks the name absent for the firmware (the loader accepts the file and the read is off).
 #[cfg(target_arch = "m68k")]

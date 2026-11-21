@@ -5,14 +5,14 @@ fn main() {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     // The menu of core/digikit-menu is compiled by tests/c/menu_fake.c (it includes the source), with the runtime's header.
     let includes = [
-        root.join("../../../../../sdk/include"),
-        root.join("../../../runtime/include"),
+        root.join("../../../../sdk/include"),
+        root.join("../../../core/include"),
         root.join("../include"),
     ];
     let menu_dir = root.join("../../../apps/digikit-menu/src");
     let src_dir = root.join("tests/c");
     // The pure functions of the chooser and the sample picker (sdk/src/chooser/logic.c, core/text.c, core/path.c) are linked; its screens (sdk/src/sample/picker.c) are included by tests/c/picker_fake.c.
-    let sdk_src = root.join("../../../../../sdk/src");
+    let sdk_src = root.join("../../../../sdk/src");
     println!("cargo:rerun-if-changed={}", sdk_src.display());
     for dir in includes.iter().chain([&menu_dir, &src_dir]) {
         println!("cargo:rerun-if-changed={}", dir.display());

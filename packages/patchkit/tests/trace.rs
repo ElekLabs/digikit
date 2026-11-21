@@ -15,7 +15,15 @@ fn root() -> PathBuf {
 fn stripped_root(dir: &Path) {
     use std::os::unix::fs::symlink;
     let real = root();
-    for n in ["modules", "devices", "sdk"] {
+    for n in [
+        "modules",
+        "runtime",
+        "services",
+        "image-modules",
+        "ports",
+        "devices",
+        "sdk",
+    ] {
         symlink(real.join(n), dir.join(n)).unwrap();
     }
     std::fs::create_dir_all(dir.join("out")).unwrap();

@@ -47,7 +47,7 @@ const setPaths = (rt: TestRuntime): void => {
 };
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 const SOAK_CYCLES = process.env.DIGIKIT_TIER === 'full' ? 20 : 5;
-/** Byte offsets in DkrtBootInfo (modules/core/runtime/abi.toml) and in `dynreg_info` (word 48: the view variable, word 49: the builder). */
+/** Byte offsets in DkrtBootInfo (runtime/core/abi.toml) and in `dynreg_info` (word 48: the view variable, word 49: the builder). */
 const BOOT_RELOADS = 252;
 const DYNREG_VIEW_VAR = 4 * 48;
 const DYNREG_VIEW_BUILD = 4 * 49;

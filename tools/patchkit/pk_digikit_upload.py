@@ -6,7 +6,7 @@ docs/findings/43-digikit-upload.md). Run by `tools.patchkit.pk_digikit_scen` (ki
             against the device side: INFO, LIST, put of a built module and of 70,000 bytes, replace, DELETE, E_HASH, lost replies, CLEAR; each
             step compared with the Python tool's LIST and the card read by plusdrive.
 
-The other upload scenarios are TypeScript tests (modules/core/runtime/tests/upload.device.test.ts and upload-faults.device.test.ts).
+The other upload scenarios are TypeScript tests (runtime/core/tests/upload.device.test.ts and upload-faults.device.test.ts).
 `transport` is also used by the other digikit runners.
 
 The through-the-menu proof (an uploaded module appears in DIGIKIT > MODULES, loads after APPLY & RESTART? and plays like the

@@ -47,8 +47,8 @@ def card_store(device: str) -> tuple[int, int]:
 
 
 def expansion(image: str) -> tuple[int, int]:
-    """The `cf.expansion` region of an image's port file (the file for IMAGE in devices/ports): (lo, hi exclusive)."""
-    port = tomllib.loads((ROOT / "devices" / "ports" / (image + ".toml")).read_text())
+    """The `cf.expansion` region of an image's port file (the file for IMAGE in ports): (lo, hi exclusive)."""
+    port = tomllib.loads((ROOT / "ports" / (image + ".toml")).read_text())
     for r in port["region"]:
         if r["name"] == "cf.expansion":
             return r["start"], r["end"]

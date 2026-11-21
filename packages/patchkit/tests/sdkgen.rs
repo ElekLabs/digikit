@@ -19,12 +19,12 @@ fn the_fx_chain_cap_is_the_registrys() {
         .find(|c| c.name == "DK_FX_MAX")
         .unwrap()
         .value;
-    let man = std::fs::read_to_string(root().join("modules/core/adapters/fx/module.toml"))
+    let man = std::fs::read_to_string(root().join("image-modules/points/fx/module.toml"))
         .unwrap_or_default();
     if !man.is_empty() {
         assert!(
             man.contains(&format!("max = {max}")),
-            "modules/core/adapters/fx/module.toml: the fx registry has max = {max}"
+            "image-modules/points/fx/module.toml: the fx registry has max = {max}"
         );
     }
 }
@@ -229,13 +229,11 @@ fn the_span_owners_are_the_runtimes_phases_and_poll_slots() {
     };
     let phases = line("phases = [");
     let n_phases = phases.matches('"').count() / 2;
-    let abi =
-        std::fs::read_to_string(root().join("modules/core/runtime/abi/src/service.rs")).unwrap();
+    let abi = std::fs::read_to_string(root().join("runtime/core/abi/src/service.rs")).unwrap();
     let block = abi.split("pub mod tick_phase {").nth(1).unwrap();
     let block = block.split('}').next().unwrap();
     assert_eq!(block.matches("pub const ").count(), n_phases);
-    let state =
-        std::fs::read_to_string(root().join("modules/core/runtime/src/rs/src/state.rs")).unwrap();
+    let state = std::fs::read_to_string(root().join("runtime/core/src/rs/src/state.rs")).unwrap();
     assert!(state.contains(&format!("pub const POLLS: usize = {};", line("polls = "))));
 }
 
@@ -278,7 +276,7 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
             .as_str()
     };
     // a pure wrapper is written, a hand-written function is named by its module, the list keeps the order of sdk.toml
-    let machines = get("modules/core/services/machines/dks/src/gen_exports.rs");
+    let machines = get("services/machines/dks/src/gen_exports.rs");
     assert!(machines.contains("pub unsafe extern \"C\" fn dk_machine_add_page("));
     assert!(machines.contains("build::machine_add_page(&ImportCore, m, name, short_name)"));
     assert!(machines.contains("build::add_machine(&ImportCore,"));
@@ -294,14 +292,14 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
             < machines.find("\"dk_page_bind_local\"").unwrap()
     );
     // a service whose exports are all hand-written has no wrapper and no `build` import
-    let samples = get("modules/core/services/samples/dks/src/gen_exports.rs");
+    let samples = get("services/samples/dks/src/gen_exports.rs");
     assert!(samples.contains("pub fn exports() -> [(u32, *const u8); 9]"));
     assert!(!samples.contains("ImportCore"));
     // the list `service!` declares is the provided imports: every one of them is in exactly one file
     let total: usize = ["machines", "fx", "samples"]
         .iter()
         .map(|s| {
-            get(&format!("modules/core/services/{s}/dks/src/gen_exports.rs"))
+            get(&format!("services/{s}/dks/src/gen_exports.rs"))
                 .matches("name_hash(")
                 .count()
         })

@@ -11,14 +11,14 @@ crate-type = ["staticlib", "rlib"]
 test = false
 
 [dependencies]
-dkrt-abi = { path = "../../../runtime/abi" }
-dkrt-sdk = { path = "../../../runtime/sdk" }
-dkrt-svc-rt = { path = "../../../runtime/svc-rt" }
+dkrt-abi = { path = "../../../runtime/core/abi" }
+dkrt-sdk = { path = "../../../runtime/core/sdk" }
+dkrt-svc-rt = { path = "../../../runtime/core/svc-rt" }
 dkrt-svc-machines = { path = ".." }
-dkfw = { path = "../../../fw/rs" }
+dkfw = { path = "../../../ports/bindings/rs" }
 
 [dev-dependencies]
-dkrt-test-support = { path = "../../../runtime/test-support" }
+dkrt-test-support = { path = "../../../runtime/core/test-support" }
 
 # This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).
 [workspace]

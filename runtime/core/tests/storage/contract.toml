@@ -1,4 +1,4 @@
-# The Storage contract: what the core expects of `Storage` (modules/core/runtime/abi/src/storage.rs). One table, two checkers:
+# The Storage contract: what the core expects of `Storage` (runtime/core/abi/src/storage.rs). One table, two checkers:
 #   host    `FakeStorage` (src/rs/src/fake_storage.rs) answers every row; the real adapter answers the same rows
 #   device  `storage.device.test.ts` runs the rows with `device = "list"` on the real adapter of each device, through the listing of test/files-proof
 #   store   `store_tests.rs` writes the `[[file]]` tree through the real writer over a model of the card and answers every row of a device with its

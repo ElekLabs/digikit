@@ -1,4 +1,4 @@
-| test/svc-test: the raw hook of the service (devices/fw/menu.toml, cf.menu.hook.settings_list.test). It runs in place of the displaced instructions of the site at the end of the
+| test/svc-test: the raw hook of the service (ports/fw/menu.toml, cf.menu.hook.settings_list.test). It runs in place of the displaced instructions of the site at the end of the
 | SETTINGS list rebuild: d0, d1, a0 and a1 are saved, the C function counts the run (a2 = the settings menu), and the tail runs the displaced instructions and leaves behind the site.
     .text
     .balignw 4, 0x4e71

@@ -42,7 +42,7 @@ int32_t dk_input_key(dk_input *in, uint32_t code, uint32_t down)
     (void)down;
     return 0;
 }
-/* The settings page of the module is tested on the host UI model (modules/core/adapters/ui/host); here its calls do nothing. */
+/* The settings page of the module is tested on the host UI model (runtime/platform/ui/host); here its calls do nothing. */
 void dk_ui_menu_add_text(dk_ui_menu *m, const char *text)
 {
     (void)m;

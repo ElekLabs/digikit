@@ -3,11 +3,11 @@
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline); the frame type is entered
 | through the image stub of the pointer slot `frametype` (an interrupt site). The routine takes the whole control flow of the site: it runs in place of the stock
 | instructions there and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, copied by the runtime from the port file) or, when a
-| branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `devices/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves: the jump changes no
+| branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `ports/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves: the jump changes no
 | register or flag). A routine that ends the hooked function leaves by `jmp mf_ret_*` (`dk_ret_<hash>`, an `rts`). The aliases are the `[object.externs]` of module.toml. `MF_TAB` is the image table
 | `machines_info` of core/machines, copied by `setup` (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
 |
-| Hook convention: registers the stock site frees are scratch (`devices/fw/machine.toml` lists them per hook); everything else a routine saves.
+| Hook convention: registers the stock site frees are scratch (`ports/fw/machine.toml` lists them per hook); everything else a routine saves.
 | The image keeps `mf_ensure` (the tables of the registry are built once, on first use: `mfn_call_ensure` calls it through the table), the machine list hook and the
 | dispatch hook.
 

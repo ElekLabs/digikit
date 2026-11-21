@@ -1,13 +1,13 @@
 /* Host test of digikit/remote's settings: the module's own C source, compiled here with fakes of core/input and of the runtime's
-   imports (the new entry of <dk/core/module.h>). The fake <dk/platform/ui.h> (src/lib.rs) shows the page, and modules/core/adapters/ui/host/tests/remote.rs presses the keys. */
+   imports (the new entry of <dk/core/module.h>). The fake <dk/platform/ui.h> (src/lib.rs) shows the page, and runtime/platform/ui/host/tests/remote.rs presses the keys. */
 #include <string.h>
-#include "../../../../../../tools/remote/src/c/remote.c"
+#include "../../../../../../modules/tool/digikit/remote/src/c/remote.c"
 
 static dk_host_cmd_fn *handlers[256];
 static int key_state[128];
 static int key_calls, next_result;
 
-/* modules/tools/remote/tests/remote-pacing.c checks the INPUT_TAKEN records; the settings page test here ignores them. */
+/* modules/tool/digikit/remote/tests/remote-pacing.c checks the INPUT_TAKEN records; the settings page test here ignores them. */
 void dk_log_event(uint32_t kind, uint32_t flags, const uint32_t *a)
 {
     (void)kind;

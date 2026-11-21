@@ -1,4 +1,4 @@
-//! The fit rule for hosts: does a module (its `dkneeds`) fit the capacity of a device? The rule is `dkrt-fit` (modules/core/runtime/fit), the code
+//! The fit rule for hosts: does a module (its `dkneeds`) fit the capacity of a device? The rule is `dkrt-fit` (runtime/core/fit), the code
 //! the DIGIKIT menu runs; the web app calls this through `pk_fit` (wasm) and the device tools through `patchkit fit --json -`. Only the wordings
 //! for a person (`describe`, `describe_by`) are written here.
 //!
@@ -185,7 +185,7 @@ mod tests {
 
     fn vectors() -> Value {
         serde_json::from_str(include_str!(
-            "../../../modules/core/runtime/vectors/fit-vectors.json"
+            "../../../runtime/core/vectors/fit-vectors.json"
         ))
         .unwrap()
     }

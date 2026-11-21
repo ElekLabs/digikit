@@ -10,7 +10,7 @@ import tomllib
 import pytest
 from support.paths import REPO_ROOT
 
-MOD = REPO_ROOT / "modules/tools/debug"
+MOD = REPO_ROOT / "modules/tool/digikit/debug"
 # the kind the module logs SETUP_DONE with is the one of sdk/sdk.toml (debug.c names it K_SETUP_DONE)
 SETUP_DONE = next(
     k["id"]

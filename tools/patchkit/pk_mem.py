@@ -6,7 +6,7 @@ The fit is the patchkit placement's own: the modules are applied to the stock `.
 allocation per region) and refused when they do not fit (exit 1, the placement's message). The numbers come from the
 plan it writes (`regions`: bytes used and capacity per region, `writes`: every placed object, table and hook tail), so
 no placement is reimplemented here. Modules pulled in by `requires` are listed too. Without modules the table shows
-the free regions of the port (devices/ports/<device>-<firmware>.toml) and needs no firmware.
+the free regions of the port (ports/<device>-<firmware>.toml) and needs no firmware.
 
 Used bytes of a region are the placement's: the listed modules' bytes plus alignment padding and zero-initialised
 data (`other`). Nothing here is written under out/ except the plan of the applied image (a scratch directory).
@@ -36,7 +36,7 @@ DEFAULT_FIRMWARE = (
 
 def port_regions(device: str, firmware: str) -> dict[str, dict[str, Any]]:
     """name -> {cpu, start, end, size} of the port's regions; size is net of the excluded ranges."""
-    path = ROOT / "devices" / "ports" / f"{device}-{firmware}.toml"
+    path = ROOT / "ports" / f"{device}-{firmware}.toml"
     return regions_of(tomllib.loads(path.read_text()))
 
 
@@ -107,7 +107,7 @@ def table(report: dict[str, Any]) -> str:
 def runtime_bytes(device: str, root: Path = ROOT) -> dict[str, int] | None:
     """Bytes of core/runtime for DEVICE from its built objects: code and data (bss is not counted) of the ColdFire objects
     (`cf`) and of the DSP objects (`dsp`). The objects are the ones its module.toml lists for the device. None: not built."""
-    base = root / "modules" / "core" / "runtime"
+    base = root / "runtime" / "core"
     man = tomllib.loads((base / "module.toml").read_text())
     out = {"cf": 0, "dsp": 0}
     for o in man.get("object", []):

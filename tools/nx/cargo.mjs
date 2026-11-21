@@ -90,12 +90,12 @@ const CRATE_TARGETS = {
       cache: true,
       parallelism: true,
       description:
-        'Writes dist/bytes/owners/: one hash per owner of the runtime object (`patchkit owners`, modules/core/runtime/owners.toml), the shared set, the other runtime objects and the whole object.',
+        'Writes dist/bytes/owners/: one hash per owner of the runtime object (`patchkit owners`, runtime/core/owners.toml), the shared set, the other runtime objects and the whole object.',
       inputs: [
         '{workspaceRoot}/tools/nx/runtime-owners.mjs',
         '{workspaceRoot}/tools/nx/object-hash.mjs',
-        '{workspaceRoot}/modules/core/runtime/owners.toml',
-        '{workspaceRoot}/modules/core/runtime/build/*.dko.json',
+        '{workspaceRoot}/runtime/core/owners.toml',
+        '{workspaceRoot}/runtime/core/build/*.dko.json',
         { dependentTasksOutputFiles: 'dist/patchkit/patchkit', transitive: true },
       ],
       dependsOn: ['cli'],
@@ -185,16 +185,18 @@ const GATE = {
         '{workspaceRoot}/packages/dksample/**/*',
         '{workspaceRoot}/packages/dkupload/**/*',
         '{workspaceRoot}/packages/patchkit/**/*',
-        '{workspaceRoot}/modules/core/runtime/fit/{Cargo.toml,build.rs,src/**/*}',
-        '{workspaceRoot}/modules/core/runtime/sdk/{Cargo.toml,build.rs,src/**/*}',
+        '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
+        '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
         // Test-only Rust files: `#[cfg(test)]` modules that the release build does not compile (an edit cannot change the binary).
         // tools/devtools/emud_key.py checks that each of them is declared behind cfg(test) when it leaves the daemon test key.
-        '!{workspaceRoot}/{packages,modules}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}',
-        '!{workspaceRoot}/{packages,modules}/**/tests/**/*.rs',
+        '!{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}',
+        '!{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}/**/tests/**/*.rs',
         '{workspaceRoot}/devices/**/*',
+        '{workspaceRoot}/ports/*.toml',
+        '{workspaceRoot}/ports/fw/**/*',
         '{workspaceRoot}/tests/scenarios/dn2.json',
         '{workspaceRoot}/sdk/sdk.toml',
-        '{workspaceRoot}/modules/core/runtime/abi.toml',
+        '{workspaceRoot}/runtime/core/abi.toml',
         '{workspaceRoot}/tools/patchkit/toolchain/**/*',
         '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
         '{workspaceRoot}/tools/devtools/emud_key.py',
@@ -269,8 +271,8 @@ export const HERMETIC = {
   dkprof: [],
   dkneeds: [],
   dksharc: [],
-  'dkrt-sdk': ['{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json'],
-  'dkrt-fit': ['{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json'],
+  'dkrt-sdk': ['{workspaceRoot}/runtime/core/vectors/settings-vectors.json'],
+  'dkrt-fit': ['{workspaceRoot}/runtime/core/vectors/fit-vectors.json'],
   'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
   dkupload: [],
   dksample: [],
@@ -298,9 +300,9 @@ const FIXTURE_SOURCE = {
 const COMPILE_SOURCE = {
   patchkit: [
     '{workspaceRoot}/sdk/sdk.toml',
-    '{workspaceRoot}/modules/core/runtime/abi.toml',
-    '{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json',
-    '{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json',
+    '{workspaceRoot}/runtime/core/abi.toml',
+    '{workspaceRoot}/runtime/core/vectors/fit-vectors.json',
+    '{workspaceRoot}/runtime/core/vectors/settings-vectors.json',
     '{workspaceRoot}/tests/fixtures/ping-vectors.json', // flash_rpc.rs: `include_str!` in its unit test
     '{workspaceRoot}/devices/*.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/pins.toml',
@@ -333,7 +335,7 @@ const pathDepNames = (workspaceRoot, crateRoot, seen = new Set()) => {
 };
 
 // `rust-tests` of a standalone crate: a crate with its own `[workspace]` and Cargo.lock inside a module directory (the
-// service crates `modules/core/services/*/dks`), so no member of the root workspace. modules.mjs gives it to every module
+// service crates `services/*/dks`), so no member of the root workspace. modules.mjs gives it to every module
 // project whose root holds such a crate. Uncached like the non-hermetic members. The inputs are the project's own files
 // (crate, Cargo.lock, tests), the production files of the projects it depends on by path (listed,
 // transitively, from the Cargo.toml path dependencies) and the toolchain. A crate without tests passes (`--no-tests=pass`).

@@ -16,7 +16,7 @@ from tools.patchkit import patchkit as front_end  # noqa: E402
 from tools.patchkit import pk_device, pk_toolchains
 
 ROOT = REPO_ROOT
-MOD = ROOT / "modules" / "core" / "adapters" / "dsp-link"
+MOD = ROOT / "runtime" / "platform" / "dsp-link"
 IMAGES = {
     "dt2-1.17": "Digitakt_II_OS1.17.syx",
     "dn2-1.12": "Digitone_II_OS1.12.syx",
@@ -49,10 +49,10 @@ def define(text: str, name: str) -> int:
 
 
 def port(name: str) -> dict:
-    return tomllib.loads((ROOT / "devices" / "ports" / f"{name}.toml").read_text())
+    return tomllib.loads((ROOT / "ports" / f"{name}.toml").read_text())
 
 
-# The anchors core/dsp-link links against (devices/fw/link.toml and devices/fw/dsp/link.toml).
+# The anchors core/dsp-link links against (ports/fw/link.toml and ports/fw/dsp/link.toml).
 DSPLINK_ANCHORS = (
     "cf.link.site.block_isr.frame_call",
     "cf.link.fn.frame",

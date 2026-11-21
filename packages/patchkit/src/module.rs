@@ -348,7 +348,7 @@ pub struct ServiceFill {
     pub devices: Vec<String>,
 }
 
-/// An entry of `[[hook]]` of a service: the hook of the port files (`devices/ports/`) and the global function of the object that handles it.
+/// An entry of `[[hook]]` of a service: the hook of the port files (`ports/`) and the global function of the object that handles it.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ServiceHook {
@@ -1046,6 +1046,18 @@ pub struct Build<'a> {
     pub defines: &'a [String],
 }
 
+/// The roots of the image modules and service files, whose objects are committed.
+pub const CORE_MODULE_ROOTS: &[&str] = &["runtime", "services", "image-modules"];
+
+/// The module library's committed roots, in the same order as tools/patchkit/modroots.py.
+pub const REPO_MODULE_ROOTS: &[&str] = &[
+    "modules",
+    "runtime",
+    "services",
+    "image-modules",
+    "tests/fixtures/modules",
+];
+
 /// Where a module library comes from, besides the repository's module roots and PATCHKIT_MODULES.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default, Clone)]
@@ -1058,7 +1070,7 @@ pub struct LibrarySource {
     pub trace: bool,
 }
 
-/// `modules/` and `tests/fixtures/modules/` of the repository, then the extra roots of `src.modules_dirs` and the PATCHKIT_MODULES
+/// The committed module roots of the repository, then the extra roots of `src.modules_dirs` and the PATCHKIT_MODULES
 /// environment variable (a path list), in that order. Generated modules (derived from a firmware) live there. Content modules get their
 /// objects from the cache `out/cache/dko`; a stale object is built.
 /// With `lenient`, a module whose object files are missing still loads (for `gen`); with `only`, the objects of these
@@ -1087,7 +1099,7 @@ pub fn library_with(
         defines: &defines,
     };
     // an extra root inside a repository root is scanned with that root: scanning it again would find each of its modules twice
-    let repo_roots: Vec<_> = ["modules", "tests/fixtures/modules"]
+    let repo_roots: Vec<_> = REPO_MODULE_ROOTS
         .iter()
         .filter_map(|r| root.join(r).canonicalize().ok())
         .collect();
@@ -1259,8 +1271,9 @@ impl Library {
             Ok(())
         }
         let mut paths = vec![];
-        walk(&root.join("modules"), &mut paths)?;
-        walk(&root.join("tests/fixtures/modules"), &mut paths)?;
+        for dir in REPO_MODULE_ROOTS {
+            walk(&root.join(dir), &mut paths)?;
+        }
         let headers = Self::read_headers(&paths)?;
         for m in &headers.modules {
             m.manifest
@@ -1318,7 +1331,7 @@ impl Library {
         Ok(())
     }
 
-    /// The default module roots of a repository: `modules/` and `tests/fixtures/modules/`, lowered with `devices/`. Content modules whose
+    /// The committed module roots of a repository, lowered with `devices/`. Content modules whose
     /// object is stale in the cache are built (it needs the toolchain: `uv run python -m tools.patchkit.pk_toolchains m68k`).
     pub fn scan_repo(root: &std::path::Path) -> Result<Library> {
         Self::scan_repo_with(root, false)
@@ -1369,16 +1382,9 @@ impl Library {
             defines,
         };
         let mut lib = Library::default();
-        lib.extend_unique(Self::read_root(
-            &root.join("modules"),
-            lenient,
-            Some((&env, b)),
-        )?)?;
-        lib.extend_unique(Self::read_root(
-            &root.join("tests/fixtures/modules"),
-            lenient,
-            Some((&env, b)),
-        )?)?;
+        for dir in REPO_MODULE_ROOTS {
+            lib.extend_unique(Self::read_root(&root.join(dir), lenient, Some((&env, b)))?)?;
+        }
         lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
         Ok(lib)
     }
@@ -1420,7 +1426,11 @@ mod cache_generation_tests {
         let core: Vec<_> = legacy
             .modules
             .iter()
-            .filter(|m| m.dir.starts_with(root.join("modules/core")))
+            .filter(|m| {
+                CORE_MODULE_ROOTS
+                    .iter()
+                    .any(|r| m.dir.starts_with(root.join(r)))
+            })
             .collect();
         assert!(!core.is_empty());
         let paths: Vec<_> = core.iter().map(|m| m.dir.join("module.toml")).collect();
@@ -1567,8 +1577,8 @@ mod runtime_version_tests {
     /// the patch line (`core/runtime@x`), the flash question and the check after the restart name the same number.
     #[test]
     fn the_runtime_manifest_version_is_the_sdk_runtime_version() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../modules/core/runtime/module.toml");
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/module.toml");
         let manifest: toml::Table = std::fs::read_to_string(path).unwrap().parse().unwrap();
         let version = manifest["module"]["version"].as_str().unwrap();
         assert_eq!(

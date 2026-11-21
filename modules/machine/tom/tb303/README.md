@@ -47,7 +47,7 @@ at note-on; it zeroes a track's whole state at its first note-on after the load 
 
 Cost: 8,037 instructions per block including the adapter, the same for any note and setting (8,241 on a note-on block).
 
-Tables and constants: `uv run python modules/machines/tb303/src/dsp/gen_tables.py` writes `src/dsp/tables.inc`. Model:
+Tables and constants: `uv run python modules/machine/tom/tb303/src/dsp/gen_tables.py` writes `src/dsp/tables.inc`. Model:
 `tests/tb303_ref.py` (`Tb303`); the routine matches it exactly on the SHARC core (`tests/rig/tb303.toml`).
 
 Pack: `mise run module:pack -- tom/tb303 --device dt2`.

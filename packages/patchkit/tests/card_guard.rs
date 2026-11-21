@@ -31,7 +31,7 @@ fn symbol(plan: &serde_json::Value, module: &str, name: &str) -> u64 {
 }
 
 fn registry() -> Registry {
-    Registry::from_dir(&root().join("devices/ports")).unwrap()
+    Registry::from_dir(&root().join("ports")).unwrap()
 }
 
 /// The plan of a patched image as JSON (the fields of `Plan`; a stable record of what was installed where).

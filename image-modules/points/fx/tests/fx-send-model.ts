@@ -67,7 +67,7 @@ export function same(got: readonly number[], want: readonly number[], label = ''
 }
 
 
-const REPO = path.resolve(import.meta.dirname, '../../../../..');
+const REPO = path.resolve(import.meta.dirname, '../../../..');
 export const EFFECTS = [path.join(REPO, 'tests/support/fx_effects.s')];
 
 export const clean = (b: FxBlock, what = ''): void => {

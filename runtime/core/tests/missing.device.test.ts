@@ -167,7 +167,7 @@ async function expectMissingAndSilent(rt: TestRuntime): Promise<void> {
 
 /**
  * `RESTART` once the session is stable, then the wait for the new boot in emulated time. Two boots in a row that end before the stable period (30 s of
- * DSP blocks, `DkrtBootInfo.stable`) start the third in safe mode, which loads no module (modules/core/runtime/src/rs/src/safe_mode.rs `ui_pass`).
+ * DSP blocks, `DkrtBootInfo.stable`) start the third in safe mode, which loads no module (runtime/core/src/rs/src/safe_mode.rs `ui_pass`).
  */
 async function restart(rt: TestRuntime, plan: RuntimePlan): Promise<void> {
   await pollUntil(rt.clock, async () => (await bootInfo(rt.session, plan)).stable, (v) => v === 1, {

@@ -14,7 +14,7 @@ mark = "D"
 users = ["core/digikit-menu"]
 ```
 
-`tools/patchkit/port_resolve.py` reads these files (`mise run patch:port`) and writes `devices/ports/`. Names follow
+`tools/patchkit/port_resolve.py` reads these files (`mise run patch:port`) and writes `ports/`. Names follow
 `<cpu>.<subsystem>.<kind>.<name>`: `cpu` is `cf` or `dsp`, `subsystem` is a word from [subsystems.toml](subsystems.toml)
 (each has one file: `<subsystem>.toml`, or `dsp/<subsystem>.toml` for the DSP), and `kind` is the table of the entry
 (`fn`, `data`, `value`, `sites`, `site`). `port_resolve.py` refuses a name that breaks the rule.
@@ -47,7 +47,7 @@ An `fn` may have `sig = "u32 (void *p, const char *fmt, ...)"`: a return type an
 Types are `u8 u16 u32 i8 i16 i32 bool void`, `char` behind a pointer, a struct short name, `const` and `*`. A pointer
 return is allowed (the firmware sets d0). A `site` with `bind = "static"` is also written as a static (for a module that
 takes only its address); no other `bind` value exists. A `[[struct]]` has `name`, `size`, `mark`, `users` and `fields = [{ name, off, type }]`;
-`type` is a scalar, `ptr` or a struct short name. `patchkit gen` writes the `cf` bindings to `modules/core/fw/`:
+`type` is a scalar, `ptr` or a struct short name. `patchkit gen` writes the `cf` bindings to `ports/bindings/`:
 `rs/src/lib.rs` (crate `dkfw`), `include/dk_fw_<subsystem>.h` and `inc/dk_fw_<subsystem>.inc` (GAS).
 
 A `[[hook]]` declares a hook point at a `site` or `fn` (`name` is `<cpu>.<subsystem>.hook.<name>`). `mode` is `before`

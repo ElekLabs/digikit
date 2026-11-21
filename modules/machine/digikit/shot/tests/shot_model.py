@@ -1,5 +1,5 @@
 """digikit/shot on the concrete SHARC+ core through core/dsp-voice (the real adapter, the Python rig), against a float32 model of the stereo PCM16 reader:
-the generator of the reference tables of `tests/rig/shot.toml` (`uv run python -m tools.devtools.rig_refs modules/machines/shot`, see rig_refs_gen.py). It asserts that
+the generator of the reference tables of `tests/rig/shot.toml` (`uv run python -m tools.devtools.rig_refs modules/machine/digikit/shot`, see rig_refs_gen.py). It asserts that
 the routine equals the model before it writes a table. The checks themselves run on the SHARC-only rig."""
 
 import numpy as np

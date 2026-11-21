@@ -1,6 +1,6 @@
 //! The load table from raw memory: the bytes of the runtime's module table (`DKRT_STATE`), its DSP placement table (`DKRT_DSP`) and the
 //! `dyndsp_info` table of the DSP loader, as a host reads them from an emulator or a device. One decoder for every host (the workbench uses it
-//! through wasm). The layout of the records is that of `State` (modules/core/runtime/src/rs/src/lib.rs) and `DspState` (.../dsp.rs).
+//! through wasm). The layout of the records is that of `State` (runtime/core/src/rs/src/lib.rs) and `DspState` (.../dsp.rs).
 //!
 //! The constants of the DSP placement come from the map header ([`Loader`], written by `patchkit apply`), not from the caller.
 

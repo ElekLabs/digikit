@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime",
   "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-params", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"],
   "metadata": {
@@ -19,8 +19,8 @@
         "{workspaceRoot}/rust-toolchain*",
         "{workspaceRoot}/mise.toml",
         "{workspaceRoot}/tools/nx/rust-env.mjs",
-        "{workspaceRoot}/modules/core/runtime/tests/platform/contract.toml",
-        "{workspaceRoot}/modules/core/runtime/tests/storage/contract.toml",
+        "{workspaceRoot}/runtime/core/tests/platform/contract.toml",
+        "{workspaceRoot}/runtime/core/tests/storage/contract.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/src/**/*",
         { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }
@@ -28,7 +28,7 @@
       "dependsOn": ["test/dyn-fx-gain:pack", "test/sine:pack", "test/svc-test:pack", "test/svc-test-user:pack"],
       "outputs": [],
       "options": {
-        "command": "node tools/nx/rust-env.mjs --variant host-dkrt -- cargo test --manifest-path modules/core/runtime/src/rs/Cargo.toml --lib --offline --locked -- --skip assembly_tests",
+        "command": "node tools/nx/rust-env.mjs --variant host-dkrt -- cargo test --manifest-path runtime/core/src/rs/Cargo.toml --lib --offline --locked -- --skip assembly_tests",
         "cwd": "."
       }
     },
@@ -46,14 +46,14 @@
         "{workspaceRoot}/rust-toolchain*",
         "{workspaceRoot}/mise.toml",
         "{workspaceRoot}/tools/nx/rust-env.mjs",
-        "{workspaceRoot}/modules/core/runtime/build/runtime.dko.json",
-        "{workspaceRoot}/modules/core/services/fx/dks/build/fx.dko.json",
-        "{workspaceRoot}/modules/core/services/machines/dks/build/machines.dko.json",
-        "{workspaceRoot}/modules/core/services/lfo/dks/build/lfo.dko.json",
-        "{workspaceRoot}/modules/core/services/shortcuts/dks/build/shortcuts.dko.json",
-        "{workspaceRoot}/modules/core/services/samples/dks/build/samples.dko.json",
-        "{workspaceRoot}/modules/core/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
-        "{workspaceRoot}/modules/core/services/project/dks/build/project.dko.json",
+        "{workspaceRoot}/runtime/core/build/runtime.dko.json",
+        "{workspaceRoot}/services/fx/dks/build/fx.dko.json",
+        "{workspaceRoot}/services/machines/dks/build/machines.dko.json",
+        "{workspaceRoot}/services/lfo/dks/build/lfo.dko.json",
+        "{workspaceRoot}/services/shortcuts/dks/build/shortcuts.dko.json",
+        "{workspaceRoot}/services/samples/dks/build/samples.dko.json",
+        "{workspaceRoot}/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/services/project/dks/build/project.dko.json",
         "{workspaceRoot}/tools/nx/device-images.mjs",
         { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
@@ -83,7 +83,7 @@
       ],
       "outputs": [],
       "options": {
-        "command": "node tools/nx/rust-env.mjs --variant host-dkrt -- cargo test --manifest-path modules/core/runtime/src/rs/Cargo.toml --lib --offline --locked assembly_tests",
+        "command": "node tools/nx/rust-env.mjs --variant host-dkrt -- cargo test --manifest-path runtime/core/src/rs/Cargo.toml --lib --offline --locked assembly_tests",
         "cwd": "."
       }
     }

@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-lfo-tests",
   "tags": [
     "test-only"
@@ -50,7 +50,7 @@
           "core/services/lfo"
         ],
         "sources": [
-          "modules/core/runtime/tests/lfo/goldens.json"
+          "runtime/core/tests/lfo/goldens.json"
         ],
         "plusdrive": true
       },
@@ -67,7 +67,7 @@
           "core/services/lfo"
         ],
         "sources": [
-          "modules/core/runtime/tests/lfo/goldens.json"
+          "runtime/core/tests/lfo/goldens.json"
         ],
         "plusdrive": true
       }

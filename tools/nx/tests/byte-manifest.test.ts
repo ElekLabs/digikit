@@ -1,5 +1,14 @@
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { compareManifests, pathMapper, strictObjectHash } from '../byte-manifest.mjs';
+import {
+  assertTrackedObjectsUnchanged,
+  compareManifests,
+  pathMapper,
+  strictObjectHash,
+  trackedObjectHashes,
+} from '../byte-manifest.mjs';
 
 const shape = (source: string, flags = '["-O1"]') =>
   Buffer.from(`{\n "source_sha256": "${source.repeat(64)}",\n "toolchain": {"cflags": ${flags}}\n}\n`);
@@ -12,6 +21,25 @@ it('masks only the source hash value, keeping flags, spacing and all other bytes
   expect(strictObjectHash(shape('a', '["-O2"]'), 'example').sha256).not.toBe(original.sha256);
   expect(strictObjectHash(shape('a', '[ "-O1" ]'), 'example').sha256).not.toBe(original.sha256);
   expect(() => strictObjectHash(shape('z'), 'example')).toThrow('invalid source_sha256');
+});
+
+it('fails if preparation refreshes tracked objects, even for a source hash alone', () => {
+  const root = mkdtempSync(join(tmpdir(), 'byte-manifest-test-'));
+  const paths = ['other.dko.json', 'source.dko.json', 'removed.dko.json', 'flags.dko.json'];
+  try {
+    for (const path of paths) writeFileSync(join(root, path), shape('a'));
+    const before = trackedObjectHashes(root, paths);
+    expect(() => assertTrackedObjectsUnchanged(before, trackedObjectHashes(root, paths))).not.toThrow();
+    writeFileSync(join(root, 'source.dko.json'), shape('b'));
+    writeFileSync(join(root, 'flags.dko.json'), shape('a', '["-O2"]'));
+    unlinkSync(join(root, 'removed.dko.json'));
+    expect(() => assertTrackedObjectsUnchanged(before, trackedObjectHashes(root, paths))).toThrow(
+      'Preparation refreshed tracked objects. Review these changes before rerunning the byte manifest:\n' +
+        'flags.dko.json\nremoved.dko.json\nsource.dko.json',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 const baseline = () => ({

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """Resolve the anchors and regions of one firmware into its port lockfile.
 
-    uv run python -m tools.patchkit.port_resolve resolve FIRMWARE.syx [--out devices/ports/NAME.toml]
+    uv run python -m tools.patchkit.port_resolve resolve FIRMWARE.syx [--out ports/NAME.toml]
     uv run python -m tools.patchkit.port_resolve resolve-all [--root DIR]      # the supported firmwares: DT2 1.17, DN2 1.12, DN2 1.11
-    uv run python -m tools.patchkit.port_resolve rule-sharc IMAGE PC [--len N] # print a devices/fw rule for a SHARC pc
+    uv run python -m tools.patchkit.port_resolve rule-sharc IMAGE PC [--len N] # print a ports/fw rule for a SHARC pc
     (for a rule of either CPU and a declaration entry, see tools/firmware/catalog.py: emit-rule, declare)
 
-A port (devices/ports/<short>-<version>.toml) records, for one stock `.syx` (keyed by its sha256), the
+A port (ports/<short>-<version>.toml) records, for one stock `.syx` (keyed by its sha256), the
 named anchors the modules and frameworks need (address, length, sha256 of the bytes there; never the bytes),
 the allocatable regions and the container limits. patchkit only reads it and verifies the hashes.
 
-Anchors are declared in devices/fw/<subsystem>.toml (docs/design/firmware-decls.md), not in module manifests. One
+Anchors are declared in ports/fw/<subsystem>.toml (docs/design/firmware-decls.md), not in module manifests. One
 entry is one declaration; its `rule` is shared, or `rule.dt2` / `rule.dn2` give one rule per device:
 
     [[fn]]
     name = "dsp.master.fn.q31_converter"   # <cpu>.<subsystem>.<kind>.<name>; the kind is the table, the
-                                           # subsystems are listed in devices/fw/subsystems.toml
+                                           # subsystems are listed in ports/fw/subsystems.toml
     cpu = "sharc"
     devices = ["dt2"]                # the devices that have it; the entry is skipped on the others
                                      # (a SHARC rule and a SHARC hook are also skipped on a device without a DSP)
@@ -166,8 +166,8 @@ NAME_SEGMENT = re.compile(r"[a-z0-9_]+")
 
 
 def load_subsystems(root: Path) -> dict[str, set[str]]:
-    """cpu -> the allowed subsystem words, from devices/fw/subsystems.toml."""
-    d = tomllib.loads((root / "devices" / "fw" / SUBSYSTEMS).read_text())
+    """cpu -> the allowed subsystem words, from ports/fw/subsystems.toml."""
+    d = tomllib.loads((root / "ports" / "fw" / SUBSYSTEMS).read_text())
     return {cpu: set(words) for cpu, words in d.items()}
 
 
@@ -184,7 +184,7 @@ def check_name(name: str, table: str, vocab: dict[str, set[str]]) -> None:
         raise ResolveError(f"{name}: cpu {cpu!r} is not one of {sorted(vocab)}")
     if subsystem not in vocab[cpu]:
         raise ResolveError(
-            f"{name}: {subsystem!r} is not a {cpu} subsystem in devices/fw/{SUBSYSTEMS}"
+            f"{name}: {subsystem!r} is not a {cpu} subsystem in ports/fw/{SUBSYSTEMS}"
         )
     if kind != table:
         raise ResolveError(
@@ -198,9 +198,9 @@ def check_name(name: str, table: str, vocab: dict[str, set[str]]) -> None:
 
 
 def fw_rules(root: Path) -> list[dict]:
-    """The rules of devices/fw/**/*.toml, one dict per device filter, with `_source` = "fw/<file without .toml>".
+    """The rules of ports/fw/**/*.toml, one dict per device filter, with `_source` = "fw/<file without .toml>".
     Each has the declaration's `was` (former names, never resolved; empty by default)."""
-    fw = root / "devices" / "fw"
+    fw = root / "ports" / "fw"
     vocab = load_subsystems(root)
     former: list[tuple[str, str]] = []  # (a former name, the declaration it was)
     rules = []
@@ -248,9 +248,9 @@ def fw_rules(root: Path) -> list[dict]:
 
 
 def fw_hooks(root: Path) -> list[dict]:
-    """The `[[hook]]` entries of devices/fw/**/*.toml: name, site, offset (default 0), mode, cpu, devices (when the entry has
+    """The `[[hook]]` entries of ports/fw/**/*.toml: name, site, offset (default 0), mode, cpu, devices (when the entry has
     them) and `_source` as in fw_rules."""
-    fw = root / "devices" / "fw"
+    fw = root / "ports" / "fw"
     hooks = []
     for f in sorted(fw.rglob("*.toml")):
         if f == fw / SUBSYSTEMS:
@@ -945,7 +945,7 @@ def patchkit_bin(root: Path) -> Path:
 
 
 def site_facts(syx: Path, root: Path, port_text: str) -> dict[str, dict]:
-    """hook name -> {len, kind, check} for the hooks of the port text that a service uses (devices/fw `users`), read from the image by
+    """hook name -> {len, kind, check} for the hooks of the port text that a service uses (ports/fw `users`), read from the image by
     `patchkit port facts` (its ColdFire decoder gives the whole instructions the 6-byte jump covers)."""
     r = subprocess.run(
         [
@@ -1270,9 +1270,7 @@ def main() -> int:
         for f in files:
             name, text = resolve(f, a.root)
             out = (
-                a.out
-                if getattr(a, "out", None)
-                else a.root / "devices" / "ports" / f"{name}.toml"
+                a.out if getattr(a, "out", None) else a.root / "ports" / f"{name}.toml"
             )
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(text)

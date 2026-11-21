@@ -1,4 +1,4 @@
-/* core/sdhc-large: the calls of the module. `sdhc_large_range` and `sdhc_large_ctl` are the runtime's (modules/core/runtime/include/dkrt_sdhc.h);
+/* core/sdhc-large: the calls of the module. `sdhc_large_range` and `sdhc_large_ctl` are the runtime's (runtime/core/include/dkrt_sdhc.h);
    `dk_sdhc_large_open` and `dk_sdhc_large_ctl` are the SDK's (sdk/sdk.toml, <dk/platform/sdhc_large.h>). The limit logic and its data are in sdhc.s. */
 #include <stdint.h>
 

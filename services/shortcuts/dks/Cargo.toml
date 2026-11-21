@@ -9,8 +9,8 @@ description = "The shortcuts service as a service file (.dks): the crate dkrt-sv
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-dkrt-sdk = { path = "../../../runtime/sdk" }
-dkrt-svc-rt = { path = "../../../runtime/svc-rt" }
+dkrt-sdk = { path = "../../../runtime/core/sdk" }
+dkrt-svc-rt = { path = "../../../runtime/core/svc-rt" }
 dkrt-svc-shortcuts = { path = ".." }
 
 # This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).

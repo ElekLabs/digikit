@@ -1,6 +1,6 @@
 """core/sample-pool: the firmware-free logic of the DT2 backing (slot choice, PCM planes, free space).
 
-The header modules/core/adapters/sample-pool/src/cf/pool_core.h takes plain data, so a host C compiler runs it. The firmware calls and the
+The header image-modules/points/sample-pool/src/cf/pool_core.h takes plain data, so a host C compiler runs it. The firmware calls and the
 stock reset are tested in the emulator, not here."""
 
 import shutil
@@ -9,8 +9,8 @@ import subprocess
 import pytest
 from support.paths import REPO_ROOT
 
-SRC = REPO_ROOT / "modules" / "core" / "adapters" / "sample-pool" / "src"
-RUNTIME_INC = REPO_ROOT / "modules" / "core" / "runtime" / "include"
+SRC = REPO_ROOT / "image-modules" / "points" / "sample-pool" / "src"
+RUNTIME_INC = REPO_ROOT / "runtime" / "core" / "include"
 CC = shutil.which("cc") or shutil.which("gcc")
 
 HARNESS = r"""

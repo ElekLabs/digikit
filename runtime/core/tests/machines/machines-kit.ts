@@ -22,7 +22,7 @@ export const tableSymbols = (device: Device) => [
 ];
 
 /**
- * Digitone II 1.12 ColdFire SRAM addresses. No `devices/fw` anchor or `devices/ports/dn2-1.12.toml` entry holds them (searched), so they are named here; source: finding 02
+ * Digitone II 1.12 ColdFire SRAM addresses. No `ports/fw` anchor or `ports/dn2-1.12.toml` entry holds them (searched), so they are named here; source: finding 02
  * (docs/findings/02-machines-and-parameters.md: "Where the engine parameter words are" for the TX frame, "Changing the machine twice" for the audio mirror) and finding 06 ("DN2 voice slots").
  */
 /** The audio side's copy of track 1's sound: the first byte is the selected machine type. */

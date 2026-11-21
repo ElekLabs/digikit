@@ -1,4 +1,4 @@
-# digikit/shot on the SHARC-only rig (replaces modules/machines/shot/tests/test_shot_playback.py).
+# digikit/shot on the SHARC-only rig (replaces modules/machine/digikit/shot/tests/test_shot_playback.py).
 # The tables ref/*.f32 are the output of the Python reader model of that test for the same scenarios (tools/devtools/rig_refs.py shot); the PCM of
 # the pool entries is ref/pcm-*.i16 (the numpy generator's int16 words). The count word of the pool's control set is checked after every block.
 

@@ -1,4 +1,4 @@
-# tom/tb303 on the SHARC-only rig (replaces modules/machines/tb303/tests/test_tb303.py; DT2 only, the module has no DN2 port).
+# tom/tb303 on the SHARC-only rig (replaces modules/machine/tom/tb303/tests/test_tb303.py; DT2 only, the module has no DN2 port).
 # The tables ref/*.f32 are the output of the float32 model tb303_ref.py that the Python tests compared the routine with (tools/devtools/rig_refs.py).
 
 [[case]]

@@ -3,7 +3,7 @@
  *
  * The window is the one core/dsp-link writes the address of into `_dv_diag` word 31 when stats are on (the rig pokes it). The rig runs no block tail, so the
  * rows hold the running sums of the spans: calls, cycles (the emulator's cycle counter is instructions), the largest call, and the sum of the block (word 5).
- * What the tail folds is tested with core/dsp-link (modules/core/adapters/dsp-link/tests/dsp-stats.rig.test.ts).
+ * What the tail folds is tested with core/dsp-link (runtime/platform/dsp-link/tests/dsp-stats.rig.test.ts).
  */
 import { describe, expect, it } from 'vitest';
 import { MachineRig, buildMachine, machineSpecs, nw, type MachineBlock } from '@digi/sharc-rig-kit';

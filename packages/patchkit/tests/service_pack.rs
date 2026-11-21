@@ -24,12 +24,20 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A repository root of its own for a refusal that happens when the manifest loads: the repository's `modules`, `devices` and `sdk`, and the fixture
+/// A repository root of its own for a refusal that happens when the manifest loads: the repository's module roots, `ports`, `devices` and `sdk`, and the fixture
 /// `test/svc-test` with the text of its `module.toml` changed by `edit`. No toolchain is needed.
 fn manifest_root(dir: &Path, edit: &dyn Fn(&str) -> String) {
     use std::os::unix::fs::symlink;
     std::fs::create_dir_all(dir).unwrap();
-    for n in ["modules", "devices", "sdk"] {
+    for n in [
+        "modules",
+        "runtime",
+        "services",
+        "image-modules",
+        "ports",
+        "devices",
+        "sdk",
+    ] {
         symlink(root().join(n), dir.join(n)).unwrap();
     }
     let to = dir.join("tests/fixtures/modules/svc-test");
@@ -251,11 +259,8 @@ fn lfo_packs_to_a_dks_that_owns_lfo_shape_and_its_users_need_it() {
     let abi = u32::from_be_bytes(svc[dkneeds::H_SVC_ABI as usize..][..4].try_into().unwrap());
     assert_ne!(abi, 0);
     assert!(
-        object_holds_word(
-            &here.join("modules/core/runtime/build/runtime.dko.json"),
-            abi
-        ),
-        "H_SVC_ABI {abi:#x} is not the runtime's SVC_ABI: rebuild the objects (`patchkit build --tree modules/core`)"
+        object_holds_word(&here.join("runtime/core/build/runtime.dko.json"), abi),
+        "H_SVC_ABI {abi:#x} is not the runtime's SVC_ABI: rebuild the objects (`patchkit build core/runtime`)"
     );
 
     // a module with an lfo_shape key needs the service; any other module of the tree needs no more than before
@@ -316,11 +321,8 @@ fn fx_packs_to_a_dks_that_owns_effect_and_takes_nine_hooks_by_entry() {
     }
     let abi = u32::from_be_bytes(svc[dkneeds::H_SVC_ABI as usize..][..4].try_into().unwrap());
     assert!(
-        object_holds_word(
-            &here.join("modules/core/runtime/build/runtime.dko.json"),
-            abi
-        ),
-        "H_SVC_ABI {abi:#x} is not the runtime's SVC_ABI: rebuild the objects (`patchkit build --tree modules/core`)"
+        object_holds_word(&here.join("runtime/core/build/runtime.dko.json"), abi),
+        "H_SVC_ABI {abi:#x} is not the runtime's SVC_ABI: rebuild the objects (`patchkit build core/runtime`)"
     );
     // an effect module needs the service: its effect record is a kind of the fx service, which has no row in the runtime any more
     let user = packed(&here, "test/dyn-fx-gain", &d.join("dyn-fx-gain.dkm"));

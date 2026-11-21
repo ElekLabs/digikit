@@ -1,6 +1,6 @@
 """core/fx, the send route (finding 62): the firmware-image checks of the send hook and the anchors on the Digitakt II 1.17 image
 (skipped when it is not in the repository). The send hook and the master hook on the SHARC core run on the rig
-(modules/core/adapters/fx/tests/fx-send.rig.test.ts)."""
+(image-modules/points/fx/tests/fx-send.rig.test.ts)."""
 
 import json
 import os
@@ -70,7 +70,7 @@ def test_the_send_hook_takes_the_first_instruction_of_the_master_function(
 
 @needs_image
 def test_the_anchors_of_the_send_route_hold_the_track_bus_and_the_return_bus():
-    port = (ROOT / "devices/ports/dt2-1.17.toml").read_text()
+    port = (ROOT / "ports/dt2-1.17.toml").read_text()
     for name, value in (
         ("dsp.fx.value.send.track_bus", 0x252DF8),
         ("dsp.fx.value.send.return_bus", 0x254778),

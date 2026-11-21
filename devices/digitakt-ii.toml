@@ -64,7 +64,7 @@ readiness_contract = "main-panel-fs-check-v1"
 # The softfloat ABI shortcuts (packages/emulator/boot softfloat) are verified on this MAIN OS.
 softfloat_abi = true
 # Section 7 (the SHARC+ blob) is byte-identical to 1.16, so the idle loop addresses carry over.
-# Has a port lockfile (devices/ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
+# Has a port lockfile (ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
 port = true
 dsp = { image = "dt2-1.17", idle_start = 0xb8636d, idle_end = 0xb863df, idle_head = 0xb863cf, sample_link = "lp0" }
 
@@ -144,7 +144,7 @@ windows = [
 
 # Board and CPU facts the digikit runtime and the core modules use (docs/design/device-data.md). `patchkit gen` writes them into the
 # constants and includes of the modules (`[[gen]]` in a module.toml). The runtime is one image for all devices: it reads these facts at
-# run time from the device object `dkrt_dev` (DkrtDevice in modules/core/runtime/abi.toml). Register offsets inside a peripheral
+# run time from the device object `dkrt_dev` (DkrtDevice in runtime/core/abi.toml). Register offsets inside a peripheral
 # are CPU facts (MCF5441x) and stay in the code, named as such.
 [board]
 # The console UART (UART8): the firmware drains it before its own soft reset (finding 36 section 3). The status register is at +4.
@@ -261,7 +261,7 @@ mark_index = 70
 tail_off = 0x8e
 
 # The firmware's view stack, read by the device tests (finding 71 section 2, finding 03): the UI state that shows which window takes the panel keys. All **[D]** (read from the 1.17 image).
-# `brain_ptr` is the global that the Brain getter tests (the port anchor cf.view.value.brain, checked against devices/ports by tests/regression/host/device-facts.test.ts). The view manager is at brain +
+# `brain_ptr` is the global that the Brain getter tests (the port anchor cf.view.value.brain, checked against ports by tests/regression/host/device-facts.test.ts). The view manager is at brain +
 # `view_manager_off` (the offset of the manager member in Brain, from the getter cf.view.fn.brain.view_manager); its std::list of views has the sentinel node at manager + `list_off` (+0 next, +`list_prev_off`
 # prev; libstdc++ node layout); a node holds the View pointer at `node_view_off` (the shared_ptr stored after the links), and the key dispatcher starts at the last node, the top view.
 # The first u32 of a View is its vtable pointer (see [ui.boot_window]).
@@ -293,7 +293,7 @@ fs_state_ptr = 0x46f4dcb4
 fs_state_check = 3
 fs_checked_ptr = 0x46f4dce4
 
-# What patchkit needs of this device: the container and section limits of a port (written into devices/ports/*.toml by
+# What patchkit needs of this device: the container and section limits of a port (written into ports/*.toml by
 # tools/patchkit/port_resolve.py; docs/findings/01 "NOR flash map") and the DSP L2 range the free-region search runs in.
 [patch]
 # The container (the OS image) is staged in RAM by the OS-upgrade receiver: 0x200000 bytes, copied in 101-byte messages with no size check

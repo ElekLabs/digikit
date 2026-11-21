@@ -123,14 +123,13 @@ function readToml(file: string): Toml {
 }
 const manifest = (moddir: string): Toml => readToml(path.join(moddir, 'module.toml'));
 
-/** Module id -> module directory: `modules/`, `tests/fixtures/modules/`, then the roots of PATCHKIT_MODULES (tools/patchkit/modroots.py). */
+/** Module id -> module directory: the committed roots, then PATCHKIT_MODULES (tools/patchkit/modroots.py). */
 export function moduleDirs(): Map<string, string> {
   const extra = process.env.PATCHKIT_MODULES ?? '';
   const known = dirsCache.get(extra);
   if (known) return known;
   const roots = [
-    path.join(ROOT, 'modules'),
-    path.join(ROOT, 'tests/fixtures/modules'),
+    ...['modules', 'runtime', 'services', 'image-modules', 'tests/fixtures/modules'].map((r) => path.join(ROOT, r)),
     ...extra.split(path.delimiter).filter(Boolean),
   ];
   const found = new Map<string, string>();
@@ -200,7 +199,7 @@ function dspSources(man: Toml, moddir: string, device: string): string[] {
 
 function typeNumber(mid: string, man: Toml, device: string, literal: string | null, n = 0): number {
   if (literal !== null && /^[0-9][0-9a-zA-Z_]*$/.test(String(literal))) return Number(literal);
-  const types = readToml(path.join(ROOT, 'modules/core/adapters/machines/types.toml'))[device];
+  const types = readToml(path.join(ROOT, 'image-modules/points/machines/types.toml'))[device];
   let mach: string | undefined = man.machine?.length ? man.machine[n].id : undefined;
   if (literal !== null) mach = String(literal).split('.')[1];
   const key = `${mid}:${mach}`;

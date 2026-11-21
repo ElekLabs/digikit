@@ -6,7 +6,7 @@ use crate::error::*;
 use dkneeds::keys::name_hash;
 use std::collections::BTreeMap;
 
-/// The name of the undefined symbol with which the asm of a raw hook refers to the tail of `hook` (an exit `tail = true` in `devices/fw/`):
+/// The name of the undefined symbol with which the asm of a raw hook refers to the tail of `hook` (an exit `tail = true` in `ports/fw/`):
 /// `dk_tail_` and the `name_hash` of the hook name in 8 hex digits (an import name has at most 31 characters). `patchkit pack` keeps it as an import
 /// and the runtime resolves it from the port file, so a `.dks` holds no firmware bytes.
 pub fn tail_import(hook: &str) -> String {
@@ -27,7 +27,7 @@ pub fn is_tail_import(import: &str) -> bool {
 /// | import | resolves to | |
 /// | --- | --- | --- |
 /// | `dk_fw_<H(name)>` | the address of the firmware anchor `name` (an offset is the addend of the reference) | |
-/// | `dk_exit_<H(hook)>_<n>` | `n` = 0: the end of the hook's site; `n` from 1: the expression `exits[n-1]` of the hook in `devices/fw` | |
+/// | `dk_exit_<H(hook)>_<n>` | `n` = 0: the end of the hook's site; `n` from 1: the expression `exits[n-1]` of the hook in `ports/fw` | |
 /// | `dk_tail_<H(hook)>` | the generated tail of the hook (its displaced instructions, then a jump behind the site) | |
 /// | `dk_stock_<H(hook)>` | the same code, called with `jsr` from inside the hook; control comes back | |
 /// | `dk_ret_<H(hook)>` | one `rts` (the first word of the port file's image) | |

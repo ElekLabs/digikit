@@ -18,7 +18,7 @@ fn image() -> Option<Vec<u8>> {
 }
 
 fn registry() -> Registry {
-    Registry::from_dir(&root().join("devices/ports")).unwrap()
+    Registry::from_dir(&root().join("ports")).unwrap()
 }
 
 /// A module with no object and the given manifest body.

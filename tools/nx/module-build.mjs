@@ -11,8 +11,12 @@ export const SHARED_SDK_INPUTS = [
   '{workspaceRoot}/sdk/include/**/*',
   '{workspaceRoot}/sdk/dsp/contract/**/*',
   '{workspaceRoot}/sdk/dsp/**/*',
-  '{workspaceRoot}/modules/core/runtime/vectors/**/*',
+  '{workspaceRoot}/runtime/core/vectors/**/*',
 ];
+export const ALL_MANIFESTS = new Set([
+  '{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml',
+  '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
+]);
 // Build/pack producers do not read acceptance tests. Nx's implicit ^default input would
 // otherwise turn a harness-only edit into a changed image output for every consumer.
 // Plugin sources are not inputs: Nx hashes each project's resolved configuration, so a plugin edit reaches only targets whose definition changes.
@@ -24,8 +28,7 @@ export const BUILD_INPUTS = [
   'jsToolchain',
   { dependentTasksOutputFiles: '**/*', transitive: true },
   // gen reads the library manifests and device facts; builders read shared SDK headers and pins.
-  '{workspaceRoot}/modules/**/module.toml',
-  '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
+  ...ALL_MANIFESTS,
   // pack and build-objects run the Rust patchkit binary, which reads devices/*.toml and the toolchain pins;
   // pk_toolchains.py pins the m68k compiler; there is no Python on this path.
   '{workspaceRoot}/devices/*.toml',
@@ -40,10 +43,6 @@ export const BUILD_INPUTS = [
 ];
 
 // These commands receive an explicit library; shared devices, SDK and tool inputs stay conservative.
-export const ALL_MANIFESTS = new Set([
-  '{workspaceRoot}/modules/**/module.toml',
-  '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
-]);
 export const scopedManifestInputs = (inputs, manifests) => [
   ...inputs.filter((input) => !ALL_MANIFESTS.has(input)),
   ...manifests.map((file) => `{workspaceRoot}/${file}`),

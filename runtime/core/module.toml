@@ -25,7 +25,7 @@ optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.
 # The runtime: Rust, built with rustc_codegen_gcc for -mcpu=54418 (finding 26). Its bss holds the module arena
 # (DKRT_ARENA, 512 KiB) and the staging buffer (64 KiB), so patchkit reserves both together with the code and no other
 # static object can overlap them. The Rust object has no externs table: it calls the firmware through the generated crate `dkfw`
-# (modules/core/fw, from devices/fw/), whose symbols are the anchor names resolved at patch time.
+# (ports/bindings, from ports/fw/), whose symbols are the anchor names resolved at patch time.
 [[object]]
 path = "build/runtime.dko.json"
 sources = ["src/rs/Cargo.toml"]

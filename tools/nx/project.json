@@ -8,7 +8,7 @@
       "inputs": [
         "hostTests",
         "{workspaceRoot}/**/project.json",
-        "{workspaceRoot}/modules/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         "{workspaceRoot}/**/Cargo.toml"
       ],

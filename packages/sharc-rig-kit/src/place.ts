@@ -15,22 +15,22 @@ export const DATA_BASE = 0x200a0000; // byte address of the first data symbol (f
 export const DATA_END = 0x20100000;
 
 /** The adapter's sources of a device, assembled as separate objects that see each other's data symbols. */
-const DSP = path.join(ROOT, 'modules/core/adapters/dsp-voice/src/dsp');
+const DSP = path.join(ROOT, 'image-modules/points/dsp-voice/src/dsp');
 const WRAPPER: Record<string, string[]> = {
-  dt2: [path.join(DSP, 'dsp-voice.s'), path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dt2.s')],
+  dt2: [path.join(DSP, 'dsp-voice.s'), path.join(ROOT, 'services/machines/dks/dsp/dispatch-dt2.s')],
   dn2: [
     path.join(DSP, 'dsp-voice-dn2.s'),
     path.join(DSP, 'dsp-voice-dn2-stereo.s'),
-    path.join(ROOT, 'modules/core/services/machines/dks/dsp/dispatch-dn2.s'),
+    path.join(ROOT, 'services/machines/dks/dsp/dispatch-dn2.s'),
   ],
 };
-const FX_DSP = path.join(ROOT, 'modules/core/adapters/fx/src/dsp');
+const FX_DSP = path.join(ROOT, 'image-modules/points/fx/src/dsp');
 const FX_ADAPTER = path.join(FX_DSP, 'fx.s');
 const FX_SEND: Record<string, string> = { dt2: path.join(FX_DSP, 'fxsend.s'), dn2: path.join(FX_DSP, 'fxsend-dn2.s') };
 /** The dispatch code of the fx service for a device (master chain and send route). */
 const FX_DISPATCH: Record<string, string> = {
-  dt2: path.join(ROOT, 'modules/core/services/fx/dks/dsp/fx-dt2.s'),
-  dn2: path.join(ROOT, 'modules/core/services/fx/dks/dsp/fx-dn2.s'),
+  dt2: path.join(ROOT, 'services/fx/dks/dsp/fx-dt2.s'),
+  dn2: path.join(ROOT, 'services/fx/dks/dsp/fx-dn2.s'),
 };
 const FX_FIXED_OBJECTS = 3; // the adapter's stub, the send stub and the dispatch object
 

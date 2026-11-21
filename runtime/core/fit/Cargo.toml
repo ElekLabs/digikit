@@ -10,7 +10,7 @@ path = "src/lib.rs"
 
 [dependencies]
 dkrt-sdk = { path = "../sdk" }
-dkneeds = { path = "../../../../packages/dkneeds" }
+dkneeds = { path = "../../../packages/dkneeds" }
 
 [dev-dependencies]
 serde_json = "1"

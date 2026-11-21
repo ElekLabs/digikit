@@ -30,13 +30,13 @@ import support.dsp_voice_rig as dv
 from tools.patchkit import pk_conform, pk_sharc
 
 ROOT = pk_conform.ROOT
-_DSP = ROOT / "modules/core/adapters/dsp-voice/src/dsp"
+_DSP = ROOT / "image-modules/points/dsp-voice/src/dsp"
 WRAPPER = {  # the adapter's sources of a device, assembled as separate objects that see each other's data symbols
     "dt2": (_DSP / "dsp-voice.s", dv.DISPATCH),
     "dn2": (
         _DSP / "dsp-voice-dn2.s",
         _DSP / "dsp-voice-dn2-stereo.s",
-        ROOT / "modules/core/services/machines/dks/dsp/dispatch-dn2.s",
+        ROOT / "services/machines/dks/dsp/dispatch-dn2.s",
     ),
 }
 CODE_BASE = 0xB90000

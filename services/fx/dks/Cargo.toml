@@ -9,8 +9,8 @@ description = "The fx service as a service file (.dks): the crate dkrt-svc-fx be
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-dkrt-sdk = { path = "../../../runtime/sdk" }
-dkrt-svc-rt = { path = "../../../runtime/svc-rt" }
+dkrt-sdk = { path = "../../../runtime/core/sdk" }
+dkrt-svc-rt = { path = "../../../runtime/core/svc-rt" }
 dkrt-svc-fx = { path = ".." }
 
 # This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).

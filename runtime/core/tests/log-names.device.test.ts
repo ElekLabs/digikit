@@ -29,7 +29,7 @@ runtimeTests('the workbench names addresses of the runtime and of a module throu
     { id: DEBUG_MODULE, artifact: moduleArtifact(device, DEBUG_MODULE) },
   ], { device });
 
-  const wasm = path.join(path.dirname(new URL(import.meta.url).pathname), '../../../../apps/web/public/dkprof.wasm');
+  const wasm = path.join(path.dirname(new URL(import.meta.url).pathname), '../../../apps/web/public/dkprof.wasm');
   expect(fs.existsSync(wasm), `${wasm}: run nx run dkprof:wasm`).toBe(true);
   const prof = await DkProf.create(new Uint8Array(fs.readFileSync(wasm)));
   // the symbols the load table reads, as the ship map names them, and DKRT_STATE for the module record below

@@ -14,7 +14,7 @@ import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
  */
 
 const SYMBOLS = ['DK_ABOUT', 'DK_ABOUT_N', 'DK_PANEL', 'DK_PANEL_N', 'DK_LOAD_N'];
-const BOOT_NEEDS_OFFSET = 80; // DkrtBootInfo.needs (modules/core/runtime/abi.toml)
+const BOOT_NEEDS_OFFSET = 80; // DkrtBootInfo.needs (runtime/core/abi.toml)
 const NEEDS_LEN = 12;
 
 cardRigs('a module that needs a missing module', { roots: [...RT, 'core/digikit-menu'], symbols: SYMBOLS }, (rig) => {

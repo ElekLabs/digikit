@@ -21,7 +21,7 @@ needs_device = ["input.keys"]
 "dn2-1.12" = "experimental"
 "st-1.42" = "experimental"
 
-# One C source for both devices: every firmware call is a generated anchor (modules/core/fw/include/dk_fw_*.h), so the object has no
+# One C source for both devices: every firmware call is a generated anchor (ports/bindings/include/dk_fw_*.h), so the object has no
 # externs table for C. The assembly shim maps its own symbol below. The dk_ui_* functions are plain global symbols that other
 # modules which require core/ui import by name. The module's one firmware hook is the end of the SETTINGS item list rebuild: it calls the app's optional dk_app_settings_rows (dk_ui_core.h).
 [[object]]

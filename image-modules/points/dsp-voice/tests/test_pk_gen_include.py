@@ -7,7 +7,7 @@ import re
 
 from support.paths import REPO_ROOT
 
-MOD = REPO_ROOT / "modules" / "core" / "adapters" / "dsp-voice"
+MOD = REPO_ROOT / "image-modules" / "points" / "dsp-voice"
 
 
 def test_generated_include_has_no_hex_literals_after_a_plus():

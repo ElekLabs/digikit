@@ -21,7 +21,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 #
 # The image holds data only: the table `fxpages_info` (version 3: the firmware's addresses, the device numbers, the value indices and where each hook continues in the
 # stock code) and 24 parameter rows (`params.fp0` ..), 8 for each effect slot (7 knobs and the MIX of the page) and 2 for the send page. The hooks are in the service
-# file `fx.dks` (modules/core/services/fx/dks): it takes the nine firmware sites of the effect pages when it is loaded and reads this table through the core
+# file `fx.dks` (services/fx/dks): it takes the nine firmware sites of the effect pages when it is loaded and reads this table through the core
 # (`dkc_info`). Without the file the FX view is the stock one and kits are stock bytes; the runtime refuses an effect module that needs the service.
 # - The firmware's page descriptor table (33 rows of 0x2c bytes) lives in RAM, built at start; it has no free row and a bound of 33 in its accessor. The page numbers
 #   `[fx] page_first` and up (one for each effect slot, `[limits] fx_slots`) answer with a row of the service's own table; every other number gets the stock code.

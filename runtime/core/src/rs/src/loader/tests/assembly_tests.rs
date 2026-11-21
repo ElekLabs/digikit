@@ -2,7 +2,7 @@
 //!
 //! Nothing here is a fake of an artifact. The files are the ones the build leaves in `dist/`: the packed fixtures (`dist/modules/<device>/*.dkm`), the service files
 //! (`core/services/{fx,machines,lfo}`, `test/svc-test`) as the card holds them (the packed file of `dist/modules/<device>/`, and the port file of `dist/ports/` beside them), the committed
-//! runtime object (`modules/core/runtime/build/runtime.dko.json`, the immediate of its ABI check) and the info table of the patched image
+//! runtime object (`runtime/core/build/runtime.dko.json`, the immediate of its ABI check) and the info table of the patched image
 //! (`dist/bytes/images/<device>/set-<set>.info`, written by `patchkit:device-images` from the plan of `patchkit apply`). They go through the code of the boot:
 //! the search for providers on the card, the plan (needs, owners of kinds, capacity limits from the `cap_<kind>` entries), the role checks of a provider file (ABI word, stock
 //! bytes of every hook site), the install of its hooks and slots over `FakePlatform`, and the load of a module without a DSP section.
@@ -26,7 +26,7 @@ use std::string::String;
 use std::vec::Vec;
 
 fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
 
 #[derive(Clone, Copy)]
@@ -84,7 +84,7 @@ fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
         .args(["--root", ".", "port", "stock", "--firmware"])
         .arg(repo().join(dev.firmware))
         .arg("--port")
-        .arg(repo().join(std::format!("devices/ports/{}.toml", dev.port())))
+        .arg(repo().join(std::format!("ports/{}.toml", dev.port())))
         .output()
         .unwrap_or_else(|e| panic!("patchkit port stock: {e}; run `pnpm nx:pilot run patchkit:cli`"));
     assert!(out.status.success(), "patchkit port stock: {}", String::from_utf8_lossy(&out.stderr));
@@ -129,7 +129,7 @@ fn object_abi(json: &str) -> &str {
 /// The committed runtime object (its sections, joined): `cmpi.l #SVC_ABI,d0` of `abi_ok` is `0c80` and the word. A host build of the runtime has another `SVC_ABI`
 /// (64-bit sizes), so the runtime of the device is the object.
 fn runtime_object() -> String {
-    let json = read(&repo().join("modules/core/runtime/build/runtime.dko.json"), "patchkit build modules/core/runtime");
+    let json = read(&repo().join("runtime/core/build/runtime.dko.json"), "patchkit build runtime/core");
     hex_sections(std::str::from_utf8(&json).unwrap()).join("|")
 }
 
@@ -168,7 +168,7 @@ fn set_modules(dev: Dev, set: &str) -> Vec<String> {
     let mut todo: Vec<String> = strings(roots);
     while let Some(id) = todo.pop() {
         if !all.contains(&id) {
-            todo.extend(requires.get(&id).unwrap_or_else(|| panic!("{}: set {set} names {id}, which no module.toml under modules/ declares", dev.name)).clone());
+            todo.extend(requires.get(&id).unwrap_or_else(|| panic!("{}: set {set} names {id}, which no shipped module.toml declares", dev.name)).clone());
             all.push(id);
         }
     }
@@ -179,7 +179,7 @@ fn strings(v: &toml::Value) -> Vec<String> {
     v.as_array().map(|a| a.iter().map(|x| x.as_str().unwrap().to_string()).collect()).unwrap_or_default()
 }
 
-/// The `requires` of every module under `modules/`, by id (`[module] id` and `requires` of each `module.toml`).
+/// The `requires` of every shipped module, by id (`[module] id` and `requires` of each `module.toml`).
 fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
     fn walk(dir: &Path, out: &mut std::collections::BTreeMap<String, Vec<String>>) {
         for e in std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()) {
@@ -195,7 +195,10 @@ fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
         }
     }
     let mut out = std::collections::BTreeMap::new();
-    walk(&repo().join("modules"), &mut out);
+    let repo = repo();
+    for root in ["modules", "runtime", "services", "image-modules"] {
+        walk(&repo.join(root), &mut out);
+    }
     out
 }
 
@@ -609,7 +612,7 @@ fn dsp_info_of(dev: Dev, l: &Boot, plan: &Plan) -> Option<Vec<u32>> {
         }
     }
     let device = device?;
-    let src = std::fs::read_to_string(repo().join(std::format!("modules/core/adapters/dyndsp/src/cf/dyndsp-{}.s", dev.name))).unwrap();
+    let src = std::fs::read_to_string(repo().join(std::format!("runtime/platform/dyndsp/src/cf/dyndsp-{}.s", dev.name))).unwrap();
     let names: Vec<&str> = src.lines().filter_map(|t| t.trim().strip_prefix("DSP_IMPORT ")).map(str::trim).collect();
     let mut t = vec![0u32; dkrt_abi::dsp::I_IMPORTS];
     t[dkrt_abi::dsp::I_MAGIC] = dkrt_abi::dsp::INFO_MAGIC;
@@ -965,7 +968,7 @@ fn the_project_service_binds_the_firmware_slot_byte_from_the_port_file() {
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let dev = *dev;
         // the address the committed port data of the firmware holds for the name
-        let toml = std::fs::read_to_string(repo().join(std::format!("devices/ports/{}.toml", dev.port()))).unwrap();
+        let toml = std::fs::read_to_string(repo().join(std::format!("ports/{}.toml", dev.port()))).unwrap();
         let block = toml.split("name = \"cf.project.value.slot_byte\"").nth(1).expect("the port data has the slot byte");
         let want = block.lines().find_map(|l| l.strip_prefix("addr = 0x")).expect("an address");
         let want = u32::from_str_radix(want.trim(), 16).unwrap();
@@ -1240,7 +1243,7 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
         let keys = Keys::parse(&t).unwrap();
         let kinds: Vec<u32> = (0..keys.count(tag::KINDS)).map(|i| keys.words(tag::KINDS, i).unwrap().0).collect();
         assert_eq!(kinds, [dkrt_sdk::records::KIND_SHORTCUT], "{}: the kinds shortcuts.dks declares", dev.name);
-        // the one hook it takes: the entry of the key walker (devices/fw/input.toml), listed by the port file of the device and present on it
+        // the one hook it takes: the entry of the key walker (ports/fw/input.toml), listed by the port file of the device and present on it
         let hooks: Vec<u32> = (0..keys.count(tag::HOOKS)).map(|i| keys.words(tag::HOOKS, i).unwrap().0).collect();
         assert_eq!(hooks, [name_hash("cf.input.hook.key_event")], "{}: the hooks shortcuts.dks declares", dev.name);
         let image = Image::read(*dev, "emulator");
@@ -1477,11 +1480,11 @@ fn every_hook_and_firmware_import_of_a_service_file_is_listed_by_the_port_file()
 fn the_service_objects_and_files_carry_the_abi_word_of_the_runtime_object() {
     let runtime = runtime_object();
     for s in SERVICES.iter().filter(|s| s.nx.starts_with("core/") && s.leaf != "samples") {
-        let json = read(&repo().join(format!("modules/core/services/{}/dks/build/{}.dko.json", s.leaf, s.leaf)), "patchkit build modules/core");
+        let json = read(&repo().join(format!("services/{}/dks/build/{}.dko.json", s.leaf, s.leaf)), "patchkit build --tree services");
         let abi = object_abi(std::str::from_utf8(&json).unwrap()).to_string();
         assert!(
             runtime.contains(&std::format!("0c80{abi}")),
-            "{}.dko.json carries ABI word {abi}, the runtime object another: patchkit build modules/core/services/{}/dks",
+            "{}.dko.json carries ABI word {abi}, the runtime object another: patchkit build services/{}/dks",
             s.leaf,
             s.leaf
         );

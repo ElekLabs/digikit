@@ -86,14 +86,14 @@ afterEach(async () => {
 
 function imageConsumer(): string {
   return Object.entries(workspace.nodes).find(
-    ([, node]) => node.data.root.startsWith('modules/machines/') && node.data.targets['test-conformance'],
+    ([, node]) => node.data.root.startsWith('modules/machine/') && node.data.targets['test-conformance'],
   )![0];
 }
 
 function otherImageConsumer(): string {
   return Object.entries(workspace.nodes).find(
     ([id, node]) =>
-      id !== imageConsumer() && node.data.root.startsWith('modules/machines/') && node.data.targets['test-conformance'],
+      id !== imageConsumer() && node.data.root.startsWith('modules/machine/') && node.data.targets['test-conformance'],
   )![0];
 }
 
@@ -183,7 +183,7 @@ it('forms explicit manifest libraries from selected modules and transitive requi
 
 describe('workspace selection', () => {
   it('retains core manifest selection for producers and their image consumers', () => {
-    const graph = selected('modules/core/runtime/module.toml', 'build-objects,test-conformance');
+    const graph = selected('runtime/core/module.toml', 'build-objects,test-conformance');
     expect(graph.tasks['core/runtime:build-objects']).toBeDefined();
     expect(graph.tasks[`${imageConsumer()}:test-conformance`]).toBeDefined();
     expect(graph.tasks[`${otherImageConsumer()}:test-conformance`]).toBeDefined();
@@ -203,7 +203,7 @@ describe('workspace selection', () => {
   }, 660_000);
 
   it('selects image consumers when ui.c changes', () => {
-    const graph = selected('modules/core/adapters/ui/src/ui.c', 'test-device,test-conformance');
+    const graph = selected('runtime/platform/ui/src/ui.c', 'test-device,test-conformance');
     expect(graph.tasks['core/runtime-tests:test-device']).toBeDefined();
     expect(graph.tasks[`${imageConsumer()}:test-conformance`]).toBeDefined();
   }, 660_000);
@@ -218,7 +218,7 @@ describe('workspace selection', () => {
   it.each(['contract.rs', 'lib.rs'])(
     'selects Rust tests of Cargo consumers when shared %s changes',
     (file) => {
-      const support = 'modules/core/runtime/test-support';
+      const support = 'runtime/core/test-support';
       const cargo = (dir: string) =>
         parse(readFileSync(join(root, dir, 'Cargo.toml'), 'utf8')) as {
           package?: { name: string };
@@ -232,14 +232,14 @@ describe('workspace selection', () => {
       const workspaceConsumers = cargo('.')
         .workspace!.members.filter(usesSupport)
         .map((dir) => cargo(dir).package!.name);
-      const standaloneConsumers = globSync('modules/core/services/*/dks/Cargo.toml', { cwd: root })
+      const standaloneConsumers = globSync('services/*/dks/Cargo.toml', { cwd: root })
         .map(dirname)
         .filter(usesSupport)
         .map((dir) => {
           const { module } = parse(readFileSync(join(root, dir, 'module.toml'), 'utf8')) as { module: { id: string } };
           return module.id;
         });
-      const runtime = 'modules/core/runtime';
+      const runtime = 'runtime/core';
       expect(workspaceConsumers).toContain('dkrt-svc-shortcuts');
       expect(standaloneConsumers).toContain('core/services/machines');
       expect(usesSupport(`${runtime}/src/rs`)).toBe(true);
