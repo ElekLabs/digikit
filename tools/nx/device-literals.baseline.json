@@ -678,7 +678,7 @@
   "tests/emulator/test_gen_fingerprint.py": 20,
   "tests/emulator/test_gen_index.py": 23,
   "tests/emulator/test_live_sharc.py": 4,
-  "tests/emulator/test_native_emu_launcher.py": 50,
+  "tests/emulator/test_native_emu_launcher.py": 63,
   "tests/emulator/test_native_pgo.py": 98,
   "tests/emulator/test_patch_base.py": 15,
   "tests/firmware/test_aplibpack.py": 2,

@@ -735,7 +735,8 @@ def core_library_env(
     coupled audio. When one device's library cannot be built the launch goes on with the other and one line names the
     missing one and the build command; the launch stops when no library can be provided. An explicit
     `DIGI_SHARC_CORE_LIB_<DEV>` wins. With a PGO PLAN (a fresh profile) the library of each device the profile covers is the
-    one built with that profile. Desktop also resolves existing training for any remaining device."""
+    one built with that profile. Desktop tries each device's fresh combined profile, then its fresh individual
+    profile, then its plain library."""
     if not ("--coupled" in args or "--auto-coupled" in args):
         return {}
     from tools.devtools import core_store
@@ -768,6 +769,7 @@ def core_library_env(
                 second.get(device) or digi_env.ready_inputs(device=device)["DSP image"]
             )
             cores[device] = other_core(device, image)
+    desktop_profiles: dict[str, list[pathlib.Path]] = {}
     if desktop:
         # Key each profile against the exact library the firmware loader will open.
         profile_env = dict(os.environ)
@@ -775,31 +777,35 @@ def core_library_env(
             if gen is not None:
                 profile_env[f"SHARC_GEN_DIR_{device.upper()}"] = str(gen)
         profile_env["SHARC_GEN_DIR"] = str(cores[digi_env.SLOT_DEVICES[0]])
-        profiles = native_pgo.fresh_profiles(devices, profile_env)
+        desktop_profiles = native_pgo.fresh_profile_candidates(devices, profile_env)
     for device, gen in cores.items():
-        try:
-            library = core_store.library_env({device: gen}, profiles=profiles)
+        candidates: list[pathlib.Path | None] = (
+            [*desktop_profiles.get(device, []), None]
+            if desktop
+            else [profiles.get(device)]
+        )
+        for i, profile in enumerate(candidates):
+            try:
+                library = core_store.library_env(
+                    {device: gen}, profiles={device: profile} if profile else {}
+                )
+            except core_store.CoreStoreError as exc:
+                if i + 1 < len(candidates):
+                    fallback = "the device profile" if candidates[i + 1] else "plain"
+                    print(
+                        f"{device.upper()} profile-guided DSP library failed: {exc}; trying {fallback}",
+                        file=sys.stderr,
+                    )
+                else:
+                    states[device] = "unavailable"
+                    missing[device] = str(exc)
+                continue
             env.update(library)
             if not library:
                 states[device] = "external"
-            elif device in profiles:
-                states[device] = "ok"
             else:
-                states[device] = "plain"
-        except core_store.CoreStoreError as exc:
-            if device in profiles and desktop:
-                print(
-                    f"{device.upper()} profile-guided DSP library failed: {exc}; trying plain",
-                    file=sys.stderr,
-                )
-                try:
-                    env.update(core_store.library_env({device: gen}))
-                    states[device] = "plain"
-                    continue
-                except core_store.CoreStoreError as fallback:
-                    exc = fallback
-            states[device] = "unavailable"
-            missing[device] = str(exc)
+                states[device] = "ok" if profile else "plain"
+            break
     if len(missing) == len(devices):
         raise SystemExit(f"core library: {'; '.join(missing.values())}")
     for device, reason in missing.items():

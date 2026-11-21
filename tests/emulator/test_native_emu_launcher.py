@@ -242,12 +242,14 @@ def test_empty_workbench_uses_individually_trained_libraries(monkeypatch, tmp_pa
     override = tmp_path / "alternate-dn2"
     monkeypatch.setenv("SHARC_GEN_DIR_DN2", str(override))
 
-    def fresh_profiles(devices, environ):
+    def fresh_profile_candidates(devices, environ):
         assert native_pgo.device_generated("dn2", environ) == override
         assert native_pgo.device_generated("dt2", environ) == cores["dt2"]
-        return {"dn2": profile}
+        return {"dn2": [profile]}
 
-    monkeypatch.setattr(native_pgo, "fresh_profiles", fresh_profiles)
+    monkeypatch.setattr(
+        native_pgo, "fresh_profile_candidates", fresh_profile_candidates
+    )
     monkeypatch.setattr(native_pgo, "supported_host", lambda: True)
     monkeypatch.delenv("DIGI_EMU_PGO", raising=False)
 
@@ -262,6 +264,61 @@ def test_empty_workbench_uses_individually_trained_libraries(monkeypatch, tmp_pa
     assert env["DIGI_SHARC_CORE_LIB_DN2"] == str(profile)
     assert env["DIGI_SHARC_CORE_LIB_DT2"] == "plain"
     assert json.loads(env["DIGI_DSP_PGO"]) == {"dn2": "ok", "dt2": "plain"}
+
+
+@pytest.mark.parametrize("single", ["usable", "fails", "missing"])
+def test_desktop_retries_a_failed_combined_profile_for_only_that_device(
+    monkeypatch, tmp_path, single
+):
+    from tools.devtools import core_store
+    from tools.emulator import native_pgo
+
+    scope, _calls, inputs, _cores = _dual_launch(monkeypatch, tmp_path, "dn2")
+    combined = tmp_path / "both.profdata"
+    individual = tmp_path / "dn2.profdata"
+    monkeypatch.delenv("DIGI_EMU_PGO")
+    monkeypatch.setattr(native_pgo, "supported_host", lambda: True)
+
+    def launch_plan(environ, target):
+        if target == "both":
+            profile = combined
+        elif target == "dn2" and single != "missing":
+            profile = individual
+        else:
+            return None, ""
+        return native_pgo.LaunchPlan([], [], {}, str(profile), target), ""
+
+    monkeypatch.setattr(native_pgo, "launch_plan", launch_plan)
+    attempts = {"dn2": [], "dt2": []}
+
+    def library(devices, *, profiles=None):
+        (device,) = devices
+        profile = (profiles or {}).get(device)
+        attempts[device].append(profile)
+        if device == "dn2" and (
+            profile == combined or (profile == individual and single == "fails")
+        ):
+            raise core_store.CoreStoreError("profile build failed")
+        return {f"DIGI_SHARC_CORE_LIB_{device.upper()}": str(profile or "plain")}
+
+    monkeypatch.setattr(core_store, "library_env", library)
+    args = [str(inputs["dn2"]["firmware"]), "--auto-coupled"]
+    env = scope["core_library_env"](args, desktop=True)
+    expected = {
+        "usable": [combined, individual],
+        "fails": [combined, individual, None],
+        "missing": [combined, None],
+    }[single]
+    assert attempts["dn2"] == expected
+    assert attempts["dt2"] == [combined]
+    assert env["DIGI_SHARC_CORE_LIB_DN2"] == (
+        str(individual) if single == "usable" else "plain"
+    )
+    assert env["DIGI_SHARC_CORE_LIB_DT2"] == str(combined)
+    assert json.loads(env["DIGI_DSP_PGO"]) == {
+        "dn2": "ok" if single == "usable" else "plain",
+        "dt2": "ok",
+    }
 
 
 def test_a_missing_library_of_one_device_does_not_stop_the_launch(

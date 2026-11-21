@@ -856,8 +856,19 @@ def fresh_profiles(
 ) -> dict[str, pathlib.Path]:
     """device -> its fresh profile (status ok or partial): the `both` profile when it is fresh and covers the device, else the
     device's own. Devices without one are left out (they get the plain library)."""
+    return {
+        device: profiles[0]
+        for device, profiles in fresh_profile_candidates(devices, environ).items()
+    }
+
+
+def fresh_profile_candidates(
+    devices: tuple[str, ...] | list[str],
+    environ: dict[str, str] | os._Environ[str] | None = None,
+) -> dict[str, list[pathlib.Path]]:
+    """Fresh profiles for each device's core library, combined first, then the device's own."""
     environ = os.environ if environ is None else environ
-    found: dict[str, pathlib.Path] = {}
+    found: dict[str, list[pathlib.Path]] = {}
     for target in (BOTH, *devices):
         try:
             plan, _ = launch_plan(environ, target)
@@ -865,7 +876,9 @@ def fresh_profiles(
             continue
         for device, path in library_profiles(plan, environ).items():
             if device in devices:
-                found.setdefault(device, path)
+                candidates = found.setdefault(device, [])
+                if path not in candidates:
+                    candidates.append(path)
     return found
 
 
