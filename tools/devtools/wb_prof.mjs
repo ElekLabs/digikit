@@ -42,11 +42,12 @@ function readJson(file) {
 }
 
 /** A fit input file: one dk.profile/1, or the captures of a dk.calcaptures/1 file (the pane's "Save run"). */
-function readCaptures(file) {
+function readCaptures(file, side) {
   try {
-    return expandCaptures(readJson(file));
+    return expandCaptures(readJson(file), side, file);
   } catch (e) {
-    console.error(`wb: ${file}: ${e.message}`);
+    // the message names the file already (expandCaptures)
+    console.error(`wb: ${e.message}`);
     process.exit(1);
   }
 }
@@ -159,8 +160,8 @@ function calibrate({ prof, rest, opts, format, fail }) {
         'profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]',
       );
     const req = {
-      device: dev.flatMap(readCaptures),
-      model: mdl.flatMap(readCaptures),
+      device: dev.flatMap((f) => readCaptures(f, 'dev')),
+      model: mdl.flatMap((f) => readCaptures(f, 'emu')),
       sources: [
         ...dev.map((f) => ({ role: 'device', file: path.basename(f), sha256: sha256(f) })),
         ...mdl.map((f) => ({ role: 'model', file: path.basename(f), sha256: sha256(f) })),

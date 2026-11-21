@@ -33,10 +33,10 @@ From docs/handovers/HANDOVER-2026-11-21-calibration-filters.md:
 
 Investigation results:
 
-1. Emulator capture windows were wall time. They now wait in emulated time.
+1. Fix, not a measurement: emulator capture windows were wall time. They now wait in emulated time.
 2. The emulator stock engine does the same instructions in the light and heavy projects (about 337k per block), while the device figure rises +68 %. Stock load comes from the device, not from the emulator.
 3. Emulator DTIM0 counts one tick per ColdFire instruction (`packages/emulator/machine/src/board.rs`), so ColdFire factors are per owner and informational.
-4. The module DSP factor is the key number: module code is exact on the emulator.
+4. [O] Inference: module DSP instruction counts on the emulator are exact; the module factor is the key number. The 1.23 analog factor is mean device cycles divided by emulator instructions for one real module. It is separate from the kernel factors.
 
 ## Open [O]
 
