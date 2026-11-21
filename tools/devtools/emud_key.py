@@ -438,6 +438,8 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
 
     environ = os.environ if environ is None else environ
     files = repo_files()
+    # The developer guide is also excluded from the Nx daemon and gate inputs.
+    files.pop("packages/emulator/README.md", None)
     gen = pk_emud_pgo.generated_core(device)  # selects the profile only
     flags = {
         "device": device,

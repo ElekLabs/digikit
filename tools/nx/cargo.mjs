@@ -179,6 +179,8 @@ const GATE = {
         '{workspaceRoot}/rust-toolchain*',
         '{workspaceRoot}/.cargo/**/*',
         '{workspaceRoot}/packages/emulator/**/*',
+        // The emulator guide is developer documentation and is never read by the daemon build.
+        '!{workspaceRoot}/packages/emulator/README.md',
         '{workspaceRoot}/packages/dkaddrmap/**/*',
         '{workspaceRoot}/packages/dksharc/**/*',
         '{workspaceRoot}/packages/dkneeds/**/*',

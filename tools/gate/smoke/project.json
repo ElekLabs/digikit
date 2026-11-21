@@ -39,6 +39,7 @@
         "{workspaceRoot}/Cargo.toml",
         "{workspaceRoot}/Cargo.lock",
         "{workspaceRoot}/packages/emulator/**/*",
+        "!{workspaceRoot}/packages/emulator/README.md",
         "{workspaceRoot}/packages/dkneeds/**/*",
         "{workspaceRoot}/packages/dksample/**/*",
         "{workspaceRoot}/packages/dkupload/**/*",
