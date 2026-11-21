@@ -116,3 +116,50 @@ regs = { in = ["astat", "m4", "r2", "i3", "i5", "i6-i7", "i9", "i15"], clobbers 
 mark = "D"
 users = ["core/services/machines", "core/dsp-voice"]
 doc = "Replaces the range check: a type in the service's range runs its process stub on the block and returns to the stage after the dispatch; any other runs the displaced jump."
+
+# ---- continuation points of the three stubs (core/dsp-voice, plan E7b): the instruction behind a displaced one, and the stock skip target of a dispatch ----
+
+[[site]]
+name = "dsp.filter.site.convert.next"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "d2c02a587786f9ee328897985095c271ff1c5b65f289224e435968ea4b5d3f00", offset = 0x1fc, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "4cc8a46bca990a7bd883d1784307a9cd72aa828a1ae846977e337fbc5c54c010", offset = 0x534, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "The instruction behind the converter load (+3 parcels from dsp.filter.site.convert): the stub runs the displaced instruction itself and jumps here."
+
+[[site]]
+name = "dsp.filter.site.coef_lookup.next"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x2b9, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x2b3, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "The instruction behind the coefficient stage address load (DT2 0x1c66e3, DN2 0x1c91a4): the stock path continues here with I12 loaded."
+
+[[site]]
+name = "dsp.filter.site.coef_lookup.skip"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x5c3, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x38d, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "The target of the coefficient dispatch bound (DT2 0x1c69ed, DN2 0x1c927e): the stage that does nothing. A module filter ends its coefficient call here."
+
+[[site]]
+name = "dsp.filter.site.proc_range.next"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x7ec, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x696, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "The instruction behind the process range check (DT2 0x1c6c16, DN2 0x1c9587): the stock path loads the stage address here."
+
+[[site]]
+name = "dsp.filter.site.proc_range.skip"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0xa8d, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x9c8, len = 6 }
+mark = "D"
+users = ["core/dsp-voice"]
+doc = "The target of the process range check (DT2 0x1c6eb7, DN2 0x1c98b9): the end of the stage, then the voice loop. A module filter ends its process call here."

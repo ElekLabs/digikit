@@ -3520,6 +3520,28 @@ mark = "D"
 rule = "fw/dsp/filter:sharc_func"
 
 [[anchor]]
+name = "dsp.filter.site.coef_lookup.next"
+cpu = "sharc"
+kind = "code"
+addr = 0x28392348
+pm = 0x1c91a4
+len = 6
+sha256 = "81ad1c05606b46dddeb13e7a2e7a2cee6b0ca11c53eecd6ee3a3e748081eec9c"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
+name = "dsp.filter.site.coef_lookup.skip"
+cpu = "sharc"
+kind = "code"
+addr = 0x283924fc
+pm = 0x1c927e
+len = 6
+sha256 = "1a8258142bb1b5e20a897d804393696fae13808b8c9240610c2ccaf91ee8eeea"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
 name = "dsp.filter.site.convert"
 cpu = "sharc"
 kind = "code"
@@ -3531,6 +3553,17 @@ mark = "D"
 rule = "fw/dsp/filter:sharc_func"
 
 [[anchor]]
+name = "dsp.filter.site.convert.next"
+cpu = "sharc"
+kind = "code"
+addr = 0x2838588c
+pm = 0x1c2c46
+len = 6
+sha256 = "9666c65a7a052b676c66100c8a592952b445b6417758b94a7ffe2d99659ca7ea"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
 name = "dsp.filter.site.proc_range"
 cpu = "sharc"
 kind = "code"
@@ -3538,6 +3571,28 @@ addr = 0x28392b08
 pm = 0x1c9584
 len = 6
 sha256 = "ab763f12c6404e33b5ea916bec81c08b822764e232cc8aad0da5928c317850bf"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
+name = "dsp.filter.site.proc_range.next"
+cpu = "sharc"
+kind = "code"
+addr = 0x28392b0e
+pm = 0x1c9587
+len = 6
+sha256 = "6b6e41b5696b4a2fe1ec7386d9133d7e263dcae2f6ac36786ec639bc572e2e00"
+mark = "D"
+rule = "fw/dsp/filter:sharc_func"
+
+[[anchor]]
+name = "dsp.filter.site.proc_range.skip"
+cpu = "sharc"
+kind = "code"
+addr = 0x28393172
+pm = 0x1c98b9
+len = 6
+sha256 = "19cde4940129f53796aac6cba1f6823317c58bd28126f9a0dde28f9d19c1c373"
 mark = "D"
 rule = "fw/dsp/filter:sharc_func"
 

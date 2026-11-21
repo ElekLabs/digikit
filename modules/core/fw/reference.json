@@ -20127,6 +20127,102 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x28392348",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28392348",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838cdc6",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The instruction behind the coefficient stage address load (DT2 0x1c66e3, DN2 0x1c91a4): the stock path continues here with I12 loaded.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.coef_lookup.next",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 691
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 697
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x283924fc",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x283924fc",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838d3da",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The target of the coefficient dispatch bound (DT2 0x1c69ed, DN2 0x1c927e): the stage that does nothing. A module filter ends its coefficient call here.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.coef_lookup.skip",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 909
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1475
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x28385886",
             "len": 6,
             "pm": true
@@ -20176,6 +20272,54 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x2838588c",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x2838588c",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x28384dca",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The instruction behind the converter load (+3 parcels from dsp.filter.site.convert): the stub runs the displaced instruction itself and jumps here.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.convert.next",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1332
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 508
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x28392b08",
             "len": 6,
             "pm": true
@@ -20217,6 +20361,102 @@
       "subsystem": "filter",
       "users": [
         "core/services/machines",
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28392b0e",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28392b0e",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838d82c",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The instruction behind the process range check (DT2 0x1c6c16, DN2 0x1c9587): the stock path loads the stage address here.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.proc_range.next",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 1686
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2028
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "core/dsp-voice"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x28393172",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x28393172",
+            "len": 6,
+            "pm": true
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x2838dd6e",
+            "len": 6,
+            "pm": true
+          }
+        ]
+      },
+      "cpu": "sharc",
+      "doc": "The target of the process range check (DT2 0x1c6eb7, DN2 0x1c98b9): the end of the stage, then the voice loop. A module filter ends its process call here.",
+      "file": "devices/fw/dsp/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "dsp.filter.site.proc_range.skip",
+      "rule": {
+        "dn2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2504
+        },
+        "dt2": {
+          "kind": "sharc_func",
+          "len": 6,
+          "offset": 2701
+        }
+      },
+      "subsystem": "filter",
+      "users": [
         "core/dsp-voice"
       ],
       "was": []
@@ -25597,7 +25837,7 @@
       "name": "cache"
     },
     {
-      "count": 11,
+      "count": 16,
       "cpu": "sharc",
       "file": "devices/fw/dsp/filter.toml",
       "meaning": "the filter type in the DSP: converter, coefficient and process dispatch",
