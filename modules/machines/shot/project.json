@@ -19,8 +19,7 @@
         "tags": ["C:loading", "S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
-        "dksampleWasm": true,
-        "sources": ["packages/dk-session/src/dkupload-core.ts", "packages/dk-session/src/gen_proto.ts"]
+        "dksampleWasm": true
       },
       {
         "files": ["tests/shot-dn2-pool.device.test.ts"],

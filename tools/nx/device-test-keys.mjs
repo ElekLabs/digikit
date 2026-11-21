@@ -175,6 +175,32 @@ export const serviceLeaves = (byId) =>
 export const serviceIds = (byId) =>
   new Set([...byId].filter(([, { manifest }]) => manifest.role === 'service').map(([id]) => id));
 
+// The code a device test drives the device with. Its own host tests cover it: merge and narrow keys leave it out;
+// full keys (test-device-all, conformance, test:full) keep it. Exception: DRIVER_SUBJECT_FILES.
+export const DRIVER_ROOTS = ['packages/dk-session/', 'packages/test-support/', 'packages/control-client/'];
+// Files under the driver roots that stay in every key (merge, narrow, full): the protocol and log layout, the stock
+// MidiRpc protocol, the emulator launch and its settings, the panel key codes. A change here changes what a device test sends or reads.
+export const DRIVER_SUBJECT_FILES = [
+  'packages/dk-session/src/gen_proto.ts',
+  'packages/dk-session/src/gen_bulk.ts',
+  'packages/dk-session/src/runtime-log.ts',
+  'packages/dk-session/src/log-names.ts',
+  'packages/dk-session/src/runtime-events.ts',
+  'packages/dk-session/src/rpcdata.ts',
+  'packages/dk-session/src/rpcfiles.ts',
+  'packages/test-support/src/session.ts',
+  'packages/test-support/src/emulator-config.ts',
+  'packages/test-support/src/keys.ts',
+  'packages/test-support/src/input.ts',
+];
+// `imports` in the form of importInputs (`{workspaceRoot}/<path>`) without the files of DRIVER_ROOTS, except DRIVER_SUBJECT_FILES.
+export const withoutDriver = (imports) =>
+  imports.filter(
+    (p) =>
+      DRIVER_SUBJECT_FILES.some((f) => p === `{workspaceRoot}/${f}`) ||
+      !DRIVER_ROOTS.some((root) => p.startsWith(`{workspaceRoot}/${root}`)),
+  );
+
 // The cache inputs of one device test target, and whether its key follows patchkit (`patchkitLive`).
 // `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
 // `uploadable`); `subjects` are the projects a test-only project tests; `services` is the set of service leaves
@@ -213,6 +239,9 @@ export const deviceInputs = (
   const patchkitCompiles = recs.some((rec) => rec.patchModules?.length);
   const patchkitLive = imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
   const patchkitWasm = imports.some((file) => PATCHKIT_WASM_USERS.includes(file));
+  // the files the records name in `sources`; driver files named there follow the same rule as the imports
+  const sources = [...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`)))];
+  const driverless = opts.merge || opts.narrow;
   const inputs = [
     ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
     // a test that reads the precomputed `needs` of committed packs keys on that file's content
@@ -268,9 +297,9 @@ export const deviceInputs = (
     // the module itself (its sources, without tests/ and docs). Full set: the sources that become objects reach the
     // run through the pack outputs and the image hashes.
     ...(opts.narrow ? ['production'] : ['production', ...builtSourceExclusions(root, opts.base)]),
-    ...imports,
+    ...(driverless ? withoutDriver(imports) : imports),
     ...(!opts.narrow && (patchkitCompiles || recs.some((rec) => rec.compiles || seeds.length)) ? COMPILE_INPUTS : []),
-    ...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`))),
+    ...(driverless ? withoutDriver(sources) : sources),
     ...(seeds.length ? pythonInputs(seeds) : []),
   ];
   return { inputs, patchkitLive, patchkitWasm };

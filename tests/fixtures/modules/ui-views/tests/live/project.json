@@ -20,10 +20,6 @@
         "modules": [
           "digikit/debug",
           "test/ui-views"
-        ],
-        "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts"
         ]
       }
     ]

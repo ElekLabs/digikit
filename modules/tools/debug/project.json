@@ -36,10 +36,6 @@
           "test/dyn-fx-gain",
           "core/services/machines",
           "core/services/fx"
-        ],
-        "sources": [
-          "packages/dk-session/src/dkupload-core.ts",
-          "packages/dk-session/src/gen_proto.ts"
         ]
       },
       {

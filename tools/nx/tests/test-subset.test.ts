@@ -7,6 +7,7 @@ import { parse } from 'smol-toml';
 import { tagProblem } from '../acceptance-tags.mjs';
 import { nonCellGlobs } from '../device-files.mjs';
 import {
+  affectedFixed,
   baseProblem,
   changedFiles,
   invocations,
@@ -55,7 +56,18 @@ it('reports a tag that no record has', () => {
   expect(resolveSubset(['S:fx', 'C:boot'], projects).unknown).toEqual(['S:fx']);
 });
 
-it('adds gate-smoke and gate-pins, and runs one call when the cross product is exact', () => {
+it('adds gate-smoke and gate-pins only when affected selects them', () => {
+  const none = affectedFixed('main', () => []);
+  expect(none).toEqual([]);
+  const { tests } = resolveSubset(['C:boot'], projects);
+  expect(selectionPairs(tests, projects, none).map((p) => `${p.project}:${p.target}`)).toEqual([
+    'core/a:test-device--y--dn2',
+  ]);
+  const only = affectedFixed('main', (_base, target) => (target === 'smoke' ? ['gate-smoke'] : []));
+  expect(only.map((f) => f.project)).toEqual(['gate-smoke']);
+});
+
+it('runs one call when the cross product is exact', () => {
   const { tests } = resolveSubset(['C:boot'], projects);
   const pairs = selectionPairs(tests, projects);
   expect(pairs.map((p) => `${p.project}:${p.target}`)).toEqual([
