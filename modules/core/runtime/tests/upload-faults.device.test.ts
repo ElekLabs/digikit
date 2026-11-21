@@ -51,11 +51,15 @@ async function faultSession(
 }
 
 /** A card whose store holds `modules/old.dkm`. */
+const STABLE_BLOCKS = 300;
+
 async function cardWithOld(rig: CardRig, name: string, old: Buffer): Promise<string> {
   const file = path.join(rig.artifacts, 'old.dkm');
   fs.writeFileSync(file, old);
   rawModule(file);
-  return rig.card({ name, modules: [{ name: 'modules/old.dkm', file }] });
+  // Every boot counts from the first one (safe mode, finding 37), and the cases below boot one card lineage up to five times, each paused long
+  // before the 30 s stable period: a record with a short period lets each boot clear its count, as a session that runs does.
+  return rig.card({ name, modules: [{ name: 'modules/old.dkm', file }], selection: [], stableBlocks: STABLE_BLOCKS });
 }
 
 // ---- power cuts ---------------------------------------------------------------------------------------------------------------------
@@ -226,7 +230,8 @@ uploadTests(
         key === 'during'
           ? async () => {
               await dk.put('modules/up.dkm', payload);
-              listed = (await dk.list()).map((e) => e.path);
+              // the card also holds the port file and the services of the card builder: the case looks at the modules
+              listed = (await dk.list()).map((e) => e.path).filter((f) => f.startsWith('modules/'));
             }
           : undefined,
       );
