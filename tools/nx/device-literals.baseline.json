@@ -799,7 +799,6 @@
   "tests/patchkit/test_pk_current.py": 10,
   "tests/patchkit/test_pk_device.py": 2,
   "tests/patchkit/test_pk_dsp_budget.py": 3,
-  "tests/patchkit/test_pk_machines.py": 7,
   "tests/patchkit/test_pk_mem.py": 7,
   "tests/patchkit/test_pk_package.py": 1,
   "tests/patchkit/test_pk_params.py": 8,

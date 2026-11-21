@@ -8,7 +8,7 @@ from support.paths import REPO_ROOT
 ROOT = str(REPO_ROOT)
 
 from tools.emulator import card_overlay  # noqa: E402
-from tools.patchkit import port_resolve  # noqa: E402
+from tools.patchkit import pk_device, port_resolve  # noqa: E402
 
 
 def record(sector: int, mask_bytes: dict[int, int]) -> bytes:
@@ -62,25 +62,30 @@ def test_framework_rules_are_declared_once_per_site():
         "rb",
     ) as f:
         m = tomllib.load(f)
-    # the rules are declared in ports/fw/; a site may have one rule per device (the Digitone II rules reuse the names)
+    # A rule in ports/fw/ may be shared, but its site must occur only once per device.
     machine_rules = [
         r
         for r in port_resolve.fw_rules(REPO_ROOT)
         if r["name"].startswith(("cf.machine.", "dsp.machine."))
     ]
-    keys = [(r["name"], tuple(r.get("devices", []))) for r in machine_rules]
-    assert len(keys) == len(set(keys))
+    devices = pk_device.load_all()
+    rules = set()
+    for r in machine_rules:
+        for dev in r.get("devices") or devices:
+            key = (r["name"], dev)
+            assert key not in rules, key
+            rules.add(key)
     # every anchor a hook, write, section or extern of the manifest names has a rule for each device it is active on
-    rules = {(r["name"], dev) for r in machine_rules for dev in r.get("devices", [])}
+    targets = tuple(fw.split("-", 1)[0] for fw in m["targets"])
     named = set()
     for op in m["op"]:
-        named.add((op.get("anchor"), tuple(op.get("devices", ["dt2", "dn2"]))))
+        named.add((op.get("anchor"), tuple(op.get("devices", targets))))
     for sec in m["section"]:
-        named.add((sec["from"]["anchor"], tuple(sec.get("devices", ["dt2", "dn2"]))))
+        named.add((sec["from"]["anchor"], tuple(sec.get("devices", targets))))
     for obj in m["object"]:
         for anchor in obj.get("externs", {}).values():
             if anchor.startswith(("cf.", "dsp.")):
-                named.add((anchor, tuple(obj["devices"])))
+                named.add((anchor, tuple(obj.get("devices", targets))))
     for name, devs in named:
         if name:
             for dev in devs:
@@ -88,4 +93,3 @@ def test_framework_rules_are_declared_once_per_site():
     for r in machine_rules:
         if r["kind"] == "cf_func":
             assert len(r["hash"]) == 32 and r["len"] > 0
-            assert r["devices"] in (["dt2"], ["dn2"])

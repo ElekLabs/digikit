@@ -266,7 +266,8 @@ fn the_service_abi_hash_follows_every_byte_and_the_file_name_and_is_never_zero()
 
 #[test]
 fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
-    let files = sdkgen::generate(&root()).unwrap();
+    let root = root();
+    let files = sdkgen::generate(&root).unwrap();
     let get = |path: &str| {
         files
             .iter()
@@ -286,28 +287,64 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
     // an `internal` export is in the list and has no `api` type (it is in no header): the runtime-only export of the machines file
     assert!(machines.contains("crate::rt::dk_machines_module_info as *const u8"));
     assert!(!machines.contains("api::DkMachinesModuleInfoFn"));
-    assert!(machines.contains("pub fn exports() -> [(u32, *const u8); 13]"));
     assert!(
         machines.find("\"dk_param_get\"").unwrap()
             < machines.find("\"dk_page_bind_local\"").unwrap()
     );
     // a service whose exports are all hand-written has no wrapper and no `build` import
     let samples = get("services/samples/dks/src/gen_exports.rs");
-    assert!(samples.contains("pub fn exports() -> [(u32, *const u8); 9]"));
     assert!(!samples.contains("ImportCore"));
-    // the list `service!` declares is the provided imports: every one of them is in exactly one file
-    let total: usize = ["machines", "fx", "samples"]
-        .iter()
-        .map(|s| {
-            get(&format!("services/{s}/dks/src/gen_exports.rs"))
-                .matches("name_hash(")
-                .count()
-        })
-        .sum();
-    // the two `internal` ones are exports of the files and no import of a module: 27 for modules, 28 in the files
-    assert_eq!(total, 28);
-    assert!(get(sdkgen::RUST_OUT).contains("pub const PROVIDED: [(&str, &str); 27]"));
-    assert!(!get(sdkgen::RUST_OUT).contains("dk_fx_routes_entry"));
+
+    for service in sdkgen::provider_services() {
+        let dir = format!("services/{service}/dks");
+        let expected = sdkgen::provided_exports(&service);
+        if !expected.is_empty() && root.join(&dir).is_dir() {
+            let exports = get(&format!("{dir}/src/gen_exports.rs"));
+            let names: Vec<_> = exports
+                .lines()
+                .filter_map(|line| line.split_once("name_hash(\""))
+                .map(|(_, tail)| tail.split_once('"').unwrap().0)
+                .collect();
+            assert_eq!(names, expected, "{service}");
+        }
+    }
+
+    // The public Rust list retains declaration order. The C header groups prototypes by service.
+    let contract: toml::Value =
+        toml::from_str(&std::fs::read_to_string(root.join(sdkgen::SOURCE)).unwrap()).unwrap();
+    let c_services = contract["handle"]["services"].as_array().unwrap();
+    let header = get(sdkgen::C_IMPORTS_OUT);
+    let prototypes: Vec<_> = header
+        .lines()
+        .filter(|line| line.ends_with(");"))
+        .filter_map(|line| line.split_once('('))
+        .filter_map(|(decl, _)| decl.rsplit([' ', '*']).next())
+        .collect();
+    let mut expected = Vec::new();
+    for import in contract["import"].as_array().unwrap() {
+        let import = import.as_table().unwrap();
+        let flag = |key| import.get(key).and_then(toml::Value::as_bool) == Some(true);
+        if !flag("provided") {
+            continue;
+        }
+        let name = import["name"].as_str().unwrap();
+        let service = import.get("service").and_then(toml::Value::as_str);
+        let public = !flag("test") && !flag("internal");
+        if public {
+            expected.push(format!("({:?}, {name:?}),", service.unwrap_or("")));
+        }
+        let has_prototype = public
+            && !import.contains_key("kind")
+            && c_services.iter().any(|s| s.as_str() == service);
+        assert_eq!(prototypes.contains(&name), has_prototype, "{name}");
+    }
+    let (_, provided) = get(sdkgen::RUST_OUT)
+        .split_once("pub const PROVIDED:")
+        .unwrap();
+    let (_, rows) = provided.split_once("= [\n").unwrap();
+    let (rows, _) = rows.split_once("];").unwrap();
+    let actual: Vec<_> = rows.trim().lines().map(str::trim).collect();
+    assert_eq!(actual, expected);
 }
 
 #[test]
