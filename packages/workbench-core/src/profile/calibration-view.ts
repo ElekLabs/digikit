@@ -373,33 +373,63 @@ export function parseRunLine(line: string): RunEvent {
   return { kind: 'text', text: line };
 }
 
-/** Seconds left of a run: the rest of this capture, the other captures of this case and every later case (module loads and restarts not counted). */
-export function secondsLeft(p: {
+/** A restart (to change the loaded modules) and the 30 s stable wait the runtime needs before the next restart, seconds. */
+export const RESTART_S = 40;
+
+const runnable = (profile: CalProfile, skipping?: readonly string[]) =>
+  profile.cases.filter((c) => !skipping?.includes(c.id));
+
+/** The captures of a run: every case that is not skipped (module-free cases like `stock` and the `rest` cases included) times the repeats. */
+export function captureTotal(profile: CalProfile, skipping?: readonly string[]): number {
+  return runnable(profile, skipping).length * profile.repeats;
+}
+
+/** How long a run takes before it starts: every capture at warm-up plus window, and `RESTART_S` for each case whose modules differ from the case before it (the first is compared with no module). */
+export function estimateSeconds(profile: CalProfile, skipping?: readonly string[]): number {
+  let before: string[] = [];
+  let restarts = 0;
+  for (const c of runnable(profile, skipping)) {
+    if ([...c.modules].sort().join('\n') !== [...before].sort().join('\n')) restarts++;
+    before = c.modules;
+  }
+  return captureTotal(profile, skipping) * (profile.warmup_s + profile.capture_s) + restarts * RESTART_S;
+}
+
+/** Seconds left of a run: elapsed time per finished capture times the captures left (the rate includes the restarts); before the first capture, the static estimate less the time gone. */
+export function remainingSeconds(p: {
   profile: CalProfile;
-  case: string;
-  n: number;
-  intoCaptureS: number;
-  /** Cases that will be skipped: they take no time. */
   skipping?: readonly string[];
+  done: number;
+  elapsedS: number;
 }): number {
-  const per = p.profile.warmup_s + p.profile.capture_s;
-  const at = p.profile.cases.findIndex((c) => c.id === p.case);
-  const later = at < 0 ? 0 : p.profile.cases.slice(at + 1).filter((c) => !p.skipping?.includes(c.id)).length;
-  const left = Math.max(0, per - p.intoCaptureS) + (p.profile.repeats - p.n) * per + later * p.profile.repeats * per;
-  return Math.ceil(left);
+  if (p.done < 1) return Math.max(0, Math.ceil(estimateSeconds(p.profile, p.skipping) - p.elapsedS));
+  const left = Math.max(0, captureTotal(p.profile, p.skipping) - p.done);
+  return Math.ceil((p.elapsedS / p.done) * left);
 }
 
-/** `case lp4 · capture 2/3 · 6 s left` */
-export function progressLine(p: { case: string; n: number; of: number; left: number }): string {
-  return `case ${p.case} · capture ${p.n}/${p.of} · ${p.left} s left`;
+/** `capture 7 / 33`: the captures done so far, one more while a capture is under way. */
+export function captureCounter(p: { done: number; total: number; capturing: boolean }): string {
+  return `capture ${Math.min(p.total, p.done + (p.capturing ? 1 : 0))} / ${p.total}`;
 }
 
-/** The progress text of the phases between captures: `restarting for case lp4`, `waiting for a stable boot 4 s / 30 s`, `putting the stock machine back`. */
-export function phaseLine(e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string {
-  if (e.kind === 'restart') return `restarting for case ${e.case}`;
+/** `45 s`, or `2 min` (rounded up) from one minute on. */
+export const fmtLeft = (s: number): string => (s < 60 ? `${s} s` : `${Math.ceil(s / 60)} min`);
+
+/** `capture 7 / 33 · mem · 2 min left` */
+export function progressLine(p: { counter: string; case: string; left: number }): string {
+  return `${p.counter} · ${p.case} · ${fmtLeft(p.left)} left`;
+}
+
+/** The text of the phases between captures: `restarting for mem`, `waiting for a stable boot 4 s / 30 s`, `putting the stock machine back`. */
+export function phaseText(e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string {
+  if (e.kind === 'restart') return `restarting for ${e.case}`;
   if (e.kind === 'stable') return `waiting for a stable boot ${e.waited} s / ${e.of} s`;
   return 'putting the stock machine back';
 }
+
+/** The progress line of a phase: the counter, then the phase text (`capture 7 / 33 · restarting for mem`). */
+export const phaseLine = (counter: string, e: Extract<RunEvent, { kind: 'restart' | 'stable' | 'restore' }>): string =>
+  `${counter} · ${phaseText(e)}`;
 
 /** The note before Run: which tracks a run takes over, and that it leaves them on the stock machine (the run starts from the stock machine, it restores nothing). */
 export function trackNote(tracks: readonly number[]): string {

@@ -8,9 +8,14 @@ import {
   loadCalibrationFiles,
   parseRunLine,
   phaseLine,
+  phaseText,
   progressLine,
+  captureCounter,
+  captureTotal,
+  estimateSeconds,
+  remainingSeconds,
+  RESTART_S,
   readCaptureSet,
-  secondsLeft,
   sideOf,
   tableRows,
   type CalibrationDoc,
@@ -130,26 +135,44 @@ test('progress: the runner log lines parse, and the time left counts the later c
     reason: 'it presses keys',
   });
   assert.deepEqual(parseRunLine('loading a/b'), { kind: 'text', text: 'loading a/b' });
-  const { profiles } = loadCalibrationFiles({
-    profiles: {
-      'p/light.toml': `schema = "dk.calprofile/1"\nname = "light"\nwarmup_s = 1\ncapture_s = 4\nrepeats = 3\n[[case]]\nid = "stock"\nsteps = "s"\n[[case]]\nid = "lp4"\nsteps = "s"\n`,
-    },
-    steps: {},
-    cases: {},
-  });
-  const p = profiles[0]!;
-  // capture 2 of 3 of the first case, 2 s in: 3 s here, one more capture (5 s), one whole later case (15 s)
-  assert.equal(secondsLeft({ profile: p, case: 'stock', n: 2, intoCaptureS: 2 }), 3 + 5 + 15);
-  assert.equal(secondsLeft({ profile: p, case: 'lp4', n: 3, intoCaptureS: 9 }), 0);
-  assert.equal(progressLine({ case: 'lp4', n: 2, of: 3, left: 6 }), 'case lp4 · capture 2/3 · 6 s left');
+  assert.equal(progressLine({ counter: 'capture 2 / 3', case: 'lp4', left: 6 }), 'capture 2 / 3 · lp4 · 6 s left');
+  assert.equal(
+    progressLine({ counter: 'capture 7 / 33', case: 'mem', left: 100 }),
+    'capture 7 / 33 · mem · 2 min left',
+  );
+});
+
+test('the capture total skips cases, counts rest cases, and the estimate adds a restart per module change', () => {
+  const kase = (id: string, modules: string[]) => ({ id, steps: 's', modules });
+  const p = {
+    name: 'k',
+    description: '',
+    warmup_s: 2,
+    capture_s: 5,
+    repeats: 3,
+    modules: ['m'],
+    cases: [kase('stock', []), kase('a', ['m']), kase('rest', []), kase('b', ['m'])],
+  } as never;
+  assert.equal(captureTotal(p), 12);
+  assert.equal(captureTotal(p, ['b']), 9);
+  // restarts: a, rest, b (stock needs no change from the empty start)
+  assert.equal(estimateSeconds(p), 12 * 7 + 3 * RESTART_S);
+  // b skipped: a, rest
+  assert.equal(estimateSeconds(p, ['b']), 9 * 7 + 2 * RESTART_S);
+  assert.equal(captureCounter({ done: 6, total: 33, capturing: true }), 'capture 7 / 33');
+  assert.equal(captureCounter({ done: 6, total: 33, capturing: false }), 'capture 6 / 33');
+  assert.equal(phaseLine('capture 6 / 33', { kind: 'restart', case: 'rest' }), 'capture 6 / 33 · restarting for rest');
+  // before the first capture: the static estimate less the time gone; after: the measured rate times the captures left
+  assert.equal(remainingSeconds({ profile: p, done: 0, elapsedS: 10 }), 12 * 7 + 3 * RESTART_S - 10);
+  assert.equal(remainingSeconds({ profile: p, done: 4, elapsedS: 200 }), 400);
 });
 
 test('phase lines say what the run does between captures', () => {
   assert.deepEqual(parseRunLine('case lp4: restarting'), { kind: 'restart', case: 'lp4' });
   assert.deepEqual(parseRunLine('case lp4: putting the stock machine back'), { kind: 'restore', case: 'lp4' });
-  assert.equal(phaseLine({ kind: 'restart', case: 'lp4' }), 'restarting for case lp4');
-  assert.equal(phaseLine({ kind: 'stable', waited: 4, of: 30 }), 'waiting for a stable boot 4 s / 30 s');
-  assert.equal(phaseLine({ kind: 'restore', case: 'lp4' }), 'putting the stock machine back');
+  assert.equal(phaseText({ kind: 'restart', case: 'lp4' }), 'restarting for lp4');
+  assert.equal(phaseText({ kind: 'stable', waited: 4, of: 30 }), 'waiting for a stable boot 4 s / 30 s');
+  assert.equal(phaseText({ kind: 'restore', case: 'lp4' }), 'putting the stock machine back');
 });
 
 test('the progress parser follows what the shared runner logs', async () => {
@@ -218,7 +241,7 @@ test('malformed captures are refused with a message naming the file', () => {
   );
 });
 
-test('a fit refuses two profiles; the saved run name has no path characters; skipped cases take no time', () => {
+test('a fit refuses two profiles; the saved run name has no path characters', () => {
   const mk = (unit: 'insn' | 'cycles', profile: string) =>
     readCaptureSet([
       {
@@ -231,14 +254,6 @@ test('a fit refuses two profiles; the saved run name has no path characters; ski
     /profile light and the device run of heavy/,
   );
   assert.equal(captureSetFile({ profile: '../a b', captures: [] }).name, 'calibration-.._a_b-run.captures.json');
-  const { profiles } = loadCalibrationFiles({
-    profiles: {
-      'p/x.toml': `schema = "dk.calprofile/1"\nname = "x"\nwarmup_s = 1\ncapture_s = 4\nrepeats = 1\n[[case]]\nid = "stock"\nsteps = "s"\n[[case]]\nid = "b"\nsteps = "s"\n[[case]]\nid = "c"\nsteps = "s"\n`,
-    },
-    steps: {},
-    cases: {},
-  });
-  assert.equal(secondsLeft({ profile: profiles[0]!, case: 'stock', n: 1, intoCaptureS: 0, skipping: ['b'] }), 10);
 });
 
 test('the note before Run names the tracks and says they are left on the stock machine', async () => {

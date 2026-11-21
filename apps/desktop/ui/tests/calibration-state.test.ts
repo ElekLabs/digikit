@@ -7,7 +7,7 @@ import type { RunOptions, RunOutcome } from '@digi/workbench-core/profile/calibr
 import type { Calibrator } from '../src/calibration-backend.ts';
 import { createCalibrationState } from '../src/calibration-state.ts';
 
-const profile = { name: 'heavy', cases: [{ id: 'stock' }], warmup_s: 1, capture_s: 2, repeats: 2 };
+const profile = { name: 'heavy', cases: [{ id: 'stock', modules: [] }], warmup_s: 1, capture_s: 2, repeats: 2 };
 const capture = {
   caseId: 'stock',
   repeat: 1,
@@ -61,6 +61,21 @@ test('a target restart mid-run (reading reset, section unmounted) does not abort
     assert.equal(st.running(), false);
     assert.equal(st.sets().emu?.captures.length, 1);
     assert.deepEqual(running, [true, false]);
+    dispose();
+  });
+});
+
+test('the table fills with each capture, before the run returns', async () => {
+  const f = fake();
+  await createRoot(async (dispose) => {
+    const st = createCalibrationState({ calibrator: f.calibrator, emulator: () => true, blocked: () => false });
+    const done = st.run();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(st.running(), true);
+    assert.equal(st.sets().emu?.captures.length, 1);
+    f.release();
+    await done;
     dispose();
   });
 });
