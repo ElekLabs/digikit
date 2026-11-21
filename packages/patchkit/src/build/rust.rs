@@ -100,7 +100,7 @@ fn path_deps(text: &str, what: &Path, dev: bool) -> Result<Vec<String>> {
     Ok(deps.into_iter().map(|d| d.1).collect())
 }
 
-fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
+fn crate_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
@@ -108,8 +108,11 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let p = e.path();
         let Ok(ft) = e.file_type() else { continue };
         if ft.is_dir() {
-            rs_files(&p, out);
-        } else if p.extension().is_some_and(|x| x == "rs") {
+            crate_sources(&p, out);
+        } else if matches!(
+            p.extension().and_then(|x| x.to_str()),
+            Some("rs" | "s" | "S")
+        ) {
             out.push(p);
         }
     }
@@ -138,10 +141,10 @@ pub fn relpath(p: &Path, start: &Path) -> String {
 pub fn crate_files(manifest: &Path) -> Result<Vec<PathBuf>> {
     let d = manifest.parent().unwrap_or(Path::new("."));
     let mut out = vec![manifest.to_path_buf()];
-    let mut rs = vec![];
-    rs_files(&d.join("src"), &mut rs);
-    rs.sort();
-    out.extend(rs);
+    let mut sources = vec![];
+    crate_sources(&d.join("src"), &mut sources);
+    sources.sort();
+    out.extend(sources);
     for extra in ["build.rs", "rust-toolchain.toml"] {
         if d.join(extra).exists() {
             out.push(d.join(extra));
