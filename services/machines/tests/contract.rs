@@ -654,6 +654,7 @@ fn filter_module(
 fn filter_fixture(device: u32) -> Fixture {
     Fixture {
         name: "filter-gain",
+        survives: None,
         device,
         kinds: &KINDS_MACHINES,
         image: filter_image,

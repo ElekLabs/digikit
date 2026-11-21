@@ -26,6 +26,16 @@ export const PARAM_REC = 0x2506ec; // DT2 1.17 param record base (the stock lite
 export const RELEASE = DIAG + 0x800; // release bytes: byte v is 1 for about a block after voice v's note-off
 export const REC = 0x1d8; // bytes of a voice record
 
+/** The voice rigs link the filter hooks but do not execute the stock filter continuations. */
+export const FILTER_EXTERNS = {
+  _dl_filter_rows: 0x2009e000,
+  _flt_convert_next: STOCK_BP,
+  _flt_coef_next: STOCK_BP,
+  _flt_coef_skip: STOCK_BP,
+  _flt_proc_next: STOCK_BP,
+  _flt_proc_skip: STOCK_BP,
+};
+
 /** Byte address to normal-word address. */
 export const nw = (byte: number): number => Math.floor(byte / 4);
 
