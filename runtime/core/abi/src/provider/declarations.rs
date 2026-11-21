@@ -3,7 +3,7 @@ use dkrt_sdk::E_DECL_FULL;
 
 /// Most resources one service declares.
 pub const MAX_RESOURCES: usize = 8;
-/// Most entries one package declares and installs: the one bound, used by the declarations and by the installers in `dkrt-packages`.
+/// Most entries one package declares and installs: the one bound, used by the declarations and by the installers in `dkrt-lifecycle`.
 pub const MAX_ENTRIES: usize = 16;
 
 /// The limit of a declared resource: a number in the header, or "init", which the service decides in `start`.

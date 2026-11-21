@@ -275,7 +275,7 @@ export const HERMETIC = {
   dksharc: [],
   'dkrt-sdk': ['{workspaceRoot}/runtime/core/vectors/settings-vectors.json'],
   'dkrt-fit': ['{workspaceRoot}/runtime/core/vectors/fit-vectors.json'],
-  'dkrt-packages': [],
+  'dkrt-lifecycle': [],
   'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
   dkupload: [],
   dksample: [],

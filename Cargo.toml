@@ -40,7 +40,7 @@ members = [
     "runtime/core/abi",
     "runtime/core/fit",
     "runtime/core/link",
-    "runtime/core/packages",
+    "runtime/core/lifecycle",
     "runtime/core/svc-rt",
     "runtime/core/test-support",
     "services/rows",

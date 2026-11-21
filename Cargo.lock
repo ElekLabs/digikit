@@ -1204,7 +1204,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkrt-link"
+name = "dkrt-lifecycle"
 version = "0.1.0"
 dependencies = [
  "dkrt-abi",
@@ -1212,7 +1212,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkrt-packages"
+name = "dkrt-link"
 version = "0.1.0"
 dependencies = [
  "dkrt-abi",
