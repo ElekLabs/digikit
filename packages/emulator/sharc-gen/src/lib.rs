@@ -186,6 +186,7 @@ pub static CORE: GenCore = GenCore {
     env_suffix: env!("SHARC_GEN_ENV_SUFFIX"),
     blocks: image_blocks(),
     code_ranges: image_code_ranges(),
+    block_bounds: image_block_bounds(),
     region_entries: image_region_entries(),
     model_safe: image_model_safe(),
     loop_ends: image_loop_ends(),
@@ -280,6 +281,18 @@ const fn image_code_ranges() -> &'static [(u32, u32, &'static str)] {
         generated::image::CODE_RANGES
     }
     #[cfg(not(sharc_image))]
+    {
+        &[]
+    }
+}
+
+#[cfg(sharc_gen)]
+const fn image_block_bounds() -> &'static [(u32, u32)] {
+    #[cfg(all(sharc_image, sharc_block_bounds))]
+    {
+        generated::image::BLOCK_BOUNDS
+    }
+    #[cfg(not(all(sharc_image, sharc_block_bounds)))]
     {
         &[]
     }
