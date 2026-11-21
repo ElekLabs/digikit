@@ -61,3 +61,15 @@ On DN2 a single record's word at `+0x1dc` also changed during the repeated note 
 | DN2 1.12 | `0x1c91a1`, R3 | `0x1c9289`, I4 − 17 × 4 | `0x1c9580`, 16 − R15, I2 | 85 (1,360 pairs) |
 
 For every pair, both ordinals equalled the zero-based slot and both byte addresses matched. Adjacent slots had distinct selector addresses four bytes apart (DT2 `0x24eeac..0x24ef28`, DN2 `0x254ad4..0x254b10`). This identifies the indexing rule for the adapter. A module call still needs to demonstrate that its coefficient write is consumed by the process callback at the same allocated state address.
+
+## Dispatch through an SDK filter
+
+**[D]** On DT2 1.17, load `test/sine` and `test/filter-gain`, select the sine machine on track 1, then select Filter Gain on FLTR. Turning encoder F to its lower limit wrote zero to the gain state of the first two voice slots. Raising it wrote 0.3464567 to both. The attached 250 ms note captures had 24,064 stereo sample values each. At zero gain all were zero. At the higher setting, 24,062 were nonzero, RMS was 0.015271, peak was 0.022046, and all were finite. An empty sample track gave zero PCM at both gain settings even though the state changed.
+
+**[D]** On DN2 1.12, the emulator reached the gain process entry with type 16, a 32-sample block and a voice-state pointer equal to the first row's state base. Its live audio buffer was in the external byte-address window (one capture used `0x804acf90`). Filter code that walks a block with a DAG can keep the supplied pointer. A blanket shift right by two aliases this buffer incorrectly.
+
+**[D]** With the SDK resonator bank selected on DT2 and the SDK sine as its input, the first two voice slots initialized (mask 3). Holding FREQ at 32258 and Q at zero, turning SPRD from 0 to 12544 changed the sine note's RMS from 0.003305 to 0.011880. Both 250 ms captures were finite and the filter fault count stayed zero. The module occupied 20,096 DSP bytes, including 32 voice states.
+
+**[D]** In the DN2 emulator, the loaded coefficient-bound instruction at SW `0x1c917f` had bytes `8d0f2000`, which set R13 to 32. The interpreter traced 32 at the unsigned compare and at the lookup. The default accelerated run instead traced R13 equal to 7 on 6,808 visits to the lookup, all for a stock selector. Disabling generated execution restored the gain response. Generated blocks starting before the modified instruction include it inside overlapping straight-line sequences. The current region invalidation estimate in `packages/emulator/sharc/src/code_diff.rs` ends a block near the next entry and misses some of these overlaps.
+
+**[D]** With generated blocks disabled on DN2 (`SHARC_AOT=0`), the SDK bank and sine module also ran together. Increasing SPRD from 0 to 12800 with FREQ at 32258 and Q at zero raised the captured RMS from 0.001565 to 0.005777. Both 250 ms captures were finite and the fault counter stayed at zero. The standard DT2 gain regression passed. The same DN2 regression under default acceleration reached full gain on the panel but failed its restored-audio assertion.

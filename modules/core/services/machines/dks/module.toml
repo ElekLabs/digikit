@@ -130,6 +130,16 @@ entry = "_dv_run"
 space = "dsp"
 devices = ["dn2"]
 
+[[fill]]
+slot = "filter_coef"
+entry = "_flt_coef"
+space = "dsp"
+
+[[fill]]
+slot = "filter_proc"
+entry = "_flt_process"
+space = "dsp"
+
 [[gen]]
 kind = "sharc-adapter"
 path = "build/gen/adapter-{dev}.inc"

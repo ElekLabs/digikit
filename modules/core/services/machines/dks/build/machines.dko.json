@@ -5592,33 +5592,33 @@
    "addend": 0,
    "offset": 34,
    "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 40,
-   "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCsaMgU3lEIvKO_8dkrt_abi3dsp6rd32le",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 212,
+   "offset": 68,
+   "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "symbol": ".sec..text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines6filter7resolveNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 216,
    "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows11DSP_FILTERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 272,
+   "offset": 280,
    "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 284,
+   "offset": 292,
    "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
@@ -5750,14 +5750,14 @@
    "type": "cf.32"
   },
   {
-   "addend": 24,
+   "addend": 28,
    "offset": 10,
    "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows11DSP_FILTERS",
    "type": "cf.32"
   },
   {
-   "addend": 440,
+   "addend": 508,
    "offset": 16,
    "section": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows11DSP_FILTERS",
@@ -10412,7 +10412,7 @@
    "type": "cf.32"
   },
   {
-   "addend": 416,
+   "addend": 480,
    "offset": 10,
    "section": ".text._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows7release",
    "symbol": ".sec..bss._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows11DSP_FILTERS",
@@ -10426,7 +10426,7 @@
    "type": "cf.32"
   },
   {
-   "addend": 416,
+   "addend": 480,
    "offset": 46,
    "section": ".text._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows8row_step",
    "symbol": ".sec..bss._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows11DSP_FILTERS",
@@ -11731,7 +11731,7 @@
   },
   {
    "align": 2,
-   "hex": "4fefffd048d73cfc262f0034206f0038266f003c2e2800287008b087650000f62468002420280008b08a650000e82228003424014c072800908ab082650000d67040b0816722282b0044428249f90000000045f9000000004bf9000000002a3c00000000600000ce4a8767da2228000c2f410028508ad5d02007ed88d08a2f40002c49f9000000004bf9000000006024486a00344e94588f4a8066785e8272f8c4814c052800d5ab003845ea0040b5ef002c67922f0a4e942800486a00044e942400486a00084e942c00486a002c4e942a004fef0010b8af00286438080400006632bc82622e2f034e95588f2040b4a8001062207040b085651a486a00304e94588f0c80000000ff620a4a8067824a846600ff7e70e1603e721fb28065360680fffffff0721a4c0108002c3508004a86662e5282b48467362002e988d0ab00402f004e942f002f034e924fef000c720fb28065c470db4cd73cfc4fef00304e752f0320454e90588fb08667c660e6202b0044d0ab003cd0872740003c428060d6",
+   "hex": "4fefffd048d73cfc262f0034206f0038266f003c2e2800287008b087650000f62468002420280008b08a650000e82228003424014c072800908ab082650000d67040b0816722282b0044428249f90000000045f9000000004bf9000000002a3c00000000600000ce4a8767da2228000c2f410028508ad5d02007ed88d08a2f40002c49f9000000004bf9000000006024486a00344e94588f4a8066785e8272f8c4814c052800d5ab003845ea0040b5ef002c67922f0a4e942800486a00044e942400486a00084e942c00486a002c4e942a004fef0010b8af00286438080400006632bc82622e2f034e95588f2040b4a8001062207040b085651a486a00304e94588f0c80000000ff620a4a8067824a846600ff7e70e1603e721fb28065360680fffffff0721e4c0108002c3508004a86662e5282b48467362002e988d0ab00402f004e942f002f034e924fef000c720fb28065c470db4cd73cfc4fef00304e752f0320454e90588fb08667c660e6202b0044d0ab003cd0872740003c428060d6",
    "kind": "text",
    "name": ".text._RINvNtCstpYEnbxcXX_17dkrt_svc_machines3dsp14check_sectionsNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "size": 384
@@ -11927,10 +11927,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffd048d77cfc246f0038206a0004206800442f48002c428649f9000000004df9000000004bf900000000600000ce206a00042006e98826680040d7c02f0b4e942f002f2f003c4e962400486b000c4e942a00206a000406800000000cd0902f004e9526002e125287486b00044e94282a00080684e0000000d880e28c068400b80000486b00084e94222a00082041d1fce0000000d088e288068000b80000d285226a00102049d1ea000cd1fc200000005e837af8c6850682fffffff052864fef001c7a0fba8265447a1a4c0528002642d7fc00000000268727440004274000082741000c2748001027430014420017400018eb8bd68925430010bcaf002c6600ff2e4cd77cfc4fef00304e75487900000000487800102f024eb900000000",
+   "hex": "4fefffcc48d77cfc246f003c206a0004206800442f480030428747f9000000004df900000000600000dc206a00042007e98828680040d9c02f0c4e932f002f2f00404eb9000000002400486c000c4e932c00206a00042a50dbc0486d000c4e962600201252802f400040486c00044e932a2a00080685e0000000da80e28d068500b80000486c00084e93222a000828010684e0000000d880e28c068400b80000dc81286a000cd9ea0010d9fc20000000486d00084e965e8372f8c6810682fffffff052874fef0020720fb2826548721e4c0128002042d1fc0000000020af002c21450004214400082146000c214c0010214300142140001842001140001ceb8bd7aa0010beaf00306600ff204cd77cfc4fef00344e75487900000000487800102f024eb900000000",
    "kind": "text",
    "name": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5claimNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
-   "size": 288
+   "size": 296
   },
   {
    "align": 2,
@@ -11948,7 +11948,7 @@
   },
   {
    "align": 2,
-   "hex": "4feffedc48d75c3c4df900000000263c00000000243c00001000282f012c52842a0f06850000002249f90000000047f90000000045f900000000600658824dee001abdc36732b8aeffe866f04a1667ec20454e9442a72f02487800012f054e932f05487800022f2f01404e924fef001c4a006706421660c470017201c0814cd75c3c4fef01244e75",
+   "hex": "4feffedc48d75c3c4df900000000263c00000000243c00001000282f012c52842a0f06850000002249f90000000047f90000000045f900000000600650824dee001ebdc36732b8aeffe466f04a1667ec20454e9442a72f02487800012f054e932f05487800022f2f01404e924fef001c4a006706421660c470017201c0814cd75c3c4fef01244e75",
    "kind": "text",
    "name": ".text._RINvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows5clearNtCs1H2YknomaMO_11dkrt_svc_rt10ImportCoreECs8l4SwZCbIH4_21dkrt_svc_machines_dks",
    "size": 136
@@ -13306,17 +13306,17 @@
   },
   {
    "align": 2,
-   "hex": "2f0241f900000000203c00000000222f00085281600441e8001ab1c06722b29066f4429042a8000442a8000842a8000c42a8001042a8001442021142001860d6241f4e75",
+   "hex": "2f0241f900000000203c00000000222f00085281600441e8001eb1c06726b29066f4429042a8000442a8000842a8000c42a8001042a8001442a8001842021142001c60d2241f4e75",
    "kind": "text",
    "name": ".text._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows7release",
-   "size": 68
+   "size": 72
   },
   {
    "align": 2,
-   "hex": "4fefffec48d70c1c244893c9223c00000000242f001852826012204106810000001a20095280b490671c22400c810000000066e6700215400011200a4cd70c1c4fef00144e75266f001c26137803b883640c5983206f001c2083224060ce7001b083675e7802b88367624a83671a242800042209e5890681000010004a2f0023665493c97001601824280008307c000143f09c00220906810000100093c9420024bc0000000125410004254200082549000c154000101540001142aa00126000ff7a24280010307c000260c424280014307c000360ba43e80018700160c2",
+   "hex": "4fefffec48d70c1c244893c9223c00000000242f001852826012204106810000001e20095280b490671c22400c810000000066e6780215440011200a4cd70c1c4fef00144e75266f001c26137807b883640c5183206f001c2083224060ce7002b083675a650e4a83671a26280010307c000260187803b883666826280018307c0004600826280008307c00012009e788068000001000d0884281420224bc0000000125400004254300082541000c154200101542001142aa00126000ff7e26280014307c000360c4262800042009e7880680000010004a2f002366224281740160ba7006b08365e02209e7892003068000001001d081428142024283609e220806810000001c74016092",
    "kind": "text",
    "name": ".text._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows8row_step",
-   "size": 222
+   "size": 266
   },
   {
    "align": 2,
@@ -13372,7 +13372,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss._RNvNtNtCstpYEnbxcXX_17dkrt_svc_machines3dsp11filter_rows11DSP_FILTERS",
-   "size": 416
+   "size": 480
   },
   {
    "align": 2,
@@ -14012,7 +14012,7 @@
    "size": 24
   }
  ],
- "source_sha256": "67328dadee8c19caf5c06a33494223cf7b2fb6f411882cb011c5c63839ebb464",
+ "source_sha256": "a5f083a4a84a2879090e4fbd32cd32731d749301d86a89862e1ddfcf6c1a0b48",
  "symbols": [
   {
    "global": false,
@@ -17341,8 +17341,8 @@
  ],
  "toolchain": {
   "exports": "MF_TAB dk_filter_add_page dk_machine_add_page dk_machines_module_info dk_module dk_module_ctx_add_filter dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_filter_list dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_draw_hook mf_flt_acc mf_flt_list mf_flt_load_dn2 mf_flt_load_dt2 mf_flt_name mf_frametype mf_group mf_key_hook mf_owner mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
-  "instructions_redecoded": "16404",
-  "isa_check": "9e9574ca83513aa6aa78481e06306de66acf2f73d19185905e5348a8da82d78c",
+  "instructions_redecoded": "16424",
+  "isa_check": "bba770949a5065a1b711856bd1bdea457466b59ea26c6ef875aefc4b524bff84",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

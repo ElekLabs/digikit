@@ -761,27 +761,39 @@ fn filter_gain_reserves_one_state_per_voice_and_rejects_a_bad_callback() {
             let r = filter_rows::row(index);
             let pc = |symbol| L2_SW_BASE + (0x1000 + crate::contract_tests::symbol_offset(&map, symbol)) / 2;
             assert_eq!((r.coef_pc, r.process_pc), (pc("_fgan_coef"), pc("_fgan_process")));
-            assert_eq!(r.stride, 8);
+            assert_eq!((r.stride, r.n_params), (8, 1));
             assert_eq!(r.state, info[I_AREA] + ((job.image_size + job.bss + 7) & !7));
             let desc = job.image.add((r.desc - info[I_AREA]) as usize);
             assert_eq!(dkrt_abi::dsp::rd32le(desc.add(12)), 4);
             assert_eq!(dkneeds::needs_of(&mut file.as_slice()).unwrap().dsp_area, dsp::ds().mod_len[0]);
-            let table = dkneeds::filter::contract::DK_FILTER_LINK_WORD + index as u32 * 4;
-            for (step, (offset, value)) in [(1, r.process_pc), (2, r.state), (3, r.stride), (0, r.coef_pc)].into_iter().enumerate() {
-                let mut want = step as u32;
-                let w = crate::handlers::services().dsp_row_step(0, &mut want, true).unwrap();
-                assert_eq!((w.win, w.word, w.value), (dkrt_abi::dsp::WIN_VOICES, table + offset, value));
-                assert_eq!((w.last, w.has_undo, w.published.is_some()), (offset == 0, offset == 0, offset == 0));
-                if let Some(mark) = w.published {
-                    assert_eq!(w.undo, 0);
-                    *mark = 1;
+            let table = dkneeds::filter::contract::DK_FILTER_LINK_WORD + index as u32 * 8;
+            // A reload can reuse the same row and arena range. Publish all metadata and
+            // reset the DSP's mutable row words before the callbacks become reachable.
+            for reload in [false, true] {
+                if reload {
+                    assert_eq!(dsp::reserve(0, &job), OK, "{}", dev.name);
+                    assert_eq!(filter_rows::row(index).state, r.state);
                 }
+                let writes = [
+                    (1, r.process_pc), (2, r.state), (3, r.stride), (4, r.n_params),
+                    (5, 0), (6, 0), (7, 0), (0, r.coef_pc),
+                ];
+                for (step, (offset, value)) in writes.into_iter().enumerate() {
+                    let mut want = step as u32;
+                    let w = crate::handlers::services().dsp_row_step(0, &mut want, true).unwrap();
+                    assert_eq!((w.win, w.word, w.value), (dkrt_abi::dsp::WIN_VOICES, table + offset, value));
+                    assert_eq!((w.last, w.has_undo, w.published.is_some()), (offset == 0, offset == 0, offset == 0));
+                    if let Some(mark) = w.published {
+                        assert_eq!(w.undo, 0);
+                        *mark = 1;
+                    }
+                }
+                let mut end = writes.len() as u32;
+                assert!(crate::handlers::services().dsp_row_step(0, &mut end, true).is_none());
+                assert!(dsp::quiesce(0));
+                dsp::unreserve(0);
+                assert_eq!(filter_rows::row(index).owner, 0);
             }
-            let mut end = 4;
-            assert!(crate::handlers::services().dsp_row_step(0, &mut end, true).is_none());
-            assert!(dsp::quiesce(0));
-            dsp::unreserve(0);
-            assert_eq!(filter_rows::row(index).owner, 0);
             // Mutate copies of the actual packed section at the loader boundary.
             let check_bad = |bad: &[u8]| dsp::check(bad.as_ptr(), off, len, bad.len() as u32, &mut dsp::Job::empty());
             let set_word = |bad: &mut [u8], field: u32, value: u32| {

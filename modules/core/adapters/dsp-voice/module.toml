@@ -24,6 +24,11 @@ place = "dsp.l2"
 devices = ["dt2"]
 
 [object.externs]
+_flt_convert_next = "dsp.filter.site.convert.next"
+_flt_coef_next = "dsp.filter.site.coef_lookup.next"
+_flt_coef_skip = "dsp.filter.site.coef_lookup.skip"
+_flt_proc_next = "dsp.filter.site.proc_range.next"
+_flt_proc_skip = "dsp.filter.site.proc_range.skip"
 _dv_table = "voices.rows"
 _fw_type_cache = "dsp.voice.value.type_cache"
 _fw_render_next = "dsp.voice.site.render_entry.next"
@@ -41,6 +46,11 @@ place = "dsp.l2"
 devices = ["dn2"]
 
 [object.externs]
+_flt_convert_next = "dsp.filter.site.convert.next"
+_flt_coef_next = "dsp.filter.site.coef_lookup.next"
+_flt_coef_skip = "dsp.filter.site.coef_lookup.skip"
+_flt_proc_next = "dsp.filter.site.proc_range.next"
+_flt_proc_skip = "dsp.filter.site.proc_range.skip"
 _fw_frame = "dsp.voice.value.frame_base"
 _fw_render_next = "dsp.voice.site.render_entry.next"
 # The stereo hooks (dsp-voice-dn2-stereo.s, docs/design/dn2-stereo.md): the stock stages the wrappers call or jump to, the engine's base and two sites of the pan loop.
@@ -483,3 +493,36 @@ devices = ["dn2"]
 [[claim]]
 resource = "dsp.voice.site.pan_pre"
 devices = ["dn2"]
+
+[[slot]]
+name = "filter_coef"
+space = "dsp"
+devices = ["dt2", "dn2"]
+
+[[slot]]
+name = "filter_proc"
+space = "dsp"
+devices = ["dt2", "dn2"]
+
+# The little-endian immediate starts at byte 2 in the verified four-byte bound load.
+[[op]]
+op = "write"
+anchor = "dsp.filter.value.coef_bound"
+offset = 2
+width = 2
+value = "32"
+
+[[op]]
+op = "hook"
+hook = "dsp.filter.hook.convert"
+to = "_flt_convert"
+
+[[op]]
+op = "hook"
+hook = "dsp.filter.hook.coef_lookup"
+to = "_flt_coef_hook"
+
+[[op]]
+op = "hook"
+hook = "dsp.filter.hook.proc_range"
+to = "_flt_proc_hook"

@@ -1,6 +1,8 @@
 //! The service's filter callback and state addresses, indexed by the assigned filter type.
 use crate::filter::{self, FIRST, ROWS};
-use dkneeds::filter::contract::{DK_FILTER_LINK_WORD, DK_FILTER_TABLE_BYTES};
+use dkneeds::filter::contract::{
+    DK_FILTER_DESC_N_PARAMS, DK_FILTER_DESC_STATE_BYTES, DK_FILTER_LINK_WORD, DK_FILTER_TABLE_BYTES,
+};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::rd32le;
 use dkrt_abi::dsp::WIN_VOICES;
@@ -9,7 +11,7 @@ use dkrt_abi::link::{Owner, Sequence};
 use dkrt_abi::mem::rd32;
 use dkrt_abi::service::{Claim, RowWrite};
 
-const WORDS: u32 = 4;
+const WORDS: u32 = 8;
 const _: () = assert!(ROWS as u32 * WORDS * 4 == DK_FILTER_TABLE_BYTES);
 
 #[derive(Clone, Copy, Default)]
@@ -21,6 +23,7 @@ pub struct FilterRow {
     pub desc: u32,
     pub state: u32,
     pub stride: u32,
+    pub n_params: u32,
     published: u8,
 }
 
@@ -35,11 +38,8 @@ pub(super) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
         let at = c.job.filters.add((i * dkneeds::filter::RECORD) as usize);
         let ty = filter::resolve(core, rd32(at));
         let desc = rd32(at.add(12));
-        let state_bytes = rd32le(
-            c.job
-                .image
-                .add((desc + dkneeds::filter::contract::DK_FILTER_DESC_STATE_BYTES) as usize),
-        );
+        let src = c.job.image.add(desc as usize);
+        let state_bytes = rd32le(src.add(DK_FILTER_DESC_STATE_BYTES as usize));
         let stride = (state_bytes + 7) & !7;
         let pc = |off| L2_SW_BASE + (c.base - L2_BYTE_BASE + off) / 2;
         DSP_FILTERS[(ty - FIRST) as usize] = FilterRow {
@@ -49,6 +49,7 @@ pub(super) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
             desc: c.base + desc,
             state: L2_BYTE_BASE + c.byte_shift + c.state_at,
             stride,
+            n_params: rd32le(src.add(DK_FILTER_DESC_N_PARAMS as usize)),
             published: 0,
         };
         c.state_at += stride * dkneeds::filter::VOICES;
@@ -80,6 +81,8 @@ pub(super) unsafe fn row_step(rec: usize, want: &mut u32, write: bool) -> Option
             0 => (1, row.process_pc),
             1 => (2, row.state),
             2 => (3, row.stride),
+            3 => (4, row.n_params),
+            4..=6 => (*want + 1, 0), // initialized voices, fault window start, fault count
             _ => (0, row.coef_pc),
         };
         let activate = offset == 0;

@@ -329,7 +329,7 @@ pub mod filter {
     pub const DK_FILTER_MAX_PARAMS: u32 = 2;
     pub const DK_FILTER_OK: u32 = 0;
     pub const DK_FILTER_LINK_WORD: u32 = 4096;
-    pub const DK_FILTER_TABLE_BYTES: u32 = 256;
+    pub const DK_FILTER_TABLE_BYTES: u32 = 512;
     pub const DK_FILTER_BOUND_BITS: u32 = 1090519040;
     pub const DK_FILTER_MAGIC: u32 = 1145783884;
     pub const DK_FILTER_IN_BYTES: u32 = 0;
