@@ -41,14 +41,14 @@
         "cwd": "."
       }
     },
-    "test-rig": {
+    "test-dsp": {
       "executor": "nx:run-commands",
       "cache": true,
       "dependsOn": ["patchkit:cli", "sharc-rig:build"],
       "inputs": [
         "jsToolchain",
         "{projectRoot}/**/*",
-        "{workspaceRoot}/packages/sharc-rig-kit/src/**/*",
+        "dspTestTooling",
         "{workspaceRoot}/packages/sharc-rig-kit/package.json",
         "{workspaceRoot}/vitest.host.config.ts",
         "{workspaceRoot}/vitest.host.projects.json",

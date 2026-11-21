@@ -16,7 +16,8 @@ import {
   allRigConformance,
   fxWriteConformance,
   moduleRigConformance,
-  RIG_CONFORMANCE_MERGE,
+  DSP_CONFORMANCE,
+  DSP_CONFORMANCE_ALL,
   RIG_KIT_ROOT,
   rigTarget,
 } from './rig-tests.mjs';
@@ -31,8 +32,6 @@ export const createNodesV2 = [
     // Lazy for manifests without device targets (including small plugin fixtures).
     let imports;
     const importInputs = (files) => (imports ??= testImportInputs(ctx.workspaceRoot))(files);
-    let rig;
-    const rigImports = (files) => (rig ??= testImportInputs(ctx.workspaceRoot, { runtimeOnly: true }))(files);
     let py;
     const pythonInputs = (seeds) => (py ??= pythonImportInputs(ctx.workspaceRoot))(seeds);
     // Nx supplies the workspace file list, with ignored build trees and dependencies already excluded.
@@ -151,9 +150,9 @@ export const createNodesV2 = [
       const rustTests = standaloneRustTests(ctx.workspaceRoot, root);
       if (rustTests) targets['rust-tests'] = rustTests;
       // sound checks on the SHARC-only rig (packages/sharc-rig-kit, docs/TESTING.md "Sound checks"): tests/rig/*.toml run by tests/*.rig.test.ts
-      const rig = moduleRigConformance(ctx.workspaceRoot, f, doc, rigImports);
-      if (rigTests.length) targets['test-rig'] = rigTarget(root, rig?.soundInputs);
-      if (rig) targets[RIG_CONFORMANCE_MERGE] = rig.target;
+      const rig = moduleRigConformance(ctx.workspaceRoot, f, doc);
+      if (rigTests.length) targets['test-dsp'] = rigTarget(root, rig?.soundInputs);
+      if (rig) targets[DSP_CONFORMANCE] = rig.target;
       if (uploadable) {
         targets['test-conformance'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);
         targets['test-conformance-all'] = conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs, true);
@@ -169,8 +168,8 @@ export const createNodesV2 = [
           projects: {
             [RIG_KIT_ROOT]: {
               targets: {
-                'test-conformance-rig': allRigConformance(),
-                [RIG_CONFORMANCE_MERGE]: fxWriteConformance(rigImports),
+                [DSP_CONFORMANCE_ALL]: allRigConformance(),
+                [DSP_CONFORMANCE]: fxWriteConformance(),
               },
             },
           },

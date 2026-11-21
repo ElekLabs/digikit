@@ -206,7 +206,7 @@ mise run test:subset -- S:machines  # the device tests of record tags plus gate-
 uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --seconds 3,6   # paired counter runs of two coupled-run binaries: DSP and ColdFire host instructions per audio second, B/A ratios, parity (docs/TESTING.md)
 mise run module:check ID      # one module: conformance and its own tests
 mise run lfo:report -- digikit/lfo_shapes_1   # output report of an LFO shape module on the emulator: fit error per shape against its table, swing, verdict, SVG plots (sdk/templates/lfo-shape/README.md "Output report")
-pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig   # machine and effect conformance of every module on the SHARC-only rig (docs/TESTING.md "The Vitest kit")
+pnpm nx:pilot run-many -t test-dsp-conformance             # cached machine and effect conformance on the SHARC-only rig
 DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project module-rig modules/machine/fadedlimes/analog/tests/   # verdict, plot.png and wav files for the pinned cases (docs/TESTING.md "Classifying a changed pin")
 node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stereo-fwd-oneshot/note60   # `wb profile report` of one case on the rig: instructions per function and loop (docs/TESTING.md "SHARC-only rig")
 ```

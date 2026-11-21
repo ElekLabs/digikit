@@ -12,7 +12,8 @@ import { packDevices, read } from './module-manifests.mjs';
 import { sourceIncludeInputs } from './pack-inputs.mjs';
 
 export const RIG_KIT_ROOT = 'packages/sharc-rig-kit';
-export const RIG_CONFORMANCE_MERGE = 'test-conformance-rig-merge';
+export const DSP_CONFORMANCE = 'test-dsp-conformance';
+export const DSP_CONFORMANCE_ALL = 'test-dsp-conformance-all';
 const PINS = 'tools/patchkit/toolchain/pins.toml';
 
 const machineAdapters = [
@@ -27,7 +28,7 @@ const fxAdapters = [
   '{workspaceRoot}/services/fx/dks/{dsp,build/gen}/**/*',
 ];
 
-const conformance = ({ root = '', file, inputs, reports, fixed = false, suiteAdapters = [], imports }) => {
+const conformance = ({ root = '', file, inputs, reports, fixed = false, suiteAdapters = [] }) => {
   const command = `pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-conformance${file ? ` conformance/${file}` : ''}`;
   return {
     executor: 'nx:run-commands',
@@ -39,9 +40,8 @@ const conformance = ({ root = '', file, inputs, reports, fixed = false, suiteAda
       '{workspaceRoot}/vitest.host.projects.json',
       '{workspaceRoot}/tsconfig*.json',
       `{workspaceRoot}/${RIG_KIT_ROOT}/package.json`,
-      ...(file
-        ? imports([`${RIG_KIT_ROOT}/conformance/${file}`])
-        : [`{workspaceRoot}/${RIG_KIT_ROOT}/src/**/*`, `{workspaceRoot}/${RIG_KIT_ROOT}/conformance/**/*`]),
+      'dspTestTooling',
+      `{workspaceRoot}/${RIG_KIT_ROOT}/conformance/${file ?? '**/*'}`,
       ...suiteAdapters,
       ...SHARED_SDK_INPUTS,
       '{workspaceRoot}/devices/*.toml',
@@ -101,11 +101,10 @@ export const allRigConformance = () =>
     ],
   });
 
-export const fxWriteConformance = (imports) =>
+export const fxWriteConformance = () =>
   conformance({
     file: 'fx-writes.test.ts',
     suiteAdapters: fxAdapters,
-    imports,
     inputs: [fxWriteInput],
     fixed: true,
   });
@@ -134,7 +133,7 @@ const moduleInputs = (workspaceRoot, file, root, kind, sources) => {
   ];
 };
 
-export const moduleRigConformance = (workspaceRoot, file, manifest, imports) => {
+export const moduleRigConformance = (workspaceRoot, file, manifest) => {
   if (!CONFORMANCE_ROOTS.some((root) => file.startsWith(root + '/'))) return;
   const kind = conformanceKind(manifest);
   if (!kind) return;
@@ -151,7 +150,6 @@ export const moduleRigConformance = (workspaceRoot, file, manifest, imports) => 
       root,
       file: `${kind}.test.ts`,
       suiteAdapters: kind === 'machine' ? machineAdapters : fxAdapters,
-      imports,
       inputs: variants.length ? moduleInputs(workspaceRoot, file, root, kind, [...sources, ...variants]) : soundInputs,
       reports: `dist/conformance-rig/merge/${encodeURIComponent(manifest.module.id)}`,
       fixed: true,
@@ -159,7 +157,7 @@ export const moduleRigConformance = (workspaceRoot, file, manifest, imports) => 
   };
 };
 
-// The `test-rig` target of a module: its sound checks (tests/rig/*.toml, tests/*.rig.test.ts) on the SHARC-only rig. No daemon, firmware or
+// The `test-dsp` target of a module: its sound checks (tests/rig/*.toml, tests/*.rig.test.ts) on the SHARC-only rig. No daemon, firmware or
 // emulator. The key holds the module's own files (the DSP sources and the tables of the checks), the kit, the two adapters the rig wraps
 // the code in, the SDK, the device profiles, the hashes of the two binaries it runs and the hash of the stock DSP section (or "absent":
 // the stock-image suites skip without the firmware). The synthetic shadow-replay fixtures of tests/fixtures/dsp are inputs of the stereo proof's
@@ -174,7 +172,7 @@ export const rigTarget = (root, moduleInputs) => ({
     'jsToolchain',
     ...(moduleInputs ?? ['{projectRoot}/**/*']),
     '{projectRoot}/tests/**/*',
-    '{workspaceRoot}/packages/sharc-rig-kit/src/**/*',
+    'dspTestTooling',
     '{workspaceRoot}/packages/sharc-rig-kit/package.json',
     '{workspaceRoot}/vitest.host.config.ts',
     '{workspaceRoot}/vitest.host.projects.json',

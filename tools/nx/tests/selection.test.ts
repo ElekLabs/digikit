@@ -254,14 +254,14 @@ describe('workspace selection', () => {
     660_000,
   );
 
-  it('routes a module DSP edit to its own rig tests', () => {
+  it('routes a module DSP edit to its own DSP tests', () => {
     const project = workspace.nodes['digikit/pluck'].data;
-    const graph = selected(`${project.root}/src/dsp/pluck.s`, 'pack,test-rig,test-conformance-rig-merge');
+    const graph = selected(`${project.root}/src/dsp/pluck.s`, 'pack,test-dsp,test-dsp-conformance');
     expect(
       Object.keys(graph.tasks)
-        .filter((id) => /:test-(conformance-rig-merge|rig)$/.test(id))
+        .filter((id) => /:test-dsp(-conformance)?$/.test(id))
         .sort(),
-    ).toEqual(['digikit/pluck:test-conformance-rig-merge', 'digikit/pluck:test-rig']);
+    ).toEqual(['digikit/pluck:test-dsp', 'digikit/pluck:test-dsp-conformance']);
     expect(graph.tasks['digikit/pluck:pack']).toBeDefined();
   }, 660_000);
 

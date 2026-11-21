@@ -1069,7 +1069,7 @@ E1, E2, E3 share one subset gate. E0 runs in parallel with E1-E3. When an item s
 | Unit | contract suite per service (6 cases x 2 devices x 4 services); planner key cases including a collision; sticky ranges; `role_ok`; reload refusals and order; run-time numbering; lfo lookup; filter lowering | `<service>:rust-tests` (from `nx/dks-tests`), `core/runtime:rust-tests` |
 | Generated consistency | `patchkit gen --check` for exports and builder lists; `patchkit objdiff` for the E2 refactor | `mise run gen:modules -- --check` |
 | Assembly | one case per new seam: key clash in the boot plan; load-reload-reload of a packed fixture; lfo hooks and image slot bind; filter fixture loads | `core/runtime:test-assembly` |
-| Rig | filter DSP conformance | `@digi/sharc-rig-kit:test-conformance-rig` |
+| Rig | filter DSP conformance | `pnpm nx:pilot run-many -t test-dsp-conformance` |
 | Device | reload (code-only, machine with DSP, fx, during voice release, refused during transport, project round trip); LFO shape output and safe load without the module; filter select and render | `core/runtime-tests:test-device--<file>`, `<module>:test-device` |
 | Soak | about 5 reload cycles in the gate, 20 in the full tier, with `DIGI_FLUSH_CHECK=1` | emulator, once per E5 PR |
 

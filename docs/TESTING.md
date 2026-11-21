@@ -775,7 +775,7 @@ use the existing harness resolution/overrides; only resolution holds a shared be
 before the target. The target does not run the broad gate. Its bounded source inputs are conservative affected-selection inputs, not a cache-closure or
 fine-routing claim. This does not replace automatic gate routing.
 `module:check` runs the conformance suite on the SHARC-only rig (reports in `dist/conformance-rig` of the worktree) ("The Vitest kit") and writes `dsp_cost_*` with `patchkit uses set`.
-`pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig` runs it for every module.
+`pnpm nx:pilot run @digi/sharc-rig-kit:test-dsp-conformance-all` runs it for every module.
 
 Machine rules (`packages/sharc-rig-kit/src/spec.ts`, `cases.ts`, `checks.ts`), checked in every block of every case:
 
@@ -791,10 +791,11 @@ count stays 0; the module stores only to its output block, data, bss and stack; 
 within 8.0; the effect stays within `min(headroom) / 4` plus 900 for core/fx. Negative fixtures:
 `test/dyn-dsp-hang` (machine), `test/dyn-fx-nan` (effect). `DIGI_JOBS` sets the worker count.
 The merge gate gives every manifest exercised by the machine or FX suite its own cached
-`test-conformance-rig-merge` target, including the negative fixtures. The key tracks the DSP
-sources and includes, generated gallery, rig code and shared contracts. The kit's merge
-target checks the FX write-set harness. The kit's explicit `test-conformance-rig` target
-and the full gate run the aggregate suite.
+`test-dsp-conformance` target, including the negative fixtures. The key tracks the DSP
+sources and includes, generated gallery, shared rig-kit source, and the adapter and suite for
+the module kind. `pnpm nx:pilot run-many -t test-dsp-conformance` runs these cached targets
+and checks the shared FX write-set harness once in the kit project. The kit's explicit
+`test-dsp-conformance-all` target and the full gate run the aggregate suite.
 
 ### SHARC-only rig (`sharc-rig`, T1g slice)
 
@@ -824,7 +825,7 @@ linked code and hooks go over the stock bytes. A call takes `stock_reads: [[load
 resume reads DM without ending a stopped call. `specials: {"MSF": [mask, bits]}` sets an 80-bit multiplier register (hex strings) before a call and `read_specials` answers it after. An address like 0x2010f000 or 0x80100000 is a byte address: a read count steps by one byte, so a rig that reads words asks for each word.
 `packages/sharc-rig-kit/src/stock.ts` finds `out/sections/<id>/section_7_BLOB.bin`, checks its hash and gives the hex; a test that needs it skips with `stockSkipReason` (a describe title) when the firmware was not extracted.
 `StereoRig` (`stereo.ts`) is the DN2 1.12 stereo rig on it: `dsp-voice-dn2-stereo.s` linked beside the stock image, the pan hook patched in at 0x1c9af6, `StereoSession` for one core.
-The tests are `image-modules/points/dsp-voice/tests/dsp-stereo-*.rig.test.ts` (`pnpm nx:pilot run core/dsp-voice:test-rig`) and `image-modules/proofs/dsp-stereo-proof/tests/*.rig.test.ts` (`core/dsp-stereo-proof:test-rig`, over `openImageSession`).
+The tests are `image-modules/points/dsp-voice/tests/dsp-stereo-*.rig.test.ts` (`pnpm nx:pilot run core/dsp-voice:test-dsp`) and `image-modules/proofs/dsp-stereo-proof/tests/*.rig.test.ts` (`core/dsp-stereo-proof:test-dsp`, over `openImageSession`).
 
 A call with `"loads": true` also returns `loads`, the read analogue of `watch`: `[pc, address, width]` for each DM load (1, 2 or 4 bytes; a long-word or SIMD load is one entry per word) of an instruction in the `watch` ranges, in execution order, with the addresses of `stores` (L2 at the loader alias, an image word at its alias). The runtime records the loads (`St::read_log_on`, `packages/emulator/sharc-rt`); while it is on, the call takes the full memory path instead of the plain-RAM fast path. The record is off by default, costs a call without the option nothing and leaves no `loads` key. `StereoSession.raw` and `CallSpec` take `loads: true`. Block code (`_dm_read_b`, the fast tier) is not recorded: the rig runs one instruction at a time.
 The check kind is a `LoadRule` (`packages/sharc-rig-kit/src/loads.ts`, host tests `tests/loads.test.ts`): the covered loads (`pcs`, else every load of the call), the byte ranges they must lie in (`within`), and how many bytes they read (`bytes`, `bytesMultipleOf`). `loadFailures(loads, rules)` returns one text per broken rule, so a load of the right instruction at a wrong address fails where a count of executions passes. The shadow replay (`image-modules/proofs/dsp-stereo-proof/tests/dsp-stereo-shadow-replay.rig.test.ts`) keeps its read bounds as rule data per group: the table loads of the held and prepared leaves (and the held period `1 < p < 32`), the gain tables, the ring backing of the channel, the source samples and table, the ordered-route phases and the helper resets.
@@ -880,8 +881,9 @@ and the recorded costs stay comparable. Host tests (fake transport, made-up buil
 The machine and effect conformance on the rig (about 45 s for all 30 specs with 4 workers, no daemon, firmware or emulator):
 
 ```sh
-pnpm nx:pilot run @digi/sharc-rig-kit:test-conformance-rig       # uncached, builds patchkit:cli and sharc-rig:build
-pnpm nx:pilot run digikit/pluck:test-conformance-rig-merge      # fixed machine cases on both devices
+pnpm nx:pilot run-many -t test-dsp-conformance                    # cached contract checks for all modules
+pnpm nx:pilot run digikit/pluck:test-dsp-conformance               # fixed machine cases on both devices
+pnpm nx:pilot run @digi/sharc-rig-kit:test-dsp-conformance-all     # uncached, accepts selectors and report overrides
 DIGI_CONFORM_MODULES=fadedlimes/analog DIGI_CONFORM_DEVICE=dt2 DIGI_JOBS=4 DIGI_CONFORM_REPORTS=/tmp/reports \
   pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-conformance conformance/machine.test.ts
 ```
@@ -901,7 +903,7 @@ is written only when a count differs. It prints `wrote PATH` or `unchanged PATH`
 #### Sound checks (`tests/rig/*.toml`)
 
 A module keeps the checks of how it sounds in `modules/<kind>/<author>/<name>/tests/rig/*.toml` and one entry file, `tests/rig.rig.test.ts`
-(`import { rigSuite } from '@digi/sharc-rig-kit/suite'; rigSuite(import.meta.dirname);`). Nx infers `<module id>:test-rig` from that file
+(`import { rigSuite } from '@digi/sharc-rig-kit/suite'; rigSuite(import.meta.dirname);`). Nx infers `<module id>:test-dsp` from that file
 (cached; inputs: the module, the kit, the two adapters, the SDK, the device profiles and the hashes of `patchkit` and `sharc-rig`; no
 daemon, firmware or emulator). `pnpm exec vitest run --config vitest.host.config.ts --project module-rig <module dir>/tests/` runs one.
 
@@ -952,8 +954,8 @@ The machine note pins of analog, bd, pd and pluck are `tests/rig/equiv-note.toml
 | Assertion | Owner and scope |
 | --- | --- |
 | Loop period across the note and TUNE grid, bounded model output | `test_pluck_range.py` exercises the float32 model. The same file probes the real SHARC state at the corners. |
-| Sound, pitch, retriggers, idle and ending behavior | `digikit/pluck:test-rig` runs the sound cases in `tests/rig/`. The model tables, pitch, corner and voice lifecycle checks run on DT2. The numeric two-note fingerprints and initial-state check run on DT2 and DN2. |
-| DSP contract and budget | `digikit/pluck:test-conformance-rig-merge` uses the shared machine suite on both devices. Its limits, corners, modulation, long-note, retrigger and write-set cases check returns, context, bounded samples, memory ownership and instruction cost. |
+| Sound, pitch, retriggers, idle and ending behavior | `digikit/pluck:test-dsp` runs the sound cases in `tests/rig/`. The model tables, pitch, corner and voice lifecycle checks run on DT2. The numeric two-note fingerprints and initial-state check run on DT2 and DN2. |
+| DSP contract and budget | `digikit/pluck:test-dsp-conformance` uses the shared machine suite on both devices. Its limits, corners, modulation, long-note, retrigger and write-set cases check returns, context, bounded samples, memory ownership and instruction cost. |
 | Controls and registration | The four controls in `src/module.c` are declarative SDK builder calls. The rig reads knob slots, defaults and ranges from the generated gallery. SDK host tests exercise the shared builder contract. Runtime fixture tests check machine rows and parameter state, and the module's device load checks its real pack, published voice row and type. The shipped DT2 pages scenario exercises the actual panel. |
 | Runtime loader integration | `core/runtime-fixture-tests:test-device` exercises the common upload and load assertions with `test/sine` on both devices and the machine with its own page, `test/dyn-dn2`, on DN2. `core/runtime:test-assembly` exercises the loader seams on the host. |
 
@@ -966,7 +968,7 @@ with the module's host and generic rig conformance checks. The dedicated pages
 scenario runs separately and checks the SRC page and encoder interaction.
 
 ```sh
-pnpm nx:pilot run digikit/pluck:test-rig
+pnpm nx:pilot run digikit/pluck:test-dsp
 pnpm nx:pilot run digikit/pluck:test-conformance         # shipped load on DT2 and DN2
 pnpm nx:pilot run core/runtime-fixture-tests:test-device # representative fixture loads
 mise run module:check -- digikit/pluck                  # includes the module's DT2 menu scenario
@@ -1015,8 +1017,8 @@ On a fresh checkout there is no cache: the verdict is `fingerprint-only` (`envel
 #### Adapter tests on the rig (`tests/*.rig.test.ts`)
 
 The tests of the SHARC image modules are Vitest files under `image-modules/points/{dsp-voice,fx,sample-pool}/tests/` and `image-modules/fixes/overdrive/tests/`.
-They use the kit classes by `import { ... } from '@digi/sharc-rig-kit'` and run with `pnpm nx:pilot run core/<name>:test-rig` (same inputs as the sound checks above).
-The SDK's own DSP routines are tested the same way in `sdk/tests/dsp/*.rig.test.ts` (`pnpm nx:pilot run sdk:test-rig`): a small harness object includes the SDK files and calls the routine with `DK_CALL` (the resonator bank, its band and the `DK_EXP2` and `DK_TAN` macros).
+They use the kit classes by `import { ... } from '@digi/sharc-rig-kit'` and run with `pnpm nx:pilot run core/<name>:test-dsp` (same inputs as the sound checks above).
+The SDK's own DSP routines are tested the same way in `sdk/tests/dsp/*.rig.test.ts` (`pnpm nx:pilot run sdk:test-dsp`): a small harness object includes the SDK files and calls the routine with `DK_CALL` (the resonator bank, its band and the `DK_EXP2` and `DK_TAN` macros).
 The kit has three rigs for them:
 
 - `RawRig` (`raw.ts`): objects placed at bases the test names, data at its alignment, stand-in externs; `call(symbol, regs, { reads, readRegs })`, `poke`, `peek`.
