@@ -212,9 +212,9 @@ fn a_main_stream_whose_unpack_overtakes_the_staged_stream_is_refused_and_a_liter
         e.contains("in-place margin") && e.contains("hang before MAIN starts"),
         "{e}"
     );
-    // the same bytes with the shortest literal tail that reaches the floor
+    // the same bytes packed to meet the margin floor
     let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
-    assert!(made.literal_tail > 0 && made.stream.len() > plain.len());
+    assert!(made.literal_bytes > 0 && made.stream.len() > plain.len());
     assert!(made.margin.unwrap() >= floor as i64);
     // shortest: one token less of literals would not do (the tail is minimal up to one token)
     assert_eq!(
@@ -243,7 +243,7 @@ fn a_main_stream_with_room_is_packed_exactly_as_before() {
     let (dest, stage, floor) = dev.main_unpack();
     let data: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
     let made = patchkit::aplib::pack_section_in_place(&data, dest, stage, floor as i64).unwrap();
-    assert_eq!(made.literal_tail, 0);
+    assert_eq!(made.literal_bytes, 0);
     assert_eq!(
         made.stream,
         patchkit::aplib::pack_section(&data),
@@ -309,9 +309,9 @@ fn the_literal_tail_is_cut_inside_a_long_match_and_is_nearly_minimal() {
     // bytes, not the whole token of up to a MiB that a cut at token boundaries would literalize
     let want = 100_000 + floor as usize * 8 / 9;
     assert!(
-        made.literal_tail + 64 > want && made.literal_tail < want + 64,
+        made.literal_bytes + 64 > want && made.literal_bytes < want + 64,
         "tail {}",
-        made.literal_tail
+        made.literal_bytes
     );
     assert!(
         made.margin.unwrap() >= floor as i64 && made.margin.unwrap() < floor as i64 + 16,

@@ -294,7 +294,12 @@ pub fn plan_with(data: &[u8], depth: usize, nice: usize) -> Vec<Tok> {
 /// A tail of literals consumes one stream byte per output byte, which is what an in-place unpack needs at the end. `literal_from == data.len()` is the
 /// plain stream.
 pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
+    emit_range(data, toks, literal_from, data.len()).0
+}
+
+fn emit_range(data: &[u8], toks: &[Tok], literal_from: usize, resume: usize) -> (Vec<u8>, usize) {
     let mut out = Bits::new();
+    let mut literal_bytes = resume.saturating_sub(literal_from);
     let mut last = 1i64;
     for t in toks {
         let mut to = t.to;
@@ -304,6 +309,7 @@ pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
             if literal_from - t.from >= min {
                 to = literal_from;
             } else {
+                literal_bytes += literal_from - t.from;
                 for &b in &data[t.from..t.to] {
                     out.bit(true);
                     out.byte(b);
@@ -311,7 +317,7 @@ pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
                 continue;
             }
         }
-        if t.off == 0 || t.from >= literal_from {
+        if t.off == 0 || (literal_from..resume).contains(&t.from) {
             for &b in &data[t.from..t.to] {
                 out.bit(true);
                 out.byte(b);
@@ -337,7 +343,7 @@ pub fn emit(data: &[u8], toks: &[Tok], literal_from: usize) -> Vec<u8> {
     out.bit(false);
     out.gamma(END_GAMMA);
     out.byte(END_BYTE);
-    out.buf
+    (out.buf, literal_bytes)
 }
 
 pub fn pack(data: &[u8]) -> Vec<u8> {
@@ -363,16 +369,16 @@ pub fn pack_section(data: &[u8]) -> Vec<u8> {
 #[derive(Debug)]
 pub struct InPlace {
     pub stream: Vec<u8>,
-    /// Output bytes at the end that are stored as literals to keep the margin (0: the plain stream).
-    pub literal_tail: usize,
+    /// Output bytes in the region forced to literals to keep the margin (0: the plain stream).
+    pub literal_bytes: usize,
     /// The margin of `stream` (`None`: the output never reaches `stage`).
     pub margin: Option<i64>,
     /// The length of the plain stream, for what the tail costs.
     pub plain_len: usize,
 }
 
-/// `pack_section(data)` when its in-place margin at `stage` is at least `floor` (or the output never reaches `stage`); otherwise the same path with the
-/// shortest tail of the data stored as literals that brings the margin to `floor`. The bootstrap's depacker reads such literals like any other. Err when
+/// `pack_section(data)` when its in-place margin at `stage` is at least `floor` (or the output never reaches `stage`); otherwise force a region
+/// to literals and resume matches where the resulting stream still reaches `floor`. The bootstrap's depacker reads such literals like any other. Err when
 /// even a stream of literals only does not reach the floor.
 pub fn pack_section_in_place(
     data: &[u8],
@@ -388,16 +394,17 @@ pub fn pack_section_in_place(
     if ok(&margin) {
         return Ok(InPlace {
             stream: plain,
-            literal_tail: 0,
+            literal_bytes: 0,
             margin,
             plain_len,
         });
     }
     // the stream with the data from output position `from` on as literals: `from` = 0 is all literals, `from` = data.len() the plain stream
     let at = |from: usize| {
-        let s = section_of(emit(data, &toks, from));
+        let (body, literal_bytes) = emit_range(data, &toks, from, data.len());
+        let s = section_of(body);
         let m = inplace_margin(&s, dest, stage);
-        (s, m, data.len() - from)
+        (s, m, literal_bytes)
     };
     let (s0, m0, tail0) = at(0);
     let m0 = m0?;
@@ -422,9 +429,28 @@ pub fn pack_section_in_place(
             hi = mid;
         }
     }
+    // Each eight literal bytes consume nine staged bytes. The tail can therefore gain
+    // enough margin to resume matches before the end. Keep only shorter, verified streams.
+    let mut start = toks.partition_point(|t| t.from < lo);
+    let mut end = toks.len();
+    while start < end {
+        let mid = start + (end - start) / 2;
+        let resume = toks[mid].from;
+        let (body, literal_bytes) = emit_range(data, &toks, lo, resume);
+        let stream = section_of(body);
+        let margin = inplace_margin(&stream, dest, stage)?;
+        if ok(&margin) {
+            if stream.len() < best.0.len() {
+                best = (stream, margin, literal_bytes);
+            }
+            end = mid;
+        } else {
+            start = mid + 1;
+        }
+    }
     Ok(InPlace {
         stream: best.0,
-        literal_tail: best.2,
+        literal_bytes: best.2,
         margin: best.1,
         plain_len,
     })
@@ -640,6 +666,24 @@ mod tail_tests {
     }
 
     #[test]
+    fn matches_resume_after_literals_build_enough_margin() {
+        // Distinct runs give the encoder a choice of match boundaries near the end.
+        let data: Vec<u8> = noise(1024, 42).into_iter().flat_map(|b| [b; 32]).collect();
+        let stage = 16384;
+        let floor = 256;
+        let made = pack_section_in_place(&data, 0, stage, floor).unwrap();
+        let min_read = data.len() - stage as usize + floor as usize;
+        assert!(made.literal_bytes > 0);
+        assert!(
+            (min_read..min_read + 64).contains(&made.stream.len()),
+            "packed {} bytes, minimum {min_read}",
+            made.stream.len()
+        );
+        assert!(inplace_margin(&made.stream, 0, stage).unwrap().unwrap() >= floor);
+        assert_eq!(depack_section(&made.stream, 0, data.len()).unwrap(), data);
+    }
+
+    #[test]
     fn the_in_place_tail_reaches_the_floor_when_the_cut_falls_in_such_matches() {
         let data = mixed();
         // a stage inside the data and a floor: where the plain stream's margin is below the floor a tail is needed and taken
@@ -656,17 +700,17 @@ mod tail_tests {
             if plain.is_some_and(|m| m < floor) {
                 needed += 1;
                 assert!(
-                    made.literal_tail > 0,
+                    made.literal_bytes > 0,
                     "the plain margin {plain:?} is below {floor}: a tail is taken"
                 );
                 assert!(
-                    made.literal_tail < data.len(),
+                    made.literal_bytes < data.len(),
                     "and it is a tail, not all of the data"
                 );
                 assert!(made.stream.len() > pack_section(&data).len());
             } else {
                 assert_eq!(
-                    made.literal_tail, 0,
+                    made.literal_bytes, 0,
                     "the plain stream is kept when it holds"
                 );
             }
