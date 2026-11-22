@@ -7,11 +7,9 @@ import { bootInfo, buildCard, E_NOSTORE, statusOf } from '@digi/regression/runti
 import { rpc, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import { E_SET_OFF, sectorOf, settingsMailbox, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
-import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import {
   byte,
   DELAY_MS,
-  E_BAD_STORE,
   MODULE,
   padded,
   PATTERN,
@@ -26,11 +24,15 @@ import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-packa
 
 const { SAFE_CORE_ONLY, CORE_UNREADABLE } = BOOT_LEVEL;
 
-/** The settings store, part 3 (see settings.device.test.ts): a store that overlaps the settings area, and a card with the older header B. */
+/**
+ * The settings store, part 3 (see settings.device.test.ts): a store that overlaps the settings area, and a card with the older header B.
+ * The runtime's answers to put, get and remove, the load event and the CAPACITY figures of a store that overlaps are host tests (`settings_tests.rs`);
+ * the dump decoding is `storedump.rs`' tests. Here the firmware shows the USB answers, the untouched card and the repaired header B.
+ */
 
 for (const device of DEVICES) {
   describe(suiteName(device), () => {
-    const { s, first, headerB, limit, sectors, kit, written, dumpJson } = settingsCase(device);
+    const { s, first, headerB, limit, sectors, kit, written } = settingsCase(device);
 
     test('overlap: an older store with a file in the settings area turns the settings store off', async () => {
       // an older store (allocator ended at sectors - 3) with a file "x" from 2 sectors before header B for 4 sectors: it covers header B and the first sector of settings copy A
@@ -54,17 +56,9 @@ for (const device of DEVICES) {
       });
       await rpc(rt.session, 'run.mode', { mode: 'paused' }); // the protocol calls below step the emulator themselves
       const { session } = rt;
-      const mb = settingsMailbox(session, kit.plan);
       const usb = <T>(run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
-      const ev = await ringEvents(session, kit.plan, 'SETTINGS_LOAD');
-      expect(ev.length).toBe(1);
-      expect(ev[0]!.args[0], 'SETTINGS_LOAD state 4').toBe(4);
-      expect(ev[0]!.flags & 1, 'an error event').toBe(1);
-      expect(ev[0]!.args[3], "the store's status E_BAD_STORE").toBe(E_BAD_STORE >>> 0);
-      expect(
-        [await mb.put(ROUTE, byte(1)), (await mb.get(ROUTE))[0], await mb.remove(ROUTE)],
-        'put, get and remove answer E_SET_OFF',
-      ).toEqual([E_SET_OFF, E_SET_OFF, E_SET_OFF]);
+      const cap = (await usb((dk) => dk.capacity())).SETTINGS!;
+      expect([cap.limit, cap.used], 'CAPACITY SETTINGS has limit 0 and nothing used').toEqual([0, 0]);
       expect(await statusOf(() => usb(settingsRecord)), 'the SETTINGS command answers E_SET_OFF').toBe(E_SET_OFF);
       expect(
         await statusOf(() => usb((dk) => dk.list())),
@@ -103,10 +97,7 @@ for (const device of DEVICES) {
         [info.results, info.safe, info.count, info.seq],
         'the module of the selection loads, no safe mode, the selection is kept',
       ).toEqual([[0], 0, 1, 1]);
-      const ev = await ringEvents(session, kit.plan, 'SETTINGS_LOAD');
       const cap = await usb((dk) => dk.capacity());
-      expect(ev.length).toBe(1);
-      expect(ev[0]!.args[0], 'the settings store is on (no valid copy yet)').toBe(0);
       expect(cap.SETTINGS!.limit).toBe(8192);
       expect(
         (await usb((dk) => dk.list())).map((e) => e.path).sort(),
@@ -133,12 +124,6 @@ for (const device of DEVICES) {
       expect((await usb((dk) => dk.list())).map((e) => e.path).sort(), 'the store lists both files and the package').toEqual(
         [mod.name, 't.bin', SYSTEM_PACKAGE_STORE_PATH].sort(),
       );
-      const d = await dumpJson(after);
-      expect(d.store.files.map((f: { path: string }) => f.path).sort(), 'the card holds the two files and the package').toEqual(
-        [mod.name, 't.bin', SYSTEM_PACKAGE_STORE_PATH].sort(),
-      );
-      expect(d.selection.a.paths, 'the selection kept').toEqual([mod.name]);
-      expect(d.settings.active, 'the key in settings copy A').toBe('A');
       kit.allowStoreWrites(await written());
     });
   });
