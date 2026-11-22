@@ -9,7 +9,7 @@
 // Builds key on sources, tests key on what they run: no merge or narrow key holds a source file of the project or its subject.
 // Python tool inputs: the import closure (py-imports.mjs) of the `.py` tools a record lists in its `sources`. A test that
 // runs a new Python tool must list it there.
-import { existsSync, globSync } from 'node:fs';
+import { existsSync, globSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { nonCellGlobs, otherFiles } from './device-files.mjs';
 import { testSourceGlobs } from './test-source.mjs';
@@ -203,18 +203,52 @@ export const ownFiles = (root) =>
 // subject is a plain fileset: Nx evaluates it per hash, a directory added later is in the key without a graph rebuild.
 // The exclusions of nested projects (project.json) and crates (Cargo.toml) are computed here, at graph time: a new project adds a
 // project.json and rebuilds the graph. Tests, `*.md` and test-named Rust files stay out like in `production`.
-export const subjectInputs = (root, base = '.') => {
+export const subjectInputs = (root, base = '.', keep = null) => {
   const nested = globSync('**/{project.json,Cargo.toml}', { cwd: join(base, root) })
     .map((f) => dirname(f))
     .filter((d) => d !== '.' && !['src', 'include', 'fit', 'sdk', 'build', 'tests'].includes(d.split('/')[0]));
+  // Exclusions are global in Nx: a negated `tests` glob would also drop the files of a test project that sits inside the
+  // subject (`runtime/core/tests/capacity` in `runtime/core`), its own test files and setup. For such a project the
+  // test directories are excluded entry by entry, leaving the path to `keep` (its root, relative to the subject) out.
+  // Nx cannot re-include a path below a negated glob (checked with `show target inputs --check`: the exclusion wins), so the
+  // listing is a snapshot taken when the graph is built. A plain file or directory added under a test directory of the subject
+  // stays an input of the nested project's key (over-selection, never a missed test) until the graph rebuilds, which any
+  // project.json or module.toml change does, and a new test file is registered in one.
+  const inside = keep?.startsWith(`${root}/`) ? keep.slice(root.length + 1) : null;
+  const around = (dir) => {
+    const here = join(base, root, dir);
+    return readdirSync(here, { withFileTypes: true }).flatMap((e) => {
+      const rel = `${dir}/${e.name}`;
+      if (rel === inside) return [];
+      if (inside.startsWith(`${rel}/`)) return around(rel);
+      return [`!{workspaceRoot}/${root}/${rel}${e.isDirectory() ? '/**' : ''}`];
+    });
+  };
+  const testDirs = inside
+    ? globSync('**/tests', { cwd: join(base, root) }).filter(
+        (d) => !d.startsWith('node_modules/') && !d.includes('/node_modules/'),
+      )
+    : [];
+  const carved = testDirs.flatMap((d) =>
+    d === inside ? [] : inside.startsWith(`${d}/`) ? around(d) : [`!{workspaceRoot}/${root}/${d}/**`],
+  );
   return [
     `{workspaceRoot}/${root}/**/*`,
-    ...['src', 'include', 'fit', 'sdk', 'build', 'tests'].map((d) => `!{workspaceRoot}/${root}/${d}/**`),
+    ...['src', 'include', 'fit', 'sdk', 'build', ...(inside ? [] : ['tests'])].map(
+      (d) => `!{workspaceRoot}/${root}/${d}/**`,
+    ),
     ...[...new Set(nested)].sort().map((d) => `!{workspaceRoot}/${root}/${d}/**`),
     `!{workspaceRoot}/${root}/**/*.md`,
     // a pack stages its crate from the patchkit sources; no test reads the manifests
     `!{workspaceRoot}/${root}/Cargo.{toml,lock}`,
-    ...testSourceGlobs(`{workspaceRoot}/${root}`),
+    ...(inside
+      ? [...new Set(carved)].sort().concat(
+          // the rule's globs without the one of the `tests` directory: a path segment of the pattern, not a text match
+          testSourceGlobs(`{workspaceRoot}/${root}`).filter(
+            (g) => !g.slice(`!{workspaceRoot}/${root}/`.length).split('/').includes('tests'),
+          ),
+        )
+      : testSourceGlobs(`{workspaceRoot}/${root}`)),
   ];
 };
 
@@ -254,7 +288,7 @@ export const withoutDriver = (imports) =>
   );
 
 // The cache inputs of one device test target, and whether its key follows patchkit (`patchkitLive`).
-// `opts`: `testPaths` (workspace paths) replaces the test files of the project; `own` replaces its own files; `siblingTests` leaves the other test files out; `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
+// `opts`: `testPaths` (workspace paths) replaces the test files of the project; `own` replaces its own files; `siblingTests` lists the other test files of the project (names relative to its root), which a project-wide set leaves out (the own test file stays in); `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
 // `uploadable`); `subjects` are the projects a test-only project tests; `services` is the set of service leaves
 // (`serviceLeaves`): a narrow key follows the `.dks` pack of those, the `.dkm` pack of every other leaf.
 export const deviceInputs = (
@@ -343,7 +377,7 @@ export const deviceInputs = (
             const subject = opts.subjectRoots?.[id];
             const production = { input: 'production', projects: [id] };
             if (!subject) return production;
-            const files = subjectInputs(subject.root, opts.base);
+            const files = subjectInputs(subject.root, opts.base, root);
             const pack = subject.pack ? packOutputs([id], opts.services) : [];
             // `forDevice` picks per half: a half whose image holds the subject follows the image hashes; the others follow the
             // pack, or the subject's production files when it has none
@@ -376,7 +410,7 @@ export const deviceInputs = (
     ...(driverless ? withoutDriver(sources) : sources),
     ...(seeds.length ? pythonInputs(seeds) : []),
     // `siblingTests`: the target of one test file leaves the other test files of the project out of a project-wide set
-    ...(opts.siblingTests && wideProject ? ['!{projectRoot}/**/*.device.test.ts'] : []),
+    ...(opts.siblingTests?.length && wideProject ? opts.siblingTests.map((t) => `!{workspaceRoot}/${root}/${t}`) : []),
   ];
   return { inputs, patchkitLive, patchkitWasm };
 };
