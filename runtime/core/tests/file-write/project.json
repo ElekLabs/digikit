@@ -13,7 +13,6 @@
         "files": [
           "file-write.device.test.ts"
         ],
-        "dsp": "sharc",
         "tags": ["C:storage"],
         "modules": [
           "test/file-write",

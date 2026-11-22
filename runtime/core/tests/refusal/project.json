@@ -19,7 +19,6 @@
           "core/services/lfo"
         ],
         "plusdrive": true,
-        "dsp": "sharc",
         "tags": [
           "C:loading",
           "S:lfo"
