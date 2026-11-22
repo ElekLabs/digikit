@@ -1367,7 +1367,40 @@
           {
             "addr": "0x401378c4"
           }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The second reader of the LFO tables, the compare of D3 with 6 before the call of the wave function table (interrupt context; d7 is live). exit.1 is the RAND code, exit.2 the code after the call. DN2 0x401378c4: `moveq 6,D0; cmp.l D3,D0; beq 0x401378fa`. Dead at the RAND code (0x401378fa): D0 and the flags; at the code after the call (0x40137962): D2, D3, A6 and the flags, D1 and D0 are live. The stock fall-through needs the upper bits of D0 clear (`move.b #0x32,D0b` after the moveq): the routine sets D0 itself. The block is A4 (wave byte at 0x2a(a4)).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.read_call_dn2",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d2",
+          "ccr"
         ],
+        "in": [
+          "d1",
+          "d2",
+          "d3",
+          "a4"
+        ]
+      },
+      "site": "cf.lfo.site.read_call",
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x401394dc"
@@ -1383,7 +1416,7 @@
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.lfo.hook.read_call",
+      "name": "cf.lfo.hook.read_call_dt2",
       "regs": {
         "clobbers": [
           "d0",
@@ -1400,56 +1433,6 @@
       "site": "cf.lfo.site.read_call",
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x401375e4"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x401378c4"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x401394dc"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "The second reader of the LFO tables, the compare of D3 with 6 before the call of the wave function table (interrupt context; d7 is live). exit.1 is the RAND code, exit.2 the code after the call. DN2 0x401378c4: `moveq 6,D0; cmp.l D3,D0; beq 0x401378fa`. Dead at the RAND code (0x401378fa): D0 and the flags; at the code after the call (0x40137962): D2, D3, A6 and the flags, D1 and D0 are live. The stock fall-through needs the upper bits of D0 clear (`move.b #0x32,D0b` after the moveq): the routine sets D0 itself. The block is A4 (wave byte at 0x2a(a4)).",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.read_call",
-      "regs": {
-        "clobbers": [
-          "d0",
-          "d2",
-          "ccr"
-        ],
-        "in": [
-          "d1",
-          "d2",
-          "d3",
-          "a4"
-        ]
-      },
-      "site": "cf.lfo.site.read_call",
-      "subsystem": "lfo",
-      "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -1465,7 +1448,37 @@
           {
             "addr": "0x40137932"
           }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The second reader, the compare of D3 with 6 before the slew code (interrupt context). exit.1 skips the slew code. DN2 0x40137932: `moveq 6,D2; cmp.l D3,D2; bne 0x40137962`. Dead where the stock fall-through (0x40137938) continues: D0, D2, D3, A1, A6 and N Z V C; at 0x40137962: D2, D3, A6 and the flags.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.read_slew_dn2",
+      "regs": {
+        "clobbers": [
+          "d2",
+          "ccr"
         ],
+        "in": [
+          "d3",
+          "a4"
+        ]
+      },
+      "site": "cf.lfo.site.read_slew",
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4013954a"
@@ -1481,7 +1494,7 @@
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.lfo.hook.read_slew",
+      "name": "cf.lfo.hook.read_slew_dt2",
       "regs": {
         "clobbers": [
           "d2",
@@ -1495,53 +1508,6 @@
       "site": "cf.lfo.site.read_slew",
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x40137652"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x40137932"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x4013954a"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "The second reader, the compare of D3 with 6 before the slew code (interrupt context). exit.1 skips the slew code. DN2 0x40137932: `moveq 6,D2; cmp.l D3,D2; bne 0x40137962`. Dead where the stock fall-through (0x40137938) continues: D0, D2, D3, A1, A6 and N Z V C; at 0x40137962: D2, D3, A6 and the flags.",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.read_slew",
-      "regs": {
-        "clobbers": [
-          "d2",
-          "ccr"
-        ],
-        "in": [
-          "d3",
-          "a4"
-        ]
-      },
-      "site": "cf.lfo.site.read_slew",
-      "subsystem": "lfo",
-      "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -1557,7 +1523,37 @@
           {
             "addr": "0x40137836"
           }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq 0x40137852`. Dead at the clear (0x40137852): D2, D6 and N Z V C; at the SPH phase code (0x4013783c): D0, D2, D6 and N Z V C.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.read_start_dn2",
+      "regs": {
+        "clobbers": [
+          "d2",
+          "ccr"
         ],
+        "in": [
+          "d3",
+          "a4"
+        ]
+      },
+      "site": "cf.lfo.site.read_start",
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4013944e"
@@ -1573,7 +1569,7 @@
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.lfo.hook.read_start",
+      "name": "cf.lfo.hook.read_start_dt2",
       "regs": {
         "clobbers": [
           "d2",
@@ -1587,53 +1583,6 @@
       "site": "cf.lfo.site.read_start",
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x40137556"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x40137836"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x4013944e"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq 0x40137852`. Dead at the clear (0x40137852): D2, D6 and N Z V C; at the SPH phase code (0x4013783c): D0, D2, D6 and N Z V C.",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.read_start",
-      "regs": {
-        "clobbers": [
-          "d2",
-          "ccr"
-        ],
-        "in": [
-          "d3",
-          "a4"
-        ]
-      },
-      "site": "cf.lfo.site.read_start",
-      "subsystem": "lfo",
-      "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -1649,7 +1598,40 @@
           {
             "addr": "0x40137cc6"
           }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (interrupt context). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DN2 0x40137cc6: `moveq 6,D0; cmp.l D3,D0; beq 0x40137cec`. Dead at the RAND code (0x40137cec): D0 and the flags; at the code after the call (0x40137d52): D1, D2 and the flags (the DN2 stock call path keeps no register in its frame, so the routine saves no D1); A0 and A1 are not proven dead there (strict), so the routine saves them. The block is A4 (wave byte at 0x4c(a4)).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.tick_call_dn2",
+      "regs": {
+        "clobbers": [
+          "d0",
+          "d1",
+          "d2",
+          "ccr"
         ],
+        "in": [
+          "d2",
+          "d3",
+          "a4"
+        ]
+      },
+      "site": "cf.lfo.site.tick_call",
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x40139804"
@@ -1665,7 +1647,7 @@
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.lfo.hook.tick_call",
+      "name": "cf.lfo.hook.tick_call_dt2",
       "regs": {
         "clobbers": [
           "d0",
@@ -1682,56 +1664,6 @@
       "site": "cf.lfo.site.tick_call",
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x401379e6"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x40137cc6"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x40139804"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (interrupt context). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DN2 0x40137cc6: `moveq 6,D0; cmp.l D3,D0; beq 0x40137cec`. Dead at the RAND code (0x40137cec): D0 and the flags; at the code after the call (0x40137d52): D1, D2 and the flags (the DN2 stock call path keeps no register in its frame, so the routine saves no D1); A0 and A1 are not proven dead there (strict), so the routine saves them. The block is A4 (wave byte at 0x4c(a4)).",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.tick_call",
-      "regs": {
-        "clobbers": [
-          "d0",
-          "d1",
-          "d2",
-          "ccr"
-        ],
-        "in": [
-          "d2",
-          "d3",
-          "a4"
-        ]
-      },
-      "site": "cf.lfo.site.tick_call",
-      "subsystem": "lfo",
-      "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -1747,7 +1679,37 @@
           {
             "addr": "0x40137d1e"
           }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The LFO tick, the compare of D3 with 6 before the slew code of RAND (interrupt context). exit.1 skips the slew code; the end of the site is the slew code. DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne 0x40137d52`. Dead where the stock fall-through (the slew code, 0x40137d24) continues: D0, D1, D2, A0, A1 and N Z V C; at 0x40137d52: D1, D2 and the flags. D0 (the table result) is live.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.tick_slew_dn2",
+      "regs": {
+        "clobbers": [
+          "d1",
+          "ccr"
         ],
+        "in": [
+          "d3",
+          "a4"
+        ]
+      },
+      "site": "cf.lfo.site.tick_slew",
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4013986c"
@@ -1763,7 +1725,7 @@
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.lfo.hook.tick_slew",
+      "name": "cf.lfo.hook.tick_slew_dt2",
       "regs": {
         "clobbers": [
           "d2",
@@ -1777,53 +1739,6 @@
       "site": "cf.lfo.site.tick_slew",
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x40137a3e"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x40137d1e"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x4013986c"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "The LFO tick, the compare of D3 with 6 before the slew code of RAND (interrupt context). exit.1 skips the slew code; the end of the site is the slew code. DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne 0x40137d52`. Dead where the stock fall-through (the slew code, 0x40137d24) continues: D0, D1, D2, A0, A1 and N Z V C; at 0x40137d52: D1, D2 and the flags. D0 (the table result) is live.",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.tick_slew",
-      "regs": {
-        "clobbers": [
-          "d1",
-          "ccr"
-        ],
-        "in": [
-          "d3",
-          "a4"
-        ]
-      },
-      "site": "cf.lfo.site.tick_slew",
-      "subsystem": "lfo",
-      "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -1839,7 +1754,37 @@
           {
             "addr": "0x40137c40"
           }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dn2"
+      ],
+      "doc": "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (interrupt context). exit.1 is the clear; the end of the site is the SPH-based phase. DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq 0x40137c5c`. Dead at the clear (0x40137c5c): D1, D2, D7 and N Z V C; at the SPH phase code (0x40137c46): D0, D1, D2, D7 and N Z V C.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.lfo.hook.tick_start_dn2",
+      "regs": {
+        "clobbers": [
+          "d2",
+          "ccr"
         ],
+        "in": [
+          "d3",
+          "a4"
+        ]
+      },
+      "site": "cf.lfo.site.tick_start",
+      "subsystem": "lfo",
+      "users": [
+        "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x4013977e"
@@ -1855,7 +1800,7 @@
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.lfo.hook.tick_start",
+      "name": "cf.lfo.hook.tick_start_dt2",
       "regs": {
         "clobbers": [
           "d2",
@@ -1869,53 +1814,6 @@
       "site": "cf.lfo.site.tick_start",
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
-        "core/services/lfo"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x40137960"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x40137c40"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x4013977e"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dn2"
-      ],
-      "doc": "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (interrupt context). exit.1 is the clear; the end of the site is the SPH-based phase. DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq 0x40137c5c`. Dead at the clear (0x40137c5c): D1, D2, D7 and N Z V C; at the SPH phase code (0x40137c46): D0, D1, D2, D7 and N Z V C.",
-      "file": "devices/fw/lfo.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "replace",
-      "name": "cf.lfo.hook.tick_start",
-      "regs": {
-        "clobbers": [
-          "d2",
-          "ccr"
-        ],
-        "in": [
-          "d3",
-          "a4"
-        ]
-      },
-      "site": "cf.lfo.site.tick_start",
-      "subsystem": "lfo",
-      "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2086,7 +1984,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2132,7 +2029,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2178,7 +2074,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2224,7 +2119,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2270,7 +2164,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2316,7 +2209,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2362,7 +2254,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2408,7 +2299,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2454,7 +2344,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2500,7 +2389,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2546,7 +2434,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []
@@ -2592,7 +2479,6 @@
       },
       "subsystem": "lfo",
       "users": [
-        "core/lfo",
         "core/services/lfo"
       ],
       "was": []

@@ -66,6 +66,7 @@
         "test/dyn-dn2:pack",
         "test/dyn-fx-gain:pack",
         "test/lfo-shape:pack",
+        "test/lfo-shape-b:pack",
         "test/shortcut-demo:pack",
         "test/svc-test-user:pack",
         "test/svc-test:pack",

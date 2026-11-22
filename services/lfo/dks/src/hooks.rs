@@ -1,4 +1,4 @@
-//! The routines of the six pointer slots of `core/lfo` (an interrupt site each) as assembler, one file for each device, in one object (`fills` of `service!`, `[[fill]]` of module.toml
+//! The routines of the six interrupt hooks of the LFO tick (a site each) as assembler, one file for each device, in one object (`hooks` of `service!`, `[[hook]]` of module.toml
 //! name the entries of the device), and the one Rust function they call: `dk_lfo_eval(phase, wave)`, the lookup of the service crate (`eval`). It reads the shape table and writes
 //! nothing, so the tick may call it. A host build (the assembly test of the runtime runs the declarations of `service!`) has an empty function for each entry, so that the entry
 //! addresses exist.
@@ -18,8 +18,7 @@ extern "C" {
     static DKRT_LFO_FW: [u32; 4];
 }
 
-/// The first step of `init`: give the service the firmware addresses of the WAVE rows (the slots are named by `fills`; a file without `core/lfo` in the image is refused for its
-/// missing slots). A host build has no firmware: nothing is set and no row is written.
+/// The first step of `init`: give the service the firmware addresses of the WAVE rows (the hooks are named by `hooks`). A host build has no firmware: nothing is set and no row is written.
 pub unsafe fn setup(_core: &dkrt_svc_rt::ImportCore) -> i32 {
     #[cfg(target_arch = "m68k")]
     dkrt_svc_lfo::records::set_firmware(

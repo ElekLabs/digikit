@@ -41,7 +41,7 @@ pub struct CfItems<'a> {
     pub slots: &'a [(u32, u32)],
 }
 
-/// Installed sites at most (`[limits.format] install_sites` of sdk/sdk.toml): 18 and 22 on the two devices today, and room.
+/// Installed sites at most (`[limits.format] install_sites` of sdk/sdk.toml): 48 today, over all providers.
 pub const SITES_MAX: usize = dkneeds::INSTALL_SITES as usize;
 
 /// `jmp.l` and `nop`, as big-endian words.
