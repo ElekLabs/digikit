@@ -81,10 +81,14 @@ pub struct CommandHooks {
     /// Did a module register `cmd`?
     pub registered: Option<unsafe extern "C" fn(cmd: u32) -> bool>,
     /// Run the built-in command `cmd` of the package: the request number, the transport buffer, the body and its length; what its handler returns.
-    pub run: Option<unsafe extern "C" fn(cmd: u32, seq: u32, buf: *mut u8, body: *const u8, blen: u32) -> i32>,
+    pub run: Option<
+        unsafe extern "C" fn(cmd: u32, seq: u32, buf: *mut u8, body: *const u8, blen: u32) -> i32,
+    >,
     /// Run the command a module registered, with `out` the reply body: the length written (0 or more) or a negative status (`E_BUSY` while its module is reloaded,
     /// `E_PROTO` when no module registered it).
-    pub run_registered: Option<unsafe extern "C" fn(cmd: u32, seq: u32, body: *const u8, blen: u32, out: *mut u8) -> i32>,
+    pub run_registered: Option<
+        unsafe extern "C" fn(cmd: u32, seq: u32, body: *const u8, blen: u32, out: *mut u8) -> i32,
+    >,
 }
 
 /// What the resident exports to modules and the menu read of the loaded modules (`api.rs`, `watch.rs`, `report.rs`).
@@ -111,7 +115,14 @@ pub struct ModuleHooks {
 pub struct MenuHooks {
     pub scan: Option<unsafe extern "C" fn(out: *mut DkrtScan, max: u32) -> i32>,
     pub scan_reads: Option<unsafe extern "C" fn() -> u32>,
-    pub fit: Option<unsafe extern "C" fn(entries: *const DkrtScan, n: u32, ticked: *const u8, out: *mut DkrtFitOut) -> i32>,
+    pub fit: Option<
+        unsafe extern "C" fn(
+            entries: *const DkrtScan,
+            n: u32,
+            ticked: *const u8,
+            out: *mut DkrtFitOut,
+        ) -> i32,
+    >,
     pub capacity: Option<unsafe extern "C" fn(out: *mut DkrtCap, max: u32) -> u32>,
     pub live: Option<unsafe extern "C" fn(op: u32, path: *const u8) -> i32>,
     pub live_state: Option<unsafe extern "C" fn(out: *mut DkrtLive)>,
@@ -140,11 +151,31 @@ pub struct SettingsHooks {
     /// The module with record index `rec` opened its settings: a change of what it reads reloads it.
     pub opened: Option<unsafe extern "C" fn(rec: u32)>,
     /// The overlay's value of `key` for the module `id` into `buf`: the length, or a negative code; `NO_OVERLAY` when the overlay has no say.
-    pub overlay_get: Option<unsafe extern "C" fn(id: *const u8, id_len: u32, key: *const u8, key_len: u32, buf: *mut u8, cap: u32) -> i32>,
+    pub overlay_get: Option<
+        unsafe extern "C" fn(
+            id: *const u8,
+            id_len: u32,
+            key: *const u8,
+            key_len: u32,
+            buf: *mut u8,
+            cap: u32,
+        ) -> i32,
+    >,
     /// The overlay takes a put: 0, or the refusal.
-    pub overlay_put: Option<unsafe extern "C" fn(id: *const u8, id_len: u32, key: *const u8, key_len: u32, value: *const u8, len: u32) -> i32>,
+    pub overlay_put: Option<
+        unsafe extern "C" fn(
+            id: *const u8,
+            id_len: u32,
+            key: *const u8,
+            key_len: u32,
+            value: *const u8,
+            len: u32,
+        ) -> i32,
+    >,
     /// The overlay takes a remove: 0, or the refusal.
-    pub overlay_remove: Option<unsafe extern "C" fn(id: *const u8, id_len: u32, key: *const u8, key_len: u32) -> i32>,
+    pub overlay_remove: Option<
+        unsafe extern "C" fn(id: *const u8, id_len: u32, key: *const u8, key_len: u32) -> i32,
+    >,
 }
 
 /// `overlay_get` answer when the overlay does not hold the key: the broker reads its own record.
