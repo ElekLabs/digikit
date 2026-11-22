@@ -1,4 +1,4 @@
-// PROFILE_STATE and PROFILE_READ in the pure TypeScript client (`DkSession.profileState`, `profileRead`, `profileAll`) against a fake device
+// PROFILE_STATE and PROFILE_READ in the pure TypeScript client against a fake device
 // that answers from a queue of scripted replies and records the request bodies.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -56,7 +56,9 @@ test('profileState sends the op byte and decodes state, clock and rows', async (
 test('profileState decodes the poll slots: empty, a module record and the firmware image', async () => {
   const polls = [0, ...be(0, 4), 3, ...be(0x47e10040, 4), 0xff, ...be(0x40101000, 4), 1, ...be(0x47e00010, 4)];
   const { s } = session([{ body: [1, ...be(1000, 4), ...be(15, 2), ...be(5, 8), ...polls] }]);
-  assert.deepEqual((await s.profileState('get')).polls, [
+  const state = await s.profileState('get');
+  assert.equal('traceVersion' in state, false);
+  assert.deepEqual(state.polls, [
     undefined,
     { owner: 2, fn: 0x47e10040 },
     { owner: 'runtime', fn: 0x40101000 },
@@ -64,6 +66,21 @@ test('profileState decodes the poll slots: empty, a module record and the firmwa
   ]);
   const old = session([{ body: [1, ...be(1000, 4), ...be(15, 2), ...be(5, 8)] }]);
   assert.deepEqual((await old.s.profileState('get')).polls, [], 'a debug module without the slots');
+});
+
+test('profileState starts tracing and keeps extension bytes out of the four poll slots', async () => {
+  const emptyPolls = Array<number>(20).fill(0);
+  const { dev, s } = session([{ body: [1, ...be(1000, 4), ...be(15, 2), ...be(5, 8), ...emptyPolls, 1, 0, 0, 0, 2] }]);
+  assert.deepEqual(await s.profileState('startTrace'), {
+    running: true,
+    hz: 1000,
+    rows: 15,
+    elapsedTicks: 5n,
+    polls: [undefined, undefined, undefined, undefined],
+    traceVersion: 1,
+    traceGeneration: 2,
+  });
+  assert.deepEqual(dev.requests, [{ cmd: SERVICE_CMD.PROFILE_STATE, body: [4] }]);
 });
 
 test('profileRead sends the first row and decodes rows with a u64 sum', async () => {
@@ -126,6 +143,85 @@ test('a short reply is a protocol error', async () => {
 test('an error status is a DkError', async () => {
   await assert.rejects(session([{ status: -63 }]).s.profileState('start'), DkError);
   await assert.rejects(session([{ status: -63 }]).s.profileRead(0), DkError);
+});
+
+const traceEvent = (owner: number, start: bigint, duration: number) => [
+  ...be(owner, 4),
+  ...be(start, 8),
+  ...be(duration, 4),
+];
+const tracePage = (
+  records: number[][],
+  { generation = 0x9abcdef0, total = 2, dropped = 3, hz = 1000, first = 0, version = 1 } = {},
+) => [
+  version,
+  ...be(generation, 4),
+  ...be(total, 2),
+  ...be(dropped, 4),
+  ...be(hz, 4),
+  ...be(first, 2),
+  records.length,
+  ...records.flat(),
+];
+
+test('profileTrace pins the generation after the first page and preserves unsigned ticks in JSON', async () => {
+  const { dev, s } = session([
+    { body: tracePage([traceEvent(0x101, 5n, 12)]) },
+    { body: tracePage([traceEvent(0x203, 2n ** 64n - 1n, 0xffffffff)], { first: 1 }) },
+  ]);
+  const trace = await s.profileTrace();
+  assert.deepEqual(JSON.parse(JSON.stringify(trace)), {
+    version: 1,
+    generation: 0x9abcdef0,
+    hz: 1000,
+    dropped: 3,
+    events: [
+      { owner: 0x101, startTicks: '5', durationTicks: 12 },
+      { owner: 0x203, startTicks: '18446744073709551615', durationTicks: 0xffffffff },
+    ],
+  });
+  assert.deepEqual(dev.requests, [
+    { cmd: SERVICE_CMD.PROFILE_READ, body: [1, 0, 0, 0, 0, 0, 0] },
+    { cmd: SERVICE_CMD.PROFILE_READ, body: [1, 0x9a, 0xbc, 0xde, 0xf0, 0, 1] },
+  ]);
+});
+
+test('profileTrace accepts an empty frozen trace', async () => {
+  const { dev, s } = session([{ body: tracePage([], { total: 0, dropped: 0 }) }]);
+  assert.deepEqual(await s.profileTrace(), { version: 1, generation: 0x9abcdef0, hz: 1000, dropped: 0, events: [] });
+  assert.equal(dev.requests.length, 1);
+});
+
+test('profileTrace rejects malformed replies', async () => {
+  const records = [traceEvent(1, 10n, 5)];
+  const reply = tracePage(records);
+  const malformed = {
+    'short header': reply.slice(0, 17),
+    'short record': reply.slice(0, -1),
+    'trailing bytes': [...reply, 0],
+    'unsupported version': tracePage(records, { version: 2 }),
+    'wildcard generation': tracePage(records, { generation: 0 }),
+    'zero clock': tracePage(records, { hz: 0 }),
+    'oversized trace': tracePage(records, { total: 257 }),
+    'count past end': tracePage(records, { total: 0 }),
+    'wrong starting index': tracePage(records, { first: 1 }),
+    'no progress': tracePage([]),
+  };
+  for (const [name, body] of Object.entries(malformed)) {
+    await assert.rejects(
+      session([{ body }]).s.profileTrace(),
+      (e) => e instanceof DkError && e.kind === 'protocol',
+      name,
+    );
+  }
+});
+
+test('profileTrace rejects stale pages or changed metadata', async () => {
+  const records = [traceEvent(1, 10n, 5)];
+  for (const changed of [{ generation: 2 }, { total: 3 }, { dropped: 4 }, { hz: 2000 }]) {
+    const { s } = session([{ body: tracePage(records) }, { body: tracePage(records, { first: 1, ...changed }) }]);
+    await assert.rejects(s.profileTrace(), (e) => e instanceof DkError && e.kind === 'protocol');
+  }
 });
 
 // PROFILE_DSP: header (version, flags, generation, rows, sweep number, three counters), then the 100 words of a sweep when flag bit 1 is set.

@@ -42,8 +42,10 @@ import { setLogOpen } from '../src/log-state';
 import { logMode, previewLog } from './runtime-log-mock';
 import { previewNames } from './runtime-names-mock';
 import { SAMPLES_ROOT, bindSimApp, control, sim } from './sim';
+import { createPreviewSymbols } from './symbols-mock';
+
 const analyzerWorkers = createAnalyzerWorkers();
-const host = { ...createTauriHost(), analyzer: createPreviewAnalyzer() };
+const host = { ...createTauriHost(), analyzer: createPreviewAnalyzer(), symbols: createPreviewSymbols() };
 const apps = createDesktopApps(host);
 bindSimApp(apps.app);
 
@@ -136,7 +138,11 @@ function LogPage() {
   const follow = createLogFollow({
     follow: () => true,
     flashing: () => false,
-    emulator: { running: previewLog.emulatorRunning, session: async () => previewLog.emulator, names: previewNames },
+    emulator: {
+      running: previewLog.emulatorRunning,
+      session: async () => previewLog.emulator,
+      makeNames: () => previewNames,
+    },
     device: { port: previewLog.devicePort, session: async () => previewLog.device, present: async () => true },
   });
   return (

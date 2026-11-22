@@ -131,6 +131,9 @@ test('a fault detail names the crashed module from CRASH_MOD when no module list
     ev(3, 'CRASH_TAIL', [90, 4500, (LOG_KIND.MOD_LOG << 16) | lv(2, 1), word('tick'), 0]),
     ev(4, 'CRASH_TAIL', [90, 0, 0, 0, 1]),
   ];
+  const overlappingSymbol = () => 'unrelated_function';
+  expect(eventText(runtimeEvent(events[0]!), new Map(), overlappingSymbol)).not.toContain('unrelated_function');
+  expect(faultDetail(stop, events, new Map(), overlappingSymbol)).not.toContain('unrelated_function');
   expect(faultDetail(stop, events)).toMatch(/ 90 +3\.000s info +dyn-fx-hang +MOD_LOG/);
   expect(faultDetail(stop, events, new Map([[1, 'listed']]))).toMatch(/ 90 +3\.000s info +listed +MOD_LOG/);
 });

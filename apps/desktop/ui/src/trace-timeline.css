@@ -1,0 +1,204 @@
+.trace-timeline {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+  font: 11px/1.4 var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-timeline-toolbar,
+.trace-timeline-controls,
+.trace-timeline-inspector {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.trace-timeline-toolbar {
+  justify-content: space-between;
+}
+
+.trace-timeline-counts,
+.trace-timeline-inspector,
+.trace-timeline-empty {
+  color: var(--ink-2);
+}
+
+.trace-timeline-dropped {
+  color: var(--amber);
+}
+
+.trace-timeline-controls {
+  gap: 4px;
+}
+
+.trace-timeline-controls button {
+  min-width: 28px;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  color: var(--ink);
+  background: var(--panel-2);
+  font: inherit;
+}
+
+.trace-timeline-controls button:hover:not(:disabled) {
+  background: var(--panel-3);
+}
+
+.trace-timeline-controls button:disabled {
+  opacity: 0.5;
+}
+
+.trace-timeline-frame {
+  --trace-name-width: min(24%, 172px);
+
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--panel);
+}
+
+.trace-timeline-ruler {
+  display: flex;
+  align-items: stretch;
+  height: 28px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-3);
+}
+
+.trace-timeline-ruler-label,
+.trace-timeline-lane {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--trace-name-width);
+  width: var(--trace-name-width);
+  min-width: 0;
+  padding-inline: 8px;
+  border-right: 1px solid var(--line);
+}
+
+.trace-timeline-ruler-scale {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.trace-timeline-ruler-scale > span {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.trace-timeline-ruler-scale > span:first-child {
+  padding-left: 6px;
+  transform: none;
+}
+
+.trace-timeline-ruler-scale > span:last-child {
+  padding-right: 6px;
+  transform: translateX(-100%);
+}
+
+.trace-timeline-scroll {
+  overflow: auto;
+}
+
+.trace-timeline-sticky {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  height: 0;
+}
+
+.trace-timeline-plot {
+  position: absolute;
+  inset: 0 0 auto var(--trace-name-width);
+  overflow: hidden;
+  cursor: crosshair;
+  background: var(--panel-2);
+}
+
+.trace-timeline-plot:focus-visible {
+  outline: 1px solid var(--teal);
+  outline-offset: -1px;
+}
+
+.trace-timeline-canvas,
+.trace-timeline-crosshair {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.trace-timeline-canvas canvas {
+  display: block;
+}
+
+.trace-timeline-crosshair::before,
+.trace-timeline-crosshair::after {
+  position: absolute;
+  content: '';
+  background: var(--ink);
+  opacity: 0.55;
+}
+
+.trace-timeline-crosshair::before {
+  inset: 0 auto 0 var(--trace-cursor-x);
+  width: 1px;
+}
+
+.trace-timeline-crosshair::after {
+  inset: var(--trace-cursor-y) 0 auto;
+  height: 1px;
+}
+
+.trace-timeline-lane {
+  height: var(--trace-lane-height);
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.trace-timeline-lane::before {
+  flex: 0 0 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--trace-lane-color);
+  content: '';
+}
+
+.trace-timeline-lane span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trace-timeline-empty {
+  margin: 0;
+  padding: 12px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.trace-timeline-plot .trace-timeline-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.trace-timeline-inspector {
+  min-height: 1.4em;
+}
+
+.trace-timeline-inspector strong,
+.trace-timeline-time {
+  color: var(--ink);
+}

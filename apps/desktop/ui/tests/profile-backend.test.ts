@@ -24,8 +24,11 @@ interface FakeState {
   port?: string;
   /** PROFILE_STATE start answers E_PROTO (the debug module has no span clock). */
   noClock?: boolean;
+  traceVersion?: number;
   calls: string[];
   health?: { avg: number; max: number };
+  imageId?: string;
+  fwId?: string;
   polls?: ({ owner: number | 'runtime'; fn: number } | undefined)[];
 }
 
@@ -46,19 +49,29 @@ function fakeSession(st: FakeState): ProfileSession {
     maxTicks: max,
   });
   return {
-    info: async () => ({ port: st.port ?? 'dn2-1.12', caps: st.caps }),
+    info: async () => ({ port: st.port ?? 'dn2-1.12', caps: st.caps, image_id: st.imageId, fw_id: st.fwId }),
     modules: async () => [
       { index: 0, name: 'test/saw' },
       { index: 1, name: 'someone/mystery' },
     ],
     capacity: async () => ({ DSP_COST: { limit: 92_796, used: 0, largest: 0 } }),
-    profileState: async (op: 'get' | 'start' | 'stop' | 'reset') => {
+    profileDsp: async () => {
+      throw new DkError({ error: 'unknown command', kind: 'device', status: 'E_PROTO' });
+    },
+    profileState: async (op: 'get' | 'start' | 'stop' | 'reset' | 'startTrace') => {
       st.calls.push(`state:${op}`);
       if (st.noClock && op === 'start') throw new DkError({ error: 'no clock', kind: 'device', status: 'E_PROTO' });
-      if (op === 'start') st.running = true;
+      if (op === 'start' || op === 'startTrace') st.running = true;
       if (op === 'stop') st.running = false;
       if (op === 'reset') st.elapsed = 0n;
-      return { running: st.running, hz: HZ, rows: 15, elapsedTicks: st.elapsed };
+      return {
+        running: st.running,
+        hz: HZ,
+        rows: 15,
+        elapsedTicks: st.elapsed,
+        traceGeneration: op === 'startTrace' ? 2 : undefined,
+        traceVersion: st.traceVersion,
+      };
     },
     profileAll: async () => {
       if (st.missing) throw new DkError({ error: 'unknown command', kind: 'device', status: 'E_PROTO' });
@@ -115,6 +128,28 @@ const state = (over: Partial<FakeState> = {}): FakeState => ({
 });
 
 describe('read', () => {
+  test('timestamps span counters before owner enrichment and skips the separate HEALTH read for the drawer', async () => {
+    const session = fakeSession(state({ running: true }));
+    let clock = 1000;
+    const recorder = createRecorder({
+      session: async () => session,
+      now: () => new Date(clock),
+      loadLibrary: async () => {
+        clock += 6500;
+        return [];
+      },
+    });
+    let healthReads = 0;
+    session.logPage = async () => {
+      healthReads++;
+      throw new Error('Unexpected HEALTH read');
+    };
+    const r = await recorder.read('spans');
+    assert.ok(!r.noDebug);
+    assert.equal(r.observedAt, 1000);
+    assert.equal(clock, 7500);
+    assert.equal(healthReads, 0);
+  });
   test('a device without the PEEK capability, or one that refuses PROFILE_STATE, has no debug module', async () => {
     for (const st of [state({ caps: 0 }), state({ missing: true })]) {
       const r = await createRecorder({
@@ -346,6 +381,90 @@ describe('the emulator', () => {
     assert.deepEqual(asked, [0x40300000, 0x40101000, 0x40200000], 'one lookup, heaviest first');
   });
 
+  test('changing symbol sources refreshes live PCs and a failed refresh leaves their addresses raw', async () => {
+    const st = state({ running: true, elapsed: 10n });
+    let revision = 0;
+    let loadedRevision = -1;
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      prof: async () =>
+        ({
+          addrLookup: () => ({ results: [{ text: `tick_${loadedRevision}+0x4` }] }),
+        }) as never,
+      names: {
+        inputs: () => ({ maps: [], loads: { modules: [] } }),
+        needsRefresh: () => revision !== loadedRevision,
+        refresh: async () => {
+          if (revision === 2) throw new Error('cannot read maps');
+          loadedRevision = revision;
+        },
+      },
+    });
+    await rec.start();
+    const firstPc = async () => {
+      const r = await rec.read();
+      assert.ok(!r.noDebug);
+      return r.cf?.pcs[0];
+    };
+    assert.equal((await firstPc())?.name, 'tick_0+0x4');
+    revision = 1;
+    assert.equal((await firstPc())?.name, 'tick_1+0x4');
+    revision = 2;
+    assert.deepEqual(await firstPc(), { addr: 100, share: 1, weight: 3 });
+  });
+
+  test('export binds firmware SHA to verified capture data across a later image switch', async () => {
+    const hash = 'ab'.repeat(32);
+    const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      names: {
+        inputs: () => undefined,
+        imageHash: () => hash,
+        refresh: async () => {},
+      },
+      now: () => NOW,
+    });
+    await rec.start();
+    st.elapsed = 17n;
+    assert.equal(JSON.parse((await rec.exportFile()).text).run.firmware_sha256, hash);
+    await rec.stop();
+    st.imageId = 'ee'.repeat(8);
+    st.fwId = 'cd'.repeat(8);
+    st.elapsed = 99n;
+    const saved = JSON.parse((await rec.exportFile()).text);
+    assert.equal(saved.run.firmware_sha256, hash);
+    assert.equal(saved.span_elapsed_ticks, 17);
+    assert.equal(saved.raw[0].count, 3);
+    await rec.start();
+    assert.equal(
+      JSON.parse((await rec.exportFile()).text).run.firmware_sha256,
+      undefined,
+      'the ship map is for the old image',
+    );
+  });
+
+  test('an emulator reload invalidates the captured firmware SHA even under the same reported image id', async () => {
+    const hash = 'ab'.repeat(32);
+    const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': { ...cfAnswer, restarts: 1 }, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      names: {
+        inputs: () => ({ maps: [{ key: { image_sha256: hash } }], loads: { modules: [] } }),
+        refresh: async () => {},
+      },
+    });
+    await rec.start();
+    await rec.stop();
+    assert.equal(JSON.parse((await rec.exportFile()).text).run.firmware_sha256, undefined);
+  });
+
   test('the ColdFire view keeps only the top rows and has no shares when nothing was counted', () => {
     const part = {
       clock: { source: '', unit: '', sampling: '' },
@@ -486,4 +605,148 @@ describe('a device', () => {
     assert.equal(doc.span_elapsed_ticks, 777);
     assert.match(doc.run.id, /^dev-/);
   });
+});
+
+test('one recording freezes trace events and interval counters together for export', async () => {
+  const st = state({ traceVersion: 1 });
+  const session = fakeSession(st);
+  const trace = {
+    version: 1 as const,
+    generation: 2,
+    hz: HZ,
+    dropped: 3,
+    events: [{ owner: 0x100, startTicks: '42', durationTicks: 6 }],
+  };
+  session.profileTrace = async (generation) => {
+    assert.equal(generation, 2);
+    assert.equal(st.running, false);
+    return trace;
+  };
+  const recorder = createRecorder({ session: async () => session, loadLibrary: library });
+  await recorder.start();
+  await recorder.stop();
+  assert.deepEqual(st.calls, ['state:reset', 'state:startTrace', 'state:stop']);
+  session.profileTrace = async () => {
+    throw new Error('capture has since been replaced');
+  };
+  const doc = JSON.parse((await recorder.exportFile()).text);
+  assert.deepEqual(doc.trace, trace);
+  const reading = await recorder.read('spans');
+  assert.ok(!reading.noDebug);
+  assert.deepEqual(reading.frozenTrace?.trace, trace);
+  assert.equal(reading.frozenTrace?.names.get(0x100), 'early');
+  assert.ok(doc.spans.some((row: { owner: number }) => row.owner === 0x100));
+  await recorder.reset();
+  assert.equal(JSON.parse((await recorder.exportFile()).text).trace, undefined);
+  const resetReading = await recorder.read('spans');
+  assert.ok(!resetReading.noDebug && !resetReading.frozenTrace);
+});
+
+test('a failed trace download retains the frozen aggregate and records the loss in the export', async () => {
+  const session = fakeSession(state({ traceVersion: 1 }));
+  session.profileTrace = async () => {
+    throw new Error('recording replaced');
+  };
+  const recorder = createRecorder({ session: async () => session, loadLibrary: library });
+  await recorder.start();
+  await recorder.stop();
+  const doc = JSON.parse((await recorder.exportFile()).text);
+  assert.ok(doc.spans.length);
+  assert.equal(doc.trace, undefined);
+  assert.deepEqual(doc.loss, [{ series: 'trace', reason: 'recording replaced' }]);
+});
+
+describe('DSP block recording', () => {
+  function setup(emulator = false) {
+    const st = state();
+    const session = fakeSession(st);
+    const steps: string[] = [];
+    let generation = 80;
+    const sweep = {
+      number: 7,
+      blocks: 40,
+      maxStockBlockDelta: 44,
+      overruns: 2,
+      rows: [{ row: 8, kind: 'effect' as const, calls: 120, sumCycles: 3200n, maxCall: 65, maxBlock: 110 }],
+    };
+    let published: typeof sweep | undefined = sweep;
+    session.profileDsp = async (op = 'get') => {
+      steps.push(op);
+      if (op === 'clear') generation++;
+
+      return { on: st.running, generation, counts: { sweeps: 7, gaps: 0, ignored: 0 }, sweep: published };
+    };
+    const rec = createRecorder({
+      session: async () => session,
+      loadLibrary: library,
+      rpc: emulator ? fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }) : undefined,
+    });
+    return {
+      rec,
+      steps,
+      replace: () => generation++,
+      noSweep: () => {
+        published = undefined;
+      },
+    };
+  }
+  for (const emulator of [false, true]) {
+    test(`freezes the measured window in ${emulator ? 'emulator instructions' : 'device cycles'}`, async () => {
+      const { rec, steps } = setup(emulator);
+      await rec.start(true);
+      await rec.read('spans');
+      assert.deepEqual(steps, ['clear', 'start']);
+      const live = await rec.read('spans', true);
+      assert.ok(!live.noDebug && live.snap.running && live.dspBlocks?.blocks === 40);
+      await rec.reset();
+      await rec.stop();
+      const reading = await rec.read('spans');
+      assert.ok(!reading.noDebug);
+      assert.deepEqual(reading.dspBlocks, {
+        unit: emulator ? 'instructions' : 'cycles',
+        blocks: 40,
+        overruns: 2,
+        rows: [{ row: 8, kind: 'effect', calls: 120, meanBlock: 80, maxCall: 65, maxBlock: 110 }],
+      });
+      assert.deepEqual(steps, ['clear', 'start', 'get', 'clear', 'get']);
+      const doc = JSON.parse((await rec.exportFile()).text);
+      assert.equal(doc.dsp.unit, emulator ? 'insn' : 'cycles');
+      assert.equal(doc.dsp_rows[0].sum_cycles, 3200);
+      await rec.reset();
+      assert.equal(JSON.parse((await rec.exportFile()).text).dsp, undefined);
+    });
+  }
+  test('ordinary recording and reset leave DSP streaming alone', async () => {
+    const { rec, steps } = setup();
+    await rec.start();
+    await rec.reset();
+    await rec.stop();
+    await rec.releaseDsp();
+    assert.deepEqual(steps, []);
+  });
+
+  for (const replaced of [false, true]) {
+    test('target departure releases only the owned generation, replaced=' + replaced, async () => {
+      const { rec, replace, steps } = setup();
+      await rec.start(true);
+      if (replaced) replace();
+      await rec.releaseDsp();
+      await rec.releaseDsp();
+      assert.deepEqual(steps, replaced ? ['clear', 'start', 'get'] : ['clear', 'start', 'get', 'stop']);
+    });
+  }
+
+  for (const stale of [false, true]) {
+    test(stale ? 'rejects a replaced recording' : 'explains a short recording with no sweep', async () => {
+      const { rec, replace, noSweep } = setup();
+      await rec.start(true);
+      if (stale) replace();
+      else noSweep();
+      await rec.stop();
+      const r = await rec.read('spans');
+      assert.ok(!r.noDebug && !r.dspBlocks);
+      assert.match(r.dspBlockNote ?? '', stale ? /changed/ : /No complete DSP sweep/);
+      assert.ok(JSON.parse((await rec.exportFile()).text).spans.length);
+    });
+  }
 });

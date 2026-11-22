@@ -5,6 +5,7 @@
 // Host tests: packages/dk-session/tests/log-names.test.ts.
 import type { AddrMapJson, DkProf, LoadTableJson } from './dkprof.ts';
 import type { AddrNamer } from './runtime-log.ts';
+import { DkError } from './dkupload-core.ts';
 import { CAP } from './gen_proto.ts';
 
 /** What the controller answers to `runtime.maps` (docs/CONTROL.md). */
@@ -19,22 +20,27 @@ export interface RuntimeMaps {
 }
 
 /** The part of dkprof the names need. */
-export type NameProf = Pick<DkProf, 'addrLookup' | 'loadTable'>;
+export type NameProf = Pick<DkProf, 'prepareAddrLookup' | 'loadTable'>;
 
 /**
  * The resolver of one image: `maps` (the ship map and the maps of the built modules) and the load table that says where the modules sit.
  * A module that is not in the table has no names, and an address no map holds has none: the answer is null and the caller keeps the hex.
  */
 export function makeResolver(prof: NameProf, maps: AddrMapJson[], loads: LoadTableJson): AddrNamer {
-  return (cpu, addr, ret = false) => {
-    try {
-      const [r] = prof.addrLookup({ maps, loads, ret, addrs: [{ cpu, addr }] }).results;
-      if (!r?.text) return null;
-      return r.module ? `${r.module}: ${r.text}` : r.text;
-    } catch {
-      return null;
-    }
-  };
+  try {
+    const lookup = prof.prepareAddrLookup({ maps, loads });
+    return (cpu, addr, ret = false) => {
+      try {
+        const [r] = lookup({ ret, addrs: [{ cpu, addr }] }).results;
+        if (!r?.text) return null;
+        return r.module ? `${r.module}: ${r.text}` : r.text;
+      } catch {
+        return null;
+      }
+    };
+  } catch {
+    return () => null;
+  }
 }
 
 /** Read `len` bytes of RAM at a byte address: PEEK of the debug module over a `DkSession`, for the emulator and for a device alike. */
@@ -82,6 +88,8 @@ export interface NameSources {
   ship(session: NameSession): Promise<ShipSource | { unavailable: string }>;
   /** The JSON texts of the module maps of a device (`dt2`, `dn2`). */
   moduleMaps(device: string): Promise<string[]>;
+  firmwareMaps?(stockHash: string): Promise<AddrMapJson[]>;
+  revision?(): number;
 }
 
 /** The names of one origin the follower reads: `resolve` is what the text builders take, `refresh` reads the maps and the load table again. */
@@ -92,39 +100,74 @@ export interface LogNames {
   unavailable(): string | undefined;
   /** The maps and the load table behind `resolve` (the Profile pane names DSP addresses with them), or undefined when there are none. */
   inputs(): { maps: AddrMapJson[]; loads: LoadTableJson } | undefined;
+  /** Verified stock image, also available when module memory cannot be read. */
+  imageHash?(): string | undefined;
+  needsRefresh?(): boolean;
   refresh(session: NameSession): Promise<void>;
 }
 
 const PEEK_CAP = 'needs the debug module (digikit/debug): its PEEK reads the load table';
+
+export function stockImageHash(map: AddrMapJson): string | undefined {
+  const hash = (map.key as { image_sha256?: string } | undefined)?.image_sha256;
+  return typeof hash === 'string' && /^[a-f0-9]{64}$/i.test(hash) ? hash.toLowerCase() : undefined;
+}
 
 /** The names of one target. The same code serves the emulator and a device: they differ in `sources.ship` only. */
 export function createLogNames(sources: NameSources): LogNames {
   let resolver: AddrNamer | undefined;
   let inputs: { maps: AddrMapJson[]; loads: LoadTableJson } | undefined;
   let why: string | undefined;
+  let imageHash: string | undefined;
+  let revision = sources.revision?.();
+  let request = 0;
+  const needsRefresh = () => revision !== sources.revision?.();
   const none = (reason: string) => {
     resolver = undefined;
     inputs = undefined;
     why = reason;
   };
   return {
-    resolve: () => resolver,
+    resolve: () => (needsRefresh() ? undefined : resolver),
     unavailable: () => why,
-    inputs: () => inputs,
+    imageHash: () => imageHash,
+    inputs: () => (needsRefresh() ? undefined : inputs),
+    needsRefresh,
     async refresh(session) {
-      resolver = undefined;
+      const token = ++request;
+      imageHash = undefined;
+      none('');
+      revision = sources.revision?.();
       const info = await session.info();
-      if (info.caps === null || ((info.caps >>> CAP.PEEK) & 1) === 0 || !session.peek) return none(PEEK_CAP);
+      const canPeek = info.caps !== null && ((info.caps >>> CAP.PEEK) & 1) === 1 && !!session.peek;
+      if (token !== request) return;
+      if (!canPeek && !sources.firmwareMaps) return none(PEEK_CAP);
       const src = await sources.ship(session);
+      if (token !== request) return;
       if ('unavailable' in src) return none(src.unavailable);
       if (src.matches === false)
         return none('the maps are not those of the image that runs (reload or flash it again)');
       const ship = JSON.parse(src.ship) as AddrMapJson;
+      const hash = stockImageHash(ship);
+      imageHash = hash;
+      const firmware = hash && sources.firmwareMaps ? await sources.firmwareMaps(hash) : [];
+      if (token !== request) return;
+      revision = sources.revision?.();
+      if (!canPeek && !firmware.length) return none(PEEK_CAP);
       const device = (ship.key as { device?: string } | undefined)?.device;
-      const modules = device ? await sources.moduleMaps(device) : [];
       const prof = await sources.prof();
-      const loads = await readLoadTable(prof, ship, src.symbols, session.peek.bind(session));
-      const maps = [ship, ...modules.map((m) => JSON.parse(m) as AddrMapJson)];
+      let loads: LoadTableJson = { modules: [] };
+      let modules: string[] = [];
+      if (canPeek && session.peek) {
+        try {
+          loads = await readLoadTable(prof, ship, src.symbols, session.peek.bind(session));
+          if (device) modules = await sources.moduleMaps(device);
+        } catch (error) {
+          if (!firmware.length || (error instanceof DkError && error.kind === 'cancelled')) throw error;
+        }
+      }
+      if (token !== request || needsRefresh()) return;
+      const maps = [ship, ...modules.map((m) => JSON.parse(m) as AddrMapJson), ...firmware];
       resolver = makeResolver(prof, maps, loads);
       inputs = { maps, loads };
       why = undefined;

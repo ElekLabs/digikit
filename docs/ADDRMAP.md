@@ -151,12 +151,16 @@ Only the source of the ship map differs. **Hardware proof is a later, explicit s
   The follower picks the record whose image id equals the id INFO reports. A device whose image was not prepared by this workbench has no names: the Log says why once.
 - Modules: `lib_build` writes `M.addrmap.json` beside each `M.dkm` in `out/modules/<device>/`. The Host command `library.readMaps(device)` returns these and the kept ship
   maps; `host.firmware.dkprofWasm()` gives the wasm.
-- When the maps are read: before the first entry that names an address (a crash, a fault) and again after the module list changed. Without PEEK, without a map for the image or when the
-  maps do not match the running bytes, the pane shows hex and one line `names unavailable: <reason>`.
-- Text: a name is appended as ` (module: function+0xNN)` after the `pc` of a crash and the `at` of a stopped DSP, and a stack word that names code is listed as a return
-  address in the detail of a fault. An address no map holds stays hex. Records of an earlier boot (crash, fault) mark a module name `unverified`: the module sits at the load
-  addresses of the boot that reads the record (above). Whether the DSP's last word of a fault record is a SHARC PC is unverified [O]: it is named only when a module's DSP map holds it.
+- The Log loads names before formatting a crash and refreshes them when module state or registered sources change. It displays a PC or return address alongside its resolved name and offset. Module addresses from an earlier boot carry an `unverified` marker because modules can move. The last word of a DSP fault is a packed breadcrumb and stays hexadecimal.
 - The Memory panel lists, under each bar, what each loaded module takes of the resource (`moduleRows`, from CAPACITY and the module files' needs).
+
+### Firmware symbols in desktop Settings
+
+Open **Settings → Firmware symbols** and add a ColdFire SQLite database, a SHARC SQLite database or an exported `.dev.json` symbol map. Each source lists the firmware it covers. Select a Target to see whether its image matches. **Refresh** rereads the registered files and **Remove** forgets a path. Workbench remembers paths locally and opens databases read-only.
+
+For SQLite sources, Workbench checks the ColdFire main section or SHARC DSP image digest against the firmware port records. For exported maps it uses the declared stock SysEx SHA-256. Direct database imports use stored function names. A CPU-specific database takes precedence over an exported map for that CPU. Within each source type, the last file added takes precedence.
+
+The Log can name fixed firmware PCs even when the debug module cannot supply a module load table. Profile shows names beside sampled ColdFire and SHARC addresses. When reopening a capture, Profile uses the firmware hash recorded in the capture to find matching registered symbols. Captures without a verified image and addresses outside known ranges keep their numeric addresses.
 
 ## Consumers
 

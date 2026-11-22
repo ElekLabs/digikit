@@ -15,6 +15,7 @@ import {
   runId,
   sharcPart,
   spansPart,
+  type BuildInput,
   type CfAnswer,
   CF_PATHS,
   type Part,
@@ -29,12 +30,15 @@ import {
   type PollInfo,
   type Snapshot,
 } from '@digi/workbench-core/profile/profile-core.ts';
-import type { LogNames } from '@digi/dk-session/log-names';
+import { stockImageHash, type LogNames } from '@digi/dk-session/log-names';
+import { createDspBlockRecording, type DspBlockCapture } from './dsp-block-recording';
+import type { FrozenTrace } from './span-recording';
+import { sampledPcs, type Hotspot } from './profile-hotspots';
 
 /** The part of the session the pane uses. */
 export type ProfileSession = Pick<
   DkSession,
-  'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'logPage' | 'peek'
+  'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'profileDsp' | 'profileTrace' | 'logPage' | 'peek'
 >;
 
 /** One ColdFire path of the emulator (ram_clear, run_fast, step_once, idle_skip) with its share of the host time and of the instructions. */
@@ -48,18 +52,10 @@ export interface CfPathRow {
   insnShare: number;
 }
 
-/** One heavy PC of the ColdFire samples: its address, weight and share of all sampled weight. `name` is set when a lookup knows the address. */
-export interface CfPcRow {
-  addr: number;
-  weight: number;
-  share: number;
-  name?: string;
-}
-
 /** The compact ColdFire view of the Profile pane. */
 export interface CfView {
   paths: CfPathRow[];
-  pcs: CfPcRow[];
+  pcs: Hotspot[];
 }
 
 export const CF_TOP_PCS = 10;
@@ -83,17 +79,11 @@ export function cfView(part: Part, nameOf?: (addr: number) => string | undefined
     timeShare: ns > 0 ? r.hostNs / ns : 0,
     insnShare: ins > 0 ? r.insns / ins : 0,
   }));
-  const samples = (part.raw as { series?: string; addr: number; count: number }[]).filter((r) => r.series === 'pc');
-  const total = samples.reduce((t, r) => t + r.count, 0);
-  const pcs = samples
-    .sort((a, b) => b.count - a.count || a.addr - b.addr)
-    .slice(0, top)
-    .map((r) => {
-      const row: CfPcRow = { addr: r.addr, weight: r.count, share: total > 0 ? r.count / total : 0 };
-      const name = nameOf?.(r.addr);
-      if (name) row.name = name;
-      return row;
-    });
+  const pcs = sampledPcs(part.raw, 'cf', top);
+  for (const row of pcs) {
+    const name = nameOf?.(row.addr);
+    if (name) row.name = name;
+  }
   return { paths, pcs };
 }
 
@@ -111,6 +101,13 @@ export type ProfileReading =
       port: string;
       /** The target is the emulator (the controller's instruction profiles go with the spans). */
       emulator: boolean;
+      observedAt: number;
+      imageId?: string | null;
+      dspBlocks?: DspBlockCapture;
+      dspBlockNote?: string;
+      traceSummary?: string;
+      frozenTrace?: FrozenTrace;
+      traceSupported?: boolean;
       snap: Snapshot;
       modules: ModuleRef[];
       /** Emulator: the modules' DSP per block (undefined when `sharc.profile` is off or the daemon lacks it). */
@@ -132,7 +129,7 @@ export interface ProfileDeps {
   loadLibrary: (device: string) => Promise<LibraryModule[]>;
   prof?: () => Promise<DkProf>;
   /** The maps and load table of the running image (the emulator's names), to name the DSP counters. */
-  names?: Pick<LogNames, 'inputs' | 'refresh'>;
+  names?: Pick<LogNames, 'inputs' | 'refresh' | 'needsRefresh' | 'imageHash'>;
   now?: () => Date;
 }
 
@@ -195,10 +192,11 @@ interface Source<T> {
 }
 
 export interface Recorder {
+  releaseDsp(): Promise<void>;
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
-  read(): Promise<ProfileReading>;
+  read(detail?: 'full' | 'spans', liveDsp?: boolean): Promise<ProfileReading>;
   /** Reset the counters and start the spans; on the emulator also `cf.profile` and `sharc.profile` count from now. */
-  start(): Promise<void>;
+  start(withDspBlocks?: boolean): Promise<void>;
   /** Stop the spans; on the emulator, keep the instruction profiles of the recording for Export. */
   stop(): Promise<void>;
   /** Zero the counters (both states); the recording window starts again. */
@@ -206,6 +204,11 @@ export interface Recorder {
   /** The `dk.profile/1` of what was recorded (spans, and on the emulator cf.profile and sharc.profile), as the file text and a file name. */
   exportFile(): Promise<{ text: string; name: string }>;
 }
+
+type ProfileInfo = Awaited<ReturnType<ProfileSession['info']>>;
+
+const sameImage = (a: ProfileInfo, b: ProfileInfo): boolean =>
+  a.port === b.port && a.image_id === b.image_id && a.fw_id === b.fw_id;
 
 export function createRecorder(deps: ProfileDeps): Recorder {
   const now = deps.now ?? (() => new Date());
@@ -222,6 +225,40 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   /** What could not start for the running recording; read faults come on top. */
   let startFaults: ProfileFaults = { without: [], other: [] };
 
+  let namesImage: ProfileInfo | undefined;
+  let namesRequest = 0;
+  let captureImage: { info: ProfileInfo; sha256: string } | undefined;
+  let traceGeneration: number | undefined;
+  const dspBlocks = createDspBlockRecording();
+  let frozenTrace: FrozenTrace | undefined;
+  let stoppedCapture: BuildInput | undefined;
+
+  const nameInputs = (info: ProfileInfo) =>
+    namesImage && sameImage(info, namesImage) && !deps.names?.needsRefresh?.() ? deps.names?.inputs() : undefined;
+
+  async function refreshNames(s: ProfileSession, info: ProfileInfo): Promise<void> {
+    if (!deps.names) return;
+    const request = ++namesRequest;
+    namesImage = undefined;
+    try {
+      await deps.names.refresh(s);
+      if (request === namesRequest) namesImage = info;
+    } catch {
+      // Names are optional; the profile keeps its raw addresses.
+    }
+  }
+
+  async function captureIdentity(s: ProfileSession, info: ProfileInfo): Promise<void> {
+    captureImage = undefined;
+    await refreshNames(s, info);
+    const ship = nameInputs(info)?.maps[0];
+    const sha256 = deps.names?.imageHash?.() ?? (ship && stockImageHash(ship));
+    if (sha256 && info.image_id && (!info.fw_id || sha256.startsWith(info.fw_id.toLowerCase()))) {
+      const current = await s.info().catch(() => undefined);
+      if (current && sameImage(info, current)) captureImage = { info, sha256 };
+    }
+  }
+
   const libraryOf = async (port: string): Promise<LibraryModule[]> => {
     if (library?.port !== port) {
       let modules: LibraryModule[] = [];
@@ -236,13 +273,16 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   };
 
   /** The poll slots with the function names of the address maps (the Log pane's maps and load table); a slot without a name keeps its address only. */
-  const pollInfos = async (slots: (PollSlot | undefined)[]): Promise<(PollInfo | undefined)[]> => {
+  const pollInfos = async (slots: (PollSlot | undefined)[], info: ProfileInfo): Promise<(PollInfo | undefined)[]> => {
     const polls: (PollInfo | undefined)[] = slots.map((p) => (p ? { owner: p.owner, fn: p.fn } : undefined));
-    const inputs = deps.names?.inputs();
+    const request = namesRequest;
+    const inputs = nameInputs(info);
     const used = polls.flatMap((p) => (p ? [p] : []));
     if (!deps.prof || !inputs || used.length === 0) return polls;
     try {
-      const { results } = (await deps.prof()).addrLookup({
+      const prof = await deps.prof();
+      if (request !== namesRequest || deps.names?.needsRefresh?.()) return polls;
+      const { results } = prof.addrLookup({
         maps: inputs.maps,
         loads: inputs.loads,
         addrs: used.map((p) => ({ cpu: 'cf' as const, addr: p.fn })),
@@ -258,26 +298,28 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   };
 
   /** The ColdFire view of a `cf.profile` part, its heaviest PCs named through the same lookup as the poll slots (dkprof and the image's maps). */
-  const cfViewOf = async (part: Part): Promise<CfView> => {
-    const names = new Map<number, string>();
+  const cfViewOf = async (part: Part, info: ProfileInfo): Promise<CfView> => {
     const view = cfView(part);
-    const inputs = deps.names?.inputs();
+    const request = namesRequest;
+    const inputs = nameInputs(info);
     if (deps.prof && inputs && view.pcs.length > 0) {
       try {
-        const { results } = (await deps.prof()).addrLookup({
+        const prof = await deps.prof();
+        if (request !== namesRequest || deps.names?.needsRefresh?.()) return view;
+        const { results } = prof.addrLookup({
           maps: inputs.maps,
           loads: inputs.loads,
           addrs: view.pcs.map((p) => ({ cpu: 'cf' as const, addr: p.addr })),
         });
         view.pcs.forEach((p, i) => {
           const t = results[i]?.text;
-          if (t) names.set(p.addr, t);
+          if (t) p.name = t;
         });
       } catch {
         // no names: the rows show the address
       }
     }
-    return cfView(part, (a) => names.get(a));
+    return view;
   };
 
   const moduleRefs = async (s: ProfileSession, port: string): Promise<ModuleRef[]> => {
@@ -333,8 +375,10 @@ export function createRecorder(deps: ProfileDeps): Recorder {
 
   const spansSource = (s: ProfileSession): Source<void> => ({
     start: async () => {
-      await state(s, 'reset');
-      await state(s, 'start');
+      const caps = await state(s, 'reset');
+      const supported = caps.traceVersion === 1;
+      const started = await state(s, supported ? 'startTrace' : 'start');
+      traceGeneration = started.traceGeneration;
     },
     stop: async () => void (await state(s, 'stop')),
     reset: async () => void (await s.profileState('reset')),
@@ -365,7 +409,12 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     return out;
   }
 
-  async function dspOf(s: ProfileSession, modules: ModuleRef[], sharc: Part | undefined): Promise<DspView | undefined> {
+  async function dspOf(
+    s: ProfileSession,
+    modules: ModuleRef[],
+    sharc: Part | undefined,
+    info: ProfileInfo,
+  ): Promise<DspView | undefined> {
     if (!sharc) return undefined;
     const blocks = sharc.metrics.find((m) => m.name === 'sharc.blocks')?.value ?? 0;
     if (!(blocks > 0)) return undefined;
@@ -376,10 +425,13 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       // the device does not report it: the bar is relative to the total
     }
     let report: Parameters<typeof dspView>[0] = { blocks, series: [] };
-    const inputs = deps.names?.inputs();
+    const request = namesRequest;
+    const inputs = nameInputs(info);
     if (deps.prof && inputs) {
       const doc = buildProfile({ run: { id: runId('emu', now()), target: device }, sharc });
-      report = (await deps.prof()).profileReport({
+      const prof = await deps.prof();
+      if (request !== namesRequest || deps.names?.needsRefresh?.()) return dspView(report, modules, headroom);
+      report = prof.profileReport({
         profile: doc,
         maps: inputs.maps,
         loads: inputs.loads,
@@ -389,8 +441,36 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     return dspView(report, modules, headroom);
   }
 
+  async function capturedData(
+    s: ProfileSession,
+    info: ProfileInfo,
+    all: Awaited<ReturnType<ProfileSession['profileAll']>>,
+    parts: typeof kept,
+  ): Promise<BuildInput> {
+    const modules = await moduleRefs(s, info.port ?? '');
+    const polls = await pollInfos(all.polls, info);
+    const spans = spansPart(all, (x) => ownerName(x, modules, polls));
+    const id = runId(deps.rpc ? 'emu' : 'dev', now());
+    const target = (info.port ?? 'unknown').split('-')[0] ?? 'unknown';
+    const run: BuildInput['run'] = { id, target };
+    if (captureImage && !restarts.cf && !restarts.sharc && sameImage(captureImage.info, info)) {
+      const current = await s.info().catch(() => undefined);
+      if (current && sameImage(info, current)) run.firmware_sha256 = captureImage.sha256;
+    }
+    const capture: BuildInput = { run, ...parts, spans, dsp: all.running ? undefined : dspBlocks.artifact() };
+    if (traceGeneration !== undefined && !all.running) {
+      try {
+        capture.trace = await s.profileTrace(traceGeneration);
+      } catch (error) {
+        capture.traceError = asFault(error);
+      }
+    }
+    return capture;
+  }
+
   return {
-    async read() {
+    releaseDsp: dspBlocks.release,
+    async read(detail = 'full', liveDsp = false) {
       const s = await deps.session();
       const info = await s.info();
       if (info.caps === null || ((info.caps >>> CAP.PEEK) & 1) === 0)
@@ -404,24 +484,57 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         if (isDebugMissing(e)) return { noDebug: true, port, emulator: !!deps.rpc };
         throw e;
       }
+      const observedAt = now().getTime();
+      if (deps.names && (!namesImage || !sameImage(info, namesImage) || deps.names.needsRefresh?.()))
+        await refreshNames(s, info);
       const modules = await moduleRefs(s, port);
       const snap: Snapshot = {
         running: all.running,
         hz: all.hz,
         elapsedTicks: all.elapsedTicks,
         spans: all.spans,
-        polls: await pollInfos(all.polls),
+        polls: await pollInfos(all.polls, info),
       };
-      const r: ProfileReading = { noDebug: false, port, emulator: !!deps.rpc, snap, modules };
+      const r: ProfileReading = {
+        noDebug: false,
+        port,
+        emulator: !!deps.rpc,
+        observedAt,
+        imageId: info.image_id,
+        snap,
+        modules,
+      };
+      if (!hasDsp()) r.noDsp = true;
+      if (!all.running) r.dspBlocks = dspBlocks.capture();
+      r.dspBlockNote = !hasDsp()
+        ? 'This target has no SHARC DSP.'
+        : dspBlocks.note() ||
+          (all.running && !dspBlocks.armed()
+            ? 'To measure DSP costs, stop recording, select Include DSP block costs, and record again.'
+            : '');
+      if (all.running && liveDsp && dspBlocks.armed()) {
+        try {
+          r.dspBlocks = await dspBlocks.live(s, !!deps.rpc);
+        } catch (error) {
+          r.dspBlockNote = `Live DSP costs unavailable · ${asFault(error)}`;
+        }
+      }
+      r.traceSupported = all.traceVersion === 1;
+      if (!all.running) r.frozenTrace = frozenTrace;
+      const trace = stoppedCapture?.trace;
+      if (trace && !all.running) r.traceSummary = `${trace.events.length} trace events · ${trace.dropped} dropped`;
+      if (stoppedCapture?.traceError && !all.running)
+        r.traceSummary = `Trace unavailable · ${stoppedCapture.traceError}`;
+      if (detail === 'spans') return r;
       if (deps.rpc) {
         if (counting() && all.running) {
           const parts = await instructionParts();
-          if (parts.cf) r.cf = await cfViewOf(parts.cf);
           try {
-            r.dsp = await dspOf(s, modules, parts.sharc);
+            r.dsp = await dspOf(s, modules, parts.sharc, info);
           } catch {
             // the DSP section stays empty
           }
+          if (parts.cf) r.cf = await cfViewOf(parts.cf, info);
         }
         if (!hasDsp()) r.noDsp = true;
         if (instructionNote) r.note = instructionNote;
@@ -432,20 +545,22 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       return r;
     },
 
-    async start() {
+    async start(withDspBlocks = false) {
       const s = await deps.session();
       kept = {};
-      device = ((await s.info()).port ?? '').split('-')[0] || device;
+      stoppedCapture = undefined;
+      frozenTrace = undefined;
+      traceGeneration = undefined;
+      captureImage = undefined;
+      const info = await s.info();
+      device = (info.port ?? '').split('-')[0] || device;
+      dspBlocks.reset();
       await spansSource(s).start();
-
-      try {
-        await deps.names?.refresh(s); // the maps of the image that runs now (a reload changes them)
-      } catch {
-        // no names: the DSP view has the total only
-      }
+      if (withDspBlocks) await dspBlocks.start(s, hasDsp());
+      await captureIdentity(s, info);
+      restarts = {};
       if (!deps.rpc) return;
       active = {};
-      restarts = {};
       const faults: ProfileFaults = { without: [], other: [] };
       const wanted: [keyof typeof active, string, Source<Part>][] = [['cf', 'cf.profile', cfSource()]];
       if (hasDsp()) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
@@ -467,6 +582,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       let spansError: unknown;
       try {
         await spansSource(s).stop();
+        await dspBlocks.freeze(s, !!deps.rpc);
       } catch (e) {
         spansError = e; // the instruction sources still stop; the error comes after
       }
@@ -486,34 +602,55 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         if (stopNote) instructionNote = instructionNote ? `${instructionNote} ${stopNote}` : stopNote;
       }
       if (spansError !== undefined) throw spansError;
+      if (captureImage || traceGeneration !== undefined || dspBlocks.capture()) {
+        try {
+          const info = await s.info();
+          const capture = await capturedData(s, info, await s.profileAll(), kept);
+          if (capture.trace)
+            frozenTrace = {
+              trace: capture.trace,
+              names: new Map(capture.spans?.spans.map((row) => [row.owner, row.name])),
+            };
+          if (capture.run.firmware_sha256 || capture.trace || capture.traceError || capture.dsp)
+            stoppedCapture = capture;
+        } catch {
+          // Export can still read the available counters, leaving the identity out if it cannot verify it.
+        }
+      }
     },
 
     async reset() {
       const s = await deps.session();
-      await spansSource(s).reset();
+      const info = await s.info();
+      const resetState = await state(s, 'reset');
+      if (!resetState.running) dspBlocks.reset();
+      else await dspBlocks.clearRunning();
+      if (traceGeneration !== undefined)
+        traceGeneration = resetState.running ? (await state(s, 'startTrace')).traceGeneration : undefined;
       kept = {};
+      stoppedCapture = undefined;
+      frozenTrace = undefined;
+      await captureIdentity(s, info);
+      restarts = {};
       try {
         for (const src of Object.values(active)) await src.reset();
       } catch (e) {
+        captureImage = undefined;
         instructionNote = asFault(e);
       }
     },
 
     async exportFile() {
-      const s = await deps.session();
-      const all = await s.profileAll();
-      const info = await s.info();
-      const modules = await moduleRefs(s, info.port ?? '');
-      const parts = deps.rpc && counting() ? await instructionParts() : kept;
-      const polls = await pollInfos(all.polls);
-      const spans = spansPart(all, (x) => ownerName(x, modules, polls));
-      const id = runId(deps.rpc ? 'emu' : 'dev', now());
-      const doc = buildProfile({
-        run: { id, target: (info.port ?? 'unknown').split('-')[0] ?? 'unknown' },
-        ...parts,
-        spans,
-      });
-      return { text: `${JSON.stringify(doc)}\n`, name: `${id}.dkprof.json` };
+      let capture = stoppedCapture;
+      if (!capture) {
+        const s = await deps.session();
+        const info = await s.info();
+        const all = await s.profileAll();
+        const parts = deps.rpc && counting() ? await instructionParts() : kept;
+        capture = await capturedData(s, info, all, parts);
+      }
+      const doc = buildProfile(capture);
+      return { text: `${JSON.stringify(doc)}\n`, name: `${capture.run.id}.dkprof.json` };
     },
   };
 }

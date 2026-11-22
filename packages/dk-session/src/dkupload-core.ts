@@ -114,6 +114,15 @@ export interface ProfileSpan {
   maxTicks: number;
 }
 
+/** A frozen trace from PROFILE_READ. Start ticks are decimal strings so the trace can be serialized losslessly. */
+export interface ProfileTrace {
+  version: 1;
+  generation: number;
+  hz: number;
+  dropped: number;
+  events: { owner: number; startTicks: string; durationTicks: number }[];
+}
+
 /** One row of the DSP stats window (P8d): a DSP dispatch row, 0 to 7 machines and 8 to 15 effects. Cycles are in DSP cycles (the emulator: instructions). */
 export interface DspRow {
   row: number;
@@ -1621,20 +1630,36 @@ export class DkSession {
     if (b.length < 1) throw new DkError({ error: 'setup: malformed reply', kind: 'protocol' });
     return b[0]!;
   }
-  /** PROFILE_STATE (debug module): `get` the state, `start` or `stop` the spans, or `reset` the counters. The reply is the state after the op, with the ticks of the span clock that passed while running since the last reset (the window the sums belong to). */
+  /** PROFILE_STATE (debug module): get the state, start spans (with a trace for `startTrace`), stop, or reset. The reply includes the span clock ticks elapsed while running since reset. */
   async profileState(
-    op: 'get' | 'start' | 'stop' | 'reset',
+    op: 'get' | 'start' | 'stop' | 'reset' | 'startTrace',
     quick: Quick = false,
-  ): Promise<{ running: boolean; hz: number; rows: number; elapsedTicks: bigint; polls: (PollSlot | undefined)[] }> {
-    const code = { get: 0, start: 1, stop: 2, reset: 3 }[op];
+  ): Promise<{
+    running: boolean;
+    hz: number;
+    rows: number;
+    elapsedTicks: bigint;
+    polls: (PollSlot | undefined)[];
+    traceVersion?: number;
+    traceGeneration?: number;
+  }> {
+    const code = { get: 0, start: 1, stop: 2, reset: 3, startTrace: 4 }[op];
     const b = await this.ok(SERVICE_CMD.PROFILE_STATE, 'profile state', Uint8Array.of(code), quick);
     if (b.length < 15) throw new DkError({ error: 'profile state: malformed reply', kind: 'protocol' });
     const elapsedTicks = new DataView(b.buffer, b.byteOffset, b.length).getBigUint64(7);
     // the 4 poll slots follow (u8 owner: 0 empty, 1 + record, 0xff firmware image; u32 address); a debug module from before them sends none
     const polls: (PollSlot | undefined)[] = [];
-    for (let at = 15; at + 5 <= b.length; at += 5)
+    for (let at = 15; at + 5 <= Math.min(35, b.length); at += 5)
       polls.push(b[at] === 0 ? undefined : { owner: b[at] === 0xff ? 'runtime' : b[at]! - 1, fn: u32(b, at + 1) });
-    return { running: b[0] === 1, hz: u32(b, 1), rows: u16(b, 5), elapsedTicks, polls };
+    const state = { running: b[0] === 1, hz: u32(b, 1), rows: u16(b, 5), elapsedTicks, polls };
+    const traceVersion = b[35];
+    if (op === 'startTrace') {
+      const traceGeneration = b.length >= 40 ? u32(b, 36) : 0;
+      if (traceVersion !== 1 || !traceGeneration)
+        throw new DkError({ error: 'profile state: missing trace generation', kind: 'protocol' });
+      return { ...state, traceVersion, traceGeneration };
+    }
+    return traceVersion === undefined ? state : { ...state, traceVersion };
   }
   /** PROFILE_READ (debug module): the span rows from row `first`; the device may return fewer rows than a page holds. */
   async profileRead(
@@ -1653,6 +1678,57 @@ export class DkSession {
       rows.push({ calls: view.getUint32(at), sumTicks: view.getBigUint64(at + 4), maxTicks: view.getUint32(at + 12) });
     }
     return { first: u16(b, 0), rows };
+  }
+  /** PROFILE_READ in trace mode: page through the frozen trace, pinning the generation from the first reply. */
+  async profileTrace(expectedGeneration?: number, quick: Quick = false): Promise<ProfileTrace> {
+    const version = 1;
+    const headerBytes = 18;
+    const recordBytes = 16;
+    const maxEvents = 256;
+    const malformed = () => new DkError({ error: 'profile trace: malformed reply', kind: 'protocol' });
+    const body = Uint8Array.of(version, 0, 0, 0, 0, 0, 0);
+    const request = new DataView(body.buffer);
+    const events: ProfileTrace['events'] = [];
+    let capture: { generation: number; total: number; dropped: number; hz: number } | undefined;
+    do {
+      const first = events.length;
+      request.setUint32(1, capture?.generation ?? expectedGeneration ?? 0);
+      request.setUint16(5, first);
+      const b = await this.ok(SERVICE_CMD.PROFILE_READ, 'profile trace', body, quick);
+      if (b.length < headerBytes || b[0] !== version) throw malformed();
+      const view = new DataView(b.buffer, b.byteOffset, b.length);
+      const generation = view.getUint32(1);
+      const total = view.getUint16(5);
+      const dropped = view.getUint32(7);
+      const hz = view.getUint32(11);
+      const count = view.getUint8(17);
+      if (
+        generation === 0 ||
+        (expectedGeneration !== undefined && generation !== expectedGeneration) ||
+        hz === 0 ||
+        total > maxEvents ||
+        view.getUint16(15) !== first ||
+        first + count > total ||
+        (count === 0 && first < total) ||
+        b.length !== headerBytes + count * recordBytes ||
+        (capture &&
+          (generation !== capture.generation ||
+            total !== capture.total ||
+            dropped !== capture.dropped ||
+            hz !== capture.hz))
+      )
+        throw malformed();
+      capture ??= { generation, total, dropped, hz };
+      for (let i = 0; i < count; i++) {
+        const at = headerBytes + i * recordBytes;
+        events.push({
+          owner: view.getUint32(at),
+          startTicks: view.getBigUint64(at + 4).toString(),
+          durationTicks: view.getUint32(at + 12),
+        });
+      }
+    } while (events.length < capture.total);
+    return { version, generation: capture.generation, hz: capture.hz, dropped: capture.dropped, events };
   }
   /** PROFILE_DSP (debug module): `get` the DSP stats, `start` or `stop` the counters, or `clear` them (a new clear generation). The reply is the state after the op. */
   async profileDsp(op: 'get' | 'start' | 'stop' | 'clear' = 'get', quick: Quick = false): Promise<DspStats> {
@@ -1693,6 +1769,7 @@ export class DkSession {
    */
   async profileAll(quick: Quick = false): Promise<{
     running: boolean;
+    traceVersion?: number;
     hz: number;
     elapsedTicks: bigint;
     spans: ProfileSpan[];
@@ -1713,7 +1790,14 @@ export class DkSession {
         spans.push({ row, kind: kind as 'module' | 'phase' | 'poll', index, ...r });
       }
     }
-    return { running: st.running, hz: st.hz, elapsedTicks: st.elapsedTicks, spans, polls: st.polls };
+    return {
+      running: st.running,
+      hz: st.hz,
+      elapsedTicks: st.elapsedTicks,
+      spans,
+      polls: st.polls,
+      traceVersion: st.traceVersion,
+    };
   }
   /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded. */
   async logConfig(quick: Quick = false): Promise<LogConfig> {

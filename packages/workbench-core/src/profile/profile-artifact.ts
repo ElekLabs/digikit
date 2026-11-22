@@ -1,3 +1,5 @@
+import type { DkSession, DspStats } from '@digi/dk-session';
+
 // The `dk.profile/1` artifact (docs/INSTRUMENTATION.md "Profiles"), built from what the sources answer: the runtime spans of the debug module
 // (dk-session `profileAll`), `cf.profile` and `sharc.profile` of the emulator. One builder for `wb profile ...` (tools/devtools/wb_prof.mjs) and
 // the Profile pane (apps/desktop/ui/src/profile-backend.ts), so both write the same file. No DOM, no Tauri. Host tests: tests/profile-artifact.test.ts.
@@ -187,11 +189,31 @@ export interface DspRowOut {
   max_block: number;
 }
 
+/** The newest complete DSP stats sweep, in the target's native counter unit. */
+export function dspStatsPart(sweep: DspStats['sweep'], unit: string): BuildInput['dsp'] {
+  if (!sweep) return undefined;
+  return {
+    header: { unit, blocks: sweep.blocks, max_stock_block_delta: sweep.maxStockBlockDelta, overruns: sweep.overruns },
+    rows: sweep.rows
+      .filter((x) => x.calls > 0 || x.maxBlock > 0)
+      .map((x) => ({
+        row: x.row,
+        kind: x.kind,
+        calls: x.calls,
+        sum_cycles: Number(x.sumCycles),
+        max_call: x.maxCall,
+        max_block: x.maxBlock,
+      })),
+  };
+}
+
 export interface BuildInput {
   run: Record<string, unknown>;
   cf?: Part;
   sharc?: Part;
   spans?: SpansPart;
+  traceError?: string;
+  trace?: Awaited<ReturnType<DkSession['profileTrace']>>;
   /** The DSP stats window of the capture (calibration runs). */
   dsp?: { header: DspHeader; rows: DspRowOut[] };
   /** Names the markers (`record.start` at 0 is always there when a part is given). */
@@ -226,9 +248,10 @@ export function buildProfile(i: BuildInput): Record<string, unknown> {
     raw: parts.flatMap((p) => p.raw),
     metrics: parts.flatMap((p) => p.metrics),
     markers: i.markers ?? (parts.length > 0 ? [{ name: 'record.start', at: 0 }] : []),
-    loss: parts.flatMap((p) => p.loss),
+    loss: [...parts.flatMap((p) => p.loss), ...(i.traceError ? [{ series: 'trace', reason: i.traceError }] : [])],
     overhead: parts.flatMap((p) => p.overhead),
     ...(spans ? spans : {}),
+    ...(i.trace ? { trace: i.trace } : {}),
     ...(i.dsp ? { dsp: i.dsp.header, dsp_rows: i.dsp.rows } : {}),
   };
 }

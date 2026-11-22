@@ -51,11 +51,27 @@ export function installRemoteMock(): void {
       throw Object.assign(new Error('No runtime'), { kind: 'timeout' });
     return { port: 'dn2-1.12', caps: 1 << CAP.LOG, runtime: 11 << 8 };
   };
-  proto.logPage = async () => [
-    1,
-    1,
-    [{ seq: 1, time: 15000, kind: LOG_KIND.HEALTH, flags: 0, args: [(6 << 16) | 213, 345, 420, 0, 0] }],
-  ];
+  const history = new URLSearchParams(location.search).has('history');
+  const began = Date.now();
+  proto.logPage = async () => {
+    const tick = history ? Math.floor((Date.now() - began) / 5000) : 0;
+    const seq = 1 + tick;
+    const cpu = [213, 350, 290, 180][tick % 4]!;
+    const dsp = [345, 730, 510, 290][tick % 4]!;
+    return [
+      seq,
+      seq,
+      [
+        {
+          seq,
+          time: seq * 15000,
+          kind: LOG_KIND.HEALTH,
+          flags: 0,
+          args: [(6 << 16) | cpu, dsp, Math.max(dsp, 420), 0, 0],
+        },
+      ],
+    ];
+  };
   proto.remoteState = async () => ({ enabled: true, format: 1, turnLimit: 10 });
   proto.remoteKey = async () => {};
   proto.remoteTurn = async () => {};

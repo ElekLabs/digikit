@@ -521,6 +521,10 @@
    "owner": "rust:packages/patchkit",
    "purpose": "Path to the stock DT2 image for the storage fault ISR patchkit Rust test."
   },
+  "DIGI_SYMBOL_DB_OUT": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Directory containing cfdb and sharcdb for the opt-in desktop symbol source test"
+  },
   "DIGI_USB_TRACE": {
    "owner": "rust:packages/emulator",
    "purpose": "Any non-empty value except 0: log every USB MIDI hand-over to the guest callback and every call of its transmit function (instruction count, length, payload hash, caller) to stderr"

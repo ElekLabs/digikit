@@ -107,6 +107,28 @@ test('native audio health uses its lightweight endpoint and preserves the CF set
   }
 });
 
+test('controller utilization includes CF without audio and drops cached values on pause or guest fault', async () => {
+  vi.useFakeTimers();
+  const load = { window_s: 1, cf: { real_pct: 31, real_high_pct: 35, model_pct: 28 }, dsp: null };
+  const host = createFakeHost({
+    'emu.startup': snapshot(1),
+    'emu.step': status({ error: 'guest fault' }),
+    'rpc.call': () => ({ load }),
+  });
+  const runtime = (await createNativeRuntime(host, () => {}))!;
+  try {
+    assert.deepEqual((await runtime.controllerStatus!()).load, load);
+    runtime.pause();
+    assert.equal((await runtime.controllerStatus!()).load, null);
+    runtime.resume();
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal((await runtime.controllerStatus!()).load, null);
+  } finally {
+    runtime.dispose();
+    vi.useRealTimers();
+  }
+});
+
 test('native audio health has no session before startup firmware exists', async () => {
   vi.useFakeTimers();
   try {

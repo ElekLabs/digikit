@@ -27,12 +27,12 @@ export interface FollowEnv {
   follow(): boolean;
   /** A firmware flash is running: the Firmware page has the MIDI port. */
   flashing(): boolean;
-  emulator: { running(): boolean; session(): Promise<FollowSession>; names?: LogNames };
+  emulator: { running(): boolean; session(): Promise<FollowSession>; makeNames?(): LogNames };
   device: {
     port(): string | undefined;
     session(): Promise<FollowSession>;
     present(): Promise<boolean>;
-    names?: LogNames;
+    makeNames?(): LogNames;
   };
   push?(inputs: LogInput[]): void;
   /** The window is on screen (default: yes). A hidden window asks nothing of the device. */
@@ -107,7 +107,7 @@ export function createLogFollow(env: FollowEnv): LogFollow {
           origin,
           session: source.session,
           present: 'present' in source ? source.present : undefined,
-          names: 'names' in source ? source.names : undefined,
+          names: source.makeNames?.(),
           now,
           out: {
             push,

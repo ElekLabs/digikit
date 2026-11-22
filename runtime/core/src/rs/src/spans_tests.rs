@@ -1,10 +1,10 @@
 //! The span producers (`entry::tick_all`, `tick::phase`, `tick::poll_all`) over a fake clock and a fake emit: nothing is read or emitted without a span sink
-//! and a clock, and a span carries the owner of its producer and the clock's difference (a wrap included). The sink channel is global state: the tests
-//! share the lock of `cleanup_tests`.
-use crate::test_lock::LOCK;
+//! and a clock. A span carries its producer's owner, the first clock reading and the elapsed cycles across a wrap. The sink channel is global state. The
+//! tests share the lock of `cleanup_tests`.
 use crate::dlog::{self, Span, SINK_SPAN};
 use crate::entry::{self, Ctx};
 use crate::state::{DKRT_POLLS, POLLS};
+use crate::test_lock::LOCK;
 use crate::tick::{phase, poll_all};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::{E_CONTRACT, E_NOMEM, OK};
@@ -14,8 +14,8 @@ use std::vec::Vec;
 static mut NOW: u32 = 0;
 static mut STEP: u32 = 0;
 static mut CLOCK_CALLS: u32 = 0;
-/// What the fake emit got, as `(owner, cycles)`.
-static mut EMITS: Vec<(u32, u32)> = Vec::new();
+/// What the fake emit got, as `(owner, cycles, start_tick)`.
+static mut EMITS: Vec<(u32, u32, u32)> = Vec::new();
 /// How many times the fake module tick ran.
 static mut TICKED: u32 = 0;
 
@@ -27,7 +27,7 @@ unsafe extern "C" fn fake_clock() -> u32 {
 }
 
 unsafe extern "C" fn fake_emit(s: *const Span) {
-    (*addr_of_mut!(EMITS)).push(((*s).owner, (*s).cycles));
+    (*addr_of_mut!(EMITS)).push(((*s).owner, (*s).cycles, (*s).start_tick));
 }
 
 unsafe extern "C" fn fake_poll() {}
@@ -70,7 +70,7 @@ unsafe fn in_module<R>(f: impl FnOnce() -> R) -> R {
     r
 }
 
-fn emits() -> Vec<(u32, u32)> {
+fn emits() -> Vec<(u32, u32, u32)> {
     unsafe { (*addr_of_mut!(EMITS)).clone() }
 }
 
@@ -109,7 +109,7 @@ fn an_emit_without_a_clock_measures_nothing() {
 /// The span of a module tick (`entry::tick_all` measures the call with the record index, the emit after `leave_module`): one span per call with the owner and the clock's
 /// difference, a wrap of the counter included. The 32-bit `DKRT_TICKS` table cannot hold a fake's address on a 64-bit host, so `tick_all` itself is not run here.
 #[test]
-fn spanned_emits_one_span_per_call_with_its_owner() {
+fn spanned_emits_one_record_per_call_with_its_owner_and_start() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset(u32::MAX - 2, 10);
@@ -125,10 +125,9 @@ fn spanned_emits_one_span_per_call_with_its_owner() {
             assert_eq!(TICKED, n);
             assert_eq!(CLOCK_CALLS, 2 * n);
             assert_eq!(emits().len(), n as usize);
-            assert_eq!(emits().last().copied(), Some((rec, 10)));
         }
         // the first span wrapped the counter, the later ones did not
-        assert_eq!(emits(), [(0, 10), (2, 10), (5, 10)]);
+        assert_eq!(emits(), [(0, 10, u32::MAX - 2), (2, 10, 17), (5, 10, 37)]);
         in_module(|| dlog::dk_span_sink_set(core::ptr::null_mut(), core::ptr::null_mut()));
         let before = CLOCK_CALLS;
         dlog::spanned(9, || fake_tick(core::ptr::null()));
@@ -144,12 +143,12 @@ fn a_phase_and_each_poll_carry_their_own_owner() {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
         phase(1);
-        // the counter wrapped between the two reads: the difference is still the step
-        assert_eq!(emits(), [(0x101, 10)]);
+        // The clock wrapped during the phase. The record keeps the original reading and the elapsed cycles.
+        assert_eq!(emits(), [(0x101, 10, u32::MAX - 2)]);
         (*addr_of_mut!(DKRT_POLLS))[0] = fake_poll as *const () as usize;
         (*addr_of_mut!(DKRT_POLLS))[1] = fake_poll as *const () as usize;
         poll_all();
-        assert_eq!(emits(), [(0x101, 10), (0x200, 10), (0x201, 10)]);
+        assert_eq!(emits(), [(0x101, 10, u32::MAX - 2), (0x200, 10, 17), (0x201, 10, 37)]);
         assert_eq!(CLOCK_CALLS, 6);
         in_module(|| dlog::dk_span_sink_set(core::ptr::null_mut(), core::ptr::null_mut()));
         (*addr_of_mut!(DKRT_POLLS))[0] = 0;

@@ -9,17 +9,20 @@
 
    dk_span_sink_set(emit, clock) takes the span channel like dk_sink_set(DK_SINK_SPAN, emit) and also stores the clock, `uint32_t clock(void)`, a counter
    that wraps. The runtime measures a span only while both are set; it reads the clock before and after the measured code and passes the difference as
-   `cycles`. (0, 0) clears both. DK_E_BUSY when another module owns the channel. */
+   `cycles`. On runtime 0.11.3 and later it also passes the first reading as `start_tick`. Check that `dk_module_ctx_runtime_version(ctx)` is at least
+   `DK_SPAN_START_TICK_VERSION` before reading that field. (0, 0) clears both. DK_E_BUSY when another module owns the channel. */
 #ifndef DK_SINK_H
 #define DK_SINK_H
 #include <dk/core/module.h>
 
 #define DK_SINK_LOG 0u
 #define DK_SINK_SPAN 1u
+#define DK_SPAN_START_TICK_VERSION 0x000b03u
 
-/* One record of the span channel: the owner id the producer gave and the cycles it measured. */
+/* One span: the producer's owner id, elapsed cycles and the raw clock reading at the start. */
 typedef struct dk_span {
     uint32_t owner;
     uint32_t cycles;
+    uint32_t start_tick;
 } dk_span;
 #endif

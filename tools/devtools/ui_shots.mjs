@@ -161,6 +161,230 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'performance-dsp-blocks',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "!!document.querySelector('.span-actions input')", 'DSP recording option missing');
+      if (await p.eval("document.querySelector('.span-actions input').checked"))
+        throw new Error('DSP block recording should default to off');
+      await p.eval("document.querySelector('.span-actions input').click()");
+      await p.click(/^Timeline$/);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "document.querySelector('.span-actions input')?.disabled", 'DSP option changed during recording');
+      await waitForAnalyzer(p, "document.querySelector('.dsp-blocks canvas') && document.querySelector('.span-actions button')?.textContent.includes('Stop recording')", 'Missing live DSP chart while recording');
+      await p.click(/^Spans$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('cycles')", 'Frozen DSP block chart missing');
+    },
+  },
+  {
+    name: 'performance-timeline-legacy',
+    q: 'page=run&runtimeOnly&history&prof=stopped&legacyProfile',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Timeline$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel')?.textContent.includes('digikit runtime 0.11.3') && !document.querySelector('.performance-panel canvas')",
+        'Missing trace capability explanation',
+      );
+    },
+  },
+  {
+    name: 'performance-timeline',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Timeline$/);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')", 'Missing live DSP chart while recording');
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')", 'Missing frozen trace');
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(p, "!document.querySelector('.performance-panel canvas')", 'Trace survived a target switch');
+      await pickTarget(p, remoteModel);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "!!document.querySelector('.performance-panel canvas')", 'Missing trace after returning to target');
+      await waitForAnalyzer(p, "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')", 'Missing trace loss count');
+      await p.eval(`(() => {
+        const plot = document.querySelector('.trace-timeline-plot');
+        const r = plot.getBoundingClientRect();
+        const position = { bubbles: true, clientX: r.left + r.width * 0.018, clientY: r.top + 8 };
+        plot.dispatchEvent(new PointerEvent('pointermove', position));
+        plot.dispatchEvent(new WheelEvent('wheel', { ...position, ctrlKey: true, deltaY: -80, cancelable: true }));
+      })()`);
+      await waitForAnalyzer(p, "document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && document.querySelector('.trace-timeline-crosshair') && !document.querySelector('[aria-label=\"Zoom out\"]').disabled", 'Hover or pointer zoom failed');
+    },
+  },
+  {
+    name: 'performance-spans',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Spans$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
+        'Recorder unavailable',
+      );
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
+        'Interval has no ranked owners',
+      );
+      await showTab(p, 'Profile');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Recording')",
+        'Profile did not see the shared recording',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Stopped')",
+        'Profile did not see Stop from Spans',
+      );
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(p, "!document.querySelector('.span-breakdown-table')", 'Intervals leaked across targets');
+      await pickTarget(p, remoteModel);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
+        'New target did not bind its recorder',
+      );
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(
+        p,
+        "document.querySelectorAll('.span-details option').length >= 4",
+        'Expected consecutive recorded intervals',
+      );
+      await p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const rect = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.right - (rect.width / 60) * 2 }));
+      })()`);
+      if (
+        !(await p.eval(
+          "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw' && document.querySelector('.performance-tooltip')?.innerText.includes('Recorded interval')",
+        ))
+      )
+        throw new Error('Hover did not select an observed interval');
+    },
+  },
+  {
+    name: 'performance-history',
+    q: 'page=run&runtimeOnly&history',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      const measured =
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-cf dd')?.textContent.endsWith('%') && document.querySelector('.performance-dsp dd')?.textContent.endsWith('%')";
+      await waitForAnalyzer(p, measured, 'Missing hardware utilization');
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-source')?.textContent === 'Estimated utilization' && document.querySelector('.performance-cf dd')?.textContent === '—'",
+        'Hardware reading survived target switch',
+      );
+      await p.click(/^Analyzer$/);
+      if (await p.eval("!!document.querySelector('.performance-panel')"))
+        throw new Error('Performance drawer stayed open');
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await waitForAnalyzer(p, measured, 'Performance drawer failed to reopen');
+      for (let i = 0; i < 2; i++) {
+        const previous = await p.eval("document.querySelector('.performance-cf dd').textContent");
+        await waitForAnalyzer(
+          p,
+          `document.querySelector('.performance-cf dd')?.textContent !== ${JSON.stringify(previous)} && (${measured})`,
+          'Utilization history did not advance',
+        );
+      }
+      const move = (fraction) =>
+        p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const bounds = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: bounds.left + bounds.width * ${fraction} }));
+      })()`);
+      await move(0.01);
+      if (!(await p.eval("document.querySelector('.performance-tooltip')?.textContent.includes('No sample')")))
+        throw new Error('Inspecting empty history showed a reading');
+      await move(0.91);
+      if (
+        !(await p.eval(
+          "document.querySelectorAll('.performance-marker').length === 2 && /CF .*%DSP .*%/.test(document.querySelector('.performance-tooltip')?.textContent)",
+        ))
+      )
+        throw new Error('Hover did not show both processor readings');
+      const guideX = () => p.eval("document.querySelector('.performance-guide').getBoundingClientRect().x");
+      const before = await guideX();
+      await move(0.915);
+      if (
+        (await guideX()) <= before ||
+        !(await p.eval("document.querySelector('.performance-tooltip').textContent.includes('Interpolated')"))
+      )
+        throw new Error('Crosshair did not sweep between samples');
+      await p.eval("document.querySelector('.performance-plot').dispatchEvent(new PointerEvent('pointerleave'))");
+      if (await p.eval("!!document.querySelector('.performance-guide')"))
+        throw new Error('Guide remained after leaving plot');
+      await move(0.91);
+    },
+  },
+  {
+    name: 'firmware-symbols',
+    q: 'page=run&symbols',
+    size: MIN,
+    steps: async (p) => {
+      await pickTarget(p, 'Emulator');
+      await p.eval("document.querySelector('nav button[aria-label=Settings]').focus()");
+      await p.key(' ', { code: 'Space', vk: 32 });
+      const view = async () => p.eval("document.querySelector('.firmware-symbols:not([hidden])')?.innerText ?? ''");
+      if (!(await view()).includes('No symbol sources added.')) throw new Error('Settings did not show the empty list');
+      await p.click(/^Add ColdFire database/);
+      await p.click(/^Add SHARC database/);
+      await p.click(/^Add Symbol map/);
+      await p.click(/^Add Symbol map/); // Cancel the chooser.
+      await p.click(/^Refresh sources$/);
+      const rows = () => p.eval(`[...document.querySelectorAll('.symbols-files > li')].map((row) => row.innerText)`);
+      const [cf, sharc, map, extra] = await rows();
+      if (!cf?.includes('coldfire.sqlite') || !cf.includes('OS 1.17') || !cf.includes('Matches target'))
+        throw new Error('ColdFire source is missing its provenance or target match');
+      if (!sharc?.includes('sharc.sqlite') || !sharc.includes('missing the SHARC symbols table'))
+        throw new Error('Invalid SHARC source is missing its file error');
+      if (
+        !map?.includes('firmware.json') ||
+        !map.includes(`${remoteModel} · OS 1.12`) ||
+        map.includes('Matches target') ||
+        extra
+      )
+        throw new Error('Map did not remain a single, independently listed source');
+      await p.eval('document.querySelector(\'button[aria-label$="coldfire.sqlite"]\').focus()');
+      await p.key(' ', { code: 'Space', vk: 32 });
+      if (!(await view()).includes('No matching symbols') || (await rows()).length !== 2)
+        throw new Error('Removing the matching source changed the wrong entries or left a match');
+      await p.click(/^Emulator$/);
+      await p.click(/^Settings$/);
+      if ((await rows()).some((row) => row.includes('coldfire.sqlite')) || (await rows()).length !== 2)
+        throw new Error('The registered sources changed after reopening Settings');
+      await p.click(/^Add ColdFire database/);
+    },
+  },
+  {
     name: 'run-target-switch',
     q: 'page=run&runtimeOnly',
     size: WIDE,
@@ -690,6 +914,22 @@ const SCENES = [
     steps: async (p) => {
       await p.dnd(null, 'pane', { drop: false, files: ['from_finder_a.wav', 'from_finder_b.wav'] });
       await p.wait(300);
+      const first = await p.eval("document.querySelector('.span-details option:nth-child(2)').value");
+      await p.click(/^Transfer$/);
+      await waitForAnalyzer(
+        p,
+        `[...document.querySelectorAll('.span-details option')].some(o => o.value === ${JSON.stringify(first)}) && document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'`,
+        'Transfer refresh cleared the current recording',
+      );
+      await p.click(/^Remote$/);
+      await p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const rect = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + 1 }));
+        plot.dispatchEvent(new PointerEvent('pointerleave'));
+      })()`);
+      if (!(await p.eval("document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'")))
+        throw new Error('Leaving a timeline gap failed to restore the latest interval');
       await p.eval(
         "document.querySelectorAll('section.col')[1].dispatchEvent(new Event('dragleave', { bubbles: true }))",
       );
@@ -1046,7 +1286,7 @@ const SCENES = [
       await showTab(p, 'Profile');
       await p.wait(62000);
       await p.eval(
-        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop') b.click(); })()",
+        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop recording') b.click(); })()",
       );
       await p.wait(1500);
     },
@@ -1419,12 +1659,12 @@ function pageApi(cdp) {
     eval: evaluate,
     say: (m) => console.log(`  ${m}`),
     wait: sleep,
-    async click(text) {
+    async click(text, selector = 'button') {
       const src = text instanceof RegExp ? text.source : `^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
       // a button is disabled while the page reads (a window focus starts a read): try for up to 3 s
       for (let i = 0; i < 30; i++) {
         const ok = await evaluate(
-          `(() => { const re = new RegExp(${JSON.stringify(src)}); const b = [...document.querySelectorAll('button')].find((x) => re.test(x.textContent.trim()) && !x.disabled); if (b) b.click(); return !!b; })()`,
+          `(() => { const re = new RegExp(${JSON.stringify(src)}); const b = [...document.querySelectorAll(${JSON.stringify(selector)})].find((x) => re.test(x.textContent.trim()) && !x.disabled); if (b) b.click(); return !!b; })()`,
         );
         if (ok) return;
         await sleep(100);

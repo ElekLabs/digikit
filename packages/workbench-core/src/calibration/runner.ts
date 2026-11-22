@@ -3,7 +3,7 @@
 // and the workbench's Profile pane use the same code. Host tests: tests/calibration-runner.test.ts. Format: docs/INSTRUMENTATION.md "Calibration runs".
 import { ModuleLoadRefused, type Clock, type MidiOut, type RuntimeEvents } from '@digi/dk-session';
 import type { MidiMap } from '@digi/devices';
-import { buildProfile, type DspRowOut } from '../profile/profile-artifact.ts';
+import { buildProfile, dspStatsPart } from '../profile/profile-artifact.ts';
 import { canonicalJson, sha256Hex, STOCK_CASE, type CalCase, type CalProfile } from './calprofile.ts';
 import { resolveRef, type Op, type ResolveContext, type StepLibrary, type StepRef } from './steps.ts';
 import type { StatsReading, StatsSource } from './stats.ts';
@@ -186,29 +186,6 @@ export function splitCapture(ops: Op[], where: string): { pre: Op[]; body: Op[];
   if (ops.filter((o) => o.op === 'capture').length !== 2)
     throw new Error(`${where}: one capture start and one capture stop`);
   return { pre: ops.slice(0, a), body: ops.slice(a + 1, b), post: ops.slice(b + 1), marked: true };
-}
-
-function dspPart(
-  r: StatsReading,
-  unit: string,
-):
-  | { header: { unit: string; blocks: number; max_stock_block_delta: number; overruns: number }; rows: DspRowOut[] }
-  | undefined {
-  const sweep = r.dsp?.sweep;
-  if (!sweep) return undefined;
-  return {
-    header: { unit, blocks: sweep.blocks, max_stock_block_delta: sweep.maxStockBlockDelta, overruns: sweep.overruns },
-    rows: sweep.rows
-      .filter((x) => x.calls > 0 || x.maxBlock > 0)
-      .map((x) => ({
-        row: x.row,
-        kind: x.kind,
-        calls: x.calls,
-        sum_cycles: Number(x.sumCycles),
-        max_call: x.maxCall,
-        max_block: x.maxBlock,
-      })),
-  };
 }
 
 /** The tracks (1 to 16) the operations act on: SETUP of a machine or filter, and the notes, CCs and NRPNs by their channel (a note off only releases, it uses no track). */
@@ -433,7 +410,7 @@ async function runCase(
         // counters never keep running after a failure
         if (!stopped) await rig.stats.stop().catch(() => {});
       }
-      const dspOut = dspPart(reading, i.dspUnit);
+      const dspOut = dspStatsPart(reading.dsp?.sweep, i.dspUnit);
       if (dsp && !dspOut) throw new Error(`case ${c.id}: no complete DSP sweep after the capture`);
       if (dspOut && c.modules.length > 0) {
         const busy = dspOut.rows.filter((x) => x.calls > 0);

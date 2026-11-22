@@ -405,20 +405,13 @@ function recordName(resolve: AddrNamer, cpu: 'cf' | 'sharc', addr: number, ret =
   return n && n.includes(': ') ? `${n}, unverified` : n;
 }
 
-/**
- * The names of the addresses an event carries, by field: the pc of a crash, and where a stopped DSP was. Best effort: whether the DSP's
- * last word of the fault record is a SHARC PC is not verified [O], so it is named only when a loaded module's DSP map holds it, and it
- * stays hex otherwise.
- */
+/** A crash PC is an address. The last word of a DSP fault is a packed breadcrumb. */
 function addressNames(d: RuntimeEvent, resolve?: AddrNamer): Record<string, string> {
   const out: Record<string, string> = {};
   if (!resolve) return out;
   if (d.kind === 'CRASH_FOUND') {
     const n = recordName(resolve, 'cf', d.args[0]!);
     if (n) out.pc = n;
-  } else if (d.kind === 'FAULT_FOUND' && (d.args[0]! & 0xff) === 2) {
-    const n = recordName(resolve, 'sharc', d.args[3]!);
-    if (n) out.at = n;
   }
   return out;
 }
@@ -540,10 +533,7 @@ export function faultDetail(
     } else if (f.kind === 'panic') {
       lines.push(`a7 ${hex8(a[1]!)}; the file and line are not kept, the stack holds the way to it`);
     } else {
-      const place = addressNames(runtimeEvent(first), resolve).at;
-      lines.push(
-        `core step ${coreStep((a[0]! >>> 16) & 0xff)}, module step ${a[2]}, last word ${hex8(a[3]!)}${place ? ` (${place})` : ''}`,
-      );
+      lines.push(`core step ${coreStep((a[0]! >>> 16) & 0xff)}, module step ${a[2]}, last word ${hex8(a[3]!)}`);
     }
     const mod = rest.find((e) => e.kind === LOG_KIND.CRASH_MOD && e.args[0] !== 0x100);
     // the crashed module is named by its CRASH_MOD event: use it for the lines below, but keep the names of the current boot's list

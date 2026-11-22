@@ -181,6 +181,12 @@ export interface FirmwareInfo {
   dsp?: { enabled: boolean; flag: boolean | null };
 }
 /** The controller's heartbeat (`status.heartbeat`): whether the guest's main loop has stopped, and the stall threshold in emulated ms. */
+export interface ControllerStatus {
+  heartbeat?: RuntimeHealth;
+  job?: ControllerJob | null;
+  load?: NativeAudioStatus['load'];
+}
+
 export interface RuntimeHealth {
   stalled: boolean;
   stall_ms: number;
@@ -205,7 +211,7 @@ export interface EmulatorRuntime {
   /** Native desktop only: what the running image got from the digikit runtime patch (`status.firmware.runtime`). */
   firmwareInfo?(): Promise<FirmwareInfo | undefined>;
   /** Native desktop only: the controller's heartbeat and running job (one `status` call). */
-  controllerStatus?(): Promise<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>;
+  controllerStatus?(): Promise<ControllerStatus>;
   /** Native desktop only: cancel the controller's long job (`job.cancel`); the cancelled call fails with error 10. */
   cancelJob?(): Promise<void>;
   /** The emulator's own reset of the running firmware (the browser worker boots the file again). Not the device RESTART command. */
