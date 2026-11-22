@@ -48,11 +48,13 @@ export default function PerformancePanel(props: PerformanceProps) {
     <section class="performance-panel" aria-label="Performance">
       <header class="performance-header">
         <div class="performance-modes" role="group" aria-label="Performance view">
-          {views.map((view) => (
-            <button type="button" aria-pressed={props.view === view} onClick={() => props.setView(view)}>
-              {view}
-            </button>
-          ))}
+          <For each={views}>
+            {(view) => (
+              <button type="button" aria-pressed={props.view === view} onClick={() => props.setView(view)}>
+                {view}
+              </button>
+            )}
+          </For>
         </div>
         <Show when={props.view !== 'Utilization'}>
           <div class="span-actions">
@@ -336,17 +338,19 @@ function UtilizationChart(props: PerformanceProps) {
                 <Show when={!showingSpans() && inspected()}>
                   {(point) => (
                     <>
-                      {(['cf', 'dsp'] as const).map((series) => {
-                        const value = () => point()[series];
-                        return (
-                          <Show when={value() != null}>
-                            <i
-                              class={`performance-marker performance-${series}`}
-                              style={{ bottom: `${(100 * value()!) / ceiling()}%` }}
-                            />
-                          </Show>
-                        );
-                      })}
+                      <For each={['cf', 'dsp'] as const}>
+                        {(series) => {
+                          const value = () => point()[series];
+                          return (
+                            <Show when={value() != null}>
+                              <i
+                                class={`performance-marker performance-${series}`}
+                                style={{ bottom: `${(100 * value()!) / ceiling()}%` }}
+                              />
+                            </Show>
+                          );
+                        }}
+                      </For>
                     </>
                   )}
                 </Show>

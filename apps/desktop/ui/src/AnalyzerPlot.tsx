@@ -38,13 +38,17 @@ export default function AnalyzerPlot(props: {
     }
     const graphic = new Graphics();
     const colors = getComputedStyle(surface);
-    const amber = colors.getPropertyValue('--amber').trim() || '#f3b52c';
-    const teal = colors.getPropertyValue('--teal').trim() || '#6fc7d1';
-    const grid = colors.getPropertyValue('--ink-3').trim() || '#868b94';
     app.stage.addChild(graphic);
     surface.append(app.canvas);
 
+    const readPalette = () => ({
+      left: colors.getPropertyValue('--trace-left').trim(),
+      right: colors.getPropertyValue('--trace-right').trim(),
+      grid: colors.getPropertyValue('--trace-grid').trim(),
+    });
+    let palette = readPalette();
     function draw() {
+      const { left, right, grid } = palette;
       const { width, height } = app.screen;
       const frame = props.frame;
       const scope = props.mode === 'Scope';
@@ -79,13 +83,13 @@ export default function AnalyzerPlot(props: {
       }
 
       if (!scope && props.showHold && frame?.heldSpectrum) {
-        trace(frame.heldSpectrum[0], amber, 0.35);
-        trace(frame.heldSpectrum[1], teal, 0.35);
+        trace(frame.heldSpectrum[0], left, 0.35);
+        trace(frame.heldSpectrum[1], right, 0.35);
       }
       const traces = scope ? frame?.scope : frame?.spectrum;
       if (traces) {
-        trace(traces[0], amber, 0.95);
-        trace(traces[1], teal, 0.9);
+        trace(traces[0], left, 0.95);
+        trace(traces[1], right, 0.9);
       }
       if (props.cursor !== null) {
         const x = props.cursor * width;
@@ -107,8 +111,14 @@ export default function AnalyzerPlot(props: {
       paint?.();
     });
     resize.observe(surface);
+    const theme = new MutationObserver(() => {
+      palette = readPalette();
+      paint?.();
+    });
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     release = () => {
       if (animation) cancelAnimationFrame(animation);
+      theme.disconnect();
       resize.disconnect();
       app.destroy({ removeView: true }, { children: true });
     };

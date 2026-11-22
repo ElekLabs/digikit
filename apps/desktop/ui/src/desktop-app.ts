@@ -14,12 +14,16 @@ export interface DesktopApps {
   firmware: FirmwareApp;
 }
 
-export function createDesktopApps(host: Host, storage: KeyValue = localStorageKeyValue()): DesktopApps {
+export function createDesktopApps(
+  host: Host,
+  storage: KeyValue = localStorageKeyValue(),
+  sessions = createSessionHub((transport, opts) => new DkSession(transport, { timeoutMs: 6000, ...opts })),
+): DesktopApps {
   let app!: TransferApp;
   const getApp = () => app;
   app = createTransferApp(createDesktopEnv(host, getApp), {
     storage,
-    sessions: createSessionHub((transport, opts) => new DkSession(transport, { timeoutMs: 6000, ...opts })),
+    sessions,
   });
   return { app, firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp), app) };
 }

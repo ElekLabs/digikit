@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import type { ModuleRef, Snapshot, SpanIn } from '@digi/workbench-core/profile/profile-core.ts';
 import { createSpanIntervals } from '../src/span-intervals';
 
-const modules: ModuleRef[] = [{ index: 0, name: 'digikit/pluck', kind: 'machine' }];
+const modules: ModuleRef[] = [{ index: 0, name: 'test/sine', kind: 'machine' }];
 const span = (calls: number, sumTicks: bigint, maxTicks = 1): SpanIn => ({
   row: 0,
   kind: 'module',
@@ -36,8 +36,8 @@ test('uses per-owner calls and ticks over the target elapsed ticks', () => {
       start: 250,
       end: 1_250,
       rows: [
-        { id: 'module:0', name: 'digikit/pluck', calls: 2, share: 0.2 },
-        { id: 'poll:0', name: 'digikit/pluck poll: tick', calls: 1, share: 0.05 },
+        { id: 'module:0', name: 'test/sine', calls: 2, share: 0.2 },
+        { id: 'poll:0', name: 'test/sine poll: tick', calls: 1, share: 0.05 },
       ],
     },
   ]);
@@ -50,7 +50,7 @@ test('uses the stopped reading once and starts a fresh history on the next recor
   history.push(1_000, stopped, modules);
   history.push(2_000, stopped, modules);
   assert.deepEqual(history.intervals(), [
-    { start: 0, end: 1_000, rows: [{ id: 'module:0', name: 'digikit/pluck', calls: 2, share: 0.25 }] },
+    { start: 0, end: 1_000, rows: [{ id: 'module:0', name: 'test/sine', calls: 2, share: 0.25 }] },
   ]);
 
   history.push(3_000, reading(130n, [span(3, 35n)]), modules);
@@ -79,7 +79,7 @@ test.each([
     modules,
   );
   assert.deepEqual(history.intervals(), [
-    { start: 2_000, end: 3_000, rows: [{ id: 'module:0', name: 'digikit/pluck', calls: 1, share: 0.2 }] },
+    { start: 2_000, end: 3_000, rows: [{ id: 'module:0', name: 'test/sine', calls: 1, share: 0.2 }] },
   ]);
 });
 
@@ -118,7 +118,7 @@ test('does not attribute work across module, poll or span row reuse', () => {
   push(4, swapped, newPoll, 1);
   push(5, swapped, newPoll, 1);
   assert.deepEqual(history.intervals(), [
-    { start: 0, end: 1_000, rows: [{ id: 'module:0', name: 'digikit/pluck', calls: 1, share: 0.1 }] },
+    { start: 0, end: 1_000, rows: [{ id: 'module:0', name: 'test/sine', calls: 1, share: 0.1 }] },
     { start: 4_000, end: 5_000, rows: [{ id: 'module:0', name: 'digikit/pulse', calls: 1, share: 0.1 }] },
   ]);
 });

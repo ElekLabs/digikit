@@ -9,7 +9,7 @@
 }
 .profile-panel .hint,
 .profile-panel .foot {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -20,17 +20,17 @@
   flex: 1 1 auto;
 }
 .profile-panel .act.primary {
-  background: var(--amber, #f3b52c);
-  border-color: #a07a1c;
-  color: #17191c;
+  background: var(--action);
+  border-color: var(--profile-action-border);
+  color: var(--profile-action-ink);
   font-weight: 600;
 }
 .profile-panel .act.primary:hover:not(:disabled) {
-  background: #f7c551;
+  background: var(--profile-action-hover);
 }
 .profile-panel .act.quiet {
   background: transparent;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel label.act {
   display: inline-flex;
@@ -42,17 +42,17 @@
 }
 /* the colour of an owner type */
 .profile-panel .k-machine {
-  background: var(--amber, #f3b52c);
+  background: var(--meter-machine);
 }
 .profile-panel .k-effect {
-  background: var(--teal, #6fc7d1);
+  background: var(--meter-effect);
 }
 .profile-panel .k-tool {
-  background: var(--ok, #74d49d);
+  background: var(--meter-tool);
 }
 .profile-panel .k-runtime,
 .profile-panel .k-other {
-  background: #7d828b;
+  background: var(--meter-runtime);
 }
 .profile-panel .swatch {
   flex: 0 0 auto;
@@ -70,7 +70,7 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel .state-line {
   display: flex;
@@ -81,10 +81,10 @@
   width: 8px;
   height: 8px;
   border-radius: 4px;
-  background: var(--ink-3, #868b94);
+  background: var(--ink-3);
 }
 .profile-panel .dot.rec {
-  background: var(--bad, #e5736b);
+  background: var(--bad);
 }
 .profile-panel .elapsed {
   font-family: var(--font-mono);
@@ -96,7 +96,7 @@
   gap: 8px;
 }
 .profile-panel .prof-sec.ruled {
-  border-top: 1px solid #2c3036;
+  border-top: 1px solid var(--plot-outline);
   padding-top: 12px;
 }
 .profile-panel .sec-head {
@@ -109,7 +109,7 @@
 }
 .profile-panel .sec-head .num {
   font-family: var(--font-mono);
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel .graph {
   position: relative;
@@ -119,7 +119,7 @@
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  background: #1e2125;
+  background: var(--plot-grid);
   border-radius: 6px;
 }
 .profile-panel .graph .col {
@@ -131,13 +131,13 @@
   position: absolute;
   top: 4px;
   bottom: 0;
-  border-left: 1px dashed var(--ink-2, #b3b7be);
+  border-left: 1px dashed var(--ink-2);
 }
 .profile-panel .graph .mark-text {
   position: absolute;
   top: 4px;
   font-size: 10.5px;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
   white-space: nowrap;
 }
 .profile-panel .graph .top {
@@ -145,7 +145,7 @@
   right: 6px;
   top: 4px;
   font-size: 10.5px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .profile-panel .legend {
   display: flex;
@@ -154,7 +154,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
   font-size: 11px;
 }
 .profile-panel .legend li {
@@ -186,20 +186,20 @@
 }
 .profile-panel .prof-table .row.colhead {
   padding-bottom: 2px;
-  border-bottom: 1px solid #2c3036;
-  color: var(--ink-3, #868b94);
+  border-bottom: 1px solid var(--plot-outline);
+  color: var(--ink-3);
   font-size: 11px;
 }
 .profile-panel .prof-table .group {
   margin-top: 6px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-size: 11px;
 }
 .profile-panel .prof-table .r {
   text-align: right;
 }
 .profile-panel .prof-table .dim {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .profile-panel .prof-table .owner {
   display: flex;
@@ -224,10 +224,10 @@
 .profile-panel .prof-table .share .pct {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel .prof-table .hot {
-  color: var(--bad, #e5736b);
+  color: var(--bad);
 }
 /* DSP */
 .profile-panel .dspbar {
@@ -235,10 +235,10 @@
   height: 12px;
   overflow: hidden;
   border-radius: 6px;
-  background: var(--panel-3, #23262b);
+  background: var(--panel-3);
 }
 .profile-panel .dspbar .peak {
-  background: rgba(229, 115, 107, 0.55);
+  background: var(--meter-peak);
 }
 .profile-panel .dsp-mods {
   display: flex;
@@ -266,7 +266,7 @@
   flex-basis: 54px;
 }
 .profile-panel .dsp-mods.cal-est .dsp-mod.head {
-  color: var(--ink-3, #8b9098);
+  color: var(--ink-3);
   font-size: 10.5px;
 }
 .profile-panel .dsp-top {
@@ -274,7 +274,7 @@
   flex-direction: column;
   gap: 2px;
   padding-left: 14px;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
   font-size: 11px;
 }
 .profile-panel .dsp-top > div {
@@ -311,7 +311,7 @@
   text-align: right;
 }
 .profile-panel .cf-row.head {
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
   font-size: 11px;
 }
 /* no debug module: the usual shapes, greyed, then the offer */
@@ -324,7 +324,7 @@
 .profile-panel .prof-skeleton .line {
   display: block;
   height: 10px;
-  background: #23262b;
+  background: var(--panel-3);
   border-radius: 3px;
 }
 .profile-panel .prof-nodebug {
@@ -333,7 +333,7 @@
   gap: 8px;
 }
 .profile-panel .prof-nodebug .text {
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
   line-height: 1.45;
 }
 /* the Calibration tab (CalibrationPanel.tsx, CalibrationSection.tsx) */
@@ -350,12 +350,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel .cal-pick select {
-  background: var(--panel-3, #23262b);
-  color: var(--ink, #e6e8eb);
-  border: 1px solid #2c3036;
+  background: var(--panel-3);
+  color: var(--ink);
+  border: 1px solid var(--plot-outline);
   border-radius: 4px;
   padding: 2px 6px;
   font: inherit;
@@ -366,13 +366,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel .cal-progress {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .profile-panel .cal-table {
   --cols: minmax(0, 1fr) 76px 76px 44px 54px;
@@ -389,7 +389,7 @@
 }
 .profile-panel .cal-headline {
   font-size: 12px;
-  color: var(--ink, #e6e8eb);
+  color: var(--ink);
 }
 .profile-panel .cal-refused,
 .profile-panel .cal-warning {
@@ -397,10 +397,10 @@
   line-height: 1.4;
 }
 .profile-panel .cal-refused {
-  color: var(--bad, #e5736b);
+  color: var(--bad);
 }
 .profile-panel .cal-warning {
-  color: var(--amber, #f3b52c);
+  color: var(--status-caution);
 }
 .profile-panel .cal-acts {
   flex-wrap: wrap;

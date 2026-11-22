@@ -175,12 +175,24 @@ const SCENES = [
       await p.click(/^Timeline$/);
       await p.click(/^Start recording$/, '.span-actions button');
       await p.click(/^DSP blocks$/);
-      await waitForAnalyzer(p, "document.querySelector('.span-actions input')?.disabled", 'DSP option changed during recording');
-      await waitForAnalyzer(p, "document.querySelector('.dsp-blocks canvas') && document.querySelector('.span-actions button')?.textContent.includes('Stop recording')", 'Missing live DSP chart while recording');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions input')?.disabled",
+        'DSP option changed during recording',
+      );
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.dsp-blocks canvas') && document.querySelector('.span-actions button')?.textContent.includes('Stop recording')",
+        'Missing live DSP chart while recording',
+      );
       await p.click(/^Spans$/);
       await p.click(/^Stop recording$/, '.span-actions button');
       await p.click(/^DSP blocks$/);
-      await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('cycles')", 'Frozen DSP block chart missing');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('cycles')",
+        'Frozen DSP block chart missing',
+      );
     },
   },
   {
@@ -207,16 +219,36 @@ const SCENES = [
       await p.click(/^Performance$/);
       await p.click(/^Timeline$/);
       await p.click(/^Start recording$/, '.span-actions button');
-      await waitForAnalyzer(p, "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')", 'Missing live DSP chart while recording');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')",
+        'Missing live DSP chart while recording',
+      );
       await p.click(/^Stop recording$/, '.span-actions button');
-      await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')", 'Missing frozen trace');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')",
+        'Missing frozen trace',
+      );
       await pickTarget(p, 'Emulator');
-      await waitForAnalyzer(p, "!document.querySelector('.performance-panel canvas')", 'Trace survived a target switch');
+      await waitForAnalyzer(
+        p,
+        "!document.querySelector('.performance-panel canvas')",
+        'Trace survived a target switch',
+      );
       await pickTarget(p, remoteModel);
       await p.click(/^Start recording$/, '.span-actions button');
       await p.click(/^Stop recording$/, '.span-actions button');
-      await waitForAnalyzer(p, "!!document.querySelector('.performance-panel canvas')", 'Missing trace after returning to target');
-      await waitForAnalyzer(p, "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')", 'Missing trace loss count');
+      await waitForAnalyzer(
+        p,
+        "!!document.querySelector('.performance-panel canvas')",
+        'Missing trace after returning to target',
+      );
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')",
+        'Missing trace loss count',
+      );
       await p.eval(`(() => {
         const plot = document.querySelector('.trace-timeline-plot');
         const r = plot.getBoundingClientRect();
@@ -224,7 +256,11 @@ const SCENES = [
         plot.dispatchEvent(new PointerEvent('pointermove', position));
         plot.dispatchEvent(new WheelEvent('wheel', { ...position, ctrlKey: true, deltaY: -80, cancelable: true }));
       })()`);
-      await waitForAnalyzer(p, "document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && document.querySelector('.trace-timeline-crosshair') && !document.querySelector('[aria-label=\"Zoom out\"]').disabled", 'Hover or pointer zoom failed');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && document.querySelector('.trace-timeline-crosshair') && !document.querySelector('[aria-label=\"Zoom out\"]').disabled",
+        'Hover or pointer zoom failed',
+      );
     },
   },
   {

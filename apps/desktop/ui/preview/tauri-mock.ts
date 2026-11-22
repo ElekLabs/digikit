@@ -1,13 +1,14 @@
-// A stand-in for `@tauri-apps/api/core` in the preview: just enough for the target selector and a real `DkSession` over the emulator's
-// USB capture (a device that never answers: the "no reply" state). Everything else the pages ask of Tauri is answered by the two backend mocks.
-import { cardCall, pickFolder } from './card-mock';
+// The native command boundary of the browser preview. Desktop components call the same TauriHost as in the app.
+import { previewEmulator } from './emulator-mock';
+import { cardCall, pickFolder, reloadCard } from './card-mock';
 import type { RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
 import * as firmware from './firmware-mock';
 import { sim } from './sim';
 import { previewSymbolImage } from './symbols-mock';
 
-/** The preview is a plain browser, outside the app: the native runtime is not offered. */
-export const isTauri = (): boolean => new URLSearchParams(location.search).get('page') === 'run';
+const query = new URLSearchParams(location.search);
+const emulator = previewEmulator(query);
+export const isTauri = (): boolean => true;
 
 const remotePort = 'Elektron Digitone II';
 const symbols = isTauri() && new URLSearchParams(location.search).has('symbols');
@@ -34,20 +35,22 @@ const symbolsSnapshot: RuntimeSnapshot = {
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
     case 'emu_launch':
-      return { syx: 'Digitakt_II_OS1.17.syx', ...(symbols ? { loaded: true } : {}) } as T;
+      return (symbols ? { loaded: true } : emulator.launch) as T;
     case 'emu_startup':
-      if (!symbols) throw new Error('No startup firmware selected');
-      return symbolsSnapshot as T;
+      return (symbols ? symbolsSnapshot : await emulator.startup()) as T;
     case 'emu_step':
-      if (!symbols) throw new Error('No startup firmware selected');
-      return symbolsSnapshot as T;
-    case 'emu_stop':
-      return undefined as T;
+      return (symbols ? symbolsSnapshot : await emulator.snapshot(false)) as T;
+    case 'emu_tap':
+      return (symbols ? symbolsSnapshot : await emulator.snapshot()) as T;
     case 'emu_audio_status':
       return null as T;
+    case 'emu_stop':
+      return undefined as T;
+    case 'emu_pick_syx':
+      return emulator.source.path as T;
     case 'emu_set_source':
     case 'emu_source_info':
-      return { name: 'Digitakt_II_OS1.17.syx', path: 'Digitakt_II_OS1.17.syx', device: 'dt2' } as T;
+      return emulator.source as T;
     case 'emu_build_info':
       return {} as T;
     case 'local_pick_folder':
@@ -64,7 +67,11 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
       return undefined as T;
     case 'midi_ports':
       return (
-        firmware.page ? firmware.ports() : isTauri() ? [remotePort] : ['Elektron Digitakt II', 'IAC Driver Bus 1']
+        firmware.page
+          ? firmware.ports()
+          : query.get('page') === 'run'
+            ? [remotePort]
+            : ['Elektron Digitakt II', remotePort, 'IAC Driver Bus 1']
       ) as T;
     case 'midi_open':
       return undefined as T;
@@ -119,8 +126,13 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
           symbols: {},
         } as T;
       }
-      if (method === 'firmware.load' && isTauri()) return new Promise<T>(() => {});
-      if (method === 'status') return { mode: sim.paused ? 'paused' : 'running' } as T;
+      if (method === 'firmware.load') return (await emulator.load()) as T;
+      if (method === 'restart') return (await reloadCard()) as T;
+      if (method === 'status')
+        return {
+          mode: sim.paused ? 'paused' : 'running',
+          firmware: { runtime: { patched: true, set: 'core/dynreg' } },
+        } as T;
       if (method.startsWith('card.'))
         return (await cardCall(method, (args?.params as Record<string, unknown>) ?? {})) as T;
       return {} as T; // midi.usb.in / midi.usb.out: nothing is ever answered

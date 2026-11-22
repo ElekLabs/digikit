@@ -22,9 +22,9 @@
   height: 100%;
   padding: 20px;
   border-radius: var(--r-m);
-  background: linear-gradient(180deg, #16171b, #121316);
+  background: linear-gradient(180deg, var(--module-card-top), var(--shell-bar));
   border: 1px solid var(--line);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  box-shadow: 0 1px 0 var(--card-border) inset;
   transition:
     border-color 0.15s,
     transform 0.15s,
@@ -34,8 +34,8 @@
   border-color: var(--line-2);
   transform: translateY(-2px);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 16px 34px rgba(0, 0, 0, 0.35);
+    0 1px 0 var(--card-highlight) inset,
+    0 16px 34px var(--floating-shadow);
 }
 .card-top {
   display: flex;
@@ -44,16 +44,16 @@
   gap: 12px;
 }
 .tile {
-  --icon-accent: var(--amber);
+  --icon-accent: var(--action);
   width: 54px;
   height: 54px;
   border-radius: 12px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #24272c, #1b1d21);
+  background: linear-gradient(180deg, var(--module-icon-top), var(--nav-hover));
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.06) inset,
-    0 0 0 1px #0e0f11;
+    0 1px 0 var(--inset-highlight) inset,
+    0 0 0 1px var(--module-icon-outline);
   color: var(--ink);
   transition: box-shadow 0.15s;
 }
@@ -63,9 +63,9 @@
 }
 .card:hover .tile {
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    0 0 0 1px #0e0f11,
-    0 0 18px rgba(243, 181, 44, 0.18);
+    0 1px 0 var(--selection-muted) inset,
+    0 0 0 1px var(--module-icon-outline),
+    0 0 18px var(--module-highlight);
 }
 .card-text {
   display: flex;
@@ -152,7 +152,7 @@
 .add:hover {
   color: var(--ink);
   background: var(--panel-3);
-  border-color: #4a4e56;
+  border-color: var(--control-hover-outline);
 }
 button.add {
   font-family: inherit;
@@ -160,8 +160,8 @@ button.add {
   background: transparent;
 }
 .add[aria-pressed='true'] {
-  border-color: var(--amber);
-  color: var(--amber);
+  border-color: var(--action);
+  color: var(--action);
 }
 .by {
   font-size: 12.5px;
@@ -197,8 +197,8 @@ button.add {
   cursor: pointer;
 }
 .browse-bar > button[aria-pressed='true'] {
-  border-color: var(--amber);
-  color: var(--amber);
+  border-color: var(--action);
+  color: var(--action);
 }
 .browse-spacer {
   flex: 1 1 0;
@@ -219,7 +219,7 @@ button.add {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--amber);
+  color: var(--action);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

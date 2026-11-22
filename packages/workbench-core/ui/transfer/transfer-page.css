@@ -1,13 +1,13 @@
 /* The Transfer page (TransferPage.tsx, ModulesMode.tsx, and in the desktop app SamplesMode.tsx): fills the content area next to the sidebar. Tokens from the site (packages/workbench-core/ui/styles/site.css). */
 .transfer-page {
   /* surfaces of the page; the site maps them to its tokens (transfer-site.css) */
-  --tp-bg: #0f1012;
-  --tp-border: #2c2f35;
-  --tp-inset: #101214;
-  --tp-bar: #121316;
-  --tp-wait: #16181c;
-  --tp-bar-line: #222428;
-  --tp-track: #1d1f23;
+  --tp-bg: var(--content-bg);
+  --tp-border: var(--content-border);
+  --tp-inset: var(--content-inset);
+  --tp-bar: var(--shell-bar);
+  --tp-wait: var(--content-pending);
+  --tp-bar-line: var(--shell-divider);
+  --tp-track: var(--content-track);
   position: relative;
   flex: 1;
   min-height: 0;
@@ -17,7 +17,7 @@
   padding: 16px 20px 0;
   overflow: hidden;
   background: var(--tp-bg);
-  color: var(--ink, #eceae5);
+  color: var(--ink);
   font-size: 13px;
 }
 /* a pane is an explorer list: it takes the keys (Cmd+A, Esc, arrows), the marquee is drawn in it, and the rows that are dragged to it light it up */
@@ -41,18 +41,18 @@
   padding-bottom: 32px;
 }
 .transfer-page .col.over {
-  border-color: var(--amber, #f3b52c);
-  background: rgba(243, 181, 44, 0.05);
+  border-color: var(--action);
+  background: color-mix(in srgb, var(--action) 5%, transparent);
 }
 .transfer-page .col.over .colhead {
-  background: #1a1813;
+  background: color-mix(in srgb, var(--action) 5%, var(--tp-inset));
 }
 .transfer-page .marquee {
   position: absolute;
   z-index: 1;
   pointer-events: none;
-  border: 1px solid var(--amber, #f3b52c);
-  background: rgba(243, 181, 44, 0.13);
+  border: 1px solid var(--action);
+  background: color-mix(in srgb, var(--action) 13%, transparent);
 }
 .transfer-page .head {
   display: flex;
@@ -69,12 +69,12 @@
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .transfer-page h4 {
   margin: 10px 0 4px;
   font-size: 12px;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .transfer-page .sp {
   flex: 1;
@@ -85,7 +85,7 @@
 .transfer-page .tests {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .transfer-page .colhead {
   /* the header stays at the top of its pane while the rows scroll under it */
@@ -108,12 +108,12 @@
   height: 30px;
 }
 .transfer-page .hl .selcount {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .transfer-page .hl .selcount .lead {
-  color: var(--amber, #f3b52c);
+  color: var(--action);
 }
 .transfer-page .colhead .acts {
   flex: 1 1 auto;
@@ -128,17 +128,17 @@
   height: 14px;
   margin: 0;
   flex: none;
-  accent-color: var(--amber, #f3b52c);
+  accent-color: var(--action);
 }
 .transfer-page .empty {
   margin: 0;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .transfer-page .rows {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-block: 1px solid var(--line, #24262b);
+  border-block: 1px solid var(--line);
 }
 .transfer-page .rows li {
   /* always one line: tick, name with its tags (the name gives way), version, state, size */
@@ -147,7 +147,7 @@
   gap: 10px;
   min-height: 26px;
   padding: 2px 6px;
-  border-bottom: 1px solid var(--line, #24262b);
+  border-bottom: 1px solid var(--line);
   scroll-margin-top: 44px;
   -webkit-user-select: none;
   user-select: none;
@@ -161,15 +161,15 @@
 }
 /* a selected row (the tick is the selection); grey when the pane does not have the keyboard */
 .transfer-page .rows li.sel {
-  background: rgba(243, 181, 44, 0.16);
+  background: color-mix(in srgb, var(--action) 16%, transparent);
 }
 .transfer-page .col:not(:focus-within) .rows li.sel {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--selection-muted);
 }
 /* a folder that the dragged rows would land in */
 .transfer-page .rows li.dropon {
-  background: rgba(243, 181, 44, 0.3);
-  box-shadow: inset 0 0 0 2px var(--amber, #f3b52c);
+  background: color-mix(in srgb, var(--action) 30%, transparent);
+  box-shadow: inset 0 0 0 2px var(--action);
 }
 .transfer-page .rows li[draggable='true'] {
   -webkit-user-drag: element;
@@ -179,14 +179,14 @@
 }
 .transfer-page .rows li.uprow {
   cursor: pointer;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .transfer-page .rows .upbtn {
   color: inherit;
   cursor: pointer;
 }
 .transfer-page .rows li.uprow:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-overlay);
 }
 /* the picture that follows the pointer while rows are dragged (an element of the page body, set by pane-select.ts) */
 .dragchip {
@@ -195,8 +195,8 @@
   left: 0;
   padding: 3px 10px;
   border-radius: 6px;
-  background: #f3b52c;
-  color: #1d1403;
+  background: var(--action);
+  color: var(--action-ink);
   font: 500 12px var(--font-mono, monospace);
 }
 .transfer-page .rows .tick {
@@ -218,7 +218,7 @@
   border: 0;
   background: none;
   font: inherit;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .transfer-page .rows button.twisty {
   cursor: pointer;
@@ -248,14 +248,14 @@
   min-width: 6ch;
   text-align: right;
   font-size: 11.5px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .transfer-page .rows .size {
   flex: none;
   min-width: 9ch;
   text-align: right;
   font-size: 11.5px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
 /* the small labels after a name */
@@ -265,30 +265,30 @@
   border-radius: 4px;
   font-size: 10.5px;
   line-height: 16px;
-  color: var(--ink-3, #868b94);
-  background: #1a1c20;
+  color: var(--ink-3);
+  background: var(--panel-2);
 }
 .transfer-page .rtag.ok {
-  color: #7be3a1;
-  background: #0f2418;
+  color: var(--status-ok-text);
+  background: var(--status-ok-fill);
 }
 .transfer-page .rtag.warn {
-  color: #f0b35a;
-  background: #2a2010;
+  color: var(--status-caution);
+  background: var(--status-warning-fill);
 }
 /* a service under the module that needs it: indented, read-only */
 .transfer-page .rows li.sub {
   padding-left: 30px;
   min-height: 22px;
   font-size: 12px;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .transfer-page .rows li.sub .tree {
   flex: none;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .transfer-page .rtag.dim {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 /* the "does not fit" bar: pinned to the bottom of the list, over the rows, one line */
 .transfer-page .fitbar {
@@ -302,8 +302,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #f0b35a;
-  background: #2a2010;
+  color: var(--status-caution);
+  background: var(--status-warning-fill);
 }
 .transfer-page .check {
   flex: none;
@@ -313,12 +313,12 @@
   border-radius: 4px;
 }
 .transfer-page .check.ok {
-  color: #7be3a1;
-  background: #0f2418;
+  color: var(--status-ok-text);
+  background: var(--status-ok-fill);
 }
 .transfer-page .check.bad {
-  color: #ffb4ab;
-  background: #2a1210;
+  color: var(--status-error-text);
+  background: var(--status-error-fill);
 }
 .transfer-page .err {
   display: flex;
@@ -327,8 +327,8 @@
   margin: 0;
   padding: 8px 10px;
   border-radius: 8px;
-  color: #ffc1bc;
-  background: rgba(255, 139, 130, 0.12);
+  color: var(--alert-text);
+  background: var(--bad-bg);
 }
 /* the refusal box of an install (one line per refused module, Flash on the right) */
 .transfer-page .err.refusals {
@@ -350,14 +350,14 @@
   top: 0;
   left: 0;
   right: 0;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 35%);
+  box-shadow: 0 6px 16px var(--floating-shadow);
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 0;
   padding: 6px 10px;
   border-radius: 8px;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   background: var(--tp-wait);
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -373,8 +373,8 @@
 .transfer-page .act,
 .transfer-page .mini {
   border: 1px solid var(--tp-border);
-  background: #1a1c20;
-  color: var(--ink, #eceae5);
+  background: var(--panel-2);
+  color: var(--ink);
   border-radius: 7px;
   font: inherit;
   font-weight: 500;
@@ -394,21 +394,21 @@
   font-size: 12px;
 }
 .transfer-page .act.primary {
-  background: var(--amber, #f3b52c);
-  border-color: var(--amber, #f3b52c);
-  color: var(--amber-ink, #1d1403);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
 }
 .transfer-page .act:hover:not(:disabled),
 .transfer-page .mini:hover:not(:disabled) {
-  background: #23262b;
+  background: var(--panel-3);
 }
 .transfer-page .act.primary:disabled {
-  background: #1a1c20;
+  background: var(--panel-2);
   border-color: var(--tp-border);
-  color: var(--ink, #eceae5);
+  color: var(--ink);
 }
 .transfer-page .act.primary:hover:not(:disabled) {
-  background: var(--amber-hover, #ffc444);
+  background: var(--action-hover);
 }
 .transfer-page button:disabled {
   opacity: 0.5;
@@ -440,17 +440,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--ink, #eceae5);
+  color: var(--ink);
 }
 .transfer-page .barline .stats {
   flex: none;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 .transfer-page .phase {
   flex: none;
   width: 9ch;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .transfer-page progress {
   appearance: none;
@@ -463,7 +463,7 @@
   background: var(--tp-track);
 }
 .transfer-page progress::-webkit-progress-value {
-  background: var(--amber, #f3b52c);
+  background: var(--action);
   transition: width 0.15s ease;
 }
 .transfer-page progress.global {
@@ -471,10 +471,10 @@
   height: 12px;
 }
 .transfer-page progress.global::-webkit-progress-value {
-  background: #35c47a;
+  background: var(--transfer-complete);
 }
 .transfer-page progress.global.failed::-webkit-progress-value {
-  background: #e5594d;
+  background: var(--status-error-indicator);
 }
 /* a file's upload bar, inline in its row (the speed shows when the row is wide, else in the tooltip) */
 .transfer-page .up {
@@ -483,7 +483,7 @@
   align-items: center;
   gap: 8px;
   font-size: 11.5px;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .transfer-page .up progress {
   width: 90px;
@@ -496,7 +496,7 @@
 .transfer-page .up .rate {
   display: none;
   min-width: 8ch;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 @container (min-width: 520px) {
   .transfer-page .up .rate {
@@ -504,7 +504,7 @@
   }
 }
 .transfer-page .check.idle {
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   background: var(--tp-track);
 }
 .transfer-page .log {
@@ -514,15 +514,15 @@
   overflow-y: auto;
   border-radius: 8px;
   background: var(--tp-inset);
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: 11.5px;
   white-space: pre-wrap;
 }
 .transfer-page .act.danger {
-  background: #4a1713;
-  border-color: #e5594d;
-  color: #ffb4ab;
+  background: var(--destructive-fill);
+  border-color: var(--status-error-indicator);
+  color: var(--status-error-text);
 }
 /* the device line under the On device heading, and the folder paths */
 .transfer-page .devhead {
@@ -550,7 +550,7 @@
   margin-bottom: 6px;
 }
 .transfer-page .crumbs .mini[aria-current] {
-  color: var(--amber, #f3b52c);
+  color: var(--action);
 }
 .transfer-page .newfolder {
   display: flex;
@@ -564,11 +564,11 @@
   border: 1px solid var(--tp-border);
   border-radius: 7px;
   background: var(--tp-inset);
-  color: var(--ink, #eceae5);
+  color: var(--ink);
   font: inherit;
 }
 .transfer-page .rows .nm.dir {
-  color: var(--amber, #f3b52c);
+  color: var(--action);
 }
 .transfer-page .tests {
   display: inline-flex;
@@ -608,7 +608,7 @@
   padding: 0 4px;
   border: 0;
   background: none;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   font: inherit;
   font-size: 11.5px;
   text-decoration: underline;
@@ -616,7 +616,7 @@
   cursor: pointer;
 }
 .transfer-page .rowlink:hover {
-  color: var(--amber, #f3b52c);
+  color: var(--action);
 }
 /* the source panel (SourcePanel.tsx): over the right side of the page; the whole page when it is narrow */
 .transfer-page .source {
@@ -632,7 +632,7 @@
   padding: 14px 16px;
   background: var(--tp-bg);
   border-left: 1px solid var(--tp-border);
-  box-shadow: -12px 0 24px rgba(0, 0, 0, 0.35);
+  box-shadow: -12px 0 24px var(--floating-shadow);
 }
 .transfer-page .sourcehead {
   display: flex;
@@ -655,15 +655,15 @@
   border: 1px solid var(--tp-border);
   border-radius: 6px;
   background: transparent;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: 11.5px;
   cursor: pointer;
 }
 .transfer-page .sourcefiles button.on {
-  color: var(--amber-ink, #1d1403);
-  background: var(--amber, #f3b52c);
-  border-color: var(--amber, #f3b52c);
+  color: var(--action-ink);
+  background: var(--action);
+  border-color: var(--action);
 }
 .transfer-page .sourcetext {
   margin: 0;
@@ -672,7 +672,7 @@
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--tp-inset);
-  color: var(--ink, #eceae5);
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
@@ -707,7 +707,7 @@
   max-width: 100%;
   height: auto !important;
   aspect-ratio: 2 / 1;
-  background: #08090c;
+  background: var(--screen-inset);
 }
 .transfer-page .module-preview .acts {
   display: flex;

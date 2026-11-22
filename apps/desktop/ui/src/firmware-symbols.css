@@ -11,7 +11,7 @@
 
 .symbols-body {
   overflow: auto;
-  padding: 20px 18px;
+  padding: 20px 0;
   color: var(--ink-2);
 }
 

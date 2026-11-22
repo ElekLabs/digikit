@@ -84,10 +84,7 @@ export default function FirmwareSymbols(props: {
   }
 
   return (
-    <main class="firmware-symbols" hidden={!props.shown} aria-labelledby="symbols-settings">
-      <header class="page-head">
-        <h2 id="symbols-settings">Settings</h2>
-      </header>
+    <div class="firmware-symbols" hidden={!props.shown}>
       <div class="symbols-body">
         <section aria-labelledby="firmware-symbols">
           <h3 id="firmware-symbols">Firmware symbols</h3>
@@ -169,6 +166,6 @@ export default function FirmwareSymbols(props: {
           </Show>
         </section>
       </div>
-    </main>
+    </div>
   );
 }

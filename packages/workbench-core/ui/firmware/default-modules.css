@@ -8,9 +8,9 @@
   height: 28px;
   padding-inline: 10px;
   border-radius: 7px;
-  border: 1px solid var(--fp-border, #2c2f35);
-  background: var(--fp-card, #1a1c20);
-  color: var(--ink, #eceae5);
+  border: 1px solid var(--fp-border, var(--content-border));
+  background: var(--fp-card, var(--panel-2));
+  color: var(--ink);
   font: inherit;
   font-size: 12.5px;
   font-weight: 500;
@@ -19,10 +19,10 @@
 }
 .defmods-btn:hover:not(:disabled),
 .defmods-btn.on {
-  background: #23262b;
+  background: var(--panel-3);
 }
 .defmods-btn:disabled {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   cursor: not-allowed;
 }
 .defmods-pop {
@@ -34,10 +34,10 @@
   min-width: 320px;
   max-width: min(480px, calc(100vw - 16px));
   padding: 8px 12px;
-  background: #1a1c20;
-  border: 1px solid #3a3e46;
+  background: var(--panel-2);
+  border: 1px solid var(--popover-border);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  box-shadow: 0 8px 24px var(--popover-shadow);
   font-size: 12.5px;
   text-align: left;
 }
@@ -55,18 +55,18 @@
 }
 .defmods-row input {
   margin: 0;
-  accent-color: var(--accent, #f3b52c);
+  accent-color: var(--accent, var(--action));
 }
 .defmods-id {
   font-family: var(--font-mono, monospace);
-  color: var(--ink, #eceae5);
+  color: var(--ink);
 }
 .defmods-sum {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .defmods-note {
   margin: 6px 0 0;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-size: 11.5px;
   line-height: 1.4;
 }

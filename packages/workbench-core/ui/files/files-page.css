@@ -1,8 +1,8 @@
 /* The Files page (FilesPage.tsx): the usage bar, the tree and the info pane. It reuses the Transfer page tokens and row styles. */
 .files-page {
-  --fp-modules: var(--amber);
-  --fp-services: #6cb6ff;
-  --fp-data: #c792ea;
+  --fp-modules: var(--meter-machine);
+  --fp-services: var(--file-services);
+  --fp-data: var(--file-data);
   --fp-samples: var(--ok);
   --fp-other: var(--ink-3);
   --fp-free: var(--tp-track);
@@ -14,7 +14,7 @@
   flex-wrap: wrap;
   gap: 6px;
   font-size: 12px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .files-page .usagebox {
   display: flex;
@@ -61,7 +61,7 @@
   flex-wrap: wrap;
   gap: 2px 16px;
   font-size: 11.5px;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .files-page .legend li {
   display: inline-flex;
@@ -91,14 +91,14 @@
   outline: none;
 }
 .files-page .tree:not(:focus-within) li.sel {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--selection-muted);
 }
 .files-page .info {
   min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 0 0 16px 16px;
-  border-left: 1px solid var(--line, #24262b);
+  border-left: 1px solid var(--line);
 }
 .files-page .info dl {
   display: grid;
@@ -108,7 +108,7 @@
   font-size: 12px;
 }
 .files-page .info dt {
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .files-page .info dd {
   margin: 0;
@@ -134,7 +134,7 @@
   overflow-x: auto;
   border-radius: 8px;
   background: var(--tp-inset);
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.4;
@@ -151,7 +151,7 @@
   .files-page .info {
     padding: 12px 0 16px;
     border-left: 0;
-    border-top: 1px solid var(--line, #24262b);
+    border-top: 1px solid var(--line);
     overflow: visible;
   }
 }

@@ -2,6 +2,9 @@
 // pattern, so a screenshot shows where and how large the 128 x 64 image is drawn. The Remote page is the app's own code; only the
 // DkSession methods that ask the device are replaced.
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
+import { deviceOfPort, deviceProfiles } from '@digi/workbench-core/data/device-profiles.ts';
+import { cardDevice } from './card-mock';
 import { DkSession } from '@digi/dk-session';
 import { queryFrame } from './frame-from-png';
 
@@ -33,47 +36,53 @@ export function testPattern(): Uint8Array {
   return buf;
 }
 
-export function installRemoteMock(): void {
-  const proto = DkSession.prototype as unknown as Record<string, unknown>;
+export function previewSessions() {
   const fallback = testPattern();
   const loaded = queryFrame();
   const unidentified = new URLSearchParams(location.search).has('unidentified');
-  proto.rpc = async (type: number) => {
-    if (unidentified || new URLSearchParams(location.search).has('runtimeOnly'))
-      throw new Error('Unknown MIDI endpoint');
-    return type === 1
-      ? Uint8Array.of(0, ...new TextEncoder().encode('Digitone II'), 0)
-      : new TextEncoder().encode('1.12');
-  };
-  proto.screen = async () => ((await loaded) ?? fallback).slice();
-  proto.info = async () => {
-    if (unidentified || new URLSearchParams(location.search).has('stock'))
-      throw Object.assign(new Error('No runtime'), { kind: 'timeout' });
-    return { port: 'dn2-1.12', caps: 1 << CAP.LOG, runtime: 11 << 8 };
-  };
   const history = new URLSearchParams(location.search).has('history');
   const began = Date.now();
-  proto.logPage = async () => {
-    const tick = history ? Math.floor((Date.now() - began) / 5000) : 0;
-    const seq = 1 + tick;
-    const cpu = [213, 350, 290, 180][tick % 4]!;
-    const dsp = [345, 730, 510, 290][tick % 4]!;
-    return [
-      seq,
-      seq,
-      [
-        {
+  return createSessionHub((transport, opts, key) => {
+    const session = new DkSession(transport, { timeoutMs: 6000, ...opts });
+    const profile = deviceProfiles[deviceOfPort(key) ?? cardDevice];
+    const version = profile.firmware.at(-1)?.version ?? '';
+    return Object.assign(session, {
+      rpc: async (type: number) => {
+        if (unidentified || new URLSearchParams(location.search).has('runtimeOnly'))
+          throw new Error('Unknown MIDI endpoint');
+        return type === 1
+          ? Uint8Array.of(0, ...new TextEncoder().encode(profile.name), 0)
+          : new TextEncoder().encode(version);
+      },
+      screen: async () => ((await loaded) ?? fallback).slice(),
+      info: async () => {
+        if (unidentified || new URLSearchParams(location.search).has('stock'))
+          throw Object.assign(new Error('No runtime'), { kind: 'timeout' });
+        return { port: profile.short + '-' + version, caps: 1 << CAP.LOG, runtime: 11 << 8 };
+      },
+      logPage: async () => {
+        const tick = history ? Math.floor((Date.now() - began) / 5000) : 0;
+        const seq = 1 + tick;
+        const cpu = [213, 350, 290, 180][tick % 4]!;
+        const dsp = [345, 730, 510, 290][tick % 4]!;
+        return [
           seq,
-          time: seq * 15000,
-          kind: LOG_KIND.HEALTH,
-          flags: 0,
-          args: [(6 << 16) | cpu, dsp, Math.max(dsp, 420), 0, 0],
-        },
-      ],
-    ];
-  };
-  proto.remoteState = async () => ({ enabled: true, format: 1, turnLimit: 10 });
-  proto.remoteKey = async () => {};
-  proto.remoteTurn = async () => {};
-  proto.remoteRelease = async () => {};
+          seq,
+          [
+            {
+              seq,
+              time: seq * 15000,
+              kind: LOG_KIND.HEALTH,
+              flags: 0,
+              args: [(6 << 16) | cpu, dsp, Math.max(dsp, 420), 0, 0],
+            },
+          ],
+        ];
+      },
+      remoteState: async () => ({ enabled: true, format: 1, turnLimit: 10 }),
+      remoteKey: async () => {},
+      remoteTurn: async () => {},
+      remoteRelease: async () => {},
+    });
+  });
 }
