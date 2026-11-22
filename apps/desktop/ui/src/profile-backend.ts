@@ -36,7 +36,7 @@ import { sampledPcs, type Hotspot } from './profile-hotspots';
 /** The part of the session the pane uses. */
 export type ProfileSession = Pick<
   DkSession,
-  'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'logPage' | 'peek'
+  'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'profileTrace' | 'logPage' | 'peek'
 >;
 
 /** One ColdFire path of the emulator (ram_clear, run_fast, step_once, idle_skip) with its share of the host time and of the instructions. */
@@ -101,6 +101,7 @@ export type ProfileReading =
       emulator: boolean;
       observedAt: number;
       imageId?: string | null;
+      traceSummary?: string;
       snap: Snapshot;
       modules: ModuleRef[];
       /** Emulator: the modules' DSP per block (undefined when `sharc.profile` is off or the daemon lacks it). */
@@ -220,6 +221,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   let namesImage: ProfileInfo | undefined;
   let namesRequest = 0;
   let captureImage: { info: ProfileInfo; sha256: string } | undefined;
+  let traceGeneration: number | undefined;
   let stoppedCapture: BuildInput | undefined;
 
   const nameInputs = (info: ProfileInfo) =>
@@ -364,8 +366,10 @@ export function createRecorder(deps: ProfileDeps): Recorder {
 
   const spansSource = (s: ProfileSession): Source<void> => ({
     start: async () => {
-      await state(s, 'reset');
-      await state(s, 'start');
+      const caps = await state(s, 'reset');
+      const supported = caps.traceVersion === 1;
+      const started = await state(s, supported ? 'startTrace' : 'start');
+      traceGeneration = started.traceGeneration;
     },
     stop: async () => void (await state(s, 'stop')),
     reset: async () => void (await s.profileState('reset')),
@@ -444,7 +448,15 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const current = await s.info().catch(() => undefined);
       if (current && sameImage(info, current)) run.firmware_sha256 = captureImage.sha256;
     }
-    return { run, ...parts, spans };
+    const capture: BuildInput = { run, ...parts, spans };
+    if (traceGeneration !== undefined && !all.running) {
+      try {
+        capture.trace = await s.profileTrace(traceGeneration);
+      } catch (error) {
+        capture.traceError = asFault(error);
+      }
+    }
+    return capture;
   }
 
   return {
@@ -482,6 +494,10 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         snap,
         modules,
       };
+      const trace = stoppedCapture?.trace;
+      if (trace && !all.running) r.traceSummary = `${trace.events.length} trace events · ${trace.dropped} dropped`;
+      if (stoppedCapture?.traceError && !all.running)
+        r.traceSummary = `Trace unavailable · ${stoppedCapture.traceError}`;
       if (detail === 'spans') return r;
       if (deps.rpc) {
         if (counting() && all.running) {
@@ -506,6 +522,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const s = await deps.session();
       kept = {};
       stoppedCapture = undefined;
+      traceGeneration = undefined;
       captureImage = undefined;
       const info = await s.info();
       device = (info.port ?? '').split('-')[0] || device;
@@ -554,11 +571,11 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         if (stopNote) instructionNote = instructionNote ? `${instructionNote} ${stopNote}` : stopNote;
       }
       if (spansError !== undefined) throw spansError;
-      if (captureImage) {
+      if (captureImage || traceGeneration !== undefined) {
         try {
           const info = await s.info();
           const capture = await capturedData(s, info, await s.profileAll(), kept);
-          if (capture.run.firmware_sha256) stoppedCapture = capture;
+          if (capture.run.firmware_sha256 || capture.trace || capture.traceError) stoppedCapture = capture;
         } catch {
           // Export can still read the available counters, leaving the identity out if it cannot verify it.
         }
@@ -568,7 +585,9 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     async reset() {
       const s = await deps.session();
       const info = await s.info();
-      await spansSource(s).reset();
+      const resetState = await state(s, 'reset');
+      if (traceGeneration !== undefined)
+        traceGeneration = resetState.running ? (await state(s, 'startTrace')).traceGeneration : undefined;
       kept = {};
       stoppedCapture = undefined;
       await captureIdentity(s, info);

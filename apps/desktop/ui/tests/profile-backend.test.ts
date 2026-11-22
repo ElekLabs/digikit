@@ -24,6 +24,7 @@ interface FakeState {
   port?: string;
   /** PROFILE_STATE start answers E_PROTO (the debug module has no span clock). */
   noClock?: boolean;
+  traceVersion?: number;
   calls: string[];
   health?: { avg: number; max: number };
   imageId?: string;
@@ -54,13 +55,20 @@ function fakeSession(st: FakeState): ProfileSession {
       { index: 1, name: 'someone/mystery' },
     ],
     capacity: async () => ({ DSP_COST: { limit: 92_796, used: 0, largest: 0 } }),
-    profileState: async (op: 'get' | 'start' | 'stop' | 'reset') => {
+    profileState: async (op: 'get' | 'start' | 'stop' | 'reset' | 'startTrace') => {
       st.calls.push(`state:${op}`);
       if (st.noClock && op === 'start') throw new DkError({ error: 'no clock', kind: 'device', status: 'E_PROTO' });
-      if (op === 'start') st.running = true;
+      if (op === 'start' || op === 'startTrace') st.running = true;
       if (op === 'stop') st.running = false;
       if (op === 'reset') st.elapsed = 0n;
-      return { running: st.running, hz: HZ, rows: 15, elapsedTicks: st.elapsed };
+      return {
+        running: st.running,
+        hz: HZ,
+        rows: 15,
+        elapsedTicks: st.elapsed,
+        traceGeneration: op === 'startTrace' ? 2 : undefined,
+        traceVersion: st.traceVersion,
+      };
     },
     profileAll: async () => {
       if (st.missing) throw new DkError({ error: 'unknown command', kind: 'device', status: 'E_PROTO' });
@@ -594,4 +602,47 @@ describe('a device', () => {
     assert.equal(doc.span_elapsed_ticks, 777);
     assert.match(doc.run.id, /^dev-/);
   });
+});
+
+test('one recording freezes trace events and interval counters together for export', async () => {
+  const st = state({ traceVersion: 1 });
+  const session = fakeSession(st);
+  const trace = {
+    version: 1 as const,
+    generation: 2,
+    hz: HZ,
+    dropped: 3,
+    events: [{ owner: 0x100, startTicks: '42', durationTicks: 6 }],
+  };
+  session.profileTrace = async (generation) => {
+    assert.equal(generation, 2);
+    assert.equal(st.running, false);
+    return trace;
+  };
+  const recorder = createRecorder({ session: async () => session, loadLibrary: library });
+  await recorder.start();
+  await recorder.stop();
+  assert.deepEqual(st.calls, ['state:reset', 'state:startTrace', 'state:stop']);
+  session.profileTrace = async () => {
+    throw new Error('capture has since been replaced');
+  };
+  const doc = JSON.parse((await recorder.exportFile()).text);
+  assert.deepEqual(doc.trace, trace);
+  assert.ok(doc.spans.some((row: { owner: number }) => row.owner === 0x100));
+  await recorder.reset();
+  assert.equal(JSON.parse((await recorder.exportFile()).text).trace, undefined);
+});
+
+test('a failed trace download retains the frozen aggregate and records the loss in the export', async () => {
+  const session = fakeSession(state({ traceVersion: 1 }));
+  session.profileTrace = async () => {
+    throw new Error('recording replaced');
+  };
+  const recorder = createRecorder({ session: async () => session, loadLibrary: library });
+  await recorder.start();
+  await recorder.stop();
+  const doc = JSON.parse((await recorder.exportFile()).text);
+  assert.ok(doc.spans.length);
+  assert.equal(doc.trace, undefined);
+  assert.deepEqual(doc.loss, [{ series: 'trace', reason: 'recording replaced' }]);
 });

@@ -1,3 +1,4 @@
+import RecordingButton from './RecordingButton';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
@@ -247,9 +248,11 @@ export default function PerformancePanel(props: {
         <Show when={showingSpans()}>
           <div class="span-actions">
             <Show when={props.activeTarget && props.recording?.available()}>
-              <button type="button" disabled={props.recording?.disabled()} onClick={() => props.recording?.toggle()}>
-                {props.recording?.running() ? 'Stop recording' : 'Start recording'}
-              </button>
+              <RecordingButton
+                running={!!props.recording?.running()}
+                disabled={!!props.recording?.disabled()}
+                onToggle={() => props.recording?.toggle()}
+              />
             </Show>
             <span role="status">{props.activeTarget ? props.recording?.status() : 'Target unavailable'}</span>
           </div>

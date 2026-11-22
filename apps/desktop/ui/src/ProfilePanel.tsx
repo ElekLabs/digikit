@@ -1,3 +1,4 @@
+import RecordingButton from './RecordingButton';
 // The Profile pane: where the ColdFire time goes, per module, per runtime phase and per poll, and on the emulator the DSP per block. A tab of the
 // right-hand column (SidePanels.tsx) of the Emulator page and of the Remote page, in the Card panel's look (card-panel.css) and the Memory panel's
 // tokens (profile-panel.css). The pure rules (rows, shares, the graph history, the hot rule) are packages/workbench-core/src/profile/profile-core.ts;
@@ -263,6 +264,7 @@ export default function ProfilePanel(props: {
         await app.backend.restart(() => {});
       }),
     );
+  const toggleRecording = () => void (running() ? stop() : start());
   props.onSpanRecording?.({
     intervals,
     running,
@@ -278,10 +280,8 @@ export default function ProfilePanel(props: {
               ? 'Reading profile state…'
               : running()
                 ? 'Recording'
-                : 'Stopped'),
-    toggle: () => {
-      void (running() ? stop() : start());
-    },
+                : ok()?.traceSummary || 'Stopped'),
+    toggle: toggleRecording,
   });
   onCleanup(() => props.onSpanRecording?.(undefined));
   const openReference = async (file: File | undefined) => {
@@ -410,24 +410,14 @@ export default function ProfilePanel(props: {
                     {!r().snap.running && r().snap.elapsedTicks > 0n
                       ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz)
                       : ''}
+                    {r().traceSummary ? ` · ${r().traceSummary}` : ''}
                     {' · clock '}
                     {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(device clock)'}
                   </span>
                   <span class="elapsed">{r().snap.running ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz) : ''}</span>
                 </div>
                 <div class="acts">
-                  <Show
-                    when={r().snap.running}
-                    fallback={
-                      <button type="button" class="act primary" disabled={locked()} onClick={() => void start()}>
-                        Start
-                      </button>
-                    }
-                  >
-                    <button type="button" class="act" disabled={locked()} onClick={() => void stop()}>
-                      Stop
-                    </button>
-                  </Show>
+                  <RecordingButton class="act" running={running()} disabled={locked()} onToggle={toggleRecording} />
                   <button type="button" class="act quiet" disabled={locked()} onClick={() => void reset()}>
                     Reset
                   </button>
@@ -499,7 +489,7 @@ export default function ProfilePanel(props: {
                 </div>
                 <Show when={groups().length === 0}>
                   <p class="empty">
-                    {r().snap.running ? 'Waiting for the first spans…' : 'Nothing recorded. Press Start.'}
+                    {r().snap.running ? 'Waiting for the first spans…' : 'Nothing recorded. Press Start recording.'}
                   </p>
                 </Show>
                 <For each={groups()}>

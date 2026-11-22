@@ -1,3 +1,5 @@
+import type { DkSession } from '@digi/dk-session';
+
 // The `dk.profile/1` artifact (docs/INSTRUMENTATION.md "Profiles"), built from what the sources answer: the runtime spans of the debug module
 // (dk-session `profileAll`), `cf.profile` and `sharc.profile` of the emulator. One builder for `wb profile ...` (tools/devtools/wb_prof.mjs) and
 // the Profile pane (apps/desktop/ui/src/profile-backend.ts), so both write the same file. No DOM, no Tauri. Host tests: tests/profile-artifact.test.ts.
@@ -192,6 +194,8 @@ export interface BuildInput {
   cf?: Part;
   sharc?: Part;
   spans?: SpansPart;
+  traceError?: string;
+  trace?: Awaited<ReturnType<DkSession['profileTrace']>>;
   /** The DSP stats window of the capture (calibration runs). */
   dsp?: { header: DspHeader; rows: DspRowOut[] };
   /** Names the markers (`record.start` at 0 is always there when a part is given). */
@@ -226,9 +230,10 @@ export function buildProfile(i: BuildInput): Record<string, unknown> {
     raw: parts.flatMap((p) => p.raw),
     metrics: parts.flatMap((p) => p.metrics),
     markers: i.markers ?? (parts.length > 0 ? [{ name: 'record.start', at: 0 }] : []),
-    loss: parts.flatMap((p) => p.loss),
+    loss: [...parts.flatMap((p) => p.loss), ...(i.traceError ? [{ series: 'trace', reason: i.traceError }] : [])],
     overhead: parts.flatMap((p) => p.overhead),
     ...(spans ? spans : {}),
+    ...(i.trace ? { trace: i.trace } : {}),
     ...(i.dsp ? { dsp: i.dsp.header, dsp_rows: i.dsp.rows } : {}),
   };
 }

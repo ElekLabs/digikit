@@ -293,7 +293,7 @@ async function expectProfileSpans(runtime: PatchedSession): Promise<void> {
   await installWithDebug(runtime);
   const debug = (await dk.modules()).find((m) => m.name === 'digikit/debug')!;
   await dk.profileState('reset');
-  expect((await dk.profileState('start')).running).toBe(true);
+  expect((await dk.profileState('startTrace')).running).toBe(true);
   await waitFrames(runtime, 600);
   const running = await dk.profileAll();
   expect(running.running).toBe(true);
@@ -312,6 +312,8 @@ async function expectProfileSpans(runtime: PatchedSession): Promise<void> {
   console.log('poll owners', JSON.stringify(used.map((p) => ({ ...p, fn: p.fn.toString(16) }))));
 
   expect((await dk.profileState('stop')).running).toBe(false);
+  const trace = await dk.profileTrace();
+  expect(trace.events.some((event) => event.owner === debug.index && event.durationTicks > 0), 'captured the debug tick on the firmware clock').toBe(true);
   const first = await dk.profileAll();
   await waitFrames(runtime, 600);
   const second = await dk.profileAll();

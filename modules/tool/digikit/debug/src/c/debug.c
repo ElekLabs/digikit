@@ -13,9 +13,11 @@
  *                op 2 get the card log, op 3 set it (adds u8 on); reply: u8 on, u8 file (0 a, 1 b), u8 state (0 off, 1 on, 2 full, 3 error), u8 0, u32 writes,
  *                i32 last status, u32 ms since the last write (0xffffffff: none yet). The card log writes the ring to a file of the store (see the card log below).
  *
- *   0x1e PROFILE_STATE  body: u8 op (0 get, 1 start, 2 stop, 3 reset)   reply: u8 state (0 stopped, 1 running), u32 clock Hz, u16 rows, u64 elapsed ticks of the span clock while running since the last reset,
- *                       then the 4 poll slots, each u8 owner (0 empty, 1 + module record, 0xff firmware image) and u32 function address
+ *   0x1e PROFILE_STATE  body: u8 op (0 get, 1 start, 2 stop, 3 reset, 4 start trace)   reply: u8 state (0 stopped, 1 running), u32 clock Hz, u16 rows, u64 elapsed ticks of the span clock while running since the last reset,
+ *                       then the 4 poll slots, each u8 owner (0 empty, 1 + module record, 0xff firmware image) and u32 function address, then u8 trace version (0 unsupported); op 4 also returns u32 generation
  *   0x1f PROFILE_READ   body: u16 first row   reply: u16 first, u8 n, then n rows of u32 calls, u64 sum, u32 max (ticks of the span clock; big endian)
+ *                       trace body: u8 version (1), u32 generation (0 any), u16 first event
+ *                       trace reply: u8 version, u32 generation, u16 total, u32 dropped, u32 clock Hz, u16 first, u8 n, then n records of u32 owner, u64 start, u32 duration
  *   0x0a SETUP          body: u8 op (1 machine type, 2 filter type), u8 track (0 to 15), u8 type   reply: u8 seq (1 to 255, then from 1 again)
  *                       Queues the request for the next pass of the UI task, which sets the type through the firmware's own kit commit (`dk_debug_setup`, the call a
  *                       chooser makes) and logs SETUP_DONE: op, track, type, seq and the status (0, or a negative code: the firmware kept the old type, or the type is
@@ -87,6 +89,11 @@ typedef uint8_t u8;
 #define SPAN_POLLS 4u  /* owner 0x200 | i: the polls */
 #define SPAN_ROWS (SPAN_MODULES + SPAN_PHASES + SPAN_POLLS)
 #define SPAN_PER_REPLY ((REPLY_MAX - 3u) / 16u)
+#define TRACE_VERSION 1u
+#define TRACE_CAPACITY 256u
+#define TRACE_HEADER 18u
+#define TRACE_EVENT 16u
+#define TRACE_PER_REPLY ((REPLY_MAX - TRACE_HEADER) / TRACE_EVENT)
 
 #define RING 512u
 #define REPLY_MAX 879u /* the reply body of a service command */
@@ -651,13 +658,50 @@ typedef struct SpanRow {
 static SpanRow span_rows[SPAN_ROWS];
 static u32 clk_addr, clk_hz; /* the span clock counter (a device address, 0: none) and its rate */
 static u8 profiling;
-/* The elapsed window: ticks of the span clock while profiling, since the last reset. The counter is 32 bits and wraps (about 32.5 s at 132 MHz), so the
- * module adds the 32-bit difference to the last read each time it reads the clock: at every UI pass (mod_tick) and every PROFILE_STATE. This is exact when
- * at least one read happens per wrap period; a UI that stops for longer loses whole wraps. */
+static u8 trace_version;
+
+typedef struct SpanEvent {
+    uint64_t start;
+    u32 duration;
+    u32 owner;
+} SpanEvent;
+
+static struct {
+    SpanEvent events[TRACE_CAPACITY];
+    uint64_t origin;
+    u32 generation;
+    u32 dropped;
+    u16 count;
+    u8 present; /* the current profiling window has a trace, running or stopped */
+} trace;
+
+/* The UI tick and the host commands share the span clock and table with the IRQ-masked sink. */
+static inline u16 span_lock(void)
+{
+#ifdef __m68k__
+    u16 sr;
+    __asm__ volatile("move.w %%sr,%0\n\tmove.w #0x2700,%%sr" : "=d"(sr) : : "memory", "cc");
+    return sr;
+#else
+    return 0;
+#endif
+}
+
+static inline void span_unlock(u16 sr)
+{
+#ifdef __m68k__
+    __asm__ volatile("move.w %0,%%sr" : : "d"(sr) : "memory", "cc");
+#else
+    (void)sr;
+#endif
+}
+
+/* The elapsed window: ticks of the span clock while profiling, since the last reset. Extend the wrapping 32-bit counter at every UI pass, PROFILE_STATE
+ * and trace event. At least one read per wrap period (about 32.5 s at 132 MHz) keeps it exact. */
 static uint64_t el_ticks;
 static u32 el_last;
 
-static void span_elapse(void)
+static void span_elapse_locked(void)
 {
     u32 n;
     if (!profiling)
@@ -665,6 +709,68 @@ static void span_elapse(void)
     n = DEBUG_READ32(clk_addr);
     el_ticks += (u32)(n - el_last);
     el_last = n;
+}
+
+static void span_elapse(void)
+{
+    u16 sr;
+    if (!profiling)
+        return;
+    sr = span_lock();
+    span_elapse_locked();
+    span_unlock(sr);
+}
+
+/* Start a generation at the current clock sample, skipping the wildcard generation. */
+static void trace_clear(void)
+{
+    if (++trace.generation == 0u)
+        trace.generation = 1u;
+    trace.count = 0;
+    trace.dropped = 0;
+    trace.origin = el_ticks;
+}
+
+static void trace_append(const dk_span *s)
+{
+    uint64_t since_start, elapsed;
+    SpanEvent *e;
+
+    if (trace.count == TRACE_CAPACITY)
+        goto dropped;
+
+    span_elapse_locked();
+    elapsed = el_ticks - trace.origin;
+    /* Emission may be delayed after the runtime read the end tick. Unwrap that delay separately from the duration. */
+    since_start = (uint64_t)s->cycles + (u32)(el_last - (s->start_tick + s->cycles));
+    /* A span can already be in flight when the trace starts or resets. */
+    if (since_start > elapsed)
+        goto dropped;
+
+    e = &trace.events[trace.count++];
+    e->start = elapsed - since_start;
+    e->duration = s->cycles;
+    e->owner = s->owner;
+    return;
+
+dropped:
+    if (trace.dropped < UINT32_MAX)
+        trace.dropped++;
+}
+
+/* Nested spans can complete out of order. Order the frozen capture by start, keeping ties in completion order. */
+static void trace_order(void)
+{
+    u32 i;
+    for (i = 1; i < trace.count; i++) {
+        SpanEvent e = trace.events[i];
+        u32 j = i;
+        while (j > 0u && trace.events[j - 1u].start > e.start) {
+            trace.events[j] = trace.events[j - 1u];
+            j--;
+        }
+        trace.events[j] = e;
+    }
 }
 
 static u32 span_row(u32 owner)
@@ -683,13 +789,15 @@ static void span_sink(const dk_span *s)
 {
     u32 r = span_row(s->owner);
     SpanRow *w;
-    if (r >= SPAN_ROWS)
+    if (!profiling || r >= SPAN_ROWS)
         return;
     w = &span_rows[r];
     w->calls++;
     w->sum += s->cycles;
     if (s->cycles > w->max)
         w->max = s->cycles;
+    if (trace.present)
+        trace_append(s);
 }
 
 /* The runtime reads the clock before and after a span. The module only reads the counter; it never writes a timer register. */
@@ -701,6 +809,7 @@ static u32 span_clock(void)
 static void span_reset(void)
 {
     u32 i;
+    u16 sr = span_lock();
     el_ticks = 0;
     if (profiling)
         el_last = DEBUG_READ32(clk_addr);
@@ -709,6 +818,9 @@ static void span_reset(void)
         span_rows[i].sum = 0;
         span_rows[i].max = 0;
     }
+    if (trace.present)
+        trace_clear();
+    span_unlock(sr);
 }
 
 /* The DSP stats window (PROFILE_DSP): on while the DSP counts, and the clear generation last sent. Only the owner of the span channel may control it. */
@@ -718,38 +830,55 @@ static u32
 
 static void span_stop(void)
 {
-    span_elapse();
+    u16 sr;
     if (dsp_on) {
         dk_dsp_stats_ctl(0, dsp_gen); /* before the channel goes: the control is the owner's */
         dsp_on = 0;
     }
-    dk_span_sink_set(0, 0);
+    sr = span_lock();
+    span_elapse_locked();
     profiling = 0;
+    span_unlock(sr);
+    dk_span_sink_set(0, 0);
+    if (trace.present)
+        trace_order();
 }
 
-/* Own the span channel (the same claim as PROFILE_STATE start): 0 or the error. */
-static int32_t span_claim(void)
+/* Own the span channel and, when requested, open a generation before a producer can append to it. */
+static int32_t span_start(u8 with_trace)
 {
-    int32_t r;
-    if (profiling)
-        return 0;
-    if (clk_addr == 0u)
-        return E_PROTO; /* no clock on this device */
-    r = dk_span_sink_set((uint8_t *)span_sink, (uint8_t *)span_clock);
-    if (r != 0)
-        return r; /* DK_E_BUSY: another module owns the span channel */
-    profiling = 1;
-    el_last = DEBUG_READ32(clk_addr);
-    return 0;
+    int32_t r = 0;
+    u16 sr;
+    if (clk_addr == 0u || (with_trace && !trace_version))
+        return E_PROTO;
+    sr = span_lock();
+    if (!profiling) {
+        r = dk_span_sink_set((uint8_t *)span_sink, (uint8_t *)span_clock);
+        if (r == 0) {
+            profiling = 1;
+            el_last = DEBUG_READ32(clk_addr);
+            trace.present = 0;
+        }
+    }
+    if (r == 0 && with_trace && !trace.present) {
+        span_elapse_locked();
+        trace_clear();
+        trace.present = 1;
+    }
+    span_unlock(sr);
+    return r;
 }
 
 static int32_t cmd_profile_state(const u8 *body, u32 len, u8 *out)
 {
-    u32 i;
+    const u32 trace_at = 15u + 5u * SPAN_POLLS;
+    u32 i, generation;
+    uint64_t elapsed;
+    u16 sr;
     if (len != 1u)
         return E_MSG;
-    if (body[0] == 1u && !profiling) {
-        int32_t r = span_claim();
+    if (body[0] == 1u || body[0] == 4u) {
+        int32_t r = span_start(body[0] == 4u);
         if (r != 0)
             return r;
     } else if (body[0] == 2u) {
@@ -760,24 +889,69 @@ static int32_t cmd_profile_state(const u8 *body, u32 len, u8 *out)
     } else if (body[0] > 3u) {
         return E_PROTO;
     }
-    span_elapse();
+    sr = span_lock();
+    span_elapse_locked();
+    elapsed = el_ticks;
+    generation = trace.generation;
     out[0] = profiling;
+    span_unlock(sr);
     dk_bytes_put32(out + 1, clk_hz);
     out[5] = (u8)(SPAN_ROWS >> 8);
     out[6] = (u8)SPAN_ROWS;
-    dk_bytes_put32(out + 7, (u32)(el_ticks >> 32));
-    dk_bytes_put32(out + 11, (u32)el_ticks);
+    dk_bytes_put32(out + 7, (u32)(elapsed >> 32));
+    dk_bytes_put32(out + 11, (u32)elapsed);
     for (i = 0; i < SPAN_POLLS; i++) {
         u32 fn = 0;
         out[15u + 5u * i] = (u8)dk_debug_poll(i, &fn);
         dk_bytes_put32(out + 16u + 5u * i, fn);
     }
-    return (int32_t)(15u + 5u * SPAN_POLLS);
+    out[trace_at] = trace_version;
+    if (body[0] == 4u) {
+        dk_bytes_put32(out + trace_at + 1u, generation);
+        return (int32_t)(trace_at + 5u);
+    }
+    return (int32_t)(trace_at + 1u);
+}
+
+static int32_t cmd_trace_read(const u8 *body, u8 *out)
+{
+    u32 generation = dk_bytes_get32(body + 1u);
+    u32 first = ((u32)body[5] << 8) | body[6];
+    u32 n, i;
+    if (!trace_version || body[0] != TRACE_VERSION)
+        return E_PROTO;
+    if (profiling || !trace.present || (generation && generation != trace.generation))
+        return DK_E_STATE;
+    if (first > trace.count)
+        return E_PEEK;
+    n = trace.count - first;
+    if (n > TRACE_PER_REPLY)
+        n = TRACE_PER_REPLY;
+    out[0] = TRACE_VERSION;
+    dk_bytes_put32(out + 1, trace.generation);
+    out[5] = (u8)(trace.count >> 8);
+    out[6] = (u8)trace.count;
+    dk_bytes_put32(out + 7, trace.dropped);
+    dk_bytes_put32(out + 11, clk_hz);
+    out[15] = body[5];
+    out[16] = body[6];
+    out[17] = (u8)n;
+    for (i = 0; i < n; i++) {
+        const SpanEvent *e = &trace.events[first + i];
+        u8 *o = out + TRACE_HEADER + TRACE_EVENT * i;
+        dk_bytes_put32(o, e->owner);
+        dk_bytes_put32(o + 4, (u32)(e->start >> 32));
+        dk_bytes_put32(o + 8, (u32)e->start);
+        dk_bytes_put32(o + 12, e->duration);
+    }
+    return (int32_t)(TRACE_HEADER + TRACE_EVENT * n);
 }
 
 static int32_t cmd_profile_read(const u8 *body, u32 len, u8 *out)
 {
     u32 first, n, i;
+    if (len == 7u)
+        return cmd_trace_read(body, out);
     if (len != 2u)
         return E_MSG;
     first = ((u32)body[0] << 8) | body[1];
@@ -790,12 +964,14 @@ static int32_t cmd_profile_read(const u8 *body, u32 len, u8 *out)
     out[1] = body[1];
     out[2] = (u8)n;
     for (i = 0; i < n; i++) {
-        const SpanRow *w = &span_rows[first + i];
         u8 *o = out + 3u + 16u * i;
-        dk_bytes_put32(o, w->calls);
-        dk_bytes_put32(o + 4, (u32)(w->sum >> 32));
-        dk_bytes_put32(o + 8, (u32)w->sum);
-        dk_bytes_put32(o + 12, w->max);
+        u16 sr = span_lock();
+        SpanRow w = span_rows[first + i];
+        span_unlock(sr);
+        dk_bytes_put32(o, w.calls);
+        dk_bytes_put32(o + 4, (u32)(w.sum >> 32));
+        dk_bytes_put32(o + 8, (u32)w.sum);
+        dk_bytes_put32(o + 12, w.max);
     }
     return (int32_t)(3u + 16u * n);
 }
@@ -817,7 +993,7 @@ static int32_t cmd_profile_dsp(u32 c, u32 seq, const void *vbody, u32 len, void 
     if (body[0] > 3u)
         return E_PROTO;
     if (body[0] == 1u && !dsp_on) {
-        int32_t r = span_claim();
+        int32_t r = span_start(0);
         if (r == 0)
             r = dk_dsp_stats_ctl(1, dsp_gen);
         if (r != 0)
@@ -1030,8 +1206,15 @@ static int32_t init(dk_module_ctx *ctx)
         return DK_E_CMD_RANGE;
     }
     clk_addr = dk_debug_span_clock(&clk_hz);
+    trace_version =
+        clk_addr && clk_hz && dk_module_ctx_runtime_version(ctx) >= DK_SPAN_START_TICK_VERSION
+            ? TRACE_VERSION
+            : 0;
     dsp_gen = dk_time_blocks();
     cl_init(ctx);
+    /* Give a reloaded module a fresh starting generation for any outstanding host page requests. */
+    if (trace_version)
+        trace.generation = (cl.boot_seq * 2654435761u) ^ span_clock() ^ dsp_gen;
     dk_debug_log_sink_set((uint8_t *)sink, (uint8_t *)tick);
     return DK_OK;
 }

@@ -173,7 +173,7 @@ const SCENES = [
         "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
         'Recorder unavailable',
       );
-      await p.click(/^Start recording$/);
+      await p.click(/^Start recording$/, '.span-actions button');
       await waitForAnalyzer(
         p,
         "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
@@ -185,7 +185,7 @@ const SCENES = [
         "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Recording')",
         'Profile did not see the shared recording',
       );
-      await p.click(/^Stop recording$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
       await waitForAnalyzer(
         p,
         "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Stopped')",
@@ -199,7 +199,7 @@ const SCENES = [
         "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
         'New target did not bind its recorder',
       );
-      await p.click(/^Start recording$/);
+      await p.click(/^Start recording$/, '.span-actions button');
       await waitForAnalyzer(
         p,
         "document.querySelectorAll('.span-details option').length >= 4",
@@ -1219,7 +1219,7 @@ const SCENES = [
       await showTab(p, 'Profile');
       await p.wait(62000);
       await p.eval(
-        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop') b.click(); })()",
+        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop recording') b.click(); })()",
       );
       await p.wait(1500);
     },
@@ -1592,12 +1592,12 @@ function pageApi(cdp) {
     eval: evaluate,
     say: (m) => console.log(`  ${m}`),
     wait: sleep,
-    async click(text) {
+    async click(text, selector = 'button') {
       const src = text instanceof RegExp ? text.source : `^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
       // a button is disabled while the page reads (a window focus starts a read): try for up to 3 s
       for (let i = 0; i < 30; i++) {
         const ok = await evaluate(
-          `(() => { const re = new RegExp(${JSON.stringify(src)}); const b = [...document.querySelectorAll('button')].find((x) => re.test(x.textContent.trim()) && !x.disabled); if (b) b.click(); return !!b; })()`,
+          `(() => { const re = new RegExp(${JSON.stringify(src)}); const b = [...document.querySelectorAll(${JSON.stringify(selector)})].find((x) => re.test(x.textContent.trim()) && !x.disabled); if (b) b.click(); return !!b; })()`,
         );
         if (ok) return;
         await sleep(100);
