@@ -31,13 +31,14 @@ import {
   type Snapshot,
 } from '@digi/workbench-core/profile/profile-core.ts';
 import { stockImageHash, type LogNames } from '@digi/dk-session/log-names';
+import { createDspBlockRecording, type DspBlockCapture } from './dsp-block-recording';
 import type { FrozenTrace } from './span-recording';
 import { sampledPcs, type Hotspot } from './profile-hotspots';
 
 /** The part of the session the pane uses. */
 export type ProfileSession = Pick<
   DkSession,
-  'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'profileTrace' | 'logPage' | 'peek'
+  'info' | 'modules' | 'capacity' | 'profileState' | 'profileAll' | 'profileDsp' | 'profileTrace' | 'logPage' | 'peek'
 >;
 
 /** One ColdFire path of the emulator (ram_clear, run_fast, step_once, idle_skip) with its share of the host time and of the instructions. */
@@ -102,6 +103,8 @@ export type ProfileReading =
       emulator: boolean;
       observedAt: number;
       imageId?: string | null;
+      dspBlocks?: DspBlockCapture;
+      dspBlockNote?: string;
       traceSummary?: string;
       frozenTrace?: FrozenTrace;
       traceSupported?: boolean;
@@ -189,10 +192,11 @@ interface Source<T> {
 }
 
 export interface Recorder {
+  releaseDsp(): Promise<void>;
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
-  read(detail?: 'full' | 'spans'): Promise<ProfileReading>;
+  read(detail?: 'full' | 'spans', liveDsp?: boolean): Promise<ProfileReading>;
   /** Reset the counters and start the spans; on the emulator also `cf.profile` and `sharc.profile` count from now. */
-  start(): Promise<void>;
+  start(withDspBlocks?: boolean): Promise<void>;
   /** Stop the spans; on the emulator, keep the instruction profiles of the recording for Export. */
   stop(): Promise<void>;
   /** Zero the counters (both states); the recording window starts again. */
@@ -225,6 +229,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   let namesRequest = 0;
   let captureImage: { info: ProfileInfo; sha256: string } | undefined;
   let traceGeneration: number | undefined;
+  const dspBlocks = createDspBlockRecording();
   let frozenTrace: FrozenTrace | undefined;
   let stoppedCapture: BuildInput | undefined;
 
@@ -452,7 +457,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const current = await s.info().catch(() => undefined);
       if (current && sameImage(info, current)) run.firmware_sha256 = captureImage.sha256;
     }
-    const capture: BuildInput = { run, ...parts, spans };
+    const capture: BuildInput = { run, ...parts, spans, dsp: all.running ? undefined : dspBlocks.artifact() };
     if (traceGeneration !== undefined && !all.running) {
       try {
         capture.trace = await s.profileTrace(traceGeneration);
@@ -464,7 +469,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   }
 
   return {
-    async read(detail = 'full') {
+    releaseDsp: dspBlocks.release,
+    async read(detail = 'full', liveDsp = false) {
       const s = await deps.session();
       const info = await s.info();
       if (info.caps === null || ((info.caps >>> CAP.PEEK) & 1) === 0)
@@ -498,6 +504,20 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         snap,
         modules,
       };
+      if (!all.running) r.dspBlocks = dspBlocks.capture();
+      r.dspBlockNote = !hasDsp()
+        ? 'This target has no SHARC DSP.'
+        : dspBlocks.note() ||
+          (all.running && !dspBlocks.armed()
+            ? 'To include DSP costs, stop and start a recording from DSP blocks.'
+            : '');
+      if (all.running && liveDsp && dspBlocks.armed()) {
+        try {
+          r.dspBlocks = await dspBlocks.live(s, !!deps.rpc);
+        } catch (error) {
+          r.dspBlockNote = `Live DSP costs unavailable · ${asFault(error)}`;
+        }
+      }
       r.traceSupported = all.traceVersion === 1;
       if (!all.running) r.frozenTrace = frozenTrace;
       const trace = stoppedCapture?.trace;
@@ -524,7 +544,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       return r;
     },
 
-    async start() {
+    async start(withDspBlocks = false) {
       const s = await deps.session();
       kept = {};
       stoppedCapture = undefined;
@@ -533,7 +553,9 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       captureImage = undefined;
       const info = await s.info();
       device = (info.port ?? '').split('-')[0] || device;
+      dspBlocks.reset();
       await spansSource(s).start();
+      if (withDspBlocks) await dspBlocks.start(s, hasDsp());
       await captureIdentity(s, info);
       restarts = {};
       if (!deps.rpc) return;
@@ -559,6 +581,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       let spansError: unknown;
       try {
         await spansSource(s).stop();
+        await dspBlocks.freeze(s, !!deps.rpc);
       } catch (e) {
         spansError = e; // the instruction sources still stop; the error comes after
       }
@@ -578,7 +601,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         if (stopNote) instructionNote = instructionNote ? `${instructionNote} ${stopNote}` : stopNote;
       }
       if (spansError !== undefined) throw spansError;
-      if (captureImage || traceGeneration !== undefined) {
+      if (captureImage || traceGeneration !== undefined || dspBlocks.capture()) {
         try {
           const info = await s.info();
           const capture = await capturedData(s, info, await s.profileAll(), kept);
@@ -587,7 +610,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
               trace: capture.trace,
               names: new Map(capture.spans?.spans.map((row) => [row.owner, row.name])),
             };
-          if (capture.run.firmware_sha256 || capture.trace || capture.traceError) stoppedCapture = capture;
+          if (capture.run.firmware_sha256 || capture.trace || capture.traceError || capture.dsp)
+            stoppedCapture = capture;
         } catch {
           // Export can still read the available counters, leaving the identity out if it cannot verify it.
         }
@@ -598,6 +622,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const s = await deps.session();
       const info = await s.info();
       const resetState = await state(s, 'reset');
+      if (!resetState.running) dspBlocks.reset();
+      else await dspBlocks.clearRunning();
       if (traceGeneration !== undefined)
         traceGeneration = resetState.running ? (await state(s, 'startTrace')).traceGeneration : undefined;
       kept = {};

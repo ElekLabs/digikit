@@ -81,6 +81,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   const emulator = !!deps.rpc;
   let running = state === 'rec';
   const traceSupported = !query.has('legacyProfile');
+  let withDspBlocks = false;
+  let dspBlocks: Extract<ProfileReading, { noDebug: false }>['dspBlocks'];
   let capture: Extract<ProfileReading, { noDebug: false }>['frozenTrace'];
   let t = 0; // seconds recorded
   let last = Date.now();
@@ -100,6 +102,17 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       calls[i] += s > 0 ? Math.round((s * dt) / (m.meanUs * 1e-6)) : 0;
     });
   };
+  const sampleDsp = (): typeof dspBlocks => ({
+    unit: emulator ? 'instructions' : 'cycles',
+    blocks: Math.max(1, Math.round(t * 1500)),
+    overruns: 2,
+    rows: [
+      { row: 0, kind: 'machine', calls: 5800, meanBlock: 14880, maxBlock: 21130, maxCall: 7400 },
+      { row: 8, kind: 'effect', calls: 1500, meanBlock: 9850, maxBlock: 16675, maxCall: 16675 },
+      { row: 1, kind: 'machine', calls: 840, meanBlock: 2640, maxBlock: 9840, maxCall: 8270 },
+    ],
+  });
+
   const snap = (): Snapshot => ({
     running,
     hz: HZ,
@@ -118,7 +131,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     ],
   });
   return {
-    async read(): Promise<ProfileReading> {
+    async read(_detail, liveDsp): Promise<ProfileReading> {
       await new Promise((r) => setTimeout(r, 60));
       const port = `${dev}-${dev === 'dn2' ? '1.12' : '1.17'}`;
       if (state === 'nodebug') return { noDebug: true, port: 'dt2-1.17', emulator };
@@ -133,6 +146,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         modules,
         traceSupported,
         frozenTrace: capture,
+        dspBlocks: running && liveDsp && withDspBlocks ? sampleDsp() : dspBlocks,
       };
       if (emulator && elapsed > 0n) {
         r.cf = cfView(CF_PART, (a) => CF_NAMES.get(a));
@@ -163,8 +177,13 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       } else if (!emulator && elapsed > 0n) r.deviceDsp = { avgPct: 21.3, maxPct: 34 };
       return r;
     },
-    async start() {
+    async releaseDsp() {
+      withDspBlocks = false;
+    },
+    async start(dsp = false) {
+      withDspBlocks = dsp;
       capture = undefined;
+      dspBlocks = undefined;
       advance();
       running = true;
       last = Date.now();
@@ -172,6 +191,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     async stop() {
       advance();
       running = false;
+      if (withDspBlocks) dspBlocks = sampleDsp();
       if (traceSupported) {
         const events = Array.from({ length: 48 }, (_, i) => ({
           owner: [0x100, 0, 0x101, 2][i % 4]!,
@@ -191,6 +211,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     },
     async reset() {
       capture = undefined;
+      dspBlocks = undefined;
       advance();
       t = 0;
       elapsed = 0n;

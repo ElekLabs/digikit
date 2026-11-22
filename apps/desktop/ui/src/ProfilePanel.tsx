@@ -91,6 +91,7 @@ function HotspotTable(props: { title: string; rows: Hotspot[] }): JSX.Element {
 export default function ProfilePanel(props: {
   visible: boolean;
   collectSpans?: boolean;
+  liveDsp?: boolean;
   onSpanRecording?(recording?: SpanRecording): void;
   source: TargetBinding;
   host?: Host;
@@ -148,7 +149,7 @@ export default function ProfilePanel(props: {
 
       try {
         checkRuntime(props.source.target);
-        const r = await recorder.read(props.visible ? 'full' : 'spans');
+        const r = await recorder.read(props.visible ? 'full' : 'spans', props.liveDsp);
         if (current()) {
           if (!r.noDebug) {
             const previous = reading();
@@ -220,25 +221,40 @@ export default function ProfilePanel(props: {
   });
   onCleanup(() => gate.dispose());
 
+  let pending: Promise<void> | undefined;
+  let releasing: Promise<void> | undefined;
+  const releaseDsp = () =>
+    (releasing ??= (async () => {
+      await pending?.catch(() => {});
+      await recorder.releaseDsp();
+    })());
+  const unbindDsp = props.source.beforeLeave(releaseDsp);
+  onCleanup(() => {
+    unbindDsp();
+    void releaseDsp().catch(() => {});
+  });
+
   const act = async (what: string, f: () => Promise<void>) => {
     if (locked()) return;
     gate.stop();
     setActing(what);
     try {
-      await f();
+      pending = f();
+      await pending;
       setError('');
     } catch (e) {
       setError(failureLine(e, targetLabel(props.source.target)));
     } finally {
+      pending = undefined;
       setActing('');
     }
   };
-  const start = () =>
+  const start = (withDspBlocks: boolean) =>
     act('start', async () => {
       clearSpans();
       history.clear();
       setDsp(undefined);
-      await recorder.start();
+      await recorder.start(withDspBlocks);
     });
   const stop = () => act('stop', () => recorder.stop());
   const reset = () =>
@@ -264,8 +280,18 @@ export default function ProfilePanel(props: {
         await app.backend.restart(() => {});
       }),
     );
-  const toggleRecording = () => void (running() ? stop() : start());
+  const toggleRecording = (withDspBlocks = false) => void (running() ? stop() : start(withDspBlocks));
   props.onSpanRecording?.({
+    dspBlocks: () => ok()?.dspBlocks,
+    dspBlockStatus: () => {
+      if (error()) return error();
+      const r = ok();
+      if (!r) return reading()?.noDebug ? 'Profiling needs the debug module.' : 'Reading target capabilities…';
+      return (
+        r.dspBlockNote ||
+        (r.snap.running ? 'Waiting for the first complete DSP sweep…' : 'Start a recording to measure DSP block costs.')
+      );
+    },
     frozenTrace: () => ok()?.frozenTrace,
     timelineStatus: () => {
       const r = ok();

@@ -18,6 +18,7 @@ export default function SidePanels(props: {
   visible: boolean;
   active?: boolean;
   collectSpans?: boolean;
+  liveDsp?: boolean;
   profileGeneration?: number;
   onSpanRecording?(recording?: SpanRecording): void;
   metrics?: JSX.Element;
@@ -157,6 +158,7 @@ export default function SidePanels(props: {
         {(_generation) => (
           <ProfilePanel
             visible={reads('profile')}
+            liveDsp={props.liveDsp}
             collectSpans={props.collectSpans && (props.active ?? true)}
             onSpanRecording={props.onSpanRecording}
             source={props.source}

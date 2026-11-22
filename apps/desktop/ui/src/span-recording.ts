@@ -1,5 +1,6 @@
 // The Performance drawer observes and controls the selected Profile panel's recorder.
 import type { ProfileTrace } from '@digi/dk-session';
+import type { DspBlockCapture } from './dsp-block-recording';
 import type { SpanInterval } from './span-intervals';
 
 export interface FrozenTrace {
@@ -8,6 +9,8 @@ export interface FrozenTrace {
 }
 
 export interface SpanRecording {
+  dspBlocks(): DspBlockCapture | undefined;
+  dspBlockStatus(): string;
   frozenTrace(): FrozenTrace | undefined;
   timelineStatus(): string;
   intervals(): readonly SpanInterval[];
@@ -15,5 +18,5 @@ export interface SpanRecording {
   available(): boolean;
   disabled(): boolean;
   status(): string;
-  toggle(): void;
+  toggle(withDspBlocks?: boolean): void;
 }

@@ -1,4 +1,4 @@
-import type { DkSession } from '@digi/dk-session';
+import type { DkSession, DspStats } from '@digi/dk-session';
 
 // The `dk.profile/1` artifact (docs/INSTRUMENTATION.md "Profiles"), built from what the sources answer: the runtime spans of the debug module
 // (dk-session `profileAll`), `cf.profile` and `sharc.profile` of the emulator. One builder for `wb profile ...` (tools/devtools/wb_prof.mjs) and
@@ -187,6 +187,24 @@ export interface DspRowOut {
   sum_cycles: number;
   max_call: number;
   max_block: number;
+}
+
+/** The newest complete DSP stats sweep, in the target's native counter unit. */
+export function dspStatsPart(sweep: DspStats['sweep'], unit: string): BuildInput['dsp'] {
+  if (!sweep) return undefined;
+  return {
+    header: { unit, blocks: sweep.blocks, max_stock_block_delta: sweep.maxStockBlockDelta, overruns: sweep.overruns },
+    rows: sweep.rows
+      .filter((x) => x.calls > 0 || x.maxBlock > 0)
+      .map((x) => ({
+        row: x.row,
+        kind: x.kind,
+        calls: x.calls,
+        sum_cycles: Number(x.sumCycles),
+        max_call: x.maxCall,
+        max_block: x.maxBlock,
+      })),
+  };
 }
 
 export interface BuildInput {

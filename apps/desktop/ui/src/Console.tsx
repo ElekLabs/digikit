@@ -1211,6 +1211,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
                   <SidePanels
                     host={props.host}
                     visible={sidePanelsShown()}
+                    liveDsp={toolDrawer() === 'Performance' && performanceView() === 'DSP blocks'}
                     collectSpans={
                       toolDrawer() === 'Performance' &&
                       performanceView() !== 'Utilization' &&

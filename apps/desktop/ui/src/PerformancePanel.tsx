@@ -1,3 +1,4 @@
+import DspBlocks from './DspBlocks';
 import TraceTimeline from './TraceTimeline';
 import RecordingButton from './RecordingButton';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
@@ -20,7 +21,7 @@ function hasValue(value: number | null): value is number {
   return value !== null && Number.isFinite(value);
 }
 
-const views = ['Utilization', 'Spans', 'Timeline'] as const;
+const views = ['Utilization', 'Spans', 'Timeline', 'DSP blocks'] as const;
 export type PerformanceView = (typeof views)[number];
 
 interface PerformanceProps {
@@ -59,15 +60,15 @@ export default function PerformancePanel(props: PerformanceProps) {
               <RecordingButton
                 running={!!props.recording?.running()}
                 disabled={!!props.recording?.disabled()}
-                onToggle={() => props.recording?.toggle()}
+                onToggle={() => props.recording?.toggle(props.view === 'DSP blocks')}
               />
             </Show>
-            <Show when={props.view !== 'Timeline' || props.recording?.running()}>
+            <Show when={props.view === 'Spans' || props.recording?.running()}>
               <span role="status">{props.activeTarget ? props.recording?.status() : 'Target unavailable'}</span>
             </Show>
           </div>
         </Show>
-        <Show when={props.view !== 'Timeline'}>
+        <Show when={props.view === 'Spans' || props.view === 'Utilization'}>
           <dl class="performance-legend" aria-label="Latest utilization">
             <div class="performance-cf">
               <dt>CF</dt>
@@ -81,7 +82,25 @@ export default function PerformancePanel(props: PerformanceProps) {
           <span class="performance-source">{props.estimated ? 'Estimated utilization' : 'Measured utilization'}</span>
         </Show>
       </header>
-      <Show when={props.view === 'Timeline'} fallback={<UtilizationChart {...props} />}>
+      <Show
+        when={props.view === 'Timeline'}
+        fallback={
+          <Show when={props.view === 'DSP blocks'} fallback={<UtilizationChart {...props} />}>
+            <Show
+              when={props.activeTarget && props.recording?.dspBlocks()}
+              fallback={
+                <p role="status">
+                  {props.activeTarget
+                    ? (props.recording?.dspBlockStatus() ?? 'Reading target capabilities…')
+                    : 'Target unavailable'}
+                </p>
+              }
+            >
+              {(capture) => <DspBlocks capture={capture()} />}
+            </Show>
+          </Show>
+        }
+      >
         <Show
           when={props.activeTarget && props.recording?.frozenTrace()}
           fallback={

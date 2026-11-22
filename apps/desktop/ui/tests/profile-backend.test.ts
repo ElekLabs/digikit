@@ -55,6 +55,9 @@ function fakeSession(st: FakeState): ProfileSession {
       { index: 1, name: 'someone/mystery' },
     ],
     capacity: async () => ({ DSP_COST: { limit: 92_796, used: 0, largest: 0 } }),
+    profileDsp: async () => {
+      throw new DkError({ error: 'unknown command', kind: 'device', status: 'E_PROTO' });
+    },
     profileState: async (op: 'get' | 'start' | 'stop' | 'reset' | 'startTrace') => {
       st.calls.push(`state:${op}`);
       if (st.noClock && op === 'start') throw new DkError({ error: 'no clock', kind: 'device', status: 'E_PROTO' });
@@ -651,4 +654,99 @@ test('a failed trace download retains the frozen aggregate and records the loss 
   assert.ok(doc.spans.length);
   assert.equal(doc.trace, undefined);
   assert.deepEqual(doc.loss, [{ series: 'trace', reason: 'recording replaced' }]);
+});
+
+describe('DSP block recording', () => {
+  function setup(emulator = false) {
+    const st = state();
+    const session = fakeSession(st);
+    const steps: string[] = [];
+    let generation = 80;
+    const sweep = {
+      number: 7,
+      blocks: 40,
+      maxStockBlockDelta: 44,
+      overruns: 2,
+      rows: [{ row: 8, kind: 'effect' as const, calls: 120, sumCycles: 3200n, maxCall: 65, maxBlock: 110 }],
+    };
+    let published: typeof sweep | undefined = sweep;
+    session.profileDsp = async (op = 'get') => {
+      steps.push(op);
+      if (op === 'clear') generation++;
+
+      return { on: st.running, generation, counts: { sweeps: 7, gaps: 0, ignored: 0 }, sweep: published };
+    };
+    const rec = createRecorder({
+      session: async () => session,
+      loadLibrary: library,
+      rpc: emulator ? fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }) : undefined,
+    });
+    return {
+      rec,
+      steps,
+      replace: () => generation++,
+      noSweep: () => {
+        published = undefined;
+      },
+    };
+  }
+  for (const emulator of [false, true]) {
+    test(`freezes the measured window in ${emulator ? 'emulator instructions' : 'device cycles'}`, async () => {
+      const { rec, steps } = setup(emulator);
+      await rec.start(true);
+      await rec.read('spans');
+      assert.deepEqual(steps, ['clear', 'start']);
+      const live = await rec.read('spans', true);
+      assert.ok(!live.noDebug && live.snap.running && live.dspBlocks?.blocks === 40);
+      await rec.reset();
+      await rec.stop();
+      const reading = await rec.read('spans');
+      assert.ok(!reading.noDebug);
+      assert.deepEqual(reading.dspBlocks, {
+        unit: emulator ? 'instructions' : 'cycles',
+        blocks: 40,
+        overruns: 2,
+        rows: [{ row: 8, kind: 'effect', calls: 120, meanBlock: 80, maxCall: 65, maxBlock: 110 }],
+      });
+      assert.deepEqual(steps, ['clear', 'start', 'get', 'clear', 'get']);
+      const doc = JSON.parse((await rec.exportFile()).text);
+      assert.equal(doc.dsp.unit, emulator ? 'insn' : 'cycles');
+      assert.equal(doc.dsp_rows[0].sum_cycles, 3200);
+      await rec.reset();
+      assert.equal(JSON.parse((await rec.exportFile()).text).dsp, undefined);
+    });
+  }
+  test('ordinary recording and reset leave DSP streaming alone', async () => {
+    const { rec, steps } = setup();
+    await rec.start();
+    await rec.reset();
+    await rec.stop();
+    await rec.releaseDsp();
+    assert.deepEqual(steps, []);
+  });
+
+  for (const replaced of [false, true]) {
+    test('target departure releases only the owned generation, replaced=' + replaced, async () => {
+      const { rec, replace, steps } = setup();
+      await rec.start(true);
+      if (replaced) replace();
+      await rec.releaseDsp();
+      await rec.releaseDsp();
+      assert.deepEqual(steps, replaced ? ['clear', 'start', 'get'] : ['clear', 'start', 'get', 'stop']);
+    });
+  }
+
+  for (const stale of [false, true]) {
+    test(stale ? 'rejects a replaced recording' : 'explains a short recording with no sweep', async () => {
+      const { rec, replace, noSweep } = setup();
+      await rec.start(true);
+      if (stale) replace();
+      else noSweep();
+      await rec.stop();
+      const r = await rec.read('spans');
+      assert.ok(!r.noDebug && !r.dspBlocks);
+      assert.match(r.dspBlockNote ?? '', stale ? /changed/ : /No complete DSP sweep/);
+      assert.ok(JSON.parse((await rec.exportFile()).text).spans.length);
+    });
+  }
 });

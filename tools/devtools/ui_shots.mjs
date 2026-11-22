@@ -161,6 +161,22 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'performance-dsp-blocks',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^DSP blocks$/);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "document.querySelector('.dsp-blocks canvas') && document.querySelector('.span-actions button')?.textContent.includes('Stop recording')", 'Missing live DSP chart while recording');
+      await p.click(/^Spans$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('cycles')", 'Frozen DSP block chart missing');
+    },
+  },
+  {
     name: 'performance-timeline-legacy',
     q: 'page=run&runtimeOnly&history&prof=stopped&legacyProfile',
     size: WIDE,
@@ -184,7 +200,7 @@ const SCENES = [
       await p.click(/^Performance$/);
       await p.click(/^Timeline$/);
       await p.click(/^Start recording$/, '.span-actions button');
-      await waitForAnalyzer(p, "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')", 'Missing recording state');
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')", 'Missing live DSP chart while recording');
       await p.click(/^Stop recording$/, '.span-actions button');
       await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')", 'Missing frozen trace');
       await pickTarget(p, 'Emulator');
