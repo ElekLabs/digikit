@@ -130,7 +130,14 @@ export function demoStore(): StoreOps {
     mod('em/scope', 8 * KIB),
     {
       path: 'services/lfo.dks',
-      bytes: fakeDkm({ name: 'core/lfo', role: 1, version: ver(0, 4, 1), runtime, size: 6 * KIB, imageSize: 5 * KIB }),
+      bytes: fakeDkm({
+        name: 'dkrt-svc-lfo',
+        role: 1,
+        version: ver(0, 4, 1),
+        runtime,
+        size: 6 * KIB,
+        imageSize: 5 * KIB,
+      }),
     },
     { path: 'data/em/pluck/settings.bin', bytes: fill(256, 1) },
     { path: 'data/em/chorus/presets.bin', bytes: fill(1200, 2) },

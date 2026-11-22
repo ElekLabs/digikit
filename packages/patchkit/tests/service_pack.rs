@@ -483,43 +483,53 @@ fn a_dsp_fill_without_a_dsp_object_for_the_device_is_refused() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-/// The lfo service is one file for every device: the fills of the other device's slots stay in it under a device mask in the flags of their `SLOTS` items (the loader skips
-/// them), so the packs for the two devices are the same bytes.
+/// A service file is one file for every device: the fill of a slot that only one device has stays in it under a device mask in the flags of its `SLOTS` item
+/// (the loader skips the other device's fills), so the packs for the two devices are the same bytes.
 #[test]
-fn the_lfo_service_packs_to_the_same_file_for_every_device() {
+fn fills_of_one_device_each_pack_to_the_same_file_under_a_device_mask() {
     if !toolchain() {
         return;
     }
-    let d = scratch("lfo-same");
-    let here = root();
-    let packs: Vec<Vec<u8>> = ["dt2", "dn2"]
+    // the two runtime devices with a SHARC DSP, from the device registry
+    let devs: Vec<_> = patchkit::devdata::all()
+        .iter()
+        .filter(|d| d.digikit_id.is_some() && d.identity.capabilities.dsp == "sharc")
+        .take(2)
+        .collect();
+    assert_eq!(devs.len(), 2, "two runtime devices with a DSP");
+    let (first, second) = (&devs[0].short, &devs[1].short);
+    let d = scratch("fills-masked");
+    let r = d.join("root");
+    building_root(&r, &|t| {
+        format!(
+            "{t}\n[[fill]]\nslot = \"voice_unpack\"\nentry = \"svc_test_hook\"\ndevices = [\"{first}\"]\n\n[[fill]]\nslot = \"frametype\"\nentry = \"svc_test_hook\"\ndevices = [\"{second}\"]\n"
+        )
+    });
+    let packs: Vec<Vec<u8>> = [first, second]
         .iter()
         .map(|dev| {
             pack_for(
-                &here,
-                "core/services/lfo",
+                &r,
+                "test/svc-test",
                 dev,
-                &d.join(format!("lfo-{dev}.dks")),
+                &d.join(format!("svc-test-{dev}.dks")),
             )
         })
         .collect();
-    assert!(packs[0] == packs[1], "lfo.dks differs between the devices");
+    assert!(packs[0] == packs[1], "the packs differ between the devices");
     let keys_bytes = Dkm::parse(&packs[0]).unwrap().register;
     let slots: Vec<_> = Keys::parse(&keys_bytes).unwrap().slots().collect();
-    assert_eq!(slots.len(), 12);
-    let masks: Vec<u32> = slots
+    assert_eq!(slots.len(), 2);
+    let mut masks: Vec<u32> = slots
         .iter()
         .map(|s| (s.flags & dkneeds::keys::SLOT_DEVICES_MASK) >> dkneeds::keys::SLOT_DEVICES_SHIFT)
         .collect();
-    assert_eq!(
-        masks.iter().filter(|m| **m == 1).count(),
-        6,
-        "fills of the first device"
-    );
-    assert_eq!(
-        masks.iter().filter(|m| **m == 2).count(),
-        6,
-        "fills of the second device"
-    );
+    masks.sort();
+    let mut want: Vec<u32> = devs
+        .iter()
+        .map(|d| 1 << (d.digikit_id.unwrap() - 1))
+        .collect();
+    want.sort();
+    assert_eq!(masks, want, "one fill for each device");
     let _ = std::fs::remove_dir_all(&d);
 }

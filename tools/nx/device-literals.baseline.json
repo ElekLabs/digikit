@@ -411,7 +411,7 @@
   "packages/patchkit/tests/repack.rs": 18,
   "packages/patchkit/tests/sections.rs": 3,
   "packages/patchkit/tests/service_check.rs": 42,
-  "packages/patchkit/tests/service_pack.rs": 16,
+  "packages/patchkit/tests/service_pack.rs": 14,
   "packages/patchkit/tests/services.rs": 9,
   "packages/patchkit/tests/storage_fault_isr.rs": 9,
   "packages/patchkit/tests/trace.rs": 2,
