@@ -39,12 +39,15 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
     case 'emu_startup':
       return (symbols ? symbolsSnapshot : await emulator.startup()) as T;
     case 'emu_step':
+      return (symbols ? symbolsSnapshot : await emulator.snapshot(false)) as T;
     case 'emu_tap':
       return (symbols ? symbolsSnapshot : await emulator.snapshot()) as T;
     case 'emu_audio_status':
       return null as T;
     case 'emu_stop':
       return undefined as T;
+    case 'emu_pick_syx':
+      return emulator.source.path as T;
     case 'emu_set_source':
     case 'emu_source_info':
       return emulator.source as T;

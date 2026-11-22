@@ -142,6 +142,7 @@ const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
 
 export interface ConsoleOptions {
   initialPage?: Page;
+  browserPreview?: boolean;
   files?: Pick<ComponentProps<typeof FilesPage>, 'store' | 'library'>;
   logSources?: Pick<FollowEnv, 'emulator' | 'device'>;
   initialDockHeight?: number;
@@ -623,6 +624,7 @@ export default function Console(
     }
     // ⌘R / Ctrl+R reloads the firmware file, not the page; with Shift it reloads the modules into the running session.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
+      if (props.browserPreview && (page() !== 'run' || !isEmulator())) return;
       e.preventDefault();
       if (!isEmulator() || app.target.switching() || busy('emulator')) return;
       if (e.shiftKey) void reloadModules();

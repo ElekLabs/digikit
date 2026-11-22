@@ -18,9 +18,9 @@ export function previewEmulator(query: URLSearchParams) {
   const pending = query.get('page') === 'run' || query.get('boot') === 'loading';
   const failed = query.get('boot') === 'failed';
   const frame = queryFrame().then((value) => value ?? testPattern());
-  const snapshot = async (): Promise<RuntimeSnapshot> => ({
+  const snapshot = async (includeFrame = true): Promise<RuntimeSnapshot> => ({
     polled: true,
-    frame: await frame,
+    ...(includeFrame ? { frame: await frame } : {}),
     status: {
       device,
       version: release?.version ?? '',

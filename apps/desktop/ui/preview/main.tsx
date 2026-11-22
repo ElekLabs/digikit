@@ -34,6 +34,7 @@ mountWorkbench(
   host,
   { app: apps.app, firmware: previewFirmware(apps) },
   {
+    browserPreview: true,
     initialPage: page === 'transfer' || page === 'files' || page === 'firmware' || page === 'settings' ? page : 'run',
     files: { store: files, library: () => demoLibrary(files) },
     ...(page === 'log'

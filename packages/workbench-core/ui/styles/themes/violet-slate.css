@@ -283,7 +283,7 @@
   .transfer-page .rows {
     border: 0;
   }
-  .transfer-page .rows li {
+  .transfer-page .rows li:not(.sub) {
     min-height: 32px;
     padding-inline: 8px;
     border-color: color-mix(in srgb, var(--line) 52%, transparent);

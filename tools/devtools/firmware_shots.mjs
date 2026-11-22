@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { closeTab, connect, evaluate, launchChrome, sleep } from './cdp.mjs';
 import { FakeDevice, be32, concat, cs } from '../../packages/test-support/src/fakedevice.ts';
 import { FakeUpgrade } from '../../packages/workbench-core/src/testing/fakeflash.ts';
-import { PatchKit } from '@digi/workbench-core/patch/patchkit-core.ts';
+import { PatchKit } from '../../packages/workbench-core/src/patch/patchkit-core.ts';
 import { CAP, CMD } from '../../packages/dk-session/src/gen_proto.ts';
 
 const args = process.argv.slice(2);
@@ -52,8 +52,11 @@ const click = (text) =>
 const radio = (text) =>
   `(() => { const b = [...document.querySelectorAll('button[role=radio]')].find((e) => e.textContent.trim() === ${JSON.stringify(text)}); if (!b) throw new Error('no switch ' + ${JSON.stringify(text)}); b.click(); })()`;
 
-const clickStarting = (text) =>
-  `(() => { const b = [...document.querySelectorAll('button')].find((e) => !e.matches('[role=radio]') && e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!b) throw new Error('no button ' + ${JSON.stringify(text)}); b.click(); })()`;
+const openDefaults = `(() => {
+  const page = document.querySelector('.firmware-page');
+  page.querySelector('.defmods-btn').click();
+  if (!page.querySelector('.defmods-pop')?.getClientRects().length) throw new Error('Firmware default modules did not open');
+})()`;
 // the Checks step has finished (passed or failed); its text may be folded away, so wait on its mark
 const checksDone = "!!document.querySelector('section.step[aria-labelledby=\"fw-step-2\"]')?.matches('.done, .bad')";
 const menuLink = click('Use the OS UPGRADE menu instead');
@@ -83,7 +86,7 @@ const SCENES = [
     ready: true,
     desktopOnly: true,
     query: 'fwforce=1',
-    steps: [clickStarting('Default modules')],
+    steps: [openDefaults],
   },
   {
     name: 'defaults-unticked',
@@ -94,7 +97,7 @@ const SCENES = [
     ready: true,
     desktopOnly: true,
     query: 'fwforce=1',
-    steps: [clickStarting('Default modules'), 'eval:document.querySelector(".defmods-row input").click()'],
+    steps: [openDefaults, 'eval:document.querySelector(".firmware-page .defmods-row input").click()'],
   },
   {
     name: 'defaults-installing',
