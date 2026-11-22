@@ -1,4 +1,4 @@
-//! How far each package of the manager has come: its [`State`] and how many services it is attached to.
+//! How far each package of the manager has come: its [`State`] and whether it is attached to its services.
 
 use crate::state::State;
 use crate::{PackageId, MAX_PACKAGES};
@@ -7,8 +7,8 @@ use crate::{PackageId, MAX_PACKAGES};
 struct Slot {
     package: PackageId,
     state: State,
-    /// How many of the package's services (by ascending id) it is attached to.
-    attached: usize,
+    /// Whether `attach` answered `Ok` for the package (and `detach` has not run since).
+    attached: bool,
 }
 
 /// The progress of every package that is not absent: placed, being brought up or down, active or waiting for a restore.
@@ -33,13 +33,13 @@ impl Progress {
         self.find(p).and_then(|i| self.slots[i]).map(|s| s.state)
     }
 
-    pub(super) fn attached(&self, p: PackageId) -> usize {
+    pub(super) fn attached(&self, p: PackageId) -> bool {
         self.find(p)
             .and_then(|i| self.slots[i])
-            .map_or(0, |s| s.attached)
+            .is_some_and(|s| s.attached)
     }
 
-    /// Sets the state of `p` (a new package has no services attached). A graph never holds more packages than slots.
+    /// Sets the state of `p` (a new package is not attached). A graph never holds more packages than slots.
     pub(super) fn set(&mut self, p: PackageId, state: State) {
         match self.find(p) {
             Some(i) => self.slots[i].as_mut().unwrap().state = state,
@@ -48,16 +48,16 @@ impl Progress {
                     self.slots[free] = Some(Slot {
                         package: p,
                         state,
-                        attached: 0,
+                        attached: false,
                     });
                 }
             }
         }
     }
 
-    pub(super) fn set_attached(&mut self, p: PackageId, n: usize) {
+    pub(super) fn set_attached(&mut self, p: PackageId, on: bool) {
         if let Some(i) = self.find(p) {
-            self.slots[i].as_mut().unwrap().attached = n;
+            self.slots[i].as_mut().unwrap().attached = on;
         }
     }
 

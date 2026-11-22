@@ -1,11 +1,11 @@
 //! The package graph (docs/plans/runtime-contract-and-lifecycle.md, sections 7 and 8): packages, the services they need, and the order in which a load
 //! brings packages up and an unload takes them down. Pure: no I/O, no allocation, fixed capacity from the runtime's own maxima. The package manager
-//! (`manager`) owns a graph, a ledger and a live set and runs the one lifecycle over seam traits (`seams`); nothing in the runtime uses this crate yet.
+//! (`manager`) owns a graph, a ledger and a live set and runs the one lifecycle over seam traits (`seams`); the runtime implements the seams (`runtime/core/src/rs/src/lifecycle`), and its boot and live job run through the manager.
 //! With the `fake` feature the crate also offers recording seams and a fake manifest (`fake`) for host tests; that feature builds with `std`, so only
 //! dev-dependencies enable it.
 //!
 //! - A **node** is one package: an id, the API it provides (a service) or none (a module), its needs and whether a selection pins it.
-//! - A need is met by the one package that provides the service name with a compatible version (`dkrt_abi::version::version_satisfies`).
+//! - A need is met by the one package that provides the service name with a compatible version (`dkrt_abi::version::provider_meets`). A package that emits keys for a record kind comes up after the package that declares it.
 //! - Every order is deterministic: ties go by ascending [`PackageId`].
 #![cfg_attr(not(any(test, feature = "fake")), no_std)]
 

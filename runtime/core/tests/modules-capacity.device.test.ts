@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { hasCap } from '@digi/dk-session';
-import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
@@ -13,8 +13,8 @@ import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime
 import { DSP_SLOT_BYTES } from '@digi/regression/runtime/synth.ts';
 
 /** MODULES (protocol command 3): after a boot with two modules with DSP code (dyn-dn2 and sine, then the debug module) the reply lists them with ranges
- * inside the arena and the DSP area, the contract bytes and version of the file and the assigned machine types; it pages by start index and is not
- * logged as an UPLOAD event. CAPACITY lists every kind with the device file's limit. */
+ * inside the arena and the DSP area, the contract bytes and version of the file and the assigned machine types; it is not logged as an UPLOAD event.
+ * Paging by start index is a host test (`module_cmds.rs` `modules_pages_by_start_index_and_the_total_stays_the_loaded_count`). CAPACITY lists every kind with the device file's limit. */
 async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
   await expectRuntimeReady(session);
@@ -94,11 +94,6 @@ async function expectModulesReply(runtime: PatchedSession): Promise<void> {
   });
   expect(used.PARAM_ROWS).toBeGreaterThan(0);
 
-  // paging: from record index 1 the sine and the debug module, past the end nothing; the total stays 3
-  const page = async (start: number) => (await dk.request(CMD.MODULES, Uint8Array.of(start))).body;
-  const [from1, from9] = [await page(1), await page(9)];
-  expect([from1[16], from1[17], from1[18]], 'MODULES pages by start index').toEqual([3, 2, 1]);
-  expect([from9[16], from9[17]]).toEqual([3, 0]);
   expect(ofKind(await dk.readLog(), LOG_KIND.UPLOAD), 'MODULES is not logged as an UPLOAD event').toHaveLength(
     uploadsBefore,
   );

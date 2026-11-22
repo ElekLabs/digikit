@@ -3,7 +3,7 @@ name = "dkrt-lifecycle"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "The package graph of the digikit runtime: which services a package needs, in which order packages come up and go down. Pure, no allocation, not yet used by the runtime"
+description = "The package graph of the digikit runtime: which services a package needs, in which order packages come up and go down. Pure, no allocation; the runtime implements its seams and does not drive it yet"
 
 [lib]
 path = "src/lib.rs"

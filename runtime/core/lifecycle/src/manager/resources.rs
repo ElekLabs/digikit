@@ -68,6 +68,29 @@ where
             })
     }
 
+    /// The packages of `order` that the manifest admits (`Manifest::admit`: the rules of the core, owners, keys and capacity), in order. A package whose service was
+    /// refused is not asked; a package it refuses is refused with its consumers, as in [`PackageManager::plan_fit`].
+    pub(super) fn admit_order(&mut self, order: &Steps, refused: &mut RefusedList) -> Steps {
+        let mut admitted = Steps::new();
+        for &p in order.as_slice() {
+            if let Some(service) = refused_need(&self.graph, p, refused) {
+                refused.push(
+                    p,
+                    LifecycleError::NeedRefused {
+                        package: p,
+                        service,
+                    },
+                );
+                continue;
+            }
+            match self.manifest.admit(p) {
+                Ok(()) => admitted.push(p),
+                Err(status) => refused.push(p, LifecycleError::Admission { package: p, status }),
+            }
+        }
+        admitted
+    }
+
     /// The fit plan of `order`, package by package in bring-up order, without touching the ledger: each package's pools and wants are added to those of the
     /// packages accepted before it and checked together ([`ResourceLedger::fits_with`]; the `released` owners' pools and claims count as returned). A
     /// package that does not fit is refused, and so are the packages that need a refused service. Of the rest, a service stays in the plan only if a

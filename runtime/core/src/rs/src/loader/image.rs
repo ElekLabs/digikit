@@ -123,6 +123,53 @@ pub unsafe fn sections(f: *const u8, head: &Head) -> Result<(), i32> {
     Ok(())
 }
 
+/// Which relocations `relocate` applies: the image-relative ones (kind 0, `base`), the import ones (kind 1, the address of the import), or both.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Pass {
+    Base,
+    Imports,
+    Both,
+}
+
+/// Copy the image of the staged file to `mem` and zero its bss. `head` is validated.
+pub unsafe fn copy(mem: *mut u8, f: *const u8, head: &Head) {
+    let mut i = 0;
+    while i < head.image_size as usize {
+        *mem.add(i) = *f.add(head.image_off as usize + i);
+        i += 1;
+    }
+    i = 0;
+    while i < head.bss as usize {
+        *mem.add(head.image_size as usize + i) = 0;
+        i += 1;
+    }
+}
+
+/// Apply the relocations of `pass` to the copied image at `mem`, which is placed at `base`: a kind-0 word gets `base` added, a kind-1 word the address `imports[n]` of
+/// its import. `sections` validated the table. A word has one kind, so the two passes in either order give what `Both` gives.
+pub unsafe fn relocate(mem: *mut u8, f: *const u8, head: &Head, base: u32, imports: &[u32], pass: Pass) {
+    let mut i = 0;
+    while i < head.reloc_n as usize {
+        let e = f.add(head.reloc_off as usize + i * dkneeds::CF_RELOC_LEN as usize);
+        let off = rd32(e.add(dkneeds::CF_RELOC_OFFSET as usize)) as usize;
+        let kind = rd32(e.add(dkneeds::CF_RELOC_KIND as usize));
+        i += 1;
+        let add = if kind >> 24 == 0 {
+            if pass == Pass::Imports {
+                continue;
+            }
+            base
+        } else {
+            if pass == Pass::Base {
+                continue;
+            }
+            imports[(kind & 0xff_ffff) as usize]
+        };
+        let p = mem.add(off);
+        crate::wr32(p, rd32(p).wrapping_add(add));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,6 +264,24 @@ mod tests {
         v[IMAGE_OFF] ^= 1;
         assert_eq!(run(&v).unwrap_err(), E_SHA);
         refuses(dkneeds::H_RUNTIME, 0x7fff_ff00, E_CONTRACT);
+    }
+
+    /// The runtime version a module needs is E_CONTRACT for another major, another minor or a higher patch; the runtime's own version, a lower patch and none (0) load.
+    /// (The device test `entry` showed this once on the firmware before the rule had a host test.)
+    #[test]
+    fn a_need_of_another_major_or_minor_or_a_higher_patch_is_refused() {
+        let v = dkrt_sdk::RUNTIME_VERSION;
+        refuses(dkneeds::H_RUNTIME, v.wrapping_add(0x1_0000), E_CONTRACT);
+        refuses(dkneeds::H_RUNTIME, v.wrapping_add(0x100), E_CONTRACT);
+        if v & 255 != 255 {
+            refuses(dkneeds::H_RUNTIME, v | 255, E_CONTRACT);
+        }
+        for ok in [v, v & !255, 0] {
+            let mut f = good();
+            put(&mut f, dkneeds::H_RUNTIME, ok);
+            seal(&mut f);
+            assert!(run(&f).is_ok(), "{ok:#x}");
+        }
     }
 
     #[test]

@@ -35,6 +35,8 @@ pub enum LifecycleError {
         package: PackageId,
         error: InstallError,
     },
+    /// The manifest's rules refused the package (`Manifest::admit`: an owner, a key or the capacity); it was not placed.
+    Admission { package: PackageId, status: Status },
     /// A service the package needs was refused, so the package was not tried.
     NeedRefused {
         package: PackageId,

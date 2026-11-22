@@ -357,4 +357,58 @@ mod tests {
             assert_eq!(ask(0x38), E_PROTO, "released: nobody registered it");
         }
     }
+
+    /// What the device test `modules-capacity` showed on the firmware: MODULES pages by the start index (the records from `start` on), `total` stays the number of loaded
+    /// modules, and a start past the last record gives none.
+    #[test]
+    fn modules_pages_by_start_index_and_the_total_stays_the_loaded_count() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            crate::st().magic = crate::state::STATE_MAGIC;
+            let used: Vec<u32> = (0..crate::MAX_MODULES).map(|i| crate::st().modules[i].used).collect();
+            for i in 0..crate::MAX_MODULES {
+                crate::st().modules[i].used = u32::from(i < 3);
+            }
+            let page = |start: u8| {
+                let mut msg = [0xf0, 0x7d, 0x64, 0x6b, VERSION, CMD_MODULES as u8, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+                let n = pack([start].as_ptr(), 1, msg.as_mut_ptr().add(7));
+                msg[7 + n] = 0xf7;
+                assert_eq!(dkrt_midi_rx(msg.as_ptr(), 8 + n as u32, 0), 1);
+                let rb = (addr_of!(RBODY) as *const u8).add(1);
+                (*rb.add(16), *rb.add(17), *rb.add(18))
+            };
+            assert_eq!(page(0), (3, 3, 0), "from the first record");
+            assert_eq!(page(1), (3, 2, 1), "from record 1: the two after it");
+            assert_eq!((page(9).0, page(9).1), (3, 0), "past the end: no record, the total stays");
+            for (i, u) in used.into_iter().enumerate() {
+                crate::st().modules[i].used = u;
+            }
+        }
+    }
+
+    unsafe extern "C" fn answers_77(_cmd: u32, _seq: u32, _body: *const u8, _len: u32, _out: *mut u8) -> i32 {
+        -77
+    }
+
+    /// What the device test `service-commands` showed on the firmware: a range is refused when it is empty, outside every reserved range, over a registered one (or has no
+    /// handler); a handler's own status reaches the host; a command nobody registered is E_PROTO.
+    #[test]
+    fn a_range_that_is_empty_unreserved_or_taken_is_refused_and_the_handlers_status_is_the_reply() {
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            crate::st().magic = crate::state::STATE_MAGIC;
+            let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
+            let range = E_CMD_RANGE as i32;
+            assert_eq!(host_register(0x38, 0, Some(answers_ok)), range, "empty");
+            assert_eq!(host_register(0x38, 1, None), range, "no handler");
+            assert_eq!(host_register(0x40, 1, Some(answers_ok)), range, "outside every reserved range");
+            assert_eq!(host_register(0x3d, 2, Some(answers_ok)), range, "across the end of a reserved range");
+            assert_eq!(host_register(0x38, 1, Some(answers_77)), OK);
+            assert_eq!(host_register(0x38, 1, Some(answers_ok)), range, "over a registered one");
+            assert_eq!(ask(0x38), -77, "the handler's own status");
+            assert_eq!(ask(0x39), E_PROTO, "inside the reserved range but not registered");
+            dlog::leave_module(prev);
+            release_cmds(1);
+        }
+    }
 }

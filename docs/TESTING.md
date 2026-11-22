@@ -25,7 +25,7 @@ execution requirements, not levels. A successful boot proves only what the run a
 | Unit (Python) | RE, firmware and dev tools | pytest on named files under `tests/<owner>/`; `mise run test:pypy` for the PyPy subset |
 | Unit (Rust) | Workspace and standalone dkrt | Explicit Nx project target `rust-tests`; runtime-only: `pnpm nx:pilot run core/runtime:rust-tests` |
 | Contract (Rust, host) | The reload property of each service (`lfo`, `fx`, `machines`, `samples`): one generic suite over `FakeCore`, six cases, both device profiles | `pnpm nx:pilot run dkrt-svc-<service>:rust-tests` (the file `services/<service>/tests/contract.rs`) |
-| Assembly (Rust, host) | The seams between the real packed artifacts of the runtime: fixtures, service files, the port file of the test image, the runtime object and the info table of the image, through the boot's plan, role checks and installs over `FakePlatform` | `pnpm nx:pilot run core/runtime:test-assembly` (seconds; every `test-device` and `test-conformance` target depends on it) |
+| Assembly (Rust, host) | The seams between the real packed artifacts of the runtime: fixtures, service files, the port file of the test image, the runtime object and the info table of the image, through the boot's package graph and admission, role checks and installs over `FakePlatform` | `pnpm nx:pilot run core/runtime:test-assembly` (seconds; every `test-device` and `test-conformance` target depends on it) |
 | Component | Module DSP conformance on the SHARC core | `mise run module:check ID` |
 | Device: stock UI | DT2 stock pages and transport goldens (zero DSP) | `mise run test:stock` |
 | Device: FX | Stock FX oracles | `mise run test:fx`, `mise run test:fx:dt2` |
@@ -99,6 +99,8 @@ only the support/session pair was timed, not whole preflight. The standalone run
 remains uncached; all test-only device targets, including `core/runtime-tests`, are cached like other module device targets.
 Plugin sources are not inputs of module device targets. A `runtimeAcceptance` record may set `dksampleWasm: true`
 (depends on `dksample:wasm`) or `dkprofWasm: true` (depends on `dkprof:wasm`). Python tools need no record flag: list the `.py` tools a test runs in the record's `sources`. `tools/nx/py-imports.mjs` follows their `tools.*` imports (including function-local imports and `-m tools.x` strings) and hashes those files. Relative imports are not followed.
+
+A `runtimeAcceptance` record of a device test of the runtime loading and lifecycle sets `firmwareOnly`: one line that names what only the firmware or hardware shows in its files (the rest is a unit or assembly test). Nothing reads it: it is the reason the test exists, kept next to the record (RC2 split, [ledger](plans/ledgers/device-test-inventory.md)).
 
 | Command | What runs |
 | --- | --- |

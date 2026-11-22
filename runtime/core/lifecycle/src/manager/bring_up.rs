@@ -21,6 +21,8 @@ pub(super) struct Request<'a> {
     pub(super) roots: &'a [PackageId],
     pub(super) pin: bool,
     pub(super) stop_on_failure: bool,
+    /// A boot: the host plans what the services keep once every service has been tried ([`ProviderHost::services_up`]).
+    pub(super) numbering: bool,
 }
 
 impl<M, P, L, I, H> PackageManager<M, P, L, I, H>
@@ -58,10 +60,14 @@ where
                 Err(refusal) => report.refused.push(r, LifecycleError::Graph(refusal)),
             }
         }
+        // every service before the first module: a module's `init` finds every service of the boot live (the order the boot always had), and a service that
+        // fails is known before any module is tried. A service never needs a module, so the graph order holds.
+        let order = self.services_first(&order);
         let request = Request {
             roots: sorted.as_slice(),
             pin: true,
             stop_on_failure: false,
+            numbering: true,
         };
         self.run_bring_up(&order, &request, &mut report);
         Ok(report)
@@ -83,12 +89,46 @@ where
             roots: &[id],
             pin: true,
             stop_on_failure: true,
+            numbering: false,
         };
         self.run_bring_up(&order, &request, &mut report);
         match report.refused().first() {
             Some(refused) => Err(refused.reason),
             None => Ok(report),
         }
+    }
+
+    /// `order` with its services first, each group in its own order.
+    fn services_first(&self, order: &Steps) -> Steps {
+        let is_service = |p: PackageId| self.graph.node(p).is_some_and(|n| n.provides().is_some());
+        let mut out = Steps::new();
+        for &p in order.as_slice().iter().filter(|&&p| is_service(p)) {
+            out.push(p);
+        }
+        for &p in order.as_slice().iter().filter(|&&p| !is_service(p)) {
+            out.push(p);
+        }
+        out
+    }
+
+    /// The services `p` needs in the order they are attached to it: by the host's callback rank, ties by id.
+    pub(super) fn attach_order(&self, p: PackageId) -> Steps {
+        let mut services = Steps::new();
+        for s in self.graph.services_of(p) {
+            services.push(s);
+        }
+        let n = services.len();
+        let rank = |s: PackageId| (self.host.attach_rank(s), s.0);
+        let list = services.as_mut_slice();
+        // insertion sort: at most a few services
+        for i in 1..n {
+            let mut j = i;
+            while j > 0 && rank(list[j - 1]) > rank(list[j]) {
+                list.swap(j - 1, j);
+                j -= 1;
+            }
+        }
+        services
     }
 
     pub(super) fn refuse_while_pending(&self) -> Result<(), LifecycleError> {
@@ -106,9 +146,15 @@ where
     /// Brings up `order` as far as it fits and comes up (see [`PackageManager::boot`]), pins the roots that are up, then settles: what a failure left behind
     /// goes down again.
     pub(super) fn run_bring_up(&mut self, order: &Steps, request: &Request, report: &mut Report) {
-        let kept = self.plan_fit(order, request.roots, &[], &mut report.refused);
+        let admitted = self.admit_order(order, &mut report.refused);
+        let kept = self.plan_fit(&admitted, request.roots, &[], &mut report.refused);
         let mut started = Steps::new();
+        let mut services_done = !request.numbering;
         for (k, &p) in kept.as_slice().iter().enumerate() {
+            if !services_done && !self.graph.node(p).is_some_and(|n| n.provides().is_some()) {
+                services_done = true;
+                self.host.services_up(&self.graph, &self.live);
+            }
             if let Some(service) = refused_need(&self.graph, p, &report.refused) {
                 report.refused.push(
                     p,
@@ -123,6 +169,11 @@ where
                 Ok(()) => {
                     report.brought_up.push(p);
                     started.push(p);
+                    // the DSP part starts as soon as the package is up and before the next one is placed (the DSP loader holds one reservation at a time); it comes
+                    // over UI passes, so this returns at once and never blocks a boot
+                    if self.host.start_dsp(p) {
+                        report.dsp_pending.push(p);
+                    }
                 }
                 Err(reason) => {
                     report.refused.push(p, reason);
@@ -140,6 +191,9 @@ where
                     }
                 }
             }
+        }
+        if !services_done {
+            self.host.services_up(&self.graph, &self.live);
         }
         if request.pin {
             for &r in request.roots {
@@ -199,10 +253,7 @@ where
     }
 
     fn enter(&mut self, p: PackageId, at: u32) -> Result<(), LifecycleError> {
-        let mut services = Steps::new();
-        for s in self.graph.services_of(p) {
-            services.push(s);
-        }
+        let services = self.attach_order(p);
         self.linker
             .link(p, at, services.as_slice())
             .map_err(|s| failed(p, State::Linked, s))?;
@@ -232,23 +283,27 @@ where
             }
         }
 
-        for (i, s) in services.as_slice().iter().enumerate() {
-            self.host
-                .attach(*s, p)
-                .map_err(|status| failed(p, State::Active, status))?;
-            self.progress.set_attached(p, i + 1);
-        }
+        self.host
+            .activate(p)
+            .map_err(|s| failed(p, State::Activated, s))?;
+        self.progress.set(p, State::Activated);
+
+        // one call: the host walks the records over all the services (an error leaves nothing attached)
+        self.host
+            .attach(p, services.as_slice())
+            .map_err(|status| failed(p, State::Active, status))?;
+        self.progress.set_attached(p, true);
         self.progress.set(p, State::Active);
         self.live.insert(p);
         Ok(())
     }
 }
 
-/// A service `p` needs that this operation refused.
+/// A service `p` has a hard need of that this operation refused (a soft need never refuses its consumer).
 pub(super) fn refused_need(
     graph: &PackageGraph,
     p: PackageId,
     refused: &RefusedList,
 ) -> Option<PackageId> {
-    graph.services_of(p).find(|&s| refused.contains(s))
+    graph.hard_services_of(p).find(|&s| refused.contains(s))
 }

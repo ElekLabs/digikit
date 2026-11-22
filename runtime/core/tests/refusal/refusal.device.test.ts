@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { moduleStateText, type ModuleState } from '@digi/dk-session';
-import { CAPACITY_KINDS, RECORD_KIND } from '@digi/dk-session/gen_proto';
+import { RECORD_KIND } from '@digi/dk-session/gen_proto';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { derivedModule } from '@digi/regression/runtime/service-files.ts';
@@ -12,22 +12,25 @@ import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from '../capacity/cap
 import { edits, patched, unhashed } from './dkm-patch.ts';
 
 /**
- * Refusal fixtures for the loader and the boot plan, with module states (docs/plans/runtime-and-services.md section 8, item R11; the table of codes is
- * `refusal-table.ts`). Each fixture is a copy of the packed `test/lfo-shape` (a module with no machine or effect, so the card needs no service with a DSP part and the boot stays
- * cold) with one field changed (`dkm-patch.ts`), or a pair of lfo fixtures, so a must-fail
- * differs from the must-pass (the unchanged module) by that field only. The test reads three views of one boot and they must agree:
+ * What only the firmware shows of a refusal (docs/plans/runtime-and-services.md section 8, item R11; the table of codes is `refusal-table.ts`): one boot of a card
+ * with a good module and copies of the packed `test/lfo-shape` with one field changed (`dkm-patch.ts`), read in three views that must agree: `DKRT_BOOT`
+ * (`results`, `states`, `detail`, read from guest memory), the LOADS command (version 2, as Transfer reads it) and MODULES (only the ACTIVE module is listed). The
+ * boot runs without the SHARC (`dsp: 'cold'`): the good module has no DSP part.
  *
- * - `DKRT_BOOT` (`results`, `states`, `detail`): the module's state and the code, read from guest memory;
- * - the LOADS command (version 2): the same record through the protocol, as Transfer reads it;
- * - MODULES: only the module that is ACTIVE is listed, so a refused or failed module left nothing behind.
- *
- * The boot runs without the SHARC (`dsp: 'cold'`): the good module has no DSP part, so it is ACTIVE.
+ * One refusal for each way a module can end: FAILED by the loader (`E_SHA`), REFUSED by the rules of the core (`E_PLAN_KEY`, a second owner of a record key, which needs
+ * the real lfo service file), and a selected file the card does not have (`E_NOT_FOUND`). The causes themselves are host tests, one for each code:
+ * - E_FORMAT (magic, sizes, a module's KINDS table), E_SHA, E_CONTRACT of the header: `loader/image.rs` (`refuses_bad_magic_format_and_sizes`, `refuses_bad_sha_and_contract`,
+ *   `a_need_of_another_major_or_minor_or_a_higher_patch_is_refused`) and `loader/role.rs` (the role checks);
+ * - E_MISSING and E_CONTRACT of the need table, a hard need above an API of the core: the graph (`dkrt-lifecycle` `graph/tests.rs`, `graph/from_tables/tests.rs`) and
+ *   `lifecycle/codes.rs` (the code of each refusal);
+ * - E_PLAN_KIND, E_PLAN_KEY, E_PLAN_FIT: `admission.rs` and the assembly tests (`the_boot_loads_accepted_modules_and_reports_a_refused_one_without_loading_it`,
+ *   `the_same_machine_key_in_two_packed_modules_is_refused_by_the_boot_plan`);
+ * - E_INIT: `boot.rs` and `reload.rs` (a failed init leaves nothing).
  */
 const GOOD = 'test/lfo-shape';
 const LFO = 'test/lfo-shape';
 /** The file of LFO under another module name: the same shape key. */
 const LFO_DUP = 'test/lfo-shape-copy';
-const UNOWNED_KIND = 90;
 
 interface Seen {
   results: number[];
@@ -94,16 +97,9 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
   const patchedSeen = (): Promise<Seen> => {
     patchedBoot ??= (async () => {
       await rig.first();
-      const E_FORMAT = loadCode('E_FORMAT');
       const entries: Entry[] = [
         { name: GOOD, file: moduleArtifact(rig.device, GOOD), want: LOADED },
-        entryOf('test/c-format', patched(fixture(), 'test/c-format', withKey(100, edits.badMagic)), E_FORMAT),
         entryOf('test/c-sha', unhashed(patched(fixture(), 'test/c-sha', withKey(101))), loadCode('E_SHA')),
-        entryOf('test/c-newer', patched(fixture(), 'test/c-newer', withKey(102, edits.newerRuntime)), loadCode('E_CONTRACT')),
-        entryOf('test/c-need', patched(fixture(), 'test/c-need', withKey(103, edits.needsNewerRuntime)), loadCode('E_CONTRACT')),
-        entryOf('test/c-missing', patched(fixture(), 'test/c-missing', withKey(104, edits.needsMissingService)), loadCode('E_MISSING')),
-        entryOf('test/c-kind', patched(fixture(), 'test/c-kind', withKey(105, edits.unownedKind(UNOWNED_KIND))), loadCode('E_PLAN_KIND')),
-        entryOf('test/c-fit', patched(fixture(), 'test/c-fit', withKey(106, edits.recordBytes(0x01000000))), loadCode('E_PLAN_FIT')),
       ];
       return boot(rig, 'refusal-patched', entries);
     })();
@@ -116,67 +112,8 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
     expect(seen.modules, 'MODULES lists the good module and no refused or failed copy').toEqual([GOOD]);
   });
 
-  test('a wrong magic is E_FORMAT: the plan accepts it, the loader fails it', async () => {
-    const seen = await patchedSeen();
-    expectModule(seen, 1, 'FAILED', loadCode('E_FORMAT'));
-    expect(moduleStateText(seen.loads[1]!)).toMatch(/^test\/c-format not loaded|^c-format\.dkm not loaded|not loaded: bad magic/);
-  });
-
   test('a changed sha256 is E_SHA', async () => {
-    expectModule(await patchedSeen(), 2, 'FAILED', loadCode('E_SHA'));
-  });
-
-  test('a module that needs a newer runtime is E_CONTRACT: FAILED when the header says it, REFUSED when the need table says it', async () => {
-    const seen = await patchedSeen();
-    expectModule(seen, 3, 'FAILED', loadCode('E_CONTRACT'));
-    expectModule(seen, 4, 'REFUSED', loadCode('E_CONTRACT'));
-    expect(moduleStateText(seen.loads[4]!)).toContain('refused: it needs a newer runtime than this one');
-  });
-
-  test('a hard need nobody provides is E_MISSING', async () => {
-    const seen = await patchedSeen();
-    expectModule(seen, 5, 'REFUSED', loadCode('E_MISSING'));
-    expect(moduleStateText(seen.loads[5]!)).toContain('refused: the service 0xdeadbeef that it needs');
-  });
-
-  test('keys for a kind nobody owns are refused with E_PLAN_KIND and the kind', async () => {
-    const seen = await patchedSeen();
-    expectModule(seen, 6, 'REFUSED', loadCode('E_PLAN_KIND'), [UNOWNED_KIND, 0]);
-    expect(moduleStateText(seen.loads[6]!)).toContain(`records of kind ${UNOWNED_KIND} have no owner`);
-  });
-
-  test('uses over the capacity are refused with E_PLAN_FIT and the resource that is full', async () => {
-    const seen = await patchedSeen();
-    expectModule(seen, 7, 'REFUSED', loadCode('E_PLAN_FIT'), [CAPACITY_KINDS.ARENA, 0]);
-    expect(moduleStateText(seen.loads[7]!)).toContain('refused: no room: the CPU memory');
-  });
-
-  // the two failures that come after the plan (an init that fails, a table that a module may not have), each in a boot of its own copy of the good module (they share its machine key and DSP part, so the good module is not in this boot)
-  let failures: Promise<Seen> | undefined;
-  const failuresSeen = (): Promise<Seen> => {
-    failures ??= (async () => {
-      await rig.first();
-      const entries: Entry[] = [
-        entryOf('test/c-init', patched(fixture(), 'test/c-init', withKey(107, edits.failInit)), loadCode('E_INIT')),
-        entryOf('test/c-decl', patched(fixture(), 'test/c-decl', withKey(108, edits.moduleKinds)), loadCode('E_FORMAT')),
-      ];
-      return boot(rig, 'refusal-failures', entries);
-    })();
-    return failures;
-  };
-
-  test('an init that returns non-zero is E_INIT: the plan accepts the module, the load fails and leaves nothing', async () => {
-    const seen = await failuresSeen();
-    expectModule(seen, 0, 'FAILED', loadCode('E_INIT'));
-    expect(moduleStateText(seen.loads[0]!)).toContain('not loaded: init returned non-zero');
-    expect(seen.modules, 'MODULES lists neither failed module').toEqual([]);
-  });
-
-  test('a module whose header table has KINDS is E_FORMAT: a module owns no record kinds', async () => {
-    // the loader's role check runs before `init`, so the file never declares anything (the E_DECL_KIND proof is a service file: lfo.device.test.ts)
-    const seen = await failuresSeen();
-    expectModule(seen, 1, 'FAILED', loadCode('E_FORMAT'));
-    expect(seen.modules, 'MODULES lists neither failed module').toEqual([]);
+    expectModule(await patchedSeen(), 1, 'FAILED', loadCode('E_SHA'));
   });
 
   test('a selected file the card does not have is E_NOT_FOUND', async () => {

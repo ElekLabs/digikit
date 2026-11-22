@@ -12,6 +12,30 @@ use std::vec::Vec;
 // the seams between the real packed artifacts (`core/runtime:test-assembly`)
 pub(crate) mod assembly_tests;
 mod dsp_provider_tests;
+mod manager_assembly_tests;
+mod seam_tests;
+
+// ---- the single-record steps the loader tests drive ------------------------------------------------------------------------------------------------------
+//
+// The package manager runs a record's steps in its own order (`package.rs`, `lifecycle/`); the tests of the file checks and the role steps below drive the same step functions one
+// record at a time over the loader's fakes, through the one-file load that `dkrt_load` still is. A take-down, a reload and a live load run through the manager (`adopt`).
+impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+    /// Load the service file at `path` into provider record `j`.
+    pub(super) unsafe fn load_provider(&mut self, path: *const u8, j: usize) -> i32 {
+        self.load_file(path, Slot::Provider(MAX_MODULES + j))
+    }
+}
+
+/// The package manager over `l` with the records `active` taken as up, as `lifecycle::test_up` does for the cleanup tests (the single-record steps loaded them): the live job's steps
+/// (`Rt::unload`, `reload_load_with`, `live_load_with`) then run through the manager and its seams, which are the production take-down and load.
+unsafe fn adopt(l: &mut Fake, active: &[usize]) -> Box<crate::lifecycle::Rt<FakePlatform, FakeImages, FakeRegistry>> {
+    let mut rt = Box::new(crate::lifecycle::Rt::new(l as *mut Fake));
+    rt.init(&[None; MAX_MODULES], SEL_MAX).unwrap();
+    for &r in active {
+        rt.manager().unwrap().assume_active(dkrt_abi::package::PackageId(r as u8));
+    }
+    rt
+}
 
 const PATH: &[u8] = b"mods/a.dkm\0";
 const IMAGE_OFF: usize = 160;
@@ -368,7 +392,8 @@ fn a_module_loads_and_unloads_and_gives_back_every_block() {
         assert!(l.m.log.contains(&Ev::Init(0, base)));
         assert_eq!(l.r.log, vec![Ev::Add(0)]);
 
-        assert_eq!(l.unload_rec(0), OK);
+        let mut rt = adopt(&mut l, &[0]);
+        assert_eq!(rt.unload(0), OK);
         assert!(l.m.live.is_empty());
         assert_eq!(st().modules[0].used, 0);
         let fini = l.m.log.iter().position(|e| *e == Ev::Fini(0, base + 4)).expect("fini ran");
@@ -849,7 +874,7 @@ fn a_service_file_gets_the_listing_client_in_init_runs_its_tick_and_loses_both_w
         assert!(!crate::files::in_init(rec));
         let base = records::module(rec).base;
         assert_eq!(crate::entry::tick_of(rec), base + 8, "the tick of a service file runs as a module's");
-        assert_eq!(l.unload_rec(rec), OK);
+        assert_eq!(adopt(&mut l, &[rec]).unload(rec), OK);
         assert_eq!((crate::files::ready_state(rec), crate::entry::tick_of(rec)), (0, 0));
         // a failing init ends the scope and the client
         PROBED_CLIENT.store(0, SeqCst);
@@ -1005,6 +1030,22 @@ fn a_bound_export_requires_the_named_provider_and_compatible_version() {
     }
 }
 
+/// The boot record of the selection `paths` (NUL terminated store paths), the boot info as the hook leaves it, and the package manager over `l`: the boot has run when this returns.
+/// Boxed, so the seams' pointers into the lifecycle stay valid.
+unsafe fn boot_selection(l: &mut Fake, paths: &[&[u8]]) -> Box<crate::lifecycle::Rt<FakePlatform, FakeImages, FakeRegistry>> {
+    let mut rec = dkrt_sdk::sel::Record::empty();
+    rec.count = paths.len() as u32;
+    for (k, p) in paths.iter().enumerate() {
+        rec.paths[k][..p.len()].copy_from_slice(p);
+    }
+    *crate::boot::info() = core::mem::zeroed();
+    crate::boot::info().count = paths.len() as u32;
+    crate::boot::states().begin();
+    let mut rt = Box::new(crate::lifecycle::Rt::new(l as *mut Fake));
+    rt.boot_with(&rec, &wide_caps());
+    rt
+}
+
 /// A capacity with room for everything the tests take.
 fn wide_caps() -> Vec<DkrtCap> {
     use dkrt_sdk::proto::*;
@@ -1036,22 +1077,38 @@ fn user_table() -> dkneeds::keys::Table<'static> {
 }
 
 #[test]
+fn a_provider_whose_table_does_not_parse_is_still_tried_and_never_meets_a_need() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
+        l.find_providers(1);
+        assert_eq!(l.found.n, 1);
+        // the table the search kept is torn: the shared parser refuses it, the file in the store is fine
+        let len = l.found.table_len[0];
+        l.found.tables[0][..len].fill(0xff);
+        let _rt = boot_selection(&mut l, &[PATH]);
+        // the provider is accepted as before and loads (its file is checked by the loader), but it provides nothing the graph knows: the module that needs it is refused
+        assert_eq!(records::module(MAX_MODULES).used, 1, "the provider was tried");
+        let hash = dkneeds::keys::name_hash(SVC);
+        let b = crate::boot::info();
+        assert_eq!((b.states[0], b.results[0], b.detail[0]), (STATE_REFUSED, E_MISSING, [hash, 0]));
+        assert_eq!(records::module(0).used, 0, "the module was not placed");
+    }
+}
+
+#[test]
 fn the_boot_finds_the_provider_for_a_hard_need_loads_it_first_and_the_consumer_resolves_its_import() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
-        let mut plan = l.plan_with_caps(1, &wide_caps());
-        assert_eq!((plan.n, plan.np), (1, 1), "the search found the provider");
+        l.find_providers(1);
+        assert_eq!(l.found.n, 1, "the search found the provider");
         assert_eq!(l.found.path(0), SVC_PATH);
-        l.load_providers(&plan);
-        assert_eq!(l.loaded[0], true);
+        let _rt = boot_selection(&mut l, &[PATH]);
         let rec = MAX_MODULES;
         assert_eq!(records::module(rec).used, 1);
-        l.settle(&mut plan, 1);
-        assert_eq!(plan.verdicts[0], dkrt_abi::plan::Verdict::Accepted);
+        assert_eq!((crate::boot::info().states[0], crate::boot::info().results[0]), (STATE_ACTIVE, OK));
         // the module stage: the import is the provider's export
-        l.phase = Phase::Boot;
-        assert_eq!(l.load(PATH.as_ptr()), OK);
         let mem = &l.m.live.last().unwrap().1;
         let words = core::slice::from_raw_parts(mem.as_ptr() as *const u8, 32);
         assert_eq!(rd32(words.as_ptr().add(12)), records::module(rec).base + 8 + 4);
@@ -1062,22 +1119,23 @@ fn the_boot_finds_the_provider_for_a_hard_need_loads_it_first_and_the_consumer_r
 fn no_search_without_an_unmet_need_and_a_failed_provider_refuses_its_dependents_with_the_hash() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        // a selection with no need: no listing, no provider, the plan as before
+        // a selection with no need: no listing, no provider
         let mut l = staged_boot(service_file(&svc_table(), 0), module_file());
         let allocs = l.m.allocs;
-        let plan = l.plan_with_caps(1, &wide_caps());
-        assert_eq!((plan.np, l.m.allocs), (0, allocs), "nothing was searched");
-        // the provider's site is not stock: the provider fails, and its dependent is refused before the module stage
+        l.find_providers(1);
+        assert_eq!((l.found.n, l.m.allocs), (0, allocs), "nothing was searched");
+        // the provider's site is not stock: the provider fails, and its dependent is refused before the module stage, with the service's hash
         let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
         l.p.put_code(SITE, &[0u8; 6]);
-        let mut plan = l.plan_with_caps(1, &wide_caps());
-        assert_eq!(plan.np, 1);
-        l.load_providers(&plan);
-        assert_eq!((l.loaded[0], records::module(MAX_MODULES).used), (false, 0));
-        l.settle(&mut plan, 1);
+        l.find_providers(1);
+        assert_eq!(l.found.n, 1);
+        let _rt = boot_selection(&mut l, &[PATH]);
+        assert_eq!(records::module(MAX_MODULES).used, 0);
+        assert!(l.unusable[0], "a provider the boot refused is not counted by a live check");
         let hash = dkneeds::keys::name_hash(SVC);
-        assert_eq!(plan.verdicts[0], dkrt_abi::plan::Verdict::Refused(dkrt_abi::plan::Reason::NeedMissing(hash)));
-        assert_eq!(plan.verdicts[0].result(), E_MISSING);
+        let b = crate::boot::info();
+        assert_eq!((b.states[0], b.results[0], b.detail[0]), (STATE_REFUSED, E_MISSING, [hash, 0]));
+        assert_eq!(records::module(0).used, 0, "the module was not placed");
         // the site stayed stock and the table holds no site
         assert_eq!(l.installer.count(), 0);
     }
@@ -1275,33 +1333,35 @@ fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty
         assert_eq!(l.table_len, [0; SEL_MAX]);
         // a table of the planner's limit is kept, one byte more is not (the loader decides about such a file)
         let mut long = file.clone();
-        long.resize(long.len() + crate::plan::TABLE_MAX, 0);
-        put(&mut long, dkneeds::H_REG_SIZE, crate::plan::TABLE_MAX as u32);
+        long.resize(long.len() + TABLE_MAX, 0);
+        put(&mut long, dkneeds::H_REG_SIZE, TABLE_MAX as u32);
         l.capture(4, &long);
-        assert_eq!(l.table_len[4], crate::plan::TABLE_MAX);
-        put(&mut long, dkneeds::H_REG_SIZE, crate::plan::TABLE_MAX as u32 + 1);
+        assert_eq!(l.table_len[4], TABLE_MAX);
+        put(&mut long, dkneeds::H_REG_SIZE, TABLE_MAX as u32 + 1);
         l.capture(5, &long);
         assert_eq!(l.table_len[5], 0);
     }
 }
 
 #[test]
-fn a_provider_the_plan_refused_is_reported_and_never_staged_and_its_dependents_are_refused() {
+fn a_provider_the_admission_refused_is_reported_and_never_staged_and_its_dependents_are_refused() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
-        let mut plan = l.plan_with_caps(1, &wide_caps());
-        assert_eq!(plan.np, 1);
-        plan.provider_verdicts[0] = dkrt_abi::plan::Verdict::Refused(dkrt_abi::plan::Reason::Fit(dkrt_sdk::proto::CAPK_MACHINE_ROWS));
+        // the provider declares the machine kind, which a service of the table owns already: the rules of the core refuse it before anything of it is read again
+        let kinds = [dkneeds::keys::KindDecl { kind: dkneeds::KIND_MACHINE, len: 0x6c, entry: 0 }];
+        let mut l = staged_boot(service_file(&dkneeds::keys::Table { kinds: &kinds, ..svc_table() }, 0), consumer_file(&user_table()));
+        l.find_providers(1);
+        assert_eq!(l.found.n, 1);
         l.m.log.clear();
         let allocs = l.m.allocs;
-        l.load_providers(&plan);
-        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Stage)), "the refused file is not read");
-        assert_eq!((l.loaded[0], l.m.allocs, records::module(MAX_MODULES).used), (false, allocs, 0));
+        let _rt = boot_selection(&mut l, &[PATH]);
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Stage)), "the refused file is not read, and nor is the module that needs it");
+        assert_eq!((l.m.allocs, records::module(MAX_MODULES).used), (allocs, 0));
         assert!(l.phase == Phase::Closed);
-        l.settle(&mut plan, 1);
         let hash = dkneeds::keys::name_hash(SVC);
-        assert_eq!(plan.verdicts[0], dkrt_abi::plan::Verdict::Refused(dkrt_abi::plan::Reason::NeedMissing(hash)));
+        let b = crate::boot::info();
+        assert_eq!((b.states[0], b.results[0], b.detail[0]), (STATE_REFUSED, E_MISSING, [hash, 0]));
+        assert!(!l.accepted[0], "a module whose service was refused takes no number");
     }
 }
 
@@ -1474,31 +1534,25 @@ fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other
 }
 
 #[test]
-fn settle_hands_the_services_the_keys_of_accepted_modules_only() {
+fn the_services_are_handed_the_keys_of_admitted_modules_only() {
     use dkneeds::keys::{write_table, KeyGroup, Table};
-    use dkrt_abi::plan::{Reason, Verdict};
     let keys = [0x100u32, 0x200];
     let t = Table { keys: &[KeyGroup { kind: dkneeds::KIND_MACHINE, keys: &keys }], ..Default::default() };
     let mut bytes = vec![0u8; dkneeds::keys::table_size(&t)];
     write_table(&t, &mut bytes).unwrap();
-    let mut tables = [[0u8; crate::plan::TABLE_MAX]; SEL_MAX];
+    let mut tables = [[0u8; TABLE_MAX]; SEL_MAX];
     let mut lens = [0usize; SEL_MAX];
     for k in 0..2 {
         tables[k][..bytes.len()].copy_from_slice(&bytes);
         lens[k] = bytes.len();
     }
-    // module 1 repeats the keys of module 0: the plan refused it (E_PLAN_KEY), so its keys never reach the sticky assignment
-    let mut plan = Plan {
-        n: 2,
-        verdicts: [Verdict::Accepted; SEL_MAX],
-        order: [0; SEL_MAX],
-        dsp_load: (0, 0),
-        np: 0,
-        provider_verdicts: [Verdict::Accepted; dkrt_sdk::PROVIDER_MAX],
-        provider_order: [0; dkrt_sdk::PROVIDER_MAX],
+    // module 1 repeats the keys of module 0: admission refused it (E_PLAN_KEY), so its keys never reach the sticky assignment
+    let accepted = {
+        let mut a = [true; SEL_MAX];
+        a[1] = false;
+        a
     };
-    plan.verdicts[1] = Verdict::Refused(Reason::DuplicateKey(dkneeds::KIND_MACHINE, 0x100));
-    let sel = settle_ctx(&plan, &tables, &lens, 2);
+    let sel = settle_ctx(&accepted, &tables, &lens, 2);
     assert_eq!((sel.count, sel.nkeys[0], sel.nkeys[1]), (2, 2, 0));
     assert_eq!(sel.keys[0][..2], keys);
 }
@@ -1651,12 +1705,14 @@ fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
+        let mut rt = adopt(&mut l, &[0]);
         let base = st().modules[0].base;
         assert_eq!(crate::entry::tick_of(0), base + 8);
         let unloads = crate::boot::info().unloads;
-        // the DSP stays retained: the teardown stops at the quiesce, after the tick was stopped
+        // the job's quiesce stops the tick; the DSP stays retained: the unload is busy and takes nothing down
+        assert_eq!(l.reload_quiesce(0), E_BUSY);
         dsp::ds().phase = dsp::PH_RETAINED;
-        assert_eq!(l.unload_rec(0), E_BUSY);
+        assert_eq!(rt.unload(0), E_BUSY);
         assert_eq!(crate::boot::info().unloads, unloads, "a teardown that stopped is not counted");
         assert_eq!(crate::entry::tick_of(0), 0);
         assert_eq!(st().modules[0].used, 1, "the old module is not released");
@@ -1666,16 +1722,17 @@ fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_
         assert_eq!(crate::entry::tick_of(0), base + 8);
         // and the teardown can be tried again: the DSP is free this time, `fini` and the undo run once
         dsp::ds().phase = dsp::PH_IDLE;
-        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(rt.unload(0), OK);
         assert_eq!(crate::boot::info().unloads, unloads.wrapping_add(1), "a module's unload counts once (DkrtBootInfo.unloads)");
         let n = |v: &Vec<Ev>, e: Ev| v.iter().filter(|x| **x == e).count();
         assert_eq!((n(&l.m.log, Ev::Fini(0, base + 4)), n(&l.r.log, Ev::Remove(0))), (1, 1));
         assert_eq!(l.torn[0], 0, "the mask is clear once the record is free");
         // a teardown that was interrupted after `fini` ran does not run it again, and cannot give the tick back
         let mut l = live_a();
+        let mut rt = adopt(&mut l, &[0]);
         l.torn[0] = TORN_TICK | TORN_FINI;
         assert!(!l.reload_abort(0));
-        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(rt.unload(0), OK);
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))), "fini is not run twice");
     }
 }
@@ -1688,13 +1745,14 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
         booted(&mut l, 1, PATH_B);
         l.phase = Phase::Closed;
+        let mut rt = adopt(&mut l, &[0, 1]);
         for round in 0..2u32 {
             let keys: &[u32] = if round == 0 { &[1, 2, 5] } else { &[1, 2, 5, 6] };
             l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', keys));
             assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
-            assert_eq!(l.unload_rec(0), OK);
+            assert_eq!(rt.unload(0), OK);
             assert_eq!(st().modules[0].used, 0);
-            assert_eq!(l.reload_load(0, PATH.as_ptr()), OK, "round {round}");
+            assert_eq!(rt.reload_load_with(0, PATH.as_ptr(), &wide()), OK, "round {round}");
             // the same record, owner and selection index; the table is the new one; the phase is closed again
             assert_eq!((st().modules[0].used, l.sel_of(0), l.phase == Phase::Closed), (1, 0, true));
             assert_eq!(crate::entry::tick_of(0), st().modules[0].base + 8);
@@ -1706,8 +1764,8 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
         assert_eq!(l.m.live.len(), 2, "one block each: nothing leaked over two reloads");
         // a reload is the only load after the boot: the same call in the closed phase through `load` is refused
         assert_eq!(l.load(PATH.as_ptr()), E_BOOT_ONLY);
-        assert_eq!(l.unload_rec(0), OK);
-        assert_eq!(l.reload_load(MAX_MODULES, PATH.as_ptr()), E_NOT_FOUND, "a provider record is not reloaded");
+        assert_eq!(rt.unload(0), OK);
+        assert_eq!(rt.reload_load_with(MAX_MODULES, PATH.as_ptr(), &wide()), E_NOT_FOUND, "a provider record is not reloaded");
     }
 }
 
@@ -1735,7 +1793,7 @@ fn a_reload_waits_for_commands_in_flight_and_two_blocks_after_it_closed_the_entr
         assert_eq!((st().modules[0].used, l.m.live.len()), (1, 1));
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..)) || *e == Ev::Free(base)));
         // the teardown that follows finishes the record and clears the mask
-        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(adopt(&mut l, &[0]).unload(0), OK);
         assert_eq!(l.torn[0], 0);
     }
 }
@@ -1806,7 +1864,7 @@ fn a_reloads_settle_gets_the_keys_of_the_live_modules_and_the_new_file_in_its_sl
         l.phase = Phase::Closed;
         // module `a` is taken down for its reload and the new file's table is kept in its slot: `b` and the slot of `a` are live
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 5]));
-        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(adopt(&mut l, &[0, 1]).unload(0), OK);
         let staged = l.m.stage(PATH.as_ptr()).unwrap();
         l.capture(0, core::slice::from_raw_parts(staged.ptr, staged.size as usize));
         let sel = live_settle_ctx(&l.tables, &l.table_len, &l.live_at(0));
@@ -1851,7 +1909,8 @@ fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
     unsafe {
         let mut l = live_a();
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
-        assert_eq!(l.unload_rec(0), OK);
+        let mut rt = adopt(&mut l, &[0]);
+        assert_eq!(rt.unload(0), OK);
         let table_before = (l.table_len[0], l.tables[0]);
         // the file is replaced while the module drains: one that drops a key, one of another module, one whose table is gone
         let mut hollow = keyed_file(b'a', &[1, 2]);
@@ -1863,13 +1922,13 @@ fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
             ("no table", hollow, E_FORMAT),
         ] {
             l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), f);
-            assert_eq!(l.reload_load(0, PATH.as_ptr()), want, "{what}");
+            assert_eq!(rt.reload_load_with(0, PATH.as_ptr(), &wide()), want, "{what}");
             assert_eq!(st().modules[0].used, 0, "{what}: nothing loaded");
             assert_eq!((l.table_len[0], l.tables[0]), table_before, "{what}: the kept table is the old one");
         }
         // the bytes that pass the rules load
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1, 2, 3]));
-        assert_eq!(l.reload_load(0, PATH.as_ptr()), OK);
+        assert_eq!(rt.reload_load_with(0, PATH.as_ptr(), &wide()), OK);
     }
 }
 
@@ -1905,7 +1964,7 @@ unsafe fn live_a_with_b() -> Fake {
 }
 
 #[test]
-fn a_live_load_takes_the_first_free_record_at_the_given_index_and_the_check_changes_nothing() {
+fn a_live_load_takes_the_record_of_the_given_index_and_the_check_changes_nothing() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
@@ -1914,10 +1973,11 @@ fn a_live_load_takes_the_first_free_record_at_the_given_index_and_the_check_chan
         assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
         assert_eq!((l.m.live.len(), l.m.allocs, st().modules[1].used, l.table_len[1], l.accepted[1]), (live, allocs, 0, 0, false));
         assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
-        // the load: the record is the first free one, whatever the index; the table and the acceptance are kept at the index
-        assert_eq!(l.live_load(4, PATH_B.as_ptr()), OK);
-        assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
-        assert_eq!(crate::entry::tick_of(1), st().modules[1].base + 8);
+        // the load, through the manager: the record is the index's own; the table and the acceptance are kept at the index
+        let mut rt = adopt(&mut l, &[0]);
+        assert_eq!(rt.live_load_with(4, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!((st().modules[4].used, l.sel_of(4), l.accepted[4], l.phase == Phase::Closed), (1, 4, true, true));
+        assert_eq!(crate::entry::tick_of(4), st().modules[4].base + 8);
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(4, dkneeds::KIND_MACHINE, &mut out), 1);
         assert_eq!(out[0], 9);
@@ -1925,7 +1985,7 @@ fn a_live_load_takes_the_first_free_record_at_the_given_index_and_the_check_chan
         // the module that was live is untouched, and both are live at their indices
         assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true));
         assert_eq!(l.live_at(SEL_MAX), [true, false, false, false, true, false, false, false]);
-        assert!(cstr_eq(records::path(1).as_ptr(), PATH_B.as_ptr()), "the record keeps the path it was loaded from");
+        assert!(cstr_eq(records::path(4).as_ptr(), PATH_B.as_ptr()), "the record keeps the path it was loaded from");
     }
 }
 
@@ -1953,7 +2013,7 @@ fn a_live_check_refuses_a_loaded_name_a_key_clash_a_full_capacity_a_damaged_file
         assert_eq!(check(&mut l, None, &wide()), E_NOT_FOUND, "no such file");
         assert_eq!(check(&mut l, Some(keyed_file(b'c', &[5])), &wide()), OK);
         assert_eq!(l.live_check_load(SEL_MAX, PATH_C.as_ptr(), &wide()), E_SEL_COUNT);
-        assert_eq!(l.live_load(SEL_MAX, PATH_C.as_ptr()), E_SEL_COUNT);
+        assert_eq!(adopt(&mut l, &[0]).live_load_with(SEL_MAX, PATH_C.as_ptr(), &wide()), E_SEL_COUNT);
         // nothing was loaded, and no refused file left a table or an acceptance behind
         assert_eq!((st().modules[1].used, l.m.live.len(), l.table_len[1], l.accepted[1]), (0, 1, 0, false));
     }
@@ -1964,8 +2024,9 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
+        let mut rt = adopt(&mut l, &[0]);
         l.m.init = Init::Fails(E_INIT);
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_INIT);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), E_INIT);
         assert_eq!((st().modules[1].used, l.accepted[1], l.sel_of(1), l.phase == Phase::Closed), (0, false, u8::MAX, true));
         assert_eq!(l.m.live.len(), 1, "nothing leaked: the image block of module a only");
         let mut out = [0u32; 8];
@@ -1977,14 +2038,14 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
         put(&mut hollow, dkneeds::H_REG_SIZE, 0);
         seal(&mut hollow);
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), hollow);
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), E_FORMAT);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), E_FORMAT);
         assert_eq!((st().modules[1].used, l.accepted[1]), (0, false));
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), OK);
         assert_eq!((st().modules[1].used, l.sel_of(1), l.accepted[1]), (1, 1, true));
         // a loaded name is refused by the loader itself, with the index free again
         l.m.files.insert(PATH_C[..PATH_C.len() - 1].to_vec(), keyed_file(b'b', &[11]));
-        assert_eq!(l.live_load(2, PATH_C.as_ptr()), E_LOADED);
+        assert_eq!(rt.live_load_with(2, PATH_C.as_ptr(), &wide()), E_LOADED);
         assert_eq!((l.accepted[2], st().modules[2].used), (false, 0));
     }
 }
@@ -1994,11 +2055,12 @@ fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_ag
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
-        assert_eq!(l.live_load(1, PATH_B.as_ptr()), OK);
+        let mut rt = adopt(&mut l, &[0]);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), OK);
         // the unload half of a job (no block clock: the drain is over at once), then its end state
         l.p.clock.set(None);
         assert_eq!(l.reload_quiesce(0), OK);
-        assert_eq!(l.unload_rec(0), OK);
+        assert_eq!(rt.unload(0), OK);
         l.retire_index(0);
         assert_eq!((st().modules[0].used, l.accepted[0], l.sel_of(0)), (0, false, u8::MAX));
         assert_eq!(l.live_at(SEL_MAX), [false, true, false, false, false, false, false, false], "only b is live");
@@ -2012,10 +2074,10 @@ fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_ag
         // the same file loads again into the free record, at the same index, and again after another unload
         for round in 0..2 {
             assert_eq!(l.live_check_load(0, PATH.as_ptr(), &wide()), OK, "round {round}");
-            assert_eq!(l.live_load(0, PATH.as_ptr()), OK, "round {round}");
+            assert_eq!(rt.live_load_with(0, PATH.as_ptr(), &wide()), OK, "round {round}");
             assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true), "round {round}");
             assert_eq!(l.keys_of(0, dkneeds::KIND_MACHINE, &mut out), 2);
-            assert_eq!(l.unload_rec(0), OK);
+            assert_eq!(rt.unload(0), OK);
             l.retire_index(0);
         }
         assert_eq!(l.m.live.len(), 1);
@@ -2157,7 +2219,7 @@ fn a_port_file_loads_as_a_provider_copies_its_tail_sites_and_unloads_clean() {
         assert_eq!((l.installer.count(), l.exports.count()), (0, 0));
         assert_eq!(site_bytes(&l, 6), STOCK);
         // taken down, it gives both blocks back
-        assert_eq!(l.unload_rec(rec), OK);
+        assert_eq!(adopt(&mut l, &[rec]).unload(rec), OK);
         assert!(l.m.live.is_empty());
         assert_eq!(records::module(rec).used, 0);
     }

@@ -47,7 +47,9 @@ shared = [
   "dkrt::reload",   # the reload job, its refusals and the placeholder phase (docs/plans/extension-model.md E5)
   "dkrt::settings_reload",
   "dkrt::svc_rows",
-  "dkrt::plan",
+  "dkrt::admission", # owner, key and fit verdicts of a boot or a live load
+  "dkrt::lifecycle", # the runtime's seams of the package manager
+  "dkrt_lifecycle",  # package graph and package manager (runtime/core/lifecycle)
   "dkrt::scan",
   "dkrt::collect",
   "dkrt::assign",

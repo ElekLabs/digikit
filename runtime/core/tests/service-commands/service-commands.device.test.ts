@@ -1,11 +1,12 @@
 import { hasCap } from '@digi/dk-session';
-import { RANGES } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 
-/** Port of live-svc: runtime command registration, dispatch and refusal semantics. */
+/** What only the USB transport of the firmware shows of runtime commands: a module's registered command answers over the real SysEx path with bodies of 0 to 250 bytes
+ * and an oversized request is E_MSG. Registration refusals, the handler's own status and the unregistered-command reply are host tests (`module_cmds.rs`
+ * `a_range_that_is_empty_unreserved_or_taken_is_refused_and_the_handlers_status_is_the_reply`). */
 async function expectServiceCommands({ session, dk }: PatchedSession): Promise<void> {
   expect(['zero', 'none'], 'service RPC coverage runs without the DSP').toContain((await session.status()).dsp);
   await expectRuntimeReady(session);
@@ -13,7 +14,6 @@ async function expectServiceCommands({ session, dk }: PatchedSession): Promise<v
     device: session.options.device,
   });
   expect(hasCap(await dk.info(), 'SERVICE_CMDS'), 'INFO advertises service commands').toBe(true);
-  expect(RANGES.remote_state, 'reserved remote state command range').toEqual([0x3e, 0x3f]);
 
   const echo = 0x3e;
   for (const body of [
@@ -27,19 +27,10 @@ async function expectServiceCommands({ session, dk }: PatchedSession): Promise<v
     expect(reply.body, `${body.length}-byte echo body`).toEqual(body);
   }
 
-  const ownStatus = await dk.request(echo, Uint8Array.of(0xee));
-  expect(ownStatus.status, 'module-defined status').toBe(-77);
-  expect(ownStatus.body).toEqual(new Uint8Array());
   expect((await dk.request(echo, new Uint8Array(300))).status, 'oversized request is E_MSG').toBe(-50);
-
-  const refusals = await dk.request(0x3f);
-  expect(refusals.status).toBe(0);
-  // Init attempted registration outside a reserved range, over an existing one, and for an empty range.
-  expect([...refusals.body], 'three E_CMD_RANGE refusals').toEqual([0xc0, 0xc0, 0xc0]);
-  expect((await dk.request(0x3d)).status, 'unregistered command is E_PROTO').toBe(-60);
   await session.expectNoFault('service commands');
 }
 
-runtimeTests('service commands echo bodies and preserve registration and dispatch refusals', expectServiceCommands, {
+runtimeTests('a module command echoes bodies of every size over the real USB path and an oversized request is refused', expectServiceCommands, {
   dsp: 'zero',
 });

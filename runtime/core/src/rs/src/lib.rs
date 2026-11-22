@@ -60,7 +60,7 @@ mod imports;
 mod svc_imports;
 mod svc_rows;
 mod mailbox;
-mod plan;
+mod admission;
 mod platform;
 pub mod reload;
 mod safe_mode;
@@ -129,7 +129,6 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
 
 
 
-#[cfg(test)]
 mod lifecycle;
 #[cfg(test)]
 mod cleanup_tests;

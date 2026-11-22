@@ -46,14 +46,42 @@ where
         self.run_pending_take_down()
     }
 
-    /// Asks every service of `order` whether it may stop; the first refusal is the answer.
+    /// Whether `id` and its live consumers may go down now: the refusals of [`PackageManager::take_down_closure`] and the questions of [`PackageManager::unload`] for the
+    /// closure that `take_down_closure` takes down. Nothing is touched. A caller that must refuse before it changes anything (the live job's check) asks this first.
+    pub fn check_stop(&mut self, id: PackageId) -> Result<(), LifecycleError> {
+        self.refuse_while_pending()?;
+        if !self.live.contains(id) {
+            return Err(LifecycleError::NotLive { package: id });
+        }
+        let order = self.graph.reload_order(id, &self.live);
+        self.ask_can_stop(&order)
+    }
+
+    /// Takes `id` and its live consumers down (consumers first) and nothing else: the services `id` needs stay up even when nothing needs them any more, and no pin
+    /// changes. It asks no `can_stop` ([`PackageManager::check_stop`] does, and a failed DSP part cannot be refused). This is the take-down that the live job splits from its
+    /// load, and the one of a failed DSP part. A restore that answers busy stops it with [`LifecycleError::Busy`]; finish it with [`PackageManager::retry_pending`].
+    pub fn take_down_closure(&mut self, id: PackageId) -> Result<Report, LifecycleError> {
+        self.refuse_while_pending()?;
+        if !self.live.contains(id) {
+            return Err(LifecycleError::NotLive { package: id });
+        }
+        let order = self.graph.reload_order(id, &self.live);
+        self.pending_take_down = Some(PendingTakeDown {
+            op: Op::Unload,
+            todo: order,
+            rebuild: Steps::new(),
+            down: Steps::new(),
+        });
+        self.run_pending_take_down()
+    }
+
+    /// Asks every package of `order` whether it may stop; the first refusal is the answer. A service answers for itself; a module answers for what its services hold
+    /// for it (the host asks each service's `teardown_refusal` for the module).
     pub(super) fn ask_can_stop(&mut self, order: &Steps) -> Result<(), LifecycleError> {
         for &p in order.as_slice() {
-            if self.graph.node(p).is_some_and(|n| n.provides().is_some()) {
-                self.host
-                    .can_stop(p)
-                    .map_err(|status| LifecycleError::CannotStop { package: p, status })?;
-            }
+            self.host
+                .can_stop(p)
+                .map_err(|status| LifecycleError::CannotStop { package: p, status })?;
         }
         Ok(())
     }
@@ -86,6 +114,7 @@ where
                 roots: work.rebuild.as_slice(),
                 pin: false,
                 stop_on_failure: true,
+                numbering: false,
             };
             self.run_bring_up(&order, &request, &mut report);
             if let Some(refused) = report.refused().first() {
@@ -102,15 +131,15 @@ where
             self.live.remove(p);
             return Ok(());
         };
-        let mut services = Steps::new();
-        for s in self.graph.services_of(p) {
-            services.push(s);
+        if self.progress.attached(p) {
+            let services = self.attach_order(p);
+            self.host.detach(p, services.as_slice());
         }
-        let attached = self.progress.attached(p);
-        for &s in services.as_slice()[..attached].iter().rev() {
-            self.host.detach(s, p);
+        self.progress.set_attached(p, false);
+        // nothing is public while its entries are restored; a retry of a busy restore has done it
+        if state >= State::Activated && state < State::RestorePending {
+            self.host.deactivate(p);
         }
-        self.progress.set_attached(p, 0);
         if state >= State::Started {
             self.release_resources(p);
         }

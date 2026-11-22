@@ -18,6 +18,11 @@ import { AUDIBLE, RATE, captureNote, onset, selectDynamicMachine, tone, trackApi
 // 3. `LOAD` puts the module back: the pool table is new and empty, the same sample is bound again and ends ready, and a new note sounds with the same tones.
 // 4. The capacity counts after the cycle are those before it.
 //
+// What is a host test and is not asserted here: that the unloaded module is gone from MODULES and LOADS says UNLOADED, and the order of the take-down (`dkrt-lifecycle`
+// `manager/tests/take_down.rs`, `reload.rs` `an_unload_checks_the_module_drains_tears_down_and_ends_not_loaded_with_the_services_told_once`, assembly
+// `the_live_jobs_steps_unload_a_module_and_load_it_again_and_another_with_the_service_staying_up`). The services stay up across the cycle (RC2b), so the counts of step 4 hold
+// with the machines and samples services in.
+//
 // Run only with the go of the owner (docs/plans/extension-model.md, "Device proof").
 const FOLDER = 'shotlive';
 const SECONDS = 4;
@@ -49,8 +54,6 @@ runtimeTests(
     await bind('first');
 
     // 1 and 2: a note, and the unload while it sounds
-    const modules = (await dk.modules()).map((m) => m.name).filter((n) => n === 'digikit/shot');
-    expect(modules, 'shot is loaded').toEqual(['digikit/shot']);
     let ended: { result: number; unloaded: boolean } | undefined;
     let pressedBeforeUnload = 0;
     const held = await captureNote(runtime, path.join(artifacts, 'held.wav'), async (clock) => {
@@ -66,8 +69,6 @@ runtimeTests(
     record(artifacts, 'held-tones', { before: l, unloadAt: pressedBeforeUnload });
     for (const t of l) expect(t, `the tones of the sample before the unload (${l.join(' ')})`).toBeGreaterThan(AUDIBLE);
     await session.expectNoFault('unload with the voice sounding');
-    expect((await dk.modules()).map((m) => m.name), 'shot is not loaded').not.toContain('digikit/shot');
-    expect((await dk.loadStates()).find((m) => m.name === SHOT_PATH.split('/').at(-1)), 'LOADS says UNLOADED').toMatchObject({ state: 'UNLOADED' });
     const after = [440, 660].map((hz) => Math.max(tone(held.l, hz, pressedBeforeUnload + RATE / 4, held.l.length), tone(held.r, hz, pressedBeforeUnload + RATE / 4, held.l.length)));
     for (const t of after) expect(t, `the sample does not play after the unload (${after.join(' ')})`).toBeLessThan(AUDIBLE / 4);
     // the absent machine plays silence, not the first stock machine's sound
@@ -76,7 +77,6 @@ runtimeTests(
 
     // 3: load again, bind the sample again, play it
     expect(await dk.loadAndWait(SHOT_PATH), 'the load ended with the module in').toEqual({ result: 0, unloaded: false });
-    expect((await dk.modules()).map((m) => m.name), 'shot is loaded again').toContain('digikit/shot');
     await bind('after the load');
     const again = await captureNote(runtime, path.join(artifacts, 'again.wav'), async (clock) => {
       await until(clock, (await clock()) + 1.5 * RATE);

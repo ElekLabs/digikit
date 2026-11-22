@@ -7,6 +7,7 @@
     "runtimeAcceptance": [
       {
         "files": ["service-commands.device.test.ts"],
+        "firmwareOnly": "the real USB SysEx path carries command bodies of every size",
         "tags": ["C:transport"],
         "modules": ["test/svc-echo"]
       }
