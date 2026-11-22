@@ -339,6 +339,9 @@ pub mod capacity;
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").
 pub mod settings;
 
+/// The header of the system package, shared by the resident stage 1 and patchkit's packer.
+pub mod syspkg;
+
 /// The last fault (a CPU crash or a DSP stop) as the settings key `dk/fault`, and the ABOUT rows made from it.
 pub mod fault;
 
