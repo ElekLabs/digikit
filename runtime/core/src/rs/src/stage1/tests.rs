@@ -11,6 +11,8 @@ use dkrt_sdk::*;
 use std::vec;
 use std::vec::Vec;
 
+mod assembly_tests;
+
 const PATH: &[u8] = b"digikit/system.dksp";
 
 /// What a card does wrong, per source: the answers the next calls give instead of the file's bytes.

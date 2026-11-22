@@ -93,6 +93,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   service-check DIR... [--sdk sdk/sdk.toml]
                                          the structure check of a service crate (services/NAME): layout, one exported entry,
                                          declarations equal to the manifest in sdk.toml (`module:check service/NAME`)
+  syspkg pack BODY --out FILE --table MAJOR.MINOR
+                                         the system package: the 48-byte header (`dkrt_sdk::syspkg`) in front of BODY
   owners RUNTIME.dko.json [--owners runtime/core/owners.toml] --out DIR
                                          one sha256 file per owner of the runtime object (docs/TESTING.md, Owner hashes)
   dko show FILE.dko.json [--relocs]      arch, toolchain record, sections, symbols and relocations of an object
@@ -324,6 +326,7 @@ fn run(a: Args) -> Result<()> {
             patchkit::owners::run(rest)?;
         }
         "service-check" => patchkit::svccheck::run(rest)?,
+        "syspkg" => patchkit::syspkg::run(rest)?,
         #[cfg(not(target_arch = "wasm32"))]
         "services" => patchkit::services::run(&a.root, rest)?,
         "objdiff" => {
