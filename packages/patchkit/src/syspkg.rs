@@ -8,8 +8,8 @@
 use crate::dko::Dko;
 use crate::error::*;
 use crate::link;
-use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES};
 use dkrt_sdk::syspkg::Header;
+use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
@@ -22,7 +22,10 @@ pub const TABLE_SYMBOL: &str = "DKPKG_TABLE";
 /// the object does not define would be a link by name, which the package does not have (it calls the resident core through its table).
 pub fn body(obj: &Dko) -> Result<(Vec<u8>, u16, u16)> {
     if obj.arch != "cf" {
-        return Err(err!("the system package is ColdFire code; the object is {}", obj.arch));
+        return Err(err!(
+            "the system package is ColdFire code; the object is {}",
+            obj.arch
+        ));
     }
     let defined: std::collections::BTreeSet<&str> = obj
         .symbols
@@ -34,7 +37,12 @@ pub fn body(obj: &Dko) -> Result<(Vec<u8>, u16, u16)> {
         .relocs
         .iter()
         .map(|r| r.symbol.as_str())
-        .chain(obj.symbols.iter().filter(|s| s.section.is_none()).map(|s| s.name.as_str()))
+        .chain(
+            obj.symbols
+                .iter()
+                .filter(|s| s.section.is_none())
+                .map(|s| s.name.as_str()),
+        )
         .filter(|n| !defined.contains(n))
         .collect();
     undefined.sort();
@@ -46,7 +54,11 @@ pub fn body(obj: &Dko) -> Result<(Vec<u8>, u16, u16)> {
         ));
     }
     let linked = link::link(obj, 0, &BTreeMap::new())?;
-    let kind_of: BTreeMap<&str, &str> = obj.sections.iter().map(|s| (s.name.as_str(), s.kind.as_str())).collect();
+    let kind_of: BTreeMap<&str, &str> = obj
+        .sections
+        .iter()
+        .map(|s| (s.name.as_str(), s.kind.as_str()))
+        .collect();
     let mut relocs: Vec<u32> = vec![];
     for r in &obj.relocs {
         if r.rtype != "cf.32" {
@@ -64,13 +76,19 @@ pub fn body(obj: &Dko) -> Result<(Vec<u8>, u16, u16)> {
     }
     relocs.sort();
     let image_word = |name: &str| -> Result<u32> {
-        let at = *linked.symbols.get(name).ok_or_else(|| err!("the package defines no {name}"))? as usize;
+        let at = *linked
+            .symbols
+            .get(name)
+            .ok_or_else(|| err!("the package defines no {name}"))? as usize;
         match linked.image.get(at..at + 4) {
             Some(w) if at < linked.image.len() => Ok(u32::from_be_bytes([w[0], w[1], w[2], w[3]])),
             _ => Err(err!("{name} is not a whole word of the image")),
         }
     };
-    let entry = *linked.symbols.get(ENTRY).ok_or_else(|| err!("the package defines no {ENTRY}"))?;
+    let entry = *linked
+        .symbols
+        .get(ENTRY)
+        .ok_or_else(|| err!("the package defines no {ENTRY}"))?;
     let table = image_word(TABLE_SYMBOL)?;
     let align = obj
         .sections
@@ -150,7 +168,9 @@ pub fn run(args: &[String]) -> Result<()> {
     };
     let (file, major, minor) = if build_cmd {
         if tab.is_some() {
-            return Err(err!("syspkg build takes the table version from the package"));
+            return Err(err!(
+                "syspkg build takes the table version from the package"
+            ));
         }
         let text = std::fs::read_to_string(body).map_err(|e| err!("{body}: {e}"))?;
         let obj = Dko::parse(&text).map_err(|e| err!("{body}: {e}"))?;

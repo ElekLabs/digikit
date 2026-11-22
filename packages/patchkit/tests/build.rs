@@ -891,7 +891,11 @@ fn the_source_hash_of_a_crate_covers_the_sources_of_its_path_dependencies() {
     for file in ["abi/src/service.rs", "abi/src/gen_svc_abi.rs"] {
         let old = std::fs::read_to_string(d.join(file)).unwrap();
         write(file, &old.replace('1', "2"));
-        assert_ne!(rust::source_sha256(&manifest, &[]).unwrap(), before, "{file}");
+        assert_ne!(
+            rust::source_sha256(&manifest, &[]).unwrap(),
+            before,
+            "{file}"
+        );
         write(file, &old);
         assert_eq!(rust::source_sha256(&manifest, &[]).unwrap(), before);
     }

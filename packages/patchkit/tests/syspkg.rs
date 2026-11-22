@@ -24,24 +24,43 @@ mod build {
     use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES as BODY_HEADER, relocate};
     use dkrt_sdk::syspkg::{HEADER_BYTES, Header};
     use patchkit::dko::{Dko, DkoReloc, DkoSection, DkoSymbol, FORMAT};
-    use patchkit::syspkg::{build, ENTRY, TABLE_SYMBOL};
+    use patchkit::syspkg::{ENTRY, TABLE_SYMBOL, build};
 
     fn section(name: &str, kind: &str, bytes: &[u8]) -> DkoSection {
         DkoSection {
             name: name.into(),
             kind: kind.into(),
             align: 4,
-            size: if kind == "bss" { 20 } else { bytes.len() as u32 },
-            hex: if kind == "bss" { String::new() } else { patchkit::error::hex(bytes) },
+            size: if kind == "bss" {
+                20
+            } else {
+                bytes.len() as u32
+            },
+            hex: if kind == "bss" {
+                String::new()
+            } else {
+                patchkit::error::hex(bytes)
+            },
         }
     }
 
     fn symbol(name: &str, section: Option<&str>, value: u64) -> DkoSymbol {
-        DkoSymbol { name: name.into(), section: section.map(String::from), value, global: true }
+        DkoSymbol {
+            name: name.into(),
+            section: section.map(String::from),
+            value,
+            global: true,
+        }
     }
 
     fn reloc(section: &str, offset: u64, symbol: &str) -> DkoReloc {
-        DkoReloc { section: section.into(), offset, rtype: "cf.32".into(), symbol: symbol.into(), addend: 0 }
+        DkoReloc {
+            section: section.into(),
+            offset,
+            rtype: "cf.32".into(),
+            symbol: symbol.into(),
+            addend: 0,
+        }
     }
 
     /// An entry function (`rts`), the table word 1.2 and a pointer from data to the entry and one to the bss.
@@ -53,7 +72,11 @@ mod build {
             arch: "cf".into(),
             source_sha256: "0".repeat(64),
             toolchain: Default::default(),
-            sections: vec![section(".text", "text", &[0x4e, 0x75, 0x4e, 0x71]), section(".data", "data", &data), section(".bss", "bss", &[])],
+            sections: vec![
+                section(".text", "text", &[0x4e, 0x75, 0x4e, 0x71]),
+                section(".data", "data", &data),
+                section(".bss", "bss", &[]),
+            ],
             symbols: vec![
                 symbol(ENTRY, Some(".text"), 0),
                 symbol(TABLE_SYMBOL, Some(".data"), 0),
@@ -86,7 +109,10 @@ mod build {
         o.symbols.push(symbol("dk_ui_menu_new", None, 0));
         o.relocs.push(reloc(".data", 0, "dk_ui_menu_new"));
         let e = build(&o).unwrap_err().to_string();
-        assert!(e.contains("links only through the resident table") && e.contains("dk_ui_menu_new"), "{e}");
+        assert!(
+            e.contains("links only through the resident table") && e.contains("dk_ui_menu_new"),
+            "{e}"
+        );
     }
 
     #[test]

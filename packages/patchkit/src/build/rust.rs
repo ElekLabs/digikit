@@ -355,7 +355,12 @@ pub fn target_dir(env: &Env) -> PathBuf {
 
 /// Build the crate and copy its static library into `out_dir`. A lock on the shared target dir covers the cargo run and the copy, so a
 /// build of the same crate from another worktree cannot replace the library in between.
-fn build_staticlib(env: &Env, manifest: &Path, cargo_flags: &[String], out_dir: &Path) -> Result<PathBuf> {
+fn build_staticlib(
+    env: &Env,
+    manifest: &Path,
+    cargo_flags: &[String],
+    out_dir: &Path,
+) -> Result<PathBuf> {
     if !env.codegen_gcc_ready() {
         return Err(err!(
             "Rust-for-ColdFire toolchain not installed (uv run python -m tools.patchkit.pk_toolchains codegen-gcc)"
@@ -541,7 +546,12 @@ fn check_flags(blob: &[u8], what: &str) -> Result<()> {
 }
 
 /// Crate -> one relocatable ELF at `out`. Returns the exported symbols.
-fn build_object(env: &Env, manifest: &Path, cargo_flags: &[String], out: &Path) -> Result<Vec<String>> {
+fn build_object(
+    env: &Env,
+    manifest: &Path,
+    cargo_flags: &[String],
+    out: &Path,
+) -> Result<Vec<String>> {
     let crate_name = parse_cargo(&tc::read_text(manifest)?, manifest)?
         .package
         .name

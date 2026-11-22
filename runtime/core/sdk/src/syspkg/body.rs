@@ -34,7 +34,10 @@ pub struct BodyHeader {
 impl BodyHeader {
     pub fn encode(&self) -> [u8; HEADER_BYTES] {
         let mut out = [0u8; HEADER_BYTES];
-        for (i, w) in [self.entry, self.image, self.bss, self.relocs, self.align].iter().enumerate() {
+        for (i, w) in [self.entry, self.image, self.bss, self.relocs, self.align]
+            .iter()
+            .enumerate()
+        {
             out[4 * i..4 * i + 4].copy_from_slice(&w.to_be_bytes());
         }
         out
@@ -45,8 +48,19 @@ impl BodyHeader {
         if body.len() < HEADER_BYTES {
             return Err(BodyError::Short);
         }
-        let h = BodyHeader { entry: word(body, 0), image: word(body, 4), bss: word(body, 8), relocs: word(body, 12), align: word(body, 16) };
-        if !h.align.is_power_of_two() || h.align > 16 || h.image % 4 != 0 || h.entry >= h.image || h.entry % 2 != 0 {
+        let h = BodyHeader {
+            entry: word(body, 0),
+            image: word(body, 4),
+            bss: word(body, 8),
+            relocs: word(body, 12),
+            align: word(body, 16),
+        };
+        if !h.align.is_power_of_two()
+            || h.align > 16
+            || h.image % 4 != 0
+            || h.entry >= h.image
+            || h.entry % 2 != 0
+        {
             return Err(BodyError::BadHeader);
         }
         if (body.len() as u64) != h.bytes() {
@@ -97,7 +111,13 @@ mod tests {
     use std::vec::Vec;
 
     fn body(image: &[u8], relocs: &[u32], bss: u32) -> Vec<u8> {
-        let h = BodyHeader { entry: 2, image: image.len() as u32, bss, relocs: relocs.len() as u32, align: 4 };
+        let h = BodyHeader {
+            entry: 2,
+            image: image.len() as u32,
+            bss,
+            relocs: relocs.len() as u32,
+            align: 4,
+        };
         let mut b = h.encode().to_vec();
         b.extend_from_slice(image);
         for r in relocs {
@@ -110,7 +130,10 @@ mod tests {
     fn round_trip_and_sizes() {
         let b = body(&[0; 16], &[4, 8], 40);
         let h = BodyHeader::decode(&b).unwrap();
-        assert_eq!((h.entry, h.image, h.bss, h.relocs, h.align), (2, 16, 40, 2, 4));
+        assert_eq!(
+            (h.entry, h.image, h.bss, h.relocs, h.align),
+            (2, 16, 40, 2, 4)
+        );
         assert_eq!((h.bytes(), h.memory()), (b.len() as u64, 56));
         assert_eq!(h.reloc_table(&b), &[0, 0, 0, 4, 0, 0, 0, 8]);
     }
@@ -142,8 +165,14 @@ mod tests {
     #[test]
     fn a_relocation_outside_the_image_is_refused() {
         let mut image = [0u8; 8];
-        assert_eq!(relocate(&mut image, &8u32.to_be_bytes(), 1), Err(BodyError::BadReloc));
-        assert_eq!(relocate(&mut image, &6u32.to_be_bytes(), 1), Err(BodyError::BadReloc));
+        assert_eq!(
+            relocate(&mut image, &8u32.to_be_bytes(), 1),
+            Err(BodyError::BadReloc)
+        );
+        assert_eq!(
+            relocate(&mut image, &6u32.to_be_bytes(), 1),
+            Err(BodyError::BadReloc)
+        );
         assert_eq!(image, [0u8; 8]);
     }
 }
