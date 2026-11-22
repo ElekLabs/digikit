@@ -286,8 +286,8 @@ it('the half of a device in a nested test project leaves the files of every othe
     const half = forDevice(nestedKey(), short);
     expect(holds(half, own)).toBe(true);
     expect(holds(half, 'runtime/core/tests/capacity/capacity.device.test.ts')).toBe(false);
-    // the half holds the device file of its device and excludes the device file and ports of each other device
-    expect(holds(half, filesOf(short)[0])).toBe(true);
+    // the half holds every file of its device and excludes the device file and ports of each other device
+    for (const f of filesOf(short)) expect(holds(half, f)).toBe(true);
     for (const other of shorts.filter((o) => o !== short))
       for (const f of filesOf(other)) expect(holds(half, f)).toBe(false);
   }
