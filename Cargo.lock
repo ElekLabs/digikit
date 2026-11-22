@@ -1091,6 +1091,7 @@ dependencies = [
  "device-profile",
  "elektron-native-boot",
  "emmc-card",
+ "serde",
  "serde_json",
  "sha2",
  "sharc-native",

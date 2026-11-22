@@ -1,5 +1,7 @@
 // The preview entry: the desktop shell (title bar, sidebar, content) around the real Transfer page, over the fake device of sim.ts.
 // Mirrors the markup of ../src/Console.tsx for the parts around the page, so widths and heights are the app's.
+import { createPreviewAnalyzer } from './analyzer-mock';
+import { createAnalyzerWorkers } from '../src/workers';
 import { render } from 'solid-js/web';
 import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource/jetbrains-mono/400.css';
@@ -40,7 +42,8 @@ import { setLogOpen } from '../src/log-state';
 import { logMode, previewLog } from './runtime-log-mock';
 import { previewNames } from './runtime-names-mock';
 import { SAMPLES_ROOT, bindSimApp, control, sim } from './sim';
-const host = createTauriHost();
+const analyzerWorkers = createAnalyzerWorkers();
+const host = { ...createTauriHost(), analyzer: createPreviewAnalyzer() };
 const apps = createDesktopApps(host);
 bindSimApp(apps.app);
 
@@ -352,7 +355,7 @@ const PreviewShell = () => (
 render(
   () => (
     <AppProvider app={apps.app} firmware={firmware}>
-      {page === 'run' ? <Console host={host} /> : <PreviewShell />}
+      {page === 'run' ? <Console host={host} analyzerWorkers={analyzerWorkers} /> : <PreviewShell />}
     </AppProvider>
   ),
   document.getElementById('app')!,

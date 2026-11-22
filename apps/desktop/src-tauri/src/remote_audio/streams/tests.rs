@@ -34,13 +34,20 @@ fn hardware_audio_monitor() {
     assert_eq!(output.description().unwrap().name(), output_match);
 
     let require_signal = std::env::var("DIGI_REMOTE_AUDIO_REQUIRE_SIGNAL").as_deref() == Ok("1");
-    let monitor = super::super::RemoteAudio::new().unwrap();
+    use digi_coupled::pcm_observer::PcmCursor;
+
+    let pcm_source = Arc::new(PcmSource::default());
+    let monitor = super::super::RemoteAudio::new(pcm_source.clone()).unwrap();
     let seconds: usize = std::env::var("DIGI_REMOTE_AUDIO_SECONDS")
         .ok()
         .map(|value| value.parse().expect("whole seconds"))
         .unwrap_or(2);
     assert!((1..=30).contains(&seconds));
-    for _ in 0..2 {
+    let mut previous_generation = None;
+    for session in 1..=2 {
+        pcm_source.subscribe(session);
+        let mut cursor = PcmCursor::default();
+        assert!(pcm_source.read(session, &mut cursor).is_none());
         let (start, mut started) = tauri::async_runtime::channel(1);
         monitor
             .send(super::super::Command::Start(inputs[0].id.clone(), start))
@@ -57,8 +64,34 @@ fn hardware_audio_monitor() {
 
         let deadline =
             std::time::Instant::now() + std::time::Duration::from_secs(seconds as u64 + 5);
+        let window = loop {
+            if let Some(window) = pcm_source.read(session, &mut cursor) {
+                break serde_json::to_value(window).unwrap();
+            }
+            assert_eq!(signal.failure.load(Ordering::Acquire), 0);
+            assert!(std::time::Instant::now() < deadline, "no analyzer window");
+            thread::park_timeout(std::time::Duration::from_millis(20));
+        };
+        assert_eq!(window["rate"], signal.rates[0]);
+        let generation = window["generation"].as_u64().unwrap();
+        assert_ne!(previous_generation, Some(generation));
+        previous_generation = Some(generation);
+        for channel in ["left", "right"] {
+            let samples = window[channel].as_array().unwrap();
+            assert_eq!(samples.len(), 2048);
+            assert!(
+                samples
+                    .iter()
+                    .all(|sample| { (-1.0..=1.0).contains(&sample.as_f64().unwrap()) })
+            );
+        }
+        let frames_after_read = signal.played.load(Ordering::Relaxed);
+        if session == 1 {
+            pcm_source.subscribe(0);
+        }
         while signal.captured.load(Ordering::Relaxed) < 4096
-            || signal.played.load(Ordering::Relaxed) < seconds * signal.rates[1] as usize
+            || signal.played.load(Ordering::Relaxed)
+                < frames_after_read + seconds * signal.rates[1] as usize
             || require_signal
                 && signal
                     .peaks
@@ -88,6 +121,11 @@ fn hardware_audio_monitor() {
         let (stop, mut stopped) = tauri::async_runtime::channel(1);
         monitor.send(super::super::Command::Stop(stop)).unwrap();
         stopped.blocking_recv().unwrap().unwrap();
+        assert!(
+            pcm_source
+                .read(session, &mut PcmCursor::default())
+                .is_none()
+        );
         let (observe, mut observed) = tauri::async_runtime::channel(1);
         monitor
             .send(super::super::Command::Observe(observe))

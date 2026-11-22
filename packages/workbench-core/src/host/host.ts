@@ -188,7 +188,23 @@ export interface ShellHost {
   openCardFolder(): Promise<void>;
 }
 
+/** A consecutive window of stereo source samples, before monitor resampling. */
+export interface AnalyzerPcm {
+  /** Changes when the source stream restarts, including a change of USB input. */
+  generation: number;
+  rate: number;
+  left: number[];
+  right: number[];
+}
+
+export interface AnalyzerHost {
+  open(source: 'emulator' | 'remote'): Promise<number>;
+  read(id: number): Promise<AnalyzerPcm | null>;
+  close(id: number): Promise<void>;
+}
+
 export interface Host {
+  analyzer?: AnalyzerHost;
   fs: FsHost;
   library: LibraryHost;
   ports: PortsHost;

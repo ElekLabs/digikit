@@ -422,9 +422,15 @@ body {
   font-size: 12px;
   color: #c3c7cd;
   font-variant-numeric: tabular-nums;
-  overflow-x: auto;
 }
-.statusbar > span,
+.status-readings {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.status-readings > span,
 .statusbar > button {
   display: flex;
   align-items: center;
@@ -433,7 +439,7 @@ body {
   border-right: 1px solid #222428;
   white-space: nowrap;
 }
-.statusbar > .sp {
+.status-readings > .sp {
   padding: 0;
   border: 0;
 }
@@ -680,6 +686,7 @@ body {
   color: #1b0c0b;
   background: #ff8b82;
 }
+.workbench-drawer,
 .log-drawer {
   position: relative;
   flex: none;

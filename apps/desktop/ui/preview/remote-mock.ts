@@ -39,14 +39,15 @@ export function installRemoteMock(): void {
   const loaded = queryFrame();
   const unidentified = new URLSearchParams(location.search).has('unidentified');
   proto.rpc = async (type: number) => {
-    if (unidentified) throw new Error('Unknown MIDI endpoint');
+    if (unidentified || new URLSearchParams(location.search).has('runtimeOnly'))
+      throw new Error('Unknown MIDI endpoint');
     return type === 1
       ? Uint8Array.of(0, ...new TextEncoder().encode('Digitone II'), 0)
       : new TextEncoder().encode('1.12');
   };
   proto.screen = async () => ((await loaded) ?? fallback).slice();
   proto.info = async () => {
-    if (new URLSearchParams(location.search).has('stock'))
+    if (unidentified || new URLSearchParams(location.search).has('stock'))
       throw Object.assign(new Error('No runtime'), { kind: 'timeout' });
     return { port: 'dn2-1.12', caps: 1 << CAP.LOG, runtime: 11 << 8 };
   };

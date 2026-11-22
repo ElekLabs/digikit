@@ -78,3 +78,37 @@ fn monitors_again_after_upsampling_overruns_the_queue() {
     assert!((output[0] - 0.25).abs() < 0.001);
     assert!((output[1] + 0.5).abs() < 0.001);
 }
+
+#[test]
+fn observes_the_first_stereo_pair_before_resampling() {
+    use digi_coupled::pcm_observer::{PcmCursor, PcmSource};
+    use std::sync::Arc;
+
+    let source = Arc::new(PcmSource::default());
+    let (writer, _connection) = source.connect(44_100);
+    source.subscribe(1);
+    let (mut capture, mut playback) = monitor(44_100, 48_000);
+    capture.observe(writer);
+    let input: Vec<f32> = (0..4096)
+        .flat_map(|frame| {
+            let value = frame as f32 / 4096.0;
+            [value, -0.5, 1.0]
+        })
+        .collect();
+    capture.write(&input, 3);
+
+    let window = source.read(1, &mut PcmCursor::default()).unwrap();
+    let window = serde_json::to_value(window).unwrap();
+    assert_eq!(window["rate"], 44_100);
+    assert_eq!(window["left"][0], 0.5);
+    assert_eq!(window["left"][2047], 4095.0 / 4096.0);
+    assert!(
+        window["right"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|sample| sample == -0.5)
+    );
+    let mut output = vec![0.0_f32; (playback.startup_frames + 1024) * 2];
+    assert_eq!(playback.fill(&mut output, 2), 1024);
+}

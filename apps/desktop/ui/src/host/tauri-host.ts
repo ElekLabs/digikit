@@ -10,8 +10,24 @@ export function createTauriHost(): Host {
     call: <T>(method: string, params: Record<string, unknown> = {}, session?: number) =>
       invoke<T>('emu_call', { method, params, session: session ?? null }),
   };
+  // Commands from a closing drawer and a newly opened one must reach the
+  // native observer in issue order, even across component lifetimes.
+  let analyzerTail = Promise.resolve();
+  function analyzerCall<T>(command: string, args: Record<string, unknown>): Promise<T> {
+    const result = analyzerTail.then(() => invoke<T>(command, args));
+    analyzerTail = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
   return {
     rpc,
+    analyzer: {
+      open: (source) => analyzerCall('analyzer_open', { source }),
+      read: (id) => analyzerCall('analyzer_read', { id }),
+      close: (id) => analyzerCall('analyzer_close', { id }),
+    },
     fs: {
       pickFolder: ({ start, title }) => invoke('local_pick_folder', { start, title }),
       list: (root, rel) => invoke('local_list', { root, rel }),

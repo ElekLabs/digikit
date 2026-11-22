@@ -10,6 +10,7 @@ use digi_control::{
     load_scenario,
 };
 use elektron_native_boot::Snapshot;
+mod analyzer;
 mod bulk_port;
 mod desktop_runtime;
 mod firmware;
@@ -565,7 +566,9 @@ fn main() {
         .run_dir
         .clone()
         .unwrap_or_else(|| PathBuf::from("out/native/run"));
+    let analyzer = analyzer::Analyzer::default();
     let mut config = Config::new(startup.audio.clone());
+    config.pcm_source = Some(analyzer.source(analyzer::Source::Emulator));
     config.audio_alt = startup.audio_alt.clone();
     config.mode = if startup.paused {
         Mode::Paused
@@ -674,7 +677,11 @@ fn main() {
         .manage(host)
         .manage(midi_port::MidiPort::default())
         .manage(bulk_port::BulkPort::default())
-        .manage(remote_audio::RemoteAudio::new().expect("start remote audio worker"))
+        .manage(
+            remote_audio::RemoteAudio::new(analyzer.source(analyzer::Source::Remote))
+                .expect("start remote audio worker"),
+        )
+        .manage(analyzer)
         // on the main thread, before any command: CoreMIDI refreshes the port list on the run loop of the thread of its first client
         .setup(|app| {
             use tauri::Manager;
@@ -697,6 +704,9 @@ fn main() {
             remote_audio::remote_audio_start,
             remote_audio::remote_audio_stop,
             remote_audio::remote_audio_status,
+            analyzer::analyzer_open,
+            analyzer::analyzer_read,
+            analyzer::analyzer_close,
             emu_startup,
             emu_step,
             emu_tap,

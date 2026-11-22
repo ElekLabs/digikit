@@ -1,8 +1,9 @@
 //! Native monitor commands. One worker serializes requests and owns both streams.
 
-use std::sync::{Mutex, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle, Thread};
 
+use digi_coupled::pcm_observer::PcmSource;
 use tauri::State;
 use tauri::async_runtime::{Sender, channel};
 
@@ -37,11 +38,11 @@ pub(crate) struct RemoteAudio {
 }
 
 impl RemoteAudio {
-    pub(crate) fn new() -> std::io::Result<Self> {
+    pub(crate) fn new(pcm_source: Arc<PcmSource>) -> std::io::Result<Self> {
         let (send, receive) = mpsc::channel();
         let join = thread::Builder::new()
             .name("remote-audio".into())
-            .spawn(move || run(receive))?;
+            .spawn(move || run(receive, pcm_source))?;
         Ok(Self {
             send,
             thread: join.thread().clone(),
@@ -80,7 +81,7 @@ impl Drop for RemoteAudio {
     }
 }
 
-fn run(receive: mpsc::Receiver<Command>) {
+fn run(receive: mpsc::Receiver<Command>, pcm_source: Arc<PcmSource>) {
     let mut streams: Option<Streams> = None;
     let mut error = None;
     loop {
@@ -93,19 +94,18 @@ fn run(receive: mpsc::Receiver<Command>) {
                 let _ = reply.try_send(streams::inputs());
             }
             Ok(Command::Start(input, reply)) => {
-                let stopped = streams.take().map_or(Ok(()), |old| old.pause());
+                let stopped = streams.take().map_or(Ok(()), Streams::pause);
                 error = None;
-                let result =
-                    stopped
-                        .and_then(|()| Streams::start(&input))
-                        .map(|(started, name)| {
-                            streams = Some(started);
-                            name
-                        });
+                let result = stopped
+                    .and_then(|()| Streams::start(&input, &pcm_source))
+                    .map(|(started, name)| {
+                        streams = Some(started);
+                        name
+                    });
                 let _ = reply.try_send(result);
             }
             Ok(Command::Stop(reply)) => {
-                let stopped = streams.take().map_or(Ok(()), |old| old.pause());
+                let stopped = streams.take().map_or(Ok(()), Streams::pause);
                 error = None;
                 let _ = reply.try_send(stopped);
             }

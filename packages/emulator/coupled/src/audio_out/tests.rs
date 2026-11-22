@@ -128,6 +128,26 @@ fn push_reaches_sink_and_tap_and_counts_samples() {
 }
 
 #[test]
+fn reading_the_source_window_preserves_the_player_and_diagnostic_tap() {
+    use crate::pcm_observer::PcmCursor;
+
+    let (mut out, state) = fake_out(0.5);
+    let source = Arc::new(PcmSource::default());
+    source.subscribe(1);
+    out.observe_windows(&source);
+    out.observe(true);
+    let pcm = [0.5, -0.25].repeat(2048);
+    out.push(&pcm);
+
+    let window = source.read(1, &mut PcmCursor::default()).unwrap();
+    assert_eq!(serde_json::to_value(window).unwrap()["rate"], SOURCE_RATE);
+    assert_eq!(state.borrow().pushed[0], pcm);
+    assert_eq!(out.tap().unwrap().kept.as_ref().unwrap(), &pcm);
+    drop(out);
+    assert!(source.read(1, &mut PcmCursor::default()).is_none());
+}
+
+#[test]
 fn queue_ahead_needs_device_and_pending_audio_to_reach_the_pace_target() {
     let (out, state) = fake_out(0.5);
     assert!(!out.queue_ahead());

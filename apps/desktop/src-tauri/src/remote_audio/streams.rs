@@ -12,6 +12,8 @@ use cpal::{
     SupportedStreamConfig,
 };
 
+use digi_coupled::pcm_observer::{PcmConnection, PcmSource};
+
 use super::AudioInput;
 use super::stereo::{self, Capture, Playback};
 
@@ -117,10 +119,14 @@ pub(super) struct Streams {
     output: Stream,
     input: Stream,
     signal: Arc<StreamSignal>,
+    pcm_connection: Option<PcmConnection>,
 }
 
 impl Streams {
-    pub(super) fn start(input: &str) -> Result<(Self, String), String> {
+    pub(super) fn start(
+        input: &str,
+        pcm_source: &Arc<PcmSource>,
+    ) -> Result<(Self, String), String> {
         let host = cpal::default_host();
         let input_id = input
             .parse::<DeviceId>()
@@ -177,14 +183,17 @@ impl Streams {
             rates: [input_config.sample_rate(), output_config.sample_rate()],
             ..StreamSignal::default()
         });
-        let (capture, playback) =
+        let (mut capture, playback) =
             stereo::monitor(input_config.sample_rate(), output_config.sample_rate());
+        let (writer, connection) = pcm_source.connect(input_config.sample_rate());
+        capture.observe(writer);
         let input = capture_stream(input, input_config, capture, signal.clone())?;
         let output = playback_stream(output, output_config, playback, signal.clone())?;
         let streams = Self {
             output,
             input,
             signal,
+            pcm_connection: Some(connection),
         };
         streams
             .input
@@ -203,7 +212,12 @@ impl Streams {
 
     // CoreAudio can still own an audio unit while delivering a device-change
     // notification. Silence its callbacks and pause both endpoints before Stop replies.
-    pub(super) fn pause(&self) -> Result<(), String> {
+    pub(super) fn pause(mut self) -> Result<(), String> {
+        self.stop()
+    }
+
+    fn stop(&mut self) -> Result<(), String> {
+        self.pcm_connection = None;
         if self.signal.closing.swap(true, Ordering::AcqRel) {
             return Ok(());
         }
@@ -243,7 +257,7 @@ impl Streams {
 
 impl Drop for Streams {
     fn drop(&mut self) {
-        let _ = self.pause();
+        let _ = self.stop();
     }
 }
 

@@ -1,6 +1,7 @@
 //! Map native PCM to the first stereo pair and carry it between audio callbacks.
 
 use cpal::{FromSample, Sample, SizedSample};
+use digi_coupled::pcm_observer::PcmWriter;
 use fixed_resample::audioadapter_buffers::direct::InterleavedSlice;
 use fixed_resample::{
     Interleaved, PacketResampler, ReadStatus, ResampleQuality, ResamplerConfig,
@@ -46,7 +47,11 @@ pub(super) fn monitor(input_rate: u32, output_rate: u32) -> (Capture, Playback) 
     let startup_frames =
         cons.latency_frames() + resampler.as_ref().map_or(0, PacketResampler::output_delay);
     (
-        Capture { prod, resampler },
+        Capture {
+            prod,
+            resampler,
+            pcm_writer: None,
+        },
         Playback {
             #[cfg(test)]
             startup_frames,
@@ -58,9 +63,14 @@ pub(super) fn monitor(input_rate: u32, output_rate: u32) -> (Capture, Playback) 
 pub(super) struct Capture {
     prod: ResamplingProd<f32>,
     resampler: Option<PacketResampler<f32, Interleaved<f32>>>,
+    pcm_writer: Option<PcmWriter>,
 }
 
 impl Capture {
+    pub(super) fn observe(&mut self, writer: PcmWriter) {
+        self.pcm_writer = Some(writer);
+    }
+
     pub(super) fn write<T: Sample>(&mut self, input: &[T], channels: usize)
     where
         f32: FromSample<T>,
@@ -75,6 +85,10 @@ impl Capture {
             {
                 pair[0] = pcm(f32::from_sample(frame[0]));
                 pair[1] = pcm(f32::from_sample(frame[1]));
+            }
+
+            if let Some(writer) = &mut self.pcm_writer {
+                writer.push(stereo);
             }
 
             // Once the channel is full, its producer drops frames that do not

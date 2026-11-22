@@ -1,3 +1,4 @@
+import { createAnalyzerWorkers } from './workers';
 import { render } from 'solid-js/web';
 import '@fontsource-variable/archivo/wdth.css';
 import '@fontsource/jetbrains-mono/400.css';
@@ -13,6 +14,7 @@ import { installNativeFeel } from './native';
 import { installTooltips } from './tooltip';
 import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
 
+const analyzerWorkers = createAnalyzerWorkers();
 const host = createTauriHost();
 const apps = createDesktopApps(host);
 installNativeFeel();
@@ -21,7 +23,7 @@ installTooltips();
 render(
   () => (
     <AppProvider app={apps.app} firmware={apps.firmware}>
-      <Console host={host} />
+      <Console host={host} analyzerWorkers={analyzerWorkers} />
     </AppProvider>
   ),
   document.getElementById('app')!,

@@ -1,0 +1,178 @@
+.analyzer-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  container: analyzer / inline-size;
+  display: grid;
+  grid-template-rows: auto minmax(min-content, 1fr);
+  gap: 8px;
+  padding: 8px 12px 12px;
+  color: var(--ink);
+  background: var(--panel, #131418);
+  font: 11px var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.analyzer-controls,
+.analyzer-modes,
+.analyzer-cursor,
+.analyzer-cursor label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.analyzer-controls button {
+  border: 1px solid var(--line, #34373e);
+  border-radius: 3px;
+  padding: 3px 7px;
+  background: var(--panel-3, #23262b);
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.analyzer-controls button[aria-pressed='true'] {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.analyzer-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.analyzer-status {
+  margin-left: auto;
+  color: var(--ink-2);
+}
+
+.analyzer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+}
+
+.analyzer-chart {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-rows: minmax(84px, 1fr) auto auto;
+  gap: 3px 6px;
+}
+
+@container analyzer (max-width: 630px) {
+  .analyzer-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(min-content, 1fr) auto;
+  }
+
+  .analyzer-meters {
+    justify-self: start;
+  }
+}
+
+.analyzer-axis-y,
+.analyzer-axis-x {
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.analyzer-axis-y {
+  flex-direction: column;
+  text-align: right;
+}
+
+.analyzer-axis-x,
+.analyzer-cursor {
+  grid-column: 2;
+}
+
+.analyzer-plot {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--panel-3, #23262b);
+  box-shadow: inset 0 0 0 1px var(--line, #34373e);
+  cursor: crosshair;
+}
+
+.analyzer-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.analyzer-canvas canvas {
+  display: block;
+}
+
+.analyzer-plot-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+.analyzer-cursor {
+  min-height: 24px;
+  color: var(--ink-2);
+}
+
+.analyzer-cursor input {
+  width: 68px;
+  accent-color: var(--amber);
+}
+
+.analyzer-trigger-status {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+
+.analyzer-meters {
+  align-self: start;
+  /* Reserve space even when the current pitches or levels are unavailable. */
+  width: calc(34ch + 48px);
+  table-layout: fixed;
+  border-collapse: collapse;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.analyzer-meters th,
+.analyzer-meters td {
+  padding: 4px 6px;
+}
+
+.analyzer-meters th:first-child {
+  width: calc(1ch + 12px);
+  box-sizing: border-box;
+}
+
+.analyzer-meters thead {
+  border-bottom: 1px solid var(--line, #34373e);
+  color: var(--ink-2);
+}
+
+.analyzer-left {
+  color: var(--amber);
+}
+.analyzer-right {
+  color: var(--teal);
+}
+.analyzer-clipped {
+  color: var(--bad, #e5736b);
+}
+
+.analyzer-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

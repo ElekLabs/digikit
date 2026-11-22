@@ -125,7 +125,7 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
         const s = await session();
         const key = targetLabel(target());
         if (infoDue(infoAt, Date.now(), key !== infoKey)) {
-          const identity = await identifyDevice(s, registry);
+          const identity = await identifyDevice(s, registry, { preferRuntimeInfo: true });
           if (!alive || t !== target()) return;
           infoKey = key;
           infoAt = Date.now();
@@ -153,11 +153,11 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
           void noteReply(s, () => alive && t === target());
         } else if (loaded) setListed(remoteListed(loaded));
       } catch (e) {
+        if (!alive || t !== target()) return;
         missing = isRemoteMissing(e);
         infoAt = undefined;
         setState(undefined);
         setStateError(e);
-        if (!alive || t !== target()) return;
         // the module may be loaded without the optional state request: MODULES decides what the notice says
         if (!device()) {
           await reconnect().catch(() => {});

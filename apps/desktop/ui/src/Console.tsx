@@ -1,7 +1,18 @@
 // The desktop developer console: the file the app runs, the live panel, and the audio and CPU meters.
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
+import {
+  Show,
+  batch,
+  lazy,
+  Suspense,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
 import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
@@ -45,7 +56,7 @@ import {
   UP,
   WARNING,
 } from './icons';
-import { DOCK_KEY_STEP, clampDock, dockAt, parseDock, startDock } from './dock-core';
+import { DOCK_KEY_STEP, DOCK_MIN_PX, clampDock, dockAt, dockMax, parseDock, startDock } from './dock-core';
 import {
   duration,
   failureEntry,
@@ -71,6 +82,7 @@ import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
 import RemotePage from './RemotePage';
 import RemoteAudio from './RemoteAudio';
+import type { WorkerFactory } from '@digi/workbench-core/workers.ts';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { EMULATOR_NO_RUNTIME } from '@digi/workbench-core/transfer/target.ts';
 import { setReloadWithRuntime } from './emulator-actions';
@@ -117,7 +129,9 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
   );
 }
 
-export default function Console(props: { host: Host }) {
+const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
+
+export default function Console(props: { host: Host; analyzerWorkers: WorkerFactory<'analyzer'> }) {
   const app = useTransferApp();
   const fw = useFirmwareApp();
   const { readPref, writePref } = createPrefs(app.storage);
@@ -526,7 +540,21 @@ export default function Console(props: { host: Host }) {
     onCleanup(() => window.clearTimeout(timer));
   });
 
-  const toggleLog = () => setLogOpen(!logOpen());
+  const [analyzerOpen, setAnalyzerOpen] = createSignal(false);
+  createEffect(() => {
+    if (logOpen()) setAnalyzerOpen(false);
+  });
+  const drawerOpen = () => analyzerOpen() || logOpen();
+  const toggleLog = () =>
+    batch(() => {
+      setLogOpen(!logOpen());
+      setAnalyzerOpen(false);
+    });
+  const toggleAnalyzer = () =>
+    batch(() => {
+      setLogOpen(false);
+      setAnalyzerOpen((open) => !open);
+    });
   const showMetrics = () => {
     setPage('run');
     setInspectorTab('metrics');
@@ -832,7 +860,7 @@ export default function Console(props: { host: Host }) {
       style={{
         '--accent': panel().accent,
         '--func-legend': panel().func_legend,
-        '--dock-h': logOpen() ? `${dockPx()}px` : '0px',
+        '--dock-h': drawerOpen() ? `${dockPx()}px` : '0px',
       }}
     >
       <TitleBar onError={(m) => setError(m)} />
@@ -1195,14 +1223,21 @@ export default function Console(props: { host: Host }) {
         </div>
       </div>
 
-      <Show when={logOpen()}>
-        <section class="log-drawer" aria-label="Log" ref={dockEl} style={{ height: `${dockPx()}px` }}>
+      <Show when={drawerOpen()}>
+        <section
+          class="workbench-drawer"
+          classList={{ 'log-drawer': logOpen() }}
+          aria-label={analyzerOpen() ? 'Analyzer' : 'Log'}
+          ref={dockEl}
+          style={{ height: `${dockPx()}px` }}
+        >
           <div
             class="dock-handle"
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Resize the Log"
-            aria-valuemin={0}
+            aria-label={analyzerOpen() ? 'Resize the Analyzer' : 'Resize the Log'}
+            aria-valuemin={DOCK_MIN_PX}
+            aria-valuemax={dockMax(windowPx())}
             aria-valuenow={dockPx()}
             tabIndex={0}
             onPointerDown={(e) => {
@@ -1227,109 +1262,135 @@ export default function Console(props: { host: Host }) {
               e.preventDefault();
             }}
           />
-          <LogPanel
-            host={props.host}
-            follow={logFollow}
-            emulatorRunning={() => !!status()}
-            devicePort={lastMidiPort}
-            toggleKey={logKey}
-          />
+          <Show
+            when={logOpen()}
+            fallback={
+              <Show when={props.host.analyzer}>
+                {(host) => (
+                  <Suspense fallback={<p role="status">Opening analyzer…</p>}>
+                    <AnalyzerPanel host={host()} target={selected().target} workers={props.analyzerWorkers} />
+                  </Suspense>
+                )}
+              </Show>
+            }
+          >
+            <LogPanel
+              host={props.host}
+              follow={logFollow}
+              emulatorRunning={() => !!status()}
+              devicePort={lastMidiPort}
+              toggleKey={logKey}
+            />
+          </Show>
         </section>
       </Show>
 
       <footer class="statusbar">
-        <span>
-          <i
-            class="dot"
-            classList={{
-              paused: isEmulator() ? paused() || !status() || !!booting() : connection().state !== 'connected',
-            }}
-          />
-          {isEmulator()
-            ? booting()
-              ? bootingStatus(booting()!)
-              : !status()
-                ? 'no firmware'
-                : paused()
-                  ? 'paused'
-                  : phase() || 'running'
-            : connection().label}
-        </span>
-        <Show when={props.host.ports.audio}>{(host) => <RemoteAudio host={host()} source={selected} />}</Show>
-        <Show when={isEmulator() && audio()?.output_device}>
+        <div class="status-readings">
           <span>
-            <Icon d={SPEAKER} />
-            {audio()!.output_device}
+            <i
+              class="dot"
+              classList={{
+                paused: isEmulator() ? paused() || !status() || !!booting() : connection().state !== 'connected',
+              }}
+            />
+            {isEmulator()
+              ? booting()
+                ? bootingStatus(booting()!)
+                : !status()
+                  ? 'no firmware'
+                  : paused()
+                    ? 'paused'
+                    : phase() || 'running'
+              : connection().label}
           </span>
-        </Show>
-        <Show when={isEmulator() && rate() !== undefined}>
-          <span title="Emulated audio seconds per wall second">
-            {rate()!.toFixed(2)}× RT
-            <Meter value={rate()! * 100} tone="amber" />
-          </span>
-        </Show>
-        <Show when={isEmulator() && pgoWarning(buildInfo())}>
-          {(w) => (
-            <span class="warn pgo" title={w().title}>
-              <Icon d={WARNING} />
-              {w().label}
-            </span>
-          )}
-        </Show>
-        <Show when={isEmulator() && sink()}>
-          <span classList={{ warn: (sink()?.underrun_events ?? 0) > 0 }}>underruns {sink()!.underrun_events}</span>
-        </Show>
-        <Show when={isEmulator() && load_()}>
-          <span title="Estimated load of the real chips, from the manuals' cycle tables">
-            CF {Math.round(load_()!.cf.real_pct)}%
-            <Meter value={load_()!.cf.real_pct} />
-          </span>
-          <Show when={load_()!.dsp}>
-            <span title="Estimated DSP load of the real chip. Model figure (as the HEALTH page shows in the emulator) and window peak are in the Metrics tab">
-              DSP est. {Math.round(load_()!.dsp!.real_pct)}%
-              <Meter value={load_()!.dsp!.real_pct} worst={load_()!.dsp!.real_high_pct} />
+          <Show when={props.host.ports.audio}>{(host) => <RemoteAudio host={host()} source={selected} />}</Show>
+          <Show when={isEmulator() && audio()?.output_device}>
+            <span>
+              <Icon d={SPEAKER} />
+              {audio()!.output_device}
             </span>
           </Show>
-        </Show>
-        <Show when={!isEmulator()}>
-          <span>CF {percent(remoteHealth()?.cpu)}</span>
-          <span>DSP {percent(remoteHealth()?.dsp)}</span>
-        </Show>
-        <span class="sp" />
-        <Show
-          when={currentJob()}
-          fallback={
-            <Show when={isEmulator() && reloadNote()}>
-              <span class="muted" title={reloadNote()}>
-                {reloadNote()}
+          <Show when={isEmulator() && rate() !== undefined}>
+            <span title="Emulated audio seconds per wall second">
+              {rate()!.toFixed(2)}× RT
+              <Meter value={rate()! * 100} tone="amber" />
+            </span>
+          </Show>
+          <Show when={isEmulator() && pgoWarning(buildInfo())}>
+            {(w) => (
+              <span class="warn pgo" title={w().title}>
+                <Icon d={WARNING} />
+                {w().label}
+              </span>
+            )}
+          </Show>
+          <Show when={isEmulator() && sink()}>
+            <span classList={{ warn: (sink()?.underrun_events ?? 0) > 0 }}>underruns {sink()!.underrun_events}</span>
+          </Show>
+          <Show when={isEmulator() && load_()}>
+            <span title="Estimated load of the real chips, from the manuals' cycle tables">
+              CF {Math.round(load_()!.cf.real_pct)}%
+              <Meter value={load_()!.cf.real_pct} />
+            </span>
+            <Show when={load_()!.dsp}>
+              <span title="Estimated DSP load of the real chip. Model figure (as the HEALTH page shows in the emulator) and window peak are in the Metrics tab">
+                DSP est. {Math.round(load_()!.dsp!.real_pct)}%
+                <Meter value={load_()!.dsp!.real_pct} worst={load_()!.dsp!.real_high_pct} />
               </span>
             </Show>
-          }
-        >
-          {(job) => (
-            <span class="job" title={job().detail ? `${job().label}: ${job().detail}` : job().label}>
-              <Icon d={RELOAD} />
-              <span class="label">
-                {job().group === 'emulator' ? 'Emulator' : targetLabel(target())} · {job().label}
+          </Show>
+          <Show when={!isEmulator()}>
+            <span>CF {percent(remoteHealth()?.cpu)}</span>
+            <span>DSP {percent(remoteHealth()?.dsp)}</span>
+          </Show>
+          <span class="sp" />
+          <Show
+            when={currentJob()}
+            fallback={
+              <Show when={isEmulator() && reloadNote()}>
+                <span class="muted" title={reloadNote()}>
+                  {reloadNote()}
+                </span>
+              </Show>
+            }
+          >
+            {(job) => (
+              <span class="job" title={job().detail ? `${job().label}: ${job().detail}` : job().label}>
+                <Icon d={RELOAD} />
+                <span class="label">
+                  {job().group === 'emulator' ? 'Emulator' : targetLabel(target())} · {job().label}
+                </span>
+                <Show when={job().detail}>
+                  <span class="detail">{job().detail}</span>
+                </Show>
+                <span>{Math.max(0, Math.round((now() - job().started) / 1000))} s</span>
+                <Show when={job().progress !== undefined}>
+                  <Meter value={job().progress! * 100} tone="amber" />
+                  <span>~{Math.round(job().progress! * 100)}%</span>
+                </Show>
+                <Show when={jobs().list.length > 1}>
+                  <span class="more">+{jobs().list.length - 1}</span>
+                </Show>
+                <Show when={job().cancel}>
+                  <button type="button" class="cancel" onClick={() => job().cancel?.()}>
+                    Cancel
+                  </button>
+                </Show>
               </span>
-              <Show when={job().detail}>
-                <span class="detail">{job().detail}</span>
-              </Show>
-              <span>{Math.max(0, Math.round((now() - job().started) / 1000))} s</span>
-              <Show when={job().progress !== undefined}>
-                <Meter value={job().progress! * 100} tone="amber" />
-                <span>~{Math.round(job().progress! * 100)}%</span>
-              </Show>
-              <Show when={jobs().list.length > 1}>
-                <span class="more">+{jobs().list.length - 1}</span>
-              </Show>
-              <Show when={job().cancel}>
-                <button type="button" class="cancel" onClick={() => job().cancel?.()}>
-                  Cancel
-                </button>
-              </Show>
-            </span>
-          )}
+            )}
+          </Show>
+        </div>
+        <Show when={props.host.analyzer}>
+          <button
+            type="button"
+            class="sb"
+            aria-expanded={analyzerOpen()}
+            title="Show the selected target’s audio analyzer"
+            onClick={toggleAnalyzer}
+          >
+            Analyzer <Icon d={analyzerOpen() ? DOWN : UP} />
+          </button>
         </Show>
         <button type="button" class="sb" aria-expanded={logOpen()} title={`Log (${logKey})`} onClick={toggleLog}>
           Log

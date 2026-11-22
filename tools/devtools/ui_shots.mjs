@@ -93,10 +93,75 @@ const pickTarget = async (p, label) => {
   throw new Error(`Target unavailable: ${label}`);
 };
 
+async function waitForAnalyzer(p, condition, description) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (await p.eval(condition)) return;
+    await p.wait(100);
+  }
+  throw new Error(description + ' · ' + (await p.eval("document.querySelector('.analyzer-panel')?.innerText")));
+}
+
+const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
+  name: 'analyzer-' + mode.toLowerCase(),
+  q: 'page=run',
+  size: mode === 'Scope' ? WIDE : MIN,
+  steps: async (p) => {
+    await pickTarget(p, 'Emulator');
+    await p.click(/^Analyzer$/);
+    await waitForAnalyzer(
+      p,
+      "document.querySelector('.analyzer-plot canvas')?.width > 0 && Math.abs(parseFloat(document.querySelector('.analyzer-meters tbody td:last-child')?.textContent) - 440) < 2",
+      'Missing emulator trace or pitch',
+    );
+    const stable = await p.eval(`(() => {
+      const plot = document.querySelector('.analyzer-plot');
+      const cells = [...document.querySelectorAll('.analyzer-meters tbody td:last-child')];
+      const original = cells.map(c => c.textContent);
+      const width = plot.getBoundingClientRect().width;
+      try {
+        return ['—', '439.7 Hz', '12.35 kHz'].every(pitch => {
+          cells.forEach(c => c.textContent = pitch);
+          return plot.getBoundingClientRect().width === width;
+        });
+      } finally {
+        cells.forEach((c,i) => c.textContent = original[i]);
+      }
+    })()`);
+    if (!stable) throw new Error('Live pitch changed the plot width');
+    const height = await p.eval("document.querySelector('.workbench-drawer').offsetHeight");
+    await p.click(/^Freeze$/);
+    if (mode === 'Spectrum') {
+      await pickTarget(p, 'Digitone II');
+      await waitForAnalyzer(
+        p,
+        "Math.abs(parseFloat(document.querySelector('.analyzer-meters tbody td:last-child')?.textContent) - 880) < 2 && document.querySelector('.analyzer-status')?.textContent === 'Live USB audio'",
+        'Frozen emulator measurement survived target switch',
+      );
+      await p.click(/^Spectrum$/);
+      await p.click(/^Peak hold$/);
+    } else {
+      await p.eval("document.querySelector('footer button[title*=Log i]').click()");
+      if ((await p.eval("document.querySelector('.workbench-drawer').offsetHeight")) !== height)
+        throw new Error('Switching drawers changed the saved height');
+      await p.click(/^Analyzer$/);
+      await waitForAnalyzer(
+        p,
+        "!!document.querySelector('.analyzer-plot canvas') && !document.querySelector('.analyzer-cursor input')?.disabled",
+        'Analyzer failed to reopen',
+      );
+    }
+    await p.eval("document.querySelector('.analyzer-cursor input').focus()");
+    await p.key('ArrowRight', { code: 'ArrowRight', vk: 39 });
+    if (!(await p.eval("document.querySelector('.analyzer-cursor output')?.innerText.includes('L ')")))
+      throw new Error('Keyboard cursor has no channel measurements');
+  },
+}));
+
 const SCENES = [
+  ...analyzerScenes,
   {
     name: 'run-target-switch',
-    q: 'page=run',
+    q: 'page=run&runtimeOnly',
     size: WIDE,
     steps: async (p) => {
       await pickTarget(p, 'Digitone II');
@@ -105,7 +170,8 @@ const SCENES = [
       const check = () =>
         p.eval(`(() => {
         const footer = document.querySelector('footer').innerText;
-        return document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Remote'
+        return document.querySelector('.remote-page .stage')?.getAttribute('aria-label')?.includes('Digitone II')
+          && document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Remote'
           && ![...document.querySelectorAll('nav button')].some(b => b.textContent.trim() === 'Emulator')
           && document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === 'Metrics'
           && footer.includes('Preview headphones') && /Emulator · Loading Digitakt/.test(footer) && /CF 21%/.test(footer) && /DSP 35%/.test(footer)
