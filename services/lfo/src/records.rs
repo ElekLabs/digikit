@@ -89,11 +89,7 @@ fn settled() -> &'static mut Settled {
 }
 
 fn slot(number: u32) -> Option<usize> {
-    if RANGE.contains(number) {
-        Some((number - RANGE.lo) as usize)
-    } else {
-        None
-    }
+    crate::route::shape_index(number)
 }
 
 /// The wave number of the shape key `key` of the module at selection index `at` (0: none was given).
@@ -358,13 +354,12 @@ fn interp_cells(c: &[Cell; SAMPLES], phase: u32) -> i32 {
 /// is below `MAX_SHAPES` before the table is read).
 #[inline]
 pub fn eval(number: u32, phase: u32) -> i32 {
-    const _: () = assert!(RANGE.hi - RANGE.lo + 1 == MAX_SHAPES as u32);
-    let idx = number.wrapping_sub(RANGE.lo);
-    if idx >= MAX_SHAPES as u32 {
-        return tri(phase);
-    }
+    let idx = match crate::route::shape_index(number) {
+        Some(i) => i,
+        None => return tri(phase),
+    };
     // SAFETY: idx < MAX_SHAPES, the length of SHAPES; the table is only read here
-    let sh = unsafe { &*(addr_of!(SHAPES) as *const Shape).add(idx as usize) };
+    let sh = unsafe { &*(addr_of!(SHAPES) as *const Shape).add(idx) };
     if sh.owner == 0 {
         return tri(phase);
     }

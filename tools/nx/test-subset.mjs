@@ -12,6 +12,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AREAS, SERVICES } from './acceptance-tags.mjs';
 import { matchesGlob } from 'node:path';
+import { isTestSource } from './test-source.mjs';
 import { SHARED_PROJECTS } from './device-tests.mjs';
 import { NON_CELL_GLOBS, SHARED_INPUT_GLOBS } from './device-test-keys.mjs';
 import { budget, startAtOnce, workCores } from './resources.mjs';
@@ -30,13 +31,14 @@ const stemOf = (file) =>
     .replace(/\.device\.test\.ts$/, '');
 const DEVICES = ['dt2', 'dn2', 'st'];
 
-// Whether a changed file is production source of the project at `root`: below it, and not a test file, a Markdown file or its project.json.
+// Whether a changed file is production source of the project at `root`: below it, and not a device test (the project tests/conformance
+// keeps them at its root, outside a tests directory), a test source (tools/nx/test-source.mjs), a Markdown file or its project.json.
 const isSource = (file, root) =>
   file.startsWith(`${root}/`) &&
   !file.endsWith('.device.test.ts') &&
   !file.endsWith('.md') &&
   !file.endsWith('/project.json') &&
-  !file.slice(root.length + 1).startsWith('tests/');
+  !isTestSource(file.slice(root.length + 1));
 
 // The roots of the projects a record's subject is made of: its own project, the projects its test-only project tests, and the
 // modules it loads. A module id that is no project is an error: a silent miss would drop the record from the selection.

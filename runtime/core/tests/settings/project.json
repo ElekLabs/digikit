@@ -7,13 +7,13 @@
     "runtimeAcceptance": [
       {
         "files": ["settings.device.test.ts", "settings-copies.device.test.ts", "settings-cards.device.test.ts"],
+        "firmwareOnly": "settings write after the firmware block-counter delay, copy A/B on the real card, restart flush, boot events for a damaged copy, an overlapping store and an older header B",
         "tags": ["C:boot", "C:state", "C:storage"],
         "modules": ["test/c-demo"],
         "plusdrive": true
       },
       {
         "files": ["settings-api.device.test.ts"],
-        "dsp": "sharc",
         "tags": ["C:state", "C:storage"],
         "modules": ["test/settings-a", "test/settings-b"],
         "plusdrive": true

@@ -166,27 +166,5 @@ export function daemonBinary(device: Device): string {
   throw new Error(`${key} unset and dist/daemons.json missing: run pnpm nx:pilot run digi-control:daemons`);
 }
 
-/** Mirror sessions and `fresh: true` keep a fresh run dir (the mirror folder must start empty). */
-export function liveOptions(device: Device, extra: { patchSet?: string; mirror?: boolean; fresh?: boolean } = {}) {
-  const binary = daemonBinary(device);
-  const card = device === 'dt2' ? path.join(repoRoot(), 'out/runs/patchkit/samples') : undefined;
-  if (card && !fs.existsSync(card)) {
-    throw new Error(
-      `DT2 sample card missing: generate ${card} (tools.emulator.card_check.make_samples, run by pk_harness)`,
-    );
-  }
-  const { fresh, ...rest } = extra;
-  const claim = extra.mirror || fresh ? undefined : cachedRunDir(device);
-  return {
-    device,
-    firmware: FIRMWARE[device],
-    binary,
-    card,
-    ...rest,
-    runDir: claim?.dir,
-    snapshotDir: claim?.snapshotDir,
-  };
-}
-
 /** Full-tier scenarios run only under `DIGIKIT_TIER=full` (`verify --full`), as the Python tiers do. */
 export const FULL_TIER = process.env.DIGIKIT_TIER === 'full';

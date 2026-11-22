@@ -38,7 +38,8 @@ const SETUP_SLACK = 1500;
 //   3. wet card: one effect loads, its row, PCM gain and call counter are exact; a protocol select and restart deselects it again;
 //   4. full card: effects beyond the free rows are refused, the loaded chain multiplies its gains;
 //   5. card without the fx service file: the stock FX pages stay and the effect is refused.
-// It replaces fx-chain.device.test.ts and fx-reuse.device.test.ts (ledger: docs/plans/ledgers/t2-fx-contract.md).
+// It replaced fx-chain, fx-reuse and fx-two-notes (RC3 split: their dry/full chain, gain row, call counter and deselect legs are cases 2 to 4 here;
+// docs/plans/ledgers/t2-fx-contract.md). The record says why the test stays on the device (`firmwareOnly`).
 
 for (const device of DEVICES) {
   // These nested suites are ordered: the plain owned process closes before the hooked image starts.

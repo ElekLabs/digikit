@@ -24,6 +24,7 @@ pub mod sharc;
 pub mod sharc_legal;
 pub mod sharc_obj;
 pub mod show;
+pub mod test_source;
 pub mod toolchain;
 
 use crate::dko::Dko;

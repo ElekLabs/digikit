@@ -4393,7 +4393,7 @@ kind = "tail"
 check = "63f2bf6dc55b7b45"
 
 [[hook]]
-name = "cf.lfo.hook.read_call"
+name = "cf.lfo.hook.read_call_dn2"
 site = "cf.lfo.site.read_call"
 mode = "replace"
 clobbers = ["d0", "d2", "ccr"]
@@ -4402,7 +4402,7 @@ kind = "raw"
 check = "c0a706b60f9c27e1"
 
 [[hook]]
-name = "cf.lfo.hook.read_slew"
+name = "cf.lfo.hook.read_slew_dn2"
 site = "cf.lfo.site.read_slew"
 mode = "replace"
 clobbers = ["d2", "ccr"]
@@ -4411,7 +4411,7 @@ kind = "raw"
 check = "c70bafcd9b83f19c"
 
 [[hook]]
-name = "cf.lfo.hook.read_start"
+name = "cf.lfo.hook.read_start_dn2"
 site = "cf.lfo.site.read_start"
 mode = "replace"
 clobbers = ["d2", "ccr"]
@@ -4420,7 +4420,7 @@ kind = "raw"
 check = "eca5788a5083a2d5"
 
 [[hook]]
-name = "cf.lfo.hook.tick_call"
+name = "cf.lfo.hook.tick_call_dn2"
 site = "cf.lfo.site.tick_call"
 mode = "replace"
 clobbers = ["d0", "d1", "d2", "ccr"]
@@ -4429,7 +4429,7 @@ kind = "raw"
 check = "653daeac4978c363"
 
 [[hook]]
-name = "cf.lfo.hook.tick_slew"
+name = "cf.lfo.hook.tick_slew_dn2"
 site = "cf.lfo.site.tick_slew"
 mode = "replace"
 clobbers = ["d1", "ccr"]
@@ -4438,7 +4438,7 @@ kind = "raw"
 check = "29a0aa82f7f8ea15"
 
 [[hook]]
-name = "cf.lfo.hook.tick_start"
+name = "cf.lfo.hook.tick_start_dn2"
 site = "cf.lfo.site.tick_start"
 mode = "replace"
 clobbers = ["d2", "ccr"]

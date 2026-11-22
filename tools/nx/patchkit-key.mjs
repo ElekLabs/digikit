@@ -22,17 +22,13 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { releaseProfileEnv } from './cargo-profile-env.mjs';
+import { isTestSource } from './test-source.mjs';
 import { deviceShorts, filesOf, otherFiles } from './device-files.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const DEPFILE = 'dist/cargo/release/patchkit.d';
 export const KEY_DIR = 'dist/bytes';
 export const keyFile = (device) => `${KEY_DIR}/patchkit-test-${device}.key`;
-
-// Test-only Rust: the release build lists these files (rustc reads a `#[cfg(test)] mod x;` file) but does not compile them, so an edit cannot
-// change patchkit. Same patterns as TEST_ONLY_RUST in tools/devtools/emud_key.py and the negative globs of `digi-control:daemons`.
-export const TEST_ONLY_RUST = /(^|\/)(tests\.rs|tests_[^/]*\.rs|[^/]*_tests\.rs|fake_[^/]*\.rs)$|\/tests\/.*\.rs$/;
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The dependencies of a make-style .d file (`target: dep dep`, `\ ` escapes a space, `\` + newline continues); comment lines are skipped. */
 export const parseDepfile = (text) => {
@@ -63,23 +59,6 @@ export const parseDepfile = (text) => {
   }
   return [...new Set(deps)];
 };
-
-/** The names (relative to `workspaceRoot`) of the test-only Rust files that are not declared behind `#[cfg(test)]`: the exclusion would be dishonest. */
-export const testOnlyProblems = (names, workspaceRoot) =>
-  names.filter((name) => {
-    if (!TEST_ONLY_RUST.test(name) || name.includes('/tests/')) return false;
-    const path = join(workspaceRoot, name);
-    const decl = new RegExp(
-      `((?:[ \\t]*#\\[[^\\n]*\\]\\n)*)[ \\t]*(?:pub(?:\\([a-z]+\\))? )?mod ${escapeRe(basename(name, '.rs'))};`,
-      'g',
-    );
-    const dir = dirname(path);
-    const decls = [dir, dirname(dir)]
-      .flatMap((d) => globSync('*.rs', { cwd: d }).map((f) => join(d, f)))
-      .filter((p) => p !== path)
-      .flatMap((p) => [...readFileSync(p, 'utf8').matchAll(decl)]);
-    return !decls.length || decls.some((m) => !/cfg\((all\()?test\b/.test(m[1]));
-  });
 
 const cargoHome = () => resolve(process.env.CARGO_HOME || join(homedir(), '.cargo'));
 
@@ -126,9 +105,9 @@ export const patchkitKeys = ({ depText, workspaceRoot = root, facts }) => {
   const read = repoFilesOfDepfile(depText, workspaceRoot);
   if (!read.some((name) => name.startsWith('packages/patchkit/')))
     throw new Error(`${DEPFILE} lists no patchkit source: it is not the dependency file of the patchkit build`);
-  const bad = testOnlyProblems(read, workspaceRoot);
-  if (bad.length) throw new Error(`test-only Rust files that are not behind cfg(test): ${bad.join(', ')}`);
-  const sources = read.filter((name) => !TEST_ONLY_RUST.test(name));
+  // A test source is read by the build (rustc reads a `#[cfg(test)] mod x;` file) but not compiled: the key leaves it out.
+  // The cfg(test) guard of tools/nx/test-source.mjs (a host test) proves that the exclusion is honest.
+  const sources = read.filter((name) => !isTestSource(name));
   const keys = new Map();
   for (const device of deviceShorts(workspaceRoot)) {
     const others = new Set(expand(otherFiles(device, workspaceRoot), workspaceRoot));

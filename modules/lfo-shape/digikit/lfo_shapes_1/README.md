@@ -33,7 +33,7 @@ To add a shape: add a `[[record]]` with a new id to `module.toml`, its `DK_KEY_<
 
 A shape that has no negative sample is unipolar (like the stock EXPO and RAMP).
 
-The shape needs `lfo.dks` on the card (and `core/lfo` in the firmware image): the `lfo` service gives each shape a wave number from 7 up (kept across boots) and
+The shape needs `lfo.dks` on the card: the `lfo` service gives each shape a wave number from 7 up (kept across boots) and
 keeps it while the module is loaded. A sound that names the number shows ERR and runs like RAND on a device without the service, and as the triangle (TRI) when the module is not loaded.
 Never rename the module id or a record id: sounds keep a shape by its number, and the number follows the key.
 

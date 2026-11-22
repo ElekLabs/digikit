@@ -79,4 +79,5 @@ async function expectCpuCrashFault(runtime: PatchedSession): Promise<void> {
 runtimeTests('a machine that stops the DSP gives safe mode and names the module and the voice site', expectVoiceHang, { dsp: 'sharc',
   devices: ['dt2'],
 });
-runtimeTests('a CPU crash is kept as the last fault', expectCpuCrashFault, { devices: ['dt2'] });
+// the crash comes 2 s after the first tick: the card keeps the runtime's 30 s stable period, so both crashed boots count as bad boots
+runtimeTests('a CPU crash is kept as the last fault', expectCpuCrashFault, { devices: ['dt2'], stableBlocks: 0 });

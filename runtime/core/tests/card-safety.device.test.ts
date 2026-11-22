@@ -12,7 +12,6 @@ import {
   E_NOSTORE,
   E_RANGE,
   probeWrite,
-  pokeKnob,
   setSelection,
   statusOf,
 } from '@digi/regression/runtime/card-kit.ts';
@@ -24,6 +23,10 @@ import type { Session } from '@digi/test-support';
 import { logEvents, ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 
 /**
+ * Host coverage (the decisions): `fake_platform.rs` (range refusals, blank claim, foreign, too small, torn claim, cut claim), `store_tests.rs` (foreign refuses
+ * store writes, ours without headers, blank header pair rule, cut sweeps). These cases keep what the booted image shows: the boot counter record, the
+ * USB replies, the log events, the ABOUT rows and the card writes seen from the emulated card.
+ *
  * Card safety (was Python `run_card`, `run_card_small`; deleted: 6a5bb1ed:tests/digikit/scenarios/card-safety.toml, 6a5bb1ed:tests/digikit/scenarios/card-small.toml): the one card-write function refuses writes
  * outside the store range; a blank card works as before; foreign bytes in the range make the card read-only for the runtime; a card with our store keeps
  * working; an upload on a blank card claims the range first, so a cut upload leaves a card the next boot calls ours; a card smaller than the store area has
@@ -55,9 +58,9 @@ cardRigs(
     devices: ['dt2'],
     dsp: 'zero',
     uploads: true,
-    relaxFs: true, // the card after the cut upload carries the firmware's own writes: no filesystem check on the next boot
+    relaxFs: true, // the card carries the firmware's own writes: no filesystem check on the next boot
     roots: RT,
-    symbols: [...CARD_SYMBOLS, 'DKRT_UPLOAD_CUT'],
+    symbols: CARD_SYMBOLS,
   },
   (h) => {
     const { first, end } = cardStore(h.device);
@@ -83,19 +86,14 @@ cardRigs(
           paths: [],
         });
         expect(s0.writes, 'one write for the boot, one more for the clear').toBe(1 + s0.stable);
+        // the full list of sizes and places is `every_write_outside_the_store_is_refused_for_range_and_counted_whatever_its_size` (fake_platform.rs)
         const bad: [number, number][] = [
           [first - 1, 512],
           [end, 512],
-          [end - 1, 1024],
-          [first, 100],
-          [0, 512],
-          [first, 0],
-          [0xffffffff, 512],
-          [first - 1, 1024],
         ];
         const results: number[] = [];
         for (const [sector, n] of bad) results.push(await probeWrite(session, h.plan, sector, n));
-        expect(results, 'every write outside the range is E_RANGE, whatever its size').toEqual(bad.map(() => E_RANGE));
+        expect(results, 'a write outside the range is E_RANGE').toEqual(bad.map(() => E_RANGE));
         expect(await check(), 'the refusals are counted').toMatchObject({
           refused: bad.length,
           refusedRange: bad.length,
@@ -136,18 +134,12 @@ cardRigs(
     );
 
     test(
-      'a selection record only: blank header sectors give an empty store, foreign bytes in both headers give no store',
+      'a selection record and foreign bytes in both headers: the card is ours, the store is no store',
       async () => {
         const headerB = deviceProfile(h.device).card.store.header_b_sector;
-        // a valid selection record and nothing else in the range makes the area ours
-        let rt = await h.boot(await h.card({ selection: [] }));
-        await h.ready();
-        expect((await cardInfo(rt.session, h.plan)).stateName).toBe('ours');
-        expect(await statusOf(() => rt.dk.put('modules/s.dkm', blob(3_000, 4))), 'an upload works').toBe(0);
-        expect((await rt.dk.list()).map((e) => e.path)).toContain('modules/s.dkm');
-
+        // (a valid record alone makes the area ours: fake_platform.rs and store_tests.rs; the upload on it: `an_ours_card_without_headers_is_an_empty_store_for_the_list_and_the_figures` (store_tests.rs))
         // foreign bytes in header A and B: the store is somebody's data
-        rt = await h.boot(await h.card({ selection: [], foreign: { [first]: PAT, [headerB]: PAT } }));
+        const rt = await h.boot(await h.card({ selection: [], foreign: { [first]: PAT, [headerB]: PAT } }));
         await h.ready();
         const ci = await cardInfo(rt.session, h.plan);
         expect(ci.stateName, 'the card counts as ours').toBe('ours');
@@ -161,28 +153,6 @@ cardRigs(
         expect(await h.storeWrites(), 'nothing was written to the store range besides the selection record').toEqual(
           st.stable ? [selA, selB] : [selB],
         );
-      },
-    );
-
-    test(
-      'an upload on a blank card claims the range first: after a cut upload the next boot calls the area ours',
-      async () => {
-        const rt = await h.boot(await h.card());
-        await h.ready();
-        await pokeKnob(rt.session, h.plan, 'DKRT_UPLOAD_CUT', 1);
-        // three DATA chunks: the second write is refused
-        expect(await statusOf(() => rt.dk.put('modules/c.dkm', blob(70_000, 9))), 'the cut upload failed').not.toBe(0);
-        // The boot's record write already marked the area ours, so the first data write needs no claim of the empty header pair.
-        expect(await cardInfo(rt.session, h.plan), 'the area was ours before the first data write: no claim').toMatchObject({
-          claims: 0,
-          stateName: 'ours',
-        });
-
-        const next = await h.boot(await h.after());
-        await h.ready();
-        expect((await cardInfo(next.session, h.plan)).stateName, 'ours, not foreign').toBe('ours');
-        expect(await next.dk.list(), 'the store is empty').toEqual([]);
-        expect(await statusOf(() => next.dk.put('modules/c.dkm', blob(5_000, 3))), 'an upload works').toBe(0);
       },
     );
   },
@@ -216,14 +186,8 @@ cardRigs(
         expect(await bootInfo(session, h.plan), 'the boot runs normally').toMatchObject(BOOT_OK);
 
         const rSel = await setSelection(session, h.plan, [MOD]);
-        const rProbe = await probeWrite(session, h.plan, first + 5, 512);
-        const rRange = await probeWrite(session, h.plan, first - 1, 512);
-        expect([rSel, rProbe, rRange], 'in the range E_CARD_RO, outside it E_RANGE').toEqual([
-          E_CARD_RO,
-          E_CARD_RO,
-          E_RANGE,
-        ]);
-        expect(await cardInfo(session, h.plan)).toMatchObject({ refused: 3, writes: 0 });
+        expect(rSel, 'the selection write is E_CARD_RO (probe and range answers: fake_platform.rs)').toBe(E_CARD_RO);
+        expect(await cardInfo(session, h.plan)).toMatchObject({ refused: 1, writes: 0 });
         expect(await h.records(), 'no selection record was written').toEqual([null, null]);
 
         const info = await dk.info();
@@ -316,10 +280,6 @@ cardRigs(
         const { STORE } = await dk.capacity();
         expect(STORE).toMatchObject({ limit: 0, used: 0 });
 
-        const rSel = await setSelection(session, h.plan, [MOD]);
-        const rProbe = await probeWrite(session, h.plan, cardStore(h.device).first + 5, 512);
-        expect([rSel, rProbe], 'a selection and a write in the area are refused').toEqual([E_CARD_RO, E_CARD_RO]);
-        expect((await cardInfo(session, h.plan)).writes).toBe(0);
         // the stock firmware formats this blank card (writes below the store area), so only the store range is checked
         expect(await h.storeWrites(), 'the runtime wrote nothing in the store range').toEqual([]);
       },

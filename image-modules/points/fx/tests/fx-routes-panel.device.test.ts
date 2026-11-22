@@ -22,13 +22,6 @@ for (const device of DEVICES) {
         none: { selection: [] },
         list: { selection: selection(0, 1, 2) },
         sendonly: { selection: selection(3, 1) },
-        fallback: {
-          selection: selection(1, 3),
-          settings: [
-            [`fx/route/${GAIN}`, '01'],
-            [`fx/route/${SENDONLY}`, '00'],
-          ],
-        },
         full: {
           selection: device === 'dt2' ? selection(2, 3, 4) : selection(2, 4),
           settings: [[`fx/route/${SEND3}`, '00']],
@@ -126,13 +119,8 @@ for (const device of DEVICES) {
       expect((await ui.pending()).slice(0, 2)).toEqual([SEND_ROUTE, MASTER]);
       expect(await ui.popups()).toBe(sendOnlyPopups);
 
-      await reload('fallback');
-      ui = await inspect('fallback', [GAIN, SENDONLY]);
-      expect(await ui.routes(2), 'disallowed stored routes fall back to manifest defaults').toEqual([0, 1]);
-      expect((await ui.sendUsed())!.used).toBe(1);
-      await ui.toModules();
-      expect((await ui.pending()).slice(0, 2)).toEqual([MASTER, SEND_ROUTE]);
-
+      // The fallback of a stored route the effect no longer allows to its manifest default is a host fact (services/fx/src/fxsend.rs test
+      // `the_saved_route_falls_back_to_the_default`).
       await reload('full');
       const fullNames = sendSlots > 1 ? [SEND, SENDONLY, SEND3] : [SEND, SEND3];
       ui = await inspect('full', fullNames);

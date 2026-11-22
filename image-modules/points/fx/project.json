@@ -4,6 +4,7 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "firmwareOnly": "the menu route panel drawn with the firmware views, the persisted route on the card and the restarted audio and FX pages",
         "files": [
           "tests/fx-routes-panel.device.test.ts",
           "tests/fx-routes-persist.device.test.ts"
@@ -29,6 +30,7 @@
         "plusdrive": true
       },
       {
+        "firmwareOnly": "the send bus wired through the patched stock image: zero, other and full amounts as PCM (the gain law is on the rig)",
         "files": ["tests/fx-send.device.test.ts"],
         "dsp": "sharc",
         "tags": ["A:core/fx"],
@@ -50,6 +52,11 @@
         "devices": ["dt2"],
         "dsp": "sharc",
         "tags": ["A:core/fx", "C:boot", "C:dsp"],
+        "sources": [
+          "runtime/platform/dsp-link/{module.toml,src/**/*,build/**/*}",
+          "runtime/platform/expansion/{module.toml,src/**/*,build/**/*}",
+          "image-modules/points/fx/{module.toml,src/**/*,build/**/*}"
+        ],
         "compiles": true
       }
     ],

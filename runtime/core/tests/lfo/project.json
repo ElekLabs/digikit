@@ -20,7 +20,8 @@
           "digikit/debug",
           "test/lfo-shape",
           "core/services/lfo"
-        ]
+        ],
+        "firmwareOnly": "hooks install into the real image and a shape fixture loads and unloads with the firmware running; refusals and stock-byte restore are assembly tests"
       },
       {
         "files": [
@@ -33,7 +34,8 @@
           "test/lfo-shape",
           "core/services/lfo"
         ],
-        "plusdrive": true
+        "plusdrive": true,
+        "firmwareOnly": "the LFO output through the vector 191 tick with stock waves and a shape table; the shape numbering and routing decision are unit tests (services/lfo route.rs)"
       },
       {
         "files": [
@@ -52,7 +54,8 @@
         "sources": [
           "runtime/core/tests/lfo/goldens.json"
         ],
-        "plusdrive": true
+        "plusdrive": true,
+        "firmwareOnly": "stock readers clamp a stored shape number (ERR, RAND) and the tick plays the fallback with the firmware; the routing decision is a unit test (services/lfo route.rs)"
       },
       {
         "files": [

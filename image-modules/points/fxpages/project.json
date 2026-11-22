@@ -4,6 +4,7 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "firmwareOnly": "signed FX page words and PCM gain through the firmware pages and the stock FX audio path; the page and row tables exist only in firmware memory",
         "files": ["tests/fx-bipolar.device.test.ts"],
         "dsp": "sharc",
         "tags": ["A:core/fxpages", "C:state"],
@@ -17,6 +18,7 @@
         "plusdrive": true
       },
       {
+        "firmwareOnly": "the firmware kit and project save and load reacting to the FX values and effect ids (kit objects, Load Kit, project save menu)",
         "files": ["tests/fx-kit-persist.device.test.ts"],
         "dsp": "sharc",
         "tags": ["A:core/fxpages", "C:state"],
@@ -29,6 +31,7 @@
         "plusdrive": true
       },
       {
+        "firmwareOnly": "stock FUNC pixels, stock PCM and knob mapping through the firmware pages, and removal after SELECT and restart",
         "files": ["tests/fx-pages.device.test.ts"],
         "dsp": "sharc",
         "tags": ["A:core/fxpages"],
@@ -41,6 +44,7 @@
         "plusdrive": true
       },
       {
+        "firmwareOnly": "send cells of the Sound array, track DSP amounts and project saves written into firmware memory (the host cannot reach those raw addresses: services/fx/tests/table.rs header)",
         "files": ["tests/fx-track-route.device.test.ts"],
         "dsp": "sharc",
         "tags": ["A:core/fxpages", "C:state"],

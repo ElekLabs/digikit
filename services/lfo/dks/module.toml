@@ -9,76 +9,76 @@ callback_order = 400
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "The lfo service of the runtime as a service file: it owns the lfo_shape record kind, numbers the shapes as values of the LFO wave parameter, writes their maximum into the parameter table and fills the interrupt slots of core/lfo"
-requires = ["core/lfo", "core/dynreg"]
+summary = "The lfo service of the runtime as a service file: it owns the lfo_shape record kind, numbers the shapes as values of the LFO wave parameter, writes their maximum into the parameter table and installs the interrupt hooks of the LFO tick"
+requires = ["core/dynreg"]
 conflicts = []
 
 [targets]
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The pointer slots of core/lfo (`[[slot]]` of its module.toml): each interrupt site calls its slot only when it is set; the file writes the address of its routine.
-[[fill]]
-slot = "lfo_dt2_tick_call"
+# The six interrupt hooks of the LFO tick and its second reader (ports/fw/lfo.toml, one set for each device): each runs in place of the six stock bytes of its site, in the interrupt (vector 191, IPL 5; the installer's IPL 7 mask keeps the tick out during the write).
+[[hook]]
+name = "cf.lfo.hook.tick_call_dt2"
 entry = "lfo_dt2_tick_call"
 devices = ["dt2"]
 
-[[fill]]
-slot = "lfo_dt2_tick_slew"
+[[hook]]
+name = "cf.lfo.hook.tick_slew_dt2"
 entry = "lfo_dt2_tick_slew"
 devices = ["dt2"]
 
-[[fill]]
-slot = "lfo_dt2_tick_start"
+[[hook]]
+name = "cf.lfo.hook.tick_start_dt2"
 entry = "lfo_dt2_tick_start"
 devices = ["dt2"]
 
-[[fill]]
-slot = "lfo_dt2_read_call"
+[[hook]]
+name = "cf.lfo.hook.read_call_dt2"
 entry = "lfo_dt2_read_call"
 devices = ["dt2"]
 
-[[fill]]
-slot = "lfo_dt2_read_slew"
+[[hook]]
+name = "cf.lfo.hook.read_slew_dt2"
 entry = "lfo_dt2_read_slew"
 devices = ["dt2"]
 
-[[fill]]
-slot = "lfo_dt2_read_start"
+[[hook]]
+name = "cf.lfo.hook.read_start_dt2"
 entry = "lfo_dt2_read_start"
 devices = ["dt2"]
 
-[[fill]]
-slot = "lfo_dn2_tick_call"
+[[hook]]
+name = "cf.lfo.hook.tick_call_dn2"
 entry = "lfo_dn2_tick_call"
 devices = ["dn2"]
 
-[[fill]]
-slot = "lfo_dn2_tick_slew"
+[[hook]]
+name = "cf.lfo.hook.tick_slew_dn2"
 entry = "lfo_dn2_tick_slew"
 devices = ["dn2"]
 
-[[fill]]
-slot = "lfo_dn2_tick_start"
+[[hook]]
+name = "cf.lfo.hook.tick_start_dn2"
 entry = "lfo_dn2_tick_start"
 devices = ["dn2"]
 
-[[fill]]
-slot = "lfo_dn2_read_call"
+[[hook]]
+name = "cf.lfo.hook.read_call_dn2"
 entry = "lfo_dn2_read_call"
 devices = ["dn2"]
 
-[[fill]]
-slot = "lfo_dn2_read_slew"
+[[hook]]
+name = "cf.lfo.hook.read_slew_dn2"
 entry = "lfo_dn2_read_slew"
 devices = ["dn2"]
 
-[[fill]]
-slot = "lfo_dn2_read_start"
+[[hook]]
+name = "cf.lfo.hook.read_start_dn2"
 entry = "lfo_dn2_read_start"
 devices = ["dn2"]
 
-# The hooks it takes (ports/fw/lfo.toml): UI-task sites of the MOD page, listed in the port file. They have no `handler`: each is a routine of this file (`src/hooks-ui.s`) that runs in
+# The UI hooks it takes (ports/fw/lfo.toml): UI-task sites of the MOD page, listed in the port file. They have no `handler`: each is a routine of this file (`src/hooks-ui.s`) that runs in
 # place of the first six bytes of a stock function and leaves into the stock code through the end of its site. DT2 binds two sites, DN2 three. `init` repeats them with dk_service_declare_hook (`service!`).
 [[hook]]
 name = "cf.lfo.hook.wave_name"
@@ -101,16 +101,30 @@ place = "cf.expansion"
 
 # The exits of the hooks of ports/fw/lfo.toml (`hook.<hook>.exit` is the end of the site, `.exit.N` the Nth entry of its `exits`), as aliases `patchkit pack` makes into imports.
 [object.externs]
-lfo_x_tick_rand = "hook.cf.lfo.hook.tick_call.exit.1"
-lfo_x_tick_done = "hook.cf.lfo.hook.tick_call.exit.2"
-lfo_x_tick_slew = "hook.cf.lfo.hook.tick_slew.exit"
-lfo_x_tick_start = "hook.cf.lfo.hook.tick_start.exit"
-lfo_x_tick_start_rand = "hook.cf.lfo.hook.tick_start.exit.1"
-lfo_x_read_rand = "hook.cf.lfo.hook.read_call.exit.1"
-lfo_x_read_done = "hook.cf.lfo.hook.read_call.exit.2"
-lfo_x_read_slew = "hook.cf.lfo.hook.read_slew.exit"
-lfo_x_read_start = "hook.cf.lfo.hook.read_start.exit"
-lfo_x_read_start_rand = "hook.cf.lfo.hook.read_start.exit.1"
+lfo_x_dt2_tick_call_end = "hook.cf.lfo.hook.tick_call_dt2.exit"
+lfo_x_dn2_tick_call_end = "hook.cf.lfo.hook.tick_call_dn2.exit"
+lfo_x_dt2_read_call_end = "hook.cf.lfo.hook.read_call_dt2.exit"
+lfo_x_dn2_read_call_end = "hook.cf.lfo.hook.read_call_dn2.exit"
+lfo_x_dt2_tick_rand = "hook.cf.lfo.hook.tick_call_dt2.exit.1"
+lfo_x_dn2_tick_rand = "hook.cf.lfo.hook.tick_call_dn2.exit.1"
+lfo_x_dt2_tick_done = "hook.cf.lfo.hook.tick_call_dt2.exit.2"
+lfo_x_dn2_tick_done = "hook.cf.lfo.hook.tick_call_dn2.exit.2"
+lfo_x_dt2_tick_slew = "hook.cf.lfo.hook.tick_slew_dt2.exit"
+lfo_x_dn2_tick_slew = "hook.cf.lfo.hook.tick_slew_dn2.exit"
+lfo_x_dt2_tick_start = "hook.cf.lfo.hook.tick_start_dt2.exit"
+lfo_x_dn2_tick_start = "hook.cf.lfo.hook.tick_start_dn2.exit"
+lfo_x_dt2_tick_start_rand = "hook.cf.lfo.hook.tick_start_dt2.exit.1"
+lfo_x_dn2_tick_start_rand = "hook.cf.lfo.hook.tick_start_dn2.exit.1"
+lfo_x_dt2_read_rand = "hook.cf.lfo.hook.read_call_dt2.exit.1"
+lfo_x_dn2_read_rand = "hook.cf.lfo.hook.read_call_dn2.exit.1"
+lfo_x_dt2_read_done = "hook.cf.lfo.hook.read_call_dt2.exit.2"
+lfo_x_dn2_read_done = "hook.cf.lfo.hook.read_call_dn2.exit.2"
+lfo_x_dt2_read_slew = "hook.cf.lfo.hook.read_slew_dt2.exit"
+lfo_x_dn2_read_slew = "hook.cf.lfo.hook.read_slew_dn2.exit"
+lfo_x_dt2_read_start = "hook.cf.lfo.hook.read_start_dt2.exit"
+lfo_x_dn2_read_start = "hook.cf.lfo.hook.read_start_dn2.exit"
+lfo_x_dt2_read_start_rand = "hook.cf.lfo.hook.read_start_dt2.exit.1"
+lfo_x_dn2_read_start_rand = "hook.cf.lfo.hook.read_start_dn2.exit.1"
 lfo_x_name4 = "hook.cf.lfo.hook.wave_name.exit"
 lfo_x_name3 = "hook.cf.lfo.hook.wave_name3.exit"
 lfo_wave_table = "cf.param.data.descriptor_table"
