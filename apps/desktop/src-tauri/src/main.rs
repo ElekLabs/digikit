@@ -7,7 +7,6 @@ use digi_control::{
     Command, Config, Handle, Mode, ScenarioSetup,
     cli::{self, StartupArgs},
     controller::spawn,
-    dispatch::Dispatcher,
     load_scenario,
 };
 use elektron_native_boot::Snapshot;
@@ -18,6 +17,7 @@ mod library;
 mod local;
 mod log_save;
 mod midi_port;
+mod remote_audio;
 use serde_json::Value;
 use std::sync::mpsc;
 use tauri::State;
@@ -633,7 +633,7 @@ fn main() {
     // The control socket is on unless `--no-control` (design question 3).
     let _server = if startup.control != Some(false) {
         match digi_control::server::serve(
-            Dispatcher::new(handle.clone(), "digiemu-desktop"),
+            digi_control::dispatch::Dispatcher::new(handle.clone(), "digiemu-desktop"),
             digi_control::server::ServerOptions { run_dir },
             "digiemu-desktop",
         ) {
@@ -650,8 +650,6 @@ fn main() {
     } else {
         None
     };
-    #[cfg(not(unix))]
-    let _ = (&run_dir, Dispatcher::new);
     let exit_handle = handle.clone();
     let host = Host {
         handle,
@@ -676,6 +674,7 @@ fn main() {
         .manage(host)
         .manage(midi_port::MidiPort::default())
         .manage(bulk_port::BulkPort::default())
+        .manage(remote_audio::RemoteAudio::new().expect("start remote audio worker"))
         // on the main thread, before any command: CoreMIDI refreshes the port list on the run loop of the thread of its first client
         .setup(|app| {
             use tauri::Manager;
@@ -694,6 +693,10 @@ fn main() {
             emu_pick_syx,
             emu_build_info,
             emu_audio_status,
+            remote_audio::remote_audio_inputs,
+            remote_audio::remote_audio_start,
+            remote_audio::remote_audio_stop,
+            remote_audio::remote_audio_status,
             emu_startup,
             emu_step,
             emu_tap,
@@ -735,8 +738,10 @@ fn main() {
         .expect("tauri build error");
     // The window closed: let the controller end the session (`quit`: the module store is mirrored once more and the card's changes
     // are exported to the +Drive folder) before the process goes. Without it the controller thread is cut off mid-export.
-    app.run(move |_app, event| {
+    app.run(move |app, event| {
         if let tauri::RunEvent::Exit = event {
+            use tauri::Manager;
+            app.state::<remote_audio::RemoteAudio>().shutdown();
             let _ = exit_handle.call("quit", serde_json::json!({}));
         }
     });

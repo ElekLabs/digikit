@@ -26,6 +26,12 @@ export function createTauriHost(): Host {
       readMaps: (device) => invoke('lib_maps', { device }),
     },
     ports: {
+      audio: {
+        inputs: () => invoke('remote_audio_inputs'),
+        start: (input) => invoke('remote_audio_start', { input }),
+        stop: () => invoke('remote_audio_stop'),
+        status: () => invoke('remote_audio_status'),
+      },
       midi: {
         ports: () => invoke('midi_ports'),
         open: (name) => invoke('midi_open', { name }),

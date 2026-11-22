@@ -77,12 +77,21 @@ const modulesReady = async (p) => {
   }
 };
 /** Page helpers: `p.eval(js)`, `p.click(text)`, `p.tick(labelRegexSource)`, `p.hover(selector)`, `p.wait(ms)`. */
-const pickTarget = (p, label) =>
-  p.eval(`(() => {
-        const select = document.querySelector('select[aria-label="Target"]');
-        select.value = [...select.options].find(o => o.text.includes(${JSON.stringify(label)})).value;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      })()`);
+const pickTarget = async (p, label) => {
+  for (let n = 0; n < 40; n++) {
+    const found = await p.eval(`(() => {
+      const select = document.querySelector('select[aria-label="Target"]');
+      const option = select && [...select.options].find(o => o.text.includes(${JSON.stringify(label)}));
+      if (!option || select.disabled) return false;
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    })()`);
+    if (found) return;
+    await p.wait(100);
+  }
+  throw new Error(`Target unavailable: ${label}`);
+};
 
 const SCENES = [
   {
@@ -99,7 +108,7 @@ const SCENES = [
         return document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Remote'
           && ![...document.querySelectorAll('nav button')].some(b => b.textContent.trim() === 'Emulator')
           && document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === 'Metrics'
-          && /Emulator · Loading Digitakt/.test(footer) && /CF 21%/.test(footer) && /DSP 35%/.test(footer)
+          && footer.includes('Preview headphones') && /Emulator · Loading Digitakt/.test(footer) && /CF 21%/.test(footer) && /DSP 35%/.test(footer)
           && !/underruns|× RT|DSP est/.test(footer);
       })()`);
       for (let n = 0; !(await check()); n++) {
@@ -113,7 +122,7 @@ const SCENES = [
       await pickTarget(p, 'Emulator');
       if (
         !(await p.eval(`document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Emulator'
-          && document.querySelector('footer').innerText.includes('Booting')`))
+          && !document.querySelector('select[aria-label="Remote audio input"]') && document.querySelector('footer').innerText.includes('Booting')`))
       )
         throw new Error('Emulator boot was lost');
       await pickTarget(p, 'Digitone II');

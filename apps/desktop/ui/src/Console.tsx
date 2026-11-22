@@ -70,6 +70,7 @@ import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
 import RemotePage from './RemotePage';
+import RemoteAudio from './RemoteAudio';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { EMULATOR_NO_RUNTIME } from '@digi/workbench-core/transfer/target.ts';
 import { setReloadWithRuntime } from './emulator-actions';
@@ -1254,10 +1255,10 @@ export default function Console(props: { host: Host }) {
                   : phase() || 'running'
             : connection().label}
         </span>
-        <Show when={audio()?.output_device}>
+        <Show when={props.host.ports.audio}>{(host) => <RemoteAudio host={host()} source={selected} />}</Show>
+        <Show when={isEmulator() && audio()?.output_device}>
           <span>
             <Icon d={SPEAKER} />
-            {!isEmulator() && 'Emulator output · '}
             {audio()!.output_device}
           </span>
         </Show>

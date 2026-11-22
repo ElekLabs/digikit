@@ -13,6 +13,7 @@ export type Reply = unknown | ((...args: any[]) => unknown);
 
 /** Commands that answer nothing: no reply needed. */
 const ANSWERS_NOTHING = new Set([
+  'ports.audio.stop',
   'ports.midi.open',
   'ports.midi.close',
   'ports.midi.send',
@@ -76,6 +77,12 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       readMaps: leaf('library.readMaps'),
     },
     ports: {
+      audio: {
+        inputs: leaf('ports.audio.inputs'),
+        start: leaf('ports.audio.start'),
+        stop: leaf('ports.audio.stop'),
+        status: leaf('ports.audio.status'),
+      },
       midi: {
         ports: leaf('ports.midi.ports'),
         open: leaf('ports.midi.open'),

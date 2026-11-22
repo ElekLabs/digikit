@@ -117,7 +117,23 @@ export interface BulkHost {
   closeOutOnly(): Promise<void>;
 }
 
+/** A host stereo capture endpoint. The opaque ID identifies the device even when display names coincide. */
+export interface AudioInput {
+  id: string;
+  name: string;
+}
+
+/** The native monitor routes one stereo input to the current system output. */
+export interface RemoteAudioHost {
+  inputs(): Promise<AudioInput[]>;
+  start(input: string): Promise<string>;
+  stop(): Promise<void>;
+  /** A running stream's failure, if any. */
+  status(): Promise<string | null>;
+}
+
 export interface PortsHost {
+  audio?: RemoteAudioHost;
   midi: MidiHost;
   bulk: BulkHost;
 }

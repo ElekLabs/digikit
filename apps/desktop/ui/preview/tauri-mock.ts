@@ -7,6 +7,8 @@ import { sim } from './sim';
 /** The preview is a plain browser, outside the app: the native runtime is not offered. */
 export const isTauri = (): boolean => new URLSearchParams(location.search).get('page') === 'run';
 
+const remotePort = 'Elektron Digitone II';
+
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
     case 'emu_launch':
@@ -20,13 +22,17 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
       return (await pickFolder()) as T;
     case 'card_open_folder':
       return undefined as T;
+    case 'remote_audio_inputs':
+      return [{ id: 'audio-input', name: remotePort }] as T;
+    case 'remote_audio_start':
+      return 'Preview headphones' as T;
+    case 'remote_audio_status':
+      return null as T;
+    case 'remote_audio_stop':
+      return undefined as T;
     case 'midi_ports':
       return (
-        firmware.page
-          ? firmware.ports()
-          : isTauri()
-            ? ['Elektron Digitone II']
-            : ['Elektron Digitakt II', 'IAC Driver Bus 1']
+        firmware.page ? firmware.ports() : isTauri() ? [remotePort] : ['Elektron Digitakt II', 'IAC Driver Bus 1']
       ) as T;
     case 'midi_open':
       return undefined as T;

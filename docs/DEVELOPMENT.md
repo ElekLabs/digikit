@@ -81,6 +81,16 @@ starts the ColdFire-only emulator. If the default firmware file is missing, the 
 The +Drive comes from `plus_drive/dt2/` or `plus_drive/dn2/` (git ignores both) when it exists, or from `--plus-drive DIR` (`--samples DIR` is the same option): the launcher builds a card image from the folder and caches it by content ([docs/SAMPLES.md](SAMPLES.md)).
 Track N of the DT2 plays file N (sorted by name; more than 16 files wrap around).
 
+**Monitor a USB audio device.** Set the instrument's USB configuration to USB AUDIO/MIDI, choose your headphones or speakers as the computer's default output, and select its MIDI port under Target. In the desktop footer, USB audio defaults to Auto. It opens the stereo input when the MIDI port and audio endpoint uniquely match the same model. For an ambiguous or renamed port, choose the intended input in that menu. Off stops monitoring. Switching to Emulator releases the remote streams. After plugging in an interface or changing the system output, choose Rescan inputs to reopen the route. On macOS, grant microphone access when prompted and choose Rescan inputs. Windows uses the system’s WASAPI input and output devices.
+
+To check the physical audio route, play a pattern and set the two names to the exact input and default output shown by your OS. The opt-in test opens the route twice, checks that both channels carry signal, prints the negotiated rates and peaks, and releases the streams after each pass.
+
+```sh
+DIGI_REMOTE_AUDIO_INPUT='Elektron Digitone II' DIGI_REMOTE_AUDIO_OUTPUT='WH-1000XM6' \
+  DIGI_REMOTE_AUDIO_REQUIRE_SIGNAL=1 DIGI_REMOTE_AUDIO_SECONDS=10 \
+  node tools/nx/rust-env.mjs -- cargo test -p digiemu-desktop hardware_audio_monitor -- --ignored --nocapture
+```
+
 **Choose samples (desktop app, Digitakt II).** With the DT2 running, the toolbar's "Choose
 samples" button picks a folder. The app sends its top-level `.wav` files to the controller,
 which builds the card in process, cold-boots the DT2 with it (about 12 s the first time at
@@ -121,7 +131,7 @@ disabled ("desktop only for now"). Headless: the control socket's `card.load {di
 
 ### Host and EmuRpc (desktop UI)
 
-The desktop UI never calls Tauri's `invoke`. `packages/workbench-core/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `createDesktopApps(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The Host types and the fake live in workbench-core; `TauriHost` is the desktop's, and `NodeHost` (above) is the command line's.
+The desktop UI never calls Tauri's `invoke`. `packages/workbench-core/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `ports.audio`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `createDesktopApps(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The Host types and the fake live in workbench-core; `TauriHost` is the desktop's, and `NodeHost` (above) is the command line's.
 
 Add a command: write the Rust command, then add a method to the group in `host.ts`, its `invoke` line in `tauri-host.ts` and its `leaf(...)` line in `fake-host.ts`. `library.readMaps(device)` returns the address maps (docs/ADDRMAP.md): the ship maps `firmware_prepare` kept for the device's images and the maps `lib_build` writes beside each `.dkm`; `firmware.dkprofWasm()` returns `dkprof.wasm` (`mise run wasm:dkprof`; loader `ui/src/dkprof-env.ts`), which the Log pane uses to name addresses (the emulator's ship map and symbol addresses come from the controller call `runtime.maps`; the load table is read with PEEK of the debug module through `DkSession.peek`, for the emulator and a device). The emulator session commands (`emu_startup`, `emu_step`, `emu_tap`, `emu_stop`, `emu_audio_status`, `emu_stage_syx`, `emu_save_diagnostics`, `emu_card_*`) are in `host.emu` for `createNativeRuntime`.
 
