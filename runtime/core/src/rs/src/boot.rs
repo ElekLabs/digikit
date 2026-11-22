@@ -22,8 +22,6 @@ use dkrt_abi::boot_path::{path_hash, pick_index};
 use dkrt_abi::module::{shown_name, LOG_NAME};
 use dkrt_sdk::*;
 
-pub use crate::safe_mode::*;
-pub use crate::selection::*;
 
 
 pub(crate) const INFO_MAGIC: u32 = 0x444b_4254; // "DKBT"

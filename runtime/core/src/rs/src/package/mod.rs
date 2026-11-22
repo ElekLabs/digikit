@@ -6,7 +6,7 @@
 //! table (S7) replaces them.
 
 pub(crate) mod admission;
-pub(crate) mod boot;
+pub(crate) mod boot_steps;
 pub(crate) mod capacity;
 pub mod collect;
 pub(crate) mod commands;
@@ -23,7 +23,7 @@ pub(crate) mod invariants;
 pub(crate) mod lifecycle;
 pub(crate) mod link;
 pub(crate) mod loader;
-pub(crate) mod module_admin;
+pub(crate) mod live_cmds;
 pub(crate) mod module_cmds;
 pub mod registry;
 pub mod reload;

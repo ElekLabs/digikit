@@ -1,34 +1,11 @@
-//! The upload commands about the loaded modules: CAPACITY and the live load, unload and reload (RELOAD, RELOAD_STATE, LOAD, UNLOAD).
+//! The upload commands about the loaded modules: CAPACITY (the handler only; the reply is built in `capacity.rs`) and the live load, unload and reload (RELOAD, RELOAD_STATE, LOAD, UNLOAD).
 
 use crate::store_writer as sw;
 use crate::platform::wr32;
 use crate::transport::*;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::proto::*;
-use dkrt_sdk::{DkrtCap, CAP_MAX, LIVE_LOAD, LIVE_RELOAD, LIVE_UNLOAD, OK};
-
-/// CAPACITY: per resource of the runtime, its limit, what is used and the largest free piece. Body: none. Reply: `u8 version` (1), `u8 n`, then
-/// `n` entries of `u8 kind` (`CAPK_*`, sdk/sdk.toml `[capacity.kinds]`), `u32 limit`, `u32 used`, `u32 largest` (0 where a largest piece has
-/// no meaning). A host skips a kind it does not know; new kinds are appended.
-pub(crate) unsafe fn cmd_capacity(seq: u32) -> i32 {
-    let mut entries = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-    let n = crate::package::capacity::dkrt_capacity(entries.as_mut_ptr(), CAP_MAX as u32) as usize;
-    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
-    *rb = 1;
-    *rb.add(1) = n as u8;
-    let mut at = 2usize;
-    let mut k = 0;
-    while k < n {
-        let e = &entries[k];
-        *rb.add(at) = e.kind as u8;
-        wr32(rb.add(at + 1), e.limit);
-        wr32(rb.add(at + 5), e.used);
-        wr32(rb.add(at + 9), e.largest);
-        at += 13;
-        k += 1;
-    }
-    reply(CMD_CAPACITY, seq, OK, at)
-}
+use dkrt_sdk::{LIVE_LOAD, LIVE_RELOAD, LIVE_UNLOAD, OK};
 
 /// Queue a live job (`reload::Job`) for the module at the store path in the body (NUL terminated; the file of a load or a reload is on the card already) and answer `cmd` with its
 /// status: 0, `E_MSG` (no path), `E_BUSY` (a job is queued or running), `E_STATE` (an upload is open or a store write is in flight), `E_RELOAD_RETAINED`, `E_NOT_FOUND` (an
@@ -87,5 +64,5 @@ pub(crate) unsafe fn h_reload_state(seq: u32, _buf: *mut u8, _body: *const u8, _
 }
 
 pub(crate) unsafe fn h_capacity(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> i32 {
-    cmd_capacity(seq)
+    crate::package::capacity::cmd_capacity(seq)
 }

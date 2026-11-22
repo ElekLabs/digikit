@@ -4,7 +4,7 @@ use crate::platform::st;
 use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use crate::state::{init_once, DKRT_UNLOAD_OBSERVERS, OBSERVERS, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
-use crate::{boot, dlog, settings};
+use crate::{boot, dlog, selection, settings};
 use crate::package::{dsp, entry, loader, scan};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
@@ -257,14 +257,14 @@ pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_selection_get(out: *mut DkrtSelection) -> i32 {
     init_once();
-    boot::selection_get(out)
+    selection::selection_get(out)
 }
 
 /// `dkrt_selection_set(sel)`: save the selection (two copies, sequence number, CRC); no effect until the next boot. 0 or `E_SEL_*`.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_selection_set(sel: *const DkrtSelection) -> i32 {
     init_once();
-    boot::selection_set(sel)
+    selection::selection_set(sel)
 }
 
 /// `dkrt_boot_info(out)`: safe mode and why, the boot counter, each selected module's result at this boot.

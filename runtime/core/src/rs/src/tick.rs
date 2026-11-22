@@ -6,7 +6,7 @@ use crate::mailbox::mailbox_select;
 use crate::platform::st;
 use crate::state::{init_once, DKRT_MAILBOX, DKRT_POLLS, POLLS};
 use crate::package::handlers::{services, tick_phase};
-use crate::{admin_cmds, boot, card, dlog, fault, intro, io, settings, store_writer, watch, worker};
+use crate::{admin_cmds, card, dlog, fault, intro, io, safe_mode, settings, store_writer, watch, worker};
 use crate::package::{entry, files, loader};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn dkrt_tick() {
     let s = st();
     s.ticks = s.ticks.wrapping_add(1);
     intro::ui_pass();
-    boot::ui_pass();
+    safe_mode::ui_pass();
     admin_cmds::restart_poll();
     crate::package::reload::poll();
     crate::package::settings_reload::poll();

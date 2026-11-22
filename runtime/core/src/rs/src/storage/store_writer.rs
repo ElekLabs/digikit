@@ -256,11 +256,11 @@ pub static mut DKRT_UPLOAD_WRITES: u32 = 0;
 /// Test knob: when not 0, the Nth card write since boot (counted in `DKRT_UPLOAD_WRITES`) is torn when it is one sector: only its first
 /// 256 bytes reach the card (a header then fails its CRC), and every later write is refused as with `DKRT_UPLOAD_CUT`.
 #[no_mangle]
-pub static mut DKRT_UPLOAD_TEAR: crate::boot::Knob = crate::boot::Knob(0);
+pub static mut DKRT_UPLOAD_TEAR: crate::safe_mode::Knob = crate::safe_mode::Knob(0);
 /// Test knob: when not 0, the Nth card write since boot (counted in `DKRT_UPLOAD_WRITES`) succeeds, then the first byte of its first sector on the card is
 /// flipped: a card that holds other bytes than the host sent (the close's read-back must refuse it).
 #[no_mangle]
-pub static mut DKRT_UPLOAD_FLIP: crate::boot::Knob = crate::boot::Knob(0);
+pub static mut DKRT_UPLOAD_FLIP: crate::safe_mode::Knob = crate::safe_mode::Knob(0);
 #[repr(C, align(16))]
 struct Sec([u8; 512]);
 static mut TEAR_BUF: Sec = Sec([0; 512]);

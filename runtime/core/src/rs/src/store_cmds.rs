@@ -4,7 +4,7 @@
 use crate::hash32::{self, Hash32};
 use crate::store_writer::{self as sw, Bufs, IN_AT, SCRATCH_AT, TBL_CAP};
 use crate::platform::{block_read, rd32, wr32};
-use crate::{boot, card};
+use crate::{card, selection};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::store::{self, Edit, Entry, Hdr, Table, KIND_DIR, KIND_FILE};
 use dkrt_sdk::proto::*;
@@ -433,7 +433,7 @@ pub(crate) unsafe fn h_abort(seq: u32, _buf: *mut u8, _body: *const u8, _blen: u
     reply(CMD_ABORT, seq, OK, 0)
 }
 
-/// SELECT (runtime 4): save the selection record, the same `boot::selection_set` the menu's APPLY & RESTART calls (so the card range check and
+/// SELECT (runtime 4): save the selection record, the same `selection::selection_set` the menu's APPLY & RESTART calls (so the card range check and
 /// the "blank or ours" rule apply). Body: `u8 n`, then `n` store paths, each NUL terminated. Status: 0, `E_MSG` (malformed), `E_INUSE` (card
 /// not writable), or the selection code (`E_SEL_COUNT`, `E_SEL_PATH`, `E_SEL_WRITE`, `E_CARD_RO`). Takes effect at the next boot.
 pub(crate) unsafe fn cmd_select(seq: u32, body: *const u8, blen: usize) -> i32 {
@@ -475,7 +475,7 @@ pub(crate) unsafe fn cmd_select(seq: u32, body: *const u8, blen: usize) -> i32 {
         return reply(CMD_SELECT, seq, E_MSG, 0);
     }
     sel.count = n as u32;
-    let r = boot::selection_set(sel);
+    let r = selection::selection_set(sel);
     reply(CMD_SELECT, seq, r, 0)
 }
 

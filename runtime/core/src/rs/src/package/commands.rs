@@ -1,6 +1,6 @@
 //! The system package's upload commands: the module list, the capacity, the boot loads and the live load, unload and reload.
 
-use crate::package::module_admin::{h_capacity, h_load, h_reload, h_reload_state, h_unload};
+use crate::package::live_cmds::{h_capacity, h_load, h_reload, h_reload_state, h_unload};
 use crate::package::module_cmds::{h_loads, h_modules};
 use crate::transport::{Cmd, NOLOG};
 use dkrt_sdk::proto::*;

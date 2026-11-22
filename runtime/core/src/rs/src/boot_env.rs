@@ -52,12 +52,12 @@ impl BootEnv for RealBootEnv {
         loader::set_safe()
     }
     unsafe fn read_tables(&self, rec: &Record) {
-        crate::package::boot::read_tables(rec)
+        crate::package::boot_steps::read_tables(rec)
     }
     unsafe fn find_providers(&self, count: usize) {
-        crate::package::boot::find_providers(count)
+        crate::package::boot_steps::find_providers(count)
     }
     unsafe fn load(&self, rec: &Record) {
-        crate::package::boot::load(rec)
+        crate::package::boot_steps::load(rec)
     }
 }

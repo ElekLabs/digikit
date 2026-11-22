@@ -169,3 +169,26 @@ mod tests {
         assert_eq!(l[1], (16, 0), "a kind the service does not count comes from the info entry");
     }
 }
+
+/// CAPACITY: per resource of the runtime, its limit, what is used and the largest free piece. Body: none. Reply: `u8 version` (1), `u8 n`, then
+/// `n` entries of `u8 kind` (`CAPK_*`, sdk/sdk.toml `[capacity.kinds]`), `u32 limit`, `u32 used`, `u32 largest` (0 where a largest piece has
+/// no meaning). A host skips a kind it does not know; new kinds are appended.
+pub(crate) unsafe fn cmd_capacity(seq: u32) -> i32 {
+    let mut entries = [dkrt_sdk::DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; dkrt_sdk::CAP_MAX];
+    let n = crate::package::capacity::dkrt_capacity(entries.as_mut_ptr(), dkrt_sdk::CAP_MAX as u32) as usize;
+    let rb = (core::ptr::addr_of_mut!(crate::transport::RBODY) as *mut u8).add(1);
+    *rb = 1;
+    *rb.add(1) = n as u8;
+    let mut at = 2usize;
+    let mut k = 0;
+    while k < n {
+        let e = &entries[k];
+        *rb.add(at) = e.kind as u8;
+        crate::platform::wr32(rb.add(at + 1), e.limit);
+        crate::platform::wr32(rb.add(at + 5), e.used);
+        crate::platform::wr32(rb.add(at + 9), e.largest);
+        at += 13;
+        k += 1;
+    }
+    crate::transport::reply(dkrt_sdk::proto::CMD_CAPACITY, seq, dkrt_sdk::OK, at)
+}

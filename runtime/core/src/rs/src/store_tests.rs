@@ -87,7 +87,7 @@ unsafe fn rest() {
     sw::unlock();
     write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_CUT), 0);
     write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_WRITES), 0);
-    write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::boot::Knob(0));
+    write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::safe_mode::Knob(0));
     sw::TEST_NOW = 0;
 }
 
@@ -763,7 +763,7 @@ fn cut_sweep(tear: bool) {
         unsafe {
             write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_WRITES), 0);
             if tear {
-                write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::boot::Knob(k));
+                write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::safe_mode::Knob(k));
             } else {
                 write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_CUT), k);
             }

@@ -41,7 +41,7 @@ shared = [
 "S:lfo" = ["dkrt_svc_lfo"]
 
 "C:state" = ["dkrt::settings", "dkrt::package::settings_overlay", "dkrt::selection"]
-"C:boot" = ["dkrt::boot", "dkrt::package::boot", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
+"C:boot" = ["dkrt::boot", "dkrt::package::boot_steps", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
 "C:loading" = [
   "dkrt::package::loader",
   "dkrt::image",     # the parse and checks of a `.dkm` image (stage 1 reads it too)
@@ -66,6 +66,6 @@ shared = [
   "dkrt::io",
   "dkrt::aux",
 ]
-"C:transport" = ["dkrt::transport", "dkrt::store_cmds", "dkrt::package::module_cmds", "dkrt::admin_cmds", "dkrt::package::module_admin", "dkrt::package::commands"]
+"C:transport" = ["dkrt::transport", "dkrt::store_cmds", "dkrt::package::module_cmds", "dkrt::admin_cmds", "dkrt::package::live_cmds", "dkrt::package::commands"]
 "C:diagnostics" = ["dkrt::dlog", "dkrt::fault", "dkrt::report", "dkrt::watch", "dkrt::health", "dkrt::package::capacity"]
 "C:tick" = ["dkrt::tick"]
