@@ -45,15 +45,21 @@ impl BodyHeader {
 
     /// Read the header of `body` (the whole body: its length is checked against the sizes the header names).
     pub fn decode(body: &[u8]) -> Result<BodyHeader, BodyError> {
-        if body.len() < HEADER_BYTES {
+        BodyHeader::peek(body, body.len() as u32)
+    }
+
+    /// Read the header from `head`, the first bytes of a body that is `body_len` bytes long (stage 1 knows the body's size from the file header before it has read all
+    /// of it): the same checks as `decode`, with `body_len` in place of the length of the bytes.
+    pub fn peek(head: &[u8], body_len: u32) -> Result<BodyHeader, BodyError> {
+        if head.len() < HEADER_BYTES {
             return Err(BodyError::Short);
         }
         let h = BodyHeader {
-            entry: word(body, 0),
-            image: word(body, 4),
-            bss: word(body, 8),
-            relocs: word(body, 12),
-            align: word(body, 16),
+            entry: word(head, 0),
+            image: word(head, 4),
+            bss: word(head, 8),
+            relocs: word(head, 12),
+            align: word(head, 16),
         };
         if !h.align.is_power_of_two()
             || h.align > 16
@@ -63,7 +69,7 @@ impl BodyHeader {
         {
             return Err(BodyError::BadHeader);
         }
-        if (body.len() as u64) != h.bytes() {
+        if body_len as u64 != h.bytes() {
             return Err(BodyError::Short);
         }
         Ok(h)
@@ -77,6 +83,12 @@ impl BodyHeader {
     /// Bytes the package takes in memory: the image and the bss after it.
     pub fn memory(&self) -> u64 {
         self.image as u64 + self.bss as u64
+    }
+
+    /// Bytes of memory a body needs to be placed and started in one block: the body as it is read (header, image, relocation table), where the image is then relocated in
+    /// place and the bss is zeroed after the image, over the relocation table that has done its work.
+    pub fn placed_bytes(&self) -> u64 {
+        HEADER_BYTES as u64 + self.image as u64 + (4 * self.relocs as u64).max(self.bss as u64)
     }
 
     /// The relocation table of `body` (after `decode`).
@@ -136,6 +148,39 @@ mod tests {
         );
         assert_eq!((h.bytes(), h.memory()), (b.len() as u64, 56));
         assert_eq!(h.reloc_table(&b), &[0, 0, 0, 4, 0, 0, 0, 8]);
+    }
+
+    #[test]
+    fn the_header_is_read_from_the_first_bytes_of_a_body_of_known_length() {
+        let b = body(&[0; 16], &[4, 8], 40);
+        assert_eq!(
+            BodyHeader::peek(&b[..HEADER_BYTES], b.len() as u32),
+            BodyHeader::decode(&b)
+        );
+        assert_eq!(
+            BodyHeader::peek(&b[..HEADER_BYTES - 1], b.len() as u32),
+            Err(BodyError::Short)
+        );
+        assert_eq!(
+            BodyHeader::peek(&b[..HEADER_BYTES], b.len() as u32 + 4),
+            Err(BodyError::Short)
+        );
+    }
+
+    #[test]
+    fn placement_needs_the_larger_of_the_relocation_table_and_the_bss_after_the_image() {
+        let h = |bss, relocs| BodyHeader {
+            entry: 2,
+            image: 16,
+            bss,
+            relocs,
+            align: 4,
+        };
+        assert_eq!(h(8, 4).placed_bytes(), 32 + 16 + 16);
+        assert_eq!(h(100, 4).placed_bytes(), 32 + 16 + 100);
+        assert_eq!(h(0, 0).placed_bytes(), 32 + 16);
+        // the body itself always fits
+        assert!(h(0, 4).placed_bytes() >= h(0, 4).bytes());
     }
 
     #[test]
