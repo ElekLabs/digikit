@@ -1769,6 +1769,7 @@ export class DkSession {
    */
   async profileAll(quick: Quick = false): Promise<{
     running: boolean;
+    traceVersion?: number;
     hz: number;
     elapsedTicks: bigint;
     spans: ProfileSpan[];
@@ -1789,7 +1790,14 @@ export class DkSession {
         spans.push({ row, kind: kind as 'module' | 'phase' | 'poll', index, ...r });
       }
     }
-    return { running: st.running, hz: st.hz, elapsedTicks: st.elapsedTicks, spans, polls: st.polls };
+    return {
+      running: st.running,
+      hz: st.hz,
+      elapsedTicks: st.elapsedTicks,
+      spans,
+      polls: st.polls,
+      traceVersion: st.traceVersion,
+    };
   }
   /** LOGCFG (read): the default log level, the level of each module record (0xff: the default), and whether the debug module is loaded. */
   async logConfig(quick: Quick = false): Promise<LogConfig> {

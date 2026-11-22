@@ -18,6 +18,7 @@ export default function SidePanels(props: {
   visible: boolean;
   active?: boolean;
   collectSpans?: boolean;
+  profileGeneration?: number;
   onSpanRecording?(recording?: SpanRecording): void;
   metrics?: JSX.Element;
   source: TargetBinding;
@@ -152,15 +153,19 @@ export default function SidePanels(props: {
         <p class="side-empty">The emulator is not running.</p>
       </Show>
       <MemoryPanel visible={reads('memory')} source={props.source} tabpanel={tabpanel('memory')} />
-      <ProfilePanel
-        visible={reads('profile')}
-        collectSpans={props.collectSpans && (props.active ?? true)}
-        onSpanRecording={props.onSpanRecording}
-        source={props.source}
-        host={props.host}
-        hub={hub}
-        tabpanel={tabpanel('profile')}
-      />
+      <Show when={props.profileGeneration ?? 1} keyed>
+        {(_generation) => (
+          <ProfilePanel
+            visible={reads('profile')}
+            collectSpans={props.collectSpans && (props.active ?? true)}
+            onSpanRecording={props.onSpanRecording}
+            source={props.source}
+            host={props.host}
+            hub={hub}
+            tabpanel={tabpanel('profile')}
+          />
+        )}
+      </Show>
       <Show when={props.host}>
         <CalibrationPanel
           visible={reads('calibration')}

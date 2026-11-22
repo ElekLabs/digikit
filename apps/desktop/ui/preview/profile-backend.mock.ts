@@ -80,6 +80,8 @@ const MODULES = (t: number): ModuleRef[] => [
 export function createRecorder(deps: ProfileDeps): Recorder {
   const emulator = !!deps.rpc;
   let running = state === 'rec';
+  const traceSupported = !query.has('legacyProfile');
+  let capture: Extract<ProfileReading, { noDebug: false }>['frozenTrace'];
   let t = 0; // seconds recorded
   let last = Date.now();
   let elapsed = 0n;
@@ -122,7 +124,16 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       if (state === 'nodebug') return { noDebug: true, port: 'dt2-1.17', emulator };
       advance();
       const modules = MODULES(t);
-      const r: ProfileReading = { noDebug: false, port, emulator, observedAt: Date.now(), snap: snap(), modules };
+      const r: ProfileReading = {
+        noDebug: false,
+        port,
+        emulator,
+        observedAt: Date.now(),
+        snap: snap(),
+        modules,
+        traceSupported,
+        frozenTrace: capture,
+      };
       if (emulator && elapsed > 0n) {
         r.cf = cfView(CF_PART, (a) => CF_NAMES.get(a));
         r.dsp = dspView(
@@ -153,6 +164,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       return r;
     },
     async start() {
+      capture = undefined;
       advance();
       running = true;
       last = Date.now();
@@ -160,8 +172,25 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     async stop() {
       advance();
       running = false;
+      if (traceSupported) {
+        const events = Array.from({ length: 48 }, (_, i) => ({
+          owner: [0x100, 0, 0x101, 2][i % 4]!,
+          startTicks: String(Math.floor(i / 4) * 24000 + (i % 4) * 4000),
+          durationTicks: i % 4 === 0 ? 11000 : 1500 + (i % 3) * 1000,
+        }));
+        capture = {
+          trace: { version: 1, generation: 1, hz: HZ, dropped: 12, events },
+          names: new Map([
+            [0, 'test/saw'],
+            [2, 'test/mon'],
+            [0x100, 'early'],
+            [0x101, 'late'],
+          ]),
+        };
+      }
     },
     async reset() {
+      capture = undefined;
       advance();
       t = 0;
       elapsed = 0n;

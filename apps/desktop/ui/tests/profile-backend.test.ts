@@ -628,9 +628,15 @@ test('one recording freezes trace events and interval counters together for expo
   };
   const doc = JSON.parse((await recorder.exportFile()).text);
   assert.deepEqual(doc.trace, trace);
+  const reading = await recorder.read('spans');
+  assert.ok(!reading.noDebug);
+  assert.deepEqual(reading.frozenTrace?.trace, trace);
+  assert.equal(reading.frozenTrace?.names.get(0x100), 'early');
   assert.ok(doc.spans.some((row: { owner: number }) => row.owner === 0x100));
   await recorder.reset();
   assert.equal(JSON.parse((await recorder.exportFile()).text).trace, undefined);
+  const resetReading = await recorder.read('spans');
+  assert.ok(!resetReading.noDebug && !resetReading.frozenTrace);
 });
 
 test('a failed trace download retains the frozen aggregate and records the loss in the export', async () => {

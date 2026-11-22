@@ -266,6 +266,16 @@ export default function ProfilePanel(props: {
     );
   const toggleRecording = () => void (running() ? stop() : start());
   props.onSpanRecording?.({
+    frozenTrace: () => ok()?.frozenTrace,
+    timelineStatus: () => {
+      const r = ok();
+      if (error()) return error();
+      if (!r) return reading()?.noDebug ? 'Profiling needs the debug module.' : 'Reading target capabilities…';
+      if (!r.traceSupported)
+        return 'Individual events require digikit runtime 0.11.3 or later and the updated debug module.';
+      if (r.snap.running) return 'Stop recording to view the captured events.';
+      return r.traceSummary || 'Start a recording to capture ColdFire events.';
+    },
     intervals,
     running,
     available: () => !!reading() && !reading()?.noDebug && !noRuntime(),

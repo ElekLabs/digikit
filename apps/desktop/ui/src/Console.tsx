@@ -39,6 +39,7 @@ import { connectionView } from '@digi/workbench-core/transfer/connection-core.ts
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
 import type { SpanRecording } from './span-recording';
+import type { PerformanceView } from './PerformancePanel';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
 import { pageFor, type Page } from './page-core';
@@ -206,6 +207,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     }),
   );
   const isEmulator = () => selected().target.kind === 'emulator';
+  const [emulatorGeneration, setEmulatorGeneration] = createSignal(1);
   const emulatorLoaded = createMemo(() => !!status());
   const connectionState = createMemo(() => app.connection.connection().state);
   const symbolSource = () =>
@@ -362,6 +364,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     const r = runtime();
     if (!r) return;
     live?.releaseAll();
+    setEmulatorGeneration((n) => n + 1);
     setError('');
     setStatus(undefined);
     setInfo(undefined);
@@ -564,7 +567,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
   createEffect(() => {
     if (logOpen()) setToolDrawer(undefined);
   });
-  const [performanceView, setPerformanceView] = createSignal<'Utilization' | 'Spans'>('Utilization');
+  const [performanceView, setPerformanceView] = createSignal<PerformanceView>('Utilization');
   const [spanRecording, setSpanRecording] = createSignal<SpanRecording>();
   const analyzerOpen = () => toolDrawer() === 'Analyzer';
   const drawerName = () => (logOpen() ? 'Log' : toolDrawer());
@@ -677,6 +680,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     const began = performance.now();
     try {
       const s = await runtime()?.restart();
+      if (s) setEmulatorGeneration((n) => n + 1);
       if (s) update({ type: 'snapshot', snapshot: s });
       setPaused(false);
       await refreshInfo();
@@ -1208,8 +1212,11 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
                     host={props.host}
                     visible={sidePanelsShown()}
                     collectSpans={
-                      toolDrawer() === 'Performance' && performanceView() === 'Spans' && source.target.kind !== 'none'
+                      toolDrawer() === 'Performance' &&
+                      performanceView() !== 'Utilization' &&
+                      source.target.kind !== 'none'
                     }
+                    profileGeneration={isEmulator() ? emulatorGeneration() : 1}
                     onSpanRecording={setSpanRecording}
                     active={!isEmulator() || !!status()}
                     source={source}

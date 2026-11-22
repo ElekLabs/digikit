@@ -161,6 +161,50 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'performance-timeline-legacy',
+    q: 'page=run&runtimeOnly&history&prof=stopped&legacyProfile',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Timeline$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel')?.textContent.includes('digikit runtime 0.11.3') && !document.querySelector('.performance-panel canvas')",
+        'Missing trace capability explanation',
+      );
+    },
+  },
+  {
+    name: 'performance-timeline',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Timeline$/);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel')?.textContent.includes('Stop recording to view')", 'Missing recording state');
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')", 'Missing frozen trace');
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(p, "!document.querySelector('.performance-panel canvas')", 'Trace survived a target switch');
+      await pickTarget(p, remoteModel);
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await waitForAnalyzer(p, "!!document.querySelector('.performance-panel canvas')", 'Missing trace after returning to target');
+      await waitForAnalyzer(p, "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')", 'Missing trace loss count');
+      await p.eval(`(() => {
+        const plot = document.querySelector('.trace-timeline-plot');
+        const r = plot.getBoundingClientRect();
+        const position = { bubbles: true, clientX: r.left + r.width * 0.018, clientY: r.top + 8 };
+        plot.dispatchEvent(new PointerEvent('pointermove', position));
+        plot.dispatchEvent(new WheelEvent('wheel', { ...position, ctrlKey: true, deltaY: -80, cancelable: true }));
+      })()`);
+      await waitForAnalyzer(p, "document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && document.querySelector('.trace-timeline-crosshair') && !document.querySelector('[aria-label=\"Zoom out\"]').disabled", 'Hover or pointer zoom failed');
+    },
+  },
+  {
     name: 'performance-spans',
     q: 'page=run&runtimeOnly&history&prof=stopped',
     size: WIDE,

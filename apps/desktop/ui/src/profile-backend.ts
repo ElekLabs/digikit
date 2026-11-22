@@ -31,6 +31,7 @@ import {
   type Snapshot,
 } from '@digi/workbench-core/profile/profile-core.ts';
 import { stockImageHash, type LogNames } from '@digi/dk-session/log-names';
+import type { FrozenTrace } from './span-recording';
 import { sampledPcs, type Hotspot } from './profile-hotspots';
 
 /** The part of the session the pane uses. */
@@ -102,6 +103,8 @@ export type ProfileReading =
       observedAt: number;
       imageId?: string | null;
       traceSummary?: string;
+      frozenTrace?: FrozenTrace;
+      traceSupported?: boolean;
       snap: Snapshot;
       modules: ModuleRef[];
       /** Emulator: the modules' DSP per block (undefined when `sharc.profile` is off or the daemon lacks it). */
@@ -222,6 +225,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   let namesRequest = 0;
   let captureImage: { info: ProfileInfo; sha256: string } | undefined;
   let traceGeneration: number | undefined;
+  let frozenTrace: FrozenTrace | undefined;
   let stoppedCapture: BuildInput | undefined;
 
   const nameInputs = (info: ProfileInfo) =>
@@ -494,6 +498,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         snap,
         modules,
       };
+      r.traceSupported = all.traceVersion === 1;
+      if (!all.running) r.frozenTrace = frozenTrace;
       const trace = stoppedCapture?.trace;
       if (trace && !all.running) r.traceSummary = `${trace.events.length} trace events · ${trace.dropped} dropped`;
       if (stoppedCapture?.traceError && !all.running)
@@ -522,6 +528,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       const s = await deps.session();
       kept = {};
       stoppedCapture = undefined;
+      frozenTrace = undefined;
       traceGeneration = undefined;
       captureImage = undefined;
       const info = await s.info();
@@ -575,6 +582,11 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         try {
           const info = await s.info();
           const capture = await capturedData(s, info, await s.profileAll(), kept);
+          if (capture.trace)
+            frozenTrace = {
+              trace: capture.trace,
+              names: new Map(capture.spans?.spans.map((row) => [row.owner, row.name])),
+            };
           if (capture.run.firmware_sha256 || capture.trace || capture.traceError) stoppedCapture = capture;
         } catch {
           // Export can still read the available counters, leaving the identity out if it cannot verify it.
@@ -590,6 +602,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         traceGeneration = resetState.running ? (await state(s, 'startTrace')).traceGeneration : undefined;
       kept = {};
       stoppedCapture = undefined;
+      frozenTrace = undefined;
       await captureIdentity(s, info);
       restarts = {};
       try {
