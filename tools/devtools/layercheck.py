@@ -721,7 +721,10 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                             ARROW_CORE_HINT,
                         )
                     )
-        if own is None and r.as_posix() not in ("package/handlers.rs", "package/gen_services.rs"):
+        if own is None and r.as_posix() not in (
+            "package/handlers.rs",
+            "package/gen_services.rs",
+        ):
             for m in RT_BARE_SERVICES.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
                 out.append(

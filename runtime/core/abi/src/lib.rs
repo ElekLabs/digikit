@@ -38,8 +38,8 @@ pub mod regcheck;
 pub mod registry;
 pub mod service;
 pub mod state;
-pub mod store_path;
 pub mod storage;
+pub mod store_path;
 pub mod version;
 
 /// Module records of the runtime: the selection record's size (`SEL_MAX`, `[limits.max] modules` of sdk/sdk.toml); the device files' `[limits] modules` may not exceed it.

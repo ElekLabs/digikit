@@ -17,7 +17,12 @@ pub unsafe fn path_hash(path: *const u8) -> u32 {
 /// there now (`live`); else the first index below `count` that no module lives at and no boot path owns (an index an earlier live load added); else a new index (`count`).
 /// `E_SEL_COUNT` when all `SEL_MAX` are taken. An unloaded boot module keeps its index for itself.
 #[inline]
-pub fn pick_index(hash: u32, boot: &[u32; SEL_MAX], count: usize, live: &[bool; SEL_MAX]) -> Result<usize, i32> {
+pub fn pick_index(
+    hash: u32,
+    boot: &[u32; SEL_MAX],
+    count: usize,
+    live: &[bool; SEL_MAX],
+) -> Result<usize, i32> {
     let count = count.min(SEL_MAX);
     let mut k = 0;
     while k < count {
