@@ -184,7 +184,11 @@ fn a_package_that_cannot_run_is_core_only_and_not_a_crash() {
             PackageStatus::Incompatible,
             CoreOnlyReason::PackageIncompatible,
         ),
-        (PackageStatus::BadHash, CoreOnlyReason::PackageBadHash),
+        (PackageStatus::Damaged, CoreOnlyReason::PackageDamaged),
+        (
+            PackageStatus::Unreadable,
+            CoreOnlyReason::PackageUnreadable,
+        ),
     ] {
         let level = decide(&Inputs {
             package: status,
@@ -209,11 +213,11 @@ fn a_package_that_cannot_run_is_core_only_and_not_a_crash() {
 #[test]
 fn a_package_fault_and_many_crashes_name_the_package() {
     let i = Inputs {
-        package: PackageStatus::BadHash,
+        package: PackageStatus::Damaged,
         boot_counter: CORE_ONLY_AFTER,
         ..calm()
     };
-    assert_eq!(decide(&i), Level::CoreOnly(CoreOnlyReason::PackageBadHash));
+    assert_eq!(decide(&i), Level::CoreOnly(CoreOnlyReason::PackageDamaged));
 }
 
 #[test]

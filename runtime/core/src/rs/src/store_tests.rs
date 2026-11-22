@@ -38,20 +38,20 @@ use std::sync::MutexGuard;
 use std::vec;
 use std::vec::Vec;
 
-const L: Layout = Layout { first: 1000, sectors: 4096 };
+pub(crate) const L: Layout = Layout { first: 1000, sectors: 4096 };
 /// The module that owns the SDK calls of these tests (a source index, as `io` gives it).
 const OWNER: u8 = 3;
 
 // ---- the fixture ----------------------------------------------------------------------------------------------------------------------
 
 /// A blank card of the layout `L`, the card gate unchecked, the writer's statics at rest. Holds the test lock.
-struct Fixture {
+pub(crate) struct Fixture {
     _card: CardGuard,
     _lock: MutexGuard<'static, ()>,
 }
 
 impl Fixture {
-    fn new() -> Fixture {
+    pub(crate) fn new() -> Fixture {
         let lock = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe { rest() };
         *card_gate::info() = card_gate::CardInfo {
@@ -91,7 +91,7 @@ unsafe fn rest() {
     sw::TEST_NOW = 0;
 }
 
-fn pattern(n: usize, m: usize) -> Vec<u8> {
+pub(crate) fn pattern(n: usize, m: usize) -> Vec<u8> {
     (0..n).map(|i| (i * m + 1) as u8).collect()
 }
 
@@ -188,7 +188,7 @@ fn abort() -> i32 {
 }
 
 /// BEGIN, DATA in chunks of 4096, END: the first status that is not OK.
-fn upload(path: &str, bytes: &[u8]) -> i32 {
+pub(crate) fn upload(path: &str, bytes: &[u8]) -> i32 {
     let r = begin(path, bytes.len(), slot(bytes));
     if r != OK {
         return r;
@@ -289,8 +289,52 @@ fn verify_cmd(path: &str, range: Option<(u32, u32)>) -> (i32, [u8; 32]) {
 }
 
 /// The store file `path` as `crate::store::find` knows it: where it starts.
-fn found(path: &str) -> crate::store::File {
+pub(crate) fn found(path: &str) -> crate::store::File {
     unsafe { crate::store::find(zpath(path).as_ptr()).unwrap_or_else(|e| panic!("{path}: {e}")) }
+}
+
+// ---- reads of a file in pieces ----------------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_file_read_in_sectors_stops_at_the_end_of_the_file() {
+    let _f = Fixture::new();
+    let a = pattern(700, 7);
+    assert_eq!(upload("a/x", &a), OK);
+    assert_eq!(upload("a/y", &pattern(3000, 5)), OK);
+    let file = found("a/x");
+    let read = |from: u32, count: u32| {
+        let mut buf = Aligned([0xee; 8192]);
+        let r = unsafe { crate::store::read_file_sectors(&file, from, count, buf.0.as_mut_ptr(), buf.0.len()) };
+        (r, buf)
+    };
+    // more sectors asked than the file has (a file followed by another one): two are read, and the bytes after them are untouched
+    let (r, buf) = read(0, 8);
+    assert_eq!(r, Ok(700));
+    assert_eq!(&buf.0[..700], &a[..]);
+    assert!(buf.0[1024..].iter().all(|b| *b == 0xee));
+    // an offset near the end: the last sector alone, then nothing
+    let (r, buf) = read(1, 4);
+    assert_eq!(r, Ok(188));
+    assert_eq!(&buf.0[..188], &a[512..]);
+    assert!(buf.0[512..].iter().all(|b| *b == 0xee));
+    let reads = card(|c| c.reads);
+    for from in [2, 3, 1000] {
+        assert_eq!(read(from, 4).0, Ok(0), "from {from}");
+    }
+    assert_eq!(card(|c| c.reads), reads, "no sector is read at or past the end");
+    // a short count is what was asked
+    assert_eq!(read(0, 1).0, Ok(512));
+}
+
+#[test]
+fn the_last_file_of_the_store_reads_to_its_end_and_a_whole_sector_file_gives_its_size() {
+    let _f = Fixture::new();
+    assert_eq!(upload("a/x", &pattern(1024, 7)), OK);
+    let file = found("a/x");
+    let mut buf = Aligned([0xee; 8192]);
+    let r = unsafe { crate::store::read_file_sectors(&file, 0, 16, buf.0.as_mut_ptr(), buf.0.len()) };
+    assert_eq!(r, Ok(1024));
+    assert!(buf.0[1024..].iter().all(|b| *b == 0xee));
 }
 
 // ---- the SDK file_* calls ---------------------------------------------------------------------------------------------------------------

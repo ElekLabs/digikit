@@ -16,8 +16,10 @@ pub enum PackageStatus {
     Missing,
     /// The header asks for a resident table this core does not have.
     Incompatible,
-    /// The body does not match the hash in the header (or the header is damaged).
-    BadHash,
+    /// The file is not a whole package: too short, of another size than its header says, a body that does not match the hash, or no room to place it.
+    Damaged,
+    /// The card could not be read for the package (a read error that stayed, or a store that stayed busy). The card may be fine on the next boot.
+    Unreadable,
 }
 
 /// What the boot found out before it decides.
@@ -62,7 +64,8 @@ impl SafeReason {
 pub enum CoreOnlyReason {
     PackageMissing,
     PackageIncompatible,
-    PackageBadHash,
+    PackageDamaged,
+    PackageUnreadable,
     /// The counter reached `CORE_ONLY_AFTER`: crashes went on in safe mode.
     Crashes,
 }
@@ -100,8 +103,11 @@ pub fn decide(i: &Inputs) -> Level {
     if i.package == PackageStatus::Incompatible {
         return Level::CoreOnly(CoreOnlyReason::PackageIncompatible);
     }
-    if i.package == PackageStatus::BadHash {
-        return Level::CoreOnly(CoreOnlyReason::PackageBadHash);
+    if i.package == PackageStatus::Damaged {
+        return Level::CoreOnly(CoreOnlyReason::PackageDamaged);
+    }
+    if i.package == PackageStatus::Unreadable {
+        return Level::CoreOnly(CoreOnlyReason::PackageUnreadable);
     }
     // an unreadable record has no counter: what the boot holds then is the default, not a count
     if !i.record_unreadable && counter_is_core_only(i.boot_counter) {

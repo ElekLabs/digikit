@@ -50,6 +50,7 @@ mod health;
 mod mailbox;
 mod platform;
 pub mod level;
+pub mod stage1;
 mod safe_mode;
 mod selection;
 mod report;

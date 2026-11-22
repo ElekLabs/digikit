@@ -190,6 +190,27 @@ pub unsafe fn load_to_stage(f: &File) -> i32 {
     OK
 }
 
+/// Read up to `count` sectors of the file `f` from sector `from` of the file into `buf` (`cap` bytes, 16-byte aligned) without the file hash check: the
+/// caller checks what it reads (stage 1 streams a package larger than the staging buffer and hashes it itself). The read stops at the end of the
+/// file (the sectors after it belong to the next file or to nothing): at most `ceil(left / 512)` sectors, none when `from` is at or past the end.
+/// Returns the number of file bytes now in `buf`: `min(count * 512, size - from * 512)`; the bytes of the last sector after them are not defined.
+pub unsafe fn read_file_sectors(f: &File, from: u32, count: u32, buf: *mut u8, cap: usize) -> Result<u32, i32> {
+    let left = (f.size as u64).saturating_sub(from as u64 * 512);
+    let sectors = count.min(left.div_ceil(512) as u32);
+    if sectors == 0 {
+        return Ok(0);
+    }
+    if !super::lock::acquire() {
+        return Err(E_BUSY);
+    }
+    let r = store::read_span(&reader(), &layout(), f.first + from, sectors, buf, cap);
+    super::lock::unlock();
+    if r != OK {
+        return Err(r);
+    }
+    Ok(left.min(sectors as u64 * 512) as u32)
+}
+
 /// `dk_files_read`: copy a store file to `dst` (at most `cap` bytes); returns its size or a negative code.
 pub unsafe fn read_file(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
     let f = match find(path) {

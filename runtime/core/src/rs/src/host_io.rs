@@ -26,6 +26,8 @@ pub(crate) struct HostCard {
     pub total: u32,
     pub reads: u32,
     pub writes: u32,
+    /// A read that covers one of these sectors fails.
+    pub bad_reads: Vec<u32>,
 }
 
 static CARD: Mutex<Option<HostCard>> = Mutex::new(None);
@@ -35,7 +37,7 @@ pub(crate) struct CardGuard;
 
 impl CardGuard {
     pub(crate) fn install() -> CardGuard {
-        *grab(&CARD) = Some(HostCard { sectors: BTreeMap::new(), fill: 0xff, total: 1 << 20, reads: 0, writes: 0 });
+        *grab(&CARD) = Some(HostCard { sectors: BTreeMap::new(), fill: 0xff, total: 1 << 20, reads: 0, writes: 0, bad_reads: Vec::new() });
         CardGuard
     }
 }
@@ -65,7 +67,7 @@ pub(crate) fn card_read(sector: u32, bytes: u32, buf: *mut u8) -> Option<i32> {
     let c = g.as_mut()?;
     c.reads += 1;
     let n = bytes / 512;
-    if sector as u64 + n as u64 > c.total as u64 {
+    if sector as u64 + n as u64 > c.total as u64 || (0..n).any(|i| c.bad_reads.contains(&(sector + i))) {
         return Some(-1);
     }
     for i in 0..n {
