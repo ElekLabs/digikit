@@ -14,6 +14,8 @@ interface Exports {
   dp_alloc(n: number): number;
   dp_free(p: number, n: number): void;
   dp_addr_lookup(req: number, len: number): number;
+  dp_addr_prepare(req: number, len: number): number;
+  dp_addr_lookup_prepared(req: number, len: number): number;
   dp_load_table(req: number, len: number): number;
   dp_profile_report(req: number, len: number): number;
   dp_calibrate_fit(req: number, len: number): number;
@@ -79,12 +81,14 @@ export interface CalibrateRequest {
 
 export class DkProf {
   private x: Exports;
-  private constructor(x: Exports) {
-    this.x = x;
+  private module: WebAssembly.Module;
+  private constructor(module: WebAssembly.Module, instance: WebAssembly.Instance) {
+    this.module = module;
+    this.x = instance.exports as unknown as Exports;
   }
   static async create(wasm: BufferSource): Promise<DkProf> {
-    const { instance } = await WebAssembly.instantiate(wasm, {});
-    return new DkProf(instance.exports as unknown as Exports);
+    const { module, instance } = await WebAssembly.instantiate(wasm, {});
+    return new DkProf(module, instance);
   }
 
   private withBytes<T>(b: Uint8Array, f: (p: number) => T): T {
@@ -113,6 +117,15 @@ export class DkProf {
   /** Names for addresses. With `format: 'text'` the answer is `{ text }`. */
   addrLookup(req: LookupRequest & { format?: 'text' }): LookupAnswer & { text?: string } {
     return this.json((p, n) => this.x.dp_addr_lookup(p, n), req) as LookupAnswer;
+  }
+
+  /** Prepare an index once for repeated address lookups. The returned function owns its Wasm instance and its index. */
+  prepareAddrLookup(
+    req: Pick<LookupRequest, 'maps'> & { loads: LoadTableJson },
+  ): (lookup: Pick<LookupRequest, 'addrs' | 'ret'>) => LookupAnswer {
+    const resolver = new DkProf(this.module, new WebAssembly.Instance(this.module));
+    resolver.json((p, n) => resolver.x.dp_addr_prepare(p, n), req);
+    return (lookup) => resolver.json((p, n) => resolver.x.dp_addr_lookup_prepared(p, n), lookup) as LookupAnswer;
   }
 
   /** The load table of a snapshot of the runtime's tables; without `snapshot` the symbols and byte counts to read (`{ reads }`). */

@@ -19,6 +19,7 @@ mod local;
 mod log_save;
 mod midi_port;
 mod remote_audio;
+mod symbols;
 use serde_json::Value;
 use std::sync::mpsc;
 use tauri::State;
@@ -717,6 +718,8 @@ fn main() {
             card_open_folder,
             firmware::firmware_prepare,
             firmware::firmware_save,
+            symbols::symbols_pick,
+            symbols::symbols_read,
             log_save::log_save,
             library::lib_scan,
             library::lib_build,

@@ -161,6 +161,45 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'firmware-symbols',
+    q: 'page=run&symbols',
+    size: MIN,
+    steps: async (p) => {
+      await pickTarget(p, 'Emulator');
+      await p.eval("document.querySelector('nav button[aria-label=Settings]').focus()");
+      await p.key(' ', { code: 'Space', vk: 32 });
+      const view = async () => p.eval("document.querySelector('.firmware-symbols:not([hidden])')?.innerText ?? ''");
+      if (!(await view()).includes('No symbol sources added.')) throw new Error('Settings did not show the empty list');
+      await p.click(/^Add ColdFire database/);
+      await p.click(/^Add SHARC database/);
+      await p.click(/^Add Symbol map/);
+      await p.click(/^Add Symbol map/); // Cancel the chooser.
+      await p.click(/^Refresh sources$/);
+      const rows = () => p.eval(`[...document.querySelectorAll('.symbols-files > li')].map((row) => row.innerText)`);
+      const [cf, sharc, map, extra] = await rows();
+      if (!cf?.includes('coldfire.sqlite') || !cf.includes('OS 1.17') || !cf.includes('Matches target'))
+        throw new Error('ColdFire source is missing its provenance or target match');
+      if (!sharc?.includes('sharc.sqlite') || !sharc.includes('missing the SHARC symbols table'))
+        throw new Error('Invalid SHARC source is missing its file error');
+      if (
+        !map?.includes('firmware.json') ||
+        !map.includes(`${remoteModel} · OS 1.12`) ||
+        map.includes('Matches target') ||
+        extra
+      )
+        throw new Error('Map did not remain a single, independently listed source');
+      await p.eval('document.querySelector(\'button[aria-label$="coldfire.sqlite"]\').focus()');
+      await p.key(' ', { code: 'Space', vk: 32 });
+      if (!(await view()).includes('No matching symbols') || (await rows()).length !== 2)
+        throw new Error('Removing the matching source changed the wrong entries or left a match');
+      await p.click(/^Emulator$/);
+      await p.click(/^Settings$/);
+      if ((await rows()).some((row) => row.includes('coldfire.sqlite')) || (await rows()).length !== 2)
+        throw new Error('The registered sources changed after reopening Settings');
+      await p.click(/^Add ColdFire database/);
+    },
+  },
+  {
     name: 'run-target-switch',
     q: 'page=run&runtimeOnly',
     size: WIDE,

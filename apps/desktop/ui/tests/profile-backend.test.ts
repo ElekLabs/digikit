@@ -26,6 +26,8 @@ interface FakeState {
   noClock?: boolean;
   calls: string[];
   health?: { avg: number; max: number };
+  imageId?: string;
+  fwId?: string;
   polls?: ({ owner: number | 'runtime'; fn: number } | undefined)[];
 }
 
@@ -46,7 +48,7 @@ function fakeSession(st: FakeState): ProfileSession {
     maxTicks: max,
   });
   return {
-    info: async () => ({ port: st.port ?? 'dn2-1.12', caps: st.caps }),
+    info: async () => ({ port: st.port ?? 'dn2-1.12', caps: st.caps, image_id: st.imageId, fw_id: st.fwId }),
     modules: async () => [
       { index: 0, name: 'test/saw' },
       { index: 1, name: 'someone/mystery' },
@@ -344,6 +346,90 @@ describe('the emulator', () => {
       ],
     );
     assert.deepEqual(asked, [0x40300000, 0x40101000, 0x40200000], 'one lookup, heaviest first');
+  });
+
+  test('changing symbol sources refreshes live PCs and a failed refresh leaves their addresses raw', async () => {
+    const st = state({ running: true, elapsed: 10n });
+    let revision = 0;
+    let loadedRevision = -1;
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      prof: async () =>
+        ({
+          addrLookup: () => ({ results: [{ text: `tick_${loadedRevision}+0x4` }] }),
+        }) as never,
+      names: {
+        inputs: () => ({ maps: [], loads: { modules: [] } }),
+        needsRefresh: () => revision !== loadedRevision,
+        refresh: async () => {
+          if (revision === 2) throw new Error('cannot read maps');
+          loadedRevision = revision;
+        },
+      },
+    });
+    await rec.start();
+    const firstPc = async () => {
+      const r = await rec.read();
+      assert.ok(!r.noDebug);
+      return r.cf?.pcs[0];
+    };
+    assert.equal((await firstPc())?.name, 'tick_0+0x4');
+    revision = 1;
+    assert.equal((await firstPc())?.name, 'tick_1+0x4');
+    revision = 2;
+    assert.deepEqual(await firstPc(), { addr: 100, share: 1, weight: 3 });
+  });
+
+  test('export binds firmware SHA to verified capture data across a later image switch', async () => {
+    const hash = 'ab'.repeat(32);
+    const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      names: {
+        inputs: () => undefined,
+        imageHash: () => hash,
+        refresh: async () => {},
+      },
+      now: () => NOW,
+    });
+    await rec.start();
+    st.elapsed = 17n;
+    assert.equal(JSON.parse((await rec.exportFile()).text).run.firmware_sha256, hash);
+    await rec.stop();
+    st.imageId = 'ee'.repeat(8);
+    st.fwId = 'cd'.repeat(8);
+    st.elapsed = 99n;
+    const saved = JSON.parse((await rec.exportFile()).text);
+    assert.equal(saved.run.firmware_sha256, hash);
+    assert.equal(saved.span_elapsed_ticks, 17);
+    assert.equal(saved.raw[0].count, 3);
+    await rec.start();
+    assert.equal(
+      JSON.parse((await rec.exportFile()).text).run.firmware_sha256,
+      undefined,
+      'the ship map is for the old image',
+    );
+  });
+
+  test('an emulator reload invalidates the captured firmware SHA even under the same reported image id', async () => {
+    const hash = 'ab'.repeat(32);
+    const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': { ...cfAnswer, restarts: 1 }, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      names: {
+        inputs: () => ({ maps: [{ key: { image_sha256: hash } }], loads: { modules: [] } }),
+        refresh: async () => {},
+      },
+    });
+    await rec.start();
+    await rec.stop();
+    assert.equal(JSON.parse((await rec.exportFile()).text).run.firmware_sha256, undefined);
   });
 
   test('the ColdFire view keeps only the top rows and has no shares when nothing was counted', () => {

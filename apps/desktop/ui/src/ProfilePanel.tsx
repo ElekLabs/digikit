@@ -23,7 +23,6 @@ import {
   fmtUs,
   graphTop,
   groupRows,
-  readReference,
   STACK,
   totalShare,
   type DspView,
@@ -34,6 +33,13 @@ import { createDkProfLoader } from './dkprof-env';
 import { createEmulatorNames, createDeviceNames } from './log-names-backend';
 import { deviceOfPort } from './remote-core';
 import { createRecorder, type ProfileReading } from './profile-backend';
+import {
+  hotspotLabel,
+  readSavedProfile,
+  resolveSavedHotspots,
+  type Hotspot,
+  type SavedProfile,
+} from './profile-hotspots';
 import { createReadGate } from './read-gate-core';
 import {
   calibrationChip,
@@ -56,6 +62,29 @@ const COLUMN_PX = 4;
 const GAP_PX = 2;
 const GRAPH_PX = 90;
 
+const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;
+
+function HotspotTable(props: { title: string; rows: Hotspot[] }): JSX.Element {
+  return (
+    <div class="cf-paths" role="table" aria-label={props.title}>
+      <div class="cf-row head" role="row">
+        <span class="name">{props.title} by samples</span>
+        <span class="mono">share</span>
+      </div>
+      <For each={props.rows}>
+        {(row) => (
+          <div class="cf-row" role="row">
+            <span class="name" title={hotspotLabel(row)}>
+              {hotspotLabel(row)}
+            </span>
+            <span class="mono">{fmtPct(row.share)}</span>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
 export default function ProfilePanel(props: {
   visible: boolean;
   source: TargetBinding;
@@ -73,7 +102,10 @@ export default function ProfilePanel(props: {
   const [busy, setBusy] = createSignal(false);
   const [acting, setActing] = createSignal('');
   const [noRuntime, setNoRuntime] = createSignal(false);
-  const [reference, setReference] = createSignal<{ name: string; shares: Map<string, number> }>();
+  const [reference, setReference] = createSignal<{ name: string; profile: SavedProfile }>();
+  const [referenceError, setReferenceError] = createSignal('');
+  const [referencePcs, setReferencePcs] = createSignal<SavedProfile['pcs']>();
+  let opening = 0;
   const history = createHistory();
   const [version, setVersion] = createSignal(0); // the history changed
 
@@ -206,16 +238,47 @@ export default function ProfilePanel(props: {
     );
   const openReference = async (file: File | undefined) => {
     if (!file) return;
+    const request = ++opening;
     try {
-      const shares = readReference(JSON.parse(await file.text()));
-      if (!shares) setError(`${file.name} has no spans or no elapsed window (an export of this pane has both).`);
-      else {
-        setReference({ name: file.name, shares });
-        setError('');
+      const profile = readSavedProfile(JSON.parse(await file.text()));
+      if (request !== opening) return;
+      if (!profile.shares && !profile.pcs.cf.length && !profile.pcs.sharc.length) {
+        setReferenceError(`${file.name} has no span window or sampled PCs.`);
+        return;
       }
+      setReference({ name: file.name, profile });
+      setReferenceError('');
     } catch (e) {
-      setError(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+      if (request === opening) setReferenceError(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
     }
+  };
+  createEffect(() => {
+    const ref = reference();
+    setReferencePcs(ref?.profile.pcs);
+    if (!ref || !props.visible) return;
+    let current = true;
+    onCleanup(() => (current = false));
+    void resolveSavedHotspots(ref.profile, props.host?.symbols, prof).then((pcs) => {
+      if (current) setReferencePcs(pcs);
+    });
+  });
+  const openProfileButton = () => (
+    <label class="act quiet file">
+      Open profile…
+      <input
+        type="file"
+        accept=".json,application/json"
+        onChange={(e) => {
+          void openReference(e.currentTarget.files?.[0]);
+          e.currentTarget.value = '';
+        }}
+      />
+    </label>
+  );
+
+  const referenceShare = (name: string) => {
+    const share = reference()?.profile.shares?.get(name);
+    return share === undefined ? '–' : fmtShare(share);
   };
 
   const ok = () => {
@@ -249,7 +312,6 @@ export default function ProfilePanel(props: {
   };
   const px = (share: number) => Math.round((share / top()) * GRAPH_PX);
   const barPx = (share: number) => Math.min(36, Math.max(2, Math.round(share * 100 * 1.6)));
-  const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;
   const kindClass = (k: OwnerKind) => `k-${k}`;
   const dspSegments = (v: DspView) => v.modules.map((m) => ({ ...m, width: dspWidth(v, m.insnPerBlock) }));
 
@@ -322,17 +384,7 @@ export default function ProfilePanel(props: {
                     Reset
                   </button>
                   <span class="sp" />
-                  <label class="act quiet file">
-                    Open profile…
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      onChange={(e) => {
-                        void openReference(e.currentTarget.files?.[0]);
-                        e.currentTarget.value = '';
-                      }}
-                    />
-                  </label>
+                  {openProfileButton()}
                   <button
                     type="button"
                     class="act quiet"
@@ -385,14 +437,14 @@ export default function ProfilePanel(props: {
                 </ul>
               </div>
 
-              <div class="prof-table" classList={{ cmp: !!reference() }}>
+              <div class="prof-table" classList={{ cmp: !!reference()?.profile.shares }}>
                 <div class="row colhead">
                   <span>Owner</span>
                   <span>Share</span>
                   <span class="r">mean µs</span>
                   <span class="r">max µs</span>
-                  <Show when={reference()}>
-                    <span class="r" title={reference()!.name}>
+                  <Show when={reference()?.profile.shares}>
+                    <span class="r" title={reference()?.name}>
                       file
                     </span>
                   </Show>
@@ -427,10 +479,8 @@ export default function ProfilePanel(props: {
                             >
                               {fmtUs(row.maxUs)}
                             </span>
-                            <Show when={reference()}>
-                              <span class="r mono dim">
-                                {reference()!.shares.has(row.name) ? fmtShare(reference()!.shares.get(row.name)!) : '–'}
-                              </span>
+                            <Show when={reference()?.profile.shares}>
+                              <span class="r mono dim">{referenceShare(row.name)}</span>
                             </Show>
                           </div>
                         )}
@@ -547,22 +597,7 @@ export default function ProfilePanel(props: {
                           </For>
                         </div>
                         <Show when={cf().pcs.length > 0}>
-                          <div class="cf-paths" role="table" aria-label="Heaviest ColdFire PCs">
-                            <div class="cf-row head" role="row">
-                              <span class="name">top PCs by samples</span>
-                              <span class="mono">share</span>
-                            </div>
-                            <For each={cf().pcs}>
-                              {(c) => (
-                                <div class="cf-row" role="row">
-                                  <span class="name" title={`0x${c.addr.toString(16)}`}>
-                                    {c.name ?? `0x${c.addr.toString(16)}`}
-                                  </span>
-                                  <span class="mono">{fmtPct(c.share)}</span>
-                                </div>
-                              )}
-                            </For>
-                          </div>
+                          <HotspotTable title="ColdFire PCs" rows={cf().pcs} />
                         </Show>
                       </div>
                     )}
@@ -609,6 +644,33 @@ export default function ProfilePanel(props: {
               </span>
             </>
           )}
+        </Show>
+        <Show when={!ok()}>
+          <div class="acts">{openProfileButton()}</div>
+        </Show>
+        <Show when={referencePcs()} keyed>
+          {(pcs) => (
+            <Show when={pcs.cf.length || pcs.sharc.length}>
+              <div class="prof-sec ruled">
+                <div class="sec-head">
+                  <span class="title" title={reference()?.name}>
+                    Saved hotspots · {reference()?.name}
+                  </span>
+                </div>
+                <Show when={pcs.cf.length}>
+                  <HotspotTable title="ColdFire PCs" rows={pcs.cf} />
+                </Show>
+                <Show when={pcs.sharc.length}>
+                  <HotspotTable title="SHARC PCs" rows={pcs.sharc} />
+                </Show>
+              </div>
+            </Show>
+          )}
+        </Show>
+        <Show when={referenceError()}>
+          <p class="err" role="alert">
+            {referenceError()}
+          </p>
         </Show>
         <Show when={error()}>
           <p class="err" role="alert">

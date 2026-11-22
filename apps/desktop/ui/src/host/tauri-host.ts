@@ -1,7 +1,9 @@
 // The real Host: the only module that imports Tauri's `invoke` (a lint rule keeps it so). Bytes go as the raw request body with the
 // small arguments in headers, as the Rust commands take them (`tauri::ipc::Request`); the names and arguments follow the Rust signatures.
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import type { EmuRpc, Host } from '@digi/workbench-core/host/host.ts';
+import { createFirmwareSymbols } from '../firmware-symbols';
+import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
+import type { EmuRpc, Host, SymbolImageMap } from '@digi/workbench-core/host/host.ts';
 
 const timeout = (ms: number) => ({ timeoutMs: Math.max(1, Math.round(ms)) });
 
@@ -23,6 +25,10 @@ export function createTauriHost(): Host {
   }
   return {
     rpc,
+    symbols: createFirmwareSymbols(localStorageKeyValue(), {
+      pick: (kind) => invoke<string | null>('symbols_pick', { kind }),
+      read: (kind, path) => invoke<SymbolImageMap[]>('symbols_read', { kind, path }),
+    }),
     analyzer: {
       open: (source) => analyzerCall('analyzer_open', { source }),
       read: (id) => analyzerCall('analyzer_read', { id }),

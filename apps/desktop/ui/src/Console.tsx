@@ -52,6 +52,7 @@ import {
   RELOAD,
   REMOTE,
   RESTART,
+  SETTINGS,
   SPEAKER,
   UP,
   WARNING,
@@ -72,10 +73,11 @@ import { createPrefs } from './prefs';
 import { pgoWarning, type BuildInfo } from './pgo-warning';
 import { createLogFollow, followSession } from './log-follow';
 import { createDkProfLoader } from './dkprof-env';
-import { createDeviceNames, createEmulatorNames } from './log-names-backend';
+import { createDeviceNames, createEmulatorNames, selectedSymbolImage } from './log-names-backend';
 import { windowShown } from './log-follow-core';
 import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
 import LogPanel from './LogPanel';
+import FirmwareSymbols from './FirmwareSymbols';
 import type { EmuSource as Source, Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
@@ -200,6 +202,10 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     }),
   );
   const isEmulator = () => selected().target.kind === 'emulator';
+  const emulatorLoaded = createMemo(() => !!status());
+  const connectionState = createMemo(() => app.connection.connection().state);
+  const symbolSource = () =>
+    app.target.switching() || busy('target') || (isEmulator() && !emulatorLoaded()) ? undefined : selected();
   createEffect(() => {
     if (!isEmulator()) untrack(() => live?.releaseAll());
   });
@@ -751,13 +757,13 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     emulator: {
       running: () => !!status() && !paused(),
       session: async () => followSession(await emulatorSession()),
-      names: createEmulatorNames(props.host, dkprof),
+      makeNames: () => createEmulatorNames(props.host, dkprof),
     },
     device: {
       port: lastMidiPort,
       session: async () => followSession(await lastMidiSession()),
       present: async () => (await app.env.targets.ports()).includes(lastMidiPort() ?? ''),
-      names: createDeviceNames(props.host, dkprof),
+      makeNames: () => createDeviceNames(props.host, dkprof),
     },
   });
 
@@ -944,6 +950,20 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
             <Icon d={FIRMWARE} />
             <span>Firmware</span>
           </button>
+          <Show when={props.host.symbols}>
+            <button
+              type="button"
+              class="side"
+              classList={{ on: page() === 'settings' }}
+              aria-label="Settings"
+              aria-current={page() === 'settings' ? 'page' : undefined}
+              title="Settings"
+              onClick={() => setPage('settings')}
+            >
+              <Icon d={SETTINGS} />
+              <span>Settings</span>
+            </button>
+          </Show>
         </nav>
         <div class="content">
           {/* The faceplate stays mounted behind the Transfer and Remote pages: the emulator, its audio and the snapshot pump run on. */}
@@ -1219,6 +1239,18 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
           </Show>
           <Show when={page() === 'firmware'}>
             <FirmwarePage />
+          </Show>
+          <Show when={props.host.symbols} keyed>
+            {(symbols) => (
+              <FirmwareSymbols
+                shown={page() === 'settings'}
+                symbols={symbols}
+                source={symbolSource()}
+                imageRevision={isEmulator() ? info() : connectionState()}
+                imageFor={(binding) => selectedSymbolImage(props.host, binding)}
+                targetName={targetLabel(target())}
+              />
+            )}
           </Show>
         </div>
       </div>
