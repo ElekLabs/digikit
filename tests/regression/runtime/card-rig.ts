@@ -34,7 +34,7 @@ import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
 import { moduleArtifact, moduleStorePath } from './install.ts';
-import { neededServices, portFile, requireCoupledForServices, servicePath } from './service-files.ts';
+import { neededServices, portFile, requireCoupledForServices, servicePath, systemPackage } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
@@ -274,6 +274,8 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       !files.some((m) => m.name.startsWith('ports/'))
     )
       services.push(portFile(device));
+    // the system package the resident core's stage 1 places at boot (a test that lists its own file, or none, keeps it)
+    if (!files.some((m) => m.name === 'digikit/system.dksp') && !rest.folder) services.push(systemPackage());
     requireCoupledForServices([...files, ...services], o.dsp);
     for (const n of needed) cardServices.add(n.service);
     const options = {
