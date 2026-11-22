@@ -120,6 +120,25 @@ const SCENES = [
     },
   },
   {
+    name: 'run-unidentified-remote',
+    q: 'page=remote&unidentified',
+    size: WIDE,
+    steps: async (p) => {
+      for (let i = 0; i < 40; i++) {
+        if (
+          await p.eval(`(() => {
+          const remote = document.querySelector('.remote-page');
+          return remote?.textContent.includes('No supported device identified')
+            && !!remote.querySelector('[inert] svg.panel') && !remote.querySelector('canvas, .hints, .err');
+        })()`)
+        )
+          return;
+        await p.wait(100);
+      }
+      throw new Error('The unidentified MIDI target did not show an inactive faceplate');
+    },
+  },
+  {
     name: 'run-stock-remote',
     q: 'page=run&stock',
     size: WIDE,

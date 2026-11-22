@@ -5,7 +5,8 @@
 import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
-import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import PanelArt from '@digi/workbench-core/ui/components/PanelArt.tsx';
+import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
 import { registry, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { identifyDevice, type DkSession, type RemoteState } from '@digi/dk-session';
 import {
@@ -56,6 +57,7 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
     const d = device();
     return d ? panels[d] : undefined;
   };
+  const artwork = () => panel() ?? panels[defaultFaceplate];
   const runtime = remoteRuntime(
     () => session(),
     {
@@ -67,13 +69,19 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
       if (!alive) throw new Error('Remote page closed.');
     },
   );
-  const notice = () => remoteNotice(state(), stateError(), listed());
+  const notice = () => {
+    if (!device())
+      return stateError()
+        ? 'No supported device identified. Check the selected MIDI port. Retrying…'
+        : 'Waiting for device identification…';
+    return remoteNotice(state(), stateError(), listed());
+  };
 
   /** Screen loop: one Screenshot after the other; an error shows and the loop tries again slowly. */
   const screenLoop = async () => {
     while (alive) {
       // nothing is asked of the device while the window is hidden or a Transfer job uses the session
-      if (!windowShown() || remotePaused(busy()) || app.jobs.busy('target')) {
+      if (!device() || !windowShown() || remotePaused(busy()) || app.jobs.busy('target')) {
         await new Promise((r) => setTimeout(r, HIDDEN_MS));
         continue;
       }
@@ -122,7 +130,7 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
           infoKey = key;
           infoAt = Date.now();
           const d = deviceOfPort(identity.id);
-          if (d && Object.hasOwn(panels, d)) setDevice(d);
+          setDevice(d);
           stock = !identity.info;
           stockOs = identity.os;
           if (stock) {
@@ -151,7 +159,9 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
         setStateError(e);
         if (!alive || t !== target()) return;
         // the module may be loaded without the optional state request: MODULES decides what the notice says
-        if (missing) {
+        if (!device()) {
+          await reconnect().catch(() => {});
+        } else if (missing) {
           const list =
             loaded ??
             (await session()
@@ -186,19 +196,22 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
       <header class="head">
         <h2>Remote</h2>
         <span class="meta">
-          {targetLabel(target())} · {device()}
+          {targetLabel(props.source.target)}
+          {device() && ` · ${device()}`}
         </span>
-        <span class="hints" title={HINT}>
-          <span>
-            <kbd>Click</kbd> keys
+        <Show when={panel()}>
+          <span class="hints" title={HINT}>
+            <span>
+              <kbd>Click</kbd> keys
+            </span>
+            <span>
+              <kbd>Drag</kbd> or <kbd>Scroll</kbd> knobs
+            </span>
+            <span>
+              <kbd>⇧</kbd> ×10
+            </span>
           </span>
-          <span>
-            <kbd>Drag</kbd> or <kbd>Scroll</kbd> knobs
-          </span>
-          <span>
-            <kbd>⇧</kbd> ×10
-          </span>
-        </span>
+        </Show>
       </header>
       <Show when={remotePaused(busy()) || app.jobs.busy('target')}>
         <p class="note" role="status">
@@ -222,21 +235,30 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
       </Show>
       {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
       <div class="remote-row">
-        <Show when={panel()} fallback={<p class="remote-empty">Waiting for device identification…</p>}>
+        <Show when={artwork()}>
           {(faceplate) => (
             <main
               class="stage"
-              aria-label={`${faceplate().name} front panel`}
-              title={HINT}
+              aria-label={panel() ? `${faceplate().name} front panel` : 'Inactive front panel'}
+              title={panel() ? HINT : undefined}
               style={{ '--accent': faceplate().accent, '--func-legend': faceplate().func_legend }}
             >
               <div class="surface">
-                <LivePanel
-                  panel={faceplate()}
-                  runtime={() => runtime}
-                  onError={() => {} /* key and turn failures are reported by the runtime above (keyError) */}
-                  ref={(api) => (live = api)}
-                />
+                <Show
+                  when={panel()}
+                  fallback={
+                    <div inert>
+                      <PanelArt panel={faceplate()} />
+                    </div>
+                  }
+                >
+                  <LivePanel
+                    panel={faceplate()}
+                    runtime={() => runtime}
+                    onError={() => {} /* key and turn failures are reported by the runtime above (keyError) */}
+                    ref={(api) => (live = api)}
+                  />
+                </Show>
               </div>
             </main>
           )}

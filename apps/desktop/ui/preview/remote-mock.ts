@@ -37,8 +37,13 @@ export function installRemoteMock(): void {
   const proto = DkSession.prototype as unknown as Record<string, unknown>;
   const fallback = testPattern();
   const loaded = queryFrame();
-  proto.rpc = async (type: number) =>
-    type === 1 ? Uint8Array.of(0, ...new TextEncoder().encode('Digitone II'), 0) : new TextEncoder().encode('1.12');
+  const unidentified = new URLSearchParams(location.search).has('unidentified');
+  proto.rpc = async (type: number) => {
+    if (unidentified) throw new Error('Unknown MIDI endpoint');
+    return type === 1
+      ? Uint8Array.of(0, ...new TextEncoder().encode('Digitone II'), 0)
+      : new TextEncoder().encode('1.12');
+  };
   proto.screen = async () => ((await loaded) ?? fallback).slice();
   proto.info = async () => {
     if (new URLSearchParams(location.search).has('stock'))
