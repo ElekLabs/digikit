@@ -168,7 +168,14 @@ const SCENES = [
       await pickTarget(p, remoteModel);
       await p.click(/^Performance$/);
       await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "!!document.querySelector('.span-actions input')", 'DSP recording option missing');
+      if (await p.eval("document.querySelector('.span-actions input').checked"))
+        throw new Error('DSP block recording should default to off');
+      await p.eval("document.querySelector('.span-actions input').click()");
+      await p.click(/^Timeline$/);
       await p.click(/^Start recording$/, '.span-actions button');
+      await p.click(/^DSP blocks$/);
+      await waitForAnalyzer(p, "document.querySelector('.span-actions input')?.disabled", 'DSP option changed during recording');
       await waitForAnalyzer(p, "document.querySelector('.dsp-blocks canvas') && document.querySelector('.span-actions button')?.textContent.includes('Stop recording')", 'Missing live DSP chart while recording');
       await p.click(/^Spans$/);
       await p.click(/^Stop recording$/, '.span-actions button');

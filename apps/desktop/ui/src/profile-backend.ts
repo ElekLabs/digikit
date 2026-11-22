@@ -504,12 +504,13 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         snap,
         modules,
       };
+      if (!hasDsp()) r.noDsp = true;
       if (!all.running) r.dspBlocks = dspBlocks.capture();
       r.dspBlockNote = !hasDsp()
         ? 'This target has no SHARC DSP.'
         : dspBlocks.note() ||
           (all.running && !dspBlocks.armed()
-            ? 'To include DSP costs, stop and start a recording from DSP blocks.'
+            ? 'To measure DSP costs, stop recording, select Include DSP block costs, and record again.'
             : '');
       if (all.running && liveDsp && dspBlocks.armed()) {
         try {

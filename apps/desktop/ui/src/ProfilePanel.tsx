@@ -105,6 +105,7 @@ export default function ProfilePanel(props: {
   const [reading, setReading] = createSignal<ProfileReading>();
   const [dsp, setDsp] = createSignal<DspView>();
   const [error, setError] = createSignal('');
+  const [includeDsp, setIncludeDsp] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [acting, setActing] = createSignal('');
   const [noRuntime, setNoRuntime] = createSignal(false);
@@ -280,7 +281,8 @@ export default function ProfilePanel(props: {
         await app.backend.restart(() => {});
       }),
     );
-  const toggleRecording = (withDspBlocks = false) => void (running() ? stop() : start(withDspBlocks));
+  const dspAvailable = () => !!ok() && !ok()?.noDsp;
+  const toggleRecording = () => void (running() ? stop() : start(dspAvailable() && includeDsp()));
   props.onSpanRecording?.({
     dspBlocks: () => ok()?.dspBlocks,
     dspBlockStatus: () => {
@@ -289,7 +291,9 @@ export default function ProfilePanel(props: {
       if (!r) return reading()?.noDebug ? 'Profiling needs the debug module.' : 'Reading target capabilities…';
       return (
         r.dspBlockNote ||
-        (r.snap.running ? 'Waiting for the first complete DSP sweep…' : 'Start a recording to measure DSP block costs.')
+        (r.snap.running
+          ? 'Waiting for the first complete DSP sweep…'
+          : 'Select Include DSP block costs and start recording.')
       );
     },
     frozenTrace: () => ok()?.frozenTrace,
@@ -317,6 +321,9 @@ export default function ProfilePanel(props: {
               : running()
                 ? 'Recording'
                 : ok()?.traceSummary || 'Stopped'),
+    includeDsp,
+    dspAvailable,
+    setIncludeDsp,
     toggle: toggleRecording,
   });
   onCleanup(() => props.onSpanRecording?.(undefined));
@@ -453,7 +460,14 @@ export default function ProfilePanel(props: {
                   <span class="elapsed">{r().snap.running ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz) : ''}</span>
                 </div>
                 <div class="acts">
-                  <RecordingButton class="act" running={running()} disabled={locked()} onToggle={toggleRecording} />
+                  <RecordingButton
+                    includeDsp={includeDsp()}
+                    dspAvailable={dspAvailable()}
+                    setIncludeDsp={setIncludeDsp}
+                    running={running()}
+                    disabled={locked()}
+                    onToggle={toggleRecording}
+                  />
                   <button type="button" class="act quiet" disabled={locked()} onClick={() => void reset()}>
                     Reset
                   </button>

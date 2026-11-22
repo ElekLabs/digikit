@@ -60,7 +60,10 @@ export default function PerformancePanel(props: PerformanceProps) {
               <RecordingButton
                 running={!!props.recording?.running()}
                 disabled={!!props.recording?.disabled()}
-                onToggle={() => props.recording?.toggle(props.view === 'DSP blocks')}
+                includeDsp={!!props.recording?.includeDsp()}
+                dspAvailable={!!props.recording?.dspAvailable()}
+                setIncludeDsp={(value) => props.recording?.setIncludeDsp(value)}
+                onToggle={() => props.recording?.toggle()}
               />
             </Show>
             <Show when={props.view === 'Spans' || props.recording?.running()}>

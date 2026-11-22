@@ -18,5 +18,8 @@ export interface SpanRecording {
   available(): boolean;
   disabled(): boolean;
   status(): string;
-  toggle(withDspBlocks?: boolean): void;
+  includeDsp(): boolean;
+  dspAvailable(): boolean;
+  setIncludeDsp(value: boolean): void;
+  toggle(): void;
 }

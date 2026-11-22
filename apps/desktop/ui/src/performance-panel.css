@@ -157,7 +157,6 @@
   gap: 6px;
 }
 .performance-modes button,
-.span-actions button,
 .span-details select {
   font: inherit;
   color: var(--ink-2);
@@ -184,4 +183,29 @@
     grid-template-columns: 1fr;
     grid-template-rows: minmax(90px, 1fr) minmax(80px, 1fr);
   }
+}
+
+.recording-button {
+  height: 26px;
+  padding-inline: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--panel-3);
+  color: var(--ink);
+  font: 500 12px var(--sans, sans-serif);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.recording-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.recording-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.recording-option input {
+  accent-color: var(--amber);
 }
