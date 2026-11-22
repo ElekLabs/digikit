@@ -176,3 +176,21 @@ def test_audit_checks_every_file_below_a_directory_dependency(tmp_path: Path) ->
     assert emud_key.audit(inputs, dep, tmp_path / "t") == [
         str((tmp_path / "src" / "extra.rs").resolve())
     ]
+
+
+def test_test_key_ignores_test_sources_only(tmp_path: Path) -> None:
+    names = ["a/src/lib.rs", "a/src/tests.rs", "a/src/tests/x.rs", "a/src/b_tests.rs"]
+    for n in names:
+        (tmp_path / n).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / n).write_text("1")
+
+    def key() -> str:
+        return emud_key.test_key_of(make(tmp_path), names, "", tmp_path)
+
+    base = key()
+    for n in names[1:]:
+        (tmp_path / n).write_text("2")
+    assert key() == base
+    (tmp_path / names[0]).write_text("2")
+    assert key() != base
+    assert not emud_key.is_test_source("a/src/contest.rs")

@@ -9,6 +9,7 @@
 import { existsSync, globSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { nonCellGlobs, otherFiles } from './device-files.mjs';
+import { testSourceGlobs } from './test-source.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
 
 export const PACK_NEEDS = '{workspaceRoot}/tests/regression/runtime/pack-needs.ts';
@@ -183,7 +184,7 @@ export const builtSourceExclusions = (root, base = '.') =>
 // subject is a plain fileset: Nx evaluates it per hash, a directory added later is in the key without a graph rebuild.
 // The exclusions of nested projects (project.json) and crates (Cargo.toml) are computed here, at graph time: a new project adds a
 // project.json and rebuilds the graph. Tests, `*.md` and test-named Rust files stay out like in `production`.
-const subjectInputs = (root, base = '.') => {
+export const subjectInputs = (root, base = '.') => {
   const nested = globSync('**/{project.json,Cargo.toml}', { cwd: join(base, root) })
     .map((f) => dirname(f))
     .filter((d) => d !== '.' && !['src', 'include', 'fit', 'sdk', 'build', 'tests'].includes(d.split('/')[0]));
@@ -192,7 +193,7 @@ const subjectInputs = (root, base = '.') => {
     ...['src', 'include', 'fit', 'sdk', 'build', 'tests'].map((d) => `!{workspaceRoot}/${root}/${d}/**`),
     ...[...new Set(nested)].sort().map((d) => `!{workspaceRoot}/${root}/${d}/**`),
     `!{workspaceRoot}/${root}/**/*.md`,
-    `!{workspaceRoot}/${root}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}`,
+    ...testSourceGlobs(`{workspaceRoot}/${root}`),
   ];
 };
 

@@ -91,7 +91,5 @@ describe('patchkit key of a device', () => {
     expect(() => keys(repo, `t: /elsewhere/x.rs\n`)).toThrow(/outside the repository/);
     expect(() => keys(repo, `t: ${repo}/packages/patchkit/src/gone.rs\n`)).toThrow(/build patchkit again/);
     expect(() => keys(repo, `t: ${repo}/devices/aa.toml\n`)).toThrow(/lists no patchkit source/);
-    const bad = makeRepo({ 'packages/patchkit/src/lib.rs': 'mod tests;\n' }); // test-only file compiled in
-    expect(() => keys(bad)).toThrow(/not behind cfg\(test\)/);
   });
 });

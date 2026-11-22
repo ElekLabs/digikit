@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
 import { parse } from 'smol-toml';
+import { testSourceGlobs } from './test-source.mjs';
 
 // The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
 const NEEDS_PACKS = JSON.parse(
@@ -22,6 +23,13 @@ const CLI = {
     bin: 'patchkit',
     dir: 'patchkit',
     key: 'node tools/nx/patchkit-key.mjs', // dist/bytes/patchkit-test-<device>.key, the key of live device tests
+    // The test-source rule is compiled into patchkit (include_str!) and read by the key script.
+    inputs: [
+      'default',
+      '^default',
+      '{workspaceRoot}/config/test-source-patterns.json',
+      '{workspaceRoot}/tools/nx/test-source.mjs',
+    ],
   },
   'plusdrive-format': {
     build: 'cargo build -p plusdrive-format --bin plusdrive --release --locked --offline --target-dir dist/cargo',
@@ -29,9 +37,10 @@ const CLI = {
     dir: 'plusdrive',
   },
 };
-const cliTarget = ({ build, bin, dir, key }) => ({
+const cliTarget = ({ build, bin, dir, key, inputs }) => ({
   executor: 'nx:run-commands',
   cache: false,
+  ...(inputs && { inputs }),
   parallelism: true, // cargo locks dist/cargo itself and the install step is cp+mv, so it may run beside other tasks
   outputs: [`{workspaceRoot}/dist/${dir}/${bin}`, ...(key ? ['{workspaceRoot}/dist/bytes/patchkit-test-*.key'] : [])],
   options: {
@@ -189,10 +198,8 @@ const GATE = {
         '{workspaceRoot}/packages/patchkit/**/*',
         '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
         '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
-        // Test-only Rust files: `#[cfg(test)]` modules that the release build does not compile (an edit cannot change the binary).
-        // tools/devtools/emud_key.py checks that each of them is declared behind cfg(test) when it leaves the daemon test key.
-        '!{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}',
-        '!{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}/**/tests/**/*.rs',
+        // Test sources (config/test-source-patterns.json): `#[cfg(test)]` modules that the release build does not compile.
+        ...testSourceGlobs('{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}', '.rs'),
         '{workspaceRoot}/devices/**/*',
         '{workspaceRoot}/ports/*.toml',
         '{workspaceRoot}/ports/fw/**/*',
@@ -202,6 +209,7 @@ const GATE = {
         '{workspaceRoot}/tools/patchkit/toolchain/**/*',
         '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
         '{workspaceRoot}/tools/devtools/emud_key.py',
+        '{workspaceRoot}/config/test-source-patterns.json',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
         '{workspaceRoot}/tools/devtools/store.py',
