@@ -86,9 +86,17 @@ export function firstFailure(text, max = BLOCK_LINES) {
   return block.join('\n') + (cut > 0 ? `\n... ${cut} more lines` : '');
 }
 
+// True when a detector (not the generic fallback) finds a failure block in `text`.
+const detectsFailure = (text) => {
+  const lines = stripAnsi(text).split('\n');
+  return DETECTORS.some((detect) => detect(lines));
+};
+
 const TICK = /^(✔|✖|✘|✗|×)\s+nx run (\S+)(?:\s+(\[.*\]))?\s*$/;
 const taskId = (id) => id.replace(/^([^:]+:[^:]+):[^:]+$/, '$1');
-const HEADER = /^> nx run (\S+)\s*$/;
+const HEADER = /^> nx run (\S+)(?:\s+(\[.*\]))?\s*$/;
+const FAILED_HEADING = /^Failed tasks:\s*$/;
+const FAILED_ITEM = /^- (\S+)\s*$/;
 const NX_LINE = /^\s*NX\s/;
 
 // Splits an Nx run output into tasks: { id, ok, cache, lines, output, line } (line: 1-based start in the log).
@@ -111,6 +119,9 @@ export class NxCompactor {
     this.seg = undefined;
     this.lineNo = 0;
     this.other = [];
+    this.pending = [];
+    this.failedIds = new Set();
+    this.inList = false;
   }
 
   push(chunk) {
@@ -125,13 +136,27 @@ export class NxCompactor {
     const line = stripAnsi(raw).replace(/\r$/, '');
     const tick = TICK.exec(line);
     const header = HEADER.exec(line);
-    if (tick || header || NX_LINE.test(line)) {
-      const ok = NX_LINE.test(line) ? /Successfully/.test(line) : false;
-      this.close(ok);
+    if (FAILED_HEADING.test(line)) this.inList = true;
+    else if (this.inList) {
+      const item = FAILED_ITEM.exec(line);
+      if (item) this.failedIds.add(taskId(item[1]));
+      else if (line.trim()) this.inList = false;
     }
-    if (tick) return this.finish({ id: taskId(tick[2]), ok: tick[1] === '✔', cache: tick[3] ?? '', lines: [] });
+    if (tick || header || NX_LINE.test(line)) {
+      // A task that shows its output has a header and no tick of its own, unless it is this tick.
+      if (tick && this.seg?.id === taskId(tick[2])) {
+        const seg = this.seg;
+        this.seg = undefined;
+        return this.finish({ id: seg.id, ok: tick[1] === '✔', cache: tick[3] ?? '', lines: seg.lines, line: seg.line });
+      }
+      this.close();
+    }
+    if (tick) {
+      if (tick[1] !== '✔') this.failedIds.add(taskId(tick[2]));
+      return this.finish({ id: taskId(tick[2]), ok: tick[1] === '✔', cache: tick[3] ?? '', lines: [] });
+    }
     if (header) {
-      this.seg = { id: taskId(header[1]), lines: [], line: this.lineNo };
+      this.seg = { id: taskId(header[1]), cache: header[2] ?? '', lines: [], line: this.lineNo };
       return undefined;
     }
     if (this.seg) this.seg.lines.push(line);
@@ -139,16 +164,20 @@ export class NxCompactor {
     return undefined;
   }
 
-  close(ok) {
+  // A section closed by something else than its own tick is undecided: Nx's failure list, or the exit
+  // status with a failure block in its output, decides at the end of the run.
+  close() {
     if (!this.seg) return;
-    const seg = this.seg;
+    const task = { id: this.seg.id, ok: undefined, cache: this.seg.cache, lines: this.seg.lines, line: this.seg.line };
+    task.output = task.lines.join('\n');
     this.seg = undefined;
-    this.finish({ id: seg.id, ok, cache: '', lines: seg.lines, line: seg.line });
+    this.tasks.push(task);
+    this.pending.push(task);
   }
 
   finish(task) {
-    task.output = task.lines.join('\n');
-    this.tasks.push(task);
+    task.output ??= task.lines.join('\n');
+    if (!this.tasks.includes(task)) this.tasks.push(task);
     const at = Math.round(this.elapsed());
     if (task.ok) this.print(`✔ ${task.id}${task.cache ? `  ${task.cache}` : ''}  at ${at} s`);
     else {
@@ -168,7 +197,13 @@ export class NxCompactor {
   end(status) {
     if (this.rest) this.line(this.rest);
     this.rest = '';
-    this.close(false);
+    this.close();
+    const listed = this.failedIds.size > 0;
+    for (const task of this.pending) {
+      task.ok = !(listed ? this.failedIds.has(task.id) : status !== 0 && detectsFailure(task.output));
+      this.finish(task);
+    }
+    this.pending = [];
     if (!this.tasks.length) {
       // Nothing ran or Nx stopped before any task (configuration error): show what it said.
       for (const l of this.other.slice(0, 40)) this.print(l);
