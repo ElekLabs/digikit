@@ -181,7 +181,7 @@ const fileTargets = (
   const merge = opts.mergeTests ?? [];
   const isMerge = (test) => !opts.twin || merge.includes(test);
   // `merge`: the key of the merge target (the target everything selects); the `-all` twins keep the full key.
-  const build = (list, narrow, recList = recs, merge = false, fullTier = false, siblingTests = false) =>
+  const build = (list, narrow, recList = recs, merge = false, fullTier = false, siblingTests = []) =>
     deviceTarget(root, list, recList, imageInput, importInputs, pythonInputs, uploadable, {
       ...opts,
       narrow,
@@ -205,7 +205,14 @@ const fileTargets = (
     const narrow = !isMerge(test);
     // A sibling test file is not an input. This file's own closure comes from importInputs.
     const make = (isNarrow, merge = false, fullTier = false) =>
-      build([test], isNarrow, own.length ? own : recs, merge, fullTier, true);
+      build(
+        [test],
+        isNarrow,
+        own.length ? own : recs,
+        merge,
+        fullTier,
+        tests.filter((t) => t !== test),
+      );
     targets[child] = make(narrow, Boolean(opts.twin));
     if (opts.twin) all[`${allName}--${suffix}`] = make(false, false, true);
   }
