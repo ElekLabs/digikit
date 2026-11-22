@@ -1,3 +1,4 @@
+import RecordingButton from './RecordingButton';
 // The Profile pane: where the ColdFire time goes, per module, per runtime phase and per poll, and on the emulator the DSP per block. A tab of the
 // right-hand column (SidePanels.tsx) of the Emulator page and of the Remote page, in the Card panel's look (card-panel.css) and the Memory panel's
 // tokens (profile-panel.css). The pure rules (rows, shares, the graph history, the hot rule) are packages/workbench-core/src/profile/profile-core.ts;
@@ -23,7 +24,6 @@ import {
   fmtUs,
   graphTop,
   groupRows,
-  readReference,
   STACK,
   totalShare,
   type DspView,
@@ -34,6 +34,15 @@ import { createDkProfLoader } from './dkprof-env';
 import { createEmulatorNames, createDeviceNames } from './log-names-backend';
 import { deviceOfPort } from './remote-core';
 import { createRecorder, type ProfileReading } from './profile-backend';
+import {
+  hotspotLabel,
+  readSavedProfile,
+  resolveSavedHotspots,
+  type Hotspot,
+  type SavedProfile,
+} from './profile-hotspots';
+import { createSpanIntervals } from './span-intervals';
+import type { SpanRecording } from './span-recording';
 import { createReadGate } from './read-gate-core';
 import {
   calibrationChip,
@@ -56,8 +65,34 @@ const COLUMN_PX = 4;
 const GAP_PX = 2;
 const GRAPH_PX = 90;
 
+const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;
+
+function HotspotTable(props: { title: string; rows: Hotspot[] }): JSX.Element {
+  return (
+    <div class="cf-paths" role="table" aria-label={props.title}>
+      <div class="cf-row head" role="row">
+        <span class="name">{props.title} by samples</span>
+        <span class="mono">share</span>
+      </div>
+      <For each={props.rows}>
+        {(row) => (
+          <div class="cf-row" role="row">
+            <span class="name" title={hotspotLabel(row)}>
+              {hotspotLabel(row)}
+            </span>
+            <span class="mono">{fmtPct(row.share)}</span>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
 export default function ProfilePanel(props: {
   visible: boolean;
+  collectSpans?: boolean;
+  liveDsp?: boolean;
+  onSpanRecording?(recording?: SpanRecording): void;
   source: TargetBinding;
   host?: Host;
   /** What the Profile and Calibration tabs share (a run in progress, the active calibration). */
@@ -70,11 +105,21 @@ export default function ProfilePanel(props: {
   const [reading, setReading] = createSignal<ProfileReading>();
   const [dsp, setDsp] = createSignal<DspView>();
   const [error, setError] = createSignal('');
+  const [includeDsp, setIncludeDsp] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [acting, setActing] = createSignal('');
   const [noRuntime, setNoRuntime] = createSignal(false);
-  const [reference, setReference] = createSignal<{ name: string; shares: Map<string, number> }>();
+  const [reference, setReference] = createSignal<{ name: string; profile: SavedProfile }>();
+  const [referenceError, setReferenceError] = createSignal('');
+  const [referencePcs, setReferencePcs] = createSignal<SavedProfile['pcs']>();
+  let opening = 0;
   const history = createHistory();
+  const spans = createSpanIntervals();
+  const [intervals, setIntervals] = createSignal(spans.intervals());
+  function clearSpans() {
+    spans.clear();
+    setIntervals(spans.intervals());
+  }
   const [version, setVersion] = createSignal(0); // the history changed
 
   const onEmulator = () => props.source.target.kind === 'emulator';
@@ -105,13 +150,18 @@ export default function ProfilePanel(props: {
 
       try {
         checkRuntime(props.source.target);
-        const r = await recorder.read();
+        const r = await recorder.read(props.visible ? 'full' : 'spans', props.liveDsp);
         if (current()) {
           if (!r.noDebug) {
+            const previous = reading();
+            if (previous && !previous.noDebug && previous.imageId !== r.imageId) clearSpans();
+            spans.push(r.observedAt, r.snap, r.modules);
+            setIntervals(spans.intervals());
             history.push(r.snap, r.modules);
             setVersion((v) => v + 1);
             if (r.dsp) setDsp(r.dsp);
           }
+          if (r.noDebug) spans.break();
           setReading(r);
           setError('');
           setNoRuntime(false);
@@ -120,6 +170,7 @@ export default function ProfilePanel(props: {
         return true;
       } catch (e) {
         if (!current()) return true;
+        spans.break();
         if (isCancelled(e)) return true;
         if (isNoRuntime(e)) {
           setError(failureLine(e, targetLabel(props.source.target)));
@@ -134,7 +185,13 @@ export default function ProfilePanel(props: {
     },
   });
 
-  const active = createMemo(() => props.visible && !calibrating());
+  const detail = createMemo(() =>
+    calibrating() ? undefined : props.visible ? 'full' : props.collectSpans ? 'spans' : undefined,
+  );
+  createEffect(() => {
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
+    untrack(clearSpans);
+  });
   // read when the tab is shown, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
@@ -151,39 +208,59 @@ export default function ProfilePanel(props: {
     cardRefresh();
 
     if (props.source.target.kind === 'emulator') emulatorRuntime();
-    if (active()) untrack(() => gate.request());
-    else untrack(() => gate.stop());
+    if (detail() && !acting()) untrack(() => gate.request());
+    else {
+      gate.stop();
+      if (!detail()) spans.break();
+    }
   });
   // while the target records and the tab is shown: once a second
   createEffect(() => {
-    if (!active() || !running()) return;
+    if (!detail() || acting() || !running()) return;
     const id = setInterval(() => gate.request(), 1000);
     onCleanup(() => clearInterval(id));
   });
   onCleanup(() => gate.dispose());
 
+  let pending: Promise<void> | undefined;
+  let releasing: Promise<void> | undefined;
+  const releaseDsp = () =>
+    (releasing ??= (async () => {
+      await pending?.catch(() => {});
+      await recorder.releaseDsp();
+    })());
+  const unbindDsp = props.source.beforeLeave(releaseDsp);
+  onCleanup(() => {
+    unbindDsp();
+    void releaseDsp().catch(() => {});
+  });
+
   const act = async (what: string, f: () => Promise<void>) => {
-    if (calibrating()) return;
+    if (locked()) return;
+    gate.stop();
     setActing(what);
     try {
-      await f();
+      pending = f();
+      await pending;
       setError('');
-      gate.request();
     } catch (e) {
       setError(failureLine(e, targetLabel(props.source.target)));
     } finally {
+      pending = undefined;
       setActing('');
     }
   };
-  const start = () =>
+  const start = (withDspBlocks: boolean) =>
     act('start', async () => {
+      clearSpans();
       history.clear();
       setDsp(undefined);
-      await recorder.start();
+      await recorder.start(withDspBlocks);
     });
   const stop = () => act('stop', () => recorder.stop());
   const reset = () =>
     act('reset', async () => {
+      clearSpans();
       history.clear();
       setDsp(undefined);
       await recorder.reset();
@@ -204,18 +281,95 @@ export default function ProfilePanel(props: {
         await app.backend.restart(() => {});
       }),
     );
+  const dspAvailable = () => !!ok() && !ok()?.noDsp;
+  const toggleRecording = () => void (running() ? stop() : start(dspAvailable() && includeDsp()));
+  props.onSpanRecording?.({
+    dspBlocks: () => ok()?.dspBlocks,
+    dspBlockStatus: () => {
+      if (error()) return error();
+      const r = ok();
+      if (!r) return reading()?.noDebug ? 'Profiling needs the debug module.' : 'Reading target capabilities…';
+      return (
+        r.dspBlockNote ||
+        (r.snap.running
+          ? 'Waiting for the first complete DSP sweep…'
+          : 'Select Include DSP block costs and start recording.')
+      );
+    },
+    frozenTrace: () => ok()?.frozenTrace,
+    timelineStatus: () => {
+      const r = ok();
+      if (error()) return error();
+      if (!r) return reading()?.noDebug ? 'Profiling needs the debug module.' : 'Reading target capabilities…';
+      if (!r.traceSupported)
+        return 'Individual events require digikit runtime 0.11.3 or later and the updated debug module.';
+      if (r.snap.running) return 'Stop recording to view the captured events.';
+      return r.traceSummary || 'Start a recording to capture ColdFire events.';
+    },
+    intervals,
+    running,
+    available: () => !!reading() && !reading()?.noDebug && !noRuntime(),
+    disabled: () => locked() || !!error() || (busy() && !reading()),
+    status: () =>
+      calibrating()
+        ? 'Calibration in progress'
+        : error() ||
+          (reading()?.noDebug
+            ? 'Profiling needs the debug module'
+            : !reading()
+              ? 'Reading profile state…'
+              : running()
+                ? 'Recording'
+                : ok()?.traceSummary || 'Stopped'),
+    includeDsp,
+    dspAvailable,
+    setIncludeDsp,
+    toggle: toggleRecording,
+  });
+  onCleanup(() => props.onSpanRecording?.(undefined));
   const openReference = async (file: File | undefined) => {
     if (!file) return;
+    const request = ++opening;
     try {
-      const shares = readReference(JSON.parse(await file.text()));
-      if (!shares) setError(`${file.name} has no spans or no elapsed window (an export of this pane has both).`);
-      else {
-        setReference({ name: file.name, shares });
-        setError('');
+      const profile = readSavedProfile(JSON.parse(await file.text()));
+      if (request !== opening) return;
+      if (!profile.shares && !profile.pcs.cf.length && !profile.pcs.sharc.length) {
+        setReferenceError(`${file.name} has no span window or sampled PCs.`);
+        return;
       }
+      setReference({ name: file.name, profile });
+      setReferenceError('');
     } catch (e) {
-      setError(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+      if (request === opening) setReferenceError(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
     }
+  };
+  createEffect(() => {
+    const ref = reference();
+    setReferencePcs(ref?.profile.pcs);
+    if (!ref || !props.visible) return;
+    let current = true;
+    onCleanup(() => (current = false));
+    void resolveSavedHotspots(ref.profile, props.host?.symbols, prof).then((pcs) => {
+      if (current) setReferencePcs(pcs);
+    });
+  });
+  const openProfileButton = () => (
+    <label class="act quiet file">
+      Open profile…
+      <input
+        type="file"
+        accept=".json,application/json"
+        onChange={(e) => {
+          void openReference(e.currentTarget.files?.[0]);
+          e.currentTarget.value = '';
+        }}
+      />
+    </label>
+  );
+
+  const referenceShare = (name: string) => {
+    const share = reference()?.profile.shares?.get(name);
+    return share === undefined ? '–' : fmtShare(share);
   };
 
   const ok = () => {
@@ -249,7 +403,6 @@ export default function ProfilePanel(props: {
   };
   const px = (share: number) => Math.round((share / top()) * GRAPH_PX);
   const barPx = (share: number) => Math.min(36, Math.max(2, Math.round(share * 100 * 1.6)));
-  const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;
   const kindClass = (k: OwnerKind) => `k-${k}`;
   const dspSegments = (v: DspView) => v.modules.map((m) => ({ ...m, width: dspWidth(v, m.insnPerBlock) }));
 
@@ -300,39 +453,26 @@ export default function ProfilePanel(props: {
                     {!r().snap.running && r().snap.elapsedTicks > 0n
                       ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz)
                       : ''}
+                    {r().traceSummary ? ` · ${r().traceSummary}` : ''}
                     {' · clock '}
                     {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(device clock)'}
                   </span>
                   <span class="elapsed">{r().snap.running ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz) : ''}</span>
                 </div>
                 <div class="acts">
-                  <Show
-                    when={r().snap.running}
-                    fallback={
-                      <button type="button" class="act primary" disabled={locked()} onClick={() => void start()}>
-                        Start
-                      </button>
-                    }
-                  >
-                    <button type="button" class="act" disabled={locked()} onClick={() => void stop()}>
-                      Stop
-                    </button>
-                  </Show>
+                  <RecordingButton
+                    includeDsp={includeDsp()}
+                    dspAvailable={dspAvailable()}
+                    setIncludeDsp={setIncludeDsp}
+                    running={running()}
+                    disabled={locked()}
+                    onToggle={toggleRecording}
+                  />
                   <button type="button" class="act quiet" disabled={locked()} onClick={() => void reset()}>
                     Reset
                   </button>
                   <span class="sp" />
-                  <label class="act quiet file">
-                    Open profile…
-                    <input
-                      type="file"
-                      accept=".json,application/json"
-                      onChange={(e) => {
-                        void openReference(e.currentTarget.files?.[0]);
-                        e.currentTarget.value = '';
-                      }}
-                    />
-                  </label>
+                  {openProfileButton()}
                   <button
                     type="button"
                     class="act quiet"
@@ -385,21 +525,21 @@ export default function ProfilePanel(props: {
                 </ul>
               </div>
 
-              <div class="prof-table" classList={{ cmp: !!reference() }}>
+              <div class="prof-table" classList={{ cmp: !!reference()?.profile.shares }}>
                 <div class="row colhead">
                   <span>Owner</span>
                   <span>Share</span>
                   <span class="r">mean µs</span>
                   <span class="r">max µs</span>
-                  <Show when={reference()}>
-                    <span class="r" title={reference()!.name}>
+                  <Show when={reference()?.profile.shares}>
+                    <span class="r" title={reference()?.name}>
                       file
                     </span>
                   </Show>
                 </div>
                 <Show when={groups().length === 0}>
                   <p class="empty">
-                    {r().snap.running ? 'Waiting for the first spans…' : 'Nothing recorded. Press Start.'}
+                    {r().snap.running ? 'Waiting for the first spans…' : 'Nothing recorded. Press Start recording.'}
                   </p>
                 </Show>
                 <For each={groups()}>
@@ -427,10 +567,8 @@ export default function ProfilePanel(props: {
                             >
                               {fmtUs(row.maxUs)}
                             </span>
-                            <Show when={reference()}>
-                              <span class="r mono dim">
-                                {reference()!.shares.has(row.name) ? fmtShare(reference()!.shares.get(row.name)!) : '–'}
-                              </span>
+                            <Show when={reference()?.profile.shares}>
+                              <span class="r mono dim">{referenceShare(row.name)}</span>
                             </Show>
                           </div>
                         )}
@@ -547,22 +685,7 @@ export default function ProfilePanel(props: {
                           </For>
                         </div>
                         <Show when={cf().pcs.length > 0}>
-                          <div class="cf-paths" role="table" aria-label="Heaviest ColdFire PCs">
-                            <div class="cf-row head" role="row">
-                              <span class="name">top PCs by samples</span>
-                              <span class="mono">share</span>
-                            </div>
-                            <For each={cf().pcs}>
-                              {(c) => (
-                                <div class="cf-row" role="row">
-                                  <span class="name" title={`0x${c.addr.toString(16)}`}>
-                                    {c.name ?? `0x${c.addr.toString(16)}`}
-                                  </span>
-                                  <span class="mono">{fmtPct(c.share)}</span>
-                                </div>
-                              )}
-                            </For>
-                          </div>
+                          <HotspotTable title="ColdFire PCs" rows={cf().pcs} />
                         </Show>
                       </div>
                     )}
@@ -609,6 +732,33 @@ export default function ProfilePanel(props: {
               </span>
             </>
           )}
+        </Show>
+        <Show when={!ok()}>
+          <div class="acts">{openProfileButton()}</div>
+        </Show>
+        <Show when={referencePcs()} keyed>
+          {(pcs) => (
+            <Show when={pcs.cf.length || pcs.sharc.length}>
+              <div class="prof-sec ruled">
+                <div class="sec-head">
+                  <span class="title" title={reference()?.name}>
+                    Saved hotspots · {reference()?.name}
+                  </span>
+                </div>
+                <Show when={pcs.cf.length}>
+                  <HotspotTable title="ColdFire PCs" rows={pcs.cf} />
+                </Show>
+                <Show when={pcs.sharc.length}>
+                  <HotspotTable title="SHARC PCs" rows={pcs.sharc} />
+                </Show>
+              </div>
+            </Show>
+          )}
+        </Show>
+        <Show when={referenceError()}>
+          <p class="err" role="alert">
+            {referenceError()}
+          </p>
         </Show>
         <Show when={error()}>
           <p class="err" role="alert">

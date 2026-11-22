@@ -3,8 +3,10 @@ import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { readDeviceHealth, type DeviceHealth } from './device-health';
 import { windowShown } from './log-follow-core';
 
+export type ReceivedHealth = DeviceHealth & { received: number; source: TargetBinding };
+
 export function createTargetHealth(binding: () => TargetBinding, enabled: () => boolean) {
-  const [sample, setSample] = createSignal<DeviceHealth & { received: number }>();
+  const [sample, setSample] = createSignal<ReceivedHealth>();
   const active = createMemo(enabled);
   createEffect(() => {
     const source = binding();
@@ -23,7 +25,7 @@ export function createTargetHealth(binding: () => TargetBinding, enabled: () => 
                 health &&
                 (prev?.seq === health.seq && prev.blocks === health.blocks
                   ? prev
-                  : { ...health, received: Date.now() }),
+                  : { ...health, source, received: Date.now() }),
             );
         }
       } catch {

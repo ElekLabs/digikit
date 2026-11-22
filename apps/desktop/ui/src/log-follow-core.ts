@@ -165,6 +165,7 @@ export class LogFollower {
   /** The flash is over: the device restarts, so its first answers may take a while. */
   resume(): void {
     this.paused = false;
+    this.namesDue = true;
     this.started = false;
     this.lastAnswer = this.o.now();
   }
@@ -216,6 +217,7 @@ export class LogFollower {
     if (isCancelled(e)) return POLL_MS;
     if (this.o.present && !(await this.o.present().catch(() => true))) {
       this.started = false;
+      this.namesDue = true;
       this.lastAnswer = this.o.now();
       this.o.out.status('absent');
       return FROZEN_MS;
@@ -293,7 +295,7 @@ export class LogFollower {
   /** Read the maps and the load table when they are due. The read is made for a crash or a fault only: it asks the controller to patch the image once. */
   private async refreshNames(s: FollowSession): Promise<void> {
     const names = this.o.names;
-    if (!names || !this.namesDue) return;
+    if (!names || (!this.namesDue && !names.needsRefresh?.())) return;
     this.namesDue = false;
     let why: string | undefined;
     try {

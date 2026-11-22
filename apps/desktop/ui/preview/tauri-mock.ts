@@ -1,24 +1,46 @@
 // The native command boundary of the browser preview. Desktop components call the same TauriHost as in the app.
 import { previewEmulator } from './emulator-mock';
 import { cardCall, pickFolder, reloadCard } from './card-mock';
+import type { RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
 import * as firmware from './firmware-mock';
 import { sim } from './sim';
+import { previewSymbolImage } from './symbols-mock';
 
 const query = new URLSearchParams(location.search);
 const emulator = previewEmulator(query);
 export const isTauri = (): boolean => true;
 
 const remotePort = 'Elektron Digitone II';
+const symbols = isTauri() && new URLSearchParams(location.search).has('symbols');
+const symbolsSnapshot: RuntimeSnapshot = {
+  polled: true,
+  status: {
+    device: previewSymbolImage.device,
+    version: previewSymbolImage.firmware,
+    icount: 0,
+    pc: 0,
+    ready: true,
+    phase: 'ready',
+    error: null,
+    frame_revision: 0,
+    frame_source: null,
+    main_ui_reached: true,
+    filesystem_verified: true,
+    input_ready: true,
+    input_pending: 0,
+    input_irqs: 0,
+  },
+};
 
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
     case 'emu_launch':
-      return emulator.launch as T;
+      return (symbols ? { loaded: true } : emulator.launch) as T;
     case 'emu_startup':
-      return (await emulator.startup()) as T;
+      return (symbols ? symbolsSnapshot : await emulator.startup()) as T;
     case 'emu_step':
     case 'emu_tap':
-      return (await emulator.snapshot()) as T;
+      return (symbols ? symbolsSnapshot : await emulator.snapshot()) as T;
     case 'emu_audio_status':
       return null as T;
     case 'emu_stop':
@@ -86,6 +108,21 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
     }
     case 'emu_call': {
       const method = String(args?.method);
+      if (symbols && method === 'runtime.maps') {
+        const { device, firmware, sha256 } = previewSymbolImage;
+        return {
+          image_sha256: sha256,
+          matches: true,
+          ship: JSON.stringify({
+            format: 'dk-addrmap',
+            version: 1,
+            kind: 'ship',
+            key: { device, firmware, image_sha256: sha256 },
+            entries: [],
+          }),
+          symbols: {},
+        } as T;
+      }
       if (method === 'firmware.load') return (await emulator.load()) as T;
       if (method === 'restart') return (await reloadCard()) as T;
       if (method === 'status')

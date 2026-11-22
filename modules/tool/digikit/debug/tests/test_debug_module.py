@@ -31,6 +31,8 @@ static unsigned int fake_clk;
 static void (*the_span)(const dk_span *);
 static uint32_t (*the_span_clock)(void);
 static int span_busy, span_noclock;
+static u32 runtime_version = DK_SPAN_START_TICK_VERSION;
+uint32_t dk_module_ctx_runtime_version(dk_module_ctx *c) { (void)c; return runtime_version; }
 int32_t dk_span_sink_set(uint8_t *emit, uint8_t *clock)
 {
     if (span_busy && emit) return DK_E_BUSY;
@@ -125,8 +127,10 @@ int main(int argc, char **argv)
 {
     char line[4096];
     for (int k = 1; k < argc; k++) {
+        if (!strcmp(argv[k], "later-load")) fake_clk = 200;
         if (!strcmp(argv[k], "noclock")) span_noclock = 1;
         if (!strcmp(argv[k], "busy")) span_busy = 1;
+        if (!strcmp(argv[k], "old-runtime")) runtime_version = DK_SPAN_START_TICK_VERSION - 1u;
     }
     printf("init %d %d\n", (int)dk_module.init(NULL), the_sink != NULL);
     while (fgets(line, sizeof line, stdin)) {
@@ -140,8 +144,17 @@ int main(int argc, char **argv)
             clock_blocks = a;
         } else if (sscanf(line, "span %u %u %u", &a, &b, &c) == 3) {
             /* owner, ticks, number of spans */
-            dk_span s = { a, b };
-            while (c--) the_span(&s);
+            if (runtime_version >= DK_SPAN_START_TICK_VERSION) {
+                dk_span s = { a, b, fake_clk - b };
+                while (c--) the_span(&s);
+            } else {
+                u32 s[] = { a, b };
+                while (c--) the_span((const dk_span *)s);
+            }
+        } else if (sscanf(line, "trace %u %u %u", &a, &b, &c) == 3) {
+            /* owner, start, duration; emit on or after the span's end */
+            dk_span s = { a, c, b };
+            the_span(&s);
         } else if (sscanf(line, "setclk %u", &a) == 1) {
             fake_clk = a;
         } else if (!strncmp(line, "readclk", 7)) {
@@ -271,7 +284,7 @@ POLL = 0x200
 
 def profile_state(reply: str):
     raw = bytes.fromhex(reply.split()[2])
-    assert len(raw) == 35
+    assert len(raw) == 36
     return struct.unpack(">BIH", raw[:7])
 
 
@@ -303,7 +316,7 @@ def test_profile_start_sets_the_span_sink_and_stop_clears_it(harness):
 def test_profile_state_names_the_poll_owners(harness):
     out = run(harness, ["poll 0 3 12345678", "poll 2 255 4000", "cmd 30 00"])
     raw = bytes.fromhex(out[2].split()[2])
-    assert len(raw) == 35
+    assert len(raw) == 36
     assert struct.unpack(">BI", raw[15:20]) == (3, 0x12345678)
     assert struct.unpack(">BI", raw[20:25]) == (0, 0), "an empty slot"
     assert struct.unpack(">BI", raw[25:30]) == (255, 0x4000)
@@ -330,8 +343,192 @@ def test_profile_start_gets_the_runtime_busy_code(harness):
 
 
 def test_profile_bad_op_and_body(harness):
-    out = run(harness, ["cmd 30 04", "cmd 30", "cmd 31 00", "cmd 31 00000000"])
+    out = run(harness, ["cmd 30 05", "cmd 30", "cmd 31 00", "cmd 31 00000000"])
     assert [o.split()[1] for o in out[2:]] == ["-60", "-50", "-50", "-50"]
+
+
+def trace_start_generation(reply: str):
+    raw = bytes.fromhex(reply.split()[2])
+    assert len(raw) == 40 and raw[0] == 1 and raw[35] == 1
+    generation = struct.unpack(">I", raw[36:])[0]
+    assert generation
+    return generation
+
+
+def trace_page(reply: str):
+    raw = bytes.fromhex(reply.split()[2])
+    version, gen, total, dropped, hz, first, count = struct.unpack(">BIHIIHB", raw[:18])
+    assert version == 1 and gen != 0
+    assert len(raw) == 18 + 16 * count
+    return (gen, total, dropped, hz, first), list(struct.iter_unpack(">IQI", raw[18:]))
+
+
+def trace_read(generation=0, first=0, version=1):
+    return "cmd 31 " + struct.pack(">BIH", version, generation, first).hex()
+
+
+def test_old_runtime_still_profiles_without_the_span_extension(harness):
+    out = run(
+        harness,
+        [
+            "cmd 30 00",
+            "cmd 30 04",
+            "cmd 30 01",
+            "span 2 10 2",
+            "cmd 30 02",
+            "cmd 31 0000",
+            trace_read(),
+        ],
+        args=["old-runtime"],
+    )
+    assert bytes.fromhex(out[2].split()[2])[35] == 0
+    assert out[3].startswith("reply -60")
+    assert profile_rows(out[6])[1][2] == (2, 20, 10)
+    assert out[7].startswith("reply -60")
+
+
+def test_trace_retains_start_order_across_tick_wrap_and_nested_spans(harness):
+    out = run(
+        harness,
+        [
+            "setclk 4294967280",
+            "cmd 30 04",
+            trace_read(),  # read while running
+            "setclk 3",
+            f"trace {POLL + 2} 4294967295 3",  # inner span completes first
+            "setclk 17",
+            f"trace {PHASE + 1} 4294967288 24",
+            "trace 3 4294967279 12",  # began before start
+            "setclk 4000000000",
+            "modtick",
+            "setclk 30",
+            "trace 4 20 10",  # second wrap, with a start offset wider than 32 bits
+            "cmd 30 02",
+            trace_read(),
+            trace_read(version=2),
+        ],
+    )
+    assert out[3].startswith("reply -53")
+    fields, events = trace_page(out[5])
+    assert fields == (trace_start_generation(out[2]), 3, 1, 150000000, 0)
+    assert events == [(PHASE + 1, 8, 24), (POLL + 2, 15, 3), (4, 2**32 + 36, 10)]
+    assert out[6].startswith("reply -60")
+
+
+def test_trace_recovers_the_start_if_duration_plus_emit_delay_wraps(harness):
+    out = run(
+        harness,
+        [
+            "setclk 100",
+            "cmd 30 04",
+            "setclk 4000000000",
+            "modtick",
+            "setclk 101",
+            "trace 2 100 4294967294",
+            "cmd 30 02",
+            trace_read(),
+        ],
+    )
+    assert trace_page(out[-1])[1] == [(2, 0, 4294967294)]
+
+
+def test_trace_rejects_generation_from_previous_module_load(harness):
+    old = trace_start_generation(run(harness, ["cmd 30 04"])[-1])
+    out = run(harness, ["cmd 30 04", "cmd 30 02", trace_read(old)], args=["later-load"])
+    assert out[-1].startswith("reply -53")
+
+
+def test_trace_pages_pin_a_frozen_generation_and_report_buffer_loss(harness):
+    capture = ["cmd 30 04"]
+    for i in range(260):
+        capture.extend((f"setclk {i + 2}", f"trace {i % 2} {i} 2"))
+    capture.extend(("cmd 30 02", trace_read()))
+    generation = trace_start_generation(run(harness, ["cmd 30 04"])[-1])
+    out = run(
+        harness,
+        [
+            *capture,
+            trace_read(generation, 53),
+            trace_read(generation, 106),
+            trace_read(generation, 159),
+            trace_read(generation, 212),
+            trace_read(generation, 256),
+            trace_read(generation, 257),
+            "cmd 30 03",
+            trace_read(generation),
+            trace_read(),
+        ],
+    )
+    events = []
+    for reply, first in zip(out[4:10], (0, 53, 106, 159, 212, 256), strict=True):
+        fields, page = trace_page(reply)
+        assert fields == (generation, 256, 4, 150000000, first)
+        events.extend(page)
+    assert events == [(i % 2, i, 2) for i in range(256)]
+    assert out[10].startswith("reply -63")
+    assert out[12].startswith("reply -53")
+    fields, events = trace_page(out[13])
+    assert fields[0] != generation
+    assert fields[1:] == (0, 0, 150000000, 0)
+    assert events == []
+
+
+def test_trace_requires_explicit_start_and_running_reset_starts_new_window(harness):
+    out = run(
+        harness,
+        [
+            "cmd 30 01",
+            "setclk 10",
+            "span 1 3 2",
+            "cmd 30 02",
+            trace_read(),
+            "cmd 30 01",
+            "setclk 20",
+            "cmd 30 04",
+            "setclk 30",
+            "trace 1 25 5",
+            "cmd 30 04",  # repeat start leaves the generation intact
+            "cmd 30 03",
+            "setclk 35",
+            "trace 2 28 7",  # began before reset
+            "setclk 45",
+            "trace 5 40 5",
+            "cmd 30 04",  # same capture, new generation after reset
+            "cmd 30 02",
+            trace_read(),
+        ],
+    )
+    assert out[4].startswith("reply -53")
+    before = trace_start_generation(out[6])
+    assert trace_start_generation(out[7]) == before
+    after = trace_start_generation(out[9])
+    assert after != before
+    fields, events = trace_page(out[-1])
+    assert fields == (after, 1, 1, 150000000, 0)
+    assert events == [(5, 10, 5)]
+
+
+def test_new_aggregate_run_invalidates_the_previous_trace(harness):
+    out = run(
+        harness,
+        [
+            "cmd 30 04",
+            "cmd 30 02",
+            trace_read(),
+            "cmd 30 01",
+            "cmd 30 02",
+            trace_read(),
+            "cmd 30 04",
+            "cmd 30 02",
+            trace_read(),
+        ],
+    )
+    old = trace_start_generation(out[2])
+    assert trace_page(out[4])[0][0] == old
+    assert out[7].startswith("reply -53")
+    new = trace_start_generation(out[8])
+    assert new != old
+    assert trace_page(out[10])[0][0] == new
 
 
 def test_profile_spans_add_up_per_owner_and_unknown_owners_are_ignored(harness):

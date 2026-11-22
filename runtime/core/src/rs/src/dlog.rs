@@ -8,8 +8,8 @@
 //! filter and the host commands. Without a sink the other events are dropped (one pointer test).
 //!
 //! The sink channels (`dk_sink_set`, runtime-and-services 5.11) are the generic form of that mechanism: channel `SINK_LOG` receives the same events as the
-//! pointer above, channel `SINK_SPAN` receives `(owner, cycles)` records (`Span`) from `span_emit`. Each channel has one owner, the module whose code set it;
-//! a second owner is refused with `E_BUSY`. The channel is cleared after its owner's `fini` (`release_sinks`). With no sink set a producer pays one test.
+//! pointer above, channel `SINK_SPAN` receives `(owner, cycles, start_tick)` records (`Span`) from `span_emit`. Each channel has one owner, the module whose
+//! code set it. A second owner gets `E_BUSY`. The channel is cleared after its owner's `fini` (`release_sinks`). With no sink set a producer pays one test.
 //!
 //! Appends mask interrupts for a few instructions: the UI task, the MIDI task and the crash handler all append.
 use crate::entry::Ctx;
@@ -63,12 +63,13 @@ static mut SPAN_CLOCK: usize = 0;
 pub const SPAN_PHASE: u32 = 0x100;
 pub const SPAN_POLL: u32 = 0x200;
 
-/// The record of the `span` channel: the owner id the producer gave (opaque to the runtime, `owner_of_row`) and the cycles it measured.
+/// The record of the `span` channel: the producer's owner id, elapsed cycles and raw clock reading at the start.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Span {
     pub owner: u32,
     pub cycles: u32,
+    pub start_tick: u32,
 }
 
 /// The flags of a non-error event at the info level (an error event is `logk::F_ERROR`: level 0).
@@ -308,8 +309,8 @@ pub fn sink_on(channel: u32) -> bool {
     unsafe { read_volatile(addr_of!((*addr_of!(CHAN))[channel as usize].f)) != 0 }
 }
 
-/// Hand a `(owner, cycles)` record to the `span` sink; nothing happens (one flag test) without one. Runs in the producer's task with interrupts masked.
-pub unsafe fn span_emit(owner: u32, cycles: u32) {
+/// Hand a `(owner, cycles, start_tick)` record to the `span` sink; nothing happens (one flag test) without one. Runs in the producer's task with interrupts masked.
+unsafe fn span_emit(owner: u32, cycles: u32, start_tick: u32) {
     if !sink_on(SINK_SPAN) {
         return;
     }
@@ -317,7 +318,7 @@ pub unsafe fn span_emit(owner: u32, cycles: u32) {
     let f = read_volatile(addr_of!((*addr_of!(CHAN))[SINK_SPAN as usize].f));
     if f != 0 {
         let call: unsafe extern "C" fn(*const Span) = core::mem::transmute(f);
-        call(&Span { owner, cycles });
+        call(&Span { owner, cycles, start_tick });
     }
     irq_restore(sr);
 }
@@ -346,7 +347,7 @@ fn clock_slow() -> Option<u32> {
     }
 }
 
-/// The end of a span that `span_t0` started: hand `(owner, cycles)` to the span sink, `cycles` the clock's difference (a wrap of the counter is fine).
+/// The end of a span that `span_t0` started: emit the original reading and the clock's difference, including across a counter wrap.
 #[cold]
 #[inline(never)]
 pub unsafe fn span_end(owner: u32, t0: u32) {
@@ -355,7 +356,7 @@ pub unsafe fn span_end(owner: u32, t0: u32) {
         return;
     }
     let clock: unsafe extern "C" fn() -> u32 = core::mem::transmute(k);
-    span_emit(owner, clock().wrapping_sub(t0));
+    span_emit(owner, clock().wrapping_sub(t0), t0);
 }
 
 /// Run `f` as a measured span of `owner`: the clock is read before and after only while a span sink and clock are set.
@@ -505,7 +506,7 @@ mod tests {
     static mut LOGGED: u32 = 0;
     static mut LAST_KIND: u16 = 0;
     static mut SPANS: u32 = 0;
-    static mut LAST_SPAN: (u32, u32) = (0, 0);
+    static mut LAST_SPAN: (u32, u32, u32) = (0, 0, 0);
 
     unsafe extern "C" fn fake_log(e: *const Ev) {
         LOGGED += 1;
@@ -524,7 +525,7 @@ mod tests {
 
     unsafe extern "C" fn fake_span(s: *const Span) {
         SPANS += 1;
-        LAST_SPAN = ((*s).owner, (*s).cycles);
+        LAST_SPAN = ((*s).owner, (*s).cycles, (*s).start_tick);
     }
 
     /// Holds the test lock; the channels a test set are cleared when it ends, so the next test of any file starts without an owner.
@@ -632,13 +633,13 @@ mod tests {
     fn span_without_a_sink_calls_nothing() {
         unsafe {
             let _g = fresh();
-            span_emit(7, 100);
+            span_emit(7, 100, 123);
             assert_eq!(SPANS, 0);
             assert_eq!(set_as(1, SINK_SPAN, fake_span as *const () as usize), OK);
-            span_emit(7, 100);
-            assert_eq!((SPANS, LAST_SPAN), (1, (7, 100)));
+            span_emit(7, 100, 123);
+            assert_eq!((SPANS, LAST_SPAN), (1, (7, 100, 123)));
             assert_eq!(set_as(1, SINK_SPAN, 0), OK);
-            span_emit(8, 5);
+            span_emit(8, 5, 223);
             assert_eq!(SPANS, 1);
         }
     }

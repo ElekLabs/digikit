@@ -1,7 +1,7 @@
 // Following a runtime log (apps/desktop/ui/src/log-follow-core.ts): what a poll turns into log entries, with a fake ring in place of a device.
 import assert from 'node:assert/strict';
 import { createRoot, createSignal } from 'solid-js';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { DkLogEvent, Fault } from '@digi/dk-session';
 import { autoOpens, type LogInput } from '../src/log-core.ts';
@@ -324,6 +324,49 @@ test('flash progress does not restart the loop: one pause note, and polling goes
   await wait(20);
   assert.ok(infos > 0);
   dispose();
+});
+
+test('returning to a MIDI port names the next event with that port’s symbols', async () => {
+  const devices = { A: new Device(), B: new Device() };
+  const crash = (seq: number) => ev(seq, 'CRASH_FOUND', [0x1000, 0, 0, 0, 0]);
+  for (const device of Object.values(devices)) device.ring = [crash(1)];
+  const [port, setPort] = createSignal<'A' | 'B'>('A');
+  const rows: string[] = [];
+  const dispose = createRoot((dispose) => {
+    createLogFollow({
+      follow: () => true,
+      flashing: () => false,
+      emulator: { running: () => false, session: async () => devices.A },
+      device: {
+        port,
+        session: async () => devices[port()],
+        present: async () => true,
+        makeNames: () => {
+          const label = port();
+          return {
+            resolve: () => () => label,
+            unavailable: () => undefined,
+            inputs: () => undefined,
+            refresh: async () => {},
+          };
+        },
+      },
+      push: (inputs) =>
+        rows.push(...inputs.filter((entry) => entry.rt?.event?.kind === 'CRASH_FOUND').map((entry) => entry.text)),
+      sleep: () => new Promise((done) => setTimeout(done, 2)),
+    });
+    return dispose;
+  });
+  try {
+    await vi.waitFor(() => assert.match(rows[0] ?? '', /\(A\)/));
+    setPort('B');
+    await vi.waitFor(() => assert.match(rows[1] ?? '', /\(B\)/));
+    devices.A.ring.push(crash(2));
+    setPort('A');
+    await vi.waitFor(() => assert.match(rows[2] ?? '', /\(A\)/));
+  } finally {
+    dispose();
+  }
 });
 
 test('pace: a hidden window asks nothing; a closed drawer reads the device slowly, the emulator keeps its pace', () => {

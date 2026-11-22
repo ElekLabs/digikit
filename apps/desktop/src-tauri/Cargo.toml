@@ -16,11 +16,13 @@ play = ["digi-coupled/play", "digi-control/play"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.1", features = [] }
+toml = "0.9"
 
 [dependencies]
 tauri = { version = "2.9.1", features = ["custom-protocol"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 midir = "0.11"
@@ -34,6 +36,7 @@ device-profile = { path = "../../../packages/emulator/device-profile" }
 patchkit = { path = "../../../packages/patchkit" }
 dkmidi = { path = "../../../packages/dkmidi" }
 dkbulk = { path = "../../../packages/dkbulk" }
+dkaddrmap = { path = "../../../packages/dkaddrmap" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
@@ -51,3 +54,4 @@ windows = { version = "0.62", features = [
 
 [dev-dependencies]
 sha2 = "0.10"
+tempfile = "3"

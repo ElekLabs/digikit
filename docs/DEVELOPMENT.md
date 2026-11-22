@@ -255,6 +255,8 @@ Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, a
 queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
 All tools are indexed in [docs/TOOLS.md](TOOLS.md).
 
+Register local firmware databases and symbol maps from [desktop Settings](ADDRMAP.md#firmware-symbols-in-desktop-settings).
+
 Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).
 Usage of the object compare for moves of runtime code (`patchkit objdiff OLD NEW`): [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move).
 Usage of the register liveness of stock code at a patch site (`tools/coldfire/liveness.py`): [PATCHING.md](PATCHING.md#register-liveness-at-a-hook-site).

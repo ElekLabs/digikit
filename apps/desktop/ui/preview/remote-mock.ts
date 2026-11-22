@@ -40,6 +40,8 @@ export function previewSessions() {
   const fallback = testPattern();
   const loaded = queryFrame();
   const unidentified = new URLSearchParams(location.search).has('unidentified');
+  const history = new URLSearchParams(location.search).has('history');
+  const began = Date.now();
   return createSessionHub((transport, opts, key) => {
     const session = new DkSession(transport, { timeoutMs: 6000, ...opts });
     const profile = deviceProfiles[deviceOfPort(key) ?? cardDevice];
@@ -58,11 +60,25 @@ export function previewSessions() {
           throw Object.assign(new Error('No runtime'), { kind: 'timeout' });
         return { port: profile.short + '-' + version, caps: 1 << CAP.LOG, runtime: 11 << 8 };
       },
-      logPage: async () => [
-        1,
-        1,
-        [{ seq: 1, time: 15000, kind: LOG_KIND.HEALTH, flags: 0, args: [(6 << 16) | 213, 345, 420, 0, 0] }],
-      ],
+      logPage: async () => {
+        const tick = history ? Math.floor((Date.now() - began) / 5000) : 0;
+        const seq = 1 + tick;
+        const cpu = [213, 350, 290, 180][tick % 4]!;
+        const dsp = [345, 730, 510, 290][tick % 4]!;
+        return [
+          seq,
+          seq,
+          [
+            {
+              seq,
+              time: seq * 15000,
+              kind: LOG_KIND.HEALTH,
+              flags: 0,
+              args: [(6 << 16) | cpu, dsp, Math.max(dsp, 420), 0, 0],
+            },
+          ],
+        ];
+      },
       remoteState: async () => ({ enabled: true, format: 1, turnLimit: 10 }),
       remoteKey: async () => {},
       remoteTurn: async () => {},

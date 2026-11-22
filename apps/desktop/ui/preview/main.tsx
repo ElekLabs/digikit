@@ -1,3 +1,4 @@
+import { createPreviewSymbols } from './symbols-mock';
 // Mount the production workbench with the preview's device, filesystem and audio fixtures.
 import { demoStore } from '@digi/workbench-core/target-ops/fake-store.ts';
 import { createDesktopApps } from '../src/desktop-app';
@@ -15,7 +16,7 @@ import { SAMPLES_ROOT, bindSimApp, control, sim } from './sim';
 
 const query = new URLSearchParams(location.search);
 const page = query.get('page') ?? 'transfer';
-const host = { ...createTauriHost(), analyzer: createPreviewAnalyzer() };
+const host = { ...createTauriHost(), analyzer: createPreviewAnalyzer(), symbols: createPreviewSymbols() };
 const apps = createDesktopApps(host, undefined, page === 'firmware' ? undefined : previewSessions());
 bindSimApp(apps.app);
 const files = demoStore();
@@ -42,7 +43,7 @@ mountWorkbench(
             emulator: {
               running: previewLog.emulatorRunning,
               session: async () => previewLog.emulator,
-              names: previewNames,
+              makeNames: () => previewNames,
             },
             device: { port: previewLog.devicePort, session: async () => previewLog.device, present: async () => true },
           },

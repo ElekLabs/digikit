@@ -203,7 +203,32 @@ export interface AnalyzerHost {
   close(id: number): Promise<void>;
 }
 
+export type SymbolKind = 'cf' | 'sharc' | 'map';
+export interface SymbolImage {
+  device: string;
+  firmware: string;
+  sha256: string;
+}
+export interface SymbolImageMap extends SymbolImage {
+  json: string;
+}
+export interface SymbolSource {
+  kind: SymbolKind;
+  path: string;
+  images: SymbolImage[];
+  error?: string;
+}
+export interface SymbolsHost {
+  list(): Promise<SymbolSource[]>;
+  choose(kind: SymbolKind): Promise<void>;
+  remove(path: string): Promise<void>;
+  refresh(): Promise<void>;
+  maps(stockSha256: string): Promise<Record<string, unknown>[]>;
+  revision(): number;
+}
+
 export interface Host {
+  symbols?: SymbolsHost;
   analyzer?: AnalyzerHost;
   fs: FsHost;
   library: LibraryHost;
