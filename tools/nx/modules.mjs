@@ -100,9 +100,13 @@ export const createNodesV2 = [
       // Nx skips a dependency on a missing target without a message.
       for (const target of Object.values(project.targets ?? {})) {
         for (const dep of target.dependsOn ?? []) {
-          const ref = typeof dep === 'string' ? dep : '';
-          const m = /^(.+):pack$/.exec(ref);
-          if (m && byId.has(m[1])) packable.add(m[1]);
+          // Nx accepts 'id:pack', { target: 'id:pack' } and { projects: 'id' | ['id'], target: 'pack' }.
+          const entry = typeof dep === 'string' ? { target: dep } : (dep ?? {});
+          const named = typeof entry.target === 'string' ? entry.target : '';
+          const owners = [].concat(entry.projects ?? []);
+          const m = /^(.+):pack$/.exec(named);
+          const ids = m ? [m[1]] : named === 'pack' ? owners : [];
+          for (const id of ids) if (byId.has(id)) packable.add(id);
         }
       }
     }

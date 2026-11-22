@@ -132,7 +132,11 @@ it('refuses distinct aliases that would overwrite the same pack output', () => {
   );
 });
 
-it('gives a fixture a pack target when a project target only names it in dependsOn', () => {
+it.each([
+  ['a string', 'fixture/dep-only:pack'],
+  ['an object with a target id', { target: 'fixture/dep-only:pack' }],
+  ['an object with projects', { projects: ['fixture/dep-only'], target: 'pack' }],
+])('gives a fixture a pack target when a project target names it in dependsOn as %s', (_form, dep) => {
   const root = mkdtempSync(join(tmpdir(), 'digikit-dep-only-'));
   mkdirSync(join(root, 'tools/patchkit/toolchain'), { recursive: true });
   writeFileSync(join(root, 'tools/patchkit/toolchain/pins.toml'), '[include]\ncf = ["sdk/include"]\nsharc = []\n');
@@ -147,7 +151,7 @@ it('gives a fixture a pack target when a project target only names it in depends
   mkdirSync(join(root, owner), { recursive: true });
   writeFileSync(
     join(root, owner, 'project.json'),
-    JSON.stringify({ name: 'assembly-owner', targets: { 'test-assembly': { dependsOn: ['fixture/dep-only:pack'] } } }),
+    JSON.stringify({ name: 'assembly-owner', targets: { 'test-assembly': { dependsOn: [dep] } } }),
   );
   const run = (files: string[]) => {
     const inferred = createNodesV2[1](files, {}, { workspaceRoot: root });
