@@ -6,6 +6,7 @@
 //! resident core through `crate::` paths until the resident table (S7) replaces them.
 
 pub(crate) mod admission;
+pub(crate) mod boot_idx;
 pub(crate) mod boot_steps;
 pub(crate) mod capacity;
 pub mod collect;
@@ -19,6 +20,7 @@ pub(crate) mod files;
 pub(crate) mod gen_services;
 pub(crate) mod handlers;
 pub(crate) mod hooks;
+pub(crate) use hooks::attach;
 pub(crate) mod imports;
 pub(crate) mod invariants;
 pub(crate) mod lifecycle;
@@ -27,6 +29,7 @@ pub(crate) mod loader;
 pub(crate) mod live_cmds;
 pub(crate) mod module_cmds;
 pub mod registry;
+pub(crate) mod resident;
 pub mod reload;
 pub mod scan;
 pub(crate) mod settings_overlay;

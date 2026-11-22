@@ -27,7 +27,7 @@ use crate::package::handlers::{services, Claim, ServiceTable};
 use dkrt_abi::mem::cstr_eq;
 use dkrt_abi::mem::cstr_len;
 use dkrt_abi::mem::rd32;
-use crate::{arena};
+use crate::package::resident::arena;
 use core::ptr::{addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Stream, Ticket, SEQ_MAX};
@@ -72,7 +72,7 @@ pub(crate) unsafe fn info() -> *const u32 {
     #[cfg(test)] { return crate::package::cleanup_tests::voice_info(); }
     #[cfg(not(test))] {
         let a = fn_addr(dyndsp_info);
-        if a == 0 || !crate::platform::has_dsp() {
+        if a == 0 || !crate::package::resident::platform::has_dsp() {
             return core::ptr::null();
         }
         let p = a as *const u32;
@@ -138,7 +138,7 @@ pub unsafe fn init_once() {
 
 /// Bytes of the area (0: the image has no DSP loader, or the device has no DSP).
 pub unsafe fn area_bytes() -> u32 {
-    if !crate::platform::has_dsp() || info().is_null() {
+    if !crate::package::resident::platform::has_dsp() || info().is_null() {
         0
     } else {
         iw(I_AREA_BYTES)
@@ -572,7 +572,7 @@ pub enum Advance {
 pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
     let d = ds();
     d.failures += 1;
-    crate::platform::st().last_result = code;
+    crate::package::resident::state::st().last_result = code;
     if !reclaimed {
         d.phase = PH_RETAINED;
         return;
@@ -586,7 +586,7 @@ pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
 
 /// The loader listed the loaded module and told the boot: start the next waiting load or go idle.
 pub(crate) unsafe fn loaded_done() {
-    crate::platform::st().last_result = OK;
+    crate::package::resident::state::st().last_result = OK;
     next_job();
 }
 

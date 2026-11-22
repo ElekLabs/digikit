@@ -44,7 +44,7 @@ const INFO: ClientInfo = ClientInfo {
 };
 /// The owners of a listing client: one per loader record (`REC_MAX`), a content module's or a service file's. The owner index is the record index, the number
 /// `dlog::current_source` names less one.
-const OWNERS: usize = crate::state::REC_MAX;
+const OWNERS: usize = dkrt_abi::REC_MAX;
 static mut JOBS: Broker<OWNERS, Request, FileEntry> = Broker::new();
 static mut INFO_ROWS: [ClientInfo; OWNERS] = [INFO; OWNERS];
 // 0 retired/uninitialized, 1 initializing, 2 ready. Only init scope can attach.
@@ -56,9 +56,9 @@ static mut SCHED_ERROR: i32 = 0;
 unsafe fn locked<T>(
     f: impl FnOnce(&mut Broker<OWNERS, Request, FileEntry>) -> T,
 ) -> T {
-    let sr = crate::platform::irq_mask();
+    let sr = crate::package::resident::platform::irq_mask();
     let result = f(&mut *addr_of_mut!(JOBS));
-    crate::platform::irq_restore(sr);
+    crate::package::resident::platform::irq_restore(sr);
     result
 }
 pub unsafe fn init_begin(owner: usize) {
@@ -109,7 +109,7 @@ pub unsafe fn ready_state(owner: usize) -> u8 {
 }
 pub unsafe fn client() -> i32 {
     locked(|jobs| {
-        let source = crate::dlog::current_source();
+        let source = crate::package::resident::dlog::current_source();
         if source == 0 {
             return E_NOT_FOUND;
         }
@@ -139,7 +139,7 @@ pub unsafe fn list(
     notify: Option<FilesEventFn>,
     context: *mut u8,
 ) -> i32 {
-    list_with(&crate::platform::PLATFORM, client, root, path, notify, context)
+    list_with(&crate::package::resident::platform::PLATFORM, client, root, path, notify, context)
 }
 
 /// Most listings at once, across all modules.
@@ -163,7 +163,7 @@ static mut LISTINGS: [*mut Listing; MAX_LISTINGS] = [null_mut(); MAX_LISTINGS];
 
 #[cfg(not(test))]
 unsafe fn take(bytes: usize) -> *mut u8 {
-    let a = crate::arena::alloc(bytes as u32);
+    let a = crate::package::resident::arena::alloc(bytes as u32);
     if a.is_null() {
         null_mut()
     } else {
@@ -172,7 +172,7 @@ unsafe fn take(bytes: usize) -> *mut u8 {
 }
 #[cfg(not(test))]
 unsafe fn give(p: *mut u8) {
-    crate::arena::free(dkrt_abi::dev_addr::DevAddr::of_ptr(p));
+    crate::package::resident::arena::free(dkrt_abi::dev_addr::DevAddr::of_ptr(p));
 }
 // The arena runs on 32-bit addresses; host tests take the blocks from the host heap and count them.
 #[cfg(test)]
@@ -306,7 +306,7 @@ pub unsafe fn list_with<P: PackagePlatform>(
     })
 }
 pub unsafe fn poll(client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
-    poll_with(&crate::platform::PLATFORM, client, ticket, out, capacity)
+    poll_with(&crate::package::resident::platform::PLATFORM, client, ticket, out, capacity)
 }
 pub(crate) unsafe fn poll_with<P: PackagePlatform>(p: &P, client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
     // Validate before consuming even if no row is currently available.
@@ -454,7 +454,7 @@ const FALLBACK_STEPS: u32 = 8;
 
 /// Several provider steps, each with its deferred callback, per UI pass within a time budget, independent of slot0.
 pub unsafe fn tick() {
-    tick_with(&crate::platform::PLATFORM)
+    tick_with(&crate::package::resident::platform::PLATFORM)
 }
 
 pub(crate) unsafe fn tick_with<P: PackagePlatform>(p: &P) {
@@ -569,9 +569,9 @@ pub(crate) unsafe fn tick_with<P: PackagePlatform>(p: &P) {
                     EventState::Done => 2,
                     EventState::Error(error) => error,
                 };
-                let prev = crate::dlog::enter_module(lease.owner, crate::dlog::PHASE_CALLBACK);
+                let prev = crate::package::resident::dlog::enter_module(lease.owner, crate::package::resident::dlog::PHASE_CALLBACK);
                 call(lease.handle.id(), lease.ticket.id(), state, context);
-                crate::dlog::leave_module(prev);
+                crate::package::resident::dlog::leave_module(prev);
             }
             locked(|jobs| {
                 let _ = jobs.finish_event(lease);

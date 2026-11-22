@@ -56,13 +56,13 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             // a limit of the search was passed: a need may be unmet for that reason, not for a missing file; each cause has its own name word (`(tab`, `(fil`, `(nee`) and its `TRUNC_*` bit as the hash word, which `loadFailureText` of runtime-log.ts turns into text
             let t = self.found.truncated;
             if t & discover::TRUNC_TABLE != 0 {
-                crate::boot::report_provider(b"(tab", E_PLAN_FIT, discover::TRUNC_TABLE as u32, 0);
+                crate::package::resident::boot::report_provider(b"(tab", E_PLAN_FIT, discover::TRUNC_TABLE as u32, 0);
             }
             if t & discover::TRUNC_FILES != 0 {
-                crate::boot::report_provider(b"(fil", E_PLAN_FIT, discover::TRUNC_FILES as u32, 0);
+                crate::package::resident::boot::report_provider(b"(fil", E_PLAN_FIT, discover::TRUNC_FILES as u32, 0);
             }
             if t & discover::TRUNC_NEEDS != 0 {
-                crate::boot::report_provider(b"(nee", E_PLAN_FIT, discover::TRUNC_NEEDS as u32, 0);
+                crate::package::resident::boot::report_provider(b"(nee", E_PLAN_FIT, discover::TRUNC_NEEDS as u32, 0);
             }
         }
     }

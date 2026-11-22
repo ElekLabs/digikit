@@ -47,11 +47,11 @@ impl Transport for DspTransport {
     }
     fn event(&mut self, what: u32, a: [u32; 4]) {
         // one flag test without a sink
-        if !crate::dlog::sink_present() && !crate::dlog::sink_on(crate::dlog::SINK_LOG) {
+        if !crate::package::resident::dlog::sink_present() && !crate::package::resident::dlog::sink_on(crate::package::resident::dlog::SINK_LOG) {
             return;
         }
-        let flags = if what == EV_ERROR { dkrt_sdk::logk::L_WARN << dkrt_sdk::logk::LEVEL_SHIFT } else { crate::dlog::INFO };
-        unsafe { crate::dlog::ev(dkrt_sdk::logk::DSP_LINK, flags, [what, a[0], a[1], a[2], a[3]]) }
+        let flags = if what == EV_ERROR { dkrt_sdk::logk::L_WARN << dkrt_sdk::logk::LEVEL_SHIFT } else { crate::package::resident::dlog::INFO };
+        unsafe { crate::package::resident::dlog::ev(dkrt_sdk::logk::DSP_LINK, flags, [what, a[0], a[1], a[2], a[3]]) }
     }
 }
 

@@ -44,12 +44,8 @@ pub fn reader() -> Io {
     Io { rd: block_read, wr: no_write }
 }
 
-/// Where a file is and what its table entry says its file hash slot is.
-pub struct File {
-    pub first: u32,
-    pub size: u32,
-    pub sha: [u8; 32],
-}
+/// Where a file is and what its table entry says its file hash slot is (shared with the package through `StoreFns`).
+pub use dkrt_abi::storage::StoreFile as File;
 
 /// The table the reads last checked: (seq, table CRC, table first sector). A commit of the runtime's own upload sets it; a read of a header that
 /// differs checks the table's CRC again (one pass over the table), so a lookup costs the headers and one scan.

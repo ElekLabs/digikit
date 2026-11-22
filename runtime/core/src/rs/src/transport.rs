@@ -45,7 +45,7 @@ pub struct UploadBuf([u8; BUF_BYTES]);
 #[no_mangle]
 pub static mut DKRT_UPLOAD_BUF: UploadBuf = UploadBuf([0; BUF_BYTES]);
 /// Wire bytes of a reply are at most 1 KiB: the unpacked body at most this.
-pub(crate) const REPLY_BODY_MAX: usize = 880;
+pub(crate) use dkrt_abi::command::REPLY_BODY_MAX;
 pub(crate) const REQ_WIRE_MAX: u32 = dkrt_sdk::proto::MAX_REQUEST_WIRE as u32;
 /// A request body that is not DATA or SELECT, copied out of the buffer (a store path is up to 159 bytes: BEGIN's body is at most 196).
 pub(crate) static mut REQ: [u8; 256] = [0; 256];
@@ -270,21 +270,7 @@ unsafe fn run_builtin(ent: Option<&Cmd>, cmd: u8, seq: u32, buf: *mut u8, body: 
 
 // ---- the command table ---------------------------------------------------------------------------------------------------
 
-/// A built-in command: its handler takes the request number, the buffer (table scratch), the body and its length, and sends the reply.
-pub(crate) type Handler = unsafe fn(u32, *mut u8, *const u8, usize) -> i32;
-
-/// The reply of this command is not logged as an UPLOAD event (it is read-only and frequent).
-pub(crate) const NOLOG: u8 = 1;
-/// The body is read in place (`buf + BODY_AT`, up to a chunk), not copied into the small request buffer.
-pub(crate) const BIG: u8 = 2;
-/// The command reads or writes the table or the card through the store: it holds the store lock.
-pub(crate) const STORE: u8 = 4;
-
-pub(crate) struct Cmd {
-    pub(crate) cmd: u8,
-    pub(crate) flags: u8,
-    pub(crate) h: Handler,
-}
+pub(crate) use dkrt_abi::command::{Cmd, BIG, NOLOG, STORE};
 
 /// The commands of the resident core, looked up one after the other (a jump table is not ColdFire code); the others are the system package's (`hooks::command_flags`).
 pub(crate) static CMDS: [Cmd; 16] = [

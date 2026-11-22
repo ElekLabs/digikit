@@ -52,7 +52,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Fixture {
-        let lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let lock = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe { rest() };
         *card_gate::info() = card_gate::CardInfo {
             state: CARD_UNKNOWN,

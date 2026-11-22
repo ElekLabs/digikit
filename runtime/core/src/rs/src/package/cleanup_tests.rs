@@ -789,6 +789,11 @@ pub extern "C" fn mem_new(_: u32) -> *mut u8 {
     panic!("host tests must not allocate firmware memory")
 }
 
+#[export_name = "cf.mem.fn.free"]
+pub extern "C" fn mem_free(_: *mut u8) {
+    panic!("host tests must not free firmware memory")
+}
+
 #[export_name = "cf.storage.fn.capacity"]
 pub extern "C" fn card_capacity() -> u32 {
     crate::host_io::card_capacity()

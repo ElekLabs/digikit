@@ -7,13 +7,14 @@
 //! (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle. The handle is the client number the existing code
 //! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `imports.rs`.
 
-use crate::{dlog, settings, state::REC_MAX, store, store_writer};
+use crate::package::resident::{dlog, settings, store, store_writer};
+use dkrt_abi::REC_MAX;
 use crate::package::{files};
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::MAX_MODULES;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
-use crate::platform::PLATFORM;
+use crate::package::resident::platform::PLATFORM;
 use dkrt_abi::dev_addr::DevAddr;
-use dkrt_abi::storage::Storage;
 use dkrt_abi::module::{Ctx, CTX_MAGIC};
 use dkrt_sdk::*;
 
@@ -128,7 +129,7 @@ pub unsafe fn tick_all() {
             if let Some(t) = t0 {
                 dlog::span_end(rec as u32, t);
             }
-            let s = crate::platform::st();
+            let s = crate::package::resident::state::st();
             s.tick_calls = s.tick_calls.wrapping_add(1);
         }
         rec += 1;
@@ -157,7 +158,7 @@ pub(crate) unsafe fn give(out: *mut *mut u8, client: i32) -> i32 {
 
 pub unsafe extern "C" fn dk_module_ctx_device(ctx: *mut u8) -> u32 {
     if ctx_rec(ctx).is_some() {
-        crate::platform::device()
+        crate::package::resident::platform::device()
     } else {
         0
     }
@@ -225,31 +226,31 @@ pub unsafe extern "C" fn dk_files_read(_f: *mut u8, path: *const u8, buf: *mut u
 // The write calls take the same handle. The store has one write session in all, so the handle only names the owner: it is not looked up yet.
 
 pub unsafe extern "C" fn dk_files_create(_f: *mut u8, root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
-    crate::storage::sdk_files::sdk_create(root, path, size, hash4, flags)
+    crate::package::resident::sdk_files::sdk_create(root, path, size, hash4, flags)
 }
 
 pub unsafe extern "C" fn dk_files_write(_f: *mut u8, h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
-    crate::storage::sdk_files::sdk_write(h, offset, buf, len)
+    crate::package::resident::sdk_files::sdk_write(h, offset, buf, len)
 }
 
 pub unsafe extern "C" fn dk_files_close(_f: *mut u8, h: i32, hash_out: *mut u8) -> i32 {
-    crate::storage::sdk_files::sdk_close(h, hash_out)
+    crate::package::resident::sdk_files::sdk_close(h, hash_out)
 }
 
 pub unsafe extern "C" fn dk_files_abort(_f: *mut u8, h: i32) -> i32 {
-    crate::storage::sdk_files::sdk_abort(h)
+    crate::package::resident::sdk_files::sdk_abort(h)
 }
 
 pub unsafe extern "C" fn dk_files_delete(_f: *mut u8, root: u32, path: *const u8) -> i32 {
-    crate::storage::sdk_files::sdk_delete(root, path)
+    crate::package::resident::sdk_files::sdk_delete(root, path)
 }
 
 pub unsafe extern "C" fn dk_files_commit(_f: *mut u8) -> i32 {
-    crate::storage::sdk_files::sdk_commit()
+    crate::package::resident::sdk_files::sdk_commit()
 }
 
 pub unsafe extern "C" fn dk_files_pending(_f: *mut u8) -> i32 {
-    crate::storage::sdk_files::sdk_pending()
+    crate::package::resident::sdk_files::sdk_pending()
 }
 
 #[cfg(test)]
@@ -288,7 +289,7 @@ mod tests {
             let rec = MAX_MODULES - 1;
             unbind(rec);
             let ctx = bind(rec) as usize as *mut u8;
-            assert_eq!(dk_module_ctx_device(ctx), crate::platform::device());
+            assert_eq!(dk_module_ctx_device(ctx), crate::package::resident::platform::device());
             assert_eq!(dk_module_ctx_runtime_version(ctx), RUNTIME_VERSION);
             unbind(rec);
             assert_eq!((dk_module_ctx_device(ctx), dk_module_ctx_runtime_version(ctx)), (0, 0));

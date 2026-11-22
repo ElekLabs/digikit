@@ -1,4 +1,4 @@
-//! `PackagePlatform`: the `Platform` methods the system package uses (the 17 of the inventory and `sample_path_max`), and nothing else of the device (docs/plans/rc2s-1-boundary-inventory.md, section 3.3).
+//! `PackagePlatform`: the `Platform` methods the system package uses (the 17 of the inventory, `sample_path_max` and the device facts the capacity report reads), and nothing else of the device (docs/plans/rc2s-1-boundary-inventory.md, section 3.3).
 //!
 //! Package code takes `P: PackagePlatform` where it needs the device, so what it may ask of the resident core is this list and no more. The resident platform
 //! (`RealPlatform`, and `FakePlatform` in host tests) gives it through its `Platform`: the impl below forwards each method, so no platform writes it twice. A package in
@@ -39,6 +39,14 @@ pub trait PackagePlatform {
     fn device_id(&self) -> u32;
     /// The longest path of a sample file of the device.
     fn sample_path_max(&self) -> u32;
+    /// The device has the DSP the digikit link drives.
+    fn has_dsp(&self) -> bool;
+    /// The DSP load the device allows, in the units of the CAPACITY entry (`DeviceProfile::dsp_headroom`).
+    fn dsp_headroom(&self) -> u32;
+    /// The voices the device's DSP runs (`DeviceProfile::dsp_voices`).
+    fn dsp_voices(&self) -> u32;
+    /// The DSP cycles of one block (`DeviceProfile::dsp_block_cycles`).
+    fn dsp_block_cycles(&self) -> u32;
     /// Kind, size and hash of the store or sample path.
     unsafe fn stat(&self, root: u32, path: &[u8]) -> Result<Stat, i32>;
     /// `stat` and the first 64 bytes of a file.
@@ -128,6 +136,22 @@ impl<P: Platform> PackagePlatform for P {
     #[inline(always)]
     fn sample_path_max(&self) -> u32 {
         Platform::sample_path_max(self)
+    }
+    #[inline(always)]
+    fn has_dsp(&self) -> bool {
+        Platform::has_dsp(self)
+    }
+    #[inline(always)]
+    fn dsp_headroom(&self) -> u32 {
+        Platform::dsp_headroom(self)
+    }
+    #[inline(always)]
+    fn dsp_voices(&self) -> u32 {
+        Platform::dsp_voices(self)
+    }
+    #[inline(always)]
+    fn dsp_block_cycles(&self) -> u32 {
+        Platform::dsp_block_cycles(self)
     }
     #[inline(always)]
     unsafe fn stat(&self, root: u32, path: &[u8]) -> Result<Stat, i32> {

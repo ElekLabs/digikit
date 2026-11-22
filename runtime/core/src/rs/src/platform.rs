@@ -81,6 +81,10 @@ pub struct RealPlatform;
 /// The platform of this image. The core calls it through the free functions below, or takes a `P: Platform` where a host test drives the path.
 pub const PLATFORM: RealPlatform = RealPlatform;
 
+/// Host tests: the info tables of the test image, `None` for a name the tests have no table for. A test setup gives it once (`test_lock`).
+#[cfg(test)]
+pub(crate) static TEST_INFO: std::sync::OnceLock<unsafe fn(u32) -> Option<*const u32>> = std::sync::OnceLock::new();
+
 #[cfg(test)]
 thread_local! {
     /// The profile a host test runs with (`with_profile`); `None`: the first device file's.
@@ -310,7 +314,7 @@ impl Platform for RealPlatform {
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         // host tests link no image: the tables of the runtime's own tests (`dyndsp_info`, `dynfx_info`)
         #[cfg(test)]
-        if let Some(t) = crate::package::cleanup_tests::test_info(name_hash) {
+        if let Some(t) = TEST_INFO.get().and_then(|f| f(name_hash)) {
             return t;
         }
         dkrt_abi::platform::info_find(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash)

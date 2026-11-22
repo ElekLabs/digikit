@@ -300,7 +300,7 @@ fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_o
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
         // the first stage reads the table (numbering of the new keys), the second is the file checks: the services' checks of the DSP section read the index of the module that loads
         assert_eq!(l.m.boot_at_stage, vec![u32::MAX, 0]);
-        assert_eq!(crate::selection::BOOT_IDX, u32::MAX, "the index is as it was");
+        assert_eq!(crate::package::boot_idx::get(), u32::MAX, "the index is as it was");
         assert_eq!((l.table_len[0], l.tables[0]), table, "the kept table is the old one: the numbering used the new table for a moment only");
         // a file that drops a key is refused without numbering anything (the table is not touched either)
         l.m.files.insert(PATH[..PATH.len() - 1].to_vec(), keyed_file(b'a', &[1]));
@@ -318,7 +318,7 @@ fn a_live_load_takes_the_record_of_the_given_index_and_the_check_changes_nothing
         // the check: no record, no table, no acceptance of the index, the selection index as it was
         assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
         assert_eq!((l.m.live.len(), l.m.allocs, st().modules[1].used, l.table_len[1], l.accepted[1]), (live, allocs, 0, 0, false));
-        assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
+        assert_eq!(crate::package::boot_idx::get(), u32::MAX);
         // the load, through the manager: the record is the index's own; the table and the acceptance are kept at the index
         let mut rt = adopt(&mut l, &[0]);
         assert_eq!(rt.live_load_with(4, PATH_B.as_ptr(), &wide()), OK);
@@ -327,7 +327,7 @@ fn a_live_load_takes_the_record_of_the_given_index_and_the_check_changes_nothing
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(4, dkneeds::KIND_MACHINE, &mut out), 1);
         assert_eq!(out[0], 9);
-        assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
+        assert_eq!(crate::package::boot_idx::get(), u32::MAX);
         // the module that was live is untouched, and both are live at their indices
         assert_eq!((st().modules[0].used, l.sel_of(0), l.accepted[0]), (1, 0, true));
         assert_eq!(l.live_at(SEL_MAX), [true, false, false, false, true, false, false, false]);
@@ -377,7 +377,7 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
         assert_eq!(l.m.live.len(), 1, "nothing leaked: the image block of module a only");
         let mut out = [0u32; 8];
         assert_eq!(l.keys_of(1, dkneeds::KIND_MACHINE, &mut out), 0);
-        assert_eq!(crate::selection::BOOT_IDX, u32::MAX);
+        assert_eq!(crate::package::boot_idx::get(), u32::MAX);
         // a file that is torn between the check and the load is refused at the load
         l.m.init = Init::Ok;
         let mut hollow = keyed_file(b'b', &[9]);
@@ -406,9 +406,9 @@ fn a_load_after_the_boot_needs_the_live_phase_and_a_provider_record_is_never_loa
         assert_eq!(l.phase == Phase::Closed, true);
         // the live phase accepts a free record and a module's own record, and nothing for a provider
         l.phase = Phase::Live;
-        crate::selection::BOOT_IDX = 1;
+        crate::package::boot_idx::set(1);
         assert_eq!(l.load_file(PATH_B.as_ptr(), Slot::Free), OK);
-        crate::selection::BOOT_IDX = u32::MAX;
+        crate::package::boot_idx::set(u32::MAX);
         assert_eq!(l.load_file(PATH_B.as_ptr(), Slot::Provider(MAX_MODULES)), E_BOOT_ONLY);
         l.phase = Phase::Closed;
     }

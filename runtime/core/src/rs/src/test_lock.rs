@@ -15,7 +15,11 @@ impl TestLock {
     pub(crate) fn lock_with_package(&'static self) -> LockResult<MutexGuard<'static, ()>> {
         let guard = self.0.lock();
         // SAFETY: the lock is held, so no other test reads or swaps the installed table.
-        unsafe { crate::hooks::install(&crate::package::hooks::HOOKS) };
+        let _ = crate::platform::TEST_INFO.set(|h| unsafe { crate::package::cleanup_tests::test_info(h) });
+        unsafe {
+            crate::package::resident::install(&crate::resident::TABLE);
+            crate::hooks::install(&crate::package::hooks::HOOKS);
+        }
         guard
     }
 }

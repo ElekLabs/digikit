@@ -109,7 +109,7 @@ fn provider() -> &'static mut Provider {
 
 /// `dkc_settings_overlay_set`: the service file that runs now gives its table (null: takes it away).
 pub unsafe fn set(table: *const SettingsOverlay) {
-    if provider().set(crate::dlog::current_source(), table) {
+    if provider().set(crate::package::resident::dlog::current_source(), table) {
         provider_gone();
     }
 }

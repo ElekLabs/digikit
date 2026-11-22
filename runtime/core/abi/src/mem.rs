@@ -167,3 +167,12 @@ pub trait FwMem {
         call_at(DevAddr::new(a), args)
     }
 }
+
+/// Copy `n` bytes from `src` to `dst` (the ranges do not overlap), one byte at a time: no call to the compiler's `memcpy`.
+pub unsafe fn copy(dst: *mut u8, src: *const u8, n: usize) {
+    let mut i = 0;
+    while i < n {
+        *dst.add(i) = *src.add(i);
+        i += 1;
+    }
+}

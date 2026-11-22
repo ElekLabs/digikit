@@ -405,7 +405,7 @@ fn every_profile_is_complete_and_distinct() {
 
 #[test]
 fn card_writes_outside_the_store_are_refused_and_never_reach_the_card() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     unsafe {
@@ -419,7 +419,7 @@ fn card_writes_outside_the_store_are_refused_and_never_reach_the_card() {
 
 #[test]
 fn a_blank_card_is_claimed_before_the_first_data_write_and_ours_afterwards() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DN2);
     unsafe {
@@ -439,7 +439,7 @@ fn a_blank_card_is_claimed_before_the_first_data_write_and_ours_afterwards() {
 
 #[test]
 fn a_foreign_card_is_read_only_for_every_write() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     f.put(L.first + 5, [0x55; 512]); // not blank and not ours
@@ -454,7 +454,7 @@ fn a_foreign_card_is_read_only_for_every_write() {
 
 #[test]
 fn a_card_that_ends_before_the_store_has_no_store() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     f.card_sectors.set(L.first + 100);
@@ -467,7 +467,7 @@ fn a_card_that_ends_before_the_store_has_no_store() {
 
 #[test]
 fn the_card_check_decides_from_the_capacity_the_driver_reports() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let end = L.first + L.sectors;
     // not ready (0xFFFFFFFF): nothing is decided, nothing is read, the write is refused this time and the check runs again at the next write
     card_reset();
@@ -527,7 +527,7 @@ fn the_card_check_decides_from_the_capacity_the_driver_reports() {
 
 #[test]
 fn an_unreadable_card_is_read_only() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     f.bad_read.borrow_mut().push(L.first);
@@ -569,7 +569,7 @@ fn check(f: &FakePlatform) {
 
 #[test]
 fn every_write_outside_the_store_is_refused_for_range_and_counted_whatever_its_size() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     check(&f);
@@ -595,7 +595,7 @@ fn every_write_outside_the_store_is_refused_for_range_and_counted_whatever_its_s
 
 #[test]
 fn a_valid_selection_record_makes_the_area_ours_without_scanning_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     // foreign bytes in both headers, a valid selection copy: ours (an empty selection record is what a fresh runtime card holds)
@@ -614,7 +614,7 @@ fn a_valid_selection_record_makes_the_area_ours_without_scanning_it() {
 
 #[test]
 fn a_foreign_card_names_its_first_nonblank_sector_and_hash_and_refuses_selection_and_range() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     const STRAY: u32 = 100;
@@ -643,7 +643,7 @@ fn the_card_state_after_a_torn_claim_or_selection_write() {
         ("header A torn, B blank", Some(torn(a)), None, None, CARD_FOREIGN, 0),
         ("selection copy A torn, the rest blank", None, None, Some(torn(selection_sector(1))), CARD_BLANK, u32::MAX),
     ];
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     for (what, ha, hb, sa, state, first_nonblank) in cases {
         card_reset();
         let f = FakePlatform::new(profiles::DT2);
@@ -664,7 +664,7 @@ fn the_card_state_after_a_torn_claim_or_selection_write() {
 
 #[test]
 fn a_claim_cut_after_its_first_write_leaves_a_card_the_next_boot_calls_ours() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     // the claim writes header B first, then A, then the data: the cut comes at header A
@@ -720,7 +720,7 @@ fn interrupt_masks_nest_and_restore_the_caller_state() {
 
 #[test]
 fn a_reply_goes_to_the_usb_port_as_one_sysex_message_and_is_dropped_without_room() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let f = FakePlatform::new(profiles::DT2);
     unsafe {
         assert_eq!(reply_with(&f, 1, 5, 0, 0), 1);

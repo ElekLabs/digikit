@@ -71,18 +71,18 @@ pub(crate) const DEVICE_IMAGES: DeviceImages = crate::package::fake_checked_imag
 
 impl Images for RealImages {
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
-        let found = crate::store::find(path)?;
-        let r = crate::store::load_to_stage(&found);
+        let found = crate::package::resident::store::find(path)?;
+        let r = crate::package::resident::store::load_to_stage(&found);
         if r != dkrt_sdk::OK {
             return Err(r);
         }
-        Ok(Staged { ptr: crate::store::stage() as *const u8, size: found.size })
+        Ok(Staged { ptr: crate::package::resident::store::stage() as *const u8, size: found.size })
     }
     unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32 {
-        crate::store::list(prefix, out, max)
+        crate::package::resident::store::list(prefix, out, max)
     }
     unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
-        let a = crate::arena::alloc(n);
+        let a = crate::package::resident::arena::alloc(n);
         if a.is_null() {
             None
         } else {
@@ -90,7 +90,7 @@ impl Images for RealImages {
         }
     }
     unsafe fn free(&mut self, addr: DevAddr) {
-        crate::arena::free(addr);
+        crate::package::resident::arena::free(addr);
     }
     // host tests link no device imports (as `platform.rs`): the real loader of the cleanup tests resolves none
     unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
@@ -116,7 +116,7 @@ impl Images for RealImages {
     }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
         let call: unsafe extern "C" fn(*const Ctx) -> i32 = core::mem::transmute(init as usize);
-        crate::dlog::call_init(rec, call, ctx)
+        crate::package::resident::dlog::call_init(rec, call, ctx)
     }
     unsafe fn enter_fini(&mut self, rec: usize, fini: u32, ctx: *const Ctx) {
         #[cfg(test)]
@@ -127,7 +127,7 @@ impl Images for RealImages {
         #[cfg(not(test))]
         {
             let call: unsafe extern "C" fn(*const Ctx) = core::mem::transmute(fini as usize);
-            crate::dlog::call_fini(rec, call, ctx);
+            crate::package::resident::dlog::call_fini(rec, call, ctx);
         }
     }
 }

@@ -4,7 +4,7 @@
 //!
 //! `RealCore` is a zero-sized type that delegates to the core functions, so a call through it costs what the direct call cost. A function that a host test must
 //! drive takes a generic `C: CoreApi` (no `dyn`: the runtime has no allocator and no vtables); everything else calls the `REAL_CORE` constant.
-use crate::{dlog, settings, worker};
+use crate::package::resident::{dlog, settings, worker};
 use crate::package::{registry};
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_abi::dsp::DspState;
@@ -13,9 +13,9 @@ use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 pub use dkrt_abi::core_api::{CoreApi, JOB_E_CANCELLED, LOG_INFO};
 
 // The platform facts a service may read (the device profile, the interrupt mask, the sample-pool provider): the only platform names a service has.
-pub use crate::platform::PLATFORM;
-pub use dkrt_abi::platform::{Platform, SamplePool};
-pub use dkrt_abi::storage::Storage;
+pub(crate) use crate::package::resident::platform::PLATFORM;
+pub use dkrt_abi::platform::SamplePool;
+use dkrt_abi::package_platform::PackagePlatform;
 
 /// What the services' host tests use of the core's job queue.
 #[cfg(test)]
@@ -35,7 +35,7 @@ impl dkrt_abi::mem::FwMem for RealCore {}
 
 impl CoreApi for RealCore {
     fn boot_index(&self) -> u32 {
-        unsafe { core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)) }
+        crate::package::boot_idx::get()
     }
     fn live_op(&self) -> u32 {
         crate::package::reload::phase()
@@ -44,7 +44,7 @@ impl CoreApi for RealCore {
         crate::package::loader::keys_of(at, kind, out)
     }
     fn legacy_state(&self) -> [u8; 32] {
-        let map = unsafe { (*core::ptr::addr_of!(crate::selection::REC)).map };
+        let map = unsafe { crate::package::resident::selection::legacy_state() };
         let mut b = [0u8; 32];
         let mut i = 0;
         while i < map.len() {
@@ -54,16 +54,13 @@ impl CoreApi for RealCore {
         b
     }
     unsafe fn legacy_state_clear(&self) -> i32 {
-        use crate::selection::{update, REC, REC_COPY, REC_VALID};
-        let mut r = REC;
-        r.map = [0; dkrt_sdk::sel::MAP_N];
-        update(r, REC_COPY, REC_VALID)
+        crate::package::resident::selection::legacy_state_clear()
     }
     fn device_id(&self) -> u32 {
         PLATFORM.device_id()
     }
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
-        crate::platform::st().modules[owner as usize - 1].name.as_ptr()
+        crate::package::resident::state::st().modules[owner as usize - 1].name.as_ptr()
     }
     unsafe fn module_of(&self, ctx: *const u8) -> u8 {
         match crate::package::entry::own_rec(ctx as *mut u8) {
@@ -104,7 +101,7 @@ impl CoreApi for RealCore {
         out.assume_init()
     }
     unsafe fn selection_add(&self, path: &[u8]) -> i32 {
-        crate::selection::selection_add(path)
+        crate::package::resident::selection::selection_add(path)
     }
     unsafe fn module_path(&self, owner: u8) -> *const u8 {
         crate::package::scan::module_path(owner)

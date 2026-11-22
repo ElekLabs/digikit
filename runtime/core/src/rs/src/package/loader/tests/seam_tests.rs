@@ -302,8 +302,8 @@ fn the_seams_leave_the_boot_index_as_they_found_it() {
         let mut s = shared(&mut l);
         let (mut placer, mut linker, mut installers, mut host) = s.seams();
         let manifest = RtManifest::of(&mut s, 0);
-        let idx = || core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX));
-        crate::selection::BOOT_IDX = 77;
+        let idx = || crate::package::boot_idx::get();
+        crate::package::boot_idx::set(77);
         let base = placer.place(svc).unwrap();
         assert_eq!(idx(), 77, "place");
         linker.link(svc, base, &[]).unwrap();
@@ -318,7 +318,7 @@ fn the_seams_leave_the_boot_index_as_they_found_it() {
         host.stop(svc);
         placer.free(svc);
         assert_eq!(idx(), 77, "stop and free");
-        crate::selection::BOOT_IDX = u32::MAX;
+        crate::package::boot_idx::set(u32::MAX);
     }
 }
 
@@ -436,8 +436,8 @@ fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_duri
         assert_eq!(crate::package::svc_rows::add(even, &EVEN, Some(20)), OK);
         let block = registry_block(&[4, 3]);
         l.reg_block[3] = (block.as_ptr(), block.len() as u32);
-        let idx = || core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX));
-        crate::selection::BOOT_IDX = u32::MAX;
+        let idx = || crate::package::boot_idx::get();
+        crate::package::boot_idx::set(u32::MAX);
         BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
         host.attach(id(3), &[id(odd), id(even)]).unwrap();
         assert_eq!(*BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()), [("apply", 3), ("apply", 3)], "apply reads the consumer's record");

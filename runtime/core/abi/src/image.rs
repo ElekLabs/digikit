@@ -1,9 +1,8 @@
 //! The `.dkm` image parse: the header, bounds and relocation checks of the loader, on the staged bytes only. Nothing is written.
 //! The loader calls `head` first, then its import check, then `sections`. Each returns the error code the loader returns.
 
+use crate::mem::{cstr_len, rd32};
 use crate::sha256::Sha;
-use dkrt_abi::mem::cstr_len;
-use dkrt_abi::mem::rd32;
 
 use dkrt_sdk::*;
 
@@ -61,7 +60,7 @@ pub unsafe fn head(f: *const u8, size: u32) -> Result<Head, i32> {
     }
     // the runtime version the module needs: another major or minor than the runtime's, or a higher patch, refuses (0.x: a minor breaks)
     let needs = rd32(f.add(dkneeds::H_RUNTIME as usize));
-    if !crate::state::runtime_accepts(needs) {
+    if !crate::runtime_state::runtime_accepts(needs) {
         return Err(E_CONTRACT);
     }
     let name = f.add(dkneeds::H_NAME as usize);
@@ -106,7 +105,20 @@ pub unsafe fn head(f: *const u8, size: u32) -> Result<Head, i32> {
     {
         return Err(E_FORMAT);
     }
-    Ok(Head { needs, image_off, image_size, bss, reloc_off, reloc_n, import_off, import_n, init, fini, menu, tick })
+    Ok(Head {
+        needs,
+        image_off,
+        image_size,
+        bss,
+        reloc_off,
+        reloc_n,
+        import_off,
+        import_n,
+        init,
+        fini,
+        menu,
+        tick,
+    })
 }
 
 /// The relocation table: kind, bounds, import index. Runs after the loader's import check.
@@ -117,7 +129,10 @@ pub unsafe fn sections(f: *const u8, head: &Head) -> Result<(), i32> {
         let off = rd32(e.add(dkneeds::CF_RELOC_OFFSET as usize));
         let kind = rd32(e.add(dkneeds::CF_RELOC_KIND as usize));
         let k = kind >> 24;
-        if off > head.image_size - 4 || (k != 0 && k != 1) || (k == 1 && (kind & 0xff_ffff) >= head.import_n) {
+        if off > head.image_size - 4
+            || (k != 0 && k != 1)
+            || (k == 1 && (kind & 0xff_ffff) >= head.import_n)
+        {
             return Err(E_FORMAT);
         }
         i += 1;
@@ -149,7 +164,14 @@ pub unsafe fn copy(mem: *mut u8, f: *const u8, head: &Head) {
 
 /// Apply the relocations of `pass` to the copied image at `mem`, which is placed at `base`: a kind-0 word gets `base` added, a kind-1 word the address `imports[n]` of
 /// its import. `sections` validated the table. A word has one kind, so the two passes in either order give what `Both` gives.
-pub unsafe fn relocate(mem: *mut u8, f: *const u8, head: &Head, base: u32, imports: &[u32], pass: Pass) {
+pub unsafe fn relocate(
+    mem: *mut u8,
+    f: *const u8,
+    head: &Head,
+    base: u32,
+    imports: &[u32],
+    pass: Pass,
+) {
     let mut i = 0;
     while i < head.reloc_n as usize {
         let e = f.add(head.reloc_off as usize + i * dkneeds::CF_RELOC_LEN as usize);
@@ -168,13 +190,15 @@ pub unsafe fn relocate(mem: *mut u8, f: *const u8, head: &Head, base: u32, impor
             imports[(kind & 0xff_ffff) as usize]
         };
         let p = mem.add(off);
-        dkrt_abi::mem::wr32(p, rd32(p).wrapping_add(add));
+        crate::mem::wr32(p, rd32(p).wrapping_add(add));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::vec;
+    use std::vec::Vec;
 
     const IMAGE_OFF: usize = 160;
     const RELOC_OFF: usize = 176;
@@ -194,7 +218,10 @@ mod tests {
         unsafe {
             sha.update(v.as_ptr(), dkneeds::H_SHA);
             sha.update_zeros(32);
-            sha.update(v.as_ptr().add(dkneeds::H_SHA as usize + 32), n - (dkneeds::H_SHA + 32));
+            sha.update(
+                v.as_ptr().add(dkneeds::H_SHA as usize + 32),
+                n - (dkneeds::H_SHA + 32),
+            );
             sha.finish(got.as_mut_ptr());
         }
         v[dkneeds::H_SHA as usize..dkneeds::H_SHA as usize + 32].copy_from_slice(&got);
@@ -243,7 +270,10 @@ mod tests {
         let v = good();
         let h = run(&v).unwrap();
         assert_eq!((h.image_off, h.image_size, h.bss), (160, 16, 0));
-        assert_eq!((h.reloc_off, h.reloc_n, h.import_off, h.import_n), (176, 2, 192, 1));
+        assert_eq!(
+            (h.reloc_off, h.reloc_n, h.import_off, h.import_n),
+            (176, 2, 192, 1)
+        );
         assert_eq!((h.init, h.fini, h.menu, h.tick), (NONE, NONE, NONE, NONE));
         assert_eq!(unsafe { sections(v.as_ptr(), &h) }, Ok(()));
     }
@@ -340,9 +370,15 @@ mod tests {
         // offset past the last word of the image
         assert_eq!(sections_of(|v| put(v, RELOC_OFF as u32, 13)), Err(E_FORMAT));
         // unknown kind
-        assert_eq!(sections_of(|v| put(v, RELOC_OFF as u32 + 4, 2 << 24)), Err(E_FORMAT));
+        assert_eq!(
+            sections_of(|v| put(v, RELOC_OFF as u32 + 4, 2 << 24)),
+            Err(E_FORMAT)
+        );
         // import index not below the import count
-        assert_eq!(sections_of(|v| put(v, RELOC_OFF as u32 + 12, (1 << 24) | 1)), Err(E_FORMAT));
+        assert_eq!(
+            sections_of(|v| put(v, RELOC_OFF as u32 + 12, (1 << 24) | 1)),
+            Err(E_FORMAT)
+        );
         // the last valid offset and import index
         assert_eq!(sections_of(|v| put(v, RELOC_OFF as u32, 12)), Ok(()));
     }

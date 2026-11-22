@@ -393,13 +393,7 @@ pub fn free_bytes(h: &Hdr) -> u32 {
     }
 }
 
-pub unsafe fn copy(dst: *mut u8, src: *const u8, n: usize) {
-    let mut i = 0;
-    while i < n {
-        *dst.add(i) = *src.add(i);
-        i += 1;
-    }
-}
+pub use dkrt_abi::mem::copy;
 
 pub unsafe fn zero(dst: *mut u8, n: usize) {
     let mut i = 0;
@@ -1290,7 +1284,7 @@ mod tests {
 
     #[test]
     fn an_idle_session_expires_after_20_seconds_of_block_clock_and_not_before() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SYSEX, 1000);
             TEST_NOW = 1000 + 20 * 1500 - 1;
@@ -1308,7 +1302,7 @@ mod tests {
 
     #[test]
     fn a_session_is_not_dropped_while_the_store_lock_is_held() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SDK, 0);
             TEST_NOW = 100_000;
@@ -1323,7 +1317,7 @@ mod tests {
 
     #[test]
     fn the_idle_knob_overrides_the_default() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SYSEX, 0);
             write_volatile(addr_of_mut!(DKRT_SESSION_IDLE), 10);
@@ -1425,7 +1419,7 @@ mod tests {
 
     #[test]
     fn pending_files_keep_their_extents_out_and_count_for_their_owner() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 1024, 3);
@@ -1451,7 +1445,7 @@ mod tests {
 
     #[test]
     fn a_pending_replace_takes_the_slot_of_its_path() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             TEST_NOW = 10;
@@ -1468,7 +1462,7 @@ mod tests {
 
     #[test]
     fn pending_files_are_due_when_the_owner_is_idle_for_a_second_or_its_job_ends_and_never_dropped_by_the_session_idle() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 512, 3);
@@ -1504,7 +1498,7 @@ mod tests {
 
     #[test]
     fn a_module_that_goes_gets_its_pending_files_flushed() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 512, 3);
@@ -1529,7 +1523,7 @@ mod tests {
 
     #[test]
     fn free_bytes_leaves_room_for_the_pending_entries_and_their_data() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             crate::store::TEST_LAYOUT.with(|c| c.set(Some(Layout { first: 100, sectors: 100_000 })));
@@ -1548,7 +1542,7 @@ mod tests {
 
     #[test]
     fn a_pending_path_is_found_without_being_removed() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 512, 3);
@@ -1563,7 +1557,7 @@ mod tests {
 
     #[test]
     fn a_stale_or_foreign_handle_is_refused() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SDK, 0);
             up().handle = 7;

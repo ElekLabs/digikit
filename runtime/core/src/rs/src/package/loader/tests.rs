@@ -3,7 +3,7 @@
 //! the registry.
 use super::*;
 use crate::fake_platform::FakePlatform;
-use crate::sha256::Sha;
+use dkrt_abi::sha256::Sha;
 use crate::test_lock::LOCK;
 use dkrt_abi::profiles;
 use std::collections::BTreeMap;
@@ -115,7 +115,7 @@ const SVC_ADDR: u32 = 0x5000;
 impl Images for FakeImages {
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         self.log.push(Ev::Stage);
-        self.boot_at_stage.push(core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)));
+        self.boot_at_stage.push(crate::package::boot_idx::get());
         let n = cstr_len(path, 64);
         let key = core::slice::from_raw_parts(path, n).to_vec();
         match self.files.get(&key) {
@@ -627,13 +627,13 @@ fn keyed_file(name: u8, keys: &[u32]) -> Vec<u8> {
 /// What a boot leaves: module `file` loaded at selection index `k`, its table kept and the plan's acceptance set.
 unsafe fn booted(l: &mut Fake, k: usize, path: &[u8]) {
     l.phase = Phase::Boot;
-    crate::selection::BOOT_IDX = k as u32;
+    crate::package::boot_idx::set(k as u32);
     let staged = l.m.stage(path.as_ptr()).unwrap();
     let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize).to_vec();
     l.capture(k, &file);
     l.accepted[k] = true;
     assert_eq!(l.load(path.as_ptr()), OK);
-    crate::selection::BOOT_IDX = u32::MAX;
+    crate::package::boot_idx::set(u32::MAX);
 }
 
 /// A loader with module `a` (keys 1, 2) live in record 0 at selection index 0 and the Boot phase over.

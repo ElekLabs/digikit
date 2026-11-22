@@ -2,11 +2,11 @@
 //! the tables the proof tools read stay as they are); the records after them are the provider files' (R12-3), kept in `DKRT_PROVIDERS`, a symbol of the patch plan beside `DKRT_STATE`, so host tools read them with the same layout.
 //! Only the loader writes them. Provider records have no menu and no runtime-version cell: those tables stay `MAX_MODULES` long.
 
-use crate::state::{DKRT_MENUS, DKRT_MENU_OBJS, DKRT_MODULE_RUNTIME, DKRT_PATHS};
+use crate::package::resident::state::{menu_objs, menus, module_runtime, paths};
 use dkrt_abi::MAX_MODULES;
-use crate::platform::st;
+use crate::package::resident::state::st;
 use dkrt_abi::module::Module;
-pub use crate::state::REC_MAX;
+pub use dkrt_abi::REC_MAX;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::PROVIDER_MAX;
 
@@ -27,7 +27,7 @@ pub unsafe fn module(rec: usize) -> &'static mut Module {
 /// The store path record `rec` was loaded from (NUL padded).
 pub unsafe fn path(rec: usize) -> &'static mut [u8; 64] {
     if rec < MAX_MODULES {
-        &mut (*addr_of_mut!(DKRT_PATHS))[rec]
+        &mut (*paths())[rec]
     } else {
         &mut (*addr_of_mut!(PROVIDER_PATHS))[rec - MAX_MODULES]
     }
@@ -36,15 +36,15 @@ pub unsafe fn path(rec: usize) -> &'static mut [u8; 64] {
 /// The runtime version record `rec` needs (`MODULES` reports it); a provider has no cell.
 pub unsafe fn set_runtime(rec: usize, v: u32) {
     if rec < MAX_MODULES {
-        (*addr_of_mut!(DKRT_MODULE_RUNTIME))[rec] = v;
+        (*module_runtime())[rec] = v;
     }
 }
 
 /// The address of record `rec`'s `menu` (0: none); a provider has none. The record's menu objects (`dkrt_menu_built`) start at 0 with the module in it.
 pub unsafe fn set_menu(rec: usize, addr: u32) {
     if rec < MAX_MODULES {
-        (*addr_of_mut!(DKRT_MENUS))[rec] = addr;
-        (*addr_of_mut!(DKRT_MENU_OBJS))[rec] = 0;
+        (*menus())[rec] = addr;
+        (*menu_objs())[rec] = 0;
     }
 }
 
@@ -58,6 +58,7 @@ pub unsafe fn reset() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::{DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
     use crate::test_lock::LOCK;
 
     #[test]

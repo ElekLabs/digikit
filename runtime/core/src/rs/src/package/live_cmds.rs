@@ -1,8 +1,8 @@
 //! The upload commands about the loaded modules: CAPACITY (the handler only; the reply is built in `capacity.rs`) and the live load, unload and reload (RELOAD, RELOAD_STATE, LOAD, UNLOAD).
 
-use crate::store_writer as sw;
-use crate::platform::wr32;
-use crate::transport::*;
+use crate::package::resident::store_writer as sw;
+use dkrt_abi::mem::wr32;
+use crate::package::resident::transport::{rbody, reply};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::proto::*;
 use dkrt_sdk::{LIVE_LOAD, LIVE_RELOAD, LIVE_UNLOAD, OK};
@@ -41,7 +41,7 @@ pub(crate) unsafe fn cmd_unload(seq: u32, body: *const u8, blen: usize) -> i32 {
 /// unless the result is 0 and the job loaded; 0: a refusal or an abort left it running), `u8 op` (1 load, 2 unload, 3 reload of the last job; 0 none yet). The state of the one live job, whichever operation it is. No body.
 pub(crate) unsafe fn cmd_reload_state(seq: u32) -> i32 {
     let s = crate::package::reload::state();
-    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
+    let rb = rbody().add(1);
     *rb = s.phase;
     wr32(rb.add(1), s.result as u32);
     *rb.add(5) = s.step;

@@ -51,7 +51,7 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
 /// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
 /// command reports it with the result, and the record may change after the boot (a SELECT).
 pub use dkrt_abi::state::NAME_LEN;
-static mut BOOT_NAME: [[u8; NAME_LEN]; SEL_MAX] = [[0; NAME_LEN]; SEL_MAX];
+pub(crate) static mut BOOT_NAME: [[u8; NAME_LEN]; SEL_MAX] = [[0; NAME_LEN]; SEL_MAX];
 
 /// The file name of module `k` of this boot's selection (NUL padded, `NAME_LEN` bytes).
 pub unsafe fn boot_name(k: usize) -> *const u8 {
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn the_boot_record_feeds_the_loads_reply_and_the_boot_info_copy() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             *info() = core::mem::zeroed();
             info().count = 2;
@@ -455,7 +455,7 @@ mod tests {
     }
     #[test]
     fn boot_name_copies_the_name_of_an_index_and_refuses_one_past_the_selection() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             fresh_boot_record();
             BOOT_NAME[1][..5].copy_from_slice(b"b.dkm");
@@ -486,7 +486,7 @@ mod tests {
 
     #[test]
     fn a_module_report_keeps_the_file_leaf_and_names_the_missing_service_on_an_import_error() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             fresh_boot_record();
             let mut missing = [0u8; NEEDS_LEN];
@@ -522,7 +522,7 @@ mod tests {
 
     #[test]
     fn a_provider_report_is_a_log_event_only_and_a_dsp_report_updates_one_row() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             fresh_boot_record();
             info().count = 2;
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn a_dsp_report_for_a_module_that_is_not_waiting_for_its_dsp_changes_nothing() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             fresh_boot_record();
             info().count = 2;
@@ -579,7 +579,7 @@ mod tests {
 
     #[test]
     fn the_boot_paths_are_noted_once_by_the_boot_and_a_live_load_never_changes_them() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             BOOT_PATH = [0; SEL_MAX];
             fresh_boot_record();
@@ -602,7 +602,7 @@ mod tests {
 
     #[test]
     fn a_failed_live_load_puts_the_boot_record_back() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             // an unloaded module stays UNLOADED, with its name and result
             fresh_boot_record();
@@ -630,7 +630,7 @@ mod tests {
 
     #[test]
     fn a_live_job_moves_the_boot_record_through_init_active_and_unloaded() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             fresh_boot_record();
             info().count = 2;

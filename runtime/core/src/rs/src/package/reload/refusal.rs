@@ -22,10 +22,10 @@ impl Facts {
     /// The facts of the system for a job on module record `rec` (`None`: a load, which has no module yet), with the card transfer flag the caller read.
     pub(crate) unsafe fn of(rec: Option<usize>, card_busy: bool) -> Facts {
         Facts {
-            safe_mode: crate::boot::info().safe != 0,
-            upload_open: crate::store_writer::is_open() || crate::store_writer::is_locked(),
+            safe_mode: crate::package::resident::boot::info().safe != 0,
+            upload_open: crate::package::resident::store_writer::is_open() || crate::package::resident::store_writer::is_locked(),
             card_busy,
-            menus: rec.is_some_and(|r| crate::state::menus_held(r)),
+            menus: rec.is_some_and(|r| crate::package::resident::state::menus_held(r)),
         }
     }
 }

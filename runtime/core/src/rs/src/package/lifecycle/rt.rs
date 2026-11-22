@@ -114,7 +114,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let init = self.init(&paths, count);
         self.session.begin_boot(caps, count);
         for k in 0..count {
-            crate::boot::note_boot_path(k, rec.paths[k].as_ptr());
+            crate::package::resident::boot::note_boot_path(k, rec.paths[k].as_ptr());
         }
         let mut roots = [PackageId(0); dkrt_abi::REC_MAX];
         let mut n = 0;
@@ -150,7 +150,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
         }
         self.report_boot(rec, report);
-        crate::selection::BOOT_IDX = u32::MAX;
+        crate::package::boot_idx::set(u32::MAX);
     }
 
     /// The name hash of the service package `service` provides (0 when it provides none).
@@ -204,7 +204,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             } else {
                 (l.provided_hash(j), if ok { crate::package::loader::records::module(id.0 as usize).base } else { 0 })
             };
-            crate::boot::report_provider(l.provider_file(j), res, hash, base);
+            crate::package::resident::boot::report_provider(l.provider_file(j), res, hash, base);
         }
         // the modules: the verdict of the graph and the rules of the core, then the load, in selection order
         let mut verdicts = [Verdict::Accepted; SEL_MAX];
@@ -212,14 +212,14 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             if let Some(why) = refusal(PackageId(k as u8)) {
                 verdicts[k] = self.verdict_of(PackageId(k as u8), &why);
             }
-            crate::boot::states().planned(k, verdicts[k]);
+            crate::package::resident::boot::states().planned(k, verdicts[k]);
         }
         for k in 0..count {
             let id = PackageId(k as u8);
             let res = if let Verdict::Refused(why) = verdicts[k] {
                 why.code()
             } else {
-                crate::boot::states().init(k);
+                crate::package::resident::boot::states().init(k);
                 let res = if let Some(e) = failed {
                     code_of(&e)
                 } else if up(id) {
@@ -233,11 +233,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 } else {
                     E_NOT_FOUND
                 };
-                crate::boot::states().finished(k, res);
+                crate::package::resident::boot::states().finished(k, res);
                 res
             };
             let missing = if res == E_IMPORT { self.session.outcome[k].missing } else { [0u8; NEEDS_LEN] };
-            crate::boot::report_module(k, rec.paths[k].as_ptr(), res, &missing, &l.captured_name(k));
+            crate::package::resident::boot::report_module(k, rec.paths[k].as_ptr(), res, &missing, &l.captured_name(k));
         }
     }
 
@@ -369,7 +369,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                     if d != id && (d.0 as usize) < MAX_MODULES {
                         let k = self.session.loader.as_ref().map_or(u8::MAX, |l| l.sel_index(d.0 as usize));
                         if k != u8::MAX {
-                            crate::boot::report_taken_down(k as u32, E_MISSING);
+                            crate::package::resident::boot::report_taken_down(k as u32, E_MISSING);
                         }
                     }
                 }
@@ -387,7 +387,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         if d.phase != dsp::PH_IDLE && d.pending.rec as usize == rec {
             let idx = d.pending.boot_idx;
             let reclaimed = self.take_down_dsp(rec);
-            crate::boot::report_dsp(idx, code);
+            crate::package::resident::boot::report_dsp(idx, code);
             dsp::fail_done(reclaimed, code);
             true
         } else if dsp::dequeue(rec) {
@@ -395,7 +395,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             if !self.take_down_dsp(rec) {
                 dsp::ds().phase = dsp::PH_RETAINED;
             }
-            crate::boot::report_dsp(idx, code);
+            crate::package::resident::boot::report_dsp(idx, code);
             true
         } else {
             false
@@ -418,7 +418,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                     (p.rec as usize, p.boot_idx)
                 };
                 let reclaimed = self.take_down_dsp(rec);
-                crate::boot::report_dsp(idx, code);
+                crate::package::resident::boot::report_dsp(idx, code);
                 dsp::fail_done(reclaimed, code);
             }
             dsp::Advance::Loaded => self.loader().dsp_loaded(l),
@@ -451,11 +451,11 @@ pub(crate) fn verdict_of(why: &LifecycleError, admission: Option<Reason>, servic
 mod device {
     use super::*;
     use crate::package::loader::{DeviceImages, RealRegistry};
-    use crate::platform::RealPlatform;
+    use crate::package::resident::platform::TablePlatform;
     use core::mem::MaybeUninit;
     use core::ptr::addr_of_mut;
 
-    pub type Real = Rt<RealPlatform, DeviceImages, RealRegistry>;
+    pub type Real = Rt<TablePlatform, DeviceImages, RealRegistry>;
 
     /// Zero bytes until the boot starts it (a `MaybeUninit`, so the static stays out of `.data`).
     static mut RT: MaybeUninit<Real> = MaybeUninit::uninit();

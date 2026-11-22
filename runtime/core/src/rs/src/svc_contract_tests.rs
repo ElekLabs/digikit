@@ -9,7 +9,7 @@ use dkrt_abi::service::{Declare, Service, SVC_ABI};
 use dkrt_svc_rt::ImportCore;
 
 fn lock() -> std::sync::MutexGuard<'static, ()> {
-    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner())
 }
 
 #[test]

@@ -74,7 +74,7 @@ fn settle(keys: &[u32]) {
     sel.count = 1;
     unsafe {
         <Lfo as dkrt_abi::service::Service<RealCore>>::settle(&crate::package::core_api::REAL_CORE, &sel);
-        crate::selection::BOOT_IDX = 0;
+        crate::package::boot_idx::set(0);
     }
 }
 

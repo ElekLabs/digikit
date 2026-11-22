@@ -27,12 +27,13 @@ mod boot_env;
 pub mod fault;
 pub mod dlog;
 mod gen_abi_check;
-mod image;
 mod resident_query;
 mod hooks;
+mod resident;
 mod menu_exports;
 mod package;
-// `dkrt_sdk::optional_imports!` (expanded in imports.rs) names `crate::loader::stub_missing`; the resident table replaces that macro in RC2s-1 S7.
+// `dkrt_sdk::optional_imports!` (expanded in package/imports.rs) names `crate::loader::stub_missing`. The package crate of RC2s-2 has its own `loader` at its root, so this alias
+// (which `check:layers` does not count as a crossing) goes away then.
 use package::loader;
 pub mod settings;
 mod hash32;
@@ -42,7 +43,6 @@ pub mod aux;
 pub mod speed;
 mod intro;
 mod safe_screen;
-mod sha256;
 mod io;
 mod watch;
 mod worker;

@@ -29,7 +29,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if self.torn[rec] & TORN_DRAIN == 0 {
             self.stop_tick_once(rec);
             crate::package::module_cmds::set_draining(owner, true);
-            crate::dlog::release_sinks(rec);
+            crate::package::resident::dlog::release_sinks(rec);
             self.drain_at[rec] = self.p.blocks();
             self.torn[rec] |= TORN_DRAIN;
         }

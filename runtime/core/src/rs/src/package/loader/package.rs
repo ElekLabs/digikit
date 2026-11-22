@@ -104,11 +104,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// Run `f` with `BOOT_IDX` (the selection index the services read to find the module that loads) set to the record of package `id`, and put back the value found.
     unsafe fn with_boot_idx<T>(&mut self, id: PackageId, f: impl FnOnce(&mut Self) -> T) -> T {
         let rec = record_of(id);
-        let was = core::ptr::read_volatile(core::ptr::addr_of!(BOOT_IDX));
-        crate::selection::BOOT_IDX = if rec < MAX_MODULES { rec as u32 } else { PROVIDER_IDX };
-        let r = f(self);
-        crate::selection::BOOT_IDX = was;
-        r
+        boot_idx::with(if rec < MAX_MODULES { rec as u32 } else { PROVIDER_IDX }, || f(self))
     }
 
     /// Place package `id` from the file at `path`: stage it, run every check of a load but the imports, take the memory, copy the image, apply the relocations that name the
@@ -500,7 +496,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// repeatable), and the DSP rows are cleared (`dsp::quiesce`, which `unload_body` repeats). The live job asks before it takes a module down, so that a busy module still gets its tick back.
     pub(crate) unsafe fn package_retire_ready(&mut self, id: PackageId) -> bool {
         let rec = record_of(id);
-        crate::package::files::retire(rec) && crate::worker::retire(rec) && retire_sdk(rec) && dsp::quiesce(rec)
+        crate::package::files::retire(rec) && crate::package::resident::worker::retire(rec) && retire_sdk(rec) && dsp::quiesce(rec)
     }
 
     /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).

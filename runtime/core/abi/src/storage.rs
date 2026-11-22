@@ -78,6 +78,14 @@ impl StatWire {
     }
 }
 
+/// Where a store file is and what its table entry says its file hash is (`StoreFns::find`).
+#[repr(C)]
+pub struct StoreFile {
+    pub first: u32,
+    pub size: u32,
+    pub sha: [u8; 32],
+}
+
 /// One listing entry. `name` holds the entry's own name (not the path), `name_len` bytes of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DirEntry {

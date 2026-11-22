@@ -25,6 +25,9 @@ shared = [
   "dkrt::mailbox",
   "dkrt::package::handlers",
   "dkrt::resident_query",
+  "dkrt::resident",    # the resident table: the thunks the package calls
+  "dkrt::package::resident", # the package's facade over it
+  "dkrt::package::boot_idx",
   "dkrt::hooks",       # the resident core's calls into the package, and the package's table of them
   "dkrt::package::hooks",
   "dkrt::menu_exports",

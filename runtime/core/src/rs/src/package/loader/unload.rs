@@ -40,11 +40,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         let module = rec < MAX_MODULES;
         // the listing client and the I/O jobs of a module or a service file go before its code does; a queued job's `done` must not point into freed code
         if !crate::package::files::retire(rec) { return E_BUSY; }
-        if !crate::worker::retire(rec) { return E_BUSY; }
+        if !crate::package::resident::worker::retire(rec) { return E_BUSY; }
         if !retire_sdk(rec) { return E_BUSY; }
         if module {
             // an intro of this module that has not run `done` yet: `done` must not point into freed code
-            crate::intro::discard(rec);
+            crate::package::resident::intro::discard(rec);
             // the record's next module has opened no settings
             crate::package::settings_reload::note_unloaded(rec);
         }
@@ -63,15 +63,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             self.m.enter_fini(rec, m.fini, ctx);
         }
         // a sink it set is released with it, with or without a `fini`; nothing may point into its range
-        crate::dlog::release_sinks(rec);
-        crate::dlog::sink_drop(m.base, m.base.wrapping_add(m.size));
+        crate::package::resident::dlog::release_sinks(rec);
+        crate::package::resident::dlog::sink_drop(m.base, m.base.wrapping_add(m.size));
         // the SysEx commands it registered are released with it
         crate::package::module_cmds::release_cmds(rec as u8 + 1);
         drop_tick_cb(m.base, m.size);
-        crate::api::poll_drop_range(m.base, m.size);
+        crate::package::resident::api::poll_drop_range(m.base, m.size);
         // the unload observers end what they hold for the module (`dkrt_unload_observer_add`): the code and memory are still there, but nothing may call into the module
         if module {
-            crate::api::notify_unload(rec, m.base, m.size);
+            crate::package::resident::api::notify_unload(rec, m.base, m.size);
         }
         // the machine row first, then the DSP voice rows, then the range in the DSP area
         if self.torn[rec] & TORN_UNDO == 0 {
@@ -93,7 +93,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         crate::package::entry::unbind(rec);
         self.torn[rec] = 0;
         if module {
-            let b = crate::boot::info();
+            let b = crate::package::resident::boot::info();
             b.unloads = b.unloads.wrapping_add(1);
         }
         OK
@@ -117,10 +117,10 @@ unsafe fn drop_tick_cb(base: u32, size: u32) {
 /// The module `rec` is going away (an unload or a rollback): its I/O jobs end without `done`, and a file it was writing is dropped. False: an
 /// I/O step of it is running (it is cancelled); the caller keeps the module's memory (`E_BUSY`) until a later call returns true.
 pub(crate) unsafe fn retire_sdk(rec: usize) -> bool {
-    if !crate::io::retire(rec) {
+    if !crate::package::resident::io::retire(rec) {
         return false;
     }
-    crate::store_writer::retire(rec as u8 + 1);
+    crate::package::resident::store_writer::retire(rec as u8 + 1);
     true
 }
 

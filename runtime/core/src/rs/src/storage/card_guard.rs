@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn a_refusal_raises_one_event_with_the_last_request_and_the_totals() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let f = FakePlatform::new(profiles::ALL[0]);
         let mut c = Clock::default();
         let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn a_writer_that_keeps_trying_raises_one_event_per_wait_not_one_per_pass() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let f = FakePlatform::new(profiles::ALL[0]);
         let mut c = Clock::default();
         let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };

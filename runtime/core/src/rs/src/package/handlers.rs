@@ -34,7 +34,7 @@ pub unsafe fn check_declarations() -> u32 {
     core::ptr::write_volatile(core::ptr::addr_of_mut!(FAILED), failed);
     if failed != 0 {
         // a MOD_LOAD of selection index 0xffffffff (no module): the result and the mask of the failed rows
-        crate::dlog::ev(dkrt_sdk::logk::MOD_LOAD, dkrt_sdk::logk::F_ERROR, [u32::MAX, dkrt_sdk::E_DECL_KIND as u32, failed, 0, 0]);
+        crate::package::resident::dlog::ev(dkrt_sdk::logk::MOD_LOAD, dkrt_sdk::logk::F_ERROR, [u32::MAX, dkrt_sdk::E_DECL_KIND as u32, failed, 0, 0]);
     }
     failed
 }

@@ -194,11 +194,11 @@ impl System for Real {
         crate::package::reload::dkrt_live(LIVE_RELOAD, crate::package::loader::records::path(rec).as_ptr())
     }
     fn rec_of(&self, id: &[u8]) -> Option<usize> {
-        (0..dkrt_abi::MAX_MODULES).find(|&rec| unsafe { crate::platform::st().modules[rec].used != 0 } && self.named(rec, id))
+        (0..dkrt_abi::MAX_MODULES).find(|&rec| unsafe { crate::package::resident::state::st().modules[rec].used != 0 } && self.named(rec, id))
     }
     fn named(&self, rec: usize, id: &[u8]) -> bool {
         unsafe {
-            let m = &crate::platform::st().modules[rec];
+            let m = &crate::package::resident::state::st().modules[rec];
             core::slice::from_raw_parts(m.name.as_ptr(), dkrt_abi::mem::cstr_len(m.name.as_ptr(), 31)) == id
         }
     }

@@ -1,17 +1,16 @@
 //! The upload commands about modules: MODULES, LOADS and SELECT, and the commands that modules register (`dk_host_register`).
 
-use crate::store_writer::copy;
-use crate::platform::wr32;
-use crate::{boot, dlog};
+use dkrt_abi::mem::wr32;
+use crate::package::resident::{boot, dlog};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::OK;
-use crate::transport::*;
+use crate::package::resident::transport::{rbody, reply};
 
 /// Does a loaded module have machine type `ty` (a run-time type some module owns)? The machines service answers per module (`module_info`, the same export the
 /// MODULES reply reads). A row nobody loaded is a gap row: it plays as type 0.
 pub(crate) fn machine_type_loaded(ty: u32) -> bool {
-    let s = crate::platform::st();
+    let s = crate::package::resident::state::st();
     let mut i = 0;
     while i < dkrt_abi::MAX_MODULES {
         if s.modules[i].used != 0 {
@@ -36,9 +35,9 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         return reply(CMD_MODULES, seq, E_MSG, 0);
     }
     let start = *body as usize;
-    let s = crate::platform::st();
-    let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
-    let (af, al) = crate::arena::stats();
+    let s = crate::package::resident::state::st();
+    let rb = rbody().add(1);
+    let (af, al) = crate::package::resident::arena::stats();
     let (df, dl) = crate::package::dsp::area_stats();
     wr32(rb, af);
     wr32(rb.add(4), al);
@@ -66,14 +65,14 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         // the machines of the module (the machines service: voice rows, types, guard counts; none without the service file)
         let mm = crate::package::handlers::exports::module_info(i as u8 + 1).unwrap_or_default();
         let nt = (mm.nt as usize).min(8);
-        if at + 71 + nt > REPLY_BODY_MAX - 1 {
+        if at + 71 + nt > dkrt_abi::command::REPLY_BODY_MAX - 1 {
             break;
         }
         *rb.add(at) = i as u8;
-        copy(rb.add(at + 1), m.name.as_ptr(), 32);
+        dkrt_abi::mem::copy(rb.add(at + 1), m.name.as_ptr(), 32);
         wr32(rb.add(at + 33), m.version);
         // the version of the runtime the module needs, then four reserved zero bytes
-        wr32(rb.add(at + 37), (*addr_of!(crate::state::DKRT_MODULE_RUNTIME))[i]);
+        wr32(rb.add(at + 37), (*crate::package::resident::state::module_runtime())[i]);
         wr32(rb.add(at + 41), 0);
         wr32(rb.add(at + 45), m.base);
         wr32(rb.add(at + 49), m.size);
@@ -102,7 +101,7 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
 /// NUL padded; else zeros) and `name[28]` (the file name of its path, NUL padded). The same data as the DIGIKIT menu's BOOT page, for a host that has no debug
 /// module to read the log from.
 pub(crate) unsafe fn cmd_loads(seq: u32) -> i32 {
-    let rb = core::slice::from_raw_parts_mut((addr_of_mut!(RBODY) as *mut u8).add(1), dkrt_abi::state::loads_len(dkrt_sdk::SEL_MAX));
+    let rb = core::slice::from_raw_parts_mut(rbody().add(1), dkrt_abi::state::loads_len(dkrt_sdk::SEL_MAX));
     let at = dkrt_abi::state::loads_v2(&boot::loads_view(), rb);
     reply(CMD_LOADS, seq, OK, at)
 }
@@ -145,18 +144,18 @@ pub(crate) unsafe fn set_draining(owner: u8, on: bool) {
     if owner == 0 || owner as usize > dkrt_abi::MAX_MODULES {
         return;
     }
-    let sr = crate::platform::irq_mask();
+    let sr = crate::package::resident::platform::irq_mask();
     let bit = 1u16 << (owner - 1);
     let d = &mut *addr_of_mut!(DRAINING);
     *d = if on { *d | bit } else { *d & !bit };
-    crate::platform::irq_restore(sr);
+    crate::package::resident::platform::irq_restore(sr);
 }
 
 /// The handler of command `cmd` and its owner, with the command counted as in flight for that owner: the lookup and the count are one step under the interrupt mask,
 /// so a module that is torn down either is not found or is counted. `Ok(None)`: no module registered the command; `Err(())`: its module is being reloaded
 /// (`set_draining`). Pair a found handler with `end_cmd`.
 pub(crate) unsafe fn begin_cmd(cmd: u8) -> Result<Option<(dkrt_sdk::HostCmdFn, u8)>, ()> {
-    let sr = crate::platform::irq_mask();
+    let sr = crate::package::resident::platform::irq_mask();
     let found = service_of(cmd).and_then(|s| s.h.map(|h| (h, s.owner)));
     let mut r = Ok(found);
     if let Some((_, owner)) = found {
@@ -169,7 +168,7 @@ pub(crate) unsafe fn begin_cmd(cmd: u8) -> Result<Option<(dkrt_sdk::HostCmdFn, u
             }
         }
     }
-    crate::platform::irq_restore(sr);
+    crate::package::resident::platform::irq_restore(sr);
     r
 }
 
@@ -177,10 +176,10 @@ pub(crate) unsafe fn begin_cmd(cmd: u8) -> Result<Option<(dkrt_sdk::HostCmdFn, u
 pub(crate) unsafe fn end_cmd(owner: u8) {
     if owner != 255 && owner > 0 {
         // masked like `begin_cmd`: the count is a read-modify-write, and the task that reads it can interrupt this one
-        let sr = crate::platform::irq_mask();
+        let sr = crate::package::resident::platform::irq_mask();
         let c = &mut (*addr_of_mut!(IN_FLIGHT))[owner as usize - 1];
         *c = c.saturating_sub(1);
-        crate::platform::irq_restore(sr);
+        crate::package::resident::platform::irq_restore(sr);
     }
 }
 
@@ -272,7 +271,7 @@ pub unsafe fn release_cmds(owner: u8) {
 mod tests {
     use super::*;
     use crate::test_lock::LOCK;
-    use crate::transport::{dkrt_midi_rx, DKRT_UPLOAD_LAST};
+    use crate::transport::{dkrt_midi_rx, pack, DKRT_UPLOAD_LAST, RBODY};
     use dkrt_sdk::E_BUSY;
 
     unsafe extern "C" fn answers_ok(_cmd: u32, _seq: u32, _body: *const u8, _len: u32, _out: *mut u8) -> i32 {
@@ -291,7 +290,7 @@ mod tests {
         let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             // the runtime is initialised (the hook's `init_once` would set up the arena)
-            crate::platform::st().magic = crate::state::STATE_MAGIC;
+            crate::package::resident::state::st().magic = dkrt_abi::runtime_state::STATE_MAGIC;
             let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
             assert_eq!(host_register(0x38, 1, Some(answers_ok)), OK);
             dlog::leave_module(prev);
@@ -313,10 +312,10 @@ mod tests {
     fn modules_pages_by_start_index_and_the_total_stays_the_loaded_count() {
         let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
-            crate::platform::st().magic = crate::state::STATE_MAGIC;
-            let used: Vec<u32> = (0..dkrt_abi::MAX_MODULES).map(|i| crate::platform::st().modules[i].used).collect();
+            crate::package::resident::state::st().magic = dkrt_abi::runtime_state::STATE_MAGIC;
+            let used: Vec<u32> = (0..dkrt_abi::MAX_MODULES).map(|i| crate::package::resident::state::st().modules[i].used).collect();
             for i in 0..dkrt_abi::MAX_MODULES {
-                crate::platform::st().modules[i].used = u32::from(i < 3);
+                crate::package::resident::state::st().modules[i].used = u32::from(i < 3);
             }
             let page = |start: u8| {
                 let mut msg = [0xf0, 0x7d, 0x64, 0x6b, VERSION, CMD_MODULES as u8, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -330,7 +329,7 @@ mod tests {
             assert_eq!(page(1), (3, 2, 1), "from record 1: the two after it");
             assert_eq!((page(9).0, page(9).1), (3, 0), "past the end: no record, the total stays");
             for (i, u) in used.into_iter().enumerate() {
-                crate::platform::st().modules[i].used = u;
+                crate::package::resident::state::st().modules[i].used = u;
             }
         }
     }
@@ -345,7 +344,7 @@ mod tests {
     fn a_range_that_is_empty_unreserved_or_taken_is_refused_and_the_handlers_status_is_the_reply() {
         let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
-            crate::platform::st().magic = crate::state::STATE_MAGIC;
+            crate::package::resident::state::st().magic = dkrt_abi::runtime_state::STATE_MAGIC;
             let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
             let range = E_CMD_RANGE as i32;
             assert_eq!(host_register(0x38, 0, Some(answers_ok)), range, "empty");

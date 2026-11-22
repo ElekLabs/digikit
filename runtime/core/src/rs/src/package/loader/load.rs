@@ -86,7 +86,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 reg_size: 0,
                 init: 0,
                 early: 1,
-                boot_idx: read_volatile(addr_of!(BOOT_IDX)),
+                boot_idx: boot_idx::get(),
                 send_base: 0,
                 send_len: 0,
                 send_buf: DevAddr::NULL,
@@ -144,7 +144,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         // ---- record, init, publish ----
         self.roles[rec] = if role == 2 { 2 } else { (role == 1) as u8 };
         if rec < MAX_MODULES {
-            let k = read_volatile(addr_of!(BOOT_IDX));
+            let k = boot_idx::get();
             self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 + 1 } else { 0 };
         }
         let m: &mut Module = records::module(rec);
@@ -162,7 +162,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             i += 1;
         }
         m.version = rd32(f.add(H_VERSION));
-        records::set_runtime(rec, needs & !crate::state::FLAG_TRACE);
+        records::set_runtime(rec, needs & !dkrt_abi::runtime_state::FLAG_TRACE);
         m.base = base;
         m.size = total;
         m.fini = if fini == NONE { 0 } else { base + fini };
@@ -241,7 +241,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         crate::package::files::ready(rec);
         if module {
             s.loads = s.loads.wrapping_add(1);
-            crate::intro::commit(rec);
+            crate::package::resident::intro::commit(rec);
         }
     }
 
@@ -249,11 +249,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     pub(super) unsafe fn fail(&mut self, rec: usize, r: i32) -> i32 {
         let module = rec < MAX_MODULES;
         if module {
-            crate::intro::discard(rec);
+            crate::package::resident::intro::discard(rec);
         }
         let held = !crate::package::files::retire(rec) | !retire_sdk(rec);
         crate::package::module_cmds::release_cmds(rec as u8 + 1);
-        crate::dlog::release_sinks(rec);
+        crate::package::resident::dlog::release_sinks(rec);
         (RoleSteps::<P, M, R>::of(self.roles[rec] as u32).undo)(self, rec);
         self.r.remove(rec);
         if module && !dsp::release(rec) || held {

@@ -45,10 +45,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if rec < MAX_MODULES {
             col::keep(rec, baddr, size);
         }
-        crate::dlog::ev(
+        crate::package::resident::dlog::ev(
             logk::MODULE_COMMIT,
-            crate::dlog::INFO,
-            [read_volatile(addr_of!(BOOT_IDX)), rows.0 | rows.1 << 8 | rows.2 << 16, baddr, size, 0],
+            crate::package::resident::dlog::INFO,
+            [boot_idx::get(), rows.0 | rows.1 << 8 | rows.2 << 16, baddr, size, 0],
         );
         OK
     }
@@ -147,7 +147,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             (p.rec as usize, p.boot_idx)
         };
         l.on_loaded(rec);
-        crate::boot::report_dsp(idx, OK);
+        crate::package::resident::boot::report_dsp(idx, OK);
         dsp::loaded_done();
     }
 

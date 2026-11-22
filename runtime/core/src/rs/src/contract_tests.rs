@@ -112,7 +112,7 @@ impl Drop for MachinesBack {
 
 /// As `check`; `fx` and `machines` say whether those services are loaded.
 fn check_with(f: &[u8], device: u32, fx: bool, machines: bool) -> (i32, Job) {
-    let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let _ = crate::package::handlers::services(); // the first call adds the machines row of the host tests
     let _back = MachinesBack(!machines);
     if !machines {

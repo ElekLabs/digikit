@@ -3,7 +3,9 @@
 //! - `dk_dsp_stats_ctl(on, clear)`: the control words of window 3 (on, clear generation, the block period of the device), written only for the module that owns the span channel.
 //! - `dkrt_dsp_stats_feed(tag, a, b)`: `dl_tick` hands every acknowledgement record of the DSP to the mirror (`dkrt_link::stats`).
 //! - `dk_dsp_stats_read(out, max)`: the newest complete sweep of the mirror, for the debug module.
-use crate::dlog;
+use crate::package::resident::dlog;
+use crate::package::resident::platform::PLATFORM;
+use dkrt_abi::package_platform::PackagePlatform;
 use core::ptr::addr_of_mut;
 use dkrt_abi::link::{STATS_CLEAR, STATS_ON, STATS_PERIOD};
 use dkrt_link::stats::{Mirror, WINDOW_WORDS};
@@ -59,17 +61,17 @@ pub unsafe extern "C" fn dk_dsp_stats_ctl(on: u32, clear: u32) -> i32 {
     if !ARMED || clear != LAST_CLEAR {
         // the DSP clears its window for the new generation: the sweep the mirror holds, and what it counted, are stale. The block interrupt feeds the mirror:
         // it is masked while the main context starts it again.
-        let sr = crate::platform::irq_mask();
+        let sr = crate::package::resident::platform::irq_mask();
         LAST_CLEAR = clear;
         ARMED = true;
         mirror().reset_for(clear as u8);
-        crate::platform::irq_restore(sr);
+        crate::package::resident::platform::irq_restore(sr);
     }
     set_hook(if on & 1 != 0 { dkrt_dsp_stats_feed as usize } else { 0 });
     let l = crate::package::link::lk();
     l.set_stats_ctl(STATS_ON, on & 1);
     l.set_stats_ctl(STATS_CLEAR, clear);
-    l.set_stats_ctl(STATS_PERIOD, crate::platform::profile().dsp_block_cycles);
+    l.set_stats_ctl(STATS_PERIOD, PLATFORM.dsp_block_cycles());
     OK
 }
 
@@ -124,6 +126,7 @@ fn array_mut_ref(w: &mut [u32; READ_WORDS]) -> &mut [u32; WINDOW_WORDS] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dlog;
     use crate::test_lock::LOCK;
     use dkrt_abi::link::Slot;
     use dkrt_link::stats::{tag, PAGES};

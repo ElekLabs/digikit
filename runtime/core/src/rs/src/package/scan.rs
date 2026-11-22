@@ -2,9 +2,11 @@
 //! (accepted by this runtime and device, the needs, loaded), `dkrt_fit` judges a ticked set against the device's limits. The rules are the menu's
 //! of before (docs/plans/what-fits.md); the fit rule and its texts are `dkrt-fit`, the needs are `dkneeds`.
 
-use crate::{state::DKRT_PATHS, platform::PLATFORM, platform::device, state::init_once, platform::st, store};
+use crate::package::resident::platform::{device, PLATFORM};
+use crate::package::resident::state::{init_once, paths, st};
+use crate::package::resident::store;
 use dkrt_abi::MAX_MODULES;
-use dkrt_abi::platform::Tasking;
+use dkrt_abi::package_platform::PackagePlatform;
 use core::ptr::{addr_of, addr_of_mut, write_volatile};
 use dkneeds::{Bytes, needs_of};
 use dkrt_fit as fit;
@@ -68,7 +70,7 @@ unsafe fn compatible(first: u32, device: u32) -> bool {
         Some(DKM_MAGIC) => {}
         _ => return true,
     }
-    if !file_word(first, dkneeds::H_RUNTIME).is_none_or(crate::state::runtime_accepts) {
+    if !file_word(first, dkneeds::H_RUNTIME).is_none_or(dkrt_abi::runtime_state::runtime_accepts) {
         return false;
     }
     let (Some(off), Some(size)) = (file_word(first, dkneeds::H_DSP_OFF), file_word(first, dkneeds::H_DSP_SIZE)) else {
@@ -199,7 +201,7 @@ pub unsafe extern "C" fn dkrt_scan(out: *mut DkrtScan, max: u32) -> i32 {
     let mut m = 0;
     while m < MAX_MODULES {
         if s.modules[m].used != 0 {
-            let path = &(*addr_of!(DKRT_PATHS))[m];
+            let path = &(*paths())[m];
             let mut i = 0;
             while i < count {
                 let o = &mut *out.add(i);
@@ -223,7 +225,7 @@ pub unsafe fn module_path(owner: u8) -> *const u8 {
     if rec == 0 || rec > MAX_MODULES || st().modules[rec - 1].used == 0 {
         return core::ptr::null();
     }
-    (*addr_of!(DKRT_PATHS))[rec - 1].as_ptr()
+    (*paths())[rec - 1].as_ptr()
 }
 
 /// `CoreApi::store_find`: the first file under `dir` (at most 62 bytes, ending in `/`) whose last path part is `name`, in the table's order. The length of its path,
@@ -278,6 +280,7 @@ pub unsafe extern "C" fn dkrt_fit(
 #[cfg(test)]
 mod find_tests {
     use super::*;
+    use crate::state::DKRT_PATHS;
 
     #[test]
     fn only_a_module_record_that_is_in_use_has_a_path() {

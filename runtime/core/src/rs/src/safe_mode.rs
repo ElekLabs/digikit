@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn a_fresh_device_that_does_not_reach_the_stable_period_boots_safe_on_the_third_boot() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let f = fresh_card();
             assert!(held(&f).is_none(), "a fresh card has no record");
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn a_stable_session_clears_the_counter_so_later_failures_count_from_zero() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let f = fresh_card();
             let seen: Vec<bool> = [End::Early, End::Stable, End::Early, End::Early, End::Early]
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn a_crash_after_the_stable_period_counts_once_and_two_in_a_row_lead_to_safe_mode() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let f = fresh_card();
             assert!(!boot(&f, false, End::Stable), "a stable first session");
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn a_card_the_runtime_may_not_write_counts_nothing_and_never_loops_into_safe_mode() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let foreign = fresh_card();
             foreign.put(L.first + 100, FOREIGN);
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn an_existing_selection_keeps_its_paths_and_counts_into_the_copy_that_is_not_current() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let f = fresh_card();
             let mut r = Record::empty();
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn a_record_that_could_not_be_read_keeps_its_counter_at_the_stable_period() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let f = fresh_card();
             assert!(!boot(&f, false, End::Early));

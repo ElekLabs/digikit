@@ -43,8 +43,8 @@ static mut SINK: usize = 0;
 static mut TICK: usize = 0;
 static mut TICK_SRC: u8 = 0;
 
-/// Sink channel numbers (`dk_sink_set`, <dk/core/sink.h>).
-pub const SINK_LOG: u32 = 0;
+/// Sink channel numbers (`dk_sink_set`, <dk/core/sink.h>); the log channel is shared with the package (`dkrt_abi::log`).
+pub use dkrt_abi::log::SINK_LOG;
 pub const SINK_SPAN: u32 = 1;
 const SINKS: usize = 2;
 
@@ -72,24 +72,14 @@ pub struct Span {
     pub start_tick: u32,
 }
 
-/// The flags of a non-error event at the info level (an error event is `logk::F_ERROR`: level 0).
-pub const INFO: u16 = dkrt_abi::core_api::LOG_INFO;
+pub use dkrt_abi::log::INFO;
 
 /// The module whose code is running (record index + 1; 0: the runtime).
 static mut CURRENT_SRC: u8 = 0;
 /// What that module code is: one of the `PHASE_*` values. The crash record keeps it.
 static mut CURRENT_PHASE: u8 = PHASE_NONE;
 
-/// No module code is running.
-pub const PHASE_NONE: u8 = 0;
-/// The module's `init`.
-pub const PHASE_INIT: u8 = 1;
-/// The module's `tick`.
-pub const PHASE_TICK: u8 = 2;
-/// The module's `fini`.
-pub const PHASE_FINI: u8 = 3;
-/// A callback of the module: a host command handler, an I/O or job step, an intro frame, a menu action.
-pub const PHASE_CALLBACK: u8 = 4;
+pub use dkrt_abi::log::{PHASE_CALLBACK, PHASE_FINI, PHASE_INIT, PHASE_NONE, PHASE_TICK};
 
 /// Module code is about to run in `phase`: events it logs carry its source. Returns the previous source and phase for `leave_module`.
 pub fn enter_module(idx: usize, phase: u8) -> u16 {
@@ -515,7 +505,7 @@ mod tests {
     /// An event with the keep flag is in the small ring after the first UI frame, at any level and of any kind; one without it is not (an info-level event of an ordinary kind).
     #[test]
     fn the_small_ring_keeps_an_event_with_the_keep_flag() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         crate::boot::info().ui_reached = 1;
         assert!(keeps(logk::HEALTH, logk::F_KEEP));
         assert!(keeps(logk::MOD_LOG, logk::F_KEEP | (logk::L_DEBUG << logk::LEVEL_SHIFT)));
@@ -539,7 +529,7 @@ mod tests {
 
     /// A clean channel table and counters; the guard serializes the tests that share the statics.
     unsafe fn fresh() -> Fresh {
-        let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         test_reset_sinks();
         LOGGED = 0;
         SPANS = 0;

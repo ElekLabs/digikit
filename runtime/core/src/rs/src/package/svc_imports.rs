@@ -202,7 +202,7 @@ pub mod shims {
     /// A service panicked: the runtime's panic (crash capture, safe mode on the next boot).
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_panic() -> ! {
-        crate::fault::panic()
+        crate::package::resident::fault::panic()
     }
 }
 

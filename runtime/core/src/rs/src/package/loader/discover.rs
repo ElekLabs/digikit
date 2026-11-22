@@ -221,7 +221,7 @@ unsafe fn read_provider<C: Cards>(cards: &mut C, c: usize, out: &mut Found, role
     // a service file of the old format is skipped, and the boot log says why
     if role == 1 {
         if let Some((code, hash)) = stale(file) {
-            crate::boot::report_provider(out.path(k), code, hash, 0);
+            crate::package::resident::boot::report_provider(out.path(k), code, hash, 0);
         }
     }
     false

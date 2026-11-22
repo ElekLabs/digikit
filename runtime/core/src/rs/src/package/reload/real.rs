@@ -32,8 +32,8 @@ pub fn state() -> State {
 
 /// `dkrt_live(op, path)`: queue a live job from the DIGIKIT menu (the UI task). The same refusals as the SysEx commands: an open upload or a store write in flight is `E_STATE`.
 pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
-    crate::state::init_once();
-    if crate::store_writer::is_open() || crate::store_writer::is_locked() {
+    crate::package::resident::state::init_once();
+    if crate::package::resident::store_writer::is_open() || crate::package::resident::store_writer::is_locked() {
         return dkrt_sdk::proto::E_STATE;
     }
     cmd_queue(op, path)
@@ -63,11 +63,11 @@ impl Ops for RealOps {
         crate::package::loader::is_provider_path(path)
     }
     unsafe fn alloc_index(&mut self, path: *const u8) -> Result<usize, i32> {
-        crate::boot::live_index(path, &crate::package::loader::live_indices())
+        crate::package::resident::boot::live_index(path, &crate::package::loader::live_indices())
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
         // the service-specific refusals come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
-        refusal_for(&crate::platform::PLATFORM, rec, crate::api::card_busy(), |r| crate::package::lifecycle::get().and_then(|rt| rt.refusal(r)))
+        refusal_for(&crate::package::resident::platform::PLATFORM, rec, crate::package::resident::api::card_busy(), |r| crate::package::lifecycle::get().and_then(|rt| rt.refusal(r)))
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
         if op == LIVE_LOAD {
@@ -86,7 +86,7 @@ impl Ops for RealOps {
         crate::package::loader::reload_abort(rec)
     }
     unsafe fn menu_built(&mut self, rec: usize) -> bool {
-        crate::state::menus_held(rec)
+        crate::package::resident::state::menus_held(rec)
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
         match crate::package::lifecycle::get() {
@@ -101,7 +101,7 @@ impl Ops for RealOps {
         crate::package::loader::dsp_progress()
     }
     unsafe fn begin_load(&mut self, k: usize) {
-        crate::boot::begin_live(k);
+        crate::package::resident::boot::begin_live(k);
     }
     unsafe fn load(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
         let r = match crate::package::lifecycle::get() {
@@ -109,19 +109,19 @@ impl Ops for RealOps {
             Some(rt) => rt.reload_load(rec, path),
             None => dkrt_sdk::E_NOT_FOUND,
         };
-        crate::boot::account_load(k, path, r, crate::package::loader::missing(), &crate::package::loader::last_name());
+        crate::package::resident::boot::account_load(k, path, r, crate::package::loader::missing(), &crate::package::loader::last_name());
         r
     }
     unsafe fn unloaded(&mut self, k: usize) {
         crate::package::loader::retire_index(k);
-        crate::boot::unloaded(k);
+        crate::package::resident::boot::unloaded(k);
     }
     unsafe fn retire(&mut self, k: usize) {
         crate::package::loader::retire_index(k);
-        crate::boot::restore_live(k);
+        crate::package::resident::boot::restore_live(k);
     }
     unsafe fn dsp_result(&mut self, k: usize) -> Option<i32> {
-        let b = crate::boot::info();
+        let b = crate::package::resident::boot::info();
         let s = b.states[k];
         if s == dkrt_sdk::STATE_ACTIVE || s == dkrt_sdk::STATE_FAILED {
             Some(b.results[k])
@@ -145,6 +145,6 @@ impl Ops for RealOps {
         }
     }
     fn blocks(&mut self) -> Option<u32> {
-        crate::platform::fw_blocks()
+        crate::package::resident::platform::fw_blocks()
     }
 }

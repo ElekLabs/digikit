@@ -18,7 +18,11 @@
 #![no_std]
 #![deny(improper_ctypes, improper_ctypes_definitions)]
 
+#[cfg(test)]
+extern crate std;
+
 pub mod boot_path;
+pub mod command;
 pub mod core_api;
 pub mod core_imports;
 pub mod dev_addr;
@@ -27,8 +31,10 @@ pub mod fw;
 pub mod fw_id;
 pub mod gen_svc_abi;
 pub mod hooks;
+pub mod image;
 pub mod keys;
 pub mod link;
+pub mod log;
 pub mod mem;
 pub mod module;
 pub mod package;
@@ -39,7 +45,10 @@ pub mod profiles;
 pub mod provider;
 pub mod regcheck;
 pub mod registry;
+pub mod resident;
+pub mod runtime_state;
 pub mod service;
+pub mod sha256;
 pub mod state;
 pub mod storage;
 pub mod store_path;

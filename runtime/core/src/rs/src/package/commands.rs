@@ -2,7 +2,7 @@
 
 use crate::package::live_cmds::{h_capacity, h_load, h_reload, h_reload_state, h_unload};
 use crate::package::module_cmds::{h_loads, h_modules};
-use crate::transport::{Cmd, NOLOG};
+use dkrt_abi::command::{Cmd, NOLOG};
 use dkrt_sdk::proto::*;
 
 /// The package's commands, looked up one after the other like the resident ones.

@@ -93,12 +93,12 @@ fn the_manager_installs_the_hooks_of_a_service_and_the_firmware_is_stock_after_t
             let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
             // the services of the search in the order of `found`: svc-test, then the port file that its hooks name
             let (user, service, port) = (id(0), id(MAX_MODULES), id(MAX_MODULES + 1));
-            crate::selection::BOOT_IDX = u32::MAX;
+            crate::package::boot_idx::set(u32::MAX);
 
             let report = pm.boot(&[user]).unwrap();
             assert!(report.refused().is_empty(), "{}: {:?}", dev.name, report.refused().iter().map(|r| r.reason).collect::<Vec<_>>());
             assert_eq!(report.brought_up().as_slice(), [port, service, user], "{}", dev.name);
-            assert_eq!(core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)), u32::MAX, "{}: the bring-up leaves the boot index as it was", dev.name);
+            assert_eq!(crate::package::boot_idx::get(), u32::MAX, "{}: the bring-up leaves the boot index as it was", dev.name);
             // the hooks of the service are in: the installer holds its sites and the firmware is not stock any more
             assert!(l.installer.count() > 0, "{}: the installer recorded the hooks of the test service", dev.name);
             assert_ne!(*l.p.code.borrow(), stock, "{}: the hook sites are patched", dev.name);
@@ -108,7 +108,7 @@ fn the_manager_installs_the_hooks_of_a_service_and_the_firmware_is_stock_after_t
             assert_eq!(l.installer.count(), 0, "{}", dev.name);
             assert_eq!(*l.p.code.borrow(), stock, "{}: the firmware bytes are stock after the unload", dev.name);
             assert!(l.m.live.is_empty(), "{}: every block of the arena is back", dev.name);
-            assert_eq!(core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)), u32::MAX, "{}: the unload leaves the boot index as it was", dev.name);
+            assert_eq!(crate::package::boot_idx::get(), u32::MAX, "{}: the unload leaves the boot index as it was", dev.name);
         }
         clean_state();
     }

@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn full_table_is_busy_null_step_is_refused_and_the_task_is_made_once() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 0);
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn a_refused_task_leaves_no_job() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             TEST_REFUSE = true;
@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn more_twice_then_done_once_and_the_step_knows_its_owner() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 2);
@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn error_result_is_the_status() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 0);
@@ -643,7 +643,7 @@ mod tests {
 
     #[test]
     fn jobs_take_turns() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 2);
@@ -657,7 +657,7 @@ mod tests {
 
     #[test]
     fn a_waiting_job_sleeps_until_the_wake_and_a_wake_before_the_wait_is_not_lost() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 0);
@@ -689,7 +689,7 @@ mod tests {
 
     #[test]
     fn cancel_a_sleeping_job_calls_done_once_and_a_running_one_stops_after_its_step() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 0);
@@ -717,7 +717,7 @@ mod tests {
 
     #[test]
     fn retire_drops_the_owners_jobs_and_waits_for_the_running_step() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 0);
@@ -744,7 +744,7 @@ mod tests {
     /// A service file is a record after the modules: the source of its code is the owner of its job, and the record's retire drops the job.
     #[test]
     fn a_service_files_job_is_owned_by_its_record_and_dropped_with_it() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let rec = dkrt_abi::MAX_MODULES + 2;
@@ -766,7 +766,7 @@ mod tests {
 
     #[test]
     fn a_step_is_a_file_context_only_in_the_io_task() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 0);
@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn a_step_that_met_a_busy_store_sleeps_before_it_runs_again() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 2);
@@ -803,7 +803,7 @@ mod tests {
 
     #[test]
     fn a_rollback_while_a_step_runs_is_refused_until_it_has_returned() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 0);
@@ -819,7 +819,7 @@ mod tests {
 
     #[test]
     fn a_second_poster_while_the_task_is_being_made_is_busy() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             TASK_UP = 1;
@@ -869,7 +869,7 @@ mod tests {
 
     #[test]
     fn the_helper_import_pair_runs_one_function_and_collects_it() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut h = helper_script(false, false);
@@ -882,7 +882,7 @@ mod tests {
 
     #[test]
     fn a_run_the_step_leaves_uncollected_is_collected_when_it_returns() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut h = helper_script(true, false);
@@ -898,7 +898,7 @@ mod tests {
 
     #[test]
     fn a_module_cannot_collect_or_start_over_the_runtimes_run() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut h = helper_script(false, true);

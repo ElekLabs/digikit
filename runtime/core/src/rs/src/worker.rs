@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn full_queue_is_busy_and_null_step_is_refused() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 0);
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn more_twice_then_done_once() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 2);
@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn error_result_is_the_status() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 0);
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn two_more_jobs_alternate() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn cancel_queued_calls_done_once() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn cancel_running_stops_after_the_current_step() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -573,7 +573,7 @@ mod tests {
 
     #[test]
     fn retire_drops_queued_and_waits_for_the_flight() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -596,7 +596,7 @@ mod tests {
 
     #[test]
     fn missing_worker_finishes_with_an_error() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             TEST_WORKER = false;

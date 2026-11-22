@@ -149,7 +149,7 @@ impl Phases {
         }
         g.line("card sectors");
         for (sector, bytes) in l.p.card.borrow().iter() {
-            let mut sha = crate::sha256::Sha::new();
+            let mut sha = dkrt_abi::sha256::Sha::new();
             sha.update(bytes.as_ptr(), bytes.len() as u32);
             let mut out = [0u8; 32];
             sha.finish(out.as_mut_ptr());

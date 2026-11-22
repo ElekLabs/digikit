@@ -2,9 +2,10 @@
 //! of them. The core calls them through its own `hooks.rs` and names nothing of this folder; `install` gives it the table once, in `init_once`, and runs the package's
 //! own first-use setup. A function with the right C signature is in the table as it is; the others have a thunk here.
 
-use crate::hooks;
 use crate::package::{commands, dsp, entry, files, handlers, link, lifecycle, loader, module_cmds, reload, scan, settings_overlay, settings_reload};
 use dkrt_abi::hooks::*;
+use dkrt_abi::resident::ResidentTable;
+use crate::package::resident;
 use dkrt_sdk::sel::Record;
 use dkrt_sdk::proto::E_PROTO;
 use dkrt_sdk::{DkrtFx, DkrtModuleHeader, E_BUSY, E_CONTRACT};
@@ -42,11 +43,12 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
     provider: ProviderHooks { query: Some(provider_query) },
 };
 
-/// The package's first-use setup (`init_once`): the core gets the hooks, and the in-crate services declare their record kinds and the runtime compares them with the
-/// generated table (declare-check-commit).
-pub(crate) unsafe fn install() {
-    hooks::install(&HOOKS);
+/// The package's first-use setup (`init_once`): the package gets the resident table, the in-crate services declare their record kinds and the runtime compares them with
+/// the generated table (declare-check-commit), and the resident core gets the hooks.
+pub(crate) unsafe fn attach(table: &'static ResidentTable) -> &'static PackageHooks {
+    resident::install(table);
     handlers::check_declarations();
+    &HOOKS
 }
 
 // ---- boot ----------------------------------------------------------------------------------------------------------------
@@ -112,10 +114,10 @@ unsafe extern "C" fn command_run_registered(cmd: u32, seq: u32, body: *const u8,
     match module_cmds::begin_cmd(cmd as u8) {
         Err(()) => E_BUSY, // its module is being reloaded: the host asks again
         Ok(Some((h, owner))) => {
-            let prev = if owner != 255 && owner > 0 { crate::dlog::enter_module(owner as usize - 1, crate::dlog::PHASE_CALLBACK) } else { 0 };
+            let prev = if owner != 255 && owner > 0 { crate::package::resident::dlog::enter_module(owner as usize - 1, crate::package::resident::dlog::PHASE_CALLBACK) } else { 0 };
             let r = h(cmd, seq, body, blen, out);
             if owner != 255 && owner > 0 {
-                crate::dlog::leave_module(prev);
+                crate::package::resident::dlog::leave_module(prev);
             }
             // counted since `begin_cmd`: a reload of the module waits for it
             module_cmds::end_cmd(owner);

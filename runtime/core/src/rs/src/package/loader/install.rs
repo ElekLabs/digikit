@@ -387,7 +387,7 @@ mod tests {
                 let n = (b.len as usize).min(b.stock.len());
                 let mut check = [0u8; 8];
                 if n != 0 {
-                    let mut sha = crate::sha256::Sha::new();
+                    let mut sha = dkrt_abi::sha256::Sha::new();
                     let mut out = [0u8; 32];
                     unsafe {
                         sha.update(b.stock.as_ptr(), n as u32);

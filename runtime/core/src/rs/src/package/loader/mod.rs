@@ -15,9 +15,9 @@ use dkneeds::keys::Keys;
 use install::{Backend, CfItems, DspInstaller, Installer, SITES_MAX};
 use role::{PlaceArgs, RoleSteps};
 use exports::Exports;
-use crate::platform::RealPlatform;
-use crate::selection::BOOT_IDX;
-use crate::platform::st;
+use crate::package::resident::platform::TablePlatform;
+use crate::package::boot_idx;
+use crate::package::resident::state::st;
 use dkrt_abi::module::{Module, LOG_NAME, PROVIDER_IDX};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
@@ -72,7 +72,7 @@ mod seams;
 mod unload;
 #[cfg(test)]
 pub(crate) mod tests;
-use crate::image::{self, in_file};
+use dkrt_abi::image::{self, in_file};
 use check::{Checked, Placed};
 use plan::{parse_provs, service_import_owner, table_of_file, table_span};
 #[cfg(test)]
@@ -216,9 +216,9 @@ const TORN_UNDO: u8 = 4;
 const TORN_DRAIN: u8 = 8;
 
 /// The loader of the device.
-pub(crate) type Real = Loader<RealPlatform, DeviceImages, RealRegistry>;
+pub(crate) type Real = Loader<TablePlatform, DeviceImages, RealRegistry>;
 
-static mut LOADER: Real = Loader::new(RealPlatform, DEVICE_IMAGES, RealRegistry);
+static mut LOADER: Real = Loader::new(TablePlatform, DEVICE_IMAGES, RealRegistry);
 
 fn loader() -> &'static mut Real {
     unsafe { &mut *addr_of_mut!(LOADER) }

@@ -662,7 +662,7 @@ mod tests {
 
     #[test]
     fn without_the_service_module_settings_are_the_record_alone() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(false);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"v".as_ptr(), 1), 0);
@@ -676,7 +676,7 @@ mod tests {
 
     #[test]
     fn with_an_overlay_a_read_prefers_it_and_a_write_goes_to_both() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             // the record's value is the answer while the overlay holds none
@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn a_write_the_overlay_refuses_leaves_the_record_unchanged() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(put(b"test/m/k", b"old"), 0);
@@ -741,7 +741,7 @@ mod tests {
 
     #[test]
     fn a_put_the_record_refuses_never_reaches_the_overlay() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"old".as_ptr(), 3), 0);
@@ -765,7 +765,7 @@ mod tests {
 
     #[test]
     fn with_the_settings_off_a_put_and_a_remove_leave_the_overlay_alone() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"old".as_ptr(), 3), 0);
@@ -783,7 +783,7 @@ mod tests {
 
     #[test]
     fn a_remove_the_overlay_refuses_leaves_the_record_and_the_overlay() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"v".as_ptr(), 1), 0);
@@ -801,7 +801,7 @@ mod tests {
 
     #[test]
     fn the_runtimes_own_keys_do_not_pass_through_the_overlay() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             // the runtime's own `put` (the core's `settings_put`, the menu's `dkrt_settings_put`) is device scope: a route or a send never reaches the overlay

@@ -196,7 +196,7 @@ fn name(keys: &Keys, kind: u8, hash: u32, n: u16) -> Lookup {
 pub unsafe fn site_check<P: dkrt_abi::package_platform::PackagePlatform>(p: &P, addr: u32, len: usize) -> [u8; 8] {
     let mut cur = [0u8; SITE_LEN_MAX as usize];
     p.read_code(addr, &mut cur[..len]);
-    let mut sha = crate::sha256::Sha::new();
+    let mut sha = dkrt_abi::sha256::Sha::new();
     sha.update(cur.as_ptr(), len as u32);
     let mut out = [0u8; 32];
     sha.finish(out.as_mut_ptr());

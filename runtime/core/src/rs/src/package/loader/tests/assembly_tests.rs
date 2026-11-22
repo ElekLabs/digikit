@@ -708,7 +708,7 @@ pub(super) unsafe fn boot_run(l: &mut Boot, plan: &Plan, modules: &[&Fixture], p
     l.phase = Phase::Boot;
     let report = pm.boot(&roots).unwrap();
     l.phase = Phase::Closed;
-    crate::selection::BOOT_IDX = u32::MAX;
+    crate::package::boot_idx::set(u32::MAX);
     Run { pm, report, s, _paths: paths }
 }
 
@@ -1190,7 +1190,7 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
             let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
             rt.boot_with(&rec, &capacity(&l.p));
             assert_eq!(crate::boot::info().results[0], OK, "{}", dev.name);
-            crate::selection::BOOT_IDX = u32::MAX;
+            crate::package::boot_idx::set(u32::MAX);
             l.phase = Phase::Closed;
             let mut caps = capacity(&l.p);
             crate::package::loader::live_caps(&mut caps, crate::package::loader::own_use(0));
@@ -1226,7 +1226,7 @@ fn a_packed_module_is_unloaded_loaded_under_a_new_path_and_loaded_again_at_run_t
             let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
             rt.boot_with(&rec, &capacity(&l.p));
             assert_eq!(crate::boot::info().results[0], OK, "{}", dev.name);
-            crate::selection::BOOT_IDX = u32::MAX;
+            crate::package::boot_idx::set(u32::MAX);
             l.phase = Phase::Closed;
             let caps = |l: &Boot| {
                 let mut c = capacity(&l.p);

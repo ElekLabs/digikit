@@ -156,11 +156,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 }
             }
         }
-        let was = read_volatile(addr_of!(BOOT_IDX));
-        crate::selection::BOOT_IDX = k as u32;
-        let r = self.reload_check_inner(rec, k, path, caps);
-        crate::selection::BOOT_IDX = was;
-        r
+        boot_idx::with(k as u32, || self.reload_check_inner(rec, k, path, caps))
     }
 
     unsafe fn reload_check_inner(&mut self, rec: usize, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
@@ -255,12 +251,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 self.number_keys(k, file);
             }
         }
-        let was = read_volatile(addr_of!(BOOT_IDX));
-        crate::selection::BOOT_IDX = k as u32;
-        self.missing = [0; NEEDS_LEN];
-        let r = self.live_check_load_inner(k, path, caps);
-        crate::selection::BOOT_IDX = was;
-        r
+        boot_idx::with(k as u32, || {
+            self.missing = [0; NEEDS_LEN];
+            self.live_check_load_inner(k, path, caps)
+        })
     }
 
     unsafe fn live_check_load_inner(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {

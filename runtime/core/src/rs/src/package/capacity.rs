@@ -1,9 +1,11 @@
 //! `dkrt_capacity`: the entries of the CAPACITY command and the DIGIKIT menu's MEMORY page, and the limit each kind takes from the loaded services or the image.
 
 use crate::package::handlers::services;
-use crate::platform::{self, st};
-use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
-use crate::{arena, boot, card, settings, store};
+use crate::package::resident::platform::PLATFORM;
+use crate::package::resident::state::{init_once, st};
+use crate::package::resident::{arena, boot, card, settings, store};
+use dkrt_abi::MAX_MODULES;
+use dkrt_sdk::STAGE_BYTES;
 use crate::package::{dsp};
 use core::ptr::read_volatile;
 use dkrt_abi::package_platform::PackagePlatform;
@@ -46,15 +48,10 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
     }
     let stage = STAGE_BYTES as u32;
     // the store: its area in KiB (0 when the card is too small for it), and what the headers say is used (a card with no header: nothing)
-    let st_total = if card::state() == CARD_TOO_SMALL { 0 } else { store::layout().limit() / 2 };
-    let st_used = match store::seen() {
-        Some((used, _)) => used,
-        None => 0,
-    };
+    let (st_total, st_used) = store::capacity();
     let (set_limit, set_used) = settings::capacity();
     // the DSP load: the headroom and the voices of the device profile; the load is the boot plan's (the module set is fixed per session)
     let (dsp_used, dsp_top) = crate::package::loader::planned_dsp();
-    let pf = platform::profile();
     // the services declare their own counts (machine, voice, parameter and page rows, effect and send slots, map entries), per kind
     let table = services();
     // the values of each kind (a table, not a `match`: a jump table would put data in .text)
@@ -66,8 +63,8 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         (CAPK_DSP_AREA, area, area - df, dl),
         (CAPK_STORE, st_total, st_used, 0),
         (CAPK_SETTINGS, set_limit, set_used, 0),
-        (CAPK_DSP_COST, pf.dsp_headroom, dsp_used, dsp_top),
-        (CAPK_DSP_VOICES, pf.dsp_voices, 0, 0),
+        (CAPK_DSP_COST, PLATFORM.dsp_headroom(), dsp_used, dsp_top),
+        (CAPK_DSP_VOICES, PLATFORM.dsp_voices(), 0, 0),
     ];
     // one entry per kind of `[capacity.kinds]`, in its order; a kind with no row above reports zeros
     let mut k = 0;
@@ -81,7 +78,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
             }
             e += 1;
         }
-        v = kind_value(&crate::platform::PLATFORM, &table, k, v);
+        v = kind_value(&crate::package::resident::platform::PLATFORM, &table, k, v);
         *out.add(k) = DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 };
         k += 1;
     }
@@ -175,7 +172,7 @@ mod tests {
 pub(crate) unsafe fn cmd_capacity(seq: u32) -> i32 {
     let mut entries = [dkrt_sdk::DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; dkrt_sdk::CAP_MAX];
     let n = crate::package::capacity::dkrt_capacity(entries.as_mut_ptr(), dkrt_sdk::CAP_MAX as u32) as usize;
-    let rb = (core::ptr::addr_of_mut!(crate::transport::RBODY) as *mut u8).add(1);
+    let rb = crate::package::resident::transport::rbody().add(1);
     *rb = 1;
     *rb.add(1) = n as u8;
     let mut at = 2usize;
@@ -183,11 +180,11 @@ pub(crate) unsafe fn cmd_capacity(seq: u32) -> i32 {
     while k < n {
         let e = &entries[k];
         *rb.add(at) = e.kind as u8;
-        crate::platform::wr32(rb.add(at + 1), e.limit);
-        crate::platform::wr32(rb.add(at + 5), e.used);
-        crate::platform::wr32(rb.add(at + 9), e.largest);
+        dkrt_abi::mem::wr32(rb.add(at + 1), e.limit);
+        dkrt_abi::mem::wr32(rb.add(at + 5), e.used);
+        dkrt_abi::mem::wr32(rb.add(at + 9), e.largest);
         at += 13;
         k += 1;
     }
-    crate::transport::reply(dkrt_sdk::proto::CMD_CAPACITY, seq, dkrt_sdk::OK, at)
+    crate::package::resident::transport::reply(dkrt_sdk::proto::CMD_CAPACITY, seq, dkrt_sdk::OK, at)
 }

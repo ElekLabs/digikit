@@ -11,7 +11,8 @@
 //!    follow one rule: every owned row belongs to a used record whose row mask has the row's bit, and every bit of a used record's mask is a row it owns; an unused
 //!    record has no rows).
 //! 4. no two used records have the same name.
-use crate::{dlog, platform::st, state::DKRT_ARENA};
+use crate::package::resident::state::st;
+use crate::package::resident::{arena, dlog};
 use crate::package::{dsp};
 use dkrt_abi::MAX_MODULES;
 use dkrt_abi::mem::cstr_eq;
@@ -37,7 +38,7 @@ unsafe fn fail(inv: u32, module: usize, a: u32, b: u32) -> u32 {
 pub unsafe fn check() -> u32 {
     let s = st();
     let d = dsp::ds();
-    let arena_lo = addr_of!(DKRT_ARENA) as usize as u32;
+    let arena_lo = arena::base();
     let area = dsp::area_bytes();
     let mut i = 0;
     // 1. ranges inside the arena and the DSP area

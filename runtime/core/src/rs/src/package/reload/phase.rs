@@ -18,6 +18,6 @@ pub(crate) fn set_phase(owner: u8) {
 
 /// A live job changed the module set: the counter that tells a host and the menus their lists of modules and machines are out of date (`DkrtBootInfo.reloads`).
 pub(crate) unsafe fn note_reloaded() {
-    let b = crate::boot::info();
+    let b = crate::package::resident::boot::info();
     b.reloads = b.reloads.wrapping_add(1);
 }
