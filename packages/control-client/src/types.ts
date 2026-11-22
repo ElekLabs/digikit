@@ -59,7 +59,7 @@ export interface FirmwareLoadParams {
   patch_set?: string;
   /** With `replace`: a DSP session (true, default) or ColdFire only with the mailbox responder for a peer CPU (false). Kept for the loads after it. */
   dsp?: boolean;
-  /** At most 32 transitions; requires a patched coupled start:cold. Empty preserves the existing cache key. */
+  /** At most 32 transitions; requires a patched coupled boot. The buttons are part of the ready-pair key: a cached pair of the same buttons restores (start auto), another press never hits. Empty preserves the existing key. */
   initial_buttons?: readonly InitialButton[];
 }
 
