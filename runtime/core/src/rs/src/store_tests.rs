@@ -447,6 +447,19 @@ fn verify_names_the_bytes_on_the_card_not_the_table() {
     assert_eq!(r, OK);
     assert_ne!(now, listed, "bad: a bit of the data sector flipped");
     assert_eq!(held()["cases/a"].1, listed, "the table still says what was written");
+    // the boot's read of the file checks the table's hash: E_SHA, and VERIFY names the hash of the flipped bytes
+    let mut flipped = bytes.clone();
+    flipped[512 + 10] ^= 0x01;
+    assert_eq!(now, slot(&flipped), "VERIFY hashes the flipped bytes");
+    assert_eq!(unsafe { crate::store::load_to_stage(&found("cases/a")) }, dkrt_sdk::E_SHA, "a file that no longer matches its table hash is not loaded");
+}
+
+/// The file is read for a load when its bytes are as written.
+#[test]
+fn a_file_read_for_a_load_matches_its_table_hash() {
+    let _f = Fixture::new();
+    assert_eq!(upload("cases/a", &pattern(3000, 7)), OK);
+    assert_eq!(unsafe { crate::store::load_to_stage(&found("cases/a")) }, OK);
 }
 
 #[test]
@@ -782,6 +795,107 @@ fn only_a_blank_header_pair_on_a_card_that_may_hold_a_store_is_an_empty_store() 
         let (l, seen, lst) = views();
         assert!(l == 0 && seen.is_some() && lst == OK, "old version: {l} {seen:?} {lst}");
     }
+}
+
+/// The two selection copies as the card holds them, decoded.
+fn selection_copies() -> [Option<dkrt_sdk::sel::Record>; 2] {
+    let at = |s: u32| card(|c| c.sectors.get(&s).copied()).and_then(|b| dkrt_sdk::sel::decode(&b));
+    [at(L.sel_a()), at(L.sel_b())]
+}
+
+/// SELECT after the boot counter's record: both copies are written (two card writes), with the next sequence number and the counter of the record kept.
+#[test]
+fn a_selection_write_keeps_the_boot_counter_takes_the_next_sequence_number_and_writes_both_copies() {
+    let _f = Fixture::new();
+    unsafe { card_gate::check() };
+    let mut r = dkrt_sdk::sel::Record::empty();
+    r.boot_counter = 1;
+    assert_eq!(unsafe { crate::selection::update(r, 0, false) }, OK, "the boot counter's record: copy A, seq 1");
+    assert_eq!(card(|c| c.writes), 1);
+    let mut body = vec![1u8];
+    body.extend(zpath("modules/a.dkm"));
+    assert_eq!(send(store_cmds::h_select, &body), OK);
+    assert_eq!(card(|c| c.writes), 3, "both copies");
+    let [a, b] = selection_copies();
+    let (a, b) = (a.expect("copy A is valid"), b.expect("copy B is valid"));
+    assert_eq!((a.seq, a.boot_counter, a.count), (2, 1, 1));
+    assert_eq!((b.seq, b.boot_counter, b.count), (2, 1, 1));
+    assert_eq!(&a.paths[0][..14], b"modules/a.dkm\0");
+    assert_eq!(a.paths, b.paths);
+}
+
+/// A selection record, as the boot of a fresh runtime leaves it on a card.
+fn put_selection_record() {
+    let mut b = [0u8; 512];
+    dkrt_sdk::sel::encode(&dkrt_sdk::sel::Record::empty(), &mut b);
+    card(|c| {
+        c.sectors.insert(L.sel_a(), b);
+    });
+}
+
+/// The store a previous runtime left (version 3 headers, a table, a file) beside the runtime's selection record: it reads as no store, the check and the
+/// views write nothing, and the first upload makes a version 4 store in both headers that lists only the new file.
+#[test]
+fn a_version_3_store_is_an_empty_store_that_the_first_upload_turns_into_version_4() {
+    let _f = Fixture::new();
+    let hb = L.header_b();
+    // the previous runtime's store as it wrote it: the layout of version 4 with version 3 in the header, a table of one entry and a CRC of both that holds
+    let mut table = [0u8; 512];
+    table[..9].copy_from_slice(b"modules/o");
+    table[160..164].copy_from_slice(&2u32.to_be_bytes()); // first sector
+    table[164..168].copy_from_slice(&512u32.to_be_bytes()); // size
+    let table_crc = unsafe { dkrt_sdk::store::crc32_of(table.as_ptr(), 512) };
+    let hdr = dkrt_sdk::store::Hdr { count: 1, table_sectors: 1, table_first: 1, table_crc, seq: 1, used: 3, area: L.sectors };
+    let mut old = [0u8; 512];
+    unsafe { dkrt_sdk::store::encode_header(&hdr, old.as_mut_ptr()) };
+    old[4..8].copy_from_slice(&(dkrt_sdk::store::VERSION - 1).to_be_bytes());
+    let crc = unsafe { dkrt_sdk::store::crc32_of(old.as_ptr(), 508) };
+    old[508..].copy_from_slice(&crc.to_be_bytes());
+    let mut as_v4 = old;
+    unsafe { dkrt_sdk::store::encode_header(&hdr, as_v4.as_mut_ptr()) };
+    assert!(unsafe { dkrt_sdk::store::parse_header(as_v4.as_ptr()) }.is_some(), "the same fields with version 4 are a header");
+    put_selection_record();
+    card(|c| {
+        c.sectors.insert(L.first, old);
+        c.sectors.insert(L.first + hb, old);
+        c.sectors.insert(L.first + 1, table);
+        c.sectors.insert(L.first + 2, [0x44; 512]); // its file
+    });
+    let writes = card(|c| c.writes);
+    unsafe { card_gate::check() };
+    assert_eq!(card_gate::state(), dkrt_sdk::CARD_OURS);
+    let (l, seen, lst) = views();
+    assert!(l == 0 && seen.is_some() && lst == OK, "no store: {l} {seen:?} {lst}");
+    assert!(held().is_empty());
+    assert_eq!(card(|c| c.writes), writes, "the check and the views write nothing");
+    assert_eq!(upload("modules/a.dkm", &pattern(1000, 3)), OK);
+    for sector in [L.first, L.first + hb] {
+        let h = card(|c| c.sectors[&sector]);
+        assert_eq!(u32::from_be_bytes(h[4..8].try_into().unwrap()), dkrt_sdk::store::VERSION, "header at {sector} is version 4");
+    }
+    assert_eq!(held().keys().collect::<Vec<_>>(), ["modules/a.dkm"], "only the new file");
+}
+
+/// A claim cut inside its first write leaves header B torn and header A blank. With the runtime's selection record the card is ours, but the torn header is
+/// no store: an upload is refused and writes nothing; CLEAR makes the store, and the next upload commits.
+#[test]
+fn a_torn_header_b_with_a_blank_header_a_is_no_store_until_clear_makes_one() {
+    let _f = Fixture::new();
+    let mut torn_b = torn_header();
+    torn_b[256..].fill(0);
+    put_selection_record();
+    card(|c| {
+        c.sectors.insert(L.first + L.header_b(), torn_b);
+    });
+    unsafe { card_gate::check() };
+    assert_eq!(card_gate::state(), dkrt_sdk::CARD_OURS);
+    let writes = card(|c| c.writes);
+    let blob = pattern(3000, 31);
+    assert_eq!(begin("modules/b.dkm", blob.len(), slot(&blob)), p::E_NOSTORE);
+    assert_eq!(card(|c| c.writes), writes, "the refused upload wrote nothing");
+    assert_eq!(clear_with(CLEAR_MAGIC), OK);
+    assert_eq!(upload("modules/b.dkm", &blob), OK, "the next upload commits");
+    assert!(held().contains_key("modules/b.dkm"));
 }
 
 // ---- power cuts -----------------------------------------------------------------------------------------------------------------------
