@@ -96,6 +96,15 @@ export const createNodesV2 = [
         for (const id of rec.modules ?? []) packable.add(id);
         for (const source of Object.values(rec.aliases ?? {})) packable.add(source);
       }
+      // A project that depends on `<module>:pack` (the runtime's assembly tests) needs the target to exist:
+      // Nx skips a dependency on a missing target without a message.
+      for (const target of Object.values(project.targets ?? {})) {
+        for (const dep of target.dependsOn ?? []) {
+          const ref = typeof dep === 'string' ? dep : '';
+          const m = /^(.+):pack$/.exec(ref);
+          if (m && byId.has(m[1])) packable.add(m[1]);
+        }
+      }
     }
     const nodes = [...byId.values()].map(({ file: f, manifest: m, objects, doc }) => {
       const root = dirname(f);
