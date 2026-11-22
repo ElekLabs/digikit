@@ -8,6 +8,7 @@
 //! - `state`: the state of each module of the boot selection (R11: `BootStates`, `classify`) and the `LOADS` v2 reply bytes.
 //! - `fw`: `Fw`, the firmware's parameter page as a service sees it (the runtime implements it; tests fake it).
 //! - `keys`: the copy of a module's header table that the commit reads (`KeysCopy`).
+//! - `hooks`: `PackageHooks`, what the resident core calls on the system package (one typed entry per crossing, grouped by owner; a missing entry has a default in the core).
 //! - `dev_addr`: `DevAddr`, a device address as its own type (the host maps it through an installed `AddressSpace`).
 //! - `module`: `Module`, `Ctx` and the names of the log (`LOG_NAME`, `PROVIDER_IDX`); `boot_path`: the selection index a file takes; `fw_id`: the image's firmware identity; `store_path`: string rules of store paths.
 //! - `dsp`, `registry`, `mem`: types, constants and helpers with no state. The core owns the objects (`DKRT_DSP`, `DKRT_REG`) and hands them out through `CoreApi`.
@@ -25,6 +26,7 @@ pub mod dsp;
 pub mod fw;
 pub mod fw_id;
 pub mod gen_svc_abi;
+pub mod hooks;
 pub mod keys;
 pub mod link;
 pub mod mem;
