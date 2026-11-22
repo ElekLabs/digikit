@@ -2295,6 +2295,31 @@ fn a_boot_leaves_the_kind_and_the_full_resource_in_the_detail_words_of_a_refusal
     }
 }
 
+/// What `DKRT_BOOT` holds for each way a module of the selection ends (what the module states and the LOADS command show of it): a file whose hash is wrong is FAILED with `E_SHA` and the module before it is ACTIVE
+/// and the only one loaded. (A missing file and a second owner of a key: `manager_assembly_tests.rs`. Moved down from `refusal.device.test.ts`: only the agreement of the views is the firmware's to show.)
+#[test]
+fn a_boot_records_a_file_with_a_wrong_hash_as_failed_with_e_sha() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            // a byte of the image changed after the file was sealed: the loader's hash check fails, the good module before it loads
+            let (mut l, _plan) = planned(*dev, &image, &[], &[&LFO_SHAPE, &LFO_SHAPE_B], &SERVICES);
+            let at = l.m.files.iter().position(|(n, _)| *n == b"modules/lfo-shape-b.dkm".to_vec()).unwrap();
+            let image_off = be(&l.m.files[at].1, dkneeds::H_IMAGE_OFF) as usize;
+            l.m.files[at].1[image_off + 2] ^= 1;
+            let rec = boot_record(&[LFO_SHAPE.leaf, LFO_SHAPE_B.leaf]);
+            let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            let b = crate::boot::info();
+            assert_eq!(b.results[..2], [OK, E_SHA], "{}", dev.name);
+            assert_eq!((b.states[0], b.states[1]), (STATE_ACTIVE, STATE_FAILED), "{}", dev.name);
+            assert_eq!(b.loaded, 1, "{}: only the good module", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
 /// A service that is refused because a need failed names that need on its provider line: the test service needs the port file for its hook site; the port file's check value
 /// is changed, so the port file is refused (`E_HOOK_STOCK`, its own hash) and the service, never placed, is `E_MISSING` with the hash of the port file (the root cause), not
 /// its own hash.

@@ -45,14 +45,15 @@ const RELOAD_RELOAD = `${RELOAD_TESTS}/reload.rs`;
 const PROVIDERS = 'runtime/core/tests/services/providers.device.test.ts';
 const prov = (test: string): Proof => ({ file: PROVIDERS, test });
 const mine = (test: string): Proof => ({ file: REFUSAL, test });
-const loads = mine('the good module loads and is ACTIVE');
+const MANAGER = 'runtime/core/src/rs/src/package/loader/tests/manager_assembly_tests.rs';
+const loads = mine('the good module is ACTIVE');
 
 /** The row of each `[load.status]` name. */
 export const ROWS: Record<string, Row> = {
-  E_NOT_FOUND: { fail: mine('a selected file the card does not have is E_NOT_FOUND'), pass: loads },
+  E_NOT_FOUND: { fail: { file: MANAGER, test: 'a_selected_file_that_is_not_on_the_card_is_reported_and_the_rest_of_the_selection_loads' }, pass: loads },
   E_BAD_STORE: { kind: 'not-a-load', reason: 'the store header is checked before any module is selected', covered: [{ file: STORE_RS, test: 'E_BAD_STORE' }] },
   E_READ: { kind: 'open', reason: 'no boot rig makes the firmware block read fail while a module loads', covered: [{ file: STORE_RS, test: 'E_READ' }] },
-  E_SHA: { fail: mine('a changed sha256 is E_SHA'), pass: loads },
+  E_SHA: { fail: { file: ASSEMBLY, test: 'a_boot_records_a_file_with_a_wrong_hash_as_failed_with_e_sha' }, pass: loads },
   E_FORMAT: { fail: { file: IMAGE_RS, test: 'refuses_bad_magic_format_and_sizes' }, pass: loads },
   E_RUNTIME: { kind: 'reserved', reason: 'never returned: E_CONTRACT says a module needs another runtime' },
   E_IMPORT: { fail: { file: ASSEMBLY, test: 'an_adapter_import_resolves_only_in_an_image_with_the_adapter' }, pass: { file: ASSEMBLY, test: 'an_adapter_import_resolves_only_in_an_image_with_the_adapter' } },
@@ -80,7 +81,7 @@ export const ROWS: Record<string, Row> = {
   E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: MACHINES_BUILD, test: 'E_DECL_FULL' }] },
   E_PLAN_KIND: { fail: { file: ASSEMBLY, test: 'a_boot_leaves_the_kind_and_the_full_resource_in_the_detail_words_of_a_refusal' }, pass: loads },
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },
-  E_PLAN_KEY: { fail: mine('a second owner of one key is E_PLAN_KEY'), pass: mine('the first owner of the key loads') },
+  E_PLAN_KEY: { fail: { file: MANAGER, test: 'of_two_lfo_shapes_with_one_key_the_first_loads_and_the_second_is_refused_by_the_boot' }, pass: loads },
   E_PLAN_FIT: { fail: { file: ASSEMBLY, test: 'a_boot_leaves_the_kind_and_the_full_resource_in_the_detail_words_of_a_refusal' }, pass: loads },
   E_DECL_KIND: { fail: { file: LFO_DEVICE, test: 'a kind table' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
   E_HOOK_STOCK: { fail: prov('a port file whose check value differs is E_HOOK_STOCK and the service that needs it and its dependent are refused'), pass: prov('a provider installs its hook and the consumer calls it') },

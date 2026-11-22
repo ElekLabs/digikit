@@ -430,6 +430,10 @@ fn of_two_lfo_shapes_with_one_key_the_first_loads_and_the_second_is_refused_by_t
             rt.boot_with(&rec, &capacity(&l.p));
             let b = crate::boot::info();
             assert_eq!([b.results[0], b.results[1]], [dkrt_sdk::OK, dkrt_sdk::E_PLAN_KEY], "{}: detail {:x?}", dev.name, [b.detail[0], b.detail[1]]);
+            assert_eq!(([b.states[0], b.states[1]], b.loaded), ([dkrt_sdk::STATE_ACTIVE, dkrt_sdk::STATE_REFUSED], 1), "{}", dev.name);
+            // the detail words: the kind and the key (what the module states and the LOADS command show of the refusal)
+            let key = Keys::parse(&table_of(&packed(dev, LFO_SHAPE.leaf, "dkm", LFO_SHAPE.nx))).unwrap().keys_of(dkneeds::KIND_LFO_SHAPE).next().expect("the fixture has a shape key");
+            assert_eq!(b.detail[1], [dkneeds::KIND_LFO_SHAPE as u32, key], "{}", dev.name);
         }
         clean_state();
     }

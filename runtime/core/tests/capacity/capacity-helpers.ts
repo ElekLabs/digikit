@@ -19,11 +19,17 @@ export const SYMBOLS = [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area', 'DKRT_HOST_DI
 export const popcount = (n: number) => n.toString(2).replace(/0/g, '').length;
 const resultOk = (got: number, want: Want) => (want === LOADED ? got === 0 || got === E_LOADING : got === want);
 
-/** Boot a card of ENTRIES (selected in order) and read what the runtime says. `files` are put on the card without being selected (a service file in `services/`). */
-export async function bootEntries(rig: CardRig, tag: string, entries: Entry[], files: { name: string; file: string }[] = []) {
+/** Boot a card of ENTRIES (selected in order) and read what the runtime says. `files` are put on the card without being selected (a service file in `services/`). `absent` paths are selected after the entries and are not on the card. */
+export async function bootEntries(
+  rig: CardRig,
+  tag: string,
+  entries: Entry[],
+  files: { name: string; file: string }[] = [],
+  absent: string[] = [],
+) {
   const rt = await rig.load(tag, {
     modules: [...entries.map((e, i) => ({ name: `modules/m${i}.dkm`, file: e.file })), ...files],
-    selection: entries.map((_, i) => `modules/m${i}.dkm`),
+    selection: [...entries.map((_, i) => `modules/m${i}.dkm`), ...absent],
   });
   const info = await bootInfo(rt.session, rig.plan);
   const { mods, cap } = await rig.usb(rt, async (dk) => ({ mods: await dk.modules(), cap: await dk.capacity() }));
