@@ -128,3 +128,294 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 }
+
+impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+    /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the
+    /// record is a live module of the boot selection; the file passes every check of a load (`check_file`), has the same name, a header table the planner can keep, and
+    /// every key of the old file (`E_RELOAD_KEYS`); the planner accepts the live set with the file in the old module's slot (`caps`: `live_caps`). `OK`, or the refusal.
+    ///
+    /// The checks of a file read the numbers the services gave its keys (`resolve` of the machines service names a voice's type by the selection index of the module that loads,
+    /// `CoreApi::boot_index`). A load has that index set and the keys numbered by `settle`; so the check sets the index to the module's, and numbers the file's keys first (the old
+    /// keys keep their numbers, a key the file adds takes a free one, as `reload_load` does again). The numbering is done only for a file that has the module's name and every old key.
+    pub unsafe fn reload_check(&mut self, rec: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        if rec >= MAX_MODULES || records::module(rec).used == 0 {
+            return E_NOT_FOUND;
+        }
+        let k = self.sel_of(rec) as usize;
+        if k >= SEL_MAX || self.table_len[k] == 0 {
+            return E_NOT_FOUND;
+        }
+        if let Ok(staged) = self.m.stage(path) {
+            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+            if let Some(table) = table_of_file(file) {
+                let same_name = file.len() >= H_NAME + dkneeds::NAME_LEN as usize && file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] == records::module(rec).name[..];
+                if let (true, Ok(old), Ok(new)) = (same_name, Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(table)) {
+                    if old.first_missing_key(&new).is_none() {
+                        self.number_keys(k, file);
+                    }
+                }
+            }
+        }
+        let was = read_volatile(addr_of!(BOOT_IDX));
+        crate::selection::BOOT_IDX = k as u32;
+        let r = self.reload_check_inner(rec, k, path, caps);
+        crate::selection::BOOT_IDX = was;
+        r
+    }
+
+    unsafe fn reload_check_inner(&mut self, rec: usize, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        let mut c = Checked::empty();
+        let r = self.check_file(path, Slot::Module(rec), &mut c);
+        if r != OK {
+            return r;
+        }
+        if !cstr_eq(c.f.add(H_NAME), records::module(rec).name.as_ptr()) {
+            return E_FORMAT; // another name is another module
+        }
+        if c.reg_size as usize > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        let new = match Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)) {
+            Ok(t) => t,
+            Err(_) => return E_FORMAT,
+        };
+        match Keys::parse(&self.tables[k][..self.table_len[k]]) {
+            Ok(old) => {
+                if old.first_missing_key(&new).is_some() {
+                    return E_RELOAD_KEYS;
+                }
+            }
+            Err(_) => return E_NOT_FOUND,
+        }
+        self.live_plan(k, core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize), caps)
+    }
+
+    /// The part of `reload_load` before the file loads: the rules of the check for the bytes that load, the file's header table kept at the module's index, the
+    /// services' numbering. The package manager loads the file after it.
+    pub(crate) unsafe fn reload_prepare(&mut self, rec: usize, path: *const u8) -> i32 {
+        let k = if rec < MAX_MODULES { self.sel_of(rec) as usize } else { SEL_MAX };
+        if k >= SEL_MAX {
+            return E_NOT_FOUND;
+        }
+        // the file can have changed since `reload_check` (a host writes it while the module drains): the rules of the check hold for the bytes that load
+        let staged = match self.m.stage(path) {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+        if file.len() < dkneeds::HEADER as usize || file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] != records::module(rec).name[..] {
+            return E_FORMAT;
+        }
+        let (off, len) = match table_span(file) {
+            Some(s) => s,
+            None => return E_FORMAT,
+        };
+        if len > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        match (Keys::parse(&self.tables[k][..self.table_len[k]]), Keys::parse(&file[off..off + len])) {
+            (Ok(old), Ok(new)) => {
+                if old.first_missing_key(&new).is_some() {
+                    return E_RELOAD_KEYS;
+                }
+            }
+            (_, Err(_)) => return E_FORMAT,
+            (Err(_), _) => return E_NOT_FOUND,
+        }
+        self.capture(k, file);
+        self.accepted[k] = true;
+        // the services number the live set again: the live modules keep their numbers (sticky), a key the new file adds takes a free one
+        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+        services().settle(&sel);
+        OK
+    }
+
+    /// The services number the keys of `file` as if it were the module at selection index `k` (`settle` over the live set with its table there); the kept table of `k` is as it was after.
+    #[inline(never)]
+    unsafe fn number_keys(&mut self, k: usize, file: &[u8]) {
+        let saved = (self.tables[k], self.table_len[k]);
+        self.capture(k, file);
+        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+        services().settle(&sel);
+        self.tables[k] = saved.0;
+        self.table_len[k] = saved.1;
+    }
+
+    /// The checks of a load of the file at `path` into selection index `k` (`boot::live_index`), before anything is loaded: nothing changes but the staging buffer. The file
+    /// passes every check of a load (`check_file`, as a free record), no loaded module has its name (`E_LOADED`), and the planner accepts the live set with the file at `k`
+    /// (`caps`: `live_caps` with `own = (0, 0)`, since nothing is given back). The services number the file's keys first, as a reload's check does, because the checks of the
+    /// DSP section read the numbers by the selection index; the kept table of the index is as it was after. `OK`, or the refusal.
+    pub unsafe fn live_check_load(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        if k >= SEL_MAX {
+            return E_SEL_COUNT;
+        }
+        if let Ok(staged) = self.m.stage(path) {
+            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+            if table_of_file(file).is_some() {
+                self.number_keys(k, file);
+            }
+        }
+        let was = read_volatile(addr_of!(BOOT_IDX));
+        crate::selection::BOOT_IDX = k as u32;
+        self.missing = [0; NEEDS_LEN];
+        let r = self.live_check_load_inner(k, path, caps);
+        crate::selection::BOOT_IDX = was;
+        r
+    }
+
+    unsafe fn live_check_load_inner(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+        // the plan first, as the boot does (it plans every file before it loads one): a service that no loaded provider offers is `E_MISSING` before the file's imports
+        // are looked up, where it would be `E_IMPORT` for the first export of that service. A file whose table cannot be read goes on to `check_file`, which says why.
+        if let Ok(staged) = self.m.stage(path) {
+            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+            // a loaded name is its own answer: its keys would clash with the loaded module's, which the plan would call `E_PLAN_KEY`
+            if file.len() >= H_NAME + dkneeds::NAME_LEN as usize {
+                let mut rec = 0;
+                while rec < MAX_MODULES {
+                    if records::module(rec).used != 0 && records::module(rec).name[..] == file[H_NAME..H_NAME + dkneeds::NAME_LEN as usize] {
+                        return E_LOADED;
+                    }
+                    rec += 1;
+                }
+            }
+            if let Some(table) = table_of_file(file) {
+                if Keys::parse(table).is_ok() {
+                    let r = self.live_plan(k, table, caps);
+                    if r != OK {
+                        return r;
+                    }
+                }
+            }
+        }
+        let mut c = Checked::empty();
+        let r = self.check_file(path, Slot::Free, &mut c);
+        if r != OK {
+            return r;
+        }
+        let mut rec = 0;
+        while rec < MAX_MODULES {
+            if records::module(rec).used != 0 && cstr_eq(records::module(rec).name.as_ptr(), c.f.add(H_NAME)) {
+                return E_LOADED;
+            }
+            rec += 1;
+        }
+        if c.reg_size as usize > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        if Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)).is_err() {
+            return E_FORMAT;
+        }
+        OK
+    }
+
+    /// The part of `live_load` before the file loads (see `reload_prepare`): the file's header table kept at index `k`, the services' numbering.
+    pub(crate) unsafe fn live_prepare(&mut self, k: usize, path: *const u8) -> i32 {
+        if k >= SEL_MAX {
+            return E_SEL_COUNT;
+        }
+        // the file can have changed since `live_check_load`: the rules of the check hold for the bytes that load
+        let staged = match self.m.stage(path) {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+        let (off, len) = match table_span(file) {
+            Some(s) => s,
+            None => return E_FORMAT,
+        };
+        if len > TABLE_MAX {
+            return E_TOO_BIG;
+        }
+        if Keys::parse(&file[off..off + len]).is_err() {
+            return E_FORMAT;
+        }
+        self.capture(k, file);
+        self.accepted[k] = true;
+        let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
+        services().settle(&sel);
+        OK
+    }
+
+    /// Selection index `k` has no module any more (an unload, or a load that failed): the plan's acceptance goes, and no free record keeps the index. The kept header table
+    /// stays (nothing reads it without a live record), and so do the services' sticky numbers, so a later load of the same file gets the same numbers.
+    pub unsafe fn retire_index(&mut self, k: usize) {
+        if k >= SEL_MAX {
+            return;
+        }
+        self.accepted[k] = false;
+        let mut rec = 0;
+        while rec < MAX_MODULES {
+            if self.sel_of(rec) as usize == k && records::module(rec).used == 0 {
+                self.sel_of_rec[rec] = 0;
+            }
+            rec += 1;
+        }
+    }
+}
+
+/// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded (`Loader::reload_check`): the file, its keys, and the plan of
+/// the live set with the file in the old module's slot. `OK` or the refusal.
+pub unsafe fn reload_check(rec: usize, path: *const u8) -> i32 {
+    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+    let k = live_capacity(&mut caps, own_use(rec), dkrt_capacity_into);
+    loader().reload_check(rec, path, &caps[..k])
+}
+
+/// The capacity as a plan of the whole live set needs it (the platform's capacity from `source` into `caps` through `live_caps`, with `own` given back); its count.
+/// The host tests give the capacity of the device they boot as `source`.
+pub(crate) unsafe fn live_capacity(caps: &mut [DkrtCap; CAP_MAX], own: (u32, u32), source: impl FnOnce(&mut [DkrtCap; CAP_MAX]) -> usize) -> usize {
+    let k = source(caps);
+    live_caps(&mut caps[..k], own);
+    k
+}
+
+/// The checks of a load of the file at `path` into selection index `k` (`Loader::live_check_load`).
+pub unsafe fn live_check_load(k: usize, path: *const u8) -> i32 {
+    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+    let n = live_capacity(&mut caps, (0, 0), dkrt_capacity_into);
+    loader().live_check_load(k, path, &caps[..n])
+}
+
+/// Selection index `k` has no module any more (`Loader::retire_index`).
+pub unsafe fn retire_index(k: usize) {
+    loader().retire_index(k)
+}
+
+/// What module record `rec` holds that its reload gives back before the new file loads: (arena bytes of its image block and its record block, DSP area bytes of its
+/// range).
+pub(crate) unsafe fn own_use(rec: usize) -> (u32, u32) {
+    if rec >= MAX_MODULES {
+        return (0, 0);
+    }
+    let block = |n: u32| if n == 0 { 0 } else { dkneeds::arena_block(n).unwrap_or(n) };
+    let m = records::module(rec);
+    (block(m.size) + block(crate::collect::block_of(rec).1), dsp::ds().mod_len[rec])
+}
+
+/// The capacity as a plan of the whole live set needs it: what the live modules use is counted by the plan again, so the counts they own go back to 0. The
+/// physical resources (arena, staging buffer, DSP area, store, settings) keep their use, less `own` (the arena and DSP bytes of the module being reloaded, which its
+/// teardown frees before the new file loads, so a large module is not refused for counting itself twice). The plan still counts the record block of every other live
+/// module again, which errs on the side of refusing.
+pub(crate) fn live_caps(caps: &mut [DkrtCap], own: (u32, u32)) {
+    use dkrt_sdk::proto::*;
+    let mut c = 0;
+    while c < caps.len() {
+        let kind = caps[c].kind;
+        let physical = kind == CAPK_ARENA as u32 || kind == CAPK_STAGE as u32 || kind == CAPK_DSP_AREA as u32 || kind == CAPK_STORE as u32 || kind == CAPK_SETTINGS as u32;
+        if kind == CAPK_ARENA as u32 {
+            caps[c].used = caps[c].used.saturating_sub(own.0);
+        } else if kind == CAPK_DSP_AREA as u32 {
+            caps[c].used = caps[c].used.saturating_sub(own.1);
+        }
+        if !physical {
+            caps[c].used = 0;
+            caps[c].largest = if kind == CAPK_SELECTION as u32 { caps[c].limit } else { 0 };
+        }
+        c += 1;
+    }
+}
+
+/// The selection indices at which a module is loaded.
+pub(crate) unsafe fn live_indices() -> [bool; SEL_MAX] {
+    loader().live_at(SEL_MAX)
+}
