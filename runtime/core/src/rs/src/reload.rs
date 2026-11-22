@@ -51,6 +51,38 @@ pub struct Facts {
     pub menus: bool,
 }
 
+impl Facts {
+    /// The facts of the system for a job on module record `rec` (`None`: a load, which has no module yet), with the card transfer flag the caller read.
+    pub(crate) unsafe fn of(rec: Option<usize>, card_busy: bool) -> Facts {
+        Facts {
+            safe_mode: crate::boot::info().safe != 0,
+            upload_open: crate::store_writer::is_open() || crate::store_writer::is_locked(),
+            card_busy,
+            menus: rec.is_some_and(|r| menus_held(r)),
+        }
+    }
+}
+
+/// The refusal of a job on module record `rec` (`None` for a load): the generic ones (`refusal` over `Facts::of`), then for a module those of its services (`service`).
+pub(crate) unsafe fn refusal_for<P: Platform>(p: &P, rec: Option<usize>, card_busy: bool, service: impl FnOnce(usize) -> Option<i32>) -> Option<i32> {
+    match (refusal(p, &Facts::of(rec, card_busy)), rec) {
+        (None, Some(r)) => service(r),
+        (generic, _) => generic,
+    }
+}
+
+/// Was a menu object built for module record `rec` (`dkrt_menu_built`)?
+pub(crate) unsafe fn menus_held(rec: usize) -> bool {
+    rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec])) != 0
+}
+
+/// The boot record's account of a finished load of selection index `k` (`Ops::load`): its state and its row.
+pub(crate) unsafe fn account_load(k: usize, path: *const u8, r: i32, missing: [u8; dkrt_sdk::NEEDS_LEN], name: &[u8; crate::loader::LOG_NAME]) {
+    let missing = if r == E_IMPORT { missing } else { [0u8; dkrt_sdk::NEEDS_LEN] };
+    crate::boot::states().finished(k, r);
+    crate::boot::report_module(k, path, r, &missing, name);
+}
+
 /// The refusal of a live job (a load, an unload or a reload), or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
 /// readable), an open upload, card operations, menus of the module (`Facts::menus`: false for a load, which has no module yet). The first that holds names the status.
 /// The services' own refusals (`Service::teardown_refusal`: a service that cannot give back the module's state now) come after it, for an unload and a reload: the manager asks them
@@ -464,22 +496,8 @@ impl Ops for RealOps {
         crate::boot::live_index(path, &crate::loader::live_indices())
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
-        let menus = match rec {
-            Some(r) => core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[r])) != 0,
-            None => false,
-        };
-        let f = Facts {
-            safe_mode: crate::boot::info().safe != 0,
-            upload_open: crate::store_writer::is_open() || crate::store_writer::is_locked(),
-            card_busy: crate::api::card_busy(),
-            menus,
-        };
-        // the generic refusals are the job's; the service-specific ones come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
-        let generic = refusal(&crate::PLATFORM, &f);
-        match (generic, rec) {
-            (None, Some(r)) => crate::lifecycle::get().and_then(|rt| rt.refusal(r)),
-            (generic, _) => generic,
-        }
+        // the service-specific refusals come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
+        refusal_for(&crate::PLATFORM, rec, crate::api::card_busy(), |r| crate::lifecycle::get().and_then(|rt| rt.refusal(r)))
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
         if op == LIVE_LOAD {
@@ -498,7 +516,7 @@ impl Ops for RealOps {
         crate::loader::reload_abort(rec)
     }
     unsafe fn menu_built(&mut self, rec: usize) -> bool {
-        rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec])) != 0
+        menus_held(rec)
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
         match crate::lifecycle::get() {
@@ -521,9 +539,7 @@ impl Ops for RealOps {
             Some(rt) => rt.reload_load(rec, path),
             None => dkrt_sdk::E_NOT_FOUND,
         };
-        let missing = if r == E_IMPORT { crate::loader::missing() } else { [0u8; dkrt_sdk::NEEDS_LEN] };
-        crate::boot::states().finished(k, r);
-        crate::boot::report_module(k, path, r, &missing, &crate::loader::last_name());
+        account_load(k, path, r, crate::loader::missing(), &crate::loader::last_name());
         r
     }
     unsafe fn unloaded(&mut self, k: usize) {

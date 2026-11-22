@@ -228,20 +228,26 @@ pub unsafe fn load(path: *const u8) -> i32 {
 
 /// Safe mode: the installer writes nothing.
 pub unsafe fn set_safe() {
-    loader().installer.set_armed(false)
+    loader().set_safe()
 }
 
 /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded (`Loader::reload_check`): the file, its keys, and the plan of
 /// the live set with the file in the old module's slot. `OK` or the refusal.
 pub unsafe fn reload_check(rec: usize, path: *const u8) -> i32 {
     let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-    let k = live_capacity(&mut caps, own_use(rec));
+    let k = live_capacity(&mut caps, own_use(rec), dkrt_capacity_into);
     loader().reload_check(rec, path, &caps[..k])
 }
 
-/// The capacity as a plan of the whole live set needs it (`dkrt_capacity` into `caps` through `live_caps`, with `own` given back); its count.
-pub(crate) unsafe fn live_capacity(caps: &mut [DkrtCap; CAP_MAX], own: (u32, u32)) -> usize {
-    let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+/// The capacity of the platform: `dkrt_capacity` into `caps`; its count.
+pub(crate) fn dkrt_capacity_into(caps: &mut [DkrtCap; CAP_MAX]) -> usize {
+    unsafe { crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize }
+}
+
+/// The capacity as a plan of the whole live set needs it (the platform's capacity from `source` into `caps` through `live_caps`, with `own` given back); its count.
+/// The host tests give the capacity of the device they boot as `source`.
+pub(crate) unsafe fn live_capacity(caps: &mut [DkrtCap; CAP_MAX], own: (u32, u32), source: impl FnOnce(&mut [DkrtCap; CAP_MAX]) -> usize) -> usize {
+    let k = source(caps);
     live_caps(&mut caps[..k], own);
     k
 }
@@ -253,16 +259,7 @@ pub unsafe fn reload_quiesce(rec: usize) -> i32 {
 
 /// The module record loaded from the store path `path` (NUL terminated), and its selection index: what a live job names its module by.
 pub unsafe fn rec_of_path(path: *const u8) -> Option<(usize, usize)> {
-    let l = loader();
-    let mut rec = 0;
-    while rec < MAX_MODULES {
-        if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
-            let k = l.sel_of(rec) as usize;
-            return if k < SEL_MAX { Some((rec, k)) } else { None };
-        }
-        rec += 1;
-    }
-    None
+    loader().rec_of_path(path)
 }
 
 /// Does the DSP loader hold a module it could not release? Permanent until the next boot: every load and reload is refused.
@@ -307,7 +304,7 @@ pub(crate) unsafe fn live_indices() -> [bool; SEL_MAX] {
 /// The checks of a load of the file at `path` into selection index `k` (`Loader::live_check_load`).
 pub unsafe fn live_check_load(k: usize, path: *const u8) -> i32 {
     let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-    let n = live_capacity(&mut caps, (0, 0));
+    let n = live_capacity(&mut caps, (0, 0), dkrt_capacity_into);
     loader().live_check_load(k, path, &caps[..n])
 }
 
@@ -454,6 +451,24 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// The selection index of module record `rec`, `u8::MAX` when it has none.
     fn sel_of(&self, rec: usize) -> u8 {
         self.sel_of_rec[rec].wrapping_sub(1)
+    }
+
+    /// Safe mode: the installer writes nothing.
+    pub(crate) fn set_safe(&mut self) {
+        self.installer.set_armed(false)
+    }
+
+    /// The module record loaded from the store path `path` (NUL terminated), and its selection index: what a live job names its module by.
+    pub(crate) unsafe fn rec_of_path(&self, path: *const u8) -> Option<(usize, usize)> {
+        let mut rec = 0;
+        while rec < MAX_MODULES {
+            if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
+                let k = self.sel_of(rec) as usize;
+                return if k < SEL_MAX { Some((rec, k)) } else { None };
+            }
+            rec += 1;
+        }
+        None
     }
 
     pub const fn new(p: P, m: M, r: R) -> Self {

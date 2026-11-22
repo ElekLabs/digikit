@@ -12,8 +12,9 @@
 //! `block_write`, which refuses a write when the card's area is not ours (`card.rs`): then the boot counter is not raised either.
 
 use crate::platform::st;
-use crate::safe_mode::{key_held, DKRT_STABLE_BLOCKS, LATE_FLOOR};
-use crate::selection::{current, update, Choice, REC, REC_COPY, REC_VALID};
+use crate::boot_env::{BootEnv, RealBootEnv};
+use crate::safe_mode::{key_held_with, DKRT_STABLE_BLOCKS, LATE_FLOOR};
+use crate::selection::{current_with, update_with, Choice, REC, REC_COPY, REC_VALID};
 use crate::{card, fault, dlog, loader, store};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
@@ -106,13 +107,19 @@ pub unsafe extern "C" fn dkrt_boot() {
     if !crate::dev::valid() {
         return; // a device object this runtime cannot read (a patch bug): load nothing, leave the firmware alone
     }
-    let b = info();
-    if b.magic == INFO_MAGIC {
+    if info().magic == INFO_MAGIC {
         return; // the constructor ran once already: a second call is a bug, not a second boot
     }
+    run(&RealBootEnv);
+}
+
+/// The boot over `env` (`dkrt_boot` with the device's, the host tests with a fake card): the selection record, the safe-mode decision, the boot counter, the tables of the
+/// selection, the providers and the package manager's load. The firmware's own parts (the settings, the crash record's RAM, the intro screen) are `BootEnv` steps.
+pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
+    let b = info();
     b.magic = INFO_MAGIC;
     b.version = 1;
-    let (rec, copy, unreadable) = match current() {
+    let (rec, copy, unreadable) = match current_with(env.platform()) {
         Choice::Use { record, copy, .. } => (Some(record), copy, false),
         Choice::Empty => (None, 0, false),
         Choice::Unreadable => (None, 0, true),
@@ -121,12 +128,12 @@ pub unsafe extern "C" fn dkrt_boot() {
     let mut r = rec.unwrap_or(Record::empty());
     dlog::ev(logk::BOOT_START, dlog::INFO, [RUNTIME_VERSION, crate::device(), r.stable_blocks, r.seq, r.boot_counter]);
     // the card's area: ours, blank or neither (read-only), before anything is written
-    card::check();
+    card::check_with(env.platform());
     // the settings record (the fx routes and send amounts): into RAM before the UI starts
-    crate::settings::load();
+    env.settings_load();
     // the crash record and the RAM probe of the boot before
-    fault::keep_probe();
-    if fault::at_boot() {
+    env.keep_probe();
+    if env.crash_at_boot() {
         let seen = fault::seen();
         if seen.found != 0 && seen.stable != 0 {
             // the crashed boot had already cleared its counter: count it as bad now, and keep that one count until a boot with no crash
@@ -150,7 +157,7 @@ pub unsafe extern "C" fn dkrt_boot() {
         SAFE_READ
     } else if r.flags & sel::FLAG_SAFE_ONCE != 0 {
         SAFE_FLAG
-    } else if key_held() {
+    } else if key_held_with(env.platform()) {
         SAFE_KEY
     } else if fault::seen().hang != 0 {
         // the boot before stopped because the DSP stopped (a hang record): one stop is enough, even after a stable boot; the selection stays as it is
@@ -176,12 +183,12 @@ pub unsafe extern "C" fn dkrt_boot() {
         if reason == SAFE_FLAG {
             // honoured once: clear the flag (the counter is left as it is; the UI loop clears it)
             r.flags &= !sel::FLAG_SAFE_ONCE;
-            update(r, copy, valid);
+            update_with(env.platform(), r, copy, valid);
         }
         // a safe boot loads no module: show the safe-mode screen in place of the stock intro (no storage access, built here on the main-OS task)
         crate::intro::show_safe(reason);
         // no provider loads and the installer writes nothing: every hook site stays stock
-        loader::set_safe();
+        env.set_safe();
         let mut k = 0;
         while k < SEL_MAX {
             b.results[k] = E_SAFE_MODE;
@@ -193,34 +200,18 @@ pub unsafe extern "C" fn dkrt_boot() {
     // raise the counter before anything of a module runs; the stable period clears it. This counts from the first boot: with no record
     // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
     // (ABOUT says so).
-    r = crate::safe_mode::count_boot_with(&crate::PLATFORM, r, copy, valid, card::writable());
+    r = crate::safe_mode::count_boot_with(env.platform(), r, copy, valid, card::writable());
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them
-    read_tables(&r);
+    env.read_tables(&r);
     // the providers for the hard needs the runtime does not meet, searched on the card from the header tables that read gave
-    loader::find_providers(r.count as usize);
+    env.find_providers(r.count as usize);
     // the package manager orders the selection and the services it needs by the package graph, refuses what the graph or the rules of the core refuse, loads the rest (services
     // first), reports each module in selection order and the providers in the log
-    crate::lifecycle::boot(&r);
+    env.load(&r);
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
-}
-
-/// Read the file of each selected module into the staging buffer and keep its header table for the boot's graph (`loader::capture`). A file that is missing, torn or
-/// not a `.dkm` has none (its load reports the error).
-unsafe fn read_tables(rec: &Record) {
-    loader::reset_plan();
-    let mut k = 0;
-    while k < rec.count as usize {
-        if let Ok(found) = store::find(rec.paths[k].as_ptr()) {
-            if store::load_to_stage(&found) == OK {
-                let file = core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize);
-                loader::capture(k, file);
-            }
-        }
-        k += 1;
-    }
 }
 
 /// A 32-bit hash of each index's full selection path at this boot (0: no path; an index that a live load added past the boot's count has none). Written once, by the boot's

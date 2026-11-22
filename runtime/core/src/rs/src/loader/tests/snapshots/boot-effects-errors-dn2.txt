@@ -1,0 +1,191 @@
+# no module or service file crosses the card: the loader reads them from `Card.files` (no store sector traffic), so the only sector write is the selection record's (the boot counter)
+# the host runs no module code: `init` and `fini` are logged, never executed, so a module's own events, ticks and declarations do not appear; the DSP is not modelled
+# not made: the settings record, the crash record and the keep area's RAM probe (firmware RAM), so no boot after a crash (`fault::at_boot`, the late-crash count, a hang or panic record) can be driven; a card transfer in flight, and the files of `FakeStorage`
+# `claims` in the card state counts the claims of a blank card's area (its header copies are written first): the fake card of the test is ours from the start, so no claim is made and it stays 0
+# the boot's `result` line is the number of modules loaded (`boot info loaded`): the boot has no result code of its own, each module's code is in its `module` line
+== boot with a damaged module and a damaged service
+loaded modules 1
+installer calls
+  flush freed:blk1+0 214
+  flush freed:blk1+0 214
+  flush freed:blk1+4 210
+  flush freed:blk4+0 21876
+  flush freed:blk4+0 21876
+  mask
+  write 0x40137cc6 6
+  write 0x4000766c 6
+  write 0x4010e1b0 6
+  write 0x40137c40 6
+  write 0x40137d1e 6
+  write 0x40137932 6
+  write 0x401378c4 6
+  write 0x400e3610 6
+  write 0x40137836 6
+  flush 0x40137cc0 16
+  flush 0x40007660 32
+  flush 0x4010e1b0 16
+  flush 0x40137c40 16
+  flush 0x40137d10 32
+  flush 0x40137930 16
+  flush 0x401378c0 16
+  flush 0x400e3610 16
+  flush 0x40137830 16
+  restore
+  flush blk7+0 1760
+  flush blk7+0 1760
+  mask
+  write 0x40137cc6 6
+  flush 0x40137cc0 16
+  write 0x40137836 6
+  flush 0x40137830 16
+  write 0x400e3610 6
+  flush 0x400e3610 16
+  write 0x401378c4 6
+  flush 0x401378c0 16
+  write 0x40137932 6
+  flush 0x40137930 16
+  write 0x40137d1e 6
+  flush 0x40137d10 32
+  write 0x40137c40 6
+  flush 0x40137c40 16
+  write 0x4010e1b0 6
+  flush 0x4010e1b0 16
+  write 0x4000766c 6
+  flush 0x40007660 32
+  restore
+card writes
+  sector 5094 512 bytes
+  sector 5095 512 bytes
+card state 1 claims 0 writes 2 refused 0
+init and fini calls
+  init 8
+  init 2
+events
+  kind 2 flags 0x0004 args [2, ffffffff, 0, 0, 100000]
+  kind 1 flags 0x0004 args [b02, 1, 0, 1, 0]
+  kind 4 flags 0x0004 args [1, 0, 0, 3, 0]
+  kind 44 flags 0x0004 args [fffffffe, 0, 0, 0, 0]
+  kind 44 flags 0x0004 args [fffffffe, 0, 0, 0, 0]
+  kind 44 flags 0x0004 args [2, 0, 0, 0, 0]
+  kind 5 flags 0x0004 args [fffffffe, 0, 646e322d, 7be412a6, 100000]
+  kind 5 flags 0x0004 args [fffffffe, 0, 6c666f2e, 5768d068, 400000]
+  kind 5 flags 0x0001 args [fffffffe, fffffffb, 6c6f6361, ee7f2383, 0]
+  kind 5 flags 0x0001 args [0, fffffffb, 6c666f2d, 73686170, 65000000]
+  kind 5 flags 0x0001 args [1, ffffffb7, 6c6f6361, 6c2d7069, 6e672d75]
+  kind 5 flags 0x0004 args [2, 0, 656e7472, 792d6465, 6d6f0000]
+installed sites 0
+service rows
+arena blocks
+  0x00700000 1760 bytes
+contexts and ticks
+  2 magic 0x444b4358 rec 2 tick blk7+266
+live set 2
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+  module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+records
+  2 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x00700000 size 1760 fini 0x0070020a
+card sectors
+  5094 6ccdcc2a6b11
+  5095 7709000d04e7
+== unload of a module that is not loaded
+result -1
+installer calls
+card writes
+card state 1 claims 0 writes 2 refused 0
+init and fini calls
+events
+installed sites 0
+service rows
+arena blocks
+  0x00700000 1760 bytes
+contexts and ticks
+  2 magic 0x444b4358 rec 2 tick blk7+266
+live set 2
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+  module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+records
+  2 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x00700000 size 1760 fini 0x0070020a
+card sectors
+  5094 6ccdcc2a6b11
+  5095 7709000d04e7
+== reload of a module whose file is damaged
+result -5
+installer calls
+card writes
+card state 1 claims 0 writes 2 refused 0
+init and fini calls
+events
+installed sites 0
+service rows
+arena blocks
+  0x00700000 1760 bytes
+contexts and ticks
+  2 magic 0x444b4358 rec 2 tick blk7+266
+live set 2
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+  module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+records
+  2 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x00700000 size 1760 fini 0x0070020a
+card sectors
+  5094 6ccdcc2a6b11
+  5095 7709000d04e7
+== live load of a damaged file
+result -5
+installer calls
+card writes
+card state 1 claims 0 writes 2 refused 0
+init and fini calls
+events
+installed sites 0
+service rows
+arena blocks
+  0x00700000 1760 bytes
+contexts and ticks
+  2 magic 0x444b4358 rec 2 tick blk7+266
+live set 2
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+  module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+records
+  2 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x00700000 size 1760 fini 0x0070020a
+card sectors
+  5094 6ccdcc2a6b11
+  5095 7709000d04e7
+== safe boot by the record's flag
+installer calls
+card writes
+  sector 5094 512 bytes
+  sector 5095 512 bytes
+card state 1 claims 0 writes 4 refused 0
+init and fini calls
+events
+  kind 1 flags 0x0004 args [b02, 1, 0, 3, 0]
+  kind 4 flags 0x0004 args [3, 0, 0, 3, 1]
+  kind 3 flags 0x0001 args [3, 0, 3, 0, 0]
+installed sites 0
+boot info magic 0x444b4254 version 1 safe 1 reason 3 counter 0 seq 3 copy 0 count 3 loaded 0 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+  module 0 lfo-shape.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 1 local-ping-user.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 2 entry-demo.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+== safe boot by the boot counter
+installer calls
+card writes
+  sector 5094 512 bytes
+card state 1 claims 0 writes 5 refused 0
+init and fini calls
+events
+  kind 1 flags 0x0004 args [b02, 1, 0, 5, 2]
+  kind 4 flags 0x0004 args [5, 0, 2, 3, 0]
+  kind 3 flags 0x0001 args [1, 2, 5, 0, 0]
+installed sites 0
+boot info magic 0x444b4254 version 1 safe 1 reason 1 counter 2 seq 5 copy 0 count 3 loaded 0 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+  module 0 lfo-shape.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 1 local-ping-user.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  module 2 entry-demo.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

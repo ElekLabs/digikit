@@ -322,6 +322,8 @@ pub(super) struct Card {
     staged_path: Vec<u8>,
     pub(super) live: Vec<(u32, Vec<u128>)>,
     allocs: u32,
+    /// The blocks given back: (address, bytes). Only a load that fails flushes a block after its free (its cleanup), so a golden shows `freed:` only for such a path.
+    freed: Vec<(u32, u32)>,
     /// The runtime id of the device whose `init` the card replays.
     device: u32,
     /// The builder calls the `init` of a module makes (`replay_init`): the host runs no ColdFire code, so a case that needs a module's declarations lists them here.
@@ -330,6 +332,8 @@ pub(super) struct Card {
     pub(super) real_rows: bool,
     /// `init` declares the handler of every kind 4 bytes off the one the header table carries (a service whose `init` and file disagree).
     pub(super) skew_kind_handler: bool,
+    /// The `init` and `fini` the loader entered, in order: `(is_fini, record)`.
+    pub(super) hooks: Vec<(bool, usize)>,
 }
 
 /// A builder call of a module's `init`, made on the real machines or effects service with the index of the module's keys table.
@@ -340,6 +344,16 @@ pub(super) enum Builder {
 }
 
 impl Card {
+    /// `addr..addr+len` as a place in the arena of the card: `blk<slot>+<offset>` inside a live block, `freed:blk<slot>+<offset>` inside a block that went back (a stand-in
+    /// address, never a host address). `None`: a use after free, an access past a block's end or a host pointer. A load that fails is flushed before its block goes back.
+    pub(super) fn arena_ref(&self, addr: u32, len: u32) -> Option<String> {
+        let at = |(base, size): (u32, u32)| (addr >= base && addr - base < size && len <= size - (addr - base)).then(|| std::format!("blk{}+{}", base / 0x0010_0000, addr - base));
+        if let Some(r) = self.live.iter().map(|b| (b.0, b.1.len() as u32 * 16)).find_map(at) {
+            return Some(r);
+        }
+        self.freed.iter().copied().find_map(at).map(|r| std::format!("freed:{r}"))
+    }
+
     fn new(files: Vec<(String, Vec<u8>)>, device: u32) -> Card {
         Card {
             files: files.into_iter().map(|(n, b)| (n.into_bytes(), b)).collect(),
@@ -347,10 +361,12 @@ impl Card {
             staged_path: Vec::new(),
             live: Vec::new(),
             allocs: 0,
+            freed: Vec::new(),
             device,
             init_calls: Vec::new(),
             real_rows: false,
             skew_kind_handler: false,
+            hooks: Vec::new(),
         }
     }
 }
@@ -377,7 +393,8 @@ impl Images for Card {
     }
     unsafe fn free(&mut self, addr: u32) {
         let at = self.live.iter().position(|b| b.0 == addr).expect("free of a block that is not live");
-        self.live.remove(at);
+        let (_, mem) = self.live.remove(at);
+        self.freed.push((addr, mem.len() as u32 * 16));
     }
     unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
         // The device table `IMPORTS` points at firmware symbols that a host test binary does not link: a name the SDK declares gets a stand-in address.
@@ -413,6 +430,7 @@ impl Images for Card {
         k as i32
     }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, _: *const Ctx) -> i32 {
+        self.hooks.push((false, rec));
         let f = &self.staged;
         if be(f, dkneeds::H_ROLE) != 1 {
             // a module's `init` is module code that the host does not run, with two exceptions: the code `moveq #n,%d0; rts` (what `init` returns at once, the one
@@ -485,7 +503,9 @@ impl Images for Card {
         };
         crate::collect::dk_service_declare_row(ctx, row)
     }
-    unsafe fn enter_fini(&mut self, _: usize, _: u32, _: *const Ctx) {}
+    unsafe fn enter_fini(&mut self, rec: usize, _: u32, _: *const Ctx) {
+        self.hooks.push((true, rec));
+    }
 }
 
 pub(super) type Boot = Loader<FakePlatform, Card, DeviceRegistry>;
@@ -532,7 +552,7 @@ pub(super) struct Fixture {
 
 pub(super) const SINE: Fixture = Fixture { leaf: "sine", nx: "test/sine" };
 const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
-const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
+pub(super) const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 pub(super) const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 /// A second shape under another module id: another shape key.
 const LFO_SHAPE_B: Fixture = Fixture { leaf: "lfo-shape-b", nx: "test/lfo-shape-b" };
@@ -635,11 +655,19 @@ impl Run {
     }
 }
 
-/// The live capacity of the platform of `l`: what the live check counts (`live_caps`, nothing given back).
+/// The live capacity of the platform of `l` with `own` given back (`loader::live_capacity` over the capacity of the fake platform; `(0, 0)`: what the live check counts).
+pub(super) unsafe fn live_cap_with(l: &Boot, own: (u32, u32)) -> Vec<DkrtCap> {
+    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; crate::loader::CAP_MAX];
+    let c = capacity(&l.p);
+    let n = crate::loader::live_capacity(&mut caps, own, |out| {
+        out[..c.len()].copy_from_slice(&c);
+        c.len()
+    });
+    caps[..n].to_vec()
+}
+
 pub(super) unsafe fn live_cap(l: &Boot) -> Vec<DkrtCap> {
-    let mut c = capacity(&l.p);
-    crate::loader::live_caps(&mut c, (0, 0));
-    c
+    live_cap_with(l, (0, 0))
 }
 
 /// The boot record of the selection `modules` (`modules/<leaf>.dkm`), as `dkrt_boot` leaves it before the load: empty, with the count.
@@ -2062,7 +2090,7 @@ fn entry_of(f: &[u8], tag: u16) -> Option<(usize, usize)> {
 }
 
 /// Replace the file `leaf` of the card by `bytes` (sealed), in the store and in the capture of selection index `k`.
-unsafe fn swap_module(l: &mut Boot, k: usize, leaf: &str, mut bytes: Vec<u8>) {
+pub(super) unsafe fn swap_module(l: &mut Boot, k: usize, leaf: &str, mut bytes: Vec<u8>) {
     seal(&mut bytes);
     let at = l.m.files.iter().position(|(n, _)| *n == std::format!("modules/{leaf}.dkm").as_bytes()).unwrap();
     l.m.files[at].1 = bytes.clone();
@@ -2135,7 +2163,7 @@ fn a_packed_module_needs_the_newest_since_of_its_imports_and_the_runtime_major_a
 }
 
 /// The patched copy of `leaf`, with its DSP section dropped (the host does not load one, so the load reaches `init` and the commit).
-fn without_dsp(dev: Dev, m: &Fixture) -> Vec<u8> {
+pub(super) fn without_dsp(dev: Dev, m: &Fixture) -> Vec<u8> {
     let mut f = packed(dev, m.leaf, "dkm", m.nx);
     put(&mut f, dkneeds::H_DSP_SIZE, 0);
     f

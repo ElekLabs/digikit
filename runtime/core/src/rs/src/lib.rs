@@ -28,6 +28,7 @@ pub use storage::{card, store, store_writer};
 #[rustfmt::skip]
 mod gen_services;
 pub mod boot;
+mod boot_env;
 pub mod fault;
 pub mod dlog;
 mod dsp;

@@ -280,7 +280,7 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
     /// refusal in the loader's codes.
     pub unsafe fn live_load(&mut self, k: usize, path: *const u8) -> i32 {
         let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-        let n = crate::loader::live_capacity(&mut caps, (0, 0));
+        let n = crate::loader::live_capacity(&mut caps, (0, 0), crate::loader::dkrt_capacity_into);
         self.live_load_with(k, path, &caps[..n])
     }
 
@@ -301,7 +301,7 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
     /// Load the new file of a reload into record `rec`, which `unload` took down (`Loader::reload_prepare`, then `PackageManager::load`).
     pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
         let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-        let n = crate::loader::live_capacity(&mut caps, (0, 0));
+        let n = crate::loader::live_capacity(&mut caps, (0, 0), crate::loader::dkrt_capacity_into);
         self.reload_load_with(rec, path, &caps[..n])
     }
 

@@ -11,7 +11,11 @@ use std::vec::Vec;
 
 // the seams between the real packed artifacts (`core/runtime:test-assembly`)
 pub(crate) mod assembly_tests;
+mod boot_effects_assembly_tests;
 mod dsp_provider_tests;
+mod golden;
+mod host_boot_env;
+mod host_ops;
 mod manager_assembly_tests;
 mod seam_tests;
 

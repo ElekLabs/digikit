@@ -335,7 +335,7 @@ const INVENTED: DeviceProfile = DeviceProfile { id: 9, name: 0x78797a00, samples
 
 const L: Layout = Layout { first: 1000, sectors: 4096 };
 
-fn card_reset() {
+pub(crate) fn card_reset() {
     *card::info() = card::CardInfo {
         state: CARD_UNKNOWN,
         first_nonblank: u32::MAX,
