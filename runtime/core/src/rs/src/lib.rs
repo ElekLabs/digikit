@@ -10,6 +10,12 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(static_mut_refs)]
 
+/// Resident code: everything of the crate except the package artifact's own root. A `package-image` build holds the package and no resident module.
+macro_rules! resident {
+    ($($item:item)*) => { $( #[cfg(not(feature = "package-image"))] $item )* };
+}
+
+resident! {
 #[cfg(not(test))]
 use core::panic::PanicInfo;
 use core::ptr::{addr_of, read_volatile, write_volatile};
@@ -31,10 +37,6 @@ mod resident_query;
 mod hooks;
 mod resident;
 mod menu_exports;
-mod package;
-// `dkrt_sdk::optional_imports!` (expanded in package/imports.rs) names `crate::loader::stub_missing`. The package crate of RC2s-2 has its own `loader` at its root, so this alias
-// (which `check:layers` does not count as a crossing) goes away then.
-use package::loader;
 pub mod settings;
 mod hash32;
 // The file is not aux.rs: Windows does not allow a file named AUX, with any extension.
@@ -105,8 +107,17 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
     }
     track as i32
 }
+}
 
-
+// The system package (docs/plans/resident-core-and-system-package.md) is its own artifact: the second object of this crate, built with `--features package-image` and packed
+// by `patchkit syspkg build` into digikit/system.dksp. Its entry is `package/image.rs`. Until stage 1 places it (RC2s-2 step d), the resident object links it too,
+// behind the one feature `link-package` (on by default); with that feature off the resident object holds no package code and the device runs core-only.
+#[cfg(any(test, feature = "package-image", feature = "link-package"))]
+mod package;
+// `dkrt_sdk::optional_imports!` (expanded in package/imports.rs) names `crate::loader::stub_missing`; this alias is the crate-root name of the package's loader
+// (`check:layers` does not count it as a crossing).
+#[cfg(any(test, feature = "package-image", feature = "link-package"))]
+use package::loader;
 
 #[cfg(test)]
 mod test_lock;

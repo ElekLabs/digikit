@@ -19,6 +19,9 @@ pub(crate) mod files;
 #[rustfmt::skip]
 pub(crate) mod gen_services;
 pub(crate) mod handlers;
+// The artifact's entry symbol and panic handler: only in the `package-image` build (`[system_package]` of module.toml).
+#[cfg(feature = "package-image")]
+mod image;
 pub(crate) mod hooks;
 pub(crate) use hooks::attach;
 pub(crate) mod imports;

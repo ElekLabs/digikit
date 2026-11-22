@@ -30,12 +30,18 @@ fn table() -> &'static PackageHooks {
 
 /// The package gets the resident table and gives its hooks: once per boot, from `boot::run` when the level is not core-only (a core-only boot attaches nothing: no package code runs and the callers keep their defaults). A table the package refuses (`dkrt_abi::resident::check`) is logged with its
 /// reason and no hooks are installed: the core runs without the package.
+#[cfg(any(test, feature = "link-package"))]
 pub(crate) unsafe fn attach_package(table: &'static dkrt_abi::resident::ResidentTable) {
     match crate::package::attach(table) {
         Ok(hooks) => install(hooks),
         Err(why) => crate::state::log_at(dkrt_sdk::logk::L_ERROR as u32, why.message().as_ptr(), why.found),
     }
 }
+
+/// The resident object without the `link-package` feature holds no package code: no hooks are installed and every caller keeps its default (the core-only level),
+/// until stage 1 places the package file and calls `dkpkg_entry` (RC2s-2 step d).
+#[cfg(not(any(test, feature = "link-package")))]
+pub(crate) unsafe fn attach_package(_table: &'static dkrt_abi::resident::ResidentTable) {}
 
 /// Host tests: is a package table installed? (A core-only level has none.)
 #[cfg(test)]

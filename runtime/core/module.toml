@@ -30,6 +30,10 @@ optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.
 path = "build/runtime.dko.json"
 sources = ["src/rs/Cargo.toml"]
 place = "cf.expansion"
+# RC2s-2 step c: the one switch. While stage 1 does not place the card file (step d), the resident object links the system package too; without this line the image holds no
+# package code and the device runs core-only.
+features = ["link-package"]
+default_features = false
 # The run-time registry's table of addresses (core/dynreg), the DSP code channel (core/dsp-link: dl_send, dl_send_win, dl_poll, dl_stats_hook) and
 # the table of DSP addresses (core/dyndsp) and `dkrt_info_table`, the one table of the adapters' data tables and slot words that `CoreApi::info` searches by name hash (patchkit writes it from the `[[info]]` and `[[slot]]` entries); each is 0 when its module is not in the image.
 # The service imports of the providers (`dk_input_*`, `dk_usb_bulk_*`, `dk_sdhc_large_*`, `dk_dsp_link_*`, `dk_ui_menu_*`, `dk_ui_menu_add_*`) are the imports of sdk/sdk.toml with `requires` (the runtime links them to modules by name; `optional_imports!` in lib.rs). `sdhc_large_range` and `sdhc_large_ctl` are not SDK imports: the runtime declares them itself (store_writer.rs, include/dkrt_sdhc.h).
@@ -56,6 +60,15 @@ path = "build/gen/dkdv-offsets.inc"
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
 uses = ["DEVICE_ID", "DEVICE_NAME_WORD", "SAMPLES_IN_STORE", "SAMPLE_PATH_MAX", "DSP_HEADROOM", "DSP_VOICES", "STORE_FIRST", "STORE_SECTORS", "PEEK_N", "SPAN_CLOCK", "SPAN_CLOCK_HZ", "FX_SOUND_WORDS", "PEEK_LO_*", "PEEK_HI_*"]
+
+# The system package (docs/plans/resident-core-and-system-package.md): the same crate built with `--features package-image` and no resident module. It is not linked into the image:
+# `patchkit syspkg build core/runtime` packs `build/package.dko.json` into the card file digikit/system.dksp. While the runtime object below has the feature `link-package` (RC2s-2 step c), the
+# resident object above still holds the package as well.
+[system_package]
+path = "build/package.dko.json"
+sources = ["src/rs/Cargo.toml"]
+features = ["package-image"]
+default_features = false
 
 # The cache flush, interrupt mask, soft reset (assembly); the UI-loop, boot and MIDI hooks are in core/platform.
 # `dkrt_raw_block_write` (tramp.s) calls the firmware's block write from a label of its own, `dkrt_raw_write_ret`, which core/card-guard reads to tell the runtime's write from a stock one.

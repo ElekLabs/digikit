@@ -7,6 +7,14 @@ publish = false
 [lib]
 crate-type = ["staticlib"]
 
+# `link-package` is the one switch of RC2s-2 step c: the resident object links the system package too (`features = ["link-package"]` of the runtime `[[object]]` in module.toml).
+# `package-image` builds the package artifact (`[system_package]` of module.toml, `--no-default-features --features package-image`). Step d (stage 1 places the card file)
+# removes `link-package`.
+[features]
+default = []
+link-package = []
+package-image = []
+
 [dependencies]
 dkrt-sdk = { path = "../../sdk" }
 dkrt-abi = { path = "../../abi" }
