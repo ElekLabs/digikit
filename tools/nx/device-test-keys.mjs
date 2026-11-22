@@ -200,21 +200,13 @@ export const ownFiles = (root, base = '.') =>
     ? [`{workspaceRoot}/${root}/**/*`, ...nestedProjectDirs(root, base).map((d) => `!{workspaceRoot}/${root}/${d}/**`)]
     : [];
 
-// The directories below `root` that hold a project.json: nested projects keep their own files and key. One scan per root
-// and graph build; node_modules is not walked.
-const nestedDirsByRoot = new Map();
-const nestedProjectDirs = (root, base) => {
-  const at = join(base, root);
-  if (!nestedDirsByRoot.has(at))
-    nestedDirsByRoot.set(
-      at,
-      globSync('**/project.json', { cwd: at, exclude: (path) => basename(path) === 'node_modules' })
-        .map((f) => dirname(f))
-        .filter((d) => d !== '.')
-        .sort(),
-    );
-  return nestedDirsByRoot.get(at);
-};
+// The directories below `root` that hold a project.json: nested projects keep their own files and key. Scanned on every
+// graph build (no cache: a long-lived Nx daemon must see a project added since); node_modules is not walked.
+const nestedProjectDirs = (root, base) =>
+  globSync('**/project.json', { cwd: join(base, root), exclude: (path) => basename(path) === 'node_modules' })
+    .map((f) => dirname(f))
+    .filter((d) => d !== '.')
+    .sort();
 
 // What a test-only project hashes of a module subject that is built into the image: its files without the directories its
 // objects are built from (the image hashes hold those). `{ input: 'production', projects }` cannot take exclusions, so the
