@@ -1000,7 +1000,7 @@
   "tools/devtools/sharc_regionbench.py": 7,
   "tools/devtools/sharc_xctrace.sh": 1,
   "tools/devtools/site_firmware_scan.py": 11,
-  "tools/devtools/ui_shots.mjs": 59,
+  "tools/devtools/ui_shots.mjs": 57,
   "tools/devtools/upload_bench.py": 11,
   "tools/devtools/upload_bench_rpc.mjs": 2,
   "tools/devtools/verify_build.py": 8,

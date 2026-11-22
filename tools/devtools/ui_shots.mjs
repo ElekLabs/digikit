@@ -101,6 +101,7 @@ async function waitForAnalyzer(p, condition, description) {
   throw new Error(description + ' · ' + (await p.eval("document.querySelector('.analyzer-panel')?.innerText")));
 }
 
+const remoteModel = 'Digitone II';
 const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
   name: 'analyzer-' + mode.toLowerCase(),
   q: 'page=run',
@@ -131,7 +132,7 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
     const height = await p.eval("document.querySelector('.workbench-drawer').offsetHeight");
     await p.click(/^Freeze$/);
     if (mode === 'Spectrum') {
-      await pickTarget(p, 'Digitone II');
+      await pickTarget(p, remoteModel);
       await waitForAnalyzer(
         p,
         "Math.abs(parseFloat(document.querySelector('.analyzer-meters tbody td:last-child')?.textContent) - 880) < 2 && document.querySelector('.analyzer-status')?.textContent === 'Live USB audio'",
@@ -164,13 +165,13 @@ const SCENES = [
     q: 'page=run&runtimeOnly',
     size: WIDE,
     steps: async (p) => {
-      await pickTarget(p, 'Digitone II');
+      await pickTarget(p, remoteModel);
       await p.click(/^Files$/);
       await p.eval('document.querySelector("footer button[title*=Metrics]").click()');
       const check = () =>
         p.eval(`(() => {
         const footer = document.querySelector('footer').innerText;
-        return document.querySelector('.remote-page .stage')?.getAttribute('aria-label')?.includes('Digitone II')
+        return document.querySelector('.remote-page .stage')?.getAttribute('aria-label')?.includes(${JSON.stringify(remoteModel)})
           && document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Remote'
           && ![...document.querySelectorAll('nav button')].some(b => b.textContent.trim() === 'Emulator')
           && document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === 'Metrics'
@@ -191,7 +192,7 @@ const SCENES = [
           && !document.querySelector('select[aria-label="Remote audio input"]') && document.querySelector('footer').innerText.includes('Booting')`))
       )
         throw new Error('Emulator boot was lost');
-      await pickTarget(p, 'Digitone II');
+      await pickTarget(p, remoteModel);
     },
   },
   {
@@ -218,7 +219,7 @@ const SCENES = [
     q: 'page=run&stock',
     size: WIDE,
     steps: async (p) => {
-      await pickTarget(p, 'Digitone II');
+      await pickTarget(p, remoteModel);
       for (let i = 0; i < 40; i++) {
         if (
           await p.eval(`(() => {

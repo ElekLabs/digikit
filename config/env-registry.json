@@ -409,6 +409,22 @@
    "owner": "rust:packages/emulator",
    "purpose": "Hex guest ranges LO-HI or LO+LEN; logs CPU loads from them with the PC and per-byte load counts (read-watch instrument)."
   },
+  "DIGI_REMOTE_AUDIO_INPUT": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Exact stereo input name or ID for the opt-in desktop USB audio monitor test"
+  },
+  "DIGI_REMOTE_AUDIO_OUTPUT": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Expected default output device name for the desktop USB audio monitor test"
+  },
+  "DIGI_REMOTE_AUDIO_REQUIRE_SIGNAL": {
+   "owner": "rust:apps/desktop",
+   "purpose": "1 requires a nonzero signal on both monitored channels during the hardware test"
+  },
+  "DIGI_REMOTE_AUDIO_SECONDS": {
+   "owner": "rust:apps/desktop",
+   "purpose": "Duration in seconds of each playback check in the desktop USB audio monitor test"
+  },
   "DIGI_RENDER_CACHE": {
    "owner": "python:tests/devtools",
    "purpose": "Set to 0 to turn off the render cache of tools/devtools/render_cache.py."
