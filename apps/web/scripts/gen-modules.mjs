@@ -10,7 +10,7 @@
 //
 // The objects of `core/*` modules are committed in the module and are only read here, never rebuilt. The browser never builds: patchkit.wasm packs from the bundle.
 //
-//   node scripts/gen-modules.mjs [--out DIR]
+//   node scripts/gen-modules.mjs [--out DIR] [--workbench-preview]
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, statSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname, resolve, sep, relative } from 'node:path';
@@ -203,7 +203,7 @@ function packAll(root, ids, device, to) {
 }
 
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
-export function shipModules(out, root = repoRoot) {
+export function shipModules(out, root = repoRoot, extraModules = new Set()) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
   for (const sub of [...loadDevices().runtimeIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
@@ -213,7 +213,7 @@ export function shipModules(out, root = repoRoot) {
   for (const file of manifests) {
     const dir = dirname(file);
     const d = parse(readFileSync(file, 'utf8'));
-    if (!isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
+    if (!extraModules.has(d.module.id) && !isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
     shipped.push({ dir, d });
     for (const dev of shippedDevices(d, deviceIds)) (idsByDevice[dev] ??= []).push(d.module.id);
   }
@@ -345,13 +345,21 @@ if (
   }
   console.log('module-files.generated.ts is current');
 } else if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  writeFileSync(MODULE_FILES_TS, moduleFilesSource());
+  const preview = process.argv.includes('--workbench-preview');
+  if (!preview) writeFileSync(MODULE_FILES_TS, moduleFilesSource());
   const i = process.argv.indexOf('--out');
-  const out = i > 0 ? resolve(process.argv[i + 1]) : join(here, '..', 'public', 'modules');
+  const out = preview
+    ? join(repoRoot, 'dist', 'workbench-preview')
+    : i > 0
+      ? resolve(process.argv[i + 1])
+      : join(here, '..', 'public', 'modules');
   const { bundle } = buildModuleData(repoRoot, SITE_DEVICES);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
-  const index = shipModules(out);
+  const devices = loadDevices();
+  // The desktop installs these after a boot, including tools excluded from the public site.
+  const defaults = preview ? new Set(deviceIds.flatMap((id) => devices.get(id).defaultModules)) : undefined;
+  const index = shipModules(out, repoRoot, defaults);
   console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(
     `modules: ${bundle.modules.length} modules, ${bundle.ports.length} ports, bundle ${statSync(join(out, 'bundle.json')).size} bytes`,

@@ -1,4 +1,5 @@
 // device-literals: allow
+import { previewHome } from './preview-home';
 import type { SymbolsHost } from '@digi/workbench-core/host/host.ts';
 import { memoryKeyValue } from '@digi/workbench-core/storage.ts';
 import { createFirmwareSymbols } from '../src/firmware-symbols';
@@ -7,9 +8,9 @@ export const previewSymbolImage = { device: 'dt2', firmware: '1.17', sha256: 'a'
 
 export function createPreviewSymbols(): SymbolsHost {
   const paths = {
-    cf: '/Users/preview/symbols/coldfire.sqlite',
-    sharc: '/Users/preview/symbols/sharc.sqlite',
-    map: '/Users/preview/symbols/firmware.json',
+    cf: `${previewHome}/symbols/coldfire.sqlite`,
+    sharc: `${previewHome}/symbols/sharc.sqlite`,
+    map: `${previewHome}/symbols/firmware.json`,
   };
   let pickedMap = false;
   return createFirmwareSymbols(memoryKeyValue(), {

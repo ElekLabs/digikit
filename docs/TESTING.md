@@ -45,7 +45,7 @@ iteration checks do not replace this gate. `mise run test:plan` explains task se
 | --- | --- |
 | JS/TS host tests and helpers | `pnpm nx:pilot run <project>:test-host`, `<project>:typecheck` |
 | Web tests | `pnpm nx:pilot run @digi/web:test-host` (no wasm); `@digi/web:test-wasm` (real `public/*.wasm` and the patchkit command line: `tests/*.wasm.test.ts`, which builds the wasm first) |
-| Desktop UI or app | `pnpm nx:pilot run @digi/desktop:test-host`, `@digi/desktop:check:ui` (source types); `@digi/desktop:typecheck` for test types. `ui:preview` and `ui_shots.mjs` for pages (below). |
+| Desktop UI or app | `pnpm nx:pilot run @digi/desktop:test-host`, `@digi/desktop:check:ui` (source types); `@digi/desktop:typecheck` for test types. `wb:preview` and `ui_shots.mjs` for pages (below). |
 | Stock DT2 UI goldens | `test:stock` |
 | DN2 or DT2 FX sources and oracles | `test:fx`, `test:fx:dt2` |
 | Python under `tools/` or `tests/` | `test:changed`; then the named pytest files |
@@ -1465,7 +1465,7 @@ node packages/sharc-rig-kit/src/pin-cli.ts write --wav CAPTURE.wav --pin PIN.jso
 
 ## Desktop UI preview
 
-Type checks do not show a misaligned row. `mise run ui:preview` serves the desktop pages
+`mise run wb:preview` prepares the preview assets and serves the desktop pages
 (`apps/desktop/ui`) at http://127.0.0.1:5199/ over a fake device (state in the address:
 `?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`).
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at
@@ -1476,8 +1476,7 @@ Type checks do not show a misaligned row. `mise run ui:preview` serves the deskt
 
 The Firmware page (`?page=firmware&fwdev=dt2|dn2&fwstate=stock|runtime|noreply|none`) runs the real patchkit checks (`patchkit.wasm`) over a fake
 device that restarts after the last message. `node tools/devtools/firmware_shots.mjs --app desktop|web [--url URL] [--out DIR] [scene ...]` takes its
-pictures for the workbench (this preview) and for the site (`astro dev` or `astro preview`, with a fake Web MIDI port); it needs the stock files in
-`firmware/` and `mise run wasm:patchkit` and `pnpm build` (or the site's `gen-modules`) for `patchkit.wasm` and the module bundle.
+pictures for the workbench (this preview) and for the site (`astro dev` or `astro preview`, with a fake Web MIDI port); the firmware shots need the stock files in `firmware/`. The Workbench preview prepares `patchkit.wasm` and the module bundle at startup.
 The same flash against an emulated device at OS UPGRADE: `os_upgrade_rig.py ... --exec` runs `apps/web/tests/firmware-emulator.wasm.test.ts` (finding 75).
 
 To test pages against a running emulator, `uv run python -m tools.devtools.emu_live --device dn2 --run-dir DIR`

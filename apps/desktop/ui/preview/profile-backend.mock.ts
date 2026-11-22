@@ -1,18 +1,18 @@
 // The Profile pane's backend in the preview (replaces ../src/profile-backend.ts): a recorder over a made-up device, so the pane's own code draws
-// the three states. The state is in the address: `prof=rec` (recording; the default), `prof=stopped` (a stopped target), `prof=nodebug` (no debug
+// the three states. The state is in the address: `prof=rec` (recording), `prof=stopped` (the default, ready to record), `prof=nodebug` (no debug
 // module); `card=dn2|dt2` names the device, and the Remote page (`page=remote`) reads a device, the Emulator page the emulator.
 // The shares follow a fixed model per owner (a machine, an effect that is loaded after 19 s, the debug module, phases and polls); the clock is real
 // time, one reading a second. The numbers show layout, not measurements. The DSP figures go through the app's own `dspView`.
 import { dspView } from '@digi/workbench-core/profile/profile-core.ts';
 import type { ModuleRef, Snapshot, SpanIn } from '@digi/workbench-core/profile/profile-core.ts';
-import { cfView } from '../src/profile-backend';
+import { cfView, DSP_BLOCKS_NOT_ARMED } from '../src/profile-backend';
 import type { Part } from '@digi/workbench-core/profile/profile-artifact.ts';
 import type { ProfileDeps, ProfileReading, Recorder } from '../src/profile-backend';
 
 export { isDebugMissing } from '../src/profile-backend';
 
 const query = new URLSearchParams(location.search);
-const state = query.get('prof') ?? 'rec';
+const state = query.get('prof') ?? 'stopped';
 const dev = query.get('card') === 'dt2' ? 'dt2' : 'dn2';
 const HZ = 132_000_000;
 /** A made-up `cf.profile` part: four paths and ten heavy PCs (the numbers show layout only). */
@@ -146,6 +146,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         modules,
         traceSupported,
         frozenTrace: capture,
+        dspBlockNote: running && !withDspBlocks ? DSP_BLOCKS_NOT_ARMED : undefined,
         dspBlocks: running && liveDsp && withDspBlocks ? sampleDsp() : dspBlocks,
       };
       if (emulator && elapsed > 0n) {

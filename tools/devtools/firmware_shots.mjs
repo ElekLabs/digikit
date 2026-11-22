@@ -2,7 +2,7 @@
 // Screenshots of the Firmware page in headless Chromium, over CDP, for both apps:
 //   --app web      the site (apps/web/src/pages/firmware.astro) from a running `astro preview` or dev server; a fake Web MIDI device, a test shim
 //                  injected into each page (nothing of it is in the site), whose port feeds a fake device in this process;
-//   --app desktop  the workbench page in the UI preview (`mise run ui:preview`): the Tauri stand-in answers the page's commands with the real
+//   --app desktop  the workbench page in the UI preview (`mise run wb:preview`): the Tauri stand-in answers the page's commands with the real
 //                  patchkit.wasm checks and a fake device (apps/desktop/ui/preview/firmware-mock.ts).
 // Both patch the real stock files in firmware/ (they are not in the repository). Each scene writes a PNG; a scene whose step fails still gets its
 // picture (the failure is printed).

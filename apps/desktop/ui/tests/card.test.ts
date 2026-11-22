@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { agoText, canUseDefault, folderNotice, pickStart, shortFolder, statusText } from '../src/card-core.ts';
 
 const card = (extra: Partial<CardFolder> = {}): CardFolder => ({
-  folder: '/Users/em/src/digi/digitakt2/plus_drive/dt2',
+  folder: '/Users/preview/Projects/digikit/plus_drive/dt2',
   continuous: true,
   files: [
     { path: 'modules/sine.dkm', bytes: 932, hash: 'bb' },
@@ -39,17 +39,17 @@ test('the status line: last sync, pending changes, an error, no mirror', () => {
 });
 
 test('the shortened folder path', () => {
-  assert.equal(shortFolder('/Users/em/src/digi/digitakt2/plus_drive/dt2'), '…/plus_drive/dt2');
+  assert.equal(shortFolder('/Users/preview/Projects/digikit/plus_drive/dt2'), '…/plus_drive/dt2');
   assert.equal(shortFolder('plus_drive/dn2'), 'plus_drive/dn2');
   assert.equal(shortFolder(null), '');
 });
 
-const DT2 = '/Users/em/src/digi/digitakt2/plus_drive/dt2';
+const DT2 = '/Users/preview/Projects/digikit/plus_drive/dt2';
 
 test('a folder that waits for a reload says so; a missing choice says the default is used', () => {
   assert.equal(folderNotice(card({ device: 'dt2', reload_needed: false, next_folder: DT2 })), '');
   assert.equal(folderNotice(card({})), '', 'an older controller sends none of the fields');
-  const waiting = card({ device: 'dt2', reload_needed: true, next_folder: '/Users/em/Music/Card' });
+  const waiting = card({ device: 'dt2', reload_needed: true, next_folder: '/Users/preview/Music/Card' });
   assert.equal(
     folderNotice(waiting),
     'The card is built from its folder when it loads. A reload makes it use …/Music/Card; until then changes go to …/plus_drive/dt2.',

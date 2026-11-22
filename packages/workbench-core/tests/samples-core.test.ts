@@ -194,11 +194,11 @@ test('the local list: folders first, then files by name, then the added files; f
 });
 
 test('the local breadcrumb names the chosen folder; either path separator', () => {
-  assert.equal(baseName('/Users/em/samples'), 'samples');
-  assert.equal(baseName('/Users/em/samples/'), 'samples');
+  assert.equal(baseName('/Users/preview/samples'), 'samples');
+  assert.equal(baseName('/Users/preview/samples/'), 'samples');
   assert.equal(baseName('C:\\Users\\em\\samples'), 'samples');
-  assert.deepEqual(localCrumbs('/Users/em/samples', ''), [{ name: 'samples', path: '' }]);
-  assert.deepEqual(localCrumbs('/Users/em/samples', 'drums/808'), [
+  assert.deepEqual(localCrumbs('/Users/preview/samples', ''), [{ name: 'samples', path: '' }]);
+  assert.deepEqual(localCrumbs('/Users/preview/samples', 'drums/808'), [
     { name: 'samples', path: '' },
     { name: 'drums', path: 'drums' },
     { name: '808', path: 'drums/808' },

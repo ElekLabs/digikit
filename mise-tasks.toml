@@ -37,9 +37,15 @@ description = "Build a device's ready snapshot from the .syx alone: mise run emu
 
 # --- web panel ---
 
-["ui:preview"]
+["wb:preview-assets"]
+hide = true
+depends = ["wasm:patchkit", "wasm:dkprof"]
+run = "node apps/web/scripts/gen-modules.mjs --workbench-preview"
+
+["wb:preview"]
+depends = ["wb:preview-assets"]
 run = "pnpm --filter @digi/desktop exec vite --config ui/preview/vite.config.ts"
-description = "Serve the desktop UI pages in a browser (http://127.0.0.1:5199/) over a fake device and a fake samples folder; the state is in the address (?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=3&mode=modules|samples&mkdir=0|1); screenshots: node tools/devtools/ui_shots.mjs"
+description = "Open the Workbench in a browser (http://127.0.0.1:5199/) with simulated devices and files; the state is in the address (?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=3&mode=modules|samples&mkdir=0|1); screenshots: node tools/devtools/ui_shots.mjs"
 
 [web]
 dir = "{{config_root}}/apps/web"

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Screenshots of the desktop UI pages in the preview (`mise run ui:preview`), headless Chromium over CDP, no dependencies.
+// Screenshots of the desktop UI pages in the preview (`mise run wb:preview`), headless Chromium over CDP, no dependencies.
 // Each scene sets a state of the fake device through the address, optionally clicks, waits, and writes a PNG.
 //
 //   node tools/devtools/ui_shots.mjs [--out DIR (default out/runs/ui-shots/STAMP)] [--prefix before] [--url http://127.0.0.1:5199/] [--scale 1] [scene ...]
@@ -94,11 +94,13 @@ const pickTarget = async (p, label) => {
 };
 
 async function waitForAnalyzer(p, condition, description) {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (await p.eval(condition)) return;
-    await p.wait(100);
+  try {
+    await p.until(condition, description);
+  } catch (error) {
+    throw new Error(description + ' · ' + (await p.eval("document.querySelector('.analyzer-panel')?.innerText")), {
+      cause: error,
+    });
   }
-  throw new Error(description + ' · ' + (await p.eval("document.querySelector('.analyzer-panel')?.innerText")));
 }
 
 const remoteModel = 'Digitone II';
@@ -160,6 +162,54 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 
 const SCENES = [
   ...analyzerScenes,
+  {
+    name: 'performance-emulator',
+    q: '',
+    size: WIDE,
+    steps: async (p) => {
+      await p.click(/^Transfer$/);
+      await p.until(
+        "document.querySelector('button[title^=RESTART]')?.disabled === false",
+        'Emulator card unavailable',
+      );
+      await p.click(/^Emulator$/, '.side');
+      await p.click(/^Performance$/);
+      const cf = "document.querySelector('.performance-cf dd')?.textContent";
+      const dsp = "document.querySelector('.performance-dsp dd')?.textContent";
+      await p.until(`${cf}?.endsWith('%') && ${dsp}?.endsWith('%')`, 'Missing emulator load');
+      const first = await p.eval(cf);
+      await p.until(`${cf}?.endsWith('%') && ${cf} !== ${JSON.stringify(first)}`, 'Load did not advance');
+      await p.eval("document.querySelector('button[aria-label=Pause]').click()");
+      await p.until(`${cf} === '—' && ${dsp} === '—'`, 'Paused emulator still reporting load');
+      await p.eval("document.querySelector('button[aria-label=Resume]').click()");
+      await p.until(`${cf}?.endsWith('%') && ${dsp}?.endsWith('%')`, 'Load did not resume');
+      await p.click(/^DSP blocks$/);
+      await p.until("document.querySelector('.span-actions input')?.disabled === false", 'DSP recording unavailable');
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.until(
+        "document.querySelector('.performance-panel')?.textContent.includes('To measure DSP costs, stop recording')",
+        'Missing instructions for recording DSP costs',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.until("document.querySelector('.span-actions input')?.disabled === false", 'DSP option stayed locked');
+      await p.eval("document.querySelector('.span-actions input').click()");
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.until("document.querySelector('.dsp-blocks canvas')", 'Missing live emulator DSP blocks');
+      await p.click(/^Spans$/);
+      await p.until(
+        "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
+        'Missing recorded spans',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^Timeline$/);
+      await p.until(
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')",
+        'Missing frozen timeline',
+      );
+      await p.click(/^DSP blocks$/);
+      await p.until("document.querySelector('.dsp-blocks canvas')", 'Missing frozen DSP blocks');
+    },
+  },
   {
     name: 'performance-dsp-blocks',
     q: 'page=run&runtimeOnly&history&prof=stopped',
@@ -494,35 +544,66 @@ const SCENES = [
       throw new Error('The stock device did not display its screenshot');
     },
   },
+  {
+    name: 'workbench-card-roundtrip',
+    q: 'boot=empty',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until(
+        "document.querySelector('button[aria-label=\"Open firmware file\"]')?.innerText.includes('Open firmware')",
+        'Expected an empty emulator on Run',
+      );
+      await pickTarget(p, remoteModel);
+      await p.until("document.body.innerText.includes('Click keys')", 'Remote did not open for the selected device');
+      await p.click('Transfer');
+      const ready = 'document.querySelector(\'button[title^="RESTART"]\')?.disabled === false';
+      const installed = 'document.querySelector(\'input[aria-label="Delete analog"]\')';
+      await p.until(ready, 'Transfer could not read the target');
+      await p.tick('^Install analog$');
+      await p.click(/^Install/);
+      await p.until(installed, 'The new module is missing from the device listing');
+      await p.click('Files');
+      const folder = ".files-page li[data-key='modules/machine']";
+      await p.until(`document.querySelector(${JSON.stringify(folder)})`, 'Files could not read the module directory');
+      await p.eval(`document.querySelector(${JSON.stringify(folder + ' button')}).click()`);
+      await p.until(
+        "document.querySelector('.files-page .tree').innerText.includes('fadedlimes-analog.dkm')",
+        'Files missed the module installed in Transfer',
+      );
+      await p.click('Transfer');
+      await p.until(ready, 'Transfer did not reconnect');
+      await p.tick('^Delete analog$');
+      await p.click(/^Delete/);
+      await p.click(/^Confirm delete/);
+      await p.until(`!(${installed}) && (${ready})`, 'The deleted module is still on the card');
+    },
+  },
   { name: 'modules', q: 'mode=modules', size: WIDE, steps: modulesReady },
   {
     name: 'modules-select-partial',
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Install (Sine|Pluck)$');
-      await p.tick('^Delete (Sine)$');
+      await p.tick('^Install (shot|pluck)$');
+      await p.tick('^Delete shot$');
     },
   },
   {
-    // fit: Sine is loaded on the fake device (200 KiB of the DSP area), so Wavetable does not fit next to it (the tag says so, the tooltip why) and FM 4-op is more than
-    // the device has; the line above the list is the ticked modules together against the empty device: Pluck and Wavetable (679 KiB) are too much for the 512 KiB area
     name: 'modules-fit-ticked',
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
       await modulesReady(p);
-      await p.tick('^Install (Pluck|Wavetable)');
+      await p.tick('^Install (pluck|analog)');
     },
   },
-  // Sine and Pluck fit together (200 + 259 KiB of the 512 KiB DSP area), so the line above the list ends with the load after the next boot
   {
     name: 'modules-fit-load',
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
       await modulesReady(p);
-      await p.tick('^Install (Sine|Pluck)$');
+      await p.tick('^Install (shot|pluck)$');
       await p.wait(300);
     },
   },
@@ -531,7 +612,7 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Install Pluck$');
+      await p.tick('^Install pluck$');
     },
   },
   {
@@ -539,7 +620,7 @@ const SCENES = [
     q: 'mode=modules&speed=0.4',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Install (Wavetable|FM|Pluck)');
+      await p.tick('^Install (analog|bd|pluck)');
       await p.click(/^Install/);
       await p.wait(2500);
     },
@@ -565,7 +646,7 @@ const SCENES = [
     q: 'mode=modules&speed=0.4',
     size: MIN,
     steps: async (p) => {
-      await p.tick('^Install (Wavetable|FM|Pluck)');
+      await p.tick('^Install (analog|bd|pluck)');
       await p.click(/^Install/);
       await p.wait(2500);
     },
@@ -952,8 +1033,7 @@ const SCENES = [
       await p.wait(300);
       const first = await p.eval("document.querySelector('.span-details option:nth-child(2)').value");
       await p.click(/^Transfer$/);
-      await waitForAnalyzer(
-        p,
+      await p.until(
         `[...document.querySelectorAll('.span-details option')].some(o => o.value === ${JSON.stringify(first)}) && document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'`,
         'Transfer refresh cleared the current recording',
       );
@@ -994,12 +1074,12 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.clickRow('Sine');
-      await p.clickRow('FM 4-op', { mods: 8 });
-      await p.clickRow('Tuner', { mods: 4 });
+      await p.clickRow('shot');
+      await p.clickRow('bd', { mods: 8 });
+      await p.clickRow('track-manager', { mods: 4 });
       p.say(`modules, shift then cmd: ${JSON.stringify(await p.selected(0))}`);
-      await p.clickRow('Sine', { pane: 1 });
-      await p.clickRow('Pluck', { pane: 1, mods: 4 });
+      await p.clickRow('shot', { pane: 1 });
+      await p.clickRow('pluck', { pane: 1, mods: 4 });
       p.say(`device pane: ${JSON.stringify(await p.selected(1))}`);
     },
   },
@@ -1120,7 +1200,7 @@ const SCENES = [
     q: 'mode=modules',
     size: WIDE,
     steps: async (p) => {
-      await p.tick('^Delete (Pluck|Chorus)$');
+      await p.tick('^Delete (pluck|shot)$');
       await p.click(/^Delete/);
       await p.wait(300);
     },
@@ -1129,20 +1209,20 @@ const SCENES = [
   { name: 'empty', q: 'mode=modules&dev=empty', size: WIDE },
   { name: 'empty-samples', q: 'mode=samples&dev=empty', size: WIDE },
   { name: 'error', q: 'mode=modules&dev=error', size: WIDE },
-  // ---- the Remote page against the Emulator page's faceplate: the same test pattern on the 128 x 64 screen ----
+  // ---- the Remote page against the Emulator page's faceplate: the same captured menu on the 128 x 64 screen ----
   { name: 'remote-wide', q: 'page=remote', size: WIDE, steps: async (p) => p.wait(800) },
   { name: 'remote-narrow', q: 'page=remote', size: MIN, steps: async (p) => p.wait(800) },
-  // ---- the Files page: the demo store (target/fake-store.ts demoStore), and the emulator card-folder strip (preview/card-mock.ts) ----
+  // ---- the Files page: the simulated target store, and the emulator card-folder strip (preview/card-mock.ts) ----
   {
     // the failed module selected: header, load state and the info buttons
     name: 'files-wide',
     q: 'page=files',
     size: WIDE,
     steps: async (p) => {
-      await p.wait(500);
-      await p.eval(
-        `(() => { const li = [...document.querySelectorAll('.files-page li')].find((l) => l.querySelector('.nm')?.textContent.trim() === 'chorus.dkm'); li?.click(); return !!li; })()`,
-      );
+      const folder = ".files-page li[data-key='modules/machine'] button";
+      await p.until(`document.querySelector(${JSON.stringify(folder)})`, 'Module folder missing');
+      await p.eval(`document.querySelector(${JSON.stringify(folder)}).click()`);
+      await p.eval('document.querySelector(\'.files-page li[data-key$="/digikit-pluck.dkm"]\').click()');
       await p.wait(500);
     },
   },
@@ -1660,7 +1740,7 @@ const SCENES = [
   // README shots: the site's modules and its device screens
   {
     name: 'readme-emulator',
-    q: 'page=files&card=dn2&frame=device-modules',
+    q: 'page=emulator&card=dn2&frame=device-modules',
     size: WIDE,
     steps: async (p) => p.wait(700),
   },
@@ -1695,6 +1775,13 @@ function pageApi(cdp) {
     eval: evaluate,
     say: (m) => console.log(`  ${m}`),
     wait: sleep,
+    async until(condition, message) {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (await evaluate(condition)) return;
+        await sleep(100);
+      }
+      throw new Error(message);
+    },
     async click(text, selector = 'button') {
       const src = text instanceof RegExp ? text.source : `^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
       // a button is disabled while the page reads (a window focus starts a read): try for up to 3 s
