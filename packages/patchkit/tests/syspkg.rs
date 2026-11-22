@@ -126,3 +126,45 @@ mod build {
         assert!(build(&o).unwrap_err().to_string().contains(TABLE_SYMBOL));
     }
 }
+
+/// The committed package object (`runtime/core/build/package.dko.json`) linked at two bases: the image at the second base is exactly the image at 0 with the base added at
+/// each relocation entry of the body. A word that holds an address of the package and has no relocation entry (a relocation type the body skips, or a value the compiler
+/// folded) would differ between the two links without an entry; an entry on a word that does not hold an address would be changed by the relocation and not by the link.
+mod artifact {
+    use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES, relocate};
+    use patchkit::dko::Dko;
+    use patchkit::link::link;
+    use patchkit::syspkg::body;
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    const BASE: u64 = 0x0001_0000;
+
+    fn package_object() -> Dko {
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../runtime/core/build/package.dko.json");
+        Dko::parse(&std::fs::read_to_string(p).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn every_absolute_address_of_the_package_image_has_a_relocation_entry() {
+        let obj = package_object();
+        let (bytes, _, _) = body(&obj).unwrap();
+        let h = BodyHeader::decode(&bytes).unwrap();
+        let mut image = bytes[HEADER_BYTES..HEADER_BYTES + h.image as usize].to_vec();
+        let at_zero = link(&obj, 0, &BTreeMap::new()).unwrap();
+        assert_eq!(image, at_zero.image, "the body's image is the link at 0");
+        relocate(&mut image, h.reloc_table(&bytes), BASE as u32).unwrap();
+        let at_base = link(&obj, BASE, &BTreeMap::new()).unwrap();
+        let differing: Vec<usize> = (0..image.len())
+            .filter(|&i| image[i] != at_base.image[i])
+            .collect();
+        assert!(
+            differing.is_empty(),
+            "{} byte(s) of the image differ between the relocated body and a link at {BASE:#x}, first at {:#x}: an address without a relocation entry, or an entry on a word that holds none",
+            differing.len(),
+            differing[0]
+        );
+        assert!(h.relocs > 1000, "the package has many addresses of its own");
+    }
+}
