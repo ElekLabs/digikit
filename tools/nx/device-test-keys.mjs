@@ -10,7 +10,7 @@
 // Python tool inputs: the import closure (py-imports.mjs) of the `.py` tools a record lists in its `sources`. A test that
 // runs a new Python tool must list it there.
 import { existsSync, globSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { nonCellGlobs, otherFiles } from './device-files.mjs';
 import { testSourceGlobs } from './test-source.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
@@ -200,13 +200,21 @@ export const ownFiles = (root, base = '.') =>
     ? [`{workspaceRoot}/${root}/**/*`, ...nestedProjectDirs(root, base).map((d) => `!{workspaceRoot}/${root}/${d}/**`)]
     : [];
 
-// The directories below `root` that hold a project.json: nested projects keep their own files and key.
-const nestedProjectDirs = (root, base) =>
-  globSync('**/project.json', { cwd: join(base, root) })
-    .filter((f) => !f.startsWith('node_modules/') && !f.includes('/node_modules/'))
-    .map((f) => dirname(f))
-    .filter((d) => d !== '.')
-    .sort();
+// The directories below `root` that hold a project.json: nested projects keep their own files and key. One scan per root
+// and graph build; node_modules is not walked.
+const nestedDirsByRoot = new Map();
+const nestedProjectDirs = (root, base) => {
+  const at = join(base, root);
+  if (!nestedDirsByRoot.has(at))
+    nestedDirsByRoot.set(
+      at,
+      globSync('**/project.json', { cwd: at, exclude: (path) => basename(path) === 'node_modules' })
+        .map((f) => dirname(f))
+        .filter((d) => d !== '.')
+        .sort(),
+    );
+  return nestedDirsByRoot.get(at);
+};
 
 // What a test-only project hashes of a module subject that is built into the image: its files without the directories its
 // objects are built from (the image hashes hold those). `{ input: 'production', projects }` cannot take exclusions, so the
