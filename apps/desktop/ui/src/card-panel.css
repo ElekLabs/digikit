@@ -5,9 +5,9 @@
   width: 260px;
   display: flex;
   flex-direction: column;
-  background: #121316;
-  border-left: 1px solid #222428;
-  color: var(--ink, #eceae5);
+  background: var(--shell-bar);
+  border-left: 1px solid var(--shell-divider);
+  color: var(--ink);
   font-size: 12.5px;
   overflow: hidden;
 }
@@ -25,7 +25,7 @@
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -43,12 +43,12 @@
   gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid #2c2f35;
+  background: var(--hover-overlay);
+  border: 1px solid var(--content-border);
 }
 .card-panel .notice p {
   margin: 0;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   line-height: 1.4;
 }
 .card-panel .acts {
@@ -59,9 +59,9 @@
 .card-panel .act {
   height: 26px;
   padding-inline: 10px;
-  border: 1px solid #2c2f35;
-  background: #1a1c20;
-  color: var(--ink, #eceae5);
+  border: 1px solid var(--content-border);
+  background: var(--panel-2);
+  color: var(--ink);
   border-radius: 7px;
   font: inherit;
   font-size: 12px;
@@ -69,7 +69,7 @@
   cursor: pointer;
 }
 .card-panel .act:hover:not(:disabled) {
-  background: #23262b;
+  background: var(--panel-3);
 }
 .card-panel .act:disabled {
   opacity: 0.5;
@@ -84,19 +84,19 @@
 .card-panel .status,
 .card-panel .empty {
   margin: 0;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 11.5px;
 }
 .card-panel .status.bad,
 .card-panel .err {
-  color: #ffc1bc;
+  color: var(--alert-text);
 }
 .card-panel .err {
   margin: 0;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(255, 139, 130, 0.12);
+  background: var(--bad-bg);
 }
 
 /* The card-folder strip (CardPanel.tsx) on the Files page: a compact row that wraps on narrow widths. */
@@ -106,10 +106,10 @@
   align-items: center;
   gap: 6px 12px;
   padding: 8px 12px;
-  border: 1px solid var(--line, #24262b);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-2, #1a1c20);
-  color: var(--ink, #eceae5);
+  background: var(--panel-2);
+  color: var(--ink);
   font-size: 12.5px;
 }
 .card-mirror .where {
@@ -125,7 +125,7 @@
 .card-mirror .hint,
 .card-mirror .status {
   margin: 0;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 11.5px;
 }
@@ -149,9 +149,9 @@
 .card-mirror .act {
   height: 26px;
   padding-inline: 10px;
-  border: 1px solid var(--line, #24262b);
+  border: 1px solid var(--line);
   background: transparent;
-  color: var(--ink, #eceae5);
+  color: var(--ink);
   border-radius: 7px;
   font: inherit;
   font-size: 12px;
@@ -159,7 +159,7 @@
   cursor: pointer;
 }
 .card-mirror .act:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--inset-highlight);
 }
 .card-mirror .act:disabled {
   opacity: 0.5;
@@ -173,11 +173,11 @@
 }
 .card-mirror .notice p {
   margin: 0;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
 }
 .card-mirror .status.bad,
 .card-mirror .err {
-  color: #ffc1bc;
+  color: var(--alert-text);
 }
 .card-mirror .err {
   flex-basis: 100%;
@@ -191,8 +191,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #121316;
-  border-left: 1px solid #222428;
+  background: var(--shell-bar);
+  border-left: 1px solid var(--shell-divider);
   overflow: hidden;
   transition: width 0.14s ease;
 }
@@ -213,7 +213,7 @@
   gap: 2px;
   height: 40px;
   padding: 0 4px 0 8px;
-  border-bottom: 1px solid #222428;
+  border-bottom: 1px solid var(--shell-divider);
 }
 .side-col.rail .side-head {
   padding: 0;
@@ -231,14 +231,14 @@
   padding: 0 9px 0 1px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ink, #eceae5);
+  color: var(--ink);
 }
 .side-ink {
   position: absolute;
   left: 0;
   bottom: -1px;
   height: 2px;
-  background: var(--amber, #f3b52c);
+  background: var(--action);
   pointer-events: none;
   transition:
     transform 0.16s ease,
@@ -250,17 +250,17 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   background: transparent;
-  color: var(--ink-2, #a9adb4);
+  color: var(--ink-2);
   font: inherit;
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
 }
 .side-tab:hover {
-  color: var(--ink, #eceae5);
+  color: var(--ink);
 }
 .side-tab.on {
-  color: var(--ink, #eceae5);
+  color: var(--ink);
   font-weight: 600;
 }
 .side-fold {
@@ -273,12 +273,12 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   cursor: pointer;
 }
 .side-fold:hover {
-  background: #1a1c20;
-  color: var(--ink, #eceae5);
+  background: var(--panel-2);
+  color: var(--ink);
 }
 .side-fold svg {
   width: 14px;
@@ -303,25 +303,25 @@
   border-left: 2px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font: inherit;
   font-size: 11.5px;
   letter-spacing: 0.02em;
   cursor: pointer;
 }
 .side-rail-tab:hover {
-  color: var(--ink, #eceae5);
-  background: #1a1c20;
+  color: var(--ink);
+  background: var(--panel-2);
 }
 .side-rail-tab.on {
-  color: var(--ink-2, #a9adb4);
-  border-left-color: var(--amber, #f3b52c);
+  color: var(--ink-2);
+  border-left-color: var(--action);
 }
 .side-empty {
   margin: 0;
   padding: 14px 12px;
   font-size: 12.5px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .side-col .card-panel {
   width: auto;
@@ -342,7 +342,7 @@
 .side-tab:focus-visible,
 .side-fold:focus-visible,
 .side-rail-tab:focus-visible {
-  outline: 2px solid var(--amber, #f3b52c);
+  outline: 2px solid var(--action);
   outline-offset: -2px;
 }
 @media (prefers-reduced-motion: reduce) {

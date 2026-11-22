@@ -2,6 +2,8 @@
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
 import {
+  type ComponentProps,
+  For,
   Show,
   batch,
   lazy,
@@ -68,9 +70,10 @@ import {
   unseenErrors,
 } from './log-core';
 import { createNativeRuntime } from './native-runtime';
+import { themes, type createTheme } from './theme';
 import { createPrefs } from './prefs';
 import { pgoWarning, type BuildInfo } from './pgo-warning';
-import { createLogFollow, followSession } from './log-follow';
+import { createLogFollow, followSession, type FollowEnv } from './log-follow';
 import { createDkProfLoader } from './dkprof-env';
 import { createDeviceNames, createEmulatorNames } from './log-names-backend';
 import { windowShown } from './log-follow-core';
@@ -131,7 +134,20 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
 
 const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
 
-export default function Console(props: { host: Host; analyzerWorkers: WorkerFactory<'analyzer'> }) {
+export interface ConsoleOptions {
+  initialPage?: Page;
+  files?: Pick<ComponentProps<typeof FilesPage>, 'store' | 'library'>;
+  logSources?: Pick<FollowEnv, 'emulator' | 'device'>;
+  initialDockHeight?: number;
+}
+
+export default function Console(
+  props: ConsoleOptions & {
+    theme: ReturnType<typeof createTheme>;
+    host: Host;
+    analyzerWorkers: WorkerFactory<'analyzer'>;
+  },
+) {
   const app = useTransferApp();
   const fw = useFirmwareApp();
   const { readPref, writePref } = createPrefs(app.storage);
@@ -172,10 +188,10 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
   // the Log drawer: the last entry seen (the badge counts the errors after it); the filter and the list are in LogPanel.tsx
   const [seenId, setSeenId] = createSignal(0);
   // the Log dock: its height (undefined: the default share of the window), the window height, and a drag in progress
-  const [dockSaved, setDockSaved] = createSignal(readDockPref());
+  const [dockSaved, setDockSaved] = createSignal(props.initialDockHeight ?? readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
-  const [page, setPage] = createSignal<Page>('run');
+  const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
@@ -748,12 +764,12 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     flashing: () => flashRunning(flashRun()),
     shown: windowShown,
     drawerOpen: logOpen,
-    emulator: {
+    emulator: props.logSources?.emulator ?? {
       running: () => !!status() && !paused(),
       session: async () => followSession(await emulatorSession()),
       names: createEmulatorNames(props.host, dkprof),
     },
-    device: {
+    device: props.logSources?.device ?? {
       port: lastMidiPort,
       session: async () => followSession(await lastMidiSession()),
       present: async () => (await app.env.targets.ports()).includes(lastMidiPort() ?? ''),
@@ -943,6 +959,18 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
           >
             <Icon d={FIRMWARE} />
             <span>Firmware</span>
+          </button>
+          <button
+            type="button"
+            class="side settings-link"
+            classList={{ on: page() === 'settings' }}
+            aria-current={page() === 'settings' ? 'page' : undefined}
+            aria-label="Settings"
+            title="Settings"
+            onClick={() => setPage('settings')}
+          >
+            <Icon d="M2 4H6M9 4H14M2 8H9M12 8H14M2 12H4M7 12H14M6 2V6M10 6V10M5 10V14" />
+            <span>Settings</span>
           </button>
         </nav>
         <div class="content">
@@ -1201,7 +1229,8 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
           <Show when={page() === 'files' && !app.target.switching() && selected()} keyed>
             {(ops) => (
               <FilesPage
-                store={ops.store}
+                store={props.files?.store ?? ops.store}
+                library={props.files?.library}
                 refresh={cardRefresh}
                 halted={() =>
                   target().kind === 'emulator' && paused()
@@ -1216,6 +1245,21 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
                 }
               />
             )}
+          </Show>
+          <Show when={page() === 'settings'}>
+            <section class="appearance-page" aria-label="Settings">
+              <h2>Settings</h2>
+              <h3>Appearance</h3>
+              <label>
+                Theme
+                <select
+                  value={props.theme.current()}
+                  onChange={(event) => props.theme.select(event.currentTarget.value)}
+                >
+                  <For each={Object.entries(themes)}>{([id, label]) => <option value={id}>{label}</option>}</For>
+                </select>
+              </label>
+            </section>
           </Show>
           <Show when={page() === 'firmware'}>
             <FirmwarePage />
@@ -1277,8 +1321,8 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
             <LogPanel
               host={props.host}
               follow={logFollow}
-              emulatorRunning={() => !!status()}
-              devicePort={lastMidiPort}
+              emulatorRunning={props.logSources?.emulator.running ?? (() => !!status())}
+              devicePort={props.logSources?.device.port ?? lastMidiPort}
               toggleKey={logKey}
             />
           </Show>

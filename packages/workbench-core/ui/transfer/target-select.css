@@ -7,9 +7,9 @@
 }
 .target-select select {
   height: 26px;
-  border: 1px solid var(--tp-border, #2c2f35);
-  background: #1a1c20;
-  color: var(--ink, #eceae5);
+  border: 1px solid var(--tp-border, var(--content-border));
+  background: var(--panel-2);
+  color: var(--ink);
   border-radius: 7px;
   font: inherit;
   font-size: 12px;

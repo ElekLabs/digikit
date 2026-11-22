@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from 'solid-js';
+import { createUniqueId, For, Show, type JSX } from 'solid-js';
 import type { Key, Knob, Panel } from '../../src/data/faceplates';
 import './panel.css';
 
@@ -89,6 +89,8 @@ export interface PanelArtProps {
 
 /** The device front panel drawing: no runtime dependency, so a page can render it without the emulator. */
 export default function PanelArt(props: PanelArtProps) {
+  // Remote and Emulator can both be mounted. SVG paint references resolve across the whole document.
+  const chassisId = `chassis-${createUniqueId()}`;
   const panel = () => props.panel;
   const ledStyle = (index: number) => props.ledStyle?.(index);
   const keyLight = (key: Key) => props.keyLight?.(key);
@@ -103,18 +105,13 @@ export default function PanelArt(props: PanelArtProps) {
         onLostPointerCapture={(e) => props.onSvgLostPointerCapture?.(e)}
       >
         <defs>
-          <linearGradient id="chassis" x2="0" y2="1">
+          <linearGradient id={chassisId} x2="0" y2="1">
             <stop stop-color="#34363a" />
             <stop offset=".5" stop-color="#2c2e31" />
             <stop offset="1" stop-color="#242528" />
           </linearGradient>
-          <radialGradient id="knob">
-            <stop stop-color="#44464b" />
-            <stop offset=".68" stop-color="#2a2c2f" />
-            <stop offset=".72" stop-color="#111214" />
-          </radialGradient>
         </defs>
-        <rect class="chassis" x="1" y="1" width="213" height="174" rx="3" />
+        <rect class="chassis" fill={`url(#${chassisId})`} x="1" y="1" width="213" height="174" rx="3" />
         <For each={panel().screws}>
           {(s) => (
             <g class="screw">

@@ -15,7 +15,6 @@
   display: block;
 }
 .chassis {
-  fill: url(#chassis);
   stroke: #3b3c3f;
   stroke-width: 0.6;
 }

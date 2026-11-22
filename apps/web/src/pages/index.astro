@@ -309,7 +309,7 @@ const supported = siteDevices().map((id) => ({
     top: -20%;
     width: 70%;
     height: 120%;
-    background: radial-gradient(closest-side, rgba(243, 181, 44, 0.16), rgba(243, 181, 44, 0));
+    background: radial-gradient(closest-side, var(--hero-glow), var(--hero-glow-end));
     pointer-events: none;
   }
   .hero-grid {
@@ -330,7 +330,7 @@ const supported = siteDevices().map((id) => ({
     font-weight: 660;
   }
   .eyebrow.accent {
-    color: var(--amber);
+    color: var(--action);
   }
   .lede {
     font-size: var(--t-md);
@@ -371,7 +371,7 @@ const supported = siteDevices().map((id) => ({
   .facts svg {
     width: 15px;
     height: 15px;
-    color: var(--amber);
+    color: var(--action);
   }
   .hero-device {
     margin-right: calc(var(--gutter) * -1.2);

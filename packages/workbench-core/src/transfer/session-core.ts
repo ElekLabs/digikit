@@ -52,14 +52,16 @@ export interface SessionHubOptions {
   onLink?: DkSessionOptions['onLink'];
 }
 
-/** A hub that makes each session with `make(transport, opts)` (the apps: `new DkSession(transport, { timeoutMs: 6000, ...opts })`). */
-export function createSessionHub(make: (transport: DkTransport, opts: SessionHubOptions) => DkSession): SessionHub {
+/** A hub that makes each session with `make(transport, opts, key)` (the apps: `new DkSession(transport, { timeoutMs: 6000, ...opts })`). */
+export function createSessionHub(
+  make: (transport: DkTransport, opts: SessionHubOptions, key: string) => DkSession,
+): SessionHub {
   const table = new Map<string, DkSession>();
   return {
     get(key, transport, opts = {}) {
       let s = table.get(key);
       if (!s) {
-        s = make(transport, opts);
+        s = make(transport, opts, key);
         table.set(key, s);
       }
       return s;
