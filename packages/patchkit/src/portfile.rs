@@ -882,7 +882,30 @@ mod tests {
         let kind = |d: &PortData, n: &str| d.site(name_hash(n)).unwrap().kind;
         assert_eq!(kind(a, "cf.lfo.hook.graph_vec"), SiteKind::Tail);
         assert_eq!(kind(a, "cf.page.hook.page_desc"), SiteKind::Stock);
-        assert!(!kind(a, "cf.lfo.hook.read_call").copies());
+        // every port with the lfo hooks has the lfo read_call site, a raw hook that copies no displaced bytes; its names
+        // (one per device until RC3) come from the declarations, not from device ids
+        let read_calls: Vec<u32> = decls
+            .iter()
+            .flat_map(|t| t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '_')))
+            .filter(|w| w.starts_with("cf.lfo.hook.read_call"))
+            .map(name_hash)
+            .collect();
+        assert!(
+            !read_calls.is_empty(),
+            "the declarations name the lfo read_call hook"
+        );
+        for (p, d) in built.iter().filter(|(_, d)| site_present(d, graph_vec)) {
+            let site = read_calls
+                .iter()
+                .filter_map(|&h| d.site(h))
+                .find(|s| !s.absent)
+                .unwrap_or_else(|| panic!("port {} has the lfo read_call site", p.port.device));
+            assert!(
+                !site.kind.copies(),
+                "the lfo read_call hook of port {} copies no displaced bytes",
+                p.port.device
+            );
+        }
         // exit 0 is the end of the site
         let s = a.site(graph_vec).unwrap();
         let e = a.exit(graph_vec, 0).unwrap();

@@ -28,10 +28,10 @@ import {
  * in memory, not from the screen. The LFO runs into one destination word; its samples (read at fixed emulated intervals) are fitted to a shape with unknown rate and
  * start phase (`fitShape`), so a test needs no phase, speed or depth: the fit error is below `OK` for the shape that made the samples and above `BAD` for a shape that did not.
  * No SHARC: the LFO tick is a ColdFire interrupt (vector 191) that the zero-DSP session paces itself (`enable_zero_dsp_timing`: the SSI0 request chain at 96 kHz forces the
- * vector from the DMA 50 completion), so it runs at 1500 Hz. The image is the emulator patch set (it holds `core/lfo`).
+ * vector from the DMA 50 completion), so it runs at 1500 Hz. The image is the emulator patch set; the lfo service installs its hooks when it loads.
  *
  * Four cases, one boot of the runtime each:
- * - stock: `core/lfo` is in the image and no lfo service runs: waves 0 to 5 are the stock shapes (item 7);
+ * - stock: no lfo service runs: waves 0 to 5 are the stock shapes (item 7);
  * - table: with `lfo.dks` and the RAMP shape loaded, WAVE reaches 7 and the output follows the shape's table, not TRI (item 1);
  * - start phase: on a note in MODE TRG the shape starts at the phase of SPH (item 4); each note takes a voice slot (with voice rotation the next slot, with one voice per track slot 0), whose phase is checked exactly;
  * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5).

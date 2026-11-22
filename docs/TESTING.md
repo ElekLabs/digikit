@@ -449,7 +449,7 @@ snapshot key matches and a baseline reload restores the snapshot (0.2 to 1.5 s) 
 fresh dir and always boots cold. Eviction runs when a fixture claims its run dir: only the newest 32 card dirs
 stay (a load touches a dir; one used in the last 2 hours stays). Fx presets with a `seed-card` settings step are built in the run dir, not cached. Delete `dist/session-cache/cards` to rebuild.
 `liveOptions(..., { fresh: true })` and mirror sessions use a fresh temp dir.
-Live patched sessions (`liveOptions`, used by `runtimeTests`, `withPatchedSession` and the conformance loads) start on a cached card of `live-card.ts`: the empty store, the sample folder `out/runs/patchkit/samples` with the boot project (a device whose `[capabilities] card` is `path-fs`; the folder goes to `plusdrive build` as it is, the scan `card.load` uses), and a selection record whose `stable_blocks` is 1500 (1 s of DSP blocks, `LIVE_STABLE_BLOCKS`). The runtime's default stable period is 30 s, so a test that boots three times quickly (transfer, lfo) would otherwise reach the safe-mode threshold. The period counts from the first UI-loop pass and the record keeps it through every later selection (`next_record`). Tests of the real 30 s rule build their own cards (`safe-mode`, `boot-restart`). `stableBlocks: 0` gives a test of the boot counter the runtime's 30 s (fault-trace-dt2). `blankCard: true` (the card-guard test of the stock initialisation) leaves the card to the daemon. `SessionOptions.cardImage` hands the daemon a built image at `firmware.load` (instead of `card.load` of a folder).
+Live patched sessions (`liveOptions`, used by `runtimeTests`, `withPatchedSession` and the conformance loads) that boot start on a cached card of `live-card.ts`: the empty store, the sample folder `out/runs/patchkit/samples` with the boot project (a device whose `[capabilities] card` is `path-fs`; the folder goes to `plusdrive build` as it is, the scan `card.load` uses), and a selection record whose `stable_blocks` is 1500 (1 s of DSP blocks, `LIVE_STABLE_BLOCKS`). The runtime's default stable period is 30 s, so a test that boots three times quickly (transfer, lfo) would otherwise reach the safe-mode threshold. The period counts from the first UI-loop pass and the record keeps it through every later selection (`next_record`). Tests of the real 30 s rule build their own cards (`safe-mode`, `boot-restart`). `stableBlocks: 0` gives a test of the boot counter the runtime's 30 s (fault-trace-dt2). `blankCard: true` (the card-guard test of the stock initialisation) leaves the card to the daemon. Sessions with `runtime.reuse` return before the card step and restore a booted snapshot, so they keep the card of that snapshot. `SessionOptions.cardImage` hands the daemon a built image at `firmware.load` (instead of `card.load` of a folder).
 A file that uses `withReusablePatchedSession` shares one session between its tests. A failure stays local: the failed test closes the session (diagnostics kept), and the next test starts a fresh session (one extra boot, only after a failure).
 
 ## Module-owned tests
@@ -691,7 +691,7 @@ sources/includes, variant toolchains and mutable object caches have no proven bo
 2. Which byte files key one device test:
 
    ```text
-   $ pnpm nx:pilot show target inputs core/dynfx:test-device--fx-reuse --json
+   $ pnpm nx:pilot show target inputs core/dynfx:test-device --json
    "depOutputs": ["dist/bytes/pack-verdicts.json", "dist/modules/dn2/dyn-fx-gain.dkm", ... , "dist/plusdrive/plusdrive"]
    ```
 
@@ -1527,7 +1527,7 @@ after the boot reached the main screen. The rig's restart guard (daemon epoch an
 
 ## Known issues
 
-- fx-reuse: the onset shift varies by +-64 samples between identical runs (free-running coupled
+- fx-contract: the onset shift varies by +-64 samples between identical runs (free-running coupled
   emulator); the tolerance is 128.
 - DN2 chorus-width sweep assertion (full `fx-dn2` tier): an open question whether the oracle or the
   DSP is wrong. See [tests/regression/scenarios/README.md](../tests/regression/scenarios/README.md).
