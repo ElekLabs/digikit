@@ -560,7 +560,7 @@
   "runtime/core/tests/samples-store-live.device.test.ts": 2,
   "runtime/core/tests/storage/contract.toml": 8,
   "runtime/core/tests/storage/storage.device.test.ts": 9,
-  "runtime/core/tests/store-format.device.test.ts": 6,
+  "runtime/core/tests/store-format.device.test.ts": 4,
   "runtime/core/tests/transfer-live.device.test.ts": 2,
   "runtime/core/tests/upload-faults.device.test.ts": 1,
   "runtime/core/tests/upload.device.test.ts": 1,

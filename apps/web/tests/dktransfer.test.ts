@@ -883,6 +883,22 @@ test('delete: a module takes its now-unused .dks with it and keeps the one anoth
   );
 });
 
+test('delete: a module takes its service and the port file only that service needed with it', async () => {
+  const dev = deviceOn();
+  const lfo = service('lfo', PORT_NEED);
+  dev.files.set('modules/mod.dkm', needing('someone/mod', ['lfo']));
+  dev.files.set('services/lfo.dks', lfo.bytes);
+  dev.files.set('ports/dt-1.dkport', portFile('dt-1').bytes);
+  const events: any[] = [];
+  const out = await deleteFiles(session(dev), ['modules/mod.dkm'], (e) => events.push(e));
+  assert.deepEqual(out, { deleted: ['modules/mod.dkm', 'services/lfo.dks', 'ports/dt-1.dkport'] });
+  assert.equal(dev.files.size, 0);
+  assert.deepEqual(
+    events.filter((e) => e.event === 'delete' && e.why).map((e) => e.path),
+    ['services/lfo.dks', 'ports/dt-1.dkport'],
+  );
+});
+
 test('delete: a needed .dks named alone is refused before any DELETE', async () => {
   const dev = cardWithServices();
   await assert.rejects(

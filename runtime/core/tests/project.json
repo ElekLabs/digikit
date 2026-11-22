@@ -133,14 +133,9 @@
       },
       {
         "files": ["store-format.device.test.ts"],
-        "firmwareOnly": "VERIFY of card bytes, load refusal (E_SHA), version 3 card boot and restart, transfer install loaded by the real runtime",
+        "firmwareOnly": "host hash against the runtime's on uploaded files, the booted image refusing to load a module whose card bytes changed, and a version 3 card booting, taking the first upload and loading its kept selection after a restart",
         "tags": ["C:loading", "C:storage"],
-        "modules": ["test/c-demo", "digikit/debug", "test/svc-test", "test/svc-test-user"],
-        "sources": [
-          "packages/workbench-core/src/firmware/default-modules-core.ts",
-          "packages/workbench-core/src/modules/dktransfer.ts",
-          "packages/workbench-core/src/modules/services.ts"
-        ],
+        "modules": ["test/c-demo"],
         "plusdrive": true
       },
       {
