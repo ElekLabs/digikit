@@ -136,7 +136,7 @@ export interface RuntimeBaseline {
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
-  /** Real logical panel transitions before cold execution; explicitly supplied (even empty) selects start:cold. */
+  /** Real logical panel transitions before the first guest instruction. They are part of the ready-pair key: a hit restores a boot of the same presses, a miss boots cold and publishes. */
   initialButtons?: readonly InitialButton[];
   /** Use the MainPanel contract with DIGI_COLD_RELAX_FS: missing filesystem verification is accepted, explicit failure is rejected. Stock verification/loading may continue. */
   relaxedReady?: boolean;
@@ -526,7 +526,7 @@ export class Session {
           // force still reconstructs the firmware and opens the explicit pristine card.
           replace: !prepared,
           force: true,
-          start: baseline.initialButtons === undefined ? 'auto' : 'cold',
+          start: 'auto',
           initial_buttons: baseline.initialButtons,
           // a paused baseline keeps the daemon's press of NO at ready: settling would step the emulator that a test counts from the ready point
           auto_no: settlesBootWindow(this.options, baseline.paused) ? false : (this.options.autoNo ?? true),

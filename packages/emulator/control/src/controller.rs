@@ -67,14 +67,8 @@ const BOOT_LIMIT: u64 = 3_000_000_000;
 
 type InitialButtons = Vec<(u8, bool)>;
 
-fn parse_initial_buttons(
-    value: Option<&Value>,
-    start: &str,
-) -> Result<Option<InitialButtons>, RpcError> {
+fn parse_initial_buttons(value: Option<&Value>) -> Result<Option<InitialButtons>, RpcError> {
     let Some(value) = value else { return Ok(None) };
-    if start != "cold" {
-        return Err(RpcError::bad_params("initial_buttons requires start:cold"));
-    }
     let values = value
         .as_array()
         .ok_or_else(|| RpcError::bad_params("initial_buttons must be an array"))?;
@@ -3762,7 +3756,7 @@ impl Actor {
         if !matches!(start, "auto" | "snapshot" | "cold") {
             return Err(RpcError::bad_params("start is auto, snapshot or cold"));
         }
-        let initial_buttons = parse_initial_buttons(p.get("initial_buttons"), start)?;
+        let initial_buttons = parse_initial_buttons(p.get("initial_buttons"))?;
         let force = p.opt_bool("force")?.unwrap_or(false);
         self.want_auto_no = p.opt_bool("auto_no")?.unwrap_or(false);
         let mut base_param = p.opt_str("base_sha256")?.map(str::to_ascii_lowercase);
@@ -5939,27 +5933,24 @@ mod initial_button_tests {
     use super::*;
 
     #[test]
-    fn initial_button_params_are_bounded_typed_and_cold_only() {
-        assert_eq!(parse_initial_buttons(None, "auto").unwrap(), None);
+    fn initial_button_params_are_bounded_and_typed() {
+        assert_eq!(parse_initial_buttons(None).unwrap(), None);
         assert_eq!(
-            parse_initial_buttons(Some(&json!([])), "cold").unwrap(),
+            parse_initial_buttons(Some(&json!([]))).unwrap(),
             Some(vec![])
         );
         let input = json!([{"code":21,"down":true},{"code":21,"down":false}]);
         assert_eq!(
-            parse_initial_buttons(Some(&input), "cold").unwrap(),
+            parse_initial_buttons(Some(&input)).unwrap(),
             Some(vec![(21, true), (21, false)])
         );
-        for start in ["auto", "snapshot"] {
-            assert!(parse_initial_buttons(Some(&input), start).is_err());
-        }
         for input in [
             json!({}),
             json!([{"code":256,"down":true}]),
             json!([{"code":21,"down":1}]),
             json!([{"code":21}]),
         ] {
-            assert!(parse_initial_buttons(Some(&input), "cold").is_err());
+            assert!(parse_initial_buttons(Some(&input)).is_err());
         }
         let max = json!(
             (0..32)
@@ -5967,10 +5958,7 @@ mod initial_button_tests {
                 .collect::<Vec<_>>()
         );
         assert_eq!(
-            parse_initial_buttons(Some(&max), "cold")
-                .unwrap()
-                .unwrap()
-                .len(),
+            parse_initial_buttons(Some(&max)).unwrap().unwrap().len(),
             32
         );
         let too_many = json!(
@@ -5978,7 +5966,7 @@ mod initial_button_tests {
                 .map(|i| json!({"code":21,"down":i%2==0}))
                 .collect::<Vec<_>>()
         );
-        assert!(parse_initial_buttons(Some(&too_many), "cold").is_err());
+        assert!(parse_initial_buttons(Some(&too_many)).is_err());
     }
 
     #[test]
