@@ -594,7 +594,7 @@ pub fn st() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_STATE) }
 }
 
-pub fn flush(start: u32, len: u32) {
+pub extern "C" fn flush(start: u32, len: u32) {
     PLATFORM.flush(start, len)
 }
 
@@ -614,7 +614,7 @@ pub fn device_name() -> u32 {
 }
 
 /// The device has the DSP the digikit link drives (`DeviceProfile::has_dsp`).
-pub fn has_dsp() -> bool {
+pub extern "C" fn has_dsp() -> bool {
     PLATFORM.has_dsp()
 }
 
@@ -641,11 +641,11 @@ pub fn os_upgrade_active() -> bool {
     PLATFORM.os_upgrade_active()
 }
 
-pub fn irq_mask() -> u32 {
+pub extern "C" fn irq_mask() -> u32 {
     PLATFORM.irq_mask()
 }
 
-pub fn irq_restore(sr: u32) {
+pub extern "C" fn irq_restore(sr: u32) {
     PLATFORM.irq_restore(sr)
 }
 

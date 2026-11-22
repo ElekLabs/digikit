@@ -124,7 +124,7 @@ unsafe fn on_midi_task() -> bool {
 }
 
 /// Is the store lock held now (an SDK call or a SysEx command is inside the store)?
-pub fn is_locked() -> bool {
+pub extern "C" fn is_locked() -> bool {
     unsafe { read_volatile(addr_of!(STORE_LOCK)) }
 }
 

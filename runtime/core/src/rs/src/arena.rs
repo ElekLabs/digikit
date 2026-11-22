@@ -30,12 +30,12 @@ pub unsafe fn init() {
     let base = DevAddr::of_ptr(addr_of_mut!(DKRT_ARENA)).get();
     let lo = (base + 15) & !15;
     let hi = (base + ARENA_BYTES as u32) & !15;
-    s.arena_lo = lo;
-    s.arena_hi = hi;
+    s.arena.lo = lo;
+    s.arena.hi = hi;
     let b = block(lo);
     *b = hi - lo;
     *b.add(1) = 0;
-    s.free_head = lo;
+    s.arena.free_head = lo;
 }
 
 /// A block of at least `n` bytes, 16-byte aligned; `NULL` when none fits.
@@ -54,7 +54,7 @@ unsafe fn alloc_walk(n: u32) -> *mut u8 {
     }
     let mut need = ((n + 15) & !15) + HDR;
     let mut prev: *mut u32 = null_mut();
-    let mut cur = block(s.free_head);
+    let mut cur = block(s.arena.free_head);
     while !cur.is_null() {
         let sz = *cur;
         let next = *cur.add(1);
@@ -70,7 +70,7 @@ unsafe fn alloc_walk(n: u32) -> *mut u8 {
                 next
             };
             if prev.is_null() {
-                s.free_head = replacement;
+                s.arena.free_head = replacement;
             } else {
                 *prev.add(1) = replacement;
             }
@@ -94,7 +94,7 @@ pub unsafe fn free(p: DevAddr) -> bool {
 
 unsafe fn free_walk(a: u32) -> bool {
     let s = st();
-    if a < s.arena_lo + HDR || a >= s.arena_hi || a & 15 != 0 {
+    if a < s.arena.lo + HDR || a >= s.arena.hi || a & 15 != 0 {
         return false;
     }
     let h = block(a - HDR);
@@ -103,7 +103,7 @@ unsafe fn free_walk(a: u32) -> bool {
     }
     let size = *h;
     let mut prev: *mut u32 = null_mut();
-    let mut cur = block(s.free_head);
+    let mut cur = block(s.arena.free_head);
     while !cur.is_null() && addr(cur) < addr(h) {
         prev = cur;
         cur = block(*cur.add(1));
@@ -119,7 +119,7 @@ unsafe fn free_walk(a: u32) -> bool {
         *prev += *h;
         *prev.add(1) = *h.add(1);
     } else if prev.is_null() {
-        s.free_head = addr(h);
+        s.arena.free_head = addr(h);
     } else {
         *prev.add(1) = addr(h);
     }
@@ -131,7 +131,7 @@ unsafe fn free_walk(a: u32) -> bool {
 pub(crate) unsafe fn is_live(p: DevAddr) -> bool {
     let s = st();
     let a = p.get();
-    a >= s.arena_lo + HDR && a < s.arena_hi && *block(a - HDR).add(1) == USED
+    a >= s.arena.lo + HDR && a < s.arena.hi && *block(a - HDR).add(1) == USED
 }
 
 /// (total free bytes, largest free block) in payload bytes.
@@ -139,7 +139,7 @@ pub unsafe fn stats() -> (u32, u32) {
     let s = st();
     let mut total = 0;
     let mut largest = 0;
-    let mut cur = block(s.free_head);
+    let mut cur = block(s.arena.free_head);
     while !cur.is_null() {
         let sz = *cur;
         total += sz;

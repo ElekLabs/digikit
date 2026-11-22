@@ -1,8 +1,4 @@
-//! `FaultFns`: the crash capture.
-use dkrt_abi::resident::FaultFns;
+//! `FaultFns`: the crash capture. The entry is the owner's own `extern "C"` function.
+use dkrt_abi::resident::{FaultFns, Group};
 
-extern "C" fn panic() -> ! {
-    crate::fault::panic()
-}
-
-pub(super) static FNS: FaultFns = FaultFns { panic };
+pub(super) static FNS: Group<FaultFns> = Group::new(FaultFns { panic: crate::fault::panic });

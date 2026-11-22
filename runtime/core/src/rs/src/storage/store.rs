@@ -23,7 +23,7 @@ pub static mut DKRT_STORE_PEEK: PeekBuf = PeekBuf([0; 512]);
 #[no_mangle]
 pub static mut DKRT_STORE_FP: PeekBuf = PeekBuf([0; 512]);
 
-pub unsafe fn stage() -> *mut u8 {
+pub unsafe extern "C" fn stage() -> *mut u8 {
     addr_of_mut!(DKRT_STAGE) as *mut u8
 }
 
@@ -304,7 +304,7 @@ pub unsafe fn listed(e: *const u8, prefix: *const u8, plen: usize, filter: Filte
 /// `list(prefix, out, max)`: the files whose path starts with `prefix` (NUL-terminated, e.g. `modules/`), in path order, at most `max`
 /// into `out`; returns how many, or a negative code (`E_NOT_FOUND`: no store). A path that does not fit 63 bytes, a folder and an empty file are
 /// left out. A commit of an upload running at the same time makes the list start again (it is one header's table).
-pub unsafe fn list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
+pub unsafe extern "C" fn list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
     if !super::lock::acquire() {
         return E_BUSY;
     }
@@ -419,7 +419,7 @@ unsafe fn find_name_unlocked(prefix: *const u8, name: &[u8], out: *mut [u8; 64])
 }
 
 /// `dkrt_store_read_sector(rel, out)`: one sector of the store (relative to its start) into `out`, 512 bytes, 16-byte aligned. 0 or a negative code.
-pub unsafe fn read_sector(rel: u32, out: *mut u8) -> i32 {
+pub unsafe extern "C" fn read_sector(rel: u32, out: *mut u8) -> i32 {
     if crate::card::state() == CARD_TOO_SMALL {
         return E_NOT_FOUND;
     }

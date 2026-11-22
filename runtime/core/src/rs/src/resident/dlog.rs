@@ -1,7 +1,7 @@
-//! `DlogFns`: the resident log.
+//! `DlogFns`: the resident log. `sink_drop`, `sink_on`, `sink_present` and `span_end` are the owner's own `extern "C"` functions.
 use crate::dlog;
 use dkrt_abi::module::Ctx;
-use dkrt_abi::resident::DlogFns;
+use dkrt_abi::resident::{Group, DlogFns};
 
 unsafe extern "C" fn ev(kind: u16, flags: u16, args: *const u32) {
     dlog::ev(kind, flags, *(args as *const [u32; 5]))
@@ -24,15 +24,6 @@ unsafe extern "C" fn call_fini(idx: u32, f: unsafe extern "C" fn(*const Ctx), ct
 unsafe extern "C" fn release_sinks(idx: u32) {
     dlog::release_sinks(idx as usize)
 }
-unsafe extern "C" fn sink_drop(lo: u32, hi: u32) {
-    dlog::sink_drop(lo, hi)
-}
-extern "C" fn sink_on(channel: u32) -> bool {
-    dlog::sink_on(channel)
-}
-extern "C" fn sink_present() -> bool {
-    dlog::sink_present()
-}
 
 unsafe extern "C" fn span_t0(t0: *mut u32) -> i32 {
     match dlog::span_t0() {
@@ -43,12 +34,22 @@ unsafe extern "C" fn span_t0(t0: *mut u32) -> i32 {
         None => -1,
     }
 }
-unsafe extern "C" fn span_end(owner: u32, t0: u32) {
-    dlog::span_end(owner, t0)
-}
 extern "C" fn span_owner() -> u32 {
     dlog::span_owner() as u32
 }
 
-pub(super) static FNS: DlogFns =
-    DlogFns { ev, current_source, enter_module, leave_module, call_init, call_fini, release_sinks, sink_drop, sink_on, sink_present, span_t0, span_end, span_owner };
+pub(super) static FNS: Group<DlogFns> = Group::new(DlogFns {
+    ev,
+    current_source,
+    enter_module,
+    leave_module,
+    call_init,
+    call_fini,
+    release_sinks,
+    sink_drop: dlog::sink_drop,
+    sink_on: dlog::sink_on,
+    sink_present: dlog::sink_present,
+    span_t0,
+    span_end: dlog::span_end,
+    span_owner,
+});

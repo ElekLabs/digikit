@@ -6,7 +6,7 @@ use crate::state::log_at;
 use crate::{arena, aux, debug_selected_params, dlog, hash32, intro, io, selected_track, worker};
 use core::ptr::null_mut;
 use dkrt_abi::dev_addr::DevAddr;
-use dkrt_abi::resident::ImportRows;
+use dkrt_abi::resident::{Group, ImportRows};
 use dkrt_sdk::api::*;
 
 extern "C" {
@@ -65,7 +65,7 @@ macro_rules! device_row {
     }};
 }
 
-pub(super) static ROWS: ImportRows = ImportRows {
+pub(super) static ROWS: Group<ImportRows> = Group::new(ImportRows {
     memcpy: memcpy as *const (),
     memset: memset as *const (),
     memcmp: memcmp as *const (),
@@ -103,4 +103,4 @@ pub(super) static ROWS: ImportRows = ImportRows {
     dk_selected_track: device_row!(DkSelectedTrackFn, selected_track),
     dk_debug_log_sink_set: row!(DkDebugLogSinkSetFn, dlog::dk_debug_log_sink_set),
     dk_debug_speed_flags: device_row!(DkDebugSpeedFlagsFn, debug_speed_flags),
-};
+});

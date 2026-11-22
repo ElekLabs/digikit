@@ -1,8 +1,8 @@
-//! `PlatformFns` over the real platform.
+//! `PlatformFns` over the real platform. `irq_mask`, `irq_restore`, `flush` and `has_dsp` are the platform's own `extern "C"` functions.
 use crate::platform::PLATFORM;
 use core::slice::from_raw_parts;
 use dkrt_abi::package_platform::PackagePlatform;
-use dkrt_abi::resident::PlatformFns;
+use dkrt_abi::resident::{Group, PlatformFns};
 use dkrt_abi::storage::{DirEntry, ListStep, StatWire};
 
 unsafe fn text<'a>(p: *const u8, n: u32) -> &'a [u8] {
@@ -27,15 +27,6 @@ unsafe extern "C" fn blocks(out: *mut u32) -> i32 {
         }
         None => -1,
     }
-}
-extern "C" fn irq_mask() -> u32 {
-    PackagePlatform::irq_mask(&PLATFORM)
-}
-extern "C" fn irq_restore(sr: u32) {
-    PackagePlatform::irq_restore(&PLATFORM, sr)
-}
-extern "C" fn flush(start: u32, len: u32) {
-    PackagePlatform::flush(&PLATFORM, start, len)
 }
 unsafe extern "C" fn info(name_hash: u32) -> *const u32 {
     PackagePlatform::info(&PLATFORM, name_hash)
@@ -75,9 +66,6 @@ extern "C" fn device_id() -> u32 {
 }
 extern "C" fn sample_path_max() -> u32 {
     PackagePlatform::sample_path_max(&PLATFORM)
-}
-extern "C" fn has_dsp() -> bool {
-    PackagePlatform::has_dsp(&PLATFORM)
 }
 extern "C" fn dsp_headroom() -> u32 {
     PackagePlatform::dsp_headroom(&PLATFORM)
@@ -130,13 +118,13 @@ unsafe extern "C" fn list_next(state: *mut u8, out: *mut DirEntry) -> i32 {
     }
 }
 
-pub(super) static FNS: PlatformFns = PlatformFns {
+pub(super) static FNS: Group<PlatformFns> = Group::new(PlatformFns {
     alloc,
     free,
     blocks,
-    irq_mask,
-    irq_restore,
-    flush,
+    irq_mask: crate::platform::irq_mask,
+    irq_restore: crate::platform::irq_restore,
+    flush: crate::platform::flush,
     info,
     info_slot,
     info_dsp_slot,
@@ -146,7 +134,7 @@ pub(super) static FNS: PlatformFns = PlatformFns {
     play_state,
     device_id,
     sample_path_max,
-    has_dsp,
+    has_dsp: crate::platform::has_dsp,
     dsp_headroom,
     dsp_voices,
     dsp_block_cycles,
@@ -156,4 +144,4 @@ pub(super) static FNS: PlatformFns = PlatformFns {
     list_state_bytes,
     list_open,
     list_next,
-};
+});

@@ -100,7 +100,7 @@ pub unsafe fn log_at(level: u32, msg: *const u8, value: u32) {
 }
 
 /// First-use setup: arena free list, magic.
-pub unsafe fn init_once() {
+pub unsafe extern "C" fn init_once() {
     let s = st();
     if s.magic == STATE_MAGIC {
         return;

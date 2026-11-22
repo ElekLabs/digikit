@@ -1,11 +1,11 @@
 //! The resident state and the statics the package reads and writes through its views.
 use super::table;
-use dkrt_abi::runtime_state::State;
+use dkrt_abi::runtime_state::PackageState;
 use dkrt_abi::MAX_MODULES;
 
 /// `DKRT_STATE`.
 #[inline(always)]
-pub(crate) fn st() -> &'static mut State {
+pub(crate) fn st() -> &'static mut PackageState {
     unsafe { &mut *table().views.state }
 }
 

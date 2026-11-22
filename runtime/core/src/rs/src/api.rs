@@ -169,7 +169,7 @@ unsafe fn poll_owner(f: usize) -> u8 {
 }
 
 /// Free the poll slots whose function lies in `[base, base + size)` (a module that is released).
-pub(crate) unsafe fn poll_drop_range(base: u32, size: u32) {
+pub(crate) unsafe extern "C" fn poll_drop_range(base: u32, size: u32) {
     let t = &mut *addr_of_mut!(DKRT_POLLS);
     let mut i = 0;
     while i < POLLS {
@@ -304,7 +304,7 @@ unsafe fn save_working_state() {
 /// MCF5441x eSDHC: offset of the present-state register (`PRSSTAT`); bits 0 to 2 are command inhibit, data inhibit and data line active.
 const MCF5441X_ESDHC_PRSSTAT: u32 = 0x24;
 /// Is a card transfer in flight? The card's eSDHC controller is the profile's (`[board] esdhc_base` of the device file); a device without one has no busy card.
-pub(crate) unsafe fn card_busy() -> bool {
+pub(crate) unsafe extern "C" fn card_busy() -> bool {
     let p = crate::platform::profile();
     p.has_sdhc && read_volatile((p.esdhc_base + MCF5441X_ESDHC_PRSSTAT) as *const u32) & 7 != 0
 }

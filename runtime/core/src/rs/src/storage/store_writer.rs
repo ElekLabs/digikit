@@ -119,7 +119,7 @@ pub(crate) fn up() -> &'static mut Up {
 }
 
 /// Is a write session open (SysEx or SDK)?
-pub fn is_open() -> bool {
+pub extern "C" fn is_open() -> bool {
     up().kind != NONE
 }
 

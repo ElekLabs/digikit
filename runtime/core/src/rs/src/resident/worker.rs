@@ -1,6 +1,6 @@
 //! `WorkerFns`: the job queue.
 use crate::worker;
-use dkrt_abi::resident::WorkerFns;
+use dkrt_abi::resident::{Group, WorkerFns};
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 
 unsafe extern "C" fn post(owner: u32, step: Option<JobStepFn>, done: Option<JobDoneFn>, ctx: *mut u8) -> i32 {
@@ -13,4 +13,4 @@ unsafe extern "C" fn retire(rec: u32) -> bool {
     worker::retire(rec as usize)
 }
 
-pub(super) static FNS: WorkerFns = WorkerFns { post, cancel, retire };
+pub(super) static FNS: Group<WorkerFns> = Group::new(WorkerFns { post, cancel, retire });

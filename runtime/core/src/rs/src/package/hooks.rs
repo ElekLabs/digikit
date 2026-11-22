@@ -4,7 +4,7 @@
 
 use crate::package::{commands, dsp, entry, files, handlers, link, lifecycle, loader, module_cmds, reload, scan, settings_overlay, settings_reload};
 use dkrt_abi::hooks::*;
-use dkrt_abi::resident::ResidentTable;
+use dkrt_abi::resident::{Refusal, ResidentTable};
 use crate::package::resident;
 use dkrt_sdk::sel::Record;
 use dkrt_sdk::proto::E_PROTO;
@@ -44,11 +44,12 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
 };
 
 /// The package's first-use setup (`init_once`): the package gets the resident table, the in-crate services declare their record kinds and the runtime compares them with
-/// the generated table (declare-check-commit), and the resident core gets the hooks.
-pub(crate) unsafe fn attach(table: &'static ResidentTable) -> &'static PackageHooks {
-    resident::install(table);
+/// the generated table (declare-check-commit), and the resident core gets the hooks. A resident table the package cannot use (`dkrt_abi::resident::check`) gives the
+/// reason and no hooks: the package does not run.
+pub(crate) unsafe fn attach(table: &'static ResidentTable) -> Result<&'static PackageHooks, Refusal> {
+    resident::install(table)?;
     handlers::check_declarations();
-    &HOOKS
+    Ok(&HOOKS)
 }
 
 // ---- boot ----------------------------------------------------------------------------------------------------------------

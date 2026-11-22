@@ -1,8 +1,4 @@
-//! `StateFns`: the resident state.
-use dkrt_abi::resident::StateFns;
+//! `StateFns`: the resident state. The entry is the owner's own `extern "C"` function.
+use dkrt_abi::resident::{Group, StateFns};
 
-unsafe extern "C" fn init_once() {
-    crate::state::init_once()
-}
-
-pub(super) static FNS: StateFns = StateFns { init_once };
+pub(super) static FNS: Group<StateFns> = Group::new(StateFns { init_once: crate::state::init_once });

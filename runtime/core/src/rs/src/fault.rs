@@ -282,7 +282,7 @@ const PANIC_NAME: [u8; 16] = *b"runtime\0\0\0\0\0\0\0\0\0";
 
 /// A panic of the runtime's Rust code: `panic_handler` calls this. The toolchain strips the file and line of a panic, so nothing of `PanicInfo` is used;
 /// the record holds the stack (the return addresses lead to the panicking code). The settings store is not touched: the panic may be inside it. Never returns.
-pub fn panic() -> ! {
+pub extern "C" fn panic() -> ! {
     unsafe {
         // the first fault only: a panic inside this function, or after a CPU exception, keeps the record
         if read_volatile(addr_of!(IN_EXC)) != 0 {

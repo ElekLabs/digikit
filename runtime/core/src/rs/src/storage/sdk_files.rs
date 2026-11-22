@@ -65,7 +65,7 @@ unsafe fn sdk_path(root: u32, path: *const u8, full: &mut [u8; FULL_MAX], pd: &m
 
 /// `file_create`: a write session for a new file; the handle (> 0) or a status. `hash4`: null, or the expected `hash | 1`, big-endian.
 /// `flags`: `FILE_REPLACE` or 0.
-pub unsafe fn sdk_create(root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
+pub unsafe extern "C" fn sdk_create(root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
     let owner = match sdk_owner() {
         Ok(o) => o,
         Err(e) => return e,
@@ -110,7 +110,7 @@ pub unsafe fn sdk_create(root: u32, path: *const u8, size: u32, hash4: *const u8
 }
 
 /// `dk_files_commit`: name the calling module's pending files in one commit. The DT2 samples root: finish the adapter's table rebuild.
-pub unsafe fn sdk_commit() -> i32 {
+pub unsafe extern "C" fn sdk_commit() -> i32 {
     let owner = match sdk_owner() {
         Ok(o) => o,
         Err(e) => return e,
@@ -135,7 +135,7 @@ pub unsafe fn sdk_commit() -> i32 {
 }
 
 /// `dk_files_pending`: the calling module's pending files.
-pub unsafe fn sdk_pending() -> i32 {
+pub unsafe extern "C" fn sdk_pending() -> i32 {
     match sdk_owner() {
         Ok(o) => pend_count(o),
         Err(e) => e,
@@ -144,7 +144,7 @@ pub unsafe fn sdk_pending() -> i32 {
 
 /// `file_write`: `len` bytes of `buf` (16-byte aligned) at `offset`, the next byte, in pieces of `WRITE_PIECE`. The store lock is taken once for the
 /// whole call: `E_BUSY` only when it could not be taken, before anything was written. A status, 0 when all went in.
-pub unsafe fn sdk_write(h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
+pub unsafe extern "C" fn sdk_write(h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
     let owner = match sdk_owner() {
         Ok(o) => o,
         Err(e) => return e,
@@ -170,7 +170,7 @@ pub unsafe fn sdk_write(h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
 }
 
 /// `file_close`: end and commit; `out` (4 bytes, may be null) gets the device's file hash.
-pub unsafe fn sdk_close(h: i32, out: *mut u8) -> i32 {
+pub unsafe extern "C" fn sdk_close(h: i32, out: *mut u8) -> i32 {
     let owner = match sdk_owner() {
         Ok(o) => o,
         Err(e) => return e,
@@ -186,7 +186,7 @@ pub unsafe fn sdk_close(h: i32, out: *mut u8) -> i32 {
     r
 }
 
-pub unsafe fn sdk_abort(h: i32) -> i32 {
+pub unsafe extern "C" fn sdk_abort(h: i32) -> i32 {
     let owner = match sdk_owner() {
         Ok(o) => o,
         Err(e) => return e,
@@ -202,7 +202,7 @@ pub unsafe fn sdk_abort(h: i32) -> i32 {
     r
 }
 
-pub unsafe fn sdk_delete(root: u32, path: *const u8) -> i32 {
+pub unsafe extern "C" fn sdk_delete(root: u32, path: *const u8) -> i32 {
     if let Err(e) = sdk_owner() {
         return e;
     }

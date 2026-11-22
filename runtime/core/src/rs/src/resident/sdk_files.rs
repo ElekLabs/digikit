@@ -1,27 +1,13 @@
-//! `SdkFilesFns`: the writer front end of the SDK's file calls.
+//! `SdkFilesFns`: the writer front end of the SDK's file calls. Every entry is the owner's own `extern "C"` function.
 use crate::storage::sdk_files as sdk;
-use dkrt_abi::resident::SdkFilesFns;
+use dkrt_abi::resident::{Group, SdkFilesFns};
 
-unsafe extern "C" fn create(root: u32, path: *const u8, size: u32, hash4: *const u8, flags: u32) -> i32 {
-    sdk::sdk_create(root, path, size, hash4, flags)
-}
-unsafe extern "C" fn write(h: i32, offset: u32, buf: *const u8, len: u32) -> i32 {
-    sdk::sdk_write(h, offset, buf, len)
-}
-unsafe extern "C" fn close(h: i32, out: *mut u8) -> i32 {
-    sdk::sdk_close(h, out)
-}
-unsafe extern "C" fn abort(h: i32) -> i32 {
-    sdk::sdk_abort(h)
-}
-unsafe extern "C" fn delete(root: u32, path: *const u8) -> i32 {
-    sdk::sdk_delete(root, path)
-}
-unsafe extern "C" fn commit() -> i32 {
-    sdk::sdk_commit()
-}
-unsafe extern "C" fn pending() -> i32 {
-    sdk::sdk_pending()
-}
-
-pub(super) static FNS: SdkFilesFns = SdkFilesFns { create, write, close, abort, delete, commit, pending };
+pub(super) static FNS: Group<SdkFilesFns> = Group::new(SdkFilesFns {
+    create: sdk::sdk_create,
+    write: sdk::sdk_write,
+    close: sdk::sdk_close,
+    abort: sdk::sdk_abort,
+    delete: sdk::sdk_delete,
+    commit: sdk::sdk_commit,
+    pending: sdk::sdk_pending,
+});

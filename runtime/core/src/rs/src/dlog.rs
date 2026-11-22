@@ -134,7 +134,7 @@ pub unsafe fn call_fini(idx: usize, f: unsafe extern "C" fn(*const Ctx), ctx: *c
 }
 
 /// Is a sink set (the debug module is loaded)?
-pub fn sink_present() -> bool {
+pub extern "C" fn sink_present() -> bool {
     unsafe { read_volatile(addr_of!(SINK)) != 0 }
 }
 
@@ -295,7 +295,7 @@ pub fn span_owner() -> u8 {
 
 /// Is a sink set on `channel`? (The one flag test of a producer.)
 #[inline]
-pub fn sink_on(channel: u32) -> bool {
+pub extern "C" fn sink_on(channel: u32) -> bool {
     unsafe { read_volatile(addr_of!((*addr_of!(CHAN))[channel as usize].f)) != 0 }
 }
 
@@ -340,7 +340,7 @@ fn clock_slow() -> Option<u32> {
 /// The end of a span that `span_t0` started: emit the original reading and the clock's difference, including across a counter wrap.
 #[cold]
 #[inline(never)]
-pub unsafe fn span_end(owner: u32, t0: u32) {
+pub unsafe extern "C" fn span_end(owner: u32, t0: u32) {
     let k = read_volatile(addr_of!(SPAN_CLOCK));
     if k == 0 {
         return;
@@ -361,7 +361,7 @@ pub unsafe fn spanned<R>(owner: u32, f: impl FnOnce() -> R) -> R {
 }
 
 /// After a module's `fini`, or when its range is freed: the sink, the tick and the channels may not point into its memory [lo, hi) (a module that forgot to clear them).
-pub unsafe fn sink_drop(lo: u32, hi: u32) {
+pub unsafe extern "C" fn sink_drop(lo: u32, hi: u32) {
     let sr = irq_mask();
     let mut i = 0;
     while i < SINKS {

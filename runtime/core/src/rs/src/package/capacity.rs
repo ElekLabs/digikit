@@ -37,7 +37,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
     let (af, al) = arena::stats();
     let (df, dl) = dsp::area_stats();
     let area = dsp::area_bytes();
-    let arena = s.arena_hi - s.arena_lo;
+    let arena = arena::size();
     let mut mods = 0;
     let mut i = 0;
     while i < MAX_MODULES {

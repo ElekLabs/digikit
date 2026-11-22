@@ -1,6 +1,7 @@
 //! `Views`: pointers to the resident statics the package reads and writes. The resident core owns the statics (host tools peek them by symbol); the package holds the
-//! pointers.
-use crate::runtime_state::State;
+//! pointers. The layout of what each pointer reaches is part of the major version of the table (`resident.rs`, "Shared views"): `PackageState` (with `Module` and
+//! `LogEntry`), `DkrtBootInfo` (generated from `runtime/core/abi.toml`), the name array and the `MAX_MODULES` arrays.
+use crate::runtime_state::PackageState;
 use crate::state::NAME_LEN;
 use crate::MAX_MODULES;
 use dkrt_sdk::{DkrtBootInfo, SEL_MAX};
@@ -9,7 +10,7 @@ use dkrt_sdk::{DkrtBootInfo, SEL_MAX};
 #[derive(Clone, Copy)]
 pub struct Views {
     /// `DKRT_STATE`.
-    pub state: *mut State,
+    pub state: *mut PackageState,
     /// `DKRT_BOOT`.
     pub boot_info: *mut DkrtBootInfo,
     /// The names of the boot's modules (`LOADS` reports them).

@@ -1,15 +1,9 @@
-//! `ApiFns`: the exports of `api.rs` the package tells things.
+//! `ApiFns`: the exports of `api.rs` the package tells things. `card_busy` and `poll_drop_range` are the owner's own `extern "C"` functions.
 use crate::api;
-use dkrt_abi::resident::ApiFns;
+use dkrt_abi::resident::{ApiFns, Group};
 
-unsafe extern "C" fn card_busy() -> bool {
-    api::card_busy()
-}
 unsafe extern "C" fn notify_unload(owner: u32, base: u32, size: u32) {
     api::notify_unload(owner as usize, base, size)
 }
-unsafe extern "C" fn poll_drop_range(base: u32, size: u32) {
-    api::poll_drop_range(base, size)
-}
 
-pub(super) static FNS: ApiFns = ApiFns { card_busy, notify_unload, poll_drop_range };
+pub(super) static FNS: Group<ApiFns> = Group::new(ApiFns { card_busy: api::card_busy, notify_unload, poll_drop_range: api::poll_drop_range });

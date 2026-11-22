@@ -1,8 +1,4 @@
-//! `CardFns`: the card.
-use dkrt_abi::resident::CardFns;
+//! `CardFns`: the card. The entry is the owner's own `extern "C"` function.
+use dkrt_abi::resident::{CardFns, Group};
 
-extern "C" fn writable() -> bool {
-    crate::card::writable()
-}
-
-pub(super) static FNS: CardFns = CardFns { writable };
+pub(super) static FNS: Group<CardFns> = Group::new(CardFns { writable: crate::card::writable });

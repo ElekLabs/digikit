@@ -144,8 +144,8 @@ pub unsafe extern "C" fn dkrt_status(out: *mut DkrtStatus) {
     o.magic = s.magic;
     o.runtime = s.runtime;
     o.device = device();
-    o.arena_base = s.arena_lo;
-    o.arena_size = s.arena_hi - s.arena_lo;
+    o.arena_base = s.arena.lo;
+    o.arena_size = s.arena.hi - s.arena.lo;
     o.arena_free = free;
     o.arena_largest = largest;
     o.modules = n;

@@ -8,6 +8,8 @@ pub struct ArenaFns {
     pub free: unsafe extern "C" fn(addr: u32) -> bool,
     /// The free bytes and the largest free piece: `out[0]` and `out[1]`.
     pub stats: unsafe extern "C" fn(out: *mut u32),
+    /// The bytes of the arena.
+    pub size: extern "C" fn() -> u32,
     /// The device address of the arena.
     pub base: extern "C" fn() -> u32,
 }

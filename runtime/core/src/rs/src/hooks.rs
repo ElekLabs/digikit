@@ -28,9 +28,13 @@ fn table() -> &'static PackageHooks {
     unsafe { &*read_volatile(addr_of!(INSTALLED)) }
 }
 
-/// The package gets the resident table and gives its hooks: once per boot, in `init_once`.
+/// The package gets the resident table and gives its hooks: once per boot, in `init_once`. A table the package refuses (`dkrt_abi::resident::check`) is logged with its
+/// reason and no hooks are installed: the core runs without the package.
 pub(crate) unsafe fn attach_package(table: &'static dkrt_abi::resident::ResidentTable) {
-    install(crate::package::attach(table));
+    match crate::package::attach(table) {
+        Ok(hooks) => install(hooks),
+        Err(why) => crate::state::log_at(dkrt_sdk::logk::L_ERROR as u32, why.message().as_ptr(), why.found),
+    }
 }
 
 /// Host tests: is a package table installed? (A core-only level has none.)

@@ -1,15 +1,10 @@
-//! `StoreWriterFns`: the write side of the store.
+//! `StoreWriterFns`: the write side of the store. `is_open` and `is_locked` are the owners' own `extern "C"` functions.
 use crate::store_writer;
-use dkrt_abi::resident::StoreWriterFns;
+use dkrt_abi::resident::{Group, StoreWriterFns};
 
-extern "C" fn is_open() -> bool {
-    store_writer::is_open()
-}
-extern "C" fn is_locked() -> bool {
-    crate::storage::lock::is_locked()
-}
 extern "C" fn retire(owner: u32) {
     store_writer::retire(owner as u8)
 }
 
-pub(super) static FNS: StoreWriterFns = StoreWriterFns { is_open, is_locked, retire };
+pub(super) static FNS: Group<StoreWriterFns> =
+    Group::new(StoreWriterFns { is_open: store_writer::is_open, is_locked: crate::storage::lock::is_locked, retire });

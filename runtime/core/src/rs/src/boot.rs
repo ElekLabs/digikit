@@ -367,7 +367,7 @@ pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
 }
 
 /// The DSP part of the module loaded for selection index `idx` is over with result `r` (called by the DSP loader).
-pub unsafe fn report_dsp(idx: u32, r: i32) {
+pub unsafe extern "C" fn report_dsp(idx: u32, r: i32) {
     dlog::ev(logk::MOD_DSP, if r == OK { dlog::INFO } else { logk::F_ERROR }, [idx, r as u32, 0, 0, 0]);
     if (idx as usize) < SEL_MAX {
         // only a module that waits for its DSP part takes the result; an active or failed module keeps its record
@@ -383,7 +383,7 @@ pub unsafe fn report_dsp(idx: u32, r: i32) {
 
 /// Module `idx` of the selection was taken down because a service it needs failed (late teardown of a service whose DSP part failed): FAILED with `code`
 /// (`E_MISSING`), the count of loaded modules corrected, one `MOD_DSP` event like the end of a DSP part.
-pub unsafe fn report_taken_down(idx: u32, code: i32) {
+pub unsafe extern "C" fn report_taken_down(idx: u32, code: i32) {
     if (idx as usize) < SEL_MAX {
         let b = info();
         let was_active = states().states[idx as usize] == dkrt_sdk::STATE_ACTIVE;

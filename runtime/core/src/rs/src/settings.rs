@@ -377,7 +377,7 @@ pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len
 
 /// `dk_settings_open`: the module's handle, only inside its `init` (the check of `dk_files_open`). The handle is the module's record index + 1: the
 /// same module gets the same handle every time. `E_NOT_FOUND` outside `init`.
-pub unsafe fn module_client() -> i32 {
+pub unsafe extern "C" fn module_client() -> i32 {
     let source = dlog::current_source();
     if source == 0 {
         return E_NOT_FOUND;
@@ -424,7 +424,7 @@ unsafe fn module_id<'a>(client: u32) -> Option<&'a [u8]> {
 
 /// `settings_get`: the length of the value (0 is valid), `E_SET_NOKEY`, `E_SET_VALUE` (`cap` too small: nothing is written), `E_SET_KEY` (bad handle or
 /// key), `E_SET_OFF`. In `init` and in the UI task. With a settings overlay set the overlay's value is the answer when it holds one (`settings_overlay`), else the record's.
-pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 {
+pub unsafe extern "C" fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,
@@ -447,7 +447,7 @@ pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) ->
 /// first the record is asked whether it can take the change (`fits`: key, value size, room after replacing the key's entry, settings on); a refusal is the answer and nothing
 /// is written. Then the settings overlay (if set) takes the value; its refusal (any answer `settings_overlay::put` passes through) is the answer, with the record unchanged.
 /// Last the record takes it, which cannot refuse for the reasons `fits` checked. So a module that gets an error reads back what it read before.
-pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 {
+pub unsafe extern "C" fn module_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,
@@ -476,7 +476,7 @@ pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32
 /// `settings_remove`: 0 (also when the key was not there), or `E_SET_KEY` (bad handle or key), `E_SET_OFF`. UI task. The order is: the record is asked whether it can take the
 /// remove (`can_remove`: key valid, settings on); a refusal is the answer and nothing changes. Then the key leaves the settings overlay (a refusal the overlay passes through is
 /// the answer, the record unchanged); last the record drops it. A module that gets an error still reads the value it read before.
-pub unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
+pub unsafe extern "C" fn module_remove(client: u32, key: *const u8) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,

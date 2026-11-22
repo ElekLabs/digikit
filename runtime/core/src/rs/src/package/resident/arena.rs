@@ -26,3 +26,9 @@ pub(crate) unsafe fn stats() -> (u32, u32) {
 pub(crate) fn base() -> u32 {
     (table().arena.base)()
 }
+
+/// The bytes of the arena.
+#[inline(always)]
+pub(crate) fn size() -> u32 {
+    (table().arena.size)()
+}

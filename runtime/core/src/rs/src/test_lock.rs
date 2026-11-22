@@ -17,7 +17,7 @@ impl TestLock {
         // SAFETY: the lock is held, so no other test reads or swaps the installed table.
         let _ = crate::platform::TEST_INFO.set(|h| unsafe { crate::package::cleanup_tests::test_info(h) });
         unsafe {
-            crate::package::resident::install(&crate::resident::TABLE);
+            crate::package::resident::install(&crate::resident::TABLE).expect("the resident table fits the package");
             crate::hooks::install(&crate::package::hooks::HOOKS);
         }
         guard

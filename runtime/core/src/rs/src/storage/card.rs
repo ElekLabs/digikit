@@ -82,7 +82,7 @@ pub fn state() -> u32 {
 }
 
 /// May the runtime write the card at all (ours or blank)?
-pub fn writable() -> bool {
+pub extern "C" fn writable() -> bool {
     let s = state();
     s == CARD_OURS || s == CARD_BLANK || s == CARD_UNKNOWN
 }

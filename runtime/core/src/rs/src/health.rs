@@ -108,7 +108,7 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     o.magic = HEALTH_MAGIC;
     o.version = 5;
     o.flags = 0;
-    o.arena_total = s.arena_hi - s.arena_lo;
+    o.arena_total = s.arena.hi - s.arena.lo;
     o.arena_free = afree;
     o.arena_largest = alargest;
     let area = hooks::dsp_area();
