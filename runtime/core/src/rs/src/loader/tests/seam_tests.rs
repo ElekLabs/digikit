@@ -390,8 +390,9 @@ struct Tag<const T: u32>;
 impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Service<C> for Tag<T> {
     dkrt_abi::accepts_records!();
     dkrt_abi::accepts_teardown!();
-    unsafe fn apply(_: &C, _: &dkrt_abi::service::ApplyCtx) -> i32 {
+    unsafe fn apply(c: &C, _: &dkrt_abi::service::ApplyCtx) -> i32 {
         WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 0));
+        BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(("apply", c.boot_index()));
         OK
     }
     unsafe fn apply_record(_: &C, kind: u32, _body: *const u8, _: &dkrt_abi::service::ApplyCtx) -> i32 {
@@ -405,16 +406,49 @@ impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Service<C> for Tag<T> {
             OK
         }
     }
-    unsafe fn remove(_: &C, owner: u8) {
+    unsafe fn remove(c: &C, owner: u8) {
         WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 1000 + owner as u32));
+        BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(("remove", c.boot_index()));
     }
 }
+/// The selection index a `Tag` row read in each of its `apply` and `remove` calls.
+static BOOT_SEEN: std::sync::Mutex<Vec<(&str, u32)>> = std::sync::Mutex::new(Vec::new());
 static WALKED: std::sync::Mutex<Vec<(u32, u32)>> = std::sync::Mutex::new(Vec::new());
 static ODD: ServiceRow = ServiceRow::of::<Tag<1>, crate::core_api::RealCore>("odd", &[(3, 12), (5, 12), (99, 12)]);
 static EVEN: ServiceRow = ServiceRow::of::<Tag<2>, crate::core_api::RealCore>("even", &[(2, 12), (4, 12)]);
 
 fn walked() -> Vec<(u32, u32)> {
     core::mem::take(&mut *WALKED.lock().unwrap_or_else(|e| e.into_inner()))
+}
+
+#[test]
+fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_during_attach_and_detach() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let _ = crate::handlers::services();
+        let machines = MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1;
+        crate::svc_rows::remove(machines);
+        let mut l = loader_of(Init::Ok, module_file());
+        let mut s = shared(&mut l);
+        let (.., mut host) = s.seams();
+        let (odd, even) = (MAX_MODULES, MAX_MODULES + 1);
+        assert_eq!(crate::svc_rows::add(odd, &ODD, Some(10)), OK);
+        assert_eq!(crate::svc_rows::add(even, &EVEN, Some(20)), OK);
+        let block = registry_block(&[4, 3]);
+        l.reg_block[3] = (block.as_ptr(), block.len() as u32);
+        let idx = || core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX));
+        crate::selection::BOOT_IDX = u32::MAX;
+        BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        host.attach(id(3), &[id(odd), id(even)]).unwrap();
+        assert_eq!(*BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()), [("apply", 3), ("apply", 3)], "apply reads the consumer's record");
+        BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        host.detach(id(3), &[id(odd), id(even)]);
+        assert_eq!(*BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()), [("remove", 3), ("remove", 3)], "remove reads the consumer's record");
+        assert_eq!(idx(), u32::MAX, "the index is as it was");
+        crate::svc_rows::remove(odd);
+        crate::svc_rows::remove(even);
+        crate::svc_rows::add(machines, crate::handlers::exports::machines_row(), None);
+    }
 }
 
 #[test]

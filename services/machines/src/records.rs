@@ -680,6 +680,24 @@ unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
     let (owner, reg, base, inf, args) =
         (ctx.owner, ctx.reg, ctx.base, ctx.inf, crate::build::args());
     let s = rstate();
+    // a machine whose key has no run-time type number (none assigned, or one outside the range) is refused before any row is written, as `ck_rows` does at load: the rows are
+    // indexed by the number
+    let mut refused = OK;
+    each(reg, |kind, b| {
+        if kind == KIND_MACHINE && refused == OK {
+            let t = crate::assign::resolve(core, rd32(b));
+            refused = capacity::machine_type(
+                t,
+                iw(inf, w::M_DYN0),
+                iw(inf, w::M_DYN_N),
+                rd32(b.add(4)),
+                iw(inf, w::M_FIRST),
+            );
+        }
+    });
+    if refused != OK {
+        return refused;
+    }
     // parameters first: their codes are what the machines' knobs name
     let mut codes = [0u32; MAX_PARAM];
     let mut rows = [0usize; MAX_PARAM]; // the file's parameter i sits in row rows[i]

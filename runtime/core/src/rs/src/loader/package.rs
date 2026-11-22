@@ -252,6 +252,11 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// (`init_and_commit` in `package_start`) only keeps the section (`reg_block`). A consumer with no records, or a package that is no module, has nothing to apply. The first
     /// refusal is the answer, after the walk undid what it wrote (`remove` for the consumer on the same rows); the manager does not detach a consumer that was refused.
     pub(crate) unsafe fn package_attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), i32> {
+        // the rows read the selection index (`CoreApi::boot_index`) to find the module whose records they apply
+        self.with_boot_idx(consumer, |l| l.attach_inner(consumer, services))
+    }
+
+    unsafe fn attach_inner(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), i32> {
         let rec = record_of(consumer);
         if rec >= MAX_MODULES {
             return Ok(());
@@ -285,8 +290,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if rec >= MAX_MODULES {
             return;
         }
-        let table = ServiceTable { rows: crate::svc_rows::walk_rows(services), ..crate::handlers::services() };
-        crate::registry::remove_with(table, rec as u8 + 1);
+        self.with_boot_idx(consumer, |_| {
+            let table = ServiceTable { rows: crate::svc_rows::walk_rows(services), ..crate::handlers::services() };
+            crate::registry::remove_with(table, rec as u8 + 1);
+        });
     }
 
     /// What the last failed step of a package left in the loader for a report: the missing module's name, the item that the declarations and the table do not both hold

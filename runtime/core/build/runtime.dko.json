@@ -27822,28 +27822,28 @@
   },
   {
    "addend": 0,
-   "offset": 3068,
+   "offset": 3064,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3102,
+   "offset": 3098,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvMs1_NtCskEQhmZu1bvr_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE7go_liveB7_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3108,
+   "offset": 3104,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt10invariants5check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3114,
+   "offset": 3110,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
@@ -27864,79 +27864,79 @@
   },
   {
    "addend": 0,
-   "offset": 3214,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RINvMs2_NtNtCskEQhmZu1bvr_4dkrt9lifecycle7sessionINtB6_7SessionNtNtBa_8platform12RealPlatformNtNtNtBa_6loader5seams10RealImagesNtB1v_12RealRegistryE5trackuEBa_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3256,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3270,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RNvXsq_NtCs6uNbiqmv1Ak_4core6resultINtB5_6ResultuNtNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager5error14LifecycleErrorEINtNtNtB7_3ops9try_trait12FromResidualIBy_zBL_EE13from_residualCskEQhmZu1bvr_4dkrt",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3302,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RINvMNtNtCskEQhmZu1bvr_4dkrt6loader7installNtB3_9Installer7restoreNtNtB7_8platform12RealPlatformEB7_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3362,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RINvNtNtCskEQhmZu1bvr_4dkrt6loader4role15service_publishNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1o_12RealRegistryEB6_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3432,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RNvMNtNtCskEQhmZu1bvr_4dkrt6loader7exportsNtB2_7Exports8withdraw",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3438,
+   "offset": 3184,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3452,
+   "offset": 3214,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RNvMs0_NtNtCskEQhmZu1bvr_4dkrt6loader7packageINtB7_6LoaderNtNtB9_8platform12RealPlatformNtNtB7_5seams10RealImagesNtB1q_12RealRegistryE14failure_detailB9_",
+   "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3476,
+   "offset": 3240,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": "memcpy",
+   "symbol": ".sec..text._RINvMs2_NtNtCskEQhmZu1bvr_4dkrt9lifecycle7sessionINtB6_7SessionNtNtBa_8platform12RealPlatformNtNtNtBa_6loader5seams10RealImagesNtB1v_12RealRegistryE5trackuEBa_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3612,
+   "offset": 3282,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3626,
+   "offset": 3296,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvXsq_NtCs6uNbiqmv1Ak_4core6resultINtB5_6ResultuNtNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager5error14LifecycleErrorEINtNtNtB7_3ops9try_trait12FromResidualIBy_zBL_EE13from_residualCskEQhmZu1bvr_4dkrt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3328,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..text._RINvMNtNtCskEQhmZu1bvr_4dkrt6loader7installNtB3_9Installer7restoreNtNtB7_8platform12RealPlatformEB7_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3386,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..text._RINvNtNtCskEQhmZu1bvr_4dkrt6loader4role15service_publishNtNtB6_8platform12RealPlatformNtNtB4_5seams10RealImagesNtB1o_12RealRegistryEB6_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3458,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..text._RNvMNtNtCskEQhmZu1bvr_4dkrt6loader7exportsNtB2_7Exports8withdraw",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3468,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3482,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..text._RNvMs0_NtNtCskEQhmZu1bvr_4dkrt6loader7packageINtB7_6LoaderNtNtB9_8platform12RealPlatformNtNtB7_5seams10RealImagesNtB1q_12RealRegistryE14failure_detailB9_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3506,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": "memcpy",
    "type": "cf.32"
   },
   {
@@ -27948,91 +27948,105 @@
   },
   {
    "addend": 0,
-   "offset": 3650,
+   "offset": 3652,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..text._RNvXsq_NtCs6uNbiqmv1Ak_4core6resultINtB5_6ResultuNtNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager5error14LifecycleErrorEINtNtNtB7_3ops9try_trait12FromResidualIBy_zBL_EE13from_residualCskEQhmZu1bvr_4dkrt",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3664,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3676,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3690,
+   "offset": 3714,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvNtNtCskEQhmZu1bvr_4dkrt6loader7records6module",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3710,
+   "offset": 3734,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8svc_rows9walk_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3728,
+   "offset": 3752,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8handlers8services",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3770,
+   "offset": 3798,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3838,
+   "offset": 3878,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvMs6_NtCsaGmOzcP47sg_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3914,
+   "offset": 3958,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3926,
+   "offset": 3974,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 4020,
-   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8registry10apply_with",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 4078,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
+   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8registry10apply_with",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4136,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8registry11remove_with",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4108,
+   "offset": 4166,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8progressNtB2_8Progress12set_attached",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4124,
+   "offset": 4182,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8progressNtB2_8Progress3set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4136,
+   "offset": 4194,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
    "symbol": "_RNvMNtCsjKWswia57Rl_14dkrt_lifecycle4liveNtB2_7LiveSet6insert",
    "type": "cf.32"
@@ -28928,154 +28942,168 @@
   },
   {
    "addend": 0,
-   "offset": 440,
+   "offset": 436,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
+   "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 454,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8svc_rows9walk_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 458,
+   "offset": 472,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8handlers8services",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 504,
+   "offset": 518,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8registry11remove_with",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 546,
+   "offset": 524,
+   "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
+   "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 570,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvNtNtCskEQhmZu1bvr_4dkrt6loader7records6module",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 562,
+   "offset": 586,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 580,
+   "offset": 604,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt5entry9stop_tick",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 620,
+   "offset": 644,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvMNtNtCskEQhmZu1bvr_4dkrt6loader7exportsNtB2_7Exports8withdraw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 630,
+   "offset": 654,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..data._RNvNtCskEQhmZu1bvr_4dkrt9selection8BOOT_IDX",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 642,
+   "offset": 666,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 654,
+   "offset": 678,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 690,
+   "offset": 714,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 704,
+   "offset": 728,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 724,
+   "offset": 748,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": "_RNvMs_NtCsahTgPxXOjTk_8dkrt_fit6ledgerNtB4_14ResourceLedger7release",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 740,
+   "offset": 764,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": "_RNvMs_NtCsahTgPxXOjTk_8dkrt_fit6ledgerNtB4_14ResourceLedger8withdraw",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 786,
+   "offset": 810,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RINvMs0_NtNtCskEQhmZu1bvr_4dkrt6loader7packageINtB8_6LoaderNtNtBa_8platform12RealPlatformNtNtB8_5seams10RealImagesNtB1r_12RealRegistryE13with_boot_idxlNCNvB2_12package_stop0EBa_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 804,
+   "offset": 828,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 818,
+   "offset": 842,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 842,
+   "offset": 866,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RINvMNtNtCskEQhmZu1bvr_4dkrt6loader7installNtB3_9Installer7restoreNtNtB7_8platform12RealPlatformEB7_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 868,
+   "offset": 892,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvMs1_NtCskEQhmZu1bvr_4dkrt6loaderINtB5_6LoaderNtNtB7_8platform12RealPlatformNtNtB5_5seams10RealImagesNtB1g_12RealRegistryE13uninstall_dspB7_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 892,
+   "offset": 916,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": "_RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8progressNtB2_8Progress3set",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 930,
+   "offset": 954,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RNvMs0_NtNtCskEQhmZu1bvr_4dkrt6loader7packageINtB7_6LoaderNtNtB9_8platform12RealPlatformNtNtB7_5seams10RealImagesNtB1q_12RealRegistryE12package_freeB9_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 968,
+   "offset": 992,
    "section": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
    "symbol": ".sec..text._RINvMs0_NtNtCskEQhmZu1bvr_4dkrt6loader7packageINtB8_6LoaderNtNtBa_8platform12RealPlatformNtNtB8_5seams10RealImagesNtB1r_12RealRegistryE13with_boot_idxlNCNvB2_12package_stop0EBa_",
    "type": "cf.32"
@@ -54564,10 +54592,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56e00848d71cfc2d48e06c246e00081c2e000f75862f022f0a260e0683ffffe07c20434eb9000000002f034eb900000000266a1236206b100626022839000000002d44e0304fef000c7e07be82647c7afe23c50000000049eb00022f012f002f0c2f084eb90000000028004fef00104a80675c70012e2ee03023c7000000002f047201c2802f0171862f002f0b41eee6304eb900000000382ee630202ee6324fef00104a446778206ee06c10bc00051146000172011141000221400004202ee06c4cee1cfce0084e5e4e752a026082206b02ca2d48e038226b02ce2d49e03448780001487800802f0c2f2b07bc486b02c22f2b02f22f2b07b84eb900000000206ee0382e2ee034487078002f2b07bc4eb9000000004fef002442406000ff5841ea105c2d48e0384878000171862f002f084eb900000000266a123a286b10064200174007cc174007cd41f9000000002d50e03c20852e2b02fa2d47e0342f0741eee7944eb900000000222b02ca700119404dd8202b07c441eee7a443eb07a420d920d920d920d920d920d920d92091486ee7a4486ee7942f012f00486b030a2f032f0c4eb9000000002d40e030420119414dd84fef002c4a80660002e441eb09622d48e04041eeedc8200e0680fffff3c810bc000242a8000242a8000642011141000a41e80018b1c066e648780600486eedc8486ee7c44eb90000000042aeedc448780604486ee7c42f2ee0404eb9000000004fef00187001b0aee0346600028241eef3c84eb900000000486ef3c82f032f0c41eef8944eb9000000004fef000c4a2ef894672c2e2ef8962d47e0304aaee0306700024c2f2ee0302f032f0c4eb9000000002d40e0304fef000c7801600002304a2ef895670002282f034eb9000000002040202800282d40e05020025180588f7207b28065547e2a4c0708002034081e2d40e034202ef8887230b28065287e144c0708002e3cfffff4c8de8ede802d47e04441eef4c82d4ae04824482d42e04c242ee050606a487900000000487800302f0042a74eb900000000487900000000487800082f004eb9000000004a8a6746202a0010b0aee034646c2d6a0008f8a042011d41f8a4d0822d40f89c1d41f89a486ef89a2f2ee04041eef8ee4eb90000000045ea0014508f4a6ef8ee6600014ab5eee04466b6246ee048242ee04c202ef88c7210b2806530e7882e3cfffff3c8de8ede802d47e04441eef3c82d42e034240a2448605e246ee048242ee04c78d22d44e0306000fece487900000000487800102f0042a74eb9000000004a8a673a202a00042d52f8b842011d41f8bc2d40f8b47e021d47f8b2486ef8b22f2ee04041eef8e84eb900000000508a508f4a6ef8e86634b5eee04466c22442242ee034202ef8907210b2806530e7882e3cfffff448de8ede802d47e04441eef4482d42e034240a244860602442242ee0342e2ef8ea2d47e0306000fe34487900000000487800102f0042a74eb9000000004a8a6700022c202a00042d52f8d072011d41f8d42d40f8cc7e021d47f8ca486ef8ca2f2ee04041eef8e24eb900000000508a508f4a6ef8e2660eb5eee04466c02442242ee03460282442242ee0342e2ef8e42d47e0306000fdc6246ee048242ee04c2e2ef8f02d47e0306000fdb278012e2ee03c23c7000000002f2ee0303f04426771862f002f0b41eee78e4eb900000000382ee78e3d44e0304fef00104a4466000b847001174007cc174607cd41eef8f4200806800000005042907e013147000442a8000641e8000ab08866ec41eef944200e0680fffffa444298b08866fa280e0684ffffe63648780050486ef8f42f0447f9000000004e9348780100486ef944486ee68a4e9342aee68642aee78a487801582f04486ee4984e93282ee636386ee63a4fef002471cc7202b28067000afa2d44e4983d4ce49c42aee4e842aee5ec48780158486ee498486ee34047f9000000004e931e2ee49e1d47e03c1e2ee49f1d47e0401e2ee4a01d47e0442e2ee4a22d47e0342d44e3403d4ce3441e2ee03c1d47e3461e2ee0401d47e3471e2ee0441d47e3482e2ee0342d47e34a42aee39042aee49448780158486ee340486ee1e84e932d44e1e83d4ce1ec182ee03c1d44e1ee1e2ee0401d47e1ef182ee0441d44e1f02e2ee0342d47e1f242aee23842aee33c280e0684ffffe09048780158486ee1e82f044e934fef00244878000271862f002f2ee0384eb9000000002f044eb90000000028014fef00104a81671a226ee06c12bc0004134600016000fa5e2442242ee0346000fe3842a74878000271862f00486a072441eefa444eb900000000102efa444fef001073800c81000000ff6700009e43eefa4441eefa6220d920d920d9309173807402b481670000d01d40fa6243eefa6241eefa7020d920d920d930911d40fa7043eefa7041eefa5420d920d920d9309172021d41fa521d46fa531d40fa5443eefa5241eee60020d920d920d920911d41e6001d46e6011d40e60243eee60041eee5f020d920d920d920911d41e5f01d46e5f11d40e5f243eee5f0206ee06c20d920d920d920916000f98c4878000371862f002f2ee0384eb900000000206a11924fef000c4a2807cc66322d44e0407e022d47e048700fb0836500058e41f22a0041e8108c2d48e0541d50e047674297cb70026000057872036000ff58738671a807cdb08166c443e809622d49e0482e280f622d47e0407040b08764b8487900000000487800402f0742a74eb90000000042a72f2ee0402f2ee04847f9000000004e933840487800012f2ee0402f2ee0484e931d40e0604fef0018320c4a0166104a0066000378102ee0471200600003d6206a10ac206810062d48e0507e07be8365182d44e0642d44e058700941eeff1053804a806730421860f62f034eb9000000002040202800282d40e05820025180722a4c010800206ee0502030081e2d40e064588f60c4202eff10222eff142d40fe3e2d41fe42200e0680fffffa7e220e0681fffffe3e42aefe4642aefe4a42aefe4e43eefe3e204020d920d920d920d92091068000000014b28066da7e1141eefe52200753804a80670a429042a80004508860f02d40e04c206ee06c202ee04072184c010800d0aee0482d40e0682e2ee0482d47e05c2e2ee04c2d47e03c2d47e0342d43e0702d48e02c2d4ae07424442d42e078266ee05c602043eb00182d49e05c4a8b671a2f0b4eb900000000588f4a00670000b2266ee05cb7eee06866da262ee070280a226ee02c2d49e06c246ee074242ee0787030b0aee034655c7210b2aee03c656a2f2ee03c486efe522f2ee0642f2ee0582f2ee034486efa7e71862f00206ee05048684dda4868287a41eeff184eb900000000266eff1a4fef00244a6eff186600038e4a2ee06066000214102ee04772016000023c487900000000487800302f2ee03442a74eb900000000487900000000487800102f2ee03c42a74eb900000000101373807401b481670006de7802b8816700012a282b0006266b00022d4be06c2f2ee05041eeff264eb900000000202eff26588f4a80670006442d40ff1e2d6eff2aff22242ee04c260e0683ffffff1e47f9000000002f022f0341eeff364e93508f4a6eff366700061e5282b8aeff4466e471eeff482640222eff38242eff3c2d41ff502d42ff542d40ff4c260e0683fffffef04878000c486eff4c2f0349f9000000004e942d4bfef0240e0682fffffee24878000c2f032f024e942d4bfee24878000c2f02486efed44e944fef00247430b4aee034675a202ee06c90aee058222efed8242efedc2d41fefc2d42ff00742fb4aee034650000862d44ff042d4bff082d40ff0c202ee03478144c04080041f6080048780014486efefc4868fa7e4eb90000000052aee0344fef000c6000fdfe206ee02c2d48e06c603a7010b0aee03c672a222b0006202b00027e0fbeaee03c653e242ee03ce78a41eefe52d1c220812140000452aee03c6000fdc2206ee02c2d48e06c367cffb260000578487900000000487800302f2ee0344eb900000000487900000000487800102f2ee03c4eb9000000002f2ee0402f2ee04871862f00206a10b02f28100641eeff584eb900000000266eff5a4fef00104a6eff5866000180122ee047700260322f2ee0402f2ee04871862f00206a10b02f28100641eeff5e4eb900000000266eff604fef00104a6eff5e6600010870027201206ee05410bc00018081114000014878000471862f002f2ee0384eb900000000266a123a226b10062d49e03441f900000000285020854fef000c7001b0ab02fa670001062f2b07c82f032f2ee0344eb9000000004eb90000000023cc0000000041f328004fef000c4aab030656c04480114007ee4878000571862f002f2ee0384eb900000000486ee07c4eb90000000028402a01226a123a2d49e0484fef00107007b083640001d242832f033f2ee030426771862f002f2ee04841eeffca4eb900000000202effcc4fef00104a6effca6700035e7e051d47e6201d46e62172061d41e6222d40e624487900000000486ee620206ee06c4eb900000000508f6000f3f0206a10ac2068100671862f0048684dda4868287a4eb9000000004fef000c7004600497cb7001206ee06c10bc00061146000131400002214b00046000f3b2700460e4700460e02f032f2ee03441eeffc44eb900000000302effc42a2effc6508f73c07e02be8167244a4066022a04200251807e07be80650000ec722a4c010800206ee034218508226000feb82f03206ee034486821b64eb90000000023cc000000002f2b100641eeff644eb900000000280e0684ffffffac4878000c486eff6c2f0445f9000000004e92286eff642e2eff682d47e0302e2eff78260e0683ffffffb84878000c486eff7c2f034e924fef00244878000c2f04486eff904e924878000c2f03486effa04e9270244c02080006800000102e2d4cff88242ee0302d42ff8c2d47ff9c48780024486eff88487308004e9278051d44e6101d46e6111d44e6122d45e6144fef0024487900000000486ee610206ee06c4eb900000000508f6000f28c487900000000487800082f004eb900000000e78a204241e84d98226ee048d1e91006242800042d42e04c4a826700fe1426502f034eb9000000002040202800282d40e0542f052f0c4eb9000000002d40e03c2d41e04041eeffd04eb900000000242ee03c2d42e0582e2ee0402d47e05c242effd82d42e0342e2effdc2d47e050486b000c4eb9000000002d40e0604fef00107a10342ee0303d42e068284a244460685282b4aee05c673e701fb0826510721fc2827001e3a8c0aee0344a8066e2206ee0582f302c004eb90000000020402001588f4a8167ca220ab690671052815088b28066f460ba302ee068600270017201c081b380122ee0477401c28280811d40e047daaee0645284b8aee0606722487358004eb9000000002600487358044eb9000000002d40e064508f240a6000ff74244c4a2ee047670c76b778013d44e0306000fd0024065282282ee03c2d44ffe02e2ee0402d47ffe4282ee0342d44ffe82e2ee0502d47ffec2f2ee0542f2ee04c2f0b200271802f00486effe04eb90000000026004fef00144a806700fcb6282ee03c2d44fff02e2ee0402d47fff4282ee0342d44fff82e2ee0502d47fffc75822f02486efff04eb900000000508f74013d42e0306000fc7c487800017d862f062f2ee0384eb900000000487800062f062f2ee0384eb9000000002f06486a121e4eb900000000206ee06c10bcffff4fef00206000f084226ee02c2d49e06c6008206ee02c2d48e06c367cfff970046000fca0282ee79074051d42e3461d46e3477e021d47e3482d44e34a43eee34641eee1ee20d95888588920d920911d42e1ee1d46e1ef1d47e1f02d44e1f243eee1ee206ee06c20d920c4588920d920916000f018206ee02c2d48e06c367cfffb70046000fc3e",
+   "hex": "4e56e00848d71cfc2d48e06c246e00081c2e000f75862f022f0a260e0683ffffe07c20434eb9000000002f034eb900000000266a1236206b100626022839000000002d44e0304fef000c7e07be82647c7afe23c50000000049eb00022f012f002f0c2f084eb90000000028004fef00104a80675c70012e2ee03023c7000000002f047201c2802f0171862f002f0b41eee6304eb900000000382ee630202ee6324fef00104a446778206ee06c10bc00051146000172011141000221400004202ee06c4cee1cfce0084e5e4e752a026082206b02ca2d48e038226b02ce2d49e03448780001487800802f0c2f2b07bc486b02c22f2b02f22f2b07b84eb900000000206ee0382e2ee034487078002f2b07bc4eb9000000004fef002442406000ff5841ea105c2d48e0384878000171862f002f084eb900000000266a123a286b10064200174007cc174007cd41f9000000002d50e03c20852e2b02fa2d47e0342f0741eee7944eb900000000222b02ca700119404dd8202b07c441eee7a443eb07a420d920d920d920d920d920d920d92091486ee7a4486ee7942f012f00486b030a2f032f0c4eb9000000002d40e030420119414dd84fef002c4a80660002e441eb09622d48e04041eeedc8200e0680fffff3c810bc000242a8000242a8000642011141000a41e80018b1c066e648780600486eedc8486ee7c44eb90000000042aeedc448780604486ee7c42f2ee0404eb9000000004fef00187001b0aee0346600028241eef3c84eb900000000486ef3c82f032f0c41eef8944eb9000000004fef000c4a2ef894672c2e2ef8962d47e0304aaee0306700024c2f2ee0302f032f0c4eb9000000002d40e0304fef000c7801600002304a2ef895670002282f034eb9000000002040202800282d40e05020025180588f7207b28065547e2a4c0708002034081e2d40e034202ef8887230b28065287e144c0708002e3cfffff4c8de8ede802d47e04441eef4c82d4ae04824482d42e04c242ee050606a487900000000487800302f0042a74eb900000000487900000000487800082f004eb9000000004a8a6746202a0010b0aee034646c2d6a0008f8a042011d41f8a4d0822d40f89c1d41f89a486ef89a2f2ee04041eef8ee4eb90000000045ea0014508f4a6ef8ee6600014ab5eee04466b6246ee048242ee04c202ef88c7210b2806530e7882e3cfffff3c8de8ede802d47e04441eef3c82d42e034240a2448605e246ee048242ee04c78d22d44e0306000fece487900000000487800102f0042a74eb9000000004a8a673a202a00042d52f8b842011d41f8bc2d40f8b47e021d47f8b2486ef8b22f2ee04041eef8e84eb900000000508a508f4a6ef8e86634b5eee04466c22442242ee034202ef8907210b2806530e7882e3cfffff448de8ede802d47e04441eef4482d42e034240a244860602442242ee0342e2ef8ea2d47e0306000fe34487900000000487800102f0042a74eb9000000004a8a6700022c202a00042d52f8d072011d41f8d42d40f8cc7e021d47f8ca486ef8ca2f2ee04041eef8e24eb900000000508a508f4a6ef8e2660eb5eee04466c02442242ee03460282442242ee0342e2ef8e42d47e0306000fdc6246ee048242ee04c2e2ef8f02d47e0306000fdb278012e2ee03c23c7000000002f2ee0303f04426771862f002f0b41eee78e4eb900000000382ee78e3d44e0304fef00104a4466000bbe7001174007cc174607cd41eef8f4200806800000005042907e013147000442a8000641e8000ab1c066ec41eef944200e0680fffffa444298b08866fa280e0684ffffe63648780050486ef8f42f0447f9000000004e9348780100486ef944486ee68a4e9342aee68642aee78a487801582f04486ee4984e93282ee636386ee63a4fef002471cc7202b28067000b342d44e4983d4ce49c42aee4e842aee5ec48780158486ee498486ee34047f9000000004e931e2ee49e1d47e0341e2ee49f1d47e03c1e2ee4a01d47e0402e2ee4a22d47e0442d44e3403d4ce3441e2ee0341d47e3461e2ee03c1d47e3471e2ee0401d47e3482e2ee0442d47e34a42aee39042aee49448780158486ee340486ee1e84e932d44e1e83d4ce1ec182ee0341d44e1ee1e2ee03c1d47e1ef182ee0401d44e1f02e2ee0442d47e1f242aee23842aee33c280e0684ffffe09048780158486ee1e82f044e934fef00244878000271862f002f2ee0384eb9000000002f044eb90000000028014fef00104a81671a226ee06c12bc0004134600016000fa5e2442242ee0346000fe3842a74878000271862f00486a072441eefa444eb900000000102efa444fef001073800c81000000ff6700009e43eefa4441eefa6220d920d920d9309173807402b481670000d01d40fa6243eefa6241eefa7020d920d920d930911d40fa7043eefa7041eefa5420d920d920d9309172021d41fa521d46fa531d40fa5443eefa5241eee60020d920d920d920911d41e6001d46e6011d40e60243eee60041eee5f020d920d920d920911d41e5f01d46e5f11d40e5f243eee5f0206ee06c20d920d920d920916000f98c4878000371862f002f2ee0384eb900000000206a11924fef000c4a2807cc66322d44e0407e022d47e048700fb083650005a841f22a0041e8108c2d48e0541d50e047674297cb70026000059272036000ff58738671a807cdb08166c443e809622d49e0482e280f622d47e0407040b08764b8487900000000487800402f0742a74eb90000000042a72f2ee0402f2ee04847f9000000004e933840487800012f2ee0402f2ee0484e931d40e0604fef0018320c4a0166104a0066000378102ee0471200600003d6206a10ac206810062d48e0507e07be8365182d44e0642d44e058700941eeff1053804a806730421860f62f034eb9000000002040202800282d40e05820025180722a4c010800206ee0502030081e2d40e064588f60c4202eff10222eff142d40fe3e2d41fe42200e0680fffffa7e220e0681fffffe3e42aefe4642aefe4a42aefe4e43eefe3e204020d920d920d920d92091068000000014b28066da7e1141eefe52200753804a80670a429042a80004508860f02d40e04c206ee06c202ee04072184c010800d0aee0482d40e0682e2ee0482d47e05c2e2ee04c2d47e03c2d47e0342d43e0702d48e02c2d4ae07424442d42e078266ee05c602043eb00182d49e05c4a8b671a2f0b4eb900000000588f4a00670000b2266ee05cb7eee06866da262ee070280a226ee02c2d49e06c246ee074242ee0787030b0aee034655c7210b2aee03c656a2f2ee03c486efe522f2ee0642f2ee0582f2ee034486efa7e71862f00206ee05048684dda4868287a41eeff184eb900000000266eff1a4fef00244a6eff18660003a84a2ee06066000214102ee04772016000023c487900000000487800302f2ee03442a74eb900000000487900000000487800102f2ee03c42a74eb900000000101373807401b481670007187802b8816700012a282b0006266b00022d4be06c2f2ee05041eeff264eb900000000202eff26588f4a806700067e2d40ff1e2d6eff2aff22242ee04c260e0683ffffff1e47f9000000002f022f0341eeff364e93508f4a6eff36670006585282b8aeff4466e471eeff482640222eff38242eff3c2d41ff502d42ff542d40ff4c260e0683fffffef04878000c486eff4c2f0349f9000000004e942d4bfef0240e0682fffffee24878000c2f032f024e942d4bfee24878000c2f02486efed44e944fef00247430b4aee034675a202ee06c90aee058222efed8242efedc2d41fefc2d42ff00742fb4aee034650000862d44ff042d4bff082d40ff0c202ee03478144c04080041f6080048780014486efefc4868fa7e4eb90000000052aee0344fef000c6000fdfe206ee02c2d48e06c603a7010b0aee03c672a222b0006202b00027e0fbeaee03c653e242ee03ce78a41eefe52d1c220812140000452aee03c6000fdc2206ee02c2d48e06c367cffb2600005b2487900000000487800302f2ee0344eb900000000487900000000487800102f2ee03c4eb9000000002f2ee0402f2ee04871862f00206a10b02f28100641eeff584eb900000000266eff5a4fef00104a6eff586600019a122ee047700260322f2ee0402f2ee04871862f00206a10b02f28100641eeff5e4eb900000000266eff604fef00104a6eff5e6600012270027201206ee05410bc00018081114000014878000471862f002f2ee0384eb900000000266a123a286b100641f9000000002d50e03c20854fef000c7001b0ab02fa670001222f2b07c82f032f0c4eb9000000004eb90000000041f90000000020aee03c41f328004fef000c4aab030656c04480114007ee4878000571862f002f2ee0384eb900000000486ee07c4eb90000000026412840226a123a2d49e04c2069100643f9000000002d51e05822854fef00107007b083640001dc42832e2ee05823c7000000002f033f2ee030426771862f002f2ee04c41eeffca4eb900000000202effcc4fef00104a6effca6700037e72051d41e6201d46e62174061d42e6222d40e624487900000000486ee620206ee06c4eb900000000508f6000f3d6206a10ac2068100671862f0048684dda4868287a4eb9000000004fef000c7004600497cb7001206ee06c10bc00061146000131400002214b00046000f398700460e4700460e02f032f0c41eeffc44eb900000000302effc42e2effc62d47e034508f73c07e02be8167264a4066042d44e034200251807e07be80650000e8722a4c0108002e2ee034298708226000fe982f03486c21b64eb900000000282ee03c23c4000000002f2b100641eeff644eb900000000260e0683ffffffac4878000c486eff6c2f0345f9000000004e92286eff642a2eff682e2eff78280e0684ffffffb84878000c486eff7c2f044e924fef00244878000c2f03486eff904e924878000c2f04486effa04e9270244c02080006800000102e2d4cff882d45ff8c2d47ff9c48780024486eff88487308004e9270051d40e6101d46e6111d40e612242ee0342d42e6144fef0024487900000000486ee610206ee06c4eb900000000508f6000f272487900000000487800082f004eb9000000002002e788068000004d98d1c0242800042d42e0504a826700fe0e2d50e0342f034eb9000000002040202800282d40e05c2f0b2f0c4eb9000000002d40e0402d41e04841eeffd04eb900000000242ee0402d42e0602e2ee0482d47e064242effd82d42e03c2e2effdc2d47e054206ee0344868000c4eb9000000002d40e0684fef001026447a107601342ee0303d42e070206ee06c2d48e074284a244460685282b4aee064673e701fb0826510721fc2822003e3a8c0aee03c4a8066e2206ee0602f302c004eb90000000020402001588f4a8167ca220ab890671052815088b28066f460ba302ee070600270017201c081b380122ee0477401c28280811d40e047daaee06c528bb7eee068672a226ee034487158004eb9000000002800206ee034487058044eb9000000002d40e06c508f240a6000ff6c226ee0742d49e06c244c4a2ee047670c76b778013d44e0306000fcd824065282282ee0402d44ffe02e2ee0482d47ffe4282ee03c2d44ffe82e2ee0542d47ffec2f2ee05c2f2ee0502f2ee034200271802f00486effe04eb90000000026004fef00144a806700fc8c282ee0402d44fff02e2ee0482d47fff4282ee03c2d44fff82e2ee0542d47fffc75822f02486efff04eb900000000508f74013d42e0306000fc52487800017d862f062f2ee0384eb900000000487800062f062f2ee0384eb9000000002f06486a121e4eb900000000206ee06c10bcffff4fef00206000f04a226ee02c2d49e06c6008206ee02c2d48e06c367cfff970046000fc80282ee79074051d42e3461d46e3477e021d47e3482d44e34a43eee34641eee1ee20d95888588920d920911d42e1ee1d46e1ef1d47e1f02d44e1f243eee1ee206ee06c20d920c4588920d920916000efde206ee02c2d48e06c367cfffb70046000fc1e",
    "kind": "text",
    "name": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager8bring_upINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1k_8platform12RealPlatformNtNtNtB1k_6loader5seams10RealImagesNtB2F_12RealRegistryEINtNtB1i_6placer8RtPlacerB28_B2D_B3c_EINtNtB1i_6linker8RtLinkerB28_B2D_B3c_EINtNtNtB6_7install10installers10InstallersINtNtB1i_7install10RtColdFireB28_B2D_B3c_EINtB5u_7RtSharcB28_B2D_B3c_EEINtNtB1i_4host6RtHostB28_B2D_B3c_EE5enterB1k_",
-   "size": 4282
+   "size": 4340
   },
   {
    "align": 2,
@@ -54620,10 +54648,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffa448d70c1c2448266e0008142e000f260b06830000105c71822f002f034eb9000000001d40ffbf508f71800c80000000ff6700013a71822f002f034eb900000000508f4a006600013c42a771822f002f034eb90000000079aeffbf2d44ffba4fef000c7004b0846c0002267206b2846c00019079822f0441eb07242d48ffc42f084eb9000000002f04487800012f2effc44eb9000000004fef001479822d44ffc0700fb0846500030641f34a0041e8108c2d48ffc4102800010800000066000274206effc4102800010800000166000284206effc44210420011400001206b123a2d48ffc4202810061d42ffff486effff73822f012f004eb9000000004fef000c7382206effc4d1c14a8056c04480114007ce206b12322d48ffc42028100679822d44ffc02044d1eeffc44a2807ce670002667001206effc4d1eeffc0114007de75822f02486b121e4eb9000000002f022f034eb90000000014bcffff4fef0010200a4cee0c1cffa44e5e4e7575822f02486b121e4eb90000000014bcffff508f60de79822d44ffc02f042f0b41eeffca4eb900000000486effca4eb9000000004fef000c7807b8aeffc06500fe9c2f012f004eb9000000002d40ffc02d41ffc441eeffee4eb900000000282effc02d44ffde282effc42d44ffe22d6efff6ffe62d6efffaffea2002528071802f00486effde4eb9000000004fef00106000fe4a79822d44ffba7007b0846400fe66206b123a206810062d48ffc02f044eb900000000588f20404a906700fe4841f9000000002d50ffc420bcfffffffe2f044eb90000000020045180588f7207b280652c782a4c040800206effc042b008222f2effba486821b64eb900000000282effc423c400000000508f6000fdf8487900000000487800082f004eb9000000007001b0aeffba6d2a206b12322d48ffc4202810067382780fb8816400fe744879000000004878001075822f024eb90000000079822f0441eb07242d48ffc02f084eb9000000002f04487800012f2effc04eb9000000004fef00147003b0aeffba6d00fdaa206b123a2d48ffc4202810061d42ffff486effff79822f042f004eb9000000004fef000c720fb2846400fde44879000000004878001075822f024eb900000000206b10ac206810062f0448684dda4868287a4eb9000000004fef000c6000fd702f2effc0206b10b02f2810064eb900000000508f4a006600fd664878000771822f002f034eb90000000014bc000a1542000170043540000242aa00044fef000c6000fdcc73822f012f004eb9000000007201b380508f6000fd8a206b123a202810061d42ffff486effff73822f012f004eb9000000004fef000c6000ff50",
+   "hex": "4e56ffa448d70c1c2448266e0008142e000f260b06830000105c71822f002f034eb9000000001d40ffbb508f71800c80000000ff6700013a71822f002f034eb900000000508f4a006600013c42a771822f002f034eb90000000079aeffbb2d44ffc44fef000c7004b0846c00023e7206b2846c0001a879822f0441eb07242d48ffc02f084eb9000000002f04487800012f2effc04eb9000000004fef001479822d44ffbc700fb0846500031e41f34a0041e8108c2d48ffc010280001080000006600028c206effc010280001080000016600029c206effc04210420011400001206b123a2d48ffc0202810061d42ffff486effff73822f012f004eb9000000004fef000c7382206effc0d1c14a8056c04480114007ce206b12322d48ffc02028100679822d44ffbc2044d1eeffc04a2807ce6700027e7001206effc0d1eeffbc114007de75822f02486b121e4eb9000000002f022f034eb90000000014bcffff4fef0010200a4cee0c1cffa44e5e4e7575822f02486b121e4eb90000000014bcffff508f60de79822d44ffbc2f042f0b41eeffca4eb900000000486effca4eb9000000004fef000c7807b8aeffbc6500fe9c41f9000000002d50ffc020aeffbc2f012f004eb9000000002d40ffbc2d41ffc441eeffee4eb900000000282effbc2d44ffde282effc42d44ffe22d6efff6ffe62d6efffaffea2002528071802f00486effde4eb90000000041f90000000020aeffc04fef00106000fe3279822d44ffc47007b0846400fe4e206b123a206810062d48ffbc2f044eb900000000588f20404a906700fe3041f9000000002d50ffc020bcfffffffe2f044eb90000000020045180588f7207b280652c782a4c040800206effbc42b008222f2effc4486821b64eb900000000282effc023c400000000508f6000fde0487900000000487800082f004eb9000000007001b0aeffc46d2a206b12322d48ffc0202810067382780fb8816400fe5c4879000000004878001075822f024eb90000000079822f0441eb07242d48ffbc2f084eb9000000002f04487800012f2effbc4eb9000000004fef00147003b0aeffc46d00fd92206b123a2d48ffc0202810061d42ffff486effff79822f042f004eb9000000004fef000c720fb2846400fdcc4879000000004878001075822f024eb900000000206b10ac206810062f0448684dda4868287a4eb9000000004fef000c6000fd582f2effbc206b10b02f2810064eb900000000508f4a006600fd4e4878000771822f002f034eb90000000014bc000a1542000170043540000242aa00044fef000c6000fdb473822f012f004eb9000000007201b380508f6000fd72206b123a202810061d42ffff486effff73822f012f004eb9000000004fef000c6000ff50",
    "kind": "text",
    "name": ".text._RNvMNtNtCsjKWswia57Rl_14dkrt_lifecycle7manager9take_downINtB4_14PackageManagerINtNtNtCskEQhmZu1bvr_4dkrt9lifecycle8manifest10RtManifestNtNtB1l_8platform12RealPlatformNtNtNtB1l_6loader5seams10RealImagesNtB2G_12RealRegistryEINtNtB1j_6placer8RtPlacerB29_B2E_B3d_EINtNtB1j_6linker8RtLinkerB29_B2E_B3d_EINtNtNtB6_7install10installers10InstallersINtNtB1j_7install10RtColdFireB29_B2E_B3d_EINtB5v_7RtSharcB29_B2E_B3d_EEINtNtB1j_4host6RtHostB29_B2E_B3d_EE17take_down_packageB1l_",
-   "size": 980
+   "size": 1004
   },
   {
    "align": 2,
@@ -59932,7 +59960,7 @@
    "size": 24
   }
  ],
- "source_sha256": "5444fb46df5b203dabdce0c72ff94e67808b611df90ffe2bdd9d03a5011801b4",
+ "source_sha256": "64e1933e6b633be5ce8c768f911987cf0a2feab88b25585bf4b83336e00f9d9c",
  "symbols": [
   {
    "global": false,
@@ -69003,8 +69031,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_CTXS DKRT_DSP DKRT_DSP_STOPPED DKRT_HEALTH DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_POLLS DKRT_POLL_OWNER DKRT_PROVIDERS DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_TABLE_BAD DKRT_TICKS DKRT_UI_START DKRT_UNLOAD_OBSERVERS DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_dsp_stats_ctl dk_dsp_stats_read dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_ctx_owner dkrt_diag dkrt_dsp_stats_feed dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_phase dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_service_query dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick dkrt_unload_observer_add dkrt_unload_observer_remove",
-  "instructions_redecoded": "76713",
-  "isa_check": "8139adb23f35a6b11b57cb205dc3bc9663515c787bbfbcc684f40bfa91e8bdd7",
+  "instructions_redecoded": "76732",
+  "isa_check": "523b27a02f5c95213adf682df0899156ecd4f6fbd7a2a287cfeac640e31734b6",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
