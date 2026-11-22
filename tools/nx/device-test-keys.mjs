@@ -110,6 +110,9 @@ const SHARED_BUILT = [
   'dist/bytes/core-objects.sha256',
   'dist/modules/*/*.dkm',
   'dist/modules/*/*.dks',
+  // the sidecars of a pack (`<leaf>.services.json`, `<leaf>.addrmap.json`): tests read them besides the pack
+  'dist/modules/*/*.services.json',
+  'dist/modules/*/*.addrmap.json',
   'dist/ports/*.dkport',
   'dist/ports-test/*.dkport',
   'dist/plusdrive/plusdrive',
@@ -178,10 +181,12 @@ export const forDevice = (inputs, device) =>
 export const COMPILE_INPUTS = [...SHARED_SDK_INPUTS, '{workspaceRoot}/tools/patchkit/toolchain/**/*'];
 // The pack outputs of module ids (`.dks` for a service leaf, else `.dkm`; `services`: the set of `serviceLeaves`).
 export const packOutputs = (ids, services) =>
-  [...new Set(ids.map((id) => id.split('/').at(-1)))].map((leaf) => ({
-    dependentTasksOutputFiles: `dist/modules/*/${leaf}.${services?.has(leaf) ? 'dks' : 'dkm'}`,
-    transitive: true,
-  }));
+  [...new Set(ids.map((id) => id.split('/').at(-1)))].flatMap((leaf) =>
+    [services?.has(leaf) ? 'dks' : 'dkm', 'services.json', 'addrmap.json'].map((ext) => ({
+      dependentTasksOutputFiles: `dist/modules/*/${leaf}.${ext}`,
+      transitive: true,
+    })),
+  );
 // Directories of a module project that its objects are built from (see the pack and image outputs).
 export const builtSourceExclusions = (root, base = '.') =>
   ['src', 'include', 'fit', 'sdk']
@@ -299,6 +304,10 @@ export const deviceInputs = (
     ...(opts.narrow
       ? [
           ...DEVICE_COMMON,
+          // device and port data (and, for a patchkit-live test, the core manifests patchkit reads)
+          ...sharedReads(imports, patchkitLive),
+          // a half reads the files of its own device; a test that loads the whole registry (node.ts) reads them all
+          ...(imports?.includes(NODE_REGISTRY) ? [] : [OTHER_DEVICE_FILES]),
           ...TEST_READS,
           // the packs the test loads, not every pack output
           // (the own module, the records' modules and their alias packs)
