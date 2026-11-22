@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join, matchesGlob } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
 import { OTHER_DEVICE_FILES, deviceInputs, forDevice, subjectInputs, withoutDriver } from '../device-test-keys.mjs';
+import { cellShorts, filesOf } from '../device-files.mjs';
 import { conformanceTarget } from '../device-tests.mjs';
+import { testSourceGlobs } from '../test-source.mjs';
 
 const imports = [
   '{workspaceRoot}/packages/dk-session/src/dkupload-core.ts',
@@ -256,4 +258,66 @@ it('every key kind holds the own test file of its project', () => {
     expect(holds(keyOf(opts), test)).toBe(true);
   const conformance = conformanceTarget('.', 'modules/a', { id: 'a' }, 'm.toml', () => imports, false).inputs;
   expect(holds(conformance as unknown[], test)).toBe(true);
+});
+
+const nestedKey = () =>
+  deviceInputs(
+    'runtime/core/tests/capacity',
+    ['commit.device.test.ts'],
+    [],
+    undefined,
+    () => ['{workspaceRoot}/runtime/core/tests/capacity/commit.device.test.ts'],
+    () => [],
+    false,
+    {
+      narrow: true,
+      siblingTests: ['capacity.device.test.ts'],
+      subjects: ['core/runtime'],
+      subjectRoots: { 'core/runtime': { root: 'runtime/core', devices: [], pack: true } },
+      base: temp,
+    },
+  ).inputs;
+
+it('the half of a device in a nested test project leaves the files of every other device out; every half holds the own file', () => {
+  const own = 'runtime/core/tests/capacity/commit.device.test.ts';
+  const shorts = cellShorts();
+  expect(shorts.length).toBeGreaterThan(1);
+  for (const short of shorts) {
+    const half = forDevice(nestedKey(), short);
+    expect(holds(half, own)).toBe(true);
+    expect(holds(half, 'runtime/core/tests/capacity/capacity.device.test.ts')).toBe(false);
+    // the half holds the device file of its device and excludes the device file and ports of each other device
+    expect(holds(half, filesOf(short)[0])).toBe(true);
+    for (const other of shorts.filter((o) => o !== short))
+      for (const f of filesOf(other)) expect(holds(half, f)).toBe(false);
+  }
+});
+
+it('the conformance key of a nested test project holds none of its test files and none of the subject tests', () => {
+  const root = 'runtime/core/tests/capacity';
+  for (const full of [false, true]) {
+    const inputs = conformanceTarget('.', root, { id: 'x' }, 'm.toml', () => [], full).inputs as unknown[];
+    for (const f of ['capacity.device.test.ts', 'commit.device.test.ts', 'capacity-helpers.ts'])
+      expect(holds(inputs, `${root}/${f}`)).toBe(false);
+    expect(holds(inputs, 'runtime/core/tests/reload.device.test.ts')).toBe(false);
+  }
+});
+
+it('a file added under a tests directory of the subject is no input of a nested project but the listed entries are (snapshot)', () => {
+  const flat = [
+    ...nestedKey().filter((i) => typeof i === 'string'),
+    ...forDevice(nestedKey(), null).filter((i) => typeof i === 'string'),
+  ];
+  expect(holds(flat, 'runtime/core/tests/other.device.test.ts')).toBe(false);
+  // a name below the own root is allowed (positive glob), a tests path of src stays out
+  expect(holds(flat, 'runtime/core/tests/capacity/new-helper.ts')).toBe(true);
+  expect(holds(flat, 'runtime/core/src/y/tests/z.ts')).toBe(false);
+});
+
+it('the rule globs are filtered by path segment: a subject root that has a tests segment keeps the other test globs', () => {
+  const root = 'runtime/tests/core';
+  const inputs = subjectInputs(root, temp, `${root}/tests/capacity`);
+  const rule = testSourceGlobs(`{workspaceRoot}/${root}`).filter((g) => !g.endsWith('/**/tests/**/*'));
+  expect(rule.length).toBeGreaterThan(0);
+  for (const g of rule) expect(inputs).toContain(g);
 });

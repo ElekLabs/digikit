@@ -210,6 +210,10 @@ export const subjectInputs = (root, base = '.', keep = null) => {
   // Exclusions are global in Nx: a negated `tests` glob would also drop the files of a test project that sits inside the
   // subject (`runtime/core/tests/capacity` in `runtime/core`), its own test files and setup. For such a project the
   // test directories are excluded entry by entry, leaving the path to `keep` (its root, relative to the subject) out.
+  // Nx cannot re-include a path below a negated glob (checked with `show target inputs --check`: the exclusion wins), so the
+  // listing is a snapshot taken when the graph is built. A plain file or directory added under a test directory of the subject
+  // stays an input of the nested project's key (over-selection, never a missed test) until the graph rebuilds, which any
+  // project.json or module.toml change does, and a new test file is registered in one.
   const inside = keep?.startsWith(`${root}/`) ? keep.slice(root.length + 1) : null;
   const around = (dir) => {
     const here = join(base, root, dir);
@@ -238,9 +242,12 @@ export const subjectInputs = (root, base = '.', keep = null) => {
     // a pack stages its crate from the patchkit sources; no test reads the manifests
     `!{workspaceRoot}/${root}/Cargo.{toml,lock}`,
     ...(inside
-      ? [...new Set(carved)]
-          .sort()
-          .concat(testSourceGlobs(`{workspaceRoot}/${root}`).filter((g) => !g.includes('/tests/')))
+      ? [...new Set(carved)].sort().concat(
+          // the rule's globs without the one of the `tests` directory: a path segment of the pattern, not a text match
+          testSourceGlobs(`{workspaceRoot}/${root}`).filter(
+            (g) => !g.slice(`!{workspaceRoot}/${root}/`.length).split('/').includes('tests'),
+          ),
+        )
       : testSourceGlobs(`{workspaceRoot}/${root}`)),
   ];
 };
