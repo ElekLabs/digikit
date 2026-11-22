@@ -192,7 +192,7 @@ mod tests {
 
     /// The tests own their provider; the store and the answer are shared statics, so they take the runtime's test lock.
     fn fresh() -> (std::sync::MutexGuard<'static, ()>, Provider) {
-        let g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         STORE.lock().unwrap().clear();
         *PUT_ANSWER.lock().unwrap() = None;
         *REMOVE_ANSWER.lock().unwrap() = None;

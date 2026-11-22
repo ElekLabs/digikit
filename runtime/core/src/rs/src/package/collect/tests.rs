@@ -29,7 +29,7 @@ fn a_dsp_section_must_match_the_keys_table() {
 #[test]
 fn a_generic_record_of_an_unknown_or_a_typed_kind_is_refused_and_the_error_is_kept() {
     // `add_record` reads the service table, a static that the tests of the service rows replace under this lock
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let body = [0u8; 0x100];
     // no service owns kind 999
     let mut a = Collect::new();
@@ -79,7 +79,7 @@ fn what_init_declared_must_be_what_the_header_table_carries() {
     let n = write_table(&t, &mut b).unwrap();
     let keys = KeysCopy::from_bytes(&b[..n]).unwrap();
     let base = 0x1000;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     // nothing declared: the table's entries are missing
     assert!(!decl_matches(&Collect::new(), &keys, base));
     // the same items, with the addresses of the loaded image
@@ -129,7 +129,7 @@ fn what_init_declared_must_be_what_the_header_table_carries() {
 
 #[test]
 fn a_service_file_declares_one_row_in_init_and_only_there() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // outside init
         end();
@@ -163,7 +163,7 @@ fn the_generic_records_are_appended_to_the_block_the_services_write_in_the_order
     use dkrt_abi::service::RecordSink;
     use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
     // the record length comes from the lfo service, a loaded file: its row must be in the table, and no other test may change the table meanwhile
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let _l = crate::package::handlers::lfo_tests::Loaded::new();
     let mut c = Collect::new();
     let mut shape = std::vec![0u8; LEN_LFO_SHAPE as usize - 8];

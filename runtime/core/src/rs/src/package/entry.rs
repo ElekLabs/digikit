@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn a_context_is_one_live_entry_of_the_table() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let rec = MAX_MODULES - 1;
             // the table of contexts at a device address
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn a_bound_context_gives_the_device_and_the_runtime_version_and_an_unbound_one_gives_zero() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let rec = MAX_MODULES - 1;
             unbind(rec);

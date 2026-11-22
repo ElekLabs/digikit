@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn a_command_of_a_module_that_is_being_reloaded_answers_busy_and_counts_nothing() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             // the runtime is initialised (the hook's `init_once` would set up the arena)
             crate::platform::st().magic = crate::state::STATE_MAGIC;
@@ -311,7 +311,7 @@ mod tests {
     /// modules, and a start past the last record gives none.
     #[test]
     fn modules_pages_by_start_index_and_the_total_stays_the_loaded_count() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             crate::platform::st().magic = crate::state::STATE_MAGIC;
             let used: Vec<u32> = (0..dkrt_abi::MAX_MODULES).map(|i| crate::platform::st().modules[i].used).collect();
@@ -343,7 +343,7 @@ mod tests {
     /// handler); a handler's own status reaches the host; a command nobody registered is E_PROTO.
     #[test]
     fn a_range_that_is_empty_unreserved_or_taken_is_refused_and_the_handlers_status_is_the_reply() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             crate::platform::st().magic = crate::state::STATE_MAGIC;
             let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);

@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn only_the_owner_of_the_span_channel_writes_the_control_words() {
-        let _g = LOCK.lock().unwrap();
+        let _g = LOCK.lock_with_package().unwrap();
         unsafe {
             reset();
             assert_eq!(dk_dsp_stats_ctl(1, 3), E_CONTEXT, "no module code running");
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn the_mirror_reaches_the_reader_as_whole_sweeps() {
-        let _g = LOCK.lock().unwrap();
+        let _g = LOCK.lock_with_package().unwrap();
         unsafe {
             reset();
             let mut out = [0u32; WINDOW_WORDS];
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn a_new_clear_generation_drops_the_published_sweep_and_the_counts() {
-        let _g = LOCK.lock().unwrap();
+        let _g = LOCK.lock_with_package().unwrap();
         unsafe {
             reset();
             in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn the_feed_is_hooked_only_while_the_counters_run_and_a_page_of_another_generation_is_ignored() {
-        let _g = LOCK.lock().unwrap();
+        let _g = LOCK.lock_with_package().unwrap();
         unsafe {
             reset();
             in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn the_dsp_counters_stop_when_the_owner_of_the_span_channel_is_released() {
-        let _g = LOCK.lock().unwrap();
+        let _g = LOCK.lock_with_package().unwrap();
         unsafe {
             reset();
             in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn a_complete_sweep_logs_one_dsp_sweep_event_with_its_number_generation_and_blocks() {
-        let _g = LOCK.lock().unwrap();
+        let _g = LOCK.lock_with_package().unwrap();
         unsafe {
             reset();
             in_module(1, || dlog::dk_span_sink_set(emit as usize as *mut u8, 1usize as *mut u8));

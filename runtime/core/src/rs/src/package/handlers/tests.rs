@@ -163,7 +163,7 @@ fn rec(svc: u8, i: u8) -> (u32, Vec<u8>) {
 
 #[test]
 fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_reverse() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         // mixed kinds: service 1, 2, 1
@@ -199,7 +199,7 @@ fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_revers
 
 #[test]
 fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the_file() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         // an effect-step fault precedes nothing: the native step runs first, as in the old body, wherever the records sit in the file
@@ -224,7 +224,7 @@ fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the
 
 #[test]
 fn the_walker_refuses_a_kind_no_service_declared_and_a_wrong_length() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         // kind 99 is no one's
@@ -252,7 +252,7 @@ fn capacity_sums_the_declared_counts() {
 
 #[test]
 fn attribution_asks_the_services_in_order_until_one_answers() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         assert_eq!(TWO.attribute(2, 7), Some(207));
@@ -266,7 +266,7 @@ fn attribution_asks_the_services_in_order_until_one_answers() {
 
 #[test]
 fn the_diagnostics_block_reaches_every_service_in_list_order() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         let mut words = [0u32; dkrt_sdk::fault::DIAG_WORDS];
@@ -279,7 +279,7 @@ fn the_diagnostics_block_reaches_every_service_in_list_order() {
 #[test]
 fn the_table_check_stops_at_the_first_service_that_reports_and_gives_its_numbers() {
     use dkrt_abi::service::TableFault;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         let mut out = TableFault::default();
@@ -296,7 +296,7 @@ fn the_table_check_stops_at_the_first_service_that_reports_and_gives_its_numbers
 
 #[test]
 fn a_tick_phase_reaches_every_service_in_list_order() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
         TWO.tick(tick_phase::EARLY);
@@ -482,7 +482,7 @@ mod table {
 #[test]
 fn the_runtime_only_exports_answer_from_the_service_file_and_say_nothing_without_one() {
     use super::exports::*;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     extern "C" fn fx(index: u32, out: *mut u8) -> i32 {
         if index < 2 {
             unsafe { (*(out as *mut DkrtFx)).row = 7 + 2 * index };

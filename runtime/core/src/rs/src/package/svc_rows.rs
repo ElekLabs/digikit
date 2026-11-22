@@ -357,7 +357,7 @@ mod tests {
         static NONE: ServiceRow = ServiceRow::of::<Nothing, RealCore>("none", &[]);
         let rows: &'static [*const ServiceRow] = std::boxed::Box::leak(std::vec![&A as *const _, &NONE as *const _, &B as *const _, &D as *const _].into_boxed_slice());
         let table = ServiceTable::new(rows, &CORE);
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
         let keys = KeysCopy::empty();
         let mut sink = RecordSink::measure();

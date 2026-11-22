@@ -12,7 +12,7 @@ fn the_role_word_picks_the_steps() {
 
 #[test]
 fn no_load_starts_once_the_tables_were_marked_bad() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _reset = TableBadGuard;
         let mut l = loader(Init::Ok);
@@ -25,7 +25,7 @@ fn no_load_starts_once_the_tables_were_marked_bad() {
 
 #[test]
 fn an_import_name_without_a_nul_is_refused_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let name = vec![b'x'; dkneeds::CF_IMPORT_LEN as usize];
         let mut l = loader_of(Init::Ok, module_file_with(&[], &[&name]));
@@ -37,7 +37,7 @@ fn an_import_name_without_a_nul_is_refused_before_anything_is_allocated() {
 
 #[test]
 fn a_bad_relocation_a_register_section_outside_the_file_and_a_bad_keys_table_are_refused_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // a relocation past the last word of the image, and one of an unknown kind
         for relocs in [[(30u32, 0u32)], [(8, 2 << 24)]] {
@@ -67,7 +67,7 @@ fn a_bad_relocation_a_register_section_outside_the_file_and_a_bad_keys_table_are
 
 #[test]
 fn a_provider_record_in_use_and_a_second_module_of_the_same_name_are_refused_as_loaded() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::DeclaresRow, row_service_file());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);

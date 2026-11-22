@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn a_module_loads_and_unloads_and_gives_back_every_block() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::Ok);
         assert_eq!(l.load(PATH.as_ptr()), OK);
@@ -30,7 +30,7 @@ fn a_module_loads_and_unloads_and_gives_back_every_block() {
 
 #[test]
 fn a_failed_init_undoes_the_load() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::Fails(E_INIT));
         assert_eq!(l.load(PATH.as_ptr()), E_INIT);
@@ -44,7 +44,7 @@ fn a_failed_init_undoes_the_load() {
 
 #[test]
 fn a_failed_commit_undoes_the_load() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::Ok);
         l.r.add_result = E_NO_REGISTRY;
@@ -63,7 +63,7 @@ fn a_failed_commit_undoes_the_load() {
 
 #[test]
 fn a_need_of_init_is_returned_as_the_missing_service() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::NeedsUsbBulk);
         assert_eq!(l.load(PATH.as_ptr()), E_IMPORT);
@@ -75,7 +75,7 @@ fn a_need_of_init_is_returned_as_the_missing_service() {
 
 #[test]
 fn an_arena_that_is_full_gives_no_memory_error_and_keeps_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the module block
         let mut l = loader(Init::Ok);
@@ -96,7 +96,7 @@ fn an_arena_that_is_full_gives_no_memory_error_and_keeps_nothing() {
 
 #[test]
 fn a_load_outside_the_boot_or_of_a_missing_file_touches_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::Ok);
         l.phase = Phase::Closed;
@@ -111,7 +111,7 @@ fn a_load_outside_the_boot_or_of_a_missing_file_touches_nothing() {
 
 #[test]
 fn a_damaged_file_is_refused_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::Ok);
         let f = l.m.files.get_mut(&PATH[..PATH.len() - 1].to_vec()).unwrap();
@@ -124,7 +124,7 @@ fn a_damaged_file_is_refused_before_anything_is_allocated() {
 
 #[test]
 fn a_module_file_with_provides_or_hooks_is_refused_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         for hooks_only in [false, true] {
             let mut table = svc_table();
@@ -144,7 +144,7 @@ fn a_module_file_with_provides_or_hooks_is_refused_before_anything_is_allocated(
 
 #[test]
 fn relocations_name_the_block_or_an_import_of_the_runtime() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // word at 8 holds 0x20 (relative to the block), word at 12 holds 4 (plus the import)
         let mut file = module_file_with(&[(8, 0), (12, 1 << 24)], &[b"dk_alloc"]);
@@ -162,7 +162,7 @@ fn relocations_name_the_block_or_an_import_of_the_runtime() {
 
 #[test]
 fn an_import_of_a_module_that_is_not_there_names_it_and_allocates_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::Ok, module_file_with(&[], &[b"dk_usb_bulk_open"]));
         assert_eq!(l.load(PATH.as_ptr()), E_IMPORT);
@@ -177,7 +177,7 @@ fn an_import_of_a_module_that_is_not_there_names_it_and_allocates_nothing() {
 
 #[test]
 fn a_provider_loads_into_its_own_record_publishes_its_exports_and_installs_its_hooks_last() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK);
@@ -209,7 +209,7 @@ fn a_provider_loads_into_its_own_record_publishes_its_exports_and_installs_its_h
 #[test]
 fn a_slot_fill_of_an_info_data_entry_is_refused_and_writes_nothing() {
     use dkneeds::keys::{name_hash, Slot, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     static SLOTS: std::sync::OnceLock<[Slot; 1]> = std::sync::OnceLock::new();
     unsafe {
         let slots = SLOTS.get_or_init(|| [Slot { id: name_hash("the.entry"), flags: 0, entry: 4 }]);
@@ -237,7 +237,7 @@ fn a_slot_fill_of_an_info_data_entry_is_refused_and_writes_nothing() {
 
 #[test]
 fn a_service_import_is_linked_for_a_service_file_only() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the word at 12 holds 4, plus the import
         let base = || {
@@ -263,7 +263,7 @@ fn a_service_import_is_linked_for_a_service_file_only() {
 
 #[test]
 fn the_row_a_service_file_declares_is_added_at_the_commit() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let rec = MAX_MODULES;
         let mut l = loader_of(Init::DeclaresRow, row_service_file());
@@ -279,7 +279,7 @@ fn the_row_a_service_file_declares_is_added_at_the_commit() {
 
 #[test]
 fn a_row_the_registry_refuses_undoes_the_load() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let rec = MAX_MODULES;
         let mut l = loader_of(Init::DeclaresRow, row_service_file());
@@ -292,7 +292,7 @@ fn a_row_the_registry_refuses_undoes_the_load() {
 
 #[test]
 fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut r = RealRegistry;
         // the host tests of the runtime run with the machines row loaded (`svc_rows::test_machines`): the loaded rows start at one
@@ -316,7 +316,7 @@ fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
 
 #[test]
 fn a_hook_site_that_is_not_stock_refuses_the_provider_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.p.put_code(SITE + 3, &[0x99]);
@@ -333,7 +333,7 @@ fn a_hook_site_that_is_not_stock_refuses_the_provider_before_anything_is_allocat
 #[test]
 fn a_bound_service_file_is_refused_before_anything_is_allocated() {
     use dkneeds::keys::{Bind, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let stock = STOCK;
         let bind = [Bind { site: dkneeds::keys::name_hash("hook.a"), addr: SITE, tramp: 16, stock: &stock }];
@@ -351,7 +351,7 @@ fn a_bound_service_file_is_refused_before_anything_is_allocated() {
 /// absent on this firmware is skipped: the service loads and the site stays stock. A site the runtime cannot use is `E_RANGE`.
 #[test]
 fn a_hook_the_port_file_does_not_list_is_refused_and_one_it_lists_as_absent_is_skipped() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let hook = |flags: u8, len: u16| (("hook.a", SITE, len, dkneeds::keys::SITE_RAW, check8(&STOCK)), flags);
         // not listed (the port lists another hook)
@@ -386,7 +386,7 @@ fn a_hook_the_port_file_does_not_list_is_refused_and_one_it_lists_as_absent_is_s
 #[test]
 fn a_service_file_gets_the_listing_client_in_init_runs_its_tick_and_loses_both_with_its_record() {
     use std::sync::atomic::Ordering::SeqCst;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let rec = MAX_MODULES + 1;
         PROBE_FILES.store(true, SeqCst);
@@ -416,7 +416,7 @@ fn a_service_file_gets_the_listing_client_in_init_runs_its_tick_and_loses_both_w
 
 #[test]
 fn a_provider_whose_init_fails_leaves_no_export_no_site_and_no_block() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), Init::Fails(E_INIT));
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_INIT);
@@ -430,7 +430,7 @@ fn a_provider_whose_init_fails_leaves_no_export_no_site_and_no_block() {
 
 #[test]
 fn a_declaration_that_differs_from_the_table_refuses_the_provider_and_the_site_stays_stock() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // init declares nothing: the HOOKS and EXPORTS of the table are not repeated
         let mut l = provider_loader(service_file(&svc_table(), 0), Init::Ok);
@@ -443,7 +443,7 @@ fn a_declaration_that_differs_from_the_table_refuses_the_provider_and_the_site_s
 
 #[test]
 fn a_provider_in_safe_mode_installs_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.installer.set_armed(false);
@@ -455,7 +455,7 @@ fn a_provider_in_safe_mode_installs_nothing() {
 
 #[test]
 fn a_service_file_loads_only_as_a_provider_and_a_module_file_only_as_a_module() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let svc = service_file(&svc_table(), 0);
         let mut l = provider_loader(svc.clone(), svc_init());
@@ -485,7 +485,7 @@ fn a_service_file_loads_only_as_a_provider_and_a_module_file_only_as_a_module() 
 
 #[test]
 fn a_module_import_that_the_runtime_lacks_resolves_to_a_published_export_and_not_before() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // word at 12 holds 4 (plus the import)
         let mut file = module_file_with(&[(12, 1 << 24)], &[b"dk_svctest_ping"]);
@@ -504,7 +504,7 @@ fn a_module_import_that_the_runtime_lacks_resolves_to_a_published_export_and_not
 #[test]
 fn a_bound_export_requires_the_named_provider_and_compatible_version() {
     use dkneeds::keys::{name_hash, Need, Pair, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let symbol = b"local_ping_value";
     let hash = dkneeds::keys::name_hash_bytes(symbol);
     let owner = name_hash("local-ping");
@@ -542,7 +542,7 @@ fn a_bound_export_requires_the_named_provider_and_compatible_version() {
 #[test]
 fn a_service_file_with_a_table_outside_the_file_or_of_the_wrong_shape_is_refused_before_anything_is_allocated() {
     use dkneeds::keys::{Pair, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the table lies outside the file
         let mut f = service_file(&svc_table(), 0);
@@ -566,7 +566,7 @@ fn a_service_file_with_a_table_outside_the_file_or_of_the_wrong_shape_is_refused
 #[test]
 fn a_provider_with_an_export_past_the_image_or_a_table_copy_that_does_not_fit_is_refused_and_undone() {
     use dkneeds::keys::{name_hash, Pair, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the export entry is the image size (32): past the last byte
         let exports: &'static [Pair] = Box::leak(Box::new([Pair { a: name_hash("dk_svctest_ping"), b: 32 }]));
@@ -586,7 +586,7 @@ fn a_provider_with_an_export_past_the_image_or_a_table_copy_that_does_not_fit_is
 
 #[test]
 fn a_slot_fill_past_the_image_or_of_a_slot_the_image_lacks_undoes_the_load() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the entry is the image size
         let mut l = slot_provider(32);
@@ -605,7 +605,7 @@ fn a_slot_fill_past_the_image_or_of_a_slot_the_image_lacks_undoes_the_load() {
 #[test]
 fn a_slot_masked_for_another_device_is_skipped_and_an_unmasked_unknown_slot_is_refused() {
     use dkneeds::keys::SLOT_DEVICES_SHIFT;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let me = masked_slot_provider(0, false).p.device_id();
         let other = if me == 1 { 2 } else { 1 };
@@ -630,7 +630,7 @@ fn a_slot_masked_for_another_device_is_skipped_and_an_unmasked_unknown_slot_is_r
 
 #[test]
 fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other_export() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         l.exports.publish(MAX_MODULES + 1, dkneeds::keys::name_hash("dk_svctest_ping"), 0x7000).unwrap();
@@ -645,7 +645,7 @@ fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other
 #[test]
 fn the_device_mask_in_a_hooks_entry_is_dropped() {
     use dkneeds::keys::{name_hash, Pair, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let hooks = [Pair { a: name_hash("hook.a"), b: 4 | 0x02 << 24 }];
         let table = Table { hooks: &hooks, ..svc_table() };

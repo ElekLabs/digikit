@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn module_and_provider_records_are_apart_and_the_state_layout_holds() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             assert_eq!(REC_MAX, MAX_MODULES + PROVIDER_MAX);
             module(MAX_MODULES - 1).base = 1;

@@ -519,7 +519,7 @@ pub(super) type Boot = Loader<FakePlatform, Card, DeviceRegistry>;
 pub(super) struct Clean(std::sync::MutexGuard<'static, ()>);
 
 pub(super) fn clean() -> Clean {
-    let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::package::handlers::services(); // the first call adds the test row
         for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {

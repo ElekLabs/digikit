@@ -281,7 +281,7 @@ mod find_tests {
 
     #[test]
     fn only_a_module_record_that_is_in_use_has_a_path() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let saved = *addr_of!(DKRT_PATHS);
             (&mut (*addr_of_mut!(DKRT_PATHS))[1])[..9].copy_from_slice(b"modules/a");

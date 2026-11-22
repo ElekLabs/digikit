@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn a_provider_whose_table_does_not_parse_is_still_tried_and_never_meets_a_need() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
         l.find_providers(1);
@@ -23,7 +23,7 @@ fn a_provider_whose_table_does_not_parse_is_still_tried_and_never_meets_a_need()
 
 #[test]
 fn the_boot_finds_the_provider_for_a_hard_need_loads_it_first_and_the_consumer_resolves_its_import() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = staged_boot(service_file(&svc_table(), 0), consumer_file(&user_table()));
         l.find_providers(1);
@@ -42,7 +42,7 @@ fn the_boot_finds_the_provider_for_a_hard_need_loads_it_first_and_the_consumer_r
 
 #[test]
 fn no_search_without_an_unmet_need_and_a_failed_provider_refuses_its_dependents_with_the_hash() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // a selection with no need: no listing, no provider
         let mut l = staged_boot(service_file(&svc_table(), 0), module_file());
@@ -76,7 +76,7 @@ fn the_real_registry_accepts_zero_and_its_own_fingerprint_only() {
 
 #[test]
 fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty_table_and_one_over_the_limit() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader(Init::Ok);
         l.reset_plan();
@@ -111,7 +111,7 @@ fn capture_keeps_a_table_that_fits_and_ignores_a_short_file_a_bad_index_an_empty
 
 #[test]
 fn a_provider_the_admission_refused_is_reported_and_never_staged_and_its_dependents_are_refused() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the provider declares the machine kind, which a service of the table owns already: the rules of the core refuse it before anything of it is read again
         let kinds = [dkneeds::keys::KindDecl { kind: dkneeds::KIND_MACHINE, len: 0x6c, entry: 0 }];
@@ -134,7 +134,7 @@ fn a_provider_the_admission_refused_is_reported_and_never_staged_and_its_depende
 #[test]
 fn the_search_list_keeps_the_first_24_distinct_hard_needs_the_runtime_does_not_meet() {
     use dkneeds::keys::{name_hash, Need};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let need = |n: &str, hard: bool| Need { service: name_hash(n), min_version: 0, hard };
     let svc = |i: usize| std::format!("svc{i}");
     let mut tables = vec![needs_table(&[need("runtime", true), need("soft", false)]), needs_table(&[need(&svc(0), true), need(&svc(1), true)])];
@@ -179,7 +179,7 @@ fn the_services_are_handed_the_keys_of_admitted_modules_only() {
 #[test]
 fn keys_of_gives_the_keys_of_a_kind_for_an_accepted_module_only() {
     use dkneeds::keys::{write_table, KeyGroup, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let (shapes, machines) = ([0x300u32, 0x400, 0x500], [0x100u32]);
     let t = Table {
         keys: &[

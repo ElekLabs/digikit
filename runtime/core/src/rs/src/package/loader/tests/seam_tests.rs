@@ -40,7 +40,7 @@ fn two_relocs() -> Vec<u8> {
 
 #[test]
 fn the_placer_copies_the_image_and_relocates_it_against_the_base_only() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::Ok, two_relocs());
         let mut s = shared(&mut l);
@@ -58,7 +58,7 @@ fn the_placer_copies_the_image_and_relocates_it_against_the_base_only() {
 
 #[test]
 fn a_package_that_cannot_be_placed_takes_nothing_and_a_placed_one_is_freed() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // a file whose DSP section does not check is refused (the section is read at the place, where its range is reserved), nothing is taken
         let mut dsp = module_file();
@@ -96,7 +96,7 @@ fn consumer_needing(service_import: bool, symbol: &[u8]) -> Vec<u8> {
 
 #[test]
 fn the_linker_binds_an_import_to_an_export_of_a_service_of_the_needs_only() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let service = id(MAX_MODULES);
     let other = id(MAX_MODULES + 1);
     unsafe {
@@ -121,7 +121,7 @@ fn the_linker_binds_an_import_to_an_export_of_a_service_of_the_needs_only() {
 
 #[test]
 fn a_module_starts_with_init_and_stops_with_fini_and_a_failed_start_is_freed() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::Ok, module_file());
         let mut s = shared(&mut l);
@@ -175,7 +175,7 @@ static RECORDER: ServiceRow = ServiceRow::of::<Recorder, crate::package::core_ap
 
 #[test]
 fn detach_calls_the_remove_of_the_rows_of_the_services_it_names_for_a_module_consumer() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::Ok, module_file());
         let mut s = shared(&mut l);
@@ -195,7 +195,7 @@ fn detach_calls_the_remove_of_the_rows_of_the_services_it_names_for_a_module_con
 
 #[test]
 fn a_service_starts_with_its_entries_and_the_installers_put_the_hook_in_and_back() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         found_at(&mut l, 1);
@@ -235,7 +235,7 @@ fn a_service_starts_with_its_entries_and_the_installers_put_the_hook_in_and_back
 
 #[test]
 fn an_entry_outside_the_image_is_refused_by_the_file_checks_and_by_the_installers() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         use dkneeds::keys::Pair;
         use dkrt_lifecycle::InstallError;
@@ -270,7 +270,7 @@ fn an_entry_outside_the_image_is_refused_by_the_file_checks_and_by_the_installer
 
 #[test]
 fn the_installers_take_all_or_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         use dkrt_lifecycle::InstallError;
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
@@ -294,7 +294,7 @@ fn the_installers_take_all_or_nothing() {
 
 #[test]
 fn the_seams_leave_the_boot_index_as_they_found_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         found_at(&mut l, 1);
@@ -324,7 +324,7 @@ fn the_seams_leave_the_boot_index_as_they_found_it() {
 
 #[test]
 fn a_hook_the_port_file_lacks_refuses_the_entry_and_a_foreign_cpu_entry_is_the_other_backends() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
         let mut s = shared(&mut l);
@@ -342,7 +342,7 @@ fn a_hook_the_port_file_lacks_refuses_the_entry_and_a_foreign_cpu_entry_is_the_o
 
 #[test]
 fn the_manifest_holds_the_tables_of_the_modules_and_providers_and_the_apis_of_the_core() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::Ok, service_file(&svc_table(), 0));
         let module = module_file();
@@ -423,7 +423,7 @@ fn walked() -> Vec<(u32, u32)> {
 
 #[test]
 fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_during_attach_and_detach() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::package::handlers::services();
         let machines = MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1;
@@ -453,7 +453,7 @@ fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_duri
 
 #[test]
 fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_as_the_old_apply_did_and_a_refusal_is_undone() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::package::handlers::services(); // the first call adds the test row of the machines service, at the last provider record
         // the walk is over the rows of this test alone: the machines row takes the place of its record again at the end
@@ -520,7 +520,7 @@ static REFUSER: ServiceRow = ServiceRow::of::<Refuser, crate::package::core_api:
 
 #[test]
 fn can_stop_of_a_module_asks_the_services_about_that_module_only_and_a_service_is_not_asked() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::package::handlers::services();
         let rec = MAX_MODULES + 1;
@@ -537,7 +537,7 @@ fn can_stop_of_a_module_asks_the_services_about_that_module_only_and_a_service_i
 
 #[test]
 fn a_load_starts_with_no_detail_of_an_earlier_refusal() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let mut l = unsafe { loader_of(Init::Ok, module_file()) };
     l.missing = [7; NEEDS_LEN];
     l.decl_diff = (1, 2);
@@ -550,7 +550,7 @@ fn a_load_starts_with_no_detail_of_an_earlier_refusal() {
 
 #[test]
 fn start_dsp_hands_a_package_with_a_dsp_part_to_the_dsp_loader_once_and_a_package_without_one_to_nobody() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         *crate::package::dsp::ds() = core::mem::zeroed();
         crate::package::dsp::init_once();

@@ -5,7 +5,7 @@ use super::*;
 /// The end of a job counts in `DkrtBootInfo.reloads` when the module set changed: a finished job (`ok`) or one that tore a module down (`changed`), not a refusal.
 #[test]
 fn a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none() {
-    let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let n = || crate::boot::info().reloads;
         let start = n();
@@ -22,7 +22,7 @@ fn a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none
 fn the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body() {
     use crate::package::live_cmds::{cmd_load, cmd_reload, cmd_reload_state, cmd_unload};
     use crate::transport::{DKRT_UPLOAD_LAST, RBODY};
-    let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let status = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(DKRT_UPLOAD_LAST)) };
     let body = |i: usize| unsafe { *(core::ptr::addr_of!(RBODY) as *const u8).add(1 + i) };
     unsafe {
@@ -51,7 +51,7 @@ fn the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_
 #[test]
 fn a_service_queues_a_live_job_and_reads_its_state_through_the_core_imports() {
     use crate::package::svc_imports::shims::{dkc_live, dkc_live_state};
-    let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // `dkrt_live` runs `init_once`, which sets up the arena at a 32-bit address that a 64-bit host cannot write: the runtime counts as initialised
         crate::platform::st().magic = crate::state::STATE_MAGIC;
@@ -81,7 +81,7 @@ fn a_service_queues_a_live_job_and_reads_its_state_through_the_core_imports() {
 #[test]
 fn a_service_cannot_load_unload_or_reload_the_file_of_a_loaded_service() {
     use crate::package::svc_imports::shims::dkc_live;
-    let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         crate::platform::st().magic = crate::state::STATE_MAGIC;
         *job() = Job::new();

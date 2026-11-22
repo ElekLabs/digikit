@@ -11,7 +11,7 @@
 //! code; there is no timeout code). A request of the same client replaces the expired state. Without a block counter nothing expires.
 use core::ptr::{addr_of, addr_of_mut, null_mut};
 use dkrt_abi::package_platform::PackagePlatform;
-use dkrt_abi::storage::{DirEntry, EntryKind, ListStep, Storage};
+use dkrt_abi::storage::{DirEntry, EntryKind, ListStep};
 use dkrt_sdk::{
     api::FilesEventFn,
     files::*,
@@ -215,7 +215,7 @@ unsafe fn kill(i: usize) {
     }
 }
 
-pub unsafe fn list_with<P: PackagePlatform + Storage>(
+pub unsafe fn list_with<P: PackagePlatform>(
     p: &P,
     client: u32,
     root: u32,
@@ -396,7 +396,7 @@ pub unsafe fn cancel(client: u32, ticket: u32) -> i32 {
 
 /// One step of the listing `l` of request `request`: open it on the first step, then one `list_next`. `Pending` (also the store lock taken, `E_BUSY`)
 /// is asked again on a later step. An entry becomes the row: the request path, `/` and the entry's name. Only a tick step calls this, with `l` busy.
-unsafe fn step<P: Storage>(
+unsafe fn step<P: PackagePlatform>(
     p: &P,
     l: *mut Listing,
     request: &Request,
@@ -457,7 +457,7 @@ pub unsafe fn tick() {
     tick_with(&crate::platform::PLATFORM)
 }
 
-pub(crate) unsafe fn tick_with<P: PackagePlatform + Storage>(p: &P) {
+pub(crate) unsafe fn tick_with<P: PackagePlatform>(p: &P) {
     let entered = locked(|_| {
         if TICKING {
             false
@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn a_store_dir_and_a_samples_dir_list_the_content_of_the_provider() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             for profile in [profiles::DN2, profiles::DT2] {
                 reset();
@@ -699,7 +699,7 @@ mod tests {
     /// A service file is a record after the modules: it opens the client through `dk_files_open` in its `init` only, lists as a module does, and its client and listing go with the record.
     #[test]
     fn a_service_record_opens_the_listing_client_in_init_only_and_lists_and_retires() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
@@ -736,7 +736,7 @@ mod tests {
 
     #[test]
     fn a_provider_that_pends_still_completes_with_the_same_rows() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::ALL[0]);
@@ -750,7 +750,7 @@ mod tests {
 
     #[test]
     fn two_listings_run_at_once_and_a_third_is_busy_until_one_ends() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
@@ -772,7 +772,7 @@ mod tests {
 
     #[test]
     fn cancel_and_a_new_request_free_the_block_and_no_memory_is_an_error() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
@@ -800,7 +800,7 @@ mod tests {
 
     #[test]
     fn a_client_replaces_its_own_request_when_the_arena_holds_one_block() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
@@ -820,7 +820,7 @@ mod tests {
 
     #[test]
     fn a_listing_nobody_polls_for_10_s_is_freed_and_its_poll_gives_e_lost() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
@@ -853,7 +853,7 @@ mod tests {
 
     #[test]
     fn a_failed_open_ends_the_request_with_the_error_and_frees_the_block() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
@@ -869,7 +869,7 @@ mod tests {
 
     #[test]
     fn retire_frees_the_listing_now_or_at_the_next_tick_when_a_step_uses_it() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let f = fixture(profiles::DN2);

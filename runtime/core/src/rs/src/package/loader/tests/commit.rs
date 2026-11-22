@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn the_services_are_told_before_init_and_commit_in_three_passes_after_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         use dkrt_abi::service::commit_phase::{DECLARE, PREPARE, WRITE};
         let mut l = loader(Init::Ok);
@@ -18,7 +18,7 @@ fn the_services_are_told_before_init_and_commit_in_three_passes_after_it() {
 
 #[test]
 fn a_service_that_refuses_the_commit_undoes_the_load_for_every_service() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         use dkrt_abi::service::commit_phase::{PREPARE, WRITE};
         // in the first pass: nothing was written, no second pass
@@ -45,7 +45,7 @@ fn a_service_that_refuses_the_commit_undoes_the_load_for_every_service() {
 
 #[test]
 fn the_records_a_service_writes_are_one_block_that_the_walker_checks() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // a record of a kind no service owns: the block was allocated, written and refused by the walker, and everything is given back
         let mut l = loader(Init::Ok);

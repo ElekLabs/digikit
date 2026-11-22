@@ -49,7 +49,7 @@ pub(crate) struct TestArena {
 
 impl TestArena {
     pub(crate) fn lock() -> TestArena {
-        let lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let lock = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         TestArena { _map: ArenaMap::install(), _lock: lock }
     }
 }

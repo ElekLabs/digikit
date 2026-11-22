@@ -123,7 +123,7 @@ mod tests {
     /// The core's own rule of invariant 3: an unused record has no DSP range.
     #[test]
     fn a_record_that_is_not_used_has_no_dsp_range() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             *st() = core::mem::zeroed();
             *dsp::ds() = core::mem::zeroed();
@@ -141,7 +141,7 @@ mod tests {
     /// other owner of a record that is not used is invariant 3, with the numbers the machines service reports (the row and its owner).
     #[test]
     fn a_placeholder_voice_row_has_no_record_and_is_consistent_and_another_owner_of_a_free_record_is_not() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             crate::package::svc_rows::test_machines();
             *st() = core::mem::zeroed();
@@ -164,7 +164,7 @@ mod tests {
     /// `mod_fx` bit of such a record, are invariant 3 with the numbers the fx service reports; with no service file loaded the effect rows are not the core's to check.
     #[test]
     fn the_core_runs_the_table_checks_of_the_services_and_logs_what_they_report() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let reset = || unsafe {
             *st() = core::mem::zeroed();
             *dsp::ds() = core::mem::zeroed();

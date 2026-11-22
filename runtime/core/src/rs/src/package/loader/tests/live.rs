@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn a_reload_check_accepts_a_file_that_keeps_the_keys_and_changes_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         let (live, allocs, base) = (l.m.live.len(), l.m.allocs, st().modules[0].base);
@@ -18,7 +18,7 @@ fn a_reload_check_accepts_a_file_that_keeps_the_keys_and_changes_nothing() {
 
 #[test]
 fn a_reload_check_refuses_a_missing_record_a_dropped_key_another_name_and_a_damaged_file() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         let key = |l: &mut Fake, f: Vec<u8>| {
@@ -41,7 +41,7 @@ fn a_reload_check_refuses_a_missing_record_a_dropped_key_another_name_and_a_dama
 
 #[test]
 fn a_reload_check_runs_the_planner_over_the_live_set_with_the_file_in_the_old_slot() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         // a second live module `b` has key 9; a new `a` that also has key 9 clashes with it (the old `a` did not)
@@ -63,7 +63,7 @@ fn a_reload_check_runs_the_planner_over_the_live_set_with_the_file_in_the_old_sl
 
 #[test]
 fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_gives_the_tick_back() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         let mut rt = adopt(&mut l, &[0]);
@@ -100,7 +100,7 @@ fn a_second_unload_after_busy_runs_fini_and_the_undo_once_and_an_aborted_reload_
 
 #[test]
 fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
@@ -132,7 +132,7 @@ fn a_reload_loads_the_new_file_into_the_old_record_and_can_be_repeated() {
 
 #[test]
 fn a_reload_waits_for_commands_in_flight_and_two_blocks_after_it_closed_the_entries() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         let base = st().modules[0].base;
@@ -161,7 +161,7 @@ fn a_reload_waits_for_commands_in_flight_and_two_blocks_after_it_closed_the_entr
 
 #[test]
 fn the_block_wait_survives_a_counter_wrap_and_a_platform_without_a_clock_waits_for_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         l.p.clock.set(Some(u32::MAX));
@@ -181,7 +181,7 @@ fn the_block_wait_survives_a_counter_wrap_and_a_platform_without_a_clock_waits_f
 
 #[test]
 fn an_aborted_reload_gives_back_the_tick_and_the_commands_and_the_sinks_stay_released() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         let base = st().modules[0].base;
@@ -213,7 +213,7 @@ fn an_aborted_reload_gives_back_the_tick_and_the_commands_and_the_sinks_stay_rel
 
 #[test]
 fn a_reloads_settle_gets_the_keys_of_the_live_modules_and_the_new_file_in_its_slot() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), keyed_file(b'b', &[9]));
@@ -239,7 +239,7 @@ fn a_reloads_settle_gets_the_keys_of_the_live_modules_and_the_new_file_in_its_sl
 
 #[test]
 fn a_module_over_half_the_arena_is_not_refused_for_counting_itself_twice() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         let own = own_use(0);
@@ -262,7 +262,7 @@ fn a_module_over_half_the_arena_is_not_refused_for_counting_itself_twice() {
 
 #[test]
 fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         assert_eq!(l.reload_check(0, PATH.as_ptr(), &wide()), OK);
@@ -291,7 +291,7 @@ fn a_reload_load_checks_the_name_and_the_keys_of_the_bytes_it_loads() {
 
 #[test]
 fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_of_the_module_set_and_restores_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a();
         l.m.boot_at_stage.clear();
@@ -311,7 +311,7 @@ fn a_reload_check_runs_the_file_checks_as_a_load_does_with_the_selection_index_o
 
 #[test]
 fn a_live_load_takes_the_record_of_the_given_index_and_the_check_changes_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
         let (live, allocs) = (l.m.live.len(), l.m.allocs);
@@ -337,7 +337,7 @@ fn a_live_load_takes_the_record_of_the_given_index_and_the_check_changes_nothing
 
 #[test]
 fn a_live_check_refuses_a_loaded_name_a_key_clash_a_full_capacity_a_damaged_file_and_an_index_past_the_selection() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
         let mut check = |l: &mut Fake, f: Option<Vec<u8>>, caps: &[DkrtCap]| {
@@ -367,7 +367,7 @@ fn a_live_check_refuses_a_loaded_name_a_key_clash_a_full_capacity_a_damaged_file
 
 #[test]
 fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
         let mut rt = adopt(&mut l, &[0]);
@@ -398,7 +398,7 @@ fn a_live_load_that_fails_leaves_the_index_free_and_the_next_load_works() {
 
 #[test]
 fn a_load_after_the_boot_needs_the_live_phase_and_a_provider_record_is_never_loaded_by_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
         // outside a live job the loader loads nothing after the boot
@@ -417,7 +417,7 @@ fn a_load_after_the_boot_needs_the_live_phase_and_a_provider_record_is_never_loa
 #[test]
 fn a_live_check_answers_e_missing_for_a_service_nobody_provides_before_it_looks_at_the_files_imports() {
     use dkneeds::keys::{name_hash, write_table, KeyGroup, Need, Table};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
         // a module that needs a service no loaded provider offers, and imports a name that nothing resolves (what the file of a machine does: its imports are the exports of the service)

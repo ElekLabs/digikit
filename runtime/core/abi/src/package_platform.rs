@@ -8,7 +8,7 @@
 
 use crate::dev_addr::DevAddr;
 use crate::platform::{Platform, Tasking};
-use crate::storage::{Stat, Storage};
+use crate::storage::{DirEntry, ListStep, Stat, Storage};
 
 pub trait PackagePlatform {
     /// The firmware's heap: null when it is out of memory.
@@ -50,6 +50,12 @@ pub trait PackagePlatform {
     ) -> Result<(Stat, usize), i32>;
     /// Read a whole file into `dst`, which holds `cap` bytes; the file size.
     unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32>;
+    /// Bytes of listing state for `root` (`Storage::list_state_bytes`).
+    fn list_state_bytes(&self, root: u32) -> usize;
+    /// Start a listing of `dir` in the block `state` (`Storage::list_open`).
+    unsafe fn list_open(&self, root: u32, dir: &[u8], state: *mut u8) -> Result<(), i32>;
+    /// One bounded listing step (`Storage::list_next`).
+    unsafe fn list_next(&self, state: *mut u8, out: &mut DirEntry) -> Result<ListStep, i32>;
 
     // ---- provided ------------------------------------------------------------------------------------------------------------
     /// Blocks from `start` to now, wrapping; `None` when the clock was or is not available (`platform::blocks_since`, which the resident core's worker calls on a `Platform`).
@@ -139,5 +145,17 @@ impl<P: Platform> PackagePlatform for P {
     #[inline(always)]
     unsafe fn read_all(&self, root: u32, path: &[u8], dst: *mut u8, cap: u32) -> Result<u32, i32> {
         Storage::read_all(self, root, path, dst, cap)
+    }
+    #[inline(always)]
+    fn list_state_bytes(&self, root: u32) -> usize {
+        Storage::list_state_bytes(self, root)
+    }
+    #[inline(always)]
+    unsafe fn list_open(&self, root: u32, dir: &[u8], state: *mut u8) -> Result<(), i32> {
+        Storage::list_open(self, root, dir, state)
+    }
+    #[inline(always)]
+    unsafe fn list_next(&self, state: *mut u8, out: &mut DirEntry) -> Result<ListStep, i32> {
+        Storage::list_next(self, state, out)
     }
 }

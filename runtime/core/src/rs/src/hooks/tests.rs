@@ -6,7 +6,7 @@ use dkrt_sdk::proto::{CMD_MODULES, E_PROTO, E_STATE};
 use dkrt_sdk::{E_BOOT_ONLY, E_CONTRACT, E_NOT_FOUND, OK};
 
 fn locked() -> std::sync::MutexGuard<'static, ()> {
-    crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner())
 }
 
 #[test]

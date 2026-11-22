@@ -87,7 +87,7 @@ unsafe fn run_passes(rt: &mut crate::package::lifecycle::Rt<FakePlatform, FakeIm
 
 #[test]
 fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_sequence() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let (mut l, script) = boot_with_dsp_provider(true);
         let mut rt = boot_selection(&mut l, &[PATH]);
@@ -111,7 +111,7 @@ fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_s
 
 #[test]
 fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_the_manager() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let (mut l, script) = boot_with_dsp_provider(false);
         let mut rt = boot_selection(&mut l, &[PATH]);
@@ -147,7 +147,7 @@ fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_the_
 
 #[test]
 fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_keeps_the_memory_until_a_retry() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let (mut l, script) = boot_with_dsp_provider(true);
         let mut rt = boot_selection(&mut l, &[PATH]);
@@ -187,7 +187,7 @@ fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_
 
 #[test]
 fn a_dsp_slot_fill_needs_a_dsp_slot_of_the_image_and_an_entry_inside_the_dsp_image() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the image has no such slot: the file is refused as a whole, nothing is installed
         let (mut l, script) = boot_with_dsp_provider(true);

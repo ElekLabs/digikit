@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn a_service_file_or_a_loaded_row_is_never_the_cores_and_the_runtime_floor_follows_the_old_rule() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         // `machines` is a loaded row in the host tests, as it is a `.dks` on the device
         crate::package::svc_rows::test_machines();
         let core = CoreApis::new();

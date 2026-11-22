@@ -116,7 +116,7 @@ mod tests {
     /// With no machines service loaded the limits are the `cap_<kind>` words of the image's info table, and a module that uses one of each is accepted.
     #[test]
     fn the_image_info_table_gives_the_limits_when_no_service_is_loaded() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let p = FakePlatform::new(profiles::DT2);
         for (kind, v) in [(CAPK_MACHINE_ROWS, 8), (CAPK_PARAM_ROWS, 16), (CAPK_PAGE_ROWS, 8)] {
             p.info_entries.borrow_mut().push((hash(kind), std::vec![v]));
@@ -155,7 +155,7 @@ mod tests {
         }
         static ROWS: [ServiceRow; 1] = [ServiceRow::of::<Machines, crate::package::core_api::RealCore>("machines", &[])];
         static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let p = FakePlatform::new(profiles::DT2);
         for (kind, v) in [(CAPK_MACHINE_ROWS, 8), (CAPK_PARAM_ROWS, 16)] {
             p.info_entries.borrow_mut().push((hash(kind), std::vec![v]));

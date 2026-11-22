@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn a_port_file_loads_as_a_provider_copies_its_tail_sites_and_unloads_clean() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = port_loader(port_file());
         assert_eq!(l.load_provider(PORT_PATH.as_ptr(), 0), OK);
@@ -31,7 +31,7 @@ fn a_port_file_loads_as_a_provider_copies_its_tail_sites_and_unloads_clean() {
 
 #[test]
 fn a_port_file_for_another_firmware_or_over_other_stock_is_refused_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // another firmware, an image with no fw_id
         let mut other = FW_ID;
@@ -56,7 +56,7 @@ fn a_port_file_for_another_firmware_or_over_other_stock_is_refused_before_anythi
 
 #[test]
 fn a_port_file_that_does_not_fit_its_image_or_its_sites_is_refused_before_anything_is_allocated() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the bss is smaller than the copies need
         let mut l = port_loader(port_file_with(11, |_| {}));
@@ -84,7 +84,7 @@ fn a_port_file_that_does_not_fit_its_image_or_its_sites_is_refused_before_anythi
 
 #[test]
 fn the_firmware_imports_of_a_service_file_resolve_through_the_port_file() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let names = [
             fw_import("dk_fw_", NAME_H),           // an address
@@ -116,7 +116,7 @@ fn the_firmware_imports_of_a_service_file_resolve_through_the_port_file() {
 
 #[test]
 fn a_firmware_import_the_port_file_does_not_list_or_that_has_no_port_file_refuses_the_service_file() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // a name the port file lacks, and a tail of a raw site (it has no copy)
         for bad in [fw_import("dk_fw_", "cf.unknown"), fw_import("dk_tail_", "hook.raw"), fw_import("dk_ret_", "hook.unknown")] {

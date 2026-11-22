@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn an_unload_leaves_no_acceptance_and_no_index_behind_and_the_same_file_loads_again_at_its_index() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = live_a_with_b();
         let mut rt = adopt(&mut l, &[0]);

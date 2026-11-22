@@ -86,7 +86,7 @@ fn clear() {
 
 #[test]
 fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
     settle(&[0x700]);
@@ -106,7 +106,7 @@ fn a_shape_record_goes_from_the_builder_call_to_the_table_and_back() {
 
 #[test]
 fn an_id_twice_or_zero_and_a_file_that_does_not_fit_the_table_are_refused() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     clear();
     let keys: Vec<u32> = (1..=MAX_SHAPES as u32 + 1).map(|i| i << 8).collect();
@@ -135,7 +135,7 @@ fn an_id_twice_or_zero_and_a_file_that_does_not_fit_the_table_are_refused() {
 #[test]
 fn a_record_of_a_kind_that_is_not_generic_or_has_the_wrong_length_never_reaches_the_service() {
     // `add_record` reads the service table, a static that the tests of the service rows replace under this lock
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let b = body(1, 0);
     assert_eq!(b.len() + 8, LEN_LFO_SHAPE as usize);
     let mut c = Collect::new();
@@ -162,7 +162,7 @@ fn plan_of(tables: &[Vec<u8>]) -> Vec<Verdict> {
 
 #[test]
 fn admission_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and_a_second_owner() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     let one = table(&[(KIND_LFO_SHAPE, &[7])]);
     let same = table(&[(KIND_LFO_SHAPE, &[7, 8])]);
