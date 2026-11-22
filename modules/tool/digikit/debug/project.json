@@ -4,6 +4,12 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "files": ["tests/profile-trace.device.test.ts"],
+        "dsp": "sharc",
+        "tags": ["M:digikit/debug"],
+        "modules": ["digikit/debug"]
+      },
+      {
         "files": [
           "tests/debug-module.device.test.ts"
         ],
