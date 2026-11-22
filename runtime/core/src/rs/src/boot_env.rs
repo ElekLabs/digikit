@@ -2,7 +2,8 @@
 //! lifecycle of the device. `RealBootEnv` is the device's; a host test gives the same steps over a fake card and its own loader (`loader/tests/host_boot_env.rs`).
 
 use crate::platform::RealPlatform;
-use crate::{fault};
+use crate::fault;
+use crate::level::PackageStatus;
 use crate::hooks;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
@@ -20,6 +21,9 @@ pub(crate) trait BootEnv {
     unsafe fn keep_probe(&self);
     /// The keep area's crash record of the boot before: logged and cleared; true when there was one.
     unsafe fn crash_at_boot(&self) -> bool;
+    /// What stage 1 found of the system package: the one input of the level decision that is not read from the record, the key or the crash records. Until
+    /// stage 1 is wired in (RC2s-2 step d) the device reports `Ok` for the package that is linked into the image.
+    unsafe fn package_status(&self) -> PackageStatus;
     /// A safe boot: the installer writes nothing.
     unsafe fn set_safe(&self);
     /// Read the file of each selected module and keep its header table for the boot's graph.
@@ -47,6 +51,9 @@ impl BootEnv for RealBootEnv {
     }
     unsafe fn crash_at_boot(&self) -> bool {
         fault::at_boot()
+    }
+    unsafe fn package_status(&self) -> PackageStatus {
+        PackageStatus::Ok
     }
     unsafe fn set_safe(&self) {
         hooks::boot_safe()

@@ -54,6 +54,8 @@ pub struct FakePlatform {
     /// The transport state `play_state` returns (`None`: the platform cannot read it). Starts stopped.
     pub play: Cell<Option<u32>>,
     pub reset: Cell<bool>,
+    /// The panel key `key_down` reports as held (any key number): the safe-mode key of a boot test.
+    pub key_held: Cell<bool>,
     /// The exception hook word has been pointed at the runtime's hook.
     pub exc_hook: Cell<bool>,
     /// The `*_info` tables of the adapters, by name.
@@ -115,6 +117,7 @@ impl FakePlatform {
             os_upgrade: Cell::new(false),
             play: Cell::new(Some(0)),
             reset: Cell::new(false),
+            key_held: Cell::new(false),
             exc_hook: Cell::new(false),
             info: RefCell::new(BTreeMap::new()),
             pool: Cell::new(false),
@@ -264,7 +267,7 @@ impl Platform for FakePlatform {
         self.play.get()
     }
     unsafe fn key_down(&self, _key: u32) -> bool {
-        false
+        self.key_held.get()
     }
     fn install_exception_hook(&self) -> bool {
         let first = !self.exc_hook.get();

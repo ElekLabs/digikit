@@ -195,7 +195,7 @@ fn a_package_that_cannot_run_is_core_only_and_not_a_crash() {
             ..calm()
         });
         assert_eq!(level, Level::CoreOnly(want));
-        assert!(!want.counts_as_crash());
+        assert!(!Level::CoreOnly(want).counts_boot());
         // it wins over every safe trigger: safe mode needs the package's menu
         let busy = Inputs {
             package: status,
@@ -207,7 +207,6 @@ fn a_package_that_cannot_run_is_core_only_and_not_a_crash() {
         };
         assert_eq!(decide(&busy), Level::CoreOnly(want));
     }
-    assert!(CoreOnlyReason::Crashes.counts_as_crash());
 }
 
 #[test]
@@ -228,4 +227,31 @@ fn the_safe_key_does_not_hold_back_core_only_at_the_counter_threshold() {
         ..calm()
     };
     assert_eq!(decide(&i), Level::CoreOnly(CoreOnlyReason::Crashes));
+}
+
+#[test]
+fn only_a_normal_boot_or_one_the_counter_caused_counts_itself() {
+    assert!(Level::Normal.counts_boot());
+    for (reason, counts) in [
+        (SafeReason::Counter, true),
+        (SafeReason::Key, false),
+        (SafeReason::Flag, false),
+        (SafeReason::DspHang, false),
+        (SafeReason::Panic, false),
+        (SafeReason::Unreadable, false),
+    ] {
+        assert_eq!(Level::Safe(reason).counts_boot(), counts, "{reason:?}");
+    }
+    for reason in [CoreOnlyReason::PackageMissing, CoreOnlyReason::PackageIncompatible, CoreOnlyReason::PackageDamaged, CoreOnlyReason::PackageUnreadable] {
+        assert!(!Level::CoreOnly(reason).counts_boot(), "{reason:?}: a card state is no crash");
+    }
+    assert!(!Level::CoreOnly(CoreOnlyReason::Crashes).counts_boot(), "a core-only boot keeps the counter where it is");
+}
+
+#[test]
+fn only_a_core_only_boot_caused_by_crashes_keeps_the_counter() {
+    assert!(Level::CoreOnly(CoreOnlyReason::Crashes).keeps_counter());
+    assert!(!Level::CoreOnly(CoreOnlyReason::PackageMissing).keeps_counter());
+    assert!(!Level::Safe(SafeReason::Counter).keeps_counter());
+    assert!(!Level::Normal.keeps_counter());
 }

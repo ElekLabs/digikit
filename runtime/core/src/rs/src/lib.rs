@@ -113,6 +113,8 @@ mod test_lock;
 #[cfg(test)]
 mod fake_platform;
 #[cfg(test)]
+mod fake_boot_env;
+#[cfg(test)]
 mod spans_tests;
 #[cfg(test)]
 mod contract_tests;
@@ -124,5 +126,7 @@ mod fake_storage;
 mod host_io;
 #[cfg(test)]
 mod store_tests;
+#[cfg(test)]
+mod package_counter_tests;
 
 

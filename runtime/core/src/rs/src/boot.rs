@@ -6,14 +6,18 @@
 //! through the same loader as ever (a module that fails is skipped and reported; the others load). DSP code is sent with
 //! `dl_send` and awaited by polling the state machine here (bounded); what has not finished when the bound is reached continues
 //! in the UI-loop hook as before. The boot counter is cleared by `ui_pass` once the session has been stable: `STABLE_BLOCKS` DSP blocks (30 s)
-//! after the first UI-loop pass (at the first pass itself in a safe boot, where no module runs). A boot that dies before then counts as bad.
+//! after the first UI-loop pass, in a safe boot too. A boot that dies before then counts as bad. The level of the boot (normal, safe or core-only) is
+//! `level::decide`'s; a boot the counter caused counts itself, a key or flag safe boot does not, and a core-only boot that crashes caused never clears the
+//! counter (the package file written, or RETRY, does).
 //!
 //! The record is the only thing the runtime writes to the card here, and only to its two sectors (`store::Layout::sel_a`/`sel_b`), through
 //! `block_write`, which refuses a write when the card's area is not ours (`card.rs`): then the boot counter is not raised either.
 
 use crate::platform::st;
 use crate::boot_env::{BootEnv, RealBootEnv};
-use crate::safe_mode::{key_held_with, DKRT_STABLE_BLOCKS, LATE_FLOOR};
+use crate::hooks;
+use crate::level::{decide, Inputs, Level, SafeReason};
+use crate::safe_mode::{key_held_with, DKRT_STABLE_BLOCKS, KEEP_COUNTER, LATE_FLOOR};
 use crate::selection::{current_with, update_with, Choice, REC, REC_COPY, REC_VALID};
 use crate::{card, fault, dlog, store};
 use core::ptr::{addr_of, addr_of_mut};
@@ -104,13 +108,19 @@ pub fn info() -> &'static mut DkrtBootInfo {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_boot() {
     crate::state::init_once();
-    if !crate::dev::valid() {
-        return; // a device object this runtime cannot read (a patch bug): load nothing, leave the firmware alone
+    enter(crate::dev::valid(), &RealBootEnv);
+}
+
+/// `dkrt_boot` over a device validity and a boot env. An invalid device object (a patch bug, no firmware to read) takes no boot at all: no module loads, nothing is written, and no
+/// package is attached (the attach belongs to `run`, once the level is known), so every hook answers with the core's default and the firmware stays stock.
+pub(crate) unsafe fn enter<E: BootEnv>(device_valid: bool, env: &E) {
+    if !device_valid {
+        return;
     }
     if info().magic == INFO_MAGIC {
         return; // the constructor ran once already: a second call is a bug, not a second boot
     }
-    run(&RealBootEnv);
+    run(env);
 }
 
 /// The boot over `env` (`dkrt_boot` with the device's, the host tests with a fake card): the selection record, the safe-mode decision, the boot counter, the tables of the
@@ -152,43 +162,56 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     if r.stable_blocks != 0 {
         DKRT_STABLE_BLOCKS.0 = r.stable_blocks;
     }
-    // safe mode: the record cannot be read, or it asked for it, or the key, or too many boots that did not reach the UI loop
-    let reason = if unreadable {
-        SAFE_READ
-    } else if r.flags & sel::FLAG_SAFE_ONCE != 0 {
-        SAFE_FLAG
-    } else if key_held_with(env.platform()) {
-        SAFE_KEY
-    } else if fault::seen().hang != 0 {
-        // the boot before stopped because the DSP stopped (a hang record): one stop is enough, even after a stable boot; the selection stays as it is
-        SAFE_DSP
-    } else if fault::seen().panic != 0 {
-        // the boot before panicked (a panic record): one panic is enough, like a stop
-        SAFE_PANIC
-    } else if crate::safe_mode::counter_is_safe(&r) {
-        SAFE_COUNTER
-    } else {
-        SAFE_NONE
-    };
+    // the level of this boot (`level::decide`): the record cannot be read, or it asked for safe mode, or the key, or a DSP hang or panic record, or too many boots
+    // that did not reach the stable period; and the state of the system package, which can make the boot core-only
+    let level = decide(&Inputs {
+        record_unreadable: unreadable,
+        safe_once: r.flags & sel::FLAG_SAFE_ONCE != 0,
+        safe_key_held: key_held_with(env.platform()),
+        // a stop of the DSP or a panic in the boot before: one is enough, even after a stable boot; the selection stays as it is
+        dsp_hang_seen: fault::seen().hang != 0,
+        panic_seen: fault::seen().panic != 0,
+        boot_counter: r.boot_counter,
+        package: env.package_status(),
+    });
     dlog::ev(
         logk::BOOT_RECORD,
         dlog::INFO,
         [r.seq, copy, r.boot_counter, r.count, r.flags],
     );
-    if reason != SAFE_NONE {
+    KEEP_COUNTER = level.keeps_counter();
+    let core_only = if let Level::CoreOnly(_) = level { true } else { false };
+    if !core_only {
+        // the package gets the resident table and gives its hooks (declare-check-commit of its services); a core-only boot runs none of its code
+        hooks::attach_package(&crate::resident::TABLE);
+    }
+    if level != Level::Normal {
+        let reason = if let Level::Safe(why) = level { why.code() } else { SAFE_NONE };
+        let core_only_code = if let Level::CoreOnly(why) = level { why.code() } else { 0 };
+        // a boot that loads no module (safe or core-only) reports `safe` to the hosts; the core-only reason is the SAFE event's argument 3
         b.safe = 1;
         b.reason = reason;
         LATE_FLOOR = 0;
-        dlog::ev(logk::SAFE, logk::F_ERROR, [reason, r.boot_counter, r.seq, 0, 0]);
-        if reason == SAFE_FLAG {
-            // honoured once: clear the flag (the counter is left as it is; the UI loop clears it)
+        dlog::ev(logk::SAFE, logk::F_ERROR, [reason, r.boot_counter, r.seq, core_only_code, 0]);
+        if level == Level::Safe(SafeReason::Flag) || (core_only && r.flags & sel::FLAG_SAFE_ONCE != 0) {
+            // honoured once, or overruled by core-only (which comes first): clear the flag, so that RETRY or a new package is not followed by a surprise safe boot
+            // (the counter is left as it is; the stable period clears it)
             r.flags &= !sel::FLAG_SAFE_ONCE;
             update_with(env.platform(), r, copy, valid);
         }
-        // a safe boot loads no module: show the safe-mode screen in place of the stock intro (no storage access, built here on the main-OS task)
-        crate::intro::show_safe(reason);
+        // a boot that the counter or crashes caused counts itself, before the screen: the stable period clears it
+        crate::safe_mode::count_boot_with(env.platform(), level, r, copy, valid, card::writable());
+        // a safe or core-only boot loads no module: show its screen in place of the stock intro (no storage access, built here on the main-OS task)
+        if let Level::CoreOnly(why) = level {
+            crate::intro::show_core_only(why);
+        } else {
+            crate::intro::show_safe(reason);
+        }
         // no provider loads and the installer writes nothing: every hook site stays stock
-        env.set_safe();
+        if !core_only {
+            // (a core-only boot has no package: nothing to tell, and every hook answers with the resident core's defaults)
+            env.set_safe();
+        }
         let mut k = 0;
         while k < SEL_MAX {
             b.results[k] = E_SAFE_MODE;
@@ -200,7 +223,7 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     // raise the counter before anything of a module runs; the stable period clears it. This counts from the first boot: with no record
     // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
     // (ABOUT says so).
-    r = crate::safe_mode::count_boot_with(env.platform(), r, copy, valid, card::writable());
+    r = crate::safe_mode::count_boot_with(env.platform(), level, r, copy, valid, card::writable());
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them

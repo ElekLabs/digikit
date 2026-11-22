@@ -59,7 +59,7 @@ impl SafeReason {
     }
 }
 
-/// Why a boot runs the resident core only. `counts_as_crash` tells the boot whether the boot counter may count it.
+/// Why a boot runs the resident core only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoreOnlyReason {
     PackageMissing,
@@ -71,9 +71,9 @@ pub enum CoreOnlyReason {
 }
 
 impl CoreOnlyReason {
-    /// A package that cannot run is a card state, not a crash: it is not counted (design decision 2). Repeated crashes are.
-    pub fn counts_as_crash(self) -> bool {
-        self == CoreOnlyReason::Crashes
+    /// The word the SAFE log event carries for a core-only boot (argument 3; 0 is a boot that is not core-only).
+    pub fn code(self) -> u32 {
+        self as u32 + 1
     }
 }
 
@@ -82,6 +82,26 @@ pub enum Level {
     Normal,
     Safe(SafeReason),
     CoreOnly(CoreOnlyReason),
+}
+
+impl Level {
+    /// Does this boot count itself in the boot counter? A normal boot does, and so does a safe boot the counter caused (the next boot then finds the
+    /// crash of the safe boot as one more count); a key, flag, DSP-hang, panic or unreadable-record safe boot does not. A core-only boot never counts: the
+    /// counter stays where it is until the package file is written or RETRY runs.
+    pub fn counts_boot(self) -> bool {
+        // if-chain, no `match` (see `SafeReason`)
+        if let Level::Safe(r) = self {
+            r == SafeReason::Counter
+        } else {
+            self == Level::Normal
+        }
+    }
+
+    /// Does the stable period leave the counter as it is? Only a core-only boot caused by crashes: every boot stays core-only until the package file
+    /// is written again (or RETRY), which clear it.
+    pub fn keeps_counter(self) -> bool {
+        self == Level::CoreOnly(CoreOnlyReason::Crashes)
+    }
 }
 
 /// Do the boots counted in the record call for safe mode (`SAFE_AFTER` boots that did not reach the stable period)?

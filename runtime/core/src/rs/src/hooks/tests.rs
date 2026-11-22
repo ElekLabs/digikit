@@ -103,14 +103,13 @@ fn with_no_package_every_hook_has_its_default() {
     });
 }
 
-/// `init_once` is the one place the package gives its table: before it a core has none, after it the callers reach the package.
+/// `attach_package` is the one place the package gives its table: before it a core has none, after it the callers reach the package.
 #[test]
-fn init_once_installs_the_package_table() {
-    let _arena = crate::fake_platform::test_arena::TestArena::lock();
+fn attach_package_installs_the_package_table() {
+    let _g = locked();
     without_package(|| unsafe {
-        crate::platform::st().magic = 0;
         assert!(!installed());
-        crate::state::init_once();
+        attach_package(&crate::resident::TABLE);
         assert!(installed());
         assert!(core::ptr::eq(table(), &crate::package::hooks::HOOKS));
     });

@@ -178,7 +178,8 @@ boot info magic 0x444b4254 version 1 safe 1 reason 3 counter 0 seq 3 copy 0 coun
 installer calls
 card writes
   sector 5094 512 bytes
-card state 1 claims 0 writes 5 refused 0
+  sector 5095 512 bytes
+card state 1 claims 0 writes 6 refused 0
 init and fini calls
 events
   kind 1 flags 0x0004 args [b02, 1, 0, 5, 2]

@@ -200,6 +200,22 @@ pub unsafe fn show_safe(reason: u32) {
     }
     let buf = &mut *addr_of_mut!(SAFE_BUF);
     crate::safe_screen::render(reason, buf);
+    show_frame(buf);
+}
+
+/// `dkrt_boot` of a core-only boot: the core-only frame in place of the stock intro, like `show_safe`.
+#[cfg(not(test))]
+pub unsafe fn show_core_only(reason: crate::level::CoreOnlyReason) {
+    if !intro_running() {
+        return;
+    }
+    let buf = &mut *addr_of_mut!(SAFE_BUF);
+    crate::safe_screen::render_core_only(reason, buf);
+    show_frame(buf);
+}
+
+#[cfg(not(test))]
+unsafe fn show_frame(buf: &[u8; crate::safe_screen::FRAME_BYTES]) {
     write_volatile(addr_of_mut!(STATIC_PIXELS), buf.as_ptr());
     write_volatile(addr_of_mut!(FRAME), None);
     write_volatile(addr_of_mut!(DONE), None);
@@ -257,6 +273,8 @@ pub unsafe fn take(_: Option<IntroFrameFn>, _: Option<IntroDoneFn>, _: *mut u8, 
 pub unsafe fn commit(_: usize) {}
 #[cfg(test)]
 pub unsafe fn show_safe(_: u32) {}
+#[cfg(test)]
+pub unsafe fn show_core_only(_: crate::level::CoreOnlyReason) {}
 #[cfg(test)]
 pub unsafe fn end_blank() {}
 

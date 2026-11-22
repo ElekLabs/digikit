@@ -28,6 +28,10 @@ impl BootEnv for HostBootEnv {
     fn platform(&self) -> &FakePlatform {
         unsafe { &(*self.l).p }
     }
+    /// The package of the host's boot is the one linked into the test: stage 1 is not part of this environment.
+    unsafe fn package_status(&self) -> crate::level::PackageStatus {
+        crate::level::PackageStatus::Ok
+    }
     /// The host has no settings store (`FakeStorage` models the files, not the record).
     unsafe fn settings_load(&self) {}
     /// The keep area is firmware RAM at a raw address.

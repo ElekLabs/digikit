@@ -2,7 +2,7 @@
 //! resident file reaches the package only through these functions. A hook the package did not install (or no package at all: a core-only level) has the default each
 //! caller documents, so the core still boots, serves its own upload commands and writes the hang record.
 //!
-//! The one name of the package here is `attach_package`: the resident core gives the package its table and takes the package's hooks in return, once, in `init_once`; stage 1 will
+//! The one name of the package here is `attach_package`: the resident core gives the package its table and takes the package's hooks in return, once, in `boot::run`; stage 1 will
 //! do the same with a table from the package's own file.
 
 use core::ptr::{addr_of, read_volatile, write_volatile};
@@ -28,7 +28,7 @@ fn table() -> &'static PackageHooks {
     unsafe { &*read_volatile(addr_of!(INSTALLED)) }
 }
 
-/// The package gets the resident table and gives its hooks: once per boot, in `init_once`. A table the package refuses (`dkrt_abi::resident::check`) is logged with its
+/// The package gets the resident table and gives its hooks: once per boot, from `boot::run` when the level is not core-only (a core-only boot attaches nothing: no package code runs and the callers keep their defaults). A table the package refuses (`dkrt_abi::resident::check`) is logged with its
 /// reason and no hooks are installed: the core runs without the package.
 pub(crate) unsafe fn attach_package(table: &'static dkrt_abi::resident::ResidentTable) {
     match crate::package::attach(table) {

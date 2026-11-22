@@ -1,6 +1,7 @@
 //! The safe-mode screen: three lines of text in a built-in 5x7 pixel font, drawn into the native 128 x 64 bitmap (column-major, the byte
 //! of pixel (x, y), y = 0 at the top, is `8*x + (63-y)/8`, the bit is `7 - (63-y)%8`, as in docs/design/dkbs.md). Pure: no firmware call and no allocator. `dkrt_boot`
 //! renders it once into a static buffer, and the intro task only blits that buffer (`intro::show_safe`).
+use crate::level::CoreOnlyReason;
 use dkrt_sdk::*;
 
 pub const FRAME_BYTES: usize = 1024;
@@ -121,6 +122,33 @@ pub fn reason_text(reason: u32) -> &'static str {
     ""
 }
 
+/// The second line of the core-only screen: why this boot runs the resident core only. A list, not a `match` (see `GLYPHS`).
+pub fn core_only_text(reason: CoreOnlyReason) -> &'static str {
+    static REASONS: [(CoreOnlyReason, &str); 5] = [
+        (CoreOnlyReason::PackageMissing, "PACKAGE MISSING"),
+        (CoreOnlyReason::PackageIncompatible, "PACKAGE INCOMPATIBLE"),
+        (CoreOnlyReason::PackageDamaged, "PACKAGE DAMAGED"),
+        (CoreOnlyReason::PackageUnreadable, "CARD UNREADABLE"),
+        (CoreOnlyReason::Crashes, "REPEATED CRASHES"),
+    ];
+    let mut i = 0;
+    while i < REASONS.len() {
+        if REASONS[i].0 == reason {
+            return REASONS[i].1;
+        }
+        i += 1;
+    }
+    ""
+}
+
+/// The whole core-only frame for `reason`: black, `CORE ONLY` at 2x, the reason, `NO MODULES LOADED`.
+pub fn render_core_only(reason: CoreOnlyReason, buf: &mut [u8; FRAME_BYTES]) {
+    *buf = [0; FRAME_BYTES];
+    line(buf, "CORE ONLY", 10, 2);
+    line(buf, core_only_text(reason), 32, 1);
+    line(buf, "NO MODULES LOADED", 46, 1);
+}
+
 /// The whole frame for `reason`: black, `SAFE MODE` at 2x, the reason, `NO MODULES LOADED`.
 pub fn render(reason: u32, buf: &mut [u8; FRAME_BYTES]) {
     *buf = [0; FRAME_BYTES];
@@ -203,6 +231,33 @@ mod tests {
             }
         }
         assert_ne!(frame(SAFE_PANIC), frame(SAFE_READ));
+    }
+
+    #[test]
+    fn the_core_only_screen_names_its_reason_on_the_second_line() {
+        let all = [
+            CoreOnlyReason::PackageMissing,
+            CoreOnlyReason::PackageIncompatible,
+            CoreOnlyReason::PackageDamaged,
+            CoreOnlyReason::PackageUnreadable,
+            CoreOnlyReason::Crashes,
+        ];
+        let mut frames = Vec::new();
+        for r in all {
+            assert!(!core_only_text(r).is_empty());
+            assert!(text_width(core_only_text(r), 1) <= WIDTH, "{r:?}");
+            let mut b = [0; FRAME_BYTES];
+            render_core_only(r, &mut b);
+            assert!(!frames.contains(&b), "{r:?}: each reason has its own frame");
+            frames.push(b);
+        }
+        // the title differs from the safe screen's, and only the second line differs between two reasons
+        assert_ne!(frames[0], frame(SAFE_KEY));
+        for x in 0..WIDTH {
+            for y in (0..32).chain(40..64) {
+                assert_eq!(lit(&frames[0], x, y), lit(&frames[4], x, y), "({x},{y})");
+            }
+        }
     }
 
     /// The device tests compare the intro framebuffer with these files (`tests/fixtures/safe-*.bin`). `DK_BLESS=1` rewrites them.
