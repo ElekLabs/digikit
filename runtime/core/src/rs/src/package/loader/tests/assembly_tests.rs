@@ -17,7 +17,7 @@ use super::*;
 use crate::fake_platform::{Call, FakePlatform};
 use crate::package::lifecycle::{Manager, RtManifest, Session};
 use crate::test_lock::LOCK;
-use dkrt_lifecycle::{LifecycleError, PackageId, Report};
+use dkrt_lifecycle::{LifecycleError, PackageId, Report, State};
 use dkneeds::keys::{name_hash, tag, Keys};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::profiles;
@@ -2075,6 +2075,45 @@ fn the_boot_loads_accepted_modules_and_reports_a_refused_one_without_loading_it(
     }
 }
 
+/// The MODULES reply of a real boot reports each module with the version of its file's header and the runtime version its file needs (what the module-load device test read back
+/// from the daemon): the loader keeps both from the file, and the command writes them in the record of the module.
+#[test]
+fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_file() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let selection = [&LFO_SHAPE, &LOCAL_PING_USER];
+            let services = [Fixture { leaf: SERVICES[2].leaf, nx: SERVICES[2].nx }, Fixture { leaf: LOCAL_PING.leaf, nx: LOCAL_PING.nx }];
+            let (mut l, plan) = planned(*dev, &image, &[], &selection, &services);
+            let _dsp = dsp_env(*dev, &l, &plan);
+            let rec = boot_record(&[LFO_SHAPE.leaf, LOCAL_PING_USER.leaf]);
+            let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().loaded, 2, "{}: both modules load", dev.name);
+
+            crate::package::module_cmds::cmd_modules(1, [0u8].as_ptr(), 1);
+            let rb = crate::package::resident::transport::rbody().add(1);
+            assert_eq!(*rb.add(16), 2, "{}: the total of loaded modules", dev.name);
+            assert_eq!(*rb.add(17), 2, "{}: both records are in the reply", dev.name);
+            let mut at = 18usize;
+            let mut needs = Vec::new();
+            for m in selection {
+                let file = packed(*dev, m.leaf, "dkm", m.nx);
+                let word = |off: usize| u32::from_be_bytes(core::slice::from_raw_parts(rb.add(at + off), 4).try_into().unwrap());
+                let name = core::slice::from_raw_parts(rb.add(at + 1), 32).iter().take_while(|b| **b != 0).map(|b| *b as char).collect::<String>();
+                assert_eq!(name, m.nx, "{}: the module's name", dev.name);
+                assert_eq!(word(33), be(&file, 0x34), "{}: {}: the version of the header", dev.name, m.leaf);
+                assert_eq!(word(37), be(&file, 0x30) & 0x7fff_ffff, "{}: {}: the runtime version the file needs", dev.name, m.leaf);
+                needs.push(word(37));
+                at += 71 + *rb.add(at + 65) as usize;
+            }
+            assert_ne!(needs[0], needs[1], "{}: the two fixtures need different runtime versions, so a swapped or constant field shows", dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
 // ---- RC2b: what the device tests showed once and the host can show ---------------------------------------------------------
 
 /// Where entry `tag` of the header table of `f` has its payload (an offset in the file), and its item count.
@@ -2222,6 +2261,44 @@ fn a_machine_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leave
             let _dsp = dsp_env(*dev, &l, &plan);
             let run = boot_run(&mut l, &plan, &[&SINE], false);
             assert_eq!(run.code(0), E_DECL_ID, "{}: {:?}", dev.name, run.refusal(0));
+            nothing_left(&l, dev.name);
+        }
+        let _ = clean_state();
+    }
+}
+
+/// More rows declared than the file's `[uses]` count is refused with E_DECL_USES through the real path: the packed `sine` has its machine-row count set to 0 in the USES entry of its
+/// header table while `init` declares its machine, so the commit of the machines service refuses it. The boot is built so that the machine-row count is the only count that can
+/// trip the check: `add_machine` declares no params and the profile words after the image's listed head are zero (no page rows). The refusal is
+/// the one of the commit (`Failed` entering `Started`). The arena, the module records and the service rows hold nothing of the refused boot. (The check itself is
+/// `services/machines/tests/build.rs`; the device test of the commit keeps the accepted commit in the DSP voice row.)
+#[test]
+fn a_machine_declared_beyond_its_uses_is_refused_with_e_decl_uses_and_leaves_nothing() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&SINE], &SERVICES);
+            let mut f = without_dsp(*dev, &SINE);
+            let (at, n) = entry_of(&f, 2).expect("the fixture has uses");
+            let item = (0..n).map(|k| at + 8 * k).find(|a| be(&f, *a as u32) == dkrt_sdk::records::RES_MACHINE_ROWS).expect("the fixture uses machine rows");
+            assert!(be(&f, item as u32 + 4) >= 1, "{}: the fixture declares a machine row", dev.name);
+            put(&mut f, item as u32 + 4, 0);
+            swap_module(&mut l, 0, SINE.leaf, f);
+            // the image lists the first words of the table; the machines service reads the profile words after them, which are zero here instead of what follows the vector in memory
+            let mut dynreg = image.words("dynreg_info");
+            dynreg.resize(128, 0);
+            let _reg = crate::package::cleanup_tests::DynregInfoGuard::set(dynreg.as_ptr());
+            l.m.init_calls = std::vec![Builder::Machine(0)];
+            l.m.real_rows = true;
+            let _dsp = dsp_env(*dev, &l, &plan);
+            let run = boot_run(&mut l, &plan, &[&SINE], false);
+            assert!(
+                matches!(run.refusal(0), Some(LifecycleError::Failed { entering: State::Started, status: E_DECL_USES, .. })),
+                "{}: {:?}",
+                dev.name,
+                run.refusal(0)
+            );
             nothing_left(&l, dev.name);
         }
         let _ = clean_state();

@@ -18,7 +18,9 @@ const SECTOR: u64 = 512;
 fn dev() -> &'static str {
     patchkit::devdata::all()
         .iter()
-        .filter(|d| d.digikit_id.is_some() && card_layout(&d.short).is_ok_and(|l| l.store.is_some()))
+        .filter(|d| {
+            d.digikit_id.is_some() && card_layout(&d.short).is_ok_and(|l| l.store.is_some())
+        })
         .map(|d| d.short.as_str())
         .next()
         .expect("a runtime device with a card store")
