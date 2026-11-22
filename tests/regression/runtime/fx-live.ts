@@ -13,13 +13,13 @@ import {
   runUntilFramesWithProgress,
   stepWithProgress,
   waitClock,
-  withinRuntimeDeadline,
   type Device,
   type RuntimeBaseline,
 } from '@digi/test-support';
 import { expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type TestRuntime } from '../support.ts';
 import { record } from './artifacts.ts';
+import { bounded, rpc, word } from './guest-access.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
@@ -37,6 +37,9 @@ import { drainInputs } from './fx-session.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
 import { pollEmulated } from './waits.ts';
 
+/** `bounded`, `rpc` and `word` live in guest-access.ts (card-kit reads them without this file's session fixtures); tests import them from here. */
+export { bounded, rpc, word };
+
 const exec = promisify(execFile);
 const root = repoRoot();
 /** What the panel helpers need of a runtime: the session, the wait API's `ui` and its clock. */
@@ -48,9 +51,6 @@ export const SETTLE = 'emulated time for the firmware to act (no observable stat
 // core/fx's published registry row: image-modules/points/fx/module.toml.
 export const ROW_WORDS = 24;
 export const FREE_PC = 0xffffffff;
-export const bounded = <T>(operation: () => Promise<T>) => withinRuntimeDeadline(Date.now() + 30_000, operation);
-export const rpc = <T>(session: Session, method: string, params?: Record<string, unknown>) =>
-  bounded(() => session.client.call<T>(method, params));
 
 export function options(device: Device) {
   return { device, firmware: FIRMWARE[device], binary: daemonBinary(device), autoNo: true };
@@ -181,12 +181,6 @@ export function expectGainRow(row: number[], oracle: FxExpectations): void {
   expect(row[12], 'adapter ran the effect').toBe(1);
   expect(row[14], 'effect is not disabled').toBe(0);
   expect(row[17], 'no effect fault').toBe(0);
-}
-
-export async function word(session: Session, address: number): Promise<number> {
-  const value = await bounded(() => session.client.memPeek(address));
-  if (value === null) throw new Error(`unmapped CF word at ${address.toString(16)}`);
-  return value >>> 0;
 }
 
 export async function dspBytes(session: Session, address: number, length: number): Promise<Buffer> {

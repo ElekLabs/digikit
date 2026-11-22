@@ -101,6 +101,8 @@ export interface SessionOptions {
   dsp?: DspMode;
   /** Card sample directory for `card.load` (DT2). */
   card?: string;
+  /** Builds a card image that `firmware.load` mounts as it is (instead of `card.load` of `card`). */
+  cardImage?: () => Promise<string>;
   /** Run directory; default a fresh temporary directory. */
   runDir?: string;
   /** Shared store of booted-state snapshots (`DIGI_SNAPSHOT_DIR`); default `<runDir>/patched`, private to the run dir. */
@@ -303,6 +305,7 @@ export class Session {
     if (options.startEmpty && (options.dsp !== 'sharc' || !options.runtime?.reuse))
       throw new Error('empty startup requires a reusable coupled session');
     if (options.runtime?.reuse && options.mirror) throw new Error('reusable runtime sessions cannot mirror cards');
+    if (options.card && options.cardImage) throw new Error('`card` and `cardImage` both name the card: set one');
     const inp = resolveInputs(options.device, options.firmware);
     if (options.runtime) validateRuntimeInputs(inp);
     const volume = options.runDir && fs.existsSync(options.runDir) ? options.runDir : os.tmpdir();
@@ -384,7 +387,8 @@ export class Session {
         return session;
       }
       let card: string | undefined;
-      if (options.card) card = (await checked(c.cardLoad(options.card))).card;
+      if (options.cardImage) card = await checked(options.cardImage());
+      else if (options.card) card = (await checked(c.cardLoad(options.card))).card;
       session.#card = card;
       session.#load = await checked(
         c.firmwareLoad({
