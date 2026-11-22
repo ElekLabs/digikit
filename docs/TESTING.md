@@ -624,7 +624,7 @@ built bytes (full set; the narrow set of a file outside `mergeTests` is describe
 `dist/bytes/core-objects.sha256`, one line per committed core object (`{runtime,services,image-modules}/**/build/*.dko.json`) with its hash without
 `source_sha256`, the only field that follows the source text (a comment edit changes no other field; checked for Rust, C and assembly).
 The patched image is a function of these objects, the core manifests, the device files, the patchkit code and the firmware. A
-merge key (the target of a file in `mergeTests`) hashes the result instead of the patchkit code (a narrow key holds none of these files: the image hashes and daemon key of its device, the packs the test loads, `pack-verdicts.json` when it imports `pack-needs.ts`, and the patchkit key of its device when it is live):
+merge key (the target of a file in `mergeTests`) hashes the result instead of the patchkit code (a narrow key holds none of these files: the image hashes and daemon key of its device, the packs the test loads with their `.services.json` and `.addrmap.json` sidecars, the device and port files of its own device (`devices/**/*.toml`, `ports/**/*.toml`, the other devices' files left out like in a merge half; a patchkit-live test also holds the core `module.toml` manifests patchkit reads), `pack-verdicts.json` when it imports `pack-needs.ts`, and the patchkit key of its device when it is live):
 `patchkit:device-images` runs `patchkit apply` for each acceptance firmware (`CELLS` of `tools/nx/device-inputs.mjs`) with each patch set of
 its device file and writes `dist/bytes/images.sha256`, one line `<device>-<version> <set> image <sha256> plan <sha256> addrmap <sha256>`
 (the plan and the address map are what `runtime-plan.ts` reads), and the lines of each device again in `dist/bytes/images-<device>.sha256`:
@@ -654,7 +654,7 @@ helper in its closure reads it (`upload-kit.ts`, `synth.ts`, `memaudit-kit.ts`) 
 A merge or narrow key leaves out the import-closure files under `DRIVER_ROOTS` (`packages/dk-session`, `packages/test-support`, `packages/control-client`: the code the test drives the device with, covered by its own host tests); the full key keeps them. `tests/regression/runtime` stays an input.
 A half (`<target>--dt2`, `--dn2`) of a merge key leaves out the files of the other device (its device file, peer file and ports) unless the test loads the whole registry; a full key keeps them.
 The sources, SDK headers and `source_sha256` of the image are not inputs: a comment, an unused constant or a rebuilt object with the same
-bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`), the `plusdrive` and `dksample.wasm` outputs, the
+bytes changes no key. The key also holds the pack outputs (`dist/modules/*/*.dkm`, `*.dks` and the `*.services.json` and `*.addrmap.json` sidecars), the `plusdrive` and `dksample.wasm` outputs, the
 files the test reads and lists in `sources` (the module's own sources reach the run through the packs and the
 object hashes, not as files), the files in `READ_BY_TESTS` (`tools/nx/device-test-keys.mjs`: `devices/*.toml`, `ports/**/*.toml`, core manifests under `runtime/`, `services/` and `image-modules/`,
 `sdk/sdk.toml`, `types.toml`, fixture files, the Vitest and TypeScript config; tests read these without importing them; the files of a device without an acceptance cell (`devices/syntakt*.toml`, its ports and peer file) are excluded, see "Three keys exist"),

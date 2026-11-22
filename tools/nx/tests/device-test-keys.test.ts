@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { deviceInputs, forDevice, withoutDriver } from '../device-test-keys.mjs';
+import { OTHER_DEVICE_FILES, deviceInputs, forDevice, withoutDriver } from '../device-test-keys.mjs';
 import { conformanceTarget } from '../device-tests.mjs';
 
 const imports = [
@@ -162,4 +162,23 @@ it('a half follows the image of a subject built into it and the pack or producti
   expect(files(forDevice(image, 'q'))).toEqual([]);
   // the manifests of the crate are not inputs of a packed subject
   expect(files(forDevice(both, 'p'))).toContain('!{workspaceRoot}/modules/x-a/Cargo.{toml,lock}');
+});
+
+it('a key that holds a pack holds its sidecars; a narrow key holds the device and port files', () => {
+  const narrow = outputGlobs(
+    forDevice(keyOf({ narrow: true, services: new Set(['a']) }, [{ modules: ['x/a', 'x/b'] }]), null),
+  );
+  for (const leaf of ['a', 'b']) {
+    expect(narrow).toContain(`dist/modules/*/${leaf}.services.json`);
+    expect(narrow).toContain(`dist/modules/*/${leaf}.addrmap.json`);
+  }
+  for (const opts of [{ merge: true }, {}])
+    expect(outputGlobs(forDevice(keyOf(opts), null))).toEqual(
+      expect.arrayContaining(['dist/modules/*/*.services.json', 'dist/modules/*/*.addrmap.json']),
+    );
+  const files = forDevice(keyOf({ narrow: true }), null);
+  expect(files).toContain('{workspaceRoot}/devices/**/*.toml');
+  expect(files).toContain('{workspaceRoot}/ports/*.toml');
+  // a narrow half, like a merge half, leaves the other devices' files out (expanded per device by forDevice)
+  for (const opts of [{ narrow: true }, { merge: true }]) expect(keyOf(opts)).toContain(OTHER_DEVICE_FILES);
 });
