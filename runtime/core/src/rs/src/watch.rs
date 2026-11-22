@@ -1,6 +1,6 @@
 //! The DSP diagnostics poll and its heartbeat watch, the effect and voice guards, the module list for a stop, and the health snapshot. They stay in
 //! the runtime: the fault record, `dk/fault`, ABOUT and the machine table read their results. What they log goes through `dlog::ev`.
-use crate::handlers::services;
+use crate::package::handlers::services;
 use crate::dlog::{ev, sink_present, word_of, INFO};
 use crate::{arena, platform::fw_blocks, platform::st};
 use dkrt_abi::platform::Platform;
@@ -358,7 +358,7 @@ unsafe fn list_modules() {
             ev(
                 logk::MOD_LIST,
                 logk::F_ERROR,
-                [i as u32, crate::entry::has_tick(i) as u32, word_of(m.name.as_ptr(), 0, 32), word_of(m.name.as_ptr(), 4, 32), word_of(m.name.as_ptr(), 8, 32)],
+                [i as u32, crate::package::entry::has_tick(i) as u32, word_of(m.name.as_ptr(), 0, 32), word_of(m.name.as_ptr(), 4, 32), word_of(m.name.as_ptr(), 8, 32)],
             );
         }
         i += 1;

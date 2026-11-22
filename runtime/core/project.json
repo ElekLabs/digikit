@@ -55,7 +55,7 @@
         "{workspaceRoot}/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
         "{workspaceRoot}/services/project/dks/build/project.dko.json",
         "{workspaceRoot}/tools/nx/device-images.mjs",
-        "{projectRoot}/src/rs/src/loader/tests/snapshots/*.txt",
+        "{projectRoot}/src/rs/src/package/loader/tests/snapshots/*.txt",
         { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },

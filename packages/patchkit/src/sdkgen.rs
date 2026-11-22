@@ -52,7 +52,7 @@ pub const REGISTERS_MD_OUT: &str = "sdk/dsp/REGISTERS.md";
 /// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
 pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
 /// The generated static table of the runtime's in-crate services, relative to the repository root.
-pub const SERVICES_RS_OUT: &str = "runtime/core/src/rs/src/gen_services.rs";
+pub const SERVICES_RS_OUT: &str = "runtime/core/src/rs/src/package/gen_services.rs";
 /// The generated hash of the `dkrt-abi` boundary files (`SVC_ABI`, docs/plans/runtime-and-services.md section 13.2), relative to the repository root.
 pub const SVC_ABI_OUT: &str = "runtime/core/abi/src/gen_svc_abi.rs";
 /// The generated Python protocol numbers, relative to the repository root.
@@ -564,10 +564,10 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
     s
 }
 
-/// `runtime/core/src/rs/src/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
+/// `runtime/core/src/rs/src/package/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
 fn rust_services(sdk: &Sdk) -> String {
     let mut s = format!("// {HEADER}\n\n");
-    s.push_str("use crate::core_api::{RealCore, REAL_CORE};\nuse dkrt_abi::service::{rows_with_tail, RowPtrs, ServiceRow, ServiceTable};\n\n");
+    s.push_str("use crate::package::core_api::{RealCore, REAL_CORE};\nuse dkrt_abi::service::{rows_with_tail, RowPtrs, ServiceRow, ServiceTable};\n\n");
     s.push_str("/// The in-crate services in the order the core calls them (`[[service]]` of sdk/sdk.toml), each with the record kinds it owns.\n");
     let rows: Vec<(&ServiceDecl, &String)> = sdk
         .service

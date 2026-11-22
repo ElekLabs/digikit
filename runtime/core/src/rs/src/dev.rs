@@ -219,7 +219,7 @@ mod tests {
             p.dyn_types = 0;
             p.dsp_block_cycles = 0;
         }), || unsafe {
-            assert_eq!(crate::dsp::area_bytes(), 0);
+            assert_eq!(crate::package::dsp::area_bytes(), 0);
             assert_eq!(crate::health::dkrt_blocks(), 0);
             let mut h: DkrtHealth = core::mem::zeroed();
             crate::health::dkrt_health_light(&mut h, false);
@@ -228,7 +228,7 @@ mod tests {
         });
         // with a DSP the fixture's area is there and the flag is clear
         with_profile(device(|p| p.has_store = false), || unsafe {
-            assert_ne!(crate::dsp::area_bytes(), 0);
+            assert_ne!(crate::package::dsp::area_bytes(), 0);
             let mut h: DkrtHealth = core::mem::zeroed();
             crate::health::dkrt_health_light(&mut h, false);
             assert!(h.flags & HEALTH_NO_DSP == 0);

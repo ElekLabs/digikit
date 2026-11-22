@@ -1,7 +1,7 @@
 //! Interface C of a service file, both sides linked on the host: `ImportCore` of `dkrt-svc-rt` calls the `dkc_*` functions, which are the runtime's shims of
 //! `SVC_IMPORTS` (exported under their names in a test build), which call `RealCore`. A few representative methods give the same answer through the C shape as
 //! through `RealCore`, and the `service!` macro's `init` declares the kinds and the row to a collection.
-use crate::core_api::{CoreApi, REAL_CORE};
+use crate::package::core_api::{CoreApi, REAL_CORE};
 use crate::test_lock::LOCK;
 use dkrt_abi::core_api::LOG_INFO;
 use dkrt_abi::link::{Owner, Slot, Stream};
@@ -72,7 +72,7 @@ fn the_link_and_the_job_queue_answer_over_the_c_shape() {
         assert!(ic.link_submit(Owner::Tracks, &odd).is_none());
         assert!(REAL_CORE.link_submit(Owner::Tracks, &odd).is_none());
         // the queue: a step is posted through the table, and the id cancels it again
-        crate::core_api::testing::test_reset();
+        crate::package::core_api::testing::test_reset();
         unsafe extern "C" fn step(_: *mut u8) -> i32 {
             0
         }
@@ -81,7 +81,7 @@ fn the_link_and_the_job_queue_answer_over_the_c_shape() {
         assert_eq!(ic.job_cancel(1, id as u32), 0);
         // no step is the core's refusal
         assert_eq!(ic.job_post(1, None, None, core::ptr::null_mut()), REAL_CORE.job_post(1, None, None, core::ptr::null_mut()));
-        crate::core_api::testing::test_reset();
+        crate::package::core_api::testing::test_reset();
     }
 }
 
@@ -119,12 +119,12 @@ fn the_service_macro_gives_the_fingerprint_and_an_init_that_declares_kinds_and_r
     assert!(m.init.is_some() && m.fini.is_none() && m.tick.is_none() && m.menu.is_none());
     assert_eq!(glue::row().name(), "nothing");
     unsafe {
-        let mut col = std::boxed::Box::new(crate::collect::Collect::new());
-        crate::collect::begin(&mut *col);
-        let ctx = crate::entry::bind(0) as *mut u8;
+        let mut col = std::boxed::Box::new(crate::package::collect::Collect::new());
+        crate::package::collect::begin(&mut *col);
+        let ctx = crate::package::entry::bind(0) as *mut u8;
         let r = (m.init.unwrap())(ctx);
-        crate::collect::end();
-        crate::entry::unbind(0);
+        crate::package::collect::end();
+        crate::package::entry::unbind(0);
         assert_eq!(r, 0);
         // two kinds with the handler the macro passes (the address of init, a function of the file), then the row
         let d = &col.decl;

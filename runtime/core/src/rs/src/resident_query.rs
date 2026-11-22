@@ -45,7 +45,7 @@ pub unsafe extern "C" fn dkrt_service_query(
     {
         return E_CONTRACT;
     }
-    let addr = match crate::loader::resident_query(provider, minimum) {
+    let addr = match crate::package::loader::resident_query(provider, minimum) {
         Ok(addr) => addr,
         Err(code) => return code,
     };

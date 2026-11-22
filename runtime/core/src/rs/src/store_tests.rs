@@ -983,7 +983,7 @@ fn every_lister_gives_the_same_entries_for_the_same_folder() {
 
     // 3: the loader's provider search lists through the same call
     let mut out2 = unsafe { core::mem::zeroed::<[DkrtStoreEntry; 8]>() };
-    let n2 = unsafe { crate::loader::discover::Cards::list(&mut crate::loader::RealImages, b"modules/\0".as_ptr(), out2.as_mut_ptr(), 8) };
+    let n2 = unsafe { crate::package::loader::discover::Cards::list(&mut crate::package::loader::RealImages, b"modules/\0".as_ptr(), out2.as_mut_ptr(), 8) };
     assert_eq!(n2, n);
     assert_eq!(out2[..4].iter().map(|e| (cname(&e.path), e.size, e.first)).collect::<Vec<_>>(), out[..4].iter().map(|e| (cname(&e.path), e.size, e.first)).collect::<Vec<_>>());
 
@@ -1001,7 +1001,7 @@ fn every_lister_gives_the_same_entries_for_the_same_folder() {
 /// `store_find` of a name under `modules/`: the status and the path it found.
 fn find_module(name: &str) -> (i32, String) {
     let mut out = [0u8; 64];
-    let r = unsafe { crate::scan::store_find(b"modules/", name.as_bytes(), &mut out) };
+    let r = unsafe { crate::package::scan::store_find(b"modules/", name.as_bytes(), &mut out) };
     let end = out.iter().position(|b| *b == 0).unwrap_or(64);
     (r, String::from_utf8_lossy(&out[..end]).into_owned())
 }

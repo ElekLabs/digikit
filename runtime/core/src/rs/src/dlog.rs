@@ -261,7 +261,7 @@ pub unsafe extern "C" fn dk_span_sink_set(emit: *mut u8, clock: *mut u8) -> i32 
     irq_restore(sr);
     if r == OK && emit.is_null() {
         // the owner gives the channel up: the DSP counters are its to control, and stop with it
-        crate::dsp_stats::owner_gone();
+        crate::package::dsp_stats::owner_gone();
     }
     r
 }
@@ -294,7 +294,7 @@ pub unsafe fn release_sinks(idx: usize) {
     }
     irq_restore(sr);
     if span_released {
-        crate::dsp_stats::owner_gone();
+        crate::package::dsp_stats::owner_gone();
     }
 }
 

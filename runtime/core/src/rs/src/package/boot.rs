@@ -1,7 +1,8 @@
 //! The boot steps of the system package: the header tables of the selection, the providers they need and the package manager's load. `boot::run` calls them through
 //! `BootEnv`.
 
-use crate::{lifecycle, loader, store};
+use crate::{store};
+use crate::package::{lifecycle, loader};
 use dkrt_sdk::sel::Record;
 use dkrt_sdk::OK;
 

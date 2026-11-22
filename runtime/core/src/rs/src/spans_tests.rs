@@ -3,7 +3,7 @@
 //! tests share the lock of `cleanup_tests`.
 use crate::fake_platform::test_arena::TestArena;
 use crate::dlog::{self, Span, SINK_SPAN};
-use crate::entry;
+use crate::package::entry;
 use dkrt_abi::module::Ctx;
 use crate::state::{DKRT_POLLS, POLLS};
 use crate::tick::{phase, poll_all};
@@ -296,20 +296,20 @@ fn a_module_context_names_its_owner() {
         reset(0, 5);
         // other tests leave contexts bound
         for rec in 0..crate::state::REC_MAX {
-            crate::entry::unbind(rec);
+            crate::package::entry::unbind(rec);
         }
-        crate::entry::bind(2);
+        crate::package::entry::bind(2);
         // the host's addresses are 64 bits wide: `dkrt_ctx_owner` takes the address of the context itself, a host pointer
         let ctx = core::ptr::addr_of!(entry::DKRT_CTXS[2]) as usize;
         assert_eq!(crate::api::dkrt_ctx_owner(ctx), 2);
         assert_eq!(crate::api::dkrt_ctx_owner(ctx + 1), E_CONTRACT);
         assert_eq!(crate::api::dkrt_ctx_owner(0), E_CONTRACT);
         assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[3]) as usize), E_CONTRACT, "record 3 is not loaded");
-        crate::entry::unbind(2);
+        crate::package::entry::unbind(2);
         // a service file's record has a context too, but no owner id is given out for it
-        crate::entry::bind(dkrt_abi::MAX_MODULES);
+        crate::package::entry::bind(dkrt_abi::MAX_MODULES);
         assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[dkrt_abi::MAX_MODULES]) as usize), E_CONTRACT);
-        crate::entry::unbind(dkrt_abi::MAX_MODULES);
+        crate::package::entry::unbind(dkrt_abi::MAX_MODULES);
         reset(0, 5);
     }
 }
@@ -342,7 +342,7 @@ fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
 /// a release lets it through, releases never take the count below 0, and a load into the record starts at 0, so a release that arrives after it changes nothing.
 #[test]
 fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
-    use crate::reload::{Ops, RealOps};
+    use crate::package::reload::{Ops, RealOps};
     let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
@@ -381,7 +381,7 @@ fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
 /// a record number past the table is no menu, and the count does not wrap after many menus.
 #[test]
 fn the_job_reads_the_menu_count_of_its_own_record() {
-    use crate::reload::{Ops, RealOps};
+    use crate::package::reload::{Ops, RealOps};
     let _g = TestArena::lock();
     unsafe {
         reset(0, 5);

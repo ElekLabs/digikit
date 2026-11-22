@@ -5,8 +5,8 @@
 //! file with. The fixtures are the Nx `pack` outputs `dist/modules/<device>/<leaf>.dkm` (this target depends on them).
 //!
 //! The DSP side is a table (`dyndsp_info`) that the test builds: the device, the area and the symbols the section imports.
-use crate::cleanup_tests as ct;
-use crate::dsp::{self, Job, INFO_MAGIC, I_AREA, I_AREA_BYTES, I_DEVICE, I_IMPORTS, I_MAGIC, I_NIMPORT, I_VFREE, I_VROWS, L2_BYTE_BASE};
+use crate::package::cleanup_tests as ct;
+use crate::package::dsp::{self, Job, INFO_MAGIC, I_AREA, I_AREA_BYTES, I_DEVICE, I_IMPORTS, I_MAGIC, I_NIMPORT, I_VFREE, I_VROWS, L2_BYTE_BASE};
 use crate::test_lock::LOCK;
 use dkneeds::{fx, keys::Keys, machine};
 use dkrt_sdk::*;
@@ -92,7 +92,7 @@ fn imports_of(f: &[u8]) -> Vec<String> {
 fn machine_keys_of_file(f: &[u8], out: &mut [u32; 8]) -> usize {
     let be = |at: usize| u32::from_be_bytes([f[at], f[at + 1], f[at + 2], f[at + 3]]) as usize;
     let (off, len) = (be(dkneeds::keys::H_KEYS_OFF as usize), be(dkneeds::keys::H_KEYS_SIZE as usize));
-    crate::loader::table_keys(&f[off..off + len], out)
+    crate::package::loader::table_keys(&f[off..off + len], out)
 }
 
 /// Run the runtime's check of the DSP section of `f` on a DSP of `device`: the result code and what the check found.
@@ -105,7 +105,7 @@ struct MachinesBack(bool);
 impl Drop for MachinesBack {
     fn drop(&mut self) {
         if self.0 {
-            unsafe { crate::svc_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None) };
+            unsafe { crate::package::svc_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), None) };
         }
     }
 }
@@ -113,13 +113,13 @@ impl Drop for MachinesBack {
 /// As `check`; `fx` and `machines` say whether those services are loaded.
 fn check_with(f: &[u8], device: u32, fx: bool, machines: bool) -> (i32, Job) {
     let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let _ = crate::handlers::services(); // the first call adds the machines row of the host tests
+    let _ = crate::package::handlers::services(); // the first call adds the machines row of the host tests
     let _back = MachinesBack(!machines);
     if !machines {
-        unsafe { crate::svc_rows::remove(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1) };
+        unsafe { crate::package::svc_rows::remove(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1) };
     }
     // an effect module's DSP section is checked by the fx service, a file of the card
-    let _fx = fx.then(crate::handlers::fx_fixture::LoadedFx::new);
+    let _fx = fx.then(crate::package::handlers::fx_fixture::LoadedFx::new);
     let info = info_table(device, &imports_of(f));
     let mut job = Job::empty();
     let (off, size) = section(f);
@@ -128,9 +128,9 @@ fn check_with(f: &[u8], device: u32, fx: bool, machines: bool) -> (i32, Job) {
     let n = machine_keys_of_file(f, &mut keys);
     unsafe {
         let _info = ct::VoiceInfoGuard::set(info.as_ptr());
-        crate::handlers::exports::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::core_api::REAL_CORE));
+        crate::package::handlers::exports::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::package::core_api::REAL_CORE));
         let r = dsp::check(f.as_ptr(), off, size, f.len() as u32, &mut job);
-        crate::handlers::exports::seed_for_test(&[], 0);
+        crate::package::handlers::exports::seed_for_test(&[], 0);
         (r, job)
     }
 }
@@ -339,11 +339,11 @@ fn a_machine_voice_with_a_bad_entry_is_refused() {
 // The test-only service `svc-test` (`.dks`) and its user (`.dkm`): the role word, the find and the plan on the packed files.
 mod service_fixtures {
     use super::*;
-    use crate::core_api::{CoreApi, REAL_CORE};
+    use crate::package::core_api::{CoreApi, REAL_CORE};
     use crate::fake_storage::FakeStorage;
-    use crate::loader::discover::{find, Found};
-    use crate::handlers::ServiceTable;
-    use crate::loader::role::{role_of, role_ok};
+    use crate::package::loader::discover::{find, Found};
+    use crate::package::handlers::ServiceTable;
+    use crate::package::loader::role::{role_of, role_ok};
     use dkneeds::keys::name_hash;
     use dkrt_abi::plan::{Reason, Verdict};
     use dkrt_abi::service::{Service, ServiceRow};
@@ -354,7 +354,7 @@ mod service_fixtures {
         dkrt_abi::accepts_records!();
         dkrt_abi::accepts_teardown!();
     }
-    static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S, crate::core_api::RealCore>("machines", &[])];
+    static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S, crate::package::core_api::RealCore>("machines", &[])];
     static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
 
     #[repr(C, align(16))]
@@ -394,7 +394,7 @@ mod service_fixtures {
 
     fn found(dev: &str) -> (Vec<u8>, Found) {
         let svc = packed(dev, "svc-test");
-        let mut fs = crate::loader::discover::fake::cards(vec![("services/svc-test.dks".into(), svc.clone())]);
+        let mut fs = crate::package::loader::discover::fake::cards(vec![("services/svc-test.dks".into(), svc.clone())]);
         let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
         unsafe { find(&mut fs, &services, &[name_hash("svc-test")], None, &mut out) };
@@ -426,14 +426,14 @@ mod service_fixtures {
                 b
             };
             let (u, s, p) = (PackageId(0), PackageId(dkrt_abi::MAX_MODULES as u8), PackageId(dkrt_abi::MAX_MODULES as u8 + 1));
-            let core = crate::lifecycle::CoreApis::new();
+            let core = crate::package::lifecycle::CoreApis::new();
             let g = PackageGraph::from_tables(&[(u, table(&user)), (s, table(&svc)), (p, port.as_slice())], core.as_slice()).unwrap();
             // the port file comes first, then the service that needs it, then the user
             assert_eq!(g.bring_up_order(&[u], &LiveSet::new()).unwrap().as_slice(), [p, s, u], "{dev}");
             let g = PackageGraph::from_tables(&[(u, table(&user))], core.as_slice()).unwrap();
             let why = g.bring_up_order(&[u], &LiveSet::new()).unwrap_err();
             assert_eq!(why, Refusal::Unmet { package: u, service: name_hash("svc-test") }, "{dev}");
-            assert_eq!(crate::lifecycle::code_of(&LifecycleError::Graph(why)), E_MISSING, "{dev}");
+            assert_eq!(crate::package::lifecycle::code_of(&LifecycleError::Graph(why)), E_MISSING, "{dev}");
         }
     }
 }

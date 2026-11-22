@@ -4,7 +4,8 @@ use dkrt_abi::platform::Platform;
 use crate::{platform::fw_blocks, platform::has_dsp};
 use crate::platform::st;
 use crate::state::init_once;
-use crate::{arena, dsp, store};
+use crate::{arena, store};
+use crate::package::{dsp};
 use dkrt_sdk::*;
 
 extern "C" {

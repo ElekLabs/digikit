@@ -1,9 +1,10 @@
 //! `dkrt_capacity`: the entries of the CAPACITY command and the DIGIKIT menu's MEMORY page, and the limit each kind takes from the loaded services or the image.
 
-use crate::handlers::services;
+use crate::package::handlers::services;
 use crate::platform::{self, st};
 use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
-use crate::{arena, boot, card, dsp, settings, store};
+use crate::{arena, boot, card, settings, store};
+use crate::package::{dsp};
 use core::ptr::read_volatile;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
@@ -53,7 +54,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
     };
     let (set_limit, set_used) = settings::capacity();
     // the DSP load: the headroom and the voices of the device profile; the load is the boot plan's (the module set is fixed per session)
-    let (dsp_used, dsp_top) = crate::loader::planned_dsp();
+    let (dsp_used, dsp_top) = crate::package::loader::planned_dsp();
     let pf = platform::profile();
     // the services declare their own counts (machine, voice, parameter and page rows, effect and send slots, map entries), per kind
     let table = services();
@@ -122,7 +123,7 @@ mod tests {
             p.info_entries.borrow_mut().push((hash(kind), std::vec![v]));
             p.info_data.borrow_mut().push(hash(kind));
         }
-        let none = dkrt_abi::service::ServiceTable::new(&[], &crate::core_api::REAL_CORE);
+        let none = dkrt_abi::service::ServiceTable::new(&[], &crate::package::core_api::REAL_CORE);
         let c = caps(&p, &none);
         assert_eq!(limits(&c), [(8, 0), (16, 0), (8, 0)]);
         // every kind that needs room has it: only the three rows are checked here
@@ -145,7 +146,7 @@ mod tests {
     fn a_loaded_services_answer_wins_over_the_info_entry() {
         use dkrt_abi::service::{Service, ServiceRow, ServiceTable};
         struct Machines;
-        impl<C: crate::core_api::CoreApi> Service<C> for Machines {
+        impl<C: crate::package::core_api::CoreApi> Service<C> for Machines {
             dkrt_abi::accepts_records!();
             dkrt_abi::accepts_teardown!();
 
@@ -153,7 +154,7 @@ mod tests {
                 (kind == CAPK_MACHINE_ROWS).then_some((12, 2))
             }
         }
-        static ROWS: [ServiceRow; 1] = [ServiceRow::of::<Machines, crate::core_api::RealCore>("machines", &[])];
+        static ROWS: [ServiceRow; 1] = [ServiceRow::of::<Machines, crate::package::core_api::RealCore>("machines", &[])];
         static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
         let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let p = FakePlatform::new(profiles::DT2);
@@ -161,7 +162,7 @@ mod tests {
             p.info_entries.borrow_mut().push((hash(kind), std::vec![v]));
             p.info_data.borrow_mut().push(hash(kind));
         }
-        let table = ServiceTable::new(&ROWS_P.0, &crate::core_api::REAL_CORE);
+        let table = ServiceTable::new(&ROWS_P.0, &crate::package::core_api::REAL_CORE);
         let c = caps(&p, &table);
         let l = limits(&c);
         assert_eq!(l[0], (12, 2), "the service's answer wins and owns used");

@@ -2,7 +2,8 @@
 //! lifecycle of the device. `RealBootEnv` is the device's; a host test gives the same steps over a fake card and its own loader (`loader/tests/host_boot_env.rs`).
 
 use crate::platform::RealPlatform;
-use crate::{fault, loader};
+use crate::{fault};
+use crate::package::{loader};
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
 

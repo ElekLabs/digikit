@@ -542,7 +542,7 @@ mod tests {
             note_busy();
         }
         if let Some(rec) = s.retire_rec {
-            s.retire_seen = Some(crate::loader::retire_sdk(rec));
+            s.retire_seen = Some(crate::package::loader::retire_sdk(rec));
         }
         if s.calls <= s.more {
             IO_MORE
@@ -811,7 +811,7 @@ mod tests {
             post(3, Some(step), Some(done), ptr(&mut a));
             drain();
             assert_eq!(a.retire_seen, Some(false), "the loader must keep the module's memory while its step runs");
-            assert!(crate::loader::retire_sdk(2), "the step has returned (the job is cancelled): the memory may go");
+            assert!(crate::package::loader::retire_sdk(2), "the step has returned (the job is cancelled): the memory may go");
             tick();
             assert_eq!(a.done_calls, 0, "no done after a retire");
         }

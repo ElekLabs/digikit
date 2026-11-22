@@ -310,7 +310,7 @@ impl Platform for RealPlatform {
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         // host tests link no image: the tables of the runtime's own tests (`dyndsp_info`, `dynfx_info`)
         #[cfg(test)]
-        if let Some(t) = crate::cleanup_tests::test_info(name_hash) {
+        if let Some(t) = crate::package::cleanup_tests::test_info(name_hash) {
             return t;
         }
         dkrt_abi::platform::info_find(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash)

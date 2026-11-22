@@ -19,7 +19,7 @@ use crate::dlog;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::proto::*;
 use dkrt_sdk::{logk, E_BUSY, OK};
-use crate::module_cmds::{service, service_of};
+use crate::package::module_cmds::{service, service_of};
 use crate::store_cmds::*;
 use crate::admin_cmds::*;
 
@@ -239,7 +239,7 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
         return r;
     }
     // a command a module registered
-    match crate::module_cmds::begin_cmd(cmd) {
+    match crate::package::module_cmds::begin_cmd(cmd) {
         Err(()) => reply(cmd, seq, E_BUSY, 0), // its module is being reloaded: the host asks again
         Ok(Some((h, owner))) => {
             let out = (addr_of_mut!(RBODY) as *mut u8).add(1);
@@ -250,7 +250,7 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
                 dlog::leave_module(prev);
             }
             // counted since `begin_cmd`: a reload of the module waits for it
-            crate::module_cmds::end_cmd(owner);
+            crate::package::module_cmds::end_cmd(owner);
             if r < 0 {
                 reply(cmd, seq, r, 0)
             } else if r as usize > REPLY_BODY_MAX - 1 {

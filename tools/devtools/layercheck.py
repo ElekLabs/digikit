@@ -26,14 +26,14 @@ Rules:
             its protocol).
   arrows    Inside the runtime crate (runtime/core/src/rs/src), a service (services/NAME) names no other service folder and no core
             module except `crate::core_api` (the interface to the core: CoreApi, RealCore, FakeCore and the few core functions it re-exports); pure types
-            come from the crate dkrt-abi. The core reaches a service only through `handlers.rs` (`exports`) and the generated table `gen_services.rs`. A service's own
+            come from the crate dkrt-abi. The core reaches a service only through `package/handlers.rs` (`exports`) and the generated table `package/gen_services.rs`. A service's own
             host tests (`tests.rs` or a `tests/` folder in the service) may name core modules: they drive the walkers and the planner over the service.
   service-crates
             A service crate (services/NAME, linked into the runtime object) depends only on dkrt-abi, dkrt-sdk and dkneeds, and on
             dkrt-test-support as a dev-dependency; it names no firmware crate and no device id (only its `dks/` service file may name `dkfw`, in `dks/src/fw.rs`), and has no path into the runtime crate. The runtime
-            names a service crate (`dkrt_svc_*`) only in `gen_services.rs`, `handlers.rs` and the host-test files under `handlers/`. Final state (R12-1): no service is a folder of the
+            names a service crate (`dkrt_svc_*`) only in `package/gen_services.rs`, `package/handlers.rs` and the host-test files under `package/handlers/`. Final state (R12-1): no service is a folder of the
             runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
-  kind-free The runtime's own code (the runtime crate's and the abi crate's sources without their host tests, inline `#[cfg(test)] mod x { }` blocks included, `handlers.rs`, the host-test files in `handlers/` and the generated `gen_services.rs`) names no machine or effect: no builder
+  kind-free The runtime's own code (the runtime crate's and the abi crate's sources without their host tests, inline `#[cfg(test)] mod x { }` blocks included, `package/handlers.rs`, the host-test files in `package/handlers/` and the generated `package/gen_services.rs`) names no machine or effect: no builder
             call (the `provided` imports of the services machines and fx in sdk/sdk.toml, but for those with `wrapper = "fw"`: `dk_module_ctx_add_machine`, `dk_page_add_param` ...), no record kind of a machine or an effect (`KIND_MACHINE`, `KIND_PARAM`, `KIND_PAGE`,
             `KIND_ACTION`, `KIND_NATIVE_PAGE*`, `KIND_EFFECT`, `KINDS_MACHINES`, `KINDS_FX`), no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`,
             `fxpages_info`, `mf_native_*`) and no state of the machines registry (`RegState`, `DKRT_REG`, `DKRT_ASSIGN`). The services own them: the machines and fx service files
@@ -710,8 +710,8 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                             )
                         )
                 elif first == "services" and r.as_posix() not in (
-                    "handlers.rs",
-                    "gen_services.rs",
+                    "package/handlers.rs",
+                    "package/gen_services.rs",
                 ):
                     out.append(
                         Violation(
@@ -721,7 +721,7 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
                             ARROW_CORE_HINT,
                         )
                     )
-        if own is None and r.as_posix() not in ("handlers.rs", "gen_services.rs"):
+        if own is None and r.as_posix() not in ("package/handlers.rs", "package/gen_services.rs"):
             for m in RT_BARE_SERVICES.finditer(text):
                 line = text.count("\n", 0, m.start()) + 1
                 out.append(
@@ -822,7 +822,7 @@ SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-params", "dkrt-svc-
 SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support"}
 # `dkrt_svc_rt` is the support crate of a service file (runtime/core/svc-rt), not a service
 SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")
-SERVICE_RUNTIME_FILES = ("handlers.rs", "gen_services.rs")
+SERVICE_RUNTIME_FILES = ("package/handlers.rs", "package/gen_services.rs")
 # The services that are folders of the runtime crate (`services/NAME`): none since R12-1; every service is a crate (`services/NAME`).
 RT_LOCAL_SERVICES: set[str] = set()
 SERVICE_RUNTIME_REF = re.compile(r"\bdkrt::|\bextern\s+crate\s+dkrt\b")
@@ -972,7 +972,7 @@ def check_service_crates(root: Path) -> list[Violation]:
                 )
     for f in sorted(src.rglob("*.rs")) if src.is_dir() else []:
         r = f.relative_to(src).as_posix()
-        if r in SERVICE_RUNTIME_FILES or r.startswith("handlers/"):
+        if r in SERVICE_RUNTIME_FILES or r.startswith("package/handlers/"):
             continue
         for n, line in enumerate(
             rust_without_comments(f.read_text(encoding="utf-8")).splitlines(), 1
@@ -1013,7 +1013,7 @@ def rt_kind_free(root: Path) -> re.Pattern[str]:
     )
 
 
-KIND_FREE_EXEMPT = ("handlers.rs", "gen_services.rs")
+KIND_FREE_EXEMPT = ("package/handlers.rs", "package/gen_services.rs")
 KIND_FREE_HINT = "the machines or the fx service owns it (services/machines, fx): the core runs the generic part and calls the service through `Service` or `CoreApi`"
 
 
@@ -1055,10 +1055,10 @@ def without_test_modules(lines: list[str]) -> list[str]:
 
 # The host-test files of `handlers/` (its other files, if any, are scanned).
 KIND_FREE_TEST_FILES = (
-    "handlers/tests.rs",
-    "handlers/lfo_tests.rs",
-    "handlers/fx_fixture.rs",
-    "handlers/dks_decls.rs",
+    "package/handlers/tests.rs",
+    "package/handlers/lfo_tests.rs",
+    "package/handlers/fx_fixture.rs",
+    "package/handlers/dks_decls.rs",
 )
 # The abi crate is the core's boundary: it too names no machine or effect.
 RT_ABI_SRC = "runtime/core/abi/src"

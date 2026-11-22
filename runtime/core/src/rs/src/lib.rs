@@ -18,33 +18,21 @@ use dkrt_sdk::*;
 mod api;
 mod arena;
 mod dev;
-pub mod core_api;
-pub mod collect;
-mod handlers;
 pub mod storage;
 pub(crate) use storage::storage_adapter;
 pub use storage::card::{block_write, block_write_with};
 pub use storage::{card, store, store_writer};
-#[rustfmt::skip]
-mod gen_services;
 pub mod boot;
 mod boot_env;
 pub mod fault;
 pub mod dlog;
-mod dsp;
-mod link;
-pub mod dsp_stats;
-pub mod entry;
 mod gen_abi_check;
+mod image;
 mod resident_query;
-mod loader;
 mod package;
-pub mod registry;
-pub mod scan;
+// `dkrt_sdk::optional_imports!` (expanded in imports.rs) names `crate::loader::stub_missing`; the resident table replaces that macro in RC2s-1 S7.
+use package::loader;
 pub mod settings;
-mod settings_overlay;
-mod settings_reload;
-mod files;
 mod hash32;
 // The file is not aux.rs: Windows does not allow a file named AUX, with any extension.
 #[path = "aux_task.rs"]
@@ -54,17 +42,11 @@ mod intro;
 mod safe_screen;
 mod sha256;
 mod io;
-mod invariants;
 mod watch;
 mod worker;
 mod health;
-mod imports;
-mod svc_imports;
-mod svc_rows;
 mod mailbox;
-mod admission;
 mod platform;
-pub mod reload;
 mod safe_mode;
 mod selection;
 mod report;
@@ -73,7 +55,6 @@ mod tick;
 mod transport;
 mod store_cmds;
 mod admin_cmds;
-mod module_cmds;
 
 pub use resident_query::dkrt_service_query;
 
@@ -123,11 +104,6 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
 
 
 
-mod lifecycle;
-#[cfg(test)]
-mod cleanup_tests;
-#[cfg(test)]
-mod fake_checked_images;
 #[cfg(test)]
 mod test_lock;
 #[cfg(test)]

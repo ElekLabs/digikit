@@ -384,11 +384,11 @@ pub unsafe fn module_client() -> i32 {
     }
     let rec = source as usize - 1;
     // a service file reads the device scope through the core, not through a module handle
-    if rec >= dkrt_abi::MAX_MODULES || !crate::files::in_init(rec) {
+    if rec >= dkrt_abi::MAX_MODULES || !crate::package::files::in_init(rec) {
         return E_NOT_FOUND;
     }
     // the module reads its settings in `init`: a change of what they return reloads it (`settings_reload`)
-    crate::settings_reload::note_opened(rec);
+    crate::package::settings_reload::note_opened(rec);
     rec as i32 + 1
 }
 
@@ -436,7 +436,7 @@ pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) ->
     let mut none = [0u8; 0];
     let buf: &mut [u8] = if cap == 0 { &mut none } else { core::slice::from_raw_parts_mut(out, cap as usize) };
     if let Some(id) = module_id(client) {
-        if let Some(r) = crate::settings_overlay::get(id, key_of(key), buf) {
+        if let Some(r) = crate::package::settings_overlay::get(id, key_of(key), buf) {
             return r;
         }
     }
@@ -465,7 +465,7 @@ pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32
         return r;
     }
     if let Some(id) = module_id(client) {
-        let r = crate::settings_overlay::put(id, key_of(key), v);
+        let r = crate::package::settings_overlay::put(id, key_of(key), v);
         if r != OK {
             return r;
         }
@@ -487,7 +487,7 @@ pub unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
         return r;
     }
     if let Some(id) = module_id(client) {
-        let r = crate::settings_overlay::remove(id, key_of(key));
+        let r = crate::package::settings_overlay::remove(id, key_of(key));
         if r != OK {
             return r;
         }
@@ -594,7 +594,7 @@ mod tests {
 
     // ---- the settings overlay of the module calls (settings_overlay.rs) ---------------------------------------------------------------
 
-    use crate::settings_overlay;
+    use crate::package::settings_overlay;
     use dkrt_abi::service::{SettingsOverlay, SETTINGS_OVERLAY_VERSION};
     use std::collections::BTreeMap;
     use std::sync::Mutex;

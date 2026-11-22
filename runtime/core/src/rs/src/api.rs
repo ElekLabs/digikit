@@ -4,7 +4,8 @@ use crate::platform::st;
 use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use crate::state::{init_once, DKRT_UNLOAD_OBSERVERS, OBSERVERS, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
-use crate::{boot, dlog, dsp, entry, loader, scan, settings};
+use crate::{boot, dlog, settings};
+use crate::package::{dsp, entry, loader, scan};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
@@ -92,7 +93,7 @@ pub unsafe extern "C" fn dkrt_unload_observer_remove(f: usize) {
 /// The owner id of a module context: its record index; `E_CONTRACT` for a pointer that is not the live context of a content module (a service has none given out).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_ctx_owner(ctx: usize) -> i32 {
-    match crate::entry::ctx_owner(ctx as *mut u8) {
+    match crate::package::entry::ctx_owner(ctx as *mut u8) {
         // a service file's context is not given out: the unload observers are for content modules
         Some(rec) if rec < MAX_MODULES => rec as i32,
         _ => E_CONTRACT,
@@ -245,7 +246,7 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
     init_once();
-    crate::handlers::exports::fx_entry(index, &mut *out)
+    crate::package::handlers::exports::fx_entry(index, &mut *out)
 }
 
 
