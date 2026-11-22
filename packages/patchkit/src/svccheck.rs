@@ -3,8 +3,8 @@
 //! A service is a crate `services/NAME` with one layout (docs/plans/runtime-and-services.md 5.12, R12-1). The check reads the sources and
 //! `sdk.toml`; it builds nothing and runs nothing. It reports every problem, one line each, and the exit status is 1 when there is one.
 //!
-//! - **Layout.** `Cargo.toml` (package `dkrt-svc-NAME`), `src/lib.rs`, `src/records.rs`, `src/slots.rs` and `tests/` with at least one `.rs` file. A folder
-//!   `src/dsp/` has a `mod.rs`, and a service whose `Service` impl has `dsp_*` handlers has the folder. `lib.rs` declares `pub mod records`, `pub mod slots`
+//! - **Layout.** `Cargo.toml` (package `dkrt-svc-NAME`), `src/lib.rs`, `src/records.rs`, `src/slots.rs` (required when `dks/module.toml` declares a `[[fill]]`, declared as `pub mod slots;` when present) and `tests/` with at least one `.rs` file. A folder
+//!   `src/dsp/` has a `mod.rs`, and a service whose `Service` impl has `dsp_*` handlers has the folder. `lib.rs` declares `pub mod records` (and `pub mod slots` when the file exists)
 //!   (and `pub mod dsp` with the folder). Other modules in `src/` are the service's own.
 //! - **The service file.** `dks/` holds `module.toml` (id `core/services/NAME`, `role = "service"`, `service = "NAME"`), `Cargo.toml`, `src/lib.rs` (the
 //!   `service!(...)` call and nothing else) and, when needed, `src/hooks.rs` (every hook as assembler; required when the module has `[[hook]]` entries) and
@@ -897,7 +897,20 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
             }
         }
     }
-    for f in ["src/lib.rs", "src/records.rs", "src/slots.rs"] {
+    // a service that fills slots has the slot tables (and their checks) in src/slots.rs; one without fills needs none
+    let has_fills = std::fs::read_to_string(dir.join("dks/module.toml"))
+        .ok()
+        .and_then(|t| t.parse::<toml::Table>().ok())
+        .and_then(|m| {
+            m.get("fill")
+                .and_then(|f| f.as_array().map(|a| !a.is_empty()))
+        })
+        .unwrap_or(false);
+    let mut files = vec!["src/lib.rs", "src/records.rs"];
+    if has_fills {
+        files.push("src/slots.rs");
+    }
+    for f in files {
         if !dir.join(f).is_file() {
             problem(format!("{f} is missing"));
         }
@@ -922,7 +935,10 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
         problem("records.rs has dsp_* handlers but the crate has no src/dsp/ folder".into());
     }
     if let Some(lib) = get("src/lib.rs") {
-        let mut mods = vec!["records", "slots"];
+        let mut mods = vec!["records"];
+        if has_fills || dir.join("src/slots.rs").is_file() {
+            mods.push("slots");
+        }
         if dsp_dir.is_dir() {
             mods.push("dsp");
         }

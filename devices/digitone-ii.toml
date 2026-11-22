@@ -296,13 +296,13 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # emulator testing; the `device` set (what is flashed) does not, until the SPI wire-size decision and a hardware read-back of the reserved DDR range.
 # A module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool"]
+emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool"]
 # Real-device image. core/usb-bulk is inert until the usb-fast module is selected; usb-fast requires it. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
+device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/usb-bulk", "core/usb-bulk-audio", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/usb-bulk", "core/usb-bulk-audio", "core/introblank", "core/sdhc-large"]
 # `emulator` plus the sample pool (core/sample-pool), core/dsp-link (the pool's DSP tail needs it) and the dsp-voice stereo hooks, for the per-track sample tests (API 1.5).
-sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/lfo", "core/sample-pool", "core/dsp-link", "core/dsp-voice"]
+sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/sample-pool", "core/dsp-link", "core/dsp-voice"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).

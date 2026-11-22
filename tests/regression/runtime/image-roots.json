@@ -11,7 +11,7 @@
     },
     {
       "id": "coupled",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/input", "core/dynfx", "core/fxpages", "core/lfo"]
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/input", "core/dynfx", "core/fxpages"]
     },
     {
       "id": "ib",
