@@ -127,6 +127,7 @@
       },
       {
         "files": ["store-format.device.test.ts"],
+        "firmwareOnly": "VERIFY of card bytes, load refusal (E_SHA), version 3 card boot and restart, transfer install loaded by the real runtime",
         "tags": ["C:loading", "C:storage"],
         "modules": ["test/c-demo", "digikit/debug", "test/svc-test", "test/svc-test-user"],
         "sources": [
@@ -170,6 +171,7 @@
       },
       {
         "files": ["card-safety.device.test.ts"],
+        "firmwareOnly": "boot counter record and USB, log and ABOUT replies of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
         "devices": ["dt2"],
         "tags": ["C:storage"],
         "modules": ["test/c-demo"],
