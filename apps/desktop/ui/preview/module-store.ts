@@ -102,15 +102,13 @@ async function seedStore(library: PreviewLibrary, device: string) {
   const files = new Map<string, Uint8Array>();
   const selected = new Map<string, Uint8Array | undefined>();
   if (sim.dev !== 'empty') {
-    const entries = library.modules(device);
-    const pluck = entries.find((m) => m.id === 'digikit/pluck');
-    const installed = entries.find((m) => m.id !== pluck?.id);
-    for (const { id, pack } of [installed, pluck].filter((m) => m !== undefined)) {
+    const [outdated, installed] = library.modules(device);
+    for (const { id, pack } of [installed, outdated].filter((m) => m !== undefined)) {
       const bytes = new Uint8Array(await library.library.read(device, pack.file));
       const header = headerInfo(bytes);
       if (!header) continue;
       const path = modulePath(id, header.group);
-      const old = id === pluck?.id;
+      const old = id === outdated?.id;
       if (old) {
         // The card has an older preview build of the same module that failed to load.
         const view = new DataView(bytes.buffer);
@@ -120,7 +118,7 @@ async function seedStore(library: PreviewLibrary, device: string) {
       selected.set(path, old ? bytes : undefined);
     }
     files.set('modules/tool/old-experiment.dkm', fakeDkm({ name: 'old/experiment', size: 5 * KiB }));
-    files.set('data/digikit/pluck/settings.bin', Uint8Array.of(0, 1, 0, 8));
+    if (outdated) files.set(`data/${outdated.id}/settings.bin`, Uint8Array.of(0, 1, 0, 8));
     files.set('samples/new/', new Uint8Array());
   }
   const abi = await serviceAbi(library, device);
