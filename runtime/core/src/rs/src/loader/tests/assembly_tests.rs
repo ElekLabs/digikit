@@ -134,7 +134,7 @@ fn runtime_object() -> String {
 }
 
 /// The registry of the device: the ABI check of the runtime object, the rows of the runtime's own registry.
-struct DeviceRegistry {
+pub(super) struct DeviceRegistry {
     runtime: String,
 }
 
@@ -222,14 +222,14 @@ fn adapter_of(import: &str) -> Option<String> {
 }
 
 /// The info table of a patched image (`set-<set>.info`): name, hash, kind (0 data, 1 slot, 2 DSP slot), address (the index in the slot block for a DSP slot) and the words of a data entry.
-struct Image {
+pub(super) struct Image {
     entries: Vec<(String, u32, u32, u32, Vec<u32>)>,
     /// The modules of the set (`[patch_sets]` of the device file and what they require): the adapters the image has.
     modules: Vec<String>,
 }
 
 impl Image {
-    fn read(dev: Dev, set: &str) -> Image {
+    pub(super) fn read(dev: Dev, set: &str) -> Image {
         let path = repo().join(format!("dist/bytes/images/{}/set-{set}.info", dev.name));
         let text = String::from_utf8(read(&path, "pnpm nx:pilot run patchkit:device-images")).unwrap();
         let hex = |s: &str| u32::from_str_radix(s, 16).unwrap();
@@ -308,11 +308,11 @@ impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
 
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
 /// table declares (no ColdFire code runs on the host).
-struct Card {
+pub(super) struct Card {
     files: Vec<(Vec<u8>, Vec<u8>)>,
     staged: Vec<u8>,
     staged_path: Vec<u8>,
-    live: Vec<(u32, Vec<u128>)>,
+    pub(super) live: Vec<(u32, Vec<u128>)>,
     allocs: u32,
     /// The runtime id of the device whose `init` the card replays.
     device: u32,
@@ -442,13 +442,13 @@ impl Images for Card {
     unsafe fn enter_fini(&mut self, _: usize, _: u32, _: *const Ctx) {}
 }
 
-type Boot = Loader<FakePlatform, Card, DeviceRegistry>;
+pub(super) type Boot = Loader<FakePlatform, Card, DeviceRegistry>;
 
 /// The runtime tables of the host tests as a device has them before the boot loads anything: no loaded service (the other tests of the runtime run with the
 /// machines row of `svc_rows::test_machines`; it is put back when the guard goes), no module, no DSP load.
-struct Clean(std::sync::MutexGuard<'static, ()>);
+pub(super) struct Clean(std::sync::MutexGuard<'static, ()>);
 
-fn clean() -> Clean {
+pub(super) fn clean() -> Clean {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::handlers::services(); // the first call adds the test row
@@ -479,8 +479,8 @@ impl Drop for Clean {
 }
 
 /// Where a fixture's source module is built (`<project id>:pack`) and its file name.
-struct Fixture {
-    leaf: &'static str,
+pub(super) struct Fixture {
+    pub(super) leaf: &'static str,
     nx: &'static str,
 }
 
@@ -488,9 +488,12 @@ const SINE: Fixture = Fixture { leaf: "sine", nx: "test/sine" };
 const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
-const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
-const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/local-ping" };
-const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };
+pub(super) const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
+/// The test service with ColdFire hooks in the port file of the test image, and its user.
+pub(super) const SVC_TEST: Fixture = Fixture { leaf: "svc-test", nx: "test/svc-test" };
+pub(super) const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/local-ping" };
+pub(super) const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };
+pub(super) const LOCAL_PING_USER_B: Fixture = Fixture { leaf: "local-ping-user-b", nx: "test/local-ping-user-b" };
 /// A module that binds a key combination with `dk_shortcut_add`: a user of the shortcuts service file, no DSP section.
 const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortcut-demo" };
 /// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
@@ -522,7 +525,7 @@ fn card_of(dev: Dev, modules: &[&Fixture], services: &[Fixture]) -> Vec<(String,
 
 /// The plan of a boot of `modules` from a card with `services`, over the platform of `image`: the loader with every module captured and the plan made. The
 /// providers are not loaded yet.
-unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fixture], services: &[Fixture]) -> (Boot, Plan) {
+pub(super) unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fixture], services: &[Fixture]) -> (Boot, Plan) {
     let files = card_of(dev, modules, services);
     let p = image.platform(dev, limits);
     // the stock bytes of every hook site are live in the firmware (the check values of the port file are of them)
@@ -1672,7 +1675,7 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
 }
 
 /// Between the cases the loader tables are reset (the guard of the test holds the lock for all of them).
-fn clean_state() {
+pub(super) fn clean_state() {
     unsafe {
         for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
             crate::svc_rows::remove(rec);

@@ -14,10 +14,12 @@ fn load_brings_services_up_first_and_each_package_through_every_step() {
             Link(id(1)),
             Start(id(1)),
             Install(id(1)),
+            Activate(id(1)),
             Place(id(2)),
             Link(id(2)),
             Start(id(2)),
             Install(id(2)),
+            Activate(id(2)),
             Attach(id(1), id(2)),
         ]
     );

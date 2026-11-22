@@ -36,6 +36,14 @@ impl ProviderHost for FakeHost {
         Ok(d)
     }
 
+    fn activate(&mut self, package: PackageId) -> Result<(), Status> {
+        self.probe.record(Call::Activate(package))
+    }
+
+    fn deactivate(&mut self, package: PackageId) {
+        let _ = self.probe.record(Call::Deactivate(package));
+    }
+
     fn attach(&mut self, service: PackageId, consumer: PackageId) -> Result<(), Status> {
         self.probe.record(Call::Attach(service, consumer))
     }

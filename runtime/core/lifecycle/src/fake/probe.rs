@@ -11,6 +11,8 @@ pub enum Call {
     Link(PackageId),
     Start(PackageId),
     Install(PackageId),
+    Activate(PackageId),
+    Deactivate(PackageId),
     Attach(PackageId, PackageId),
     CanStop(PackageId),
     Detach(PackageId, PackageId),

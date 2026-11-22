@@ -380,11 +380,11 @@ The link-time import list and the graph edges are the same data: the packer writ
 ### 8.1 States
 
 ```text
-Absent -> Placed -> Linked -> Started -> Claimed -> Installed -> Active
-Active -> Detached -> Released -> Restored -> Stopped -> Freed (Absent)
+Absent -> Placed -> Linked -> Started -> Claimed -> Installed -> Activated -> Active
+Active -> Detached -> Deactivated -> Released -> Restored -> Stopped -> Freed (Absent)
 ```
 
-A failure unwinds exactly the steps done. The DSP part of a package comes up over UI passes after `Installed`; a DSP failure takes down the closure of that package through the same path.
+`Activated` makes the package public (a service publishes its exports and resident query entry; the tick and the record go live): it follows the install and precedes every attach, so nothing is visible before the package's entries are in firmware. `Deactivated` withdraws it before the entries are restored. A failure unwinds exactly the steps done. The DSP part of a package comes up over UI passes after `Installed`; a DSP failure takes down the closure of that package through the same path.
 
 ### 8.2 Boot
 
@@ -532,16 +532,19 @@ Update this block whenever the state changes.
 - RC2 is split into RC2a manager over fakes, RC2b real seams and boot, RC2c service reload and unload with orphans and MODULES listing, RC2d pins (service paths in the selection), RC2e MIDI snapshot; each step splits its ledger device tests.
 - RC1g done (PR #693): `gate-device-smoke:device` (tools/gate/device-smoke/project.json, 16 halves), TESTING.md "Device smoke set", the ledger, generic AGENTS.md wording. Not yet part of `mise run test` (a later step after one measured run).
 - PR #693 (RC1g) merged as `43e4f3cb7`. RC2a active on branch `rc/rc2a-package-manager` in the lane.
-- Open: agents sometimes report an Nx pilot summary of "1 failed" (e.g. on `patchkit:cli`) while every task passes and the exit code is 0; not reproduced in the saved logs yet. Look at the next occurrence's log.
-- RC2a reviewed (three rounds; fixes: stuck restore-pending, boot continues past failures, orphans of a failed bring-up, reload fit, `fits_with`, `retry_pending`, per-package shortage), approved by Em; PR from branch `rc/rc2a-package-manager`.
-- Open for RC2b: the DSP part after Active (over UI passes); module init timing; `Limit::Init` and entry-name checks; `load` and `reload` errors should carry a pending take-down like `Report::pending()`; the runtime crate dev-depends on dkrt-lifecycle, so its object's source hash changes with every lifecycle edit until RC2b links it for real.
-- Next: RC2a PR gate (host-only: static checks and host tests; no device tests); then RC2b (the runtime's real seams and boot on the manager).
+- Open: the launcher summary's phantom "1 failed" is a parser bug in `tools/nx/failures.mjs`: a task whose output Nx prints gets no tick line, so its section is closed by the next task's tick and counted failed; headers with a cache note (`[existing outputs match the cache, left as is]`) do not match `HEADER`. Fix on its own branch from main (approved).
+- RC2a merged in PR #695 (`3a27bd7dc`). RC2b active on branch `rc/rc2b-runtime-seams`, in three sub-steps (RC2b-1 seams, RC2b-2 boot on the manager, RC2b-3 deletions and device-test split), each reviewed by a reviewer and Em.
+- Open for RC2b: the DSP part after Active (over UI passes); module init timing; `Limit::Init` and entry-name checks; `load` and `reload` errors should carry a pending take-down like `Report::pending()`; the runtime crate depends on dkrt-lifecycle (since RC2b-1), so its object's source hash changes with every lifecycle edit.
+- RC2b sub-steps stack into one PR, merged after RC2b-3 (RC2b-1 grows runtime text by 1,152 bytes from the loader splits; RC2b-3 deletes the old path). Each sub-step is reviewed and committed after Em's review.
+- RC2b-1 open items for RC2b-2: `can_stop` should use `Service::teardown_refusal`; attach is a no-op; `MAX_ENTRIES` (16) is below machines' 13 hooks + 4 fills; module record = selection index (decided); DSP sections and slots as entries; manifest pools.
+- RC2b-1 committed on the branch (not merged: RC2b stacks). Decided 2026-11-22: a module's record follows its selection index.
+- Next: RC2b-2.
 
 ### Progress
 
 Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way:
 
-1. The worker runs the static checks (`pnpm nx:pilot run-many -t lint,fmt-check,rust-fmt,typecheck,python-checks`), leaves its changes uncommitted and marks the row `review`.
+1. The worker updates docs/ARCHITECTURE.md (and its inventories) for what the step changes, runs the static checks (`pnpm nx:pilot run-many -t lint,fmt-check,rust-fmt,typecheck,python-checks`), leaves its changes uncommitted and marks the row `review`.
 2. The worker runs `mise run test:plan` with `DIGI_GATE_BASE` at the start of the phase and states whether the selection matches what the change can reach; a selection that is wider is fixed in the inputs and edges, not run. An independent reviewer sub-agent reviews the diff and the selection (ranked findings with `file:line` and a failure scenario; boundaries, separation of concerns and device specifics behind capabilities included). Findings are fixed or answered.
 3. Em reviews the phase or deliverable. Only then is it committed and the row set to `done` with the commit.
 
@@ -557,7 +560,10 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | RC1e selection check: RC1's host-only changes select device tests (runtime `Cargo.lock`), every Rust target (workspace `Cargo.lock`) and every service (any `dkrt-abi` file); narrow the edges that are wrong so `test:plan` shows what the change can reach | done | `b62328998` |
 | RC1g Device test diet: inventory and smoke set | done | PR #693 (`125419d11`) |
 | RC2 One lifecycle | active | lane `fx-route-policy` |
-| RC2a `PackageManager` in `dkrt-lifecycle` over seam traits, test-first with fakes; ledger bound check against `REC_MAX` | done | branch `rc/rc2a-package-manager` (PR number in the next progress update) |
+| RC2a `PackageManager` in `dkrt-lifecycle` over seam traits, test-first with fakes; ledger bound check against `REC_MAX` | done | PR #695 (`132db2ece`), merged as `3a27bd7dc` |
+| RC2b-1 the runtime's real seams (placer, linker, host, installer, manifest) over the existing loader code, unit-tested over FakePlatform/FakeStorage and assembly-tested with packed fixtures; boot unchanged | done | committed on `rc/rc2b-runtime-seams` (merged with RC2b-3) |
+| RC2b-2 boot and the reload job go through `PackageManager`; the DSP part as a seam step | todo | |
+| RC2b-3 the old provider path, `take_down`, `needs_hash`, planner provider handling and inline version checks deleted; RC2 device tests split; size gate shows the runtime smaller | todo | |
 | RC3 Service contract v2 | todo | |
 | RC3m Module settings schema | todo | |
 | RC4 Installers and ColdFire points | todo | |

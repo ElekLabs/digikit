@@ -84,6 +84,18 @@ impl Rows {
         OK
     }
 
+    /// The position among the loaded rows of the row of record `rec`.
+    pub fn index_of(&self, rec: usize) -> Option<usize> {
+        let mut at = 0;
+        while at < self.n {
+            if self.owner[at] == rec as u8 + 1 {
+                return Some(at);
+            }
+            at += 1;
+        }
+        None
+    }
+
     /// Take the row of module record `rec` out of `table` (nothing when it has none).
     pub fn remove(&mut self, table: &mut [*const ServiceRow], fixed: usize, rec: usize) {
         let mut at = 0;
@@ -119,6 +131,12 @@ pub unsafe fn add(rec: usize, row: &ServiceRow, order: Option<u32>) -> i32 {
 pub unsafe fn remove(rec: usize) {
     let t = &mut *core::ptr::addr_of_mut!(crate::gen_services::ROWS);
     (*core::ptr::addr_of_mut!(LIVE)).remove(t, crate::gen_services::STATIC, rec)
+}
+
+/// The row the loaded service file of record `rec` declared, as a table of its own: the lifecycle calls into one service are the table's, over this one row.
+pub fn row_of(rec: usize) -> Option<&'static [*const ServiceRow]> {
+    let at = unsafe { (*core::ptr::addr_of!(LIVE)).index_of(rec)? } + crate::gen_services::STATIC;
+    Some(&rows()[at..=at])
 }
 
 /// The rows the core calls now: the in-crate ones and the loaded ones.

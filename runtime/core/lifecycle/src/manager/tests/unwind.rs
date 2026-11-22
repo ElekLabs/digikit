@@ -99,7 +99,9 @@ fn attach_fails_after_install_so_the_entries_are_restored() {
             Link(id(2)),
             Start(id(2)),
             Install(id(2)),
+            Activate(id(2)),
             Attach(id(1), id(2)),
+            Deactivate(id(2)),
             Restore(id(2)),
             Stop(id(2)),
             Unbind(id(2)),
@@ -198,12 +200,13 @@ fn a_busy_restore_during_the_unwind_is_finished_by_a_retry_that_then_frees_the_o
             Stop(id(2)),
             Unbind(id(2)),
             Free(id(2)),
+            Deactivate(id(1)),
             Restore(id(1)),
             Stop(id(1)),
             Unbind(id(1)),
             Free(id(1)),
         ],
-        "the retry asks nothing again"
+        "the retry asks nothing again: 2 was deactivated before its restore went busy"
     );
     assert_eq!(pm.restore_pending(), None);
     assert!(pm.live().is_empty());
@@ -307,4 +310,25 @@ fn a_busy_orphan_restore_after_a_boot_is_reported_as_pending() {
     assert_eq!(pm.restore_pending(), Some(id(1)));
     pm.retry_pending().unwrap();
     assert!(pm.live().is_empty());
+}
+
+#[test]
+fn activate_fails_after_install_so_the_entries_are_restored_and_nothing_was_attached() {
+    let (calls, pm, e) = load_a_failing(Activate(id(2)));
+    assert_eq!(
+        calls,
+        [
+            Place(id(2)),
+            Link(id(2)),
+            Start(id(2)),
+            Install(id(2)),
+            Activate(id(2)),
+            Restore(id(2)),
+            Stop(id(2)),
+            Unbind(id(2)),
+            Free(id(2)),
+        ]
+    );
+    assert_eq!(e, failed(State::Activated));
+    assert_clean(&pm);
 }

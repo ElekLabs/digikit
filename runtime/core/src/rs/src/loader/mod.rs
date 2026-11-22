@@ -6,7 +6,7 @@ use discover::Found;
 use crate::handlers::{services, ServiceTable};
 use crate::plan::{self, Env, Plan, TABLE_MAX};
 use dkneeds::keys::Keys;
-use install::{Backend, DspInstaller, Installer};
+use install::{Backend, CfItems, DspInstaller, Installer, SITES_MAX};
 use role::{PlaceArgs, RoleSteps};
 use exports::Exports;
 use crate::platform::RealPlatform;
@@ -14,6 +14,7 @@ use crate::selection::BOOT_IDX;
 use crate::{cstr_eq, cstr_len, rd32, st, wr32, Module, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::link::Owner;
+use dkrt_abi::package::PackageId;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
 
@@ -47,6 +48,7 @@ pub(crate) mod discover;
 pub(crate) mod exports;
 mod image;
 pub(crate) mod install;
+pub(crate) mod package;
 mod port;
 pub(crate) mod records;
 pub(crate) mod role;
@@ -452,6 +454,13 @@ struct Checked {
     job: dsp::Job,
 }
 
+/// What `place_image` leaves for the steps that follow: the arguments of the role's place step and the addresses of `init` and `tick` (0: none).
+struct Placed {
+    place: PlaceArgs,
+    init: u32,
+    tick: u32,
+}
+
 impl Checked {
     const fn empty() -> Checked {
         Checked {
@@ -584,7 +593,21 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
 
     /// The checks of a file: everything that can be refused before a record or a byte of the arena is taken. The staged file stays in the staging buffer (`c.f`)
     /// until the next `stage`. `slot` says which role the file must have: a service file only for a provider record, a module file only for the others.
+    /// Three parts in this order: the header and the role's check (`check_head`), the imports (`resolve_imports`), the sections (`check_body`).
     unsafe fn check_file(&mut self, path: *const u8, slot: Slot, c: &mut Checked) -> i32 {
+        let r = self.check_head(path, slot, c);
+        if r != OK {
+            return r;
+        }
+        let r = self.resolve_imports(c, None);
+        if r != OK {
+            return r;
+        }
+        self.check_body(c)
+    }
+
+    /// The first part of `check_file`: stage the file, parse its header, the role and the role's own checks.
+    unsafe fn check_head(&mut self, path: *const u8, slot: Slot, c: &mut Checked) -> i32 {
         let staged = match self.m.stage(path) {
             Ok(s) => s,
             Err(e) => return e,
@@ -603,7 +626,6 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         c.head = head;
         // the header is read: the log names the module by its id, not by its file
         self.last_name = name_part(core::slice::from_raw_parts(f.add(H_NAME), dkneeds::NAME_LEN as usize));
-        let image::Head { import_off, import_n, .. } = head;
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
         c.role = role;
@@ -611,10 +633,17 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             return E_FORMAT;
         }
         let steps = RoleSteps::<P, M, R>::of(role);
-        let r = (steps.check)(self, f, &head);
-        if r != OK {
-            return r;
-        }
+        (steps.check)(self, f, &head)
+    }
+
+    /// The second part of `check_file`: the address of every import of the staged file, into `c.import_addrs`. An explicit service import names its provider; legacy
+    /// SDK imports keep the global lookup. `needs`: when given, an import that resolves to the export of a loaded provider resolves only if that provider's record is one of
+    /// `needs` (the services of the package's needs, `PackageId` is the record); the runtime's table, the service-only imports and the loaded port file are not
+    /// bound by it.
+    unsafe fn resolve_imports(&mut self, c: &mut Checked, needs: Option<&[PackageId]>) -> i32 {
+        let (f, size, role) = (c.f, c.size, c.role);
+        let image::Head { import_off, import_n, .. } = c.head;
+        let allowed = |rec: usize| needs.map_or(true, |n| n.iter().any(|p| p.0 as usize == rec));
         // An explicit service import names its provider; legacy SDK imports keep the global lookup.
         let (reg_off, reg_size) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
         let import_owners = if import_n != 0 && in_file(reg_off, reg_size, size) {
@@ -648,7 +677,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                     match self.exports.owned(name_hash) {
                         Some((addr, rec)) => {
                             if let Some((owner, version)) = self.provs[rec - MAX_MODULES].provides {
-                                if owner == service && version >= minimum && version >> 16 == minimum >> 16 {
+                                if allowed(rec) && owner == service && version >= minimum && version >> 16 == minimum >> 16 {
                                     c.import_addrs[i] = addr;
                                     i += 1;
                                     continue;
@@ -676,7 +705,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             }
             if a == 0 {
                 // the runtime's table has no such name: a loaded provider may export it
-                a = self.exports.resolve(name_hash).unwrap_or(0);
+                a = match self.exports.owned(name_hash) {
+                    Some((addr, rec)) if allowed(rec) => self.exports.resolve(name_hash).map_or(0, |_| addr),
+                    _ => 0,
+                };
             }
             if a == 0 {
                 // the first import that belongs to a module that is not in the image: the boot keeps its name (`MISSING`)
@@ -693,6 +725,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             c.import_addrs[i] = a;
             i += 1;
         }
+        OK
+    }
+
+    /// The third part of `check_file`: the relocation table, the `register` table and the DSP section.
+    unsafe fn check_body(&mut self, c: &mut Checked) -> i32 {
+        let (f, size, role, head) = (c.f, c.size, c.role, c.head);
+        let (reg_off, reg_size) = (rd32(f.add(H_REG_OFF)), rd32(f.add(H_REG_SIZE)));
         // relocations: kind, bounds, import index
         if let Err(e) = image::sections(f, &head) {
             return e;
@@ -742,38 +781,16 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             return r;
         }
         let (f, role) = (c.f, c.role);
-        let image::Head { needs, image_off, image_size, bss, reloc_off, reloc_n, init, fini, menu, tick, .. } = c.head;
+        let image::Head { image_size, bss, .. } = c.head;
         let steps = RoleSteps::<P, M, R>::of(role);
         let name = f.add(H_NAME);
         let total = image_size + bss;
-        let import_addrs = &c.import_addrs;
-        let (reg_off, reg_size, dsp_size) = (c.reg_off, c.reg_size, c.dsp_size);
-        let keys = &c.keys;
+        let dsp_size = c.dsp_size;
         let job = &c.job;
-        let s = st();
-        let mut i;
         // already loaded; a free record
-        let rec = match slot.fixed() {
-            Some(rec) => {
-                if records::module(rec).used != 0 {
-                    return E_LOADED;
-                }
-                // a reload puts the same name back; another name is another module, which the name rule checks against the other records
-                if let Slot::Module(_) = slot {
-                    let mut k = 0;
-                    while k < MAX_MODULES {
-                        if k != rec && s.modules[k].used != 0 && cstr_eq(s.modules[k].name.as_ptr(), name) {
-                            return E_LOADED;
-                        }
-                        k += 1;
-                    }
-                }
-                rec
-            }
-            None => match capacity::pick_record(MAX_MODULES, |i| s.modules[i].used != 0, |i| cstr_eq(s.modules[i].name.as_ptr(), name)) {
-                Ok(r) => r,
-                Err(e) => return e,
-            },
+        let rec = match self.claim_record(slot, name) {
+            Ok(rec) => rec,
+            Err(e) => return e,
         };
 
         self.torn[rec] = 0;
@@ -795,64 +812,11 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 return E_NOMEM;
             }
         };
-        let (mem, base) = (blk.ptr, blk.addr);
-        i = 0;
-        while i < image_size as usize {
-            *mem.add(i) = *f.add(image_off as usize + i);
-            i += 1;
-        }
-        i = 0;
-        while i < bss as usize {
-            *mem.add(image_size as usize + i) = 0;
-            i += 1;
-        }
-        i = 0;
-        while i < reloc_n as usize {
-            let e = f.add(reloc_off as usize + i * dkneeds::CF_RELOC_LEN as usize);
-            let off = rd32(e.add(dkneeds::CF_RELOC_OFFSET as usize)) as usize;
-            let kind = rd32(e.add(dkneeds::CF_RELOC_KIND as usize));
-            let add = if kind >> 24 == 0 {
-                base
-            } else {
-                import_addrs[(kind & 0xff_ffff) as usize]
-            };
-            let p = mem.add(off);
-            wr32(p, rd32(p).wrapping_add(add));
-            i += 1;
-        }
-        // ---- caches: write the lines back and drop them from both caches ----
-        self.p.flush(base, total);
-
-        // ---- record, init, publish ----
-        self.roles[rec] = if role == 2 { 2 } else { (role == 1) as u8 };
-        if rec < MAX_MODULES {
-            let k = read_volatile(addr_of!(BOOT_IDX));
-            self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 + 1 } else { 0 };
-        }
+        let base = blk.addr;
+        let Placed { place, init: initaddr, tick: tickaddr } = self.place_image(rec, path, &c, blk, image::Pass::Both);
+        let image::Head { image_size, .. } = c.head;
+        let keys = &c.keys;
         let m: &mut Module = records::module(rec);
-        m.used = 1;
-        i = 0;
-        while i < dkneeds::NAME_LEN as usize {
-            m.name[i] = *name.add(i);
-            i += 1;
-        }
-        let dst = records::path(rec);
-        let plen = cstr_len(path, 63);
-        i = 0;
-        while i < 64 {
-            dst[i] = if i < plen { *path.add(i) } else { 0 };
-            i += 1;
-        }
-        m.version = rd32(f.add(H_VERSION));
-        records::set_runtime(rec, needs & !crate::FLAG_TRACE);
-        m.base = base;
-        m.size = total;
-        m.fini = if fini == NONE { 0 } else { base + fini };
-        crate::entry::bind(rec);
-        records::set_menu(rec, if menu == NONE { 0 } else { base + menu });
-        let place = PlaceArgs { file: f, keys_off: reg_off, keys_len: reg_size, image_size, dsp_image: if dsp_size != 0 { job.image_size } else { 0 }, mem, base, bss };
-        let initaddr = if init == NONE { 0 } else { base + init };
-        let tickaddr = if tick == NONE { 0 } else { base + tick };
         if dsp_size != 0 {
             // the CF part goes live now (rows in place before the machine view is built); the DSP code and the voice rows follow
             // when the frames flow
@@ -890,13 +854,94 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         r
     }
 
+    /// The record a file named `name` loads into: the slot's own, which must be free (a reload puts the same name back; another name is another module, which the name
+    /// rule checks against the other records), or the first free module record. `E_LOADED`, or the refusal of `capacity::pick_record`.
+    unsafe fn claim_record(&self, slot: Slot, name: *const u8) -> Result<usize, i32> {
+        let s = st();
+        match slot.fixed() {
+            Some(rec) => {
+                if records::module(rec).used != 0 {
+                    return Err(E_LOADED);
+                }
+                if let Slot::Module(_) = slot {
+                    let mut k = 0;
+                    while k < MAX_MODULES {
+                        if k != rec && s.modules[k].used != 0 && cstr_eq(s.modules[k].name.as_ptr(), name) {
+                            return Err(E_LOADED);
+                        }
+                        k += 1;
+                    }
+                }
+                Ok(rec)
+            }
+            None => capacity::pick_record(MAX_MODULES, |i| s.modules[i].used != 0, |i| cstr_eq(s.modules[i].name.as_ptr(), name)),
+        }
+    }
+
+    /// The image of the checked file `c` into block `blk` (`total` bytes) of record `rec`: copy, zero the bss, the relocations of `pass` (`image::relocate`; the import
+    /// addresses of `c` are those of `Both` and `Imports`), the caches, then the record: its name, path, version, base, size, `fini`, entry binding and menu. The record is
+    /// in use afterwards.
+    unsafe fn place_image(&mut self, rec: usize, path: *const u8, c: &Checked, blk: Block, pass: image::Pass) -> Placed {
+        let (f, role) = (c.f, c.role);
+        let image::Head { needs, image_size, bss, init, fini, menu, tick, .. } = c.head;
+        let name = f.add(H_NAME);
+        let total = image_size + bss;
+        let (mem, base) = (blk.ptr, blk.addr);
+        image::copy(mem, f, &c.head);
+        image::relocate(mem, f, &c.head, base, &c.import_addrs, pass);
+        // ---- caches: write the lines back and drop them from both caches ----
+        self.p.flush(base, total);
+
+        // ---- record, init, publish ----
+        self.roles[rec] = if role == 2 { 2 } else { (role == 1) as u8 };
+        if rec < MAX_MODULES {
+            let k = read_volatile(addr_of!(BOOT_IDX));
+            self.sel_of_rec[rec] = if (k as usize) < SEL_MAX { k as u8 + 1 } else { 0 };
+        }
+        let m: &mut Module = records::module(rec);
+        m.used = 1;
+        let mut i = 0;
+        while i < dkneeds::NAME_LEN as usize {
+            m.name[i] = *name.add(i);
+            i += 1;
+        }
+        let dst = records::path(rec);
+        let plen = cstr_len(path, 63);
+        i = 0;
+        while i < 64 {
+            dst[i] = if i < plen { *path.add(i) } else { 0 };
+            i += 1;
+        }
+        m.version = rd32(f.add(H_VERSION));
+        records::set_runtime(rec, needs & !crate::FLAG_TRACE);
+        m.base = base;
+        m.size = total;
+        m.fini = if fini == NONE { 0 } else { base + fini };
+        crate::entry::bind(rec);
+        records::set_menu(rec, if menu == NONE { 0 } else { base + menu });
+        let place = PlaceArgs { file: f, keys_off: c.reg_off, keys_len: c.reg_size, image_size, dsp_image: if c.dsp_size != 0 { c.job.image_size } else { 0 }, mem, base, bss };
+        Placed { place, init: if init == NONE { 0 } else { base + init }, tick: if tick == NONE { 0 } else { base + tick } }
+    }
 
     /// The end of a load, shared by the immediate and the DSP path (both run in the boot hook; docs/plans/sdk.md 6.3): `init` runs first and its builder calls are collected; then the commit checks them, fills the
     /// voice rows' ranges, writes the registry rows and keeps the record block. Anything that fails undoes what `init` did and writes no row.
     #[allow(clippy::too_many_arguments)]
     unsafe fn complete(&mut self, rec: usize, keys: &crate::collect::KeysCopy, init: u32, tick: u32, image_size: u32, steps: RoleSteps<P, M, R>, place: PlaceArgs) -> i32 {
-        let s = st();
-        let module = rec < MAX_MODULES;
+        let r = self.init_and_commit(rec, keys, init, image_size, steps, place);
+        if r != OK {
+            return r;
+        }
+        let r = (steps.activate)(self, rec);
+        if r != OK {
+            return self.fail(rec, r);
+        }
+        self.go_live(rec, tick);
+        OK
+    }
+
+    /// The first part of `complete`: the role's place step, `init` with the builder calls collected, then the commit. A failure undoes what was done (`fail`) and is the result.
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn init_and_commit(&mut self, rec: usize, keys: &crate::collect::KeysCopy, init: u32, image_size: u32, steps: RoleSteps<P, M, R>, place: PlaceArgs) -> i32 {
         // the role's part of the file that `init` could overwrite in the staging buffer
         let r = (steps.place)(self, rec, &place);
         if r != OK {
@@ -932,13 +977,15 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return self.fail(rec, r);
         }
-        let r = (steps.activate)(self, rec);
-        if r != OK {
-            return self.fail(rec, r);
-        }
+        OK
+    }
+
+    /// The last part of `complete`: the record is live. A service file has no intro and is no module of the count; its tick runs as a module's does.
+    unsafe fn go_live(&mut self, rec: usize, tick: u32) {
+        let s = st();
+        let module = rec < MAX_MODULES;
         let m: &mut Module = records::module(rec);
         m.used = 1;
-        // a service file has no intro and is no module of the count; its tick runs as a module's does
         if tick != 0 {
             crate::entry::publish_tick(rec, tick);
         }
@@ -947,10 +994,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             s.loads = s.loads.wrapping_add(1);
             crate::intro::commit(rec);
         }
-        OK
     }
-
-
 
     /// Undo what `init` and the checks before the commit did for record `rec`; `r` is the result to return (`E_BUSY` when a step of the module is still running).
     unsafe fn fail(&mut self, rec: usize, r: i32) -> i32 {
@@ -1226,7 +1270,17 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// slots zero (the same sequence the install sent, with zeros; a slot of the block is zero before the code behind it is freed). False when the DSP does not take the
     /// clear: the caller keeps everything (`E_BUSY`) and the DSP state stays retained.
     unsafe fn uninstall(&mut self, rec: usize) -> bool {
+        self.uninstall_cf(rec);
+        self.uninstall_dsp(rec)
+    }
+
+    /// The ColdFire part of `uninstall`: the hook sites back to stock and the slot words zero.
+    unsafe fn uninstall_cf(&mut self, rec: usize) {
         self.installer.restore(&self.p, rec as u8);
+    }
+
+    /// The DSP part of `uninstall`: the DSP slots zero. False when the DSP does not take the clear.
+    unsafe fn uninstall_dsp(&mut self, rec: usize) -> bool {
         let area = if dsp::have_link() { dsp::area_base() } else { 0 };
         if let Some(seq) = self.dsp_install.clear_sequence(rec as u8, area) {
             if !crate::link::lk().run(Owner::Loader, &seq) {
@@ -1259,18 +1313,32 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// The one lifecycle of a loaded record, for modules and services (docs/plans/digikit-hot-reload.md, "Quiesce and unload protocol"): stop what calls into it (the tick
     /// of a module; the hook sites and slots of a service), drain the DSP, `fini`, the role's undo, the registry, the DSP range, the memory.
     unsafe fn unload_rec_inner(&mut self, rec: usize) -> i32 {
-        let module = rec < MAX_MODULES;
-        if !module {
-            // a service: no new tick call, then nothing may jump into it any more (hook sites back to stock, slots zero). This goes first: a refused take-down leaves the
-            // service loaded, so it gets its tick back and keeps its file client and jobs (the retires below cannot be undone).
-            let tick = crate::entry::tick_of(rec);
-            crate::entry::stop_tick(rec);
-            if !self.uninstall(rec) {
-                crate::entry::publish_tick(rec, tick);
-                return E_BUSY;
+        if rec >= MAX_MODULES {
+            let r = self.quiesce_service(rec, true);
+            if r != OK {
+                return r;
             }
-            self.provs[rec - MAX_MODULES].query_v1 = 0;
         }
+        self.unload_body(rec)
+    }
+
+    /// The start of a service's take-down: no new tick call, then (`uninstall`) nothing may jump into it any more (hook sites back to stock, slots zero). This goes first: a
+    /// refused take-down leaves the service loaded, so it gets its tick back and keeps its file client and jobs (the retires of `unload_body` cannot be undone). The package
+    /// manager restores the entries itself before it stops a service, and passes `uninstall` false.
+    unsafe fn quiesce_service(&mut self, rec: usize, uninstall: bool) -> i32 {
+        let tick = crate::entry::tick_of(rec);
+        crate::entry::stop_tick(rec);
+        if uninstall && !self.uninstall(rec) {
+            crate::entry::publish_tick(rec, tick);
+            return E_BUSY;
+        }
+        self.provs[rec - MAX_MODULES].query_v1 = 0;
+        OK
+    }
+
+    /// The rest of the take-down of record `rec`, after a service's `quiesce_service`.
+    unsafe fn unload_body(&mut self, rec: usize) -> i32 {
+        let module = rec < MAX_MODULES;
         // the listing client and the I/O jobs of a module or a service file go before its code does; a queued job's `done` must not point into freed code
         if !crate::files::retire(rec) { return E_BUSY; }
         if !crate::worker::retire(rec) { return E_BUSY; }

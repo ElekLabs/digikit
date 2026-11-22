@@ -15,10 +15,12 @@ fn take_down_detaches_before_restore_restores_before_stop_and_unbinds_before_fre
         [
             CanStop(id(1)),
             Detach(id(1), id(2)),
+            Deactivate(id(2)),
             Restore(id(2)),
             Stop(id(2)),
             Unbind(id(2)),
             Free(id(2)),
+            Deactivate(id(1)),
             Restore(id(1)),
             Stop(id(1)),
             Unbind(id(1)),

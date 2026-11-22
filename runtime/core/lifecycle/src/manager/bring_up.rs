@@ -232,6 +232,11 @@ where
             }
         }
 
+        self.host
+            .activate(p)
+            .map_err(|s| failed(p, State::Activated, s))?;
+        self.progress.set(p, State::Activated);
+
         for (i, s) in services.as_slice().iter().enumerate() {
             self.host
                 .attach(*s, p)

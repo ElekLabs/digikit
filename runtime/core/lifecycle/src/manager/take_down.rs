@@ -111,6 +111,10 @@ where
             self.host.detach(s, p);
         }
         self.progress.set_attached(p, 0);
+        // nothing is public while its entries are restored; a retry of a busy restore has done it
+        if state >= State::Activated && state < State::RestorePending {
+            self.host.deactivate(p);
+        }
         if state >= State::Started {
             self.release_resources(p);
         }

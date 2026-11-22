@@ -12,12 +12,12 @@ dkrt-sdk = { path = "../../sdk" }
 dkrt-abi = { path = "../../abi" }
 dkrt-fit = { path = "../../fit" }
 dkrt-link = { path = "../../link" }
+dkrt-lifecycle = { path = "../../lifecycle" }
 dkneeds = { path = "../../../../packages/dkneeds" }
 dkfw = { path = "../../../../ports/bindings/rs" }
 
 [dev-dependencies]
 dkrt-test-support = { path = "../../test-support" }
-dkrt-lifecycle = { path = "../../lifecycle" }
 dkrt-svc-rt = { path = "../../svc-rt" }
 toml = "0.9.12"
 dkrt-svc-lfo = { path = "../../../../services/lfo" }

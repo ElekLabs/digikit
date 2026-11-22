@@ -12,6 +12,13 @@ pub trait ProviderHost {
     /// Create the package's object and report what it declares. The core checks the answer against the packed header.
     fn start(&mut self, package: PackageId) -> Result<Declarations, Status>;
 
+    /// Make the package public, after its entries are installed and before any consumer is attached: a service publishes its exports and resident query entry, and
+    /// the package's tick and listing client start. Nothing of the package is visible to others before this call. An error leaves nothing public.
+    fn activate(&mut self, package: PackageId) -> Result<(), Status>;
+
+    /// Undo `activate`, before the entries are restored: the tick stops and the resident entry points are withdrawn. Repeating it is harmless.
+    fn deactivate(&mut self, package: PackageId);
+
     /// `consumer` came up; `service` receives its records. An error refuses the consumer and leaves nothing attached.
     fn attach(&mut self, service: PackageId, consumer: PackageId) -> Result<(), Status>;
 

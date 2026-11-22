@@ -1,6 +1,6 @@
 //! The package graph (docs/plans/runtime-contract-and-lifecycle.md, sections 7 and 8): packages, the services they need, and the order in which a load
 //! brings packages up and an unload takes them down. Pure: no I/O, no allocation, fixed capacity from the runtime's own maxima. The package manager
-//! (`manager`) owns a graph, a ledger and a live set and runs the one lifecycle over seam traits (`seams`); nothing in the runtime uses this crate yet.
+//! (`manager`) owns a graph, a ledger and a live set and runs the one lifecycle over seam traits (`seams`); the runtime implements the seams (`runtime/core/src/rs/src/lifecycle`) and links this crate, but its boot does not use the manager yet (RC2b-2).
 //! With the `fake` feature the crate also offers recording seams and a fake manifest (`fake`) for host tests; that feature builds with `std`, so only
 //! dev-dependencies enable it.
 //!
