@@ -4,7 +4,7 @@
 use super::load::BUSY_RETRIES;
 use super::*;
 use crate::fake_storage::FakeStorage;
-use crate::sha256::Sha;
+use dkrt_abi::sha256::Sha;
 use dkrt_abi::storage::{Storage, ROOT_STORE};
 use dkrt_sdk::syspkg::{Header, HEADER_BYTES};
 use dkrt_sdk::*;
@@ -180,7 +180,7 @@ fn a_package_newer_than_the_core_is_refused_an_older_or_equal_one_runs() {
     let (newer, _) = run(&card_with(&package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR + 1, &b)), 512);
     assert_eq!(newer, PackageStatus::Incompatible);
     // the core's table only grows by appending: a package that wants fewer functions runs
-    for minor in [RESIDENT_TABLE_MINOR, RESIDENT_TABLE_MINOR - 1] {
+    for minor in 0..=RESIDENT_TABLE_MINOR {
         let (status, placer) = run(&card_with(&package(RESIDENT_TABLE_MAJOR, minor, &b)), 512);
         assert_eq!((status, placer.body), (PackageStatus::Ok, b.clone()), "minor {minor}");
     }

@@ -22,10 +22,9 @@ use crate::level::PackageStatus;
 /// The system package's path in the store (the root `ROOT_STORE`, a NUL-terminated key as `store::find` takes it).
 pub const PACKAGE_PATH: &[u8] = b"digikit/system.dksp\0";
 
-/// The resident table version this core has (`major`, `minor`): a package is compatible when the majors are equal and its minor is not newer. A constant
-/// until the resident table exists.
-pub const RESIDENT_TABLE_MAJOR: u16 = 1;
-pub const RESIDENT_TABLE_MINOR: u16 = 1;
+/// The resident table version this core has: a package is compatible when the majors are equal and its minor is not newer (`dkrt_abi::resident::check`
+/// decides the same for a table; `syspkg::Header::compatible` is that rule for the header, pinned equal by a test in `resident/tests/check.rs`).
+pub use dkrt_abi::resident::{RESIDENT_MAJOR as RESIDENT_TABLE_MAJOR, RESIDENT_MINOR as RESIDENT_TABLE_MINOR};
 
 /// The loader. `chunk` is the buffer the file is read through: its length is a multiple of 512 (the sector the source reads in), at least 512 and
 /// 16-byte aligned on a device (the staging buffer).

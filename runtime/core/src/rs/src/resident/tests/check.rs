@@ -69,3 +69,18 @@ fn every_reason_fits_a_log_entry() {
         seen.push(m);
     }
 }
+
+/// One compatibility rule: the package header's `compatible` answers as `check` does for the same versions (magic and sizes aside).
+#[test]
+fn the_package_header_and_the_table_check_agree_on_versions() {
+    for (major, minor, built_major, built_minor) in [(1u16, 0u16, 1u16, 0u16), (1, 3, 1, 3), (1, 3, 1, 2), (1, 3, 1, 4), (2, 0, 1, 0), (1, 0, 2, 0)] {
+        let mut t = copy();
+        t.header.major = major;
+        t.header.minor = minor;
+        let mut into = core::mem::MaybeUninit::<dkrt_abi::resident::Resident>::uninit();
+        // `check` compares with this build's major; a table of another major is refused by it, as the header says for a package of another major
+        let by_check = unsafe { check(&t, built_minor, into.as_mut_ptr()) }.is_ok() && built_major == RESIDENT_MAJOR;
+        let by_header = dkrt_sdk::syspkg::Header::new(built_major, built_minor, 0, [0; 32]).compatible(major, minor);
+        assert_eq!(by_check, by_header && major == RESIDENT_MAJOR, "table {major}.{minor} package {built_major}.{built_minor}");
+    }
+}

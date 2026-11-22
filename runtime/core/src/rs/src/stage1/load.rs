@@ -1,5 +1,5 @@
 use super::*;
-use crate::sha256::Sha;
+use dkrt_abi::sha256::Sha;
 use dkrt_sdk::syspkg::{Header, HeaderError, HEADER_BYTES};
 use dkrt_sdk::{E_BUSY, E_NOT_FOUND};
 
