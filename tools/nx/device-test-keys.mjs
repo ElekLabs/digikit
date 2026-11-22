@@ -10,7 +10,7 @@
 // Python tool inputs: the import closure (py-imports.mjs) of the `.py` tools a record lists in its `sources`. A test that
 // runs a new Python tool must list it there.
 import { existsSync, globSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { nonCellGlobs, otherFiles } from './device-files.mjs';
 import { testSourceGlobs } from './test-source.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
@@ -195,8 +195,26 @@ export const builtSourceExclusions = (root, base = '.') =>
 
 // The files of a test-only project that is a tests directory (`runtime/core/tests`): its setup and fixtures. A module project
 // holds none: its tests reach the run through the import closure and the records' `sources`.
-export const ownFiles = (root) =>
-  root.split('/').at(-1) === 'tests' || root.includes('/tests/') ? [`{workspaceRoot}/${root}/**/*`] : [];
+export const ownFiles = (root, base = '.') =>
+  root.split('/').at(-1) === 'tests' || root.includes('/tests/')
+    ? [`{workspaceRoot}/${root}/**/*`, ...nestedProjectDirs(root, base).map((d) => `!{workspaceRoot}/${root}/${d}/**`)]
+    : [];
+
+// The directories below `root` that hold a project.json: nested projects keep their own files and key. One scan per root
+// and graph build; node_modules is not walked.
+const nestedDirsByRoot = new Map();
+const nestedProjectDirs = (root, base) => {
+  const at = join(base, root);
+  if (!nestedDirsByRoot.has(at))
+    nestedDirsByRoot.set(
+      at,
+      globSync('**/project.json', { cwd: at, exclude: (path) => basename(path) === 'node_modules' })
+        .map((f) => dirname(f))
+        .filter((d) => d !== '.')
+        .sort(),
+    );
+  return nestedDirsByRoot.get(at);
+};
 
 // What a test-only project hashes of a module subject that is built into the image: its files without the directories its
 // objects are built from (the image hashes hold those). `{ input: 'production', projects }` cannot take exclusions, so the
@@ -238,6 +256,12 @@ export const subjectInputs = (root, base = '.', keep = null) => {
       (d) => `!{workspaceRoot}/${root}/${d}/**`,
     ),
     ...[...new Set(nested)].sort().map((d) => `!{workspaceRoot}/${root}/${d}/**`),
+    // nested test projects below `tests` (not the project itself, nor a directory it sits in)
+    ...(inside
+      ? nestedProjectDirs(root, base)
+          .filter((d) => d.startsWith('tests/') && d !== inside && !inside.startsWith(`${d}/`))
+          .map((d) => `!{workspaceRoot}/${root}/${d}/**`)
+      : []),
     `!{workspaceRoot}/${root}/**/*.md`,
     // a pack stages its crate from the patchkit sources; no test reads the manifests
     `!{workspaceRoot}/${root}/Cargo.{toml,lock}`,
@@ -328,7 +352,7 @@ export const deviceInputs = (
   // the files the records name in `sources`; driver files named there follow the same rule as the imports
   const sources = [...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`)))];
   const driverless = opts.merge || opts.narrow;
-  const own = driverless ? (opts.own ?? ownFiles(root)) : null;
+  const own = driverless ? (opts.own ?? ownFiles(root, opts.base)) : null;
   const wideProject = !driverless || own.length > 0;
   const inputs = [
     ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
@@ -403,7 +427,9 @@ export const deviceInputs = (
     // a full key holds the module itself (its files without tests/ and docs, and without the directories its objects are built
     // from); a merge or narrow key holds the test's own files and setup (`ownFiles`): the objects reach the run through the
     // pack outputs and the image hashes, no other source file is an input
-    ...(driverless ? (opts.own ?? ownFiles(root)) : ['production', ...builtSourceExclusions(root, opts.base)]),
+    ...(driverless
+      ? (opts.own ?? ownFiles(root, opts.base))
+      : ['production', ...builtSourceExclusions(root, opts.base)]),
     ...(driverless ? withoutDriver(imports) : imports),
     // a record that compiles at run time (`compiles`) keeps the SDK and the toolchain in every key, the narrow one included
     ...(recs.some((rec) => rec.compiles) || (!opts.narrow && (patchkitCompiles || seeds.length)) ? COMPILE_INPUTS : []),
