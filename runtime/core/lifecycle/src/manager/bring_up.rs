@@ -58,6 +58,9 @@ where
                 Err(refusal) => report.refused.push(r, LifecycleError::Graph(refusal)),
             }
         }
+        // every service before the first module: a module's `init` finds every service of the boot live (the order the boot always had), and a service that
+        // fails is known before any module is tried. A service never needs a module, so the graph order holds.
+        let order = self.services_first(&order);
         let request = Request {
             roots: sorted.as_slice(),
             pin: true,
@@ -89,6 +92,39 @@ where
             Some(refused) => Err(refused.reason),
             None => Ok(report),
         }
+    }
+
+    /// `order` with its services first, each group in its own order.
+    fn services_first(&self, order: &Steps) -> Steps {
+        let is_service = |p: PackageId| self.graph.node(p).is_some_and(|n| n.provides().is_some());
+        let mut out = Steps::new();
+        for &p in order.as_slice().iter().filter(|&&p| is_service(p)) {
+            out.push(p);
+        }
+        for &p in order.as_slice().iter().filter(|&&p| !is_service(p)) {
+            out.push(p);
+        }
+        out
+    }
+
+    /// The services `p` needs in the order they are attached to it: by the host's callback rank, ties by id.
+    pub(super) fn attach_order(&self, p: PackageId) -> Steps {
+        let mut services = Steps::new();
+        for s in self.graph.services_of(p) {
+            services.push(s);
+        }
+        let n = services.len();
+        let rank = |s: PackageId| (self.host.attach_rank(s), s.0);
+        let list = services.as_mut_slice();
+        // insertion sort: at most a few services
+        for i in 1..n {
+            let mut j = i;
+            while j > 0 && rank(list[j - 1]) > rank(list[j]) {
+                list.swap(j - 1, j);
+                j -= 1;
+            }
+        }
+        services
     }
 
     pub(super) fn refuse_while_pending(&self) -> Result<(), LifecycleError> {
@@ -123,6 +159,11 @@ where
                 Ok(()) => {
                     report.brought_up.push(p);
                     started.push(p);
+                    // the DSP part starts as soon as the package is up and before the next one is placed (the DSP loader holds one reservation at a time); it comes
+                    // over UI passes, so this returns at once and never blocks a boot
+                    if self.host.start_dsp(p) {
+                        report.dsp_pending.push(p);
+                    }
                 }
                 Err(reason) => {
                     report.refused.push(p, reason);
@@ -199,10 +240,7 @@ where
     }
 
     fn enter(&mut self, p: PackageId, at: u32) -> Result<(), LifecycleError> {
-        let mut services = Steps::new();
-        for s in self.graph.services_of(p) {
-            services.push(s);
-        }
+        let services = self.attach_order(p);
         self.linker
             .link(p, at, services.as_slice())
             .map_err(|s| failed(p, State::Linked, s))?;
@@ -237,12 +275,11 @@ where
             .map_err(|s| failed(p, State::Activated, s))?;
         self.progress.set(p, State::Activated);
 
-        for (i, s) in services.as_slice().iter().enumerate() {
-            self.host
-                .attach(*s, p)
-                .map_err(|status| failed(p, State::Active, status))?;
-            self.progress.set_attached(p, i + 1);
-        }
+        // one call: the host walks the records over all the services (an error leaves nothing attached)
+        self.host
+            .attach(p, services.as_slice())
+            .map_err(|status| failed(p, State::Active, status))?;
+        self.progress.set_attached(p, true);
         self.progress.set(p, State::Active);
         self.live.insert(p);
         Ok(())

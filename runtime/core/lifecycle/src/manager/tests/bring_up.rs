@@ -15,12 +15,13 @@ fn load_brings_services_up_first_and_each_package_through_every_step() {
             Start(id(1)),
             Install(id(1)),
             Activate(id(1)),
+            Attach(id(1)),
             Place(id(2)),
             Link(id(2)),
             Start(id(2)),
             Install(id(2)),
             Activate(id(2)),
-            Attach(id(1), id(2)),
+            Attach(id(2)),
         ]
     );
     assert_eq!(pm.state_of(id(1)), Some(State::Active));
@@ -36,7 +37,7 @@ fn load_skips_services_that_are_up() {
     let r = pm.load(id(3)).unwrap();
     assert_eq!(brought(&r), ids(&[3]));
     assert!(!probe.calls().contains(&Place(id(1))));
-    assert!(probe.calls().contains(&Attach(id(1), id(3))));
+    assert!(probe.calls().contains(&Attach(id(3))));
 }
 
 #[test]
@@ -137,4 +138,95 @@ fn boot_refuses_a_root_the_graph_refuses_and_brings_up_the_others() {
         report.refused(),
         [r] if r.package == id(3) && matches!(r.reason, LifecycleError::Graph(crate::Refusal::Unmet { .. }))
     ));
+}
+
+#[test]
+fn boot_brings_every_service_up_before_the_first_module() {
+    // module 0 needs `other` (package 4); module 2 needs `ref` (package 1): ascending roots would put module 0 and its service before the service of module 2
+    let pkgs = [
+        reference(),
+        Pkg::service(4, "other", V1),
+        Pkg::module(0).needs("other", V1),
+        user(2),
+    ];
+    let (mut pm, probe) = world(&pkgs);
+    let report = pm.boot(&[id(0), id(2)]).unwrap();
+    assert_eq!(brought(&report), ids(&[4, 1, 0, 2]));
+    let calls = probe.calls();
+    assert!(position(&calls, Start(id(1))) < position(&calls, Start(id(0))));
+    assert!(position(&calls, Start(id(4))) < position(&calls, Start(id(0))));
+}
+
+#[test]
+fn the_dsp_part_starts_when_its_package_is_active_before_the_next_is_placed_and_is_not_awaited() {
+    let pkgs = [reference().with_dsp(), user(2).with_dsp(), user(3)];
+    let (mut pm, probe) = world(&pkgs);
+    let report = pm.boot(&[id(2), id(3)]).unwrap();
+    assert_eq!(report.dsp_pending().as_slice(), ids(&[1, 2]));
+    let calls = probe.calls();
+    assert!(position(&calls, StartDsp(id(1))) > position(&calls, Activate(id(1))));
+    assert!(
+        position(&calls, StartDsp(id(1))) < position(&calls, Place(id(2))),
+        "one reservation at a time"
+    );
+    assert!(
+        position(&calls, StartDsp(id(2))) > position(&calls, Attach(id(2))),
+        "a module starts it once attached"
+    );
+    assert_eq!(pm.state_of(id(2)), Some(crate::State::Active));
+    assert!(
+        !calls.contains(&StartDsp(id(3))),
+        "a package with no DSP part is not reported"
+    );
+}
+
+#[test]
+fn a_refused_package_starts_no_dsp_part() {
+    let pkgs = [reference(), user(2).with_dsp()];
+    let (mut pm, probe) = world(&pkgs);
+    probe.fail(Link(id(2)), dkrt_sdk::E_MISSING);
+    let report = pm.boot(&[id(2)]).unwrap();
+    assert!(report.dsp_pending().is_empty());
+    assert!(!probe.calls().iter().any(|c| matches!(c, StartDsp(_))));
+}
+
+#[test]
+fn a_failed_dsp_part_takes_down_the_closure_and_leaves_the_services_it_needs() {
+    // service 1 has consumers 2 and 3; its DSP part fails: 2 and 3 go with it. Module 4 needs another service and stays.
+    let pkgs = [
+        reference().with_dsp(),
+        user(2),
+        user(3),
+        Pkg::service(5, "other", V1),
+        Pkg::module(4).needs("other", V1),
+    ];
+    let (mut pm, _) = world(&pkgs);
+    pm.boot(&[id(2), id(3), id(4)]).unwrap();
+    let r = pm.take_down_closure(id(1)).unwrap();
+    assert_eq!(taken(&r), ids(&[2, 3, 1]));
+    assert_eq!(live(&pm, &[1, 2, 3, 4, 5]), [4, 5]);
+    // a module whose DSP part fails leaves the service it needs up
+    let (mut pm, _) = world(&[reference(), user(2).with_dsp()]);
+    pm.boot(&[id(2)]).unwrap();
+    assert_eq!(taken(&pm.take_down_closure(id(2)).unwrap()), ids(&[2]));
+    assert_eq!(live(&pm, &[1, 2]), [1]);
+}
+
+#[test]
+fn refresh_graph_reads_the_manifest_again_and_keeps_the_pins() {
+    let (mut pm, _) = world(&[reference(), user(2)]);
+    pm.boot(&[id(2)]).unwrap();
+    assert!(pm.load(id(3)).is_err(), "package 3 is not in the graph");
+    pm.manifest_mut().put(&user(3));
+    pm.refresh_graph().unwrap();
+    assert!(
+        pm.graph().node(id(2)).unwrap().is_pinned(),
+        "the boot's pin stays"
+    );
+    pm.load(id(3)).unwrap();
+    assert_eq!(live(&pm, &[1, 2, 3]), [1, 2, 3]);
+    // a replaced table is read: package 3 needs nothing now
+    pm.manifest_mut().put(&Pkg::module(3));
+    pm.refresh_graph().unwrap();
+    assert_eq!(pm.graph().services_of(id(3)).count(), 0);
 }

@@ -13,6 +13,8 @@ pub struct Pkg {
     needs: Vec<(&'static str, u32, bool)>,
     pub(super) resources: Vec<ResourceDecl>,
     wants: Vec<Want>,
+    pub(super) dsp: bool,
+    pub(super) rank: Option<u32>,
 }
 
 impl Pkg {
@@ -23,6 +25,8 @@ impl Pkg {
             needs: Vec::new(),
             resources: Vec::new(),
             wants: Vec::new(),
+            dsp: false,
+            rank: None,
         }
     }
 
@@ -37,6 +41,18 @@ impl Pkg {
     /// A hard need.
     pub fn needs(mut self, service: &'static str, min_version: u32) -> Pkg {
         self.needs.push((service, min_version, true));
+        self
+    }
+
+    /// This service's callbacks run at `rank` (the host's `attach_rank`; the package id when unset).
+    pub fn with_rank(mut self, rank: u32) -> Pkg {
+        self.rank = Some(rank);
+        self
+    }
+
+    /// This package has a DSP part: its host's `start_dsp` answers `true`.
+    pub fn with_dsp(mut self) -> Pkg {
+        self.dsp = true;
         self
     }
 
@@ -81,6 +97,17 @@ impl FakeManifest {
 }
 
 impl FakeManifest {
+    /// `pkg` joins the manifest, or replaces the package of its id (a file that was added or replaced since the manager read the tables).
+    pub fn put(&mut self, pkg: &Pkg) {
+        let bytes: &'static [u8] = vec::Vec::leak(table_of(pkg));
+        self.tables.retain(|(id, _)| *id != pkg.id);
+        self.tables.push((pkg.id, bytes));
+        self.resources.retain(|(id, _)| *id != pkg.id);
+        self.resources.push((pkg.id, pkg.resources.clone()));
+        self.wants.retain(|(id, _)| *id != pkg.id);
+        self.wants.push((pkg.id, pkg.wants.clone()));
+    }
+
     /// The pools and wants of `pkg` become those of the package of the same id (its header tables stay): a package whose next build claims differently.
     pub fn replace_claims(&mut self, pkg: &Pkg) {
         for (_, r) in self.resources.iter_mut().filter(|(id, _)| *id == pkg.id) {

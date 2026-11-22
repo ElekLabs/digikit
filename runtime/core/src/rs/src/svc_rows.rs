@@ -139,6 +139,14 @@ pub fn row_of(rec: usize) -> Option<&'static [*const ServiceRow]> {
     Some(&rows()[at..=at])
 }
 
+/// The place of the row of record `rec` in the walk of the callbacks (`u32::MAX` when it has no row).
+pub fn rank_of(rec: usize) -> u32 {
+    match unsafe { (*core::ptr::addr_of!(LIVE)).index_of(rec) } {
+        Some(at) => (at + crate::gen_services::STATIC) as u32,
+        None => u32::MAX,
+    }
+}
+
 /// The rows the core calls now: the in-crate ones and the loaded ones.
 pub fn rows() -> &'static [*const ServiceRow] {
     unsafe {
@@ -156,6 +164,28 @@ pub fn test_machines() {
         add(crate::MAX_MODULES + PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None);
     });
 }
+
+/// The rows a consumer's attach or detach walks: the in-crate rows, then the loaded rows of `services` (the services the consumer needs), in the order of the table. The
+/// callbacks run in that order for the module as they ran for every row in the old walk; a row of a service the module does not need is not called. Valid until the next call
+/// (one task, one walk at a time).
+pub unsafe fn walk_rows(services: &[dkrt_abi::package::PackageId]) -> &'static [*const ServiceRow] {
+    let all = rows();
+    let out = &mut *core::ptr::addr_of_mut!(WALK);
+    let mut n = 0;
+    let mut at = 0;
+    while at < all.len() {
+        let loaded = at >= crate::gen_services::STATIC;
+        let wanted = !loaded || services.iter().any(|s| (*core::ptr::addr_of!(LIVE)).index_of(s.0 as usize) == Some(at - crate::gen_services::STATIC));
+        if wanted {
+            out[n] = all[at];
+            n += 1;
+        }
+        at += 1;
+    }
+    &out[..n]
+}
+
+static mut WALK: [*const ServiceRow; crate::gen_services::ROWS_LEN] = [core::ptr::null(); crate::gen_services::ROWS_LEN];
 
 /// The table of the services the core calls now (`handlers::services`): `base` with the live row list.
 pub fn table(base: ServiceTable) -> ServiceTable {

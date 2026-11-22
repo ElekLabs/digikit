@@ -4,10 +4,13 @@
 //! the first consumer (the service stays for the second), the unload of the last (the orphaned service follows), and the memory afterwards; and the hooks of `svc-test`
 //! (a ColdFire entry): the installer holds them after the bring-up and the firmware bytes are stock after the unload.
 //!
+//! RC2b-2 adds the runtime's own driver over the manager (`Rt`): the boot with a package that does not come up (the rest loads and the boot record names the cause), a DSP part
+//! that fails (the closure goes down), and the live job's steps for a module (`unload`, then `reload_load` and `live_load`: the services stay up).
+//!
 //! The tests need the outputs of the Nx target `core/runtime:test-assembly` (its `dependsOn`). A device without its firmware image is skipped.
 use super::assembly_tests::*;
 use super::*;
-use crate::lifecycle::{RtManifest, Session};
+use crate::lifecycle::{Rt, RtManifest, Session};
 use dkrt_lifecycle::{PackageId, PackageManager};
 
 fn id(n: usize) -> PackageId {
@@ -106,6 +109,270 @@ fn the_manager_installs_the_hooks_of_a_service_and_the_firmware_is_stock_after_t
             assert_eq!(*l.p.code.borrow(), stock, "{}: the firmware bytes are stock after the unload", dev.name);
             assert!(l.m.live.is_empty(), "{}: every block of the arena is back", dev.name);
             assert_eq!(core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX)), u32::MAX, "{}: the unload leaves the boot index as it was", dev.name);
+        }
+        clean_state();
+    }
+}
+
+/// The boot record the job and `LOADS` read, empty, for `count` modules at `modules/<leaf>.dkm`.
+unsafe fn boot_record(leaves: &[&str]) -> dkrt_sdk::sel::Record {
+    let mut rec = dkrt_sdk::sel::Record::empty();
+    rec.count = leaves.len() as u32;
+    for (k, leaf) in leaves.iter().enumerate() {
+        let path = std::format!("modules/{leaf}.dkm");
+        rec.paths[k][..path.len()].copy_from_slice(path.as_bytes());
+    }
+    *crate::boot::info() = core::mem::zeroed();
+    crate::boot::info().count = leaves.len() as u32;
+    crate::boot::states().begin();
+    rec
+}
+
+#[test]
+fn the_boot_continues_with_the_rest_when_a_service_does_not_come_up_and_reports_each_module() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // module 0 needs `local-ping`, whose file is damaged after the plan read its table; module 1 needs `svc-test`, which is fine
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER, &SVC_USER], &[LOCAL_PING, SVC_TEST]);
+            assert!(plan.verdicts[0].is_accepted() && plan.verdicts[1].is_accepted(), "{}: the plan accepts both", dev.name);
+            let file = l.m.files.iter_mut().find(|(n, _)| n.starts_with(b"services/local-ping")).unwrap();
+            file.1[0] ^= 0xff;
+            let rec = boot_record(&[LOCAL_PING_USER.leaf, SVC_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            let info = crate::boot::info();
+            assert_eq!(info.results[0], dkrt_sdk::E_MISSING, "{}: the consumer of the refused service is refused with the planner's code", dev.name);
+            assert_eq!(info.results[1], dkrt_sdk::OK, "{}: the other module loads", dev.name);
+            assert_eq!(info.states[0], dkrt_sdk::STATE_REFUSED, "{}", dev.name);
+            assert_eq!(info.states[1], dkrt_sdk::STATE_ACTIVE, "{}", dev.name);
+            assert_eq!(info.loaded, 1);
+            assert_eq!([records::module(0).used, records::module(1).used], [0, 1], "{}: the record follows the selection index", dev.name);
+            let name = core::slice::from_raw_parts(crate::boot::boot_name(1), 17);
+            assert_eq!(name, &b"svc-test-user.dkm"[..], "{}", dev.name);
+            // the manager holds the survivors and nothing of the refused one
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(id(1)) && !m.live().contains(id(0)));
+            assert!(m.graph().node(id(1)).unwrap().is_pinned(), "the selection pins the modules that came up");
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_failed_dsp_part_takes_down_the_closure_of_its_package_and_marks_the_modules_that_needed_it() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER, &LOCAL_PING_USER_B], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf, LOCAL_PING_USER_B.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            let service = id(MAX_MODULES);
+            assert_eq!(crate::boot::info().loaded, 2, "{}", dev.name);
+            // the DSP part of the service waits in the DSP loader's queue and is given up (the path of a failed transfer, which takes the same closure down)
+            crate::dsp::ds().nwait = 1;
+            crate::dsp::ds().waiting[0].rec = service.0 as u32;
+            assert!(rt.cancel_dsp(service.0 as usize, dkrt_sdk::E_DSP_XFER), "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(m.live().is_empty(), "{}: the consumers went first and the service with them", dev.name);
+            assert_eq!([records::module(0).used, records::module(1).used, records::module(MAX_MODULES).used], [0, 0, 0], "{}", dev.name);
+            let info = crate::boot::info();
+            assert_eq!([info.states[0], info.states[1]], [dkrt_sdk::STATE_FAILED; 2], "{}: both modules are FAILED", dev.name);
+            assert_eq!([info.results[0], info.results[1]], [dkrt_sdk::E_MISSING; 2], "{}: with the code of a service that failed", dev.name);
+            assert_eq!(info.loaded, 0);
+            assert!(!crate::dsp::retained(), "{}", dev.name);
+            assert!(l.m.live.is_empty(), "{}: every block is back", dev.name);
+            assert!(!rt.session().retained(id(0)) && !rt.session().retained(service));
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn the_live_jobs_steps_unload_a_module_and_load_it_again_and_another_with_the_service_staying_up() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER, &LOCAL_PING_USER_B], &[LOCAL_PING]);
+            // only the first module is selected: the second is a file on the card that a live load adds
+            let mut rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            rec.count = 1;
+            crate::boot::info().count = 1;
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            let service = id(MAX_MODULES);
+            assert!(rt.manager().unwrap().live().contains(service) && rt.manager().unwrap().live().contains(id(0)), "{}", dev.name);
+            assert_eq!(rt.refusal(0), None, "{}: nothing refuses the unload", dev.name);
+
+            // the job's UNLOAD: the module goes, the service its closure does not include stays
+            assert_eq!(rt.unload(0), dkrt_sdk::OK, "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(!m.live().contains(id(0)) && m.live().contains(service), "{}: the service stays with no consumer", dev.name);
+            assert_eq!(records::module(0).used, 0);
+            assert_eq!(rt.unload(0), dkrt_sdk::OK, "{}: a second ask finds nothing left", dev.name);
+
+            // its LOAD (a reload): the new file's table is read and the module comes back into its own record, the service is not placed again
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            let placed_service = l.provs[0].block.is_some();
+            assert_eq!(rt.reload_load(0, path.as_ptr()), dkrt_sdk::OK, "{}", dev.name);
+            assert_eq!(records::module(0).used, 1, "{}", dev.name);
+            assert!(placed_service && rt.manager().unwrap().live().contains(service), "{}: the service kept its block", dev.name);
+            assert!(rt.manager().unwrap().live().contains(id(0)));
+
+            // a live load of the second module takes its own index (a record follows it)
+            let path_b = std::format!("modules/{}.dkm\0", LOCAL_PING_USER_B.leaf).into_bytes();
+            assert_eq!(rt.live_load(1, path_b.as_ptr()), dkrt_sdk::OK, "{}", dev.name);
+            assert_eq!([records::module(0).used, records::module(1).used], [1, 1], "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(id(1)) && m.live().contains(service), "{}", dev.name);
+
+            // both go, and the last of them leaves the service up (the live job unloads no service); a file that is not on the card is refused and leaves nothing
+            assert_eq!(rt.unload(0), dkrt_sdk::OK);
+            assert_eq!(rt.unload(1), dkrt_sdk::OK);
+            assert!(rt.manager().unwrap().live().contains(service));
+            assert_eq!(rt.live_load(2, b"modules/not-there.dkm\0".as_ptr()), dkrt_sdk::E_NOT_FOUND, "{}", dev.name);
+            assert_eq!(records::module(2).used, 0);
+        }
+        clean_state();
+    }
+}
+
+
+#[test]
+fn a_busy_module_keeps_its_tick_and_stays_loaded_when_the_live_job_asks_the_manager_to_unload_it() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            let (user, service) = (id(0), id(MAX_MODULES));
+            let tick = crate::entry::tick_of(0);
+            // (a fixture without a tick still shows the record and the manager checks below)
+            // the job's QUIESCE stops the tick; the DSP loader holds rows it cannot clear, so the unload is busy
+            let _ = l.reload_quiesce(0);
+            assert_eq!(crate::entry::tick_of(0), 0, "{}: the quiesce stopped the tick", dev.name);
+            crate::dsp::ds().phase = crate::dsp::PH_RETAINED;
+            assert_eq!(rt.unload(0), dkrt_sdk::E_BUSY, "{}", dev.name);
+            // nothing of the module was taken down: the manager still holds it and its service, the record is whole, and the abort gives the tick back
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(user) && m.live().contains(service), "{}: the manager keeps the module", dev.name);
+            assert_eq!(records::module(0).used, 1, "{}", dev.name);
+            assert!(l.reload_abort(0), "{}", dev.name);
+            assert_eq!(crate::entry::tick_of(0), tick, "{}: the tick is back", dev.name);
+            // once the DSP is free the unload goes through
+            crate::dsp::ds().phase = crate::dsp::PH_IDLE;
+            assert_eq!(rt.unload(0), dkrt_sdk::OK, "{}", dev.name);
+            assert!(!rt.manager().unwrap().live().contains(user), "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn the_live_plan_counts_a_service_the_boot_took_down_when_its_consumer_was_refused() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // module 0 needs `local-ping` and its file is damaged after the plan: the service starts, the module is refused, and the orphaned service goes down again
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER, &LOCAL_PING_USER_B], &[LOCAL_PING]);
+            let file = l.m.files.iter_mut().find(|(n, _)| n.starts_with(b"modules/local-ping-user.dkm")).unwrap();
+            file.1[0] ^= 0xff;
+            let mut rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            rec.count = 1;
+            crate::boot::info().count = 1;
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            assert_ne!(crate::boot::info().results[0], dkrt_sdk::OK, "{}: the module is refused", dev.name);
+            assert!(rt.manager().unwrap().live().is_empty(), "{}: the service went down with its only consumer", dev.name);
+            // the live plan of a module that needs the same service: the service is down but nothing refused it, so a load can bring it up
+            let mut caps = capacity(&l.p);
+            crate::loader::live_caps(&mut caps, (0, 0));
+            let table = Keys::parse(&l.tables[1][..l.table_len[1]]).unwrap();
+            assert_eq!(l.live_plan(1, table, &caps), dkrt_sdk::OK, "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_refused_live_load_leaves_no_module_in_the_live_plan_and_frees_its_index() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER, &LOCAL_PING_USER_B], &[LOCAL_PING]);
+            let mut rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            rec.count = 1;
+            crate::boot::info().count = 1;
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            // the second module's file is damaged after the plan: its load is refused, as the old live load refused it, and index 1 is free again
+            let path_b = std::format!("modules/{}.dkm\0", LOCAL_PING_USER_B.leaf).into_bytes();
+            let file = l.m.files.iter_mut().find(|(n, _)| n.starts_with(b"modules/local-ping-user-b.dkm")).unwrap();
+            file.1[0] ^= 0xff;
+            let r = rt.live_load(1, path_b.as_ptr());
+            assert_ne!(r, dkrt_sdk::OK, "{}: the damaged file is refused", dev.name);
+            assert!(!l.accepted[1], "{}: a refused live load leaves no phantom module in the live plan", dev.name);
+            assert_eq!(records::module(1).used, 0, "{}", dev.name);
+            assert_eq!(l.sel_of_rec[1], 0, "{}: no free record keeps the index", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_module_the_boot_refused_for_a_missing_service_loads_live_once_the_service_is_there() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // the service's file is damaged after the plan: the boot refuses its consumer (the plan's verdict says E_MISSING after the settle)
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let file = l.m.files.iter_mut().find(|(n, _)| n.starts_with(b"services/local-ping")).unwrap();
+            file.1[0] ^= 0xff;
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            assert_eq!(crate::boot::info().results[0], dkrt_sdk::E_MISSING, "{}", dev.name);
+            // the service is installed (the file is whole again): the boot's verdicts are over, so the live load goes through
+            let file = l.m.files.iter_mut().find(|(n, _)| n.starts_with(b"services/local-ping")).unwrap();
+            file.1[0] ^= 0xff;
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            assert_eq!(rt.live_load(0, path.as_ptr()), dkrt_sdk::OK, "{}", dev.name);
+            assert!(rt.manager().unwrap().live().contains(id(0)) && rt.manager().unwrap().live().contains(id(MAX_MODULES)), "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_live_load_refused_before_anything_is_placed_logs_its_own_detail_and_not_that_of_an_earlier_refusal() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // module 1 needs `local-ping`, which the search did not find: the graph refuses it before any step runs
+            let (mut l, plan) = planned(dev, &image, &[], &[&SVC_USER, &LOCAL_PING_USER], &[SVC_TEST]);
+            let mut rec = boot_record(&[SVC_USER.leaf]);
+            rec.count = 1;
+            crate::boot::info().count = 1;
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot(&rec, plan);
+            // what an earlier refusal of another package left in the loader
+            l.missing = [7; dkrt_sdk::NEEDS_LEN];
+            l.decl_diff = (1, 2);
+            l.import_hash = 5;
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            assert_eq!(rt.live_load(1, path.as_ptr()), dkrt_sdk::E_MISSING, "{}", dev.name);
+            assert_eq!((crate::loader::missing(), l.decl_diff, l.import_hash), ([0; dkrt_sdk::NEEDS_LEN], (0, 0), 0), "{}: the refusal logs its own detail", dev.name);
         }
         clean_state();
     }

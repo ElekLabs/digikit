@@ -7,6 +7,8 @@ use std::vec::Vec;
 pub struct FakeHost {
     probe: Probe,
     declared: Vec<(PackageId, Vec<(u32, Limit)>)>,
+    dsp: Vec<PackageId>,
+    ranks: Vec<(PackageId, u32)>,
 }
 
 impl FakeHost {
@@ -14,7 +16,19 @@ impl FakeHost {
         FakeHost {
             probe,
             declared: Vec::new(),
+            dsp: Vec::new(),
+            ranks: Vec::new(),
         }
+    }
+
+    /// `package` has a DSP part: `start_dsp` answers `true` for it.
+    pub fn has_dsp(&mut self, package: PackageId) {
+        self.dsp.push(package);
+    }
+
+    /// `service`'s callbacks run at `rank`.
+    pub fn ranks(&mut self, service: PackageId, rank: u32) {
+        self.ranks.push((service, rank));
     }
 
     /// `package`'s `start` declares these resources (replacing an earlier answer).
@@ -44,12 +58,21 @@ impl ProviderHost for FakeHost {
         let _ = self.probe.record(Call::Deactivate(package));
     }
 
-    fn attach(&mut self, service: PackageId, consumer: PackageId) -> Result<(), Status> {
-        self.probe.record(Call::Attach(service, consumer))
+    fn attach_rank(&self, service: PackageId) -> u32 {
+        match self.ranks.iter().find(|(p, _)| *p == service) {
+            Some(&(_, r)) => r,
+            None => service.0 as u32,
+        }
     }
 
-    fn detach(&mut self, service: PackageId, consumer: PackageId) {
-        let _ = self.probe.record(Call::Detach(service, consumer));
+    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), Status> {
+        self.probe.walk(consumer, services);
+        self.probe.record(Call::Attach(consumer))
+    }
+
+    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) {
+        self.probe.walk(consumer, services);
+        let _ = self.probe.record(Call::Detach(consumer));
     }
 
     fn can_stop(&mut self, package: PackageId) -> Result<(), Status> {
@@ -58,5 +81,13 @@ impl ProviderHost for FakeHost {
 
     fn stop(&mut self, package: PackageId) {
         let _ = self.probe.record(Call::Stop(package));
+    }
+
+    fn start_dsp(&mut self, package: PackageId) -> bool {
+        let has = self.dsp.contains(&package);
+        if has {
+            let _ = self.probe.record(Call::StartDsp(package));
+        }
+        has
     }
 }

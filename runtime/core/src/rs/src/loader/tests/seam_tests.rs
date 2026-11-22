@@ -4,7 +4,7 @@
 use super::*;
 use crate::lifecycle::{RtManifest, Session};
 use dkneeds::keys::{name_hash, name_hash_bytes, Need, Pair, Table};
-use dkrt_abi::service::{Service, ServiceRow};
+use dkrt_abi::service::{Service, ServiceRow, ServiceTable};
 use dkrt_lifecycle::{Cpu, Entry, Linker, Manifest, PackageManager, Placer, ProviderHost, SiteRef};
 
 fn id(n: usize) -> PackageId {
@@ -60,7 +60,7 @@ fn the_placer_copies_the_image_and_relocates_it_against_the_base_only() {
 fn a_package_that_cannot_be_placed_takes_nothing_and_a_placed_one_is_freed() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        // a file with a DSP section waits for the DSP part (`E_CONTEXT`, after the checks of the section itself): refused, nothing is taken
+        // a file whose DSP section does not check is refused (the section is read at the place, where its range is reserved), nothing is taken
         let mut dsp = module_file();
         put(&mut dsp, dkneeds::H_DSP_SIZE, 64);
         seal(&mut dsp);
@@ -160,12 +160,21 @@ impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Recorder {
     unsafe fn remove(_: &C, owner: u8) {
         REMOVED.lock().unwrap_or_else(|e| e.into_inner()).push(owner);
     }
+    unsafe fn apply_record(_: &C, kind: u32, _body: *const u8, c: &dkrt_abi::service::ApplyCtx) -> i32 {
+        APPLIED.lock().unwrap_or_else(|e| e.into_inner()).push((c.owner, kind));
+        if kind == 99 {
+            E_INIT
+        } else {
+            OK
+        }
+    }
 }
+static APPLIED: std::sync::Mutex<Vec<(u8, u32)>> = std::sync::Mutex::new(Vec::new());
 static REMOVED: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
 static RECORDER: ServiceRow = ServiceRow::of::<Recorder, crate::core_api::RealCore>("recorder", &[]);
 
 #[test]
-fn detach_calls_the_remove_of_that_service_for_a_module_consumer() {
+fn detach_calls_the_remove_of_the_rows_of_the_services_it_names_for_a_module_consumer() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut l = loader_of(Init::Ok, module_file());
@@ -174,13 +183,13 @@ fn detach_calls_the_remove_of_that_service_for_a_module_consumer() {
         let service = MAX_MODULES + 2;
         assert_eq!(crate::svc_rows::add(service, &RECORDER, None), OK);
         REMOVED.lock().unwrap_or_else(|e| e.into_inner()).clear();
-        host.detach(id(service), id(3));
-        // a package without a row, and a consumer that is no module, call nothing
-        host.detach(id(service + 1), id(3));
-        host.detach(id(service), id(MAX_MODULES));
-        host.attach(id(service), id(3)).unwrap();
+        host.detach(id(3), &[id(service)]);
+        // a service that is not named, a package without a row, and a consumer that is no module, call nothing
+        host.detach(id(3), &[]);
+        host.detach(id(3), &[id(service + 1)]);
+        host.detach(id(MAX_MODULES), &[id(service)]);
         crate::svc_rows::remove(service);
-        assert_eq!(*REMOVED.lock().unwrap_or_else(|e| e.into_inner()), [4], "the owner id is the record plus one, and only the row of the service is called");
+        assert_eq!(*REMOVED.lock().unwrap_or_else(|e| e.into_inner()), [4], "the owner id is the record plus one, and only the rows of the named services are called");
     }
 }
 
@@ -323,10 +332,11 @@ fn a_hook_the_port_file_lacks_refuses_the_entry_and_a_foreign_cpu_entry_is_the_o
         use dkrt_lifecycle::{InstallError, SlotRef};
         let nowhere = Entry::Hook { site: SiteRef::new(Cpu::ColdFire, 0x1234_5678), target: 0x7000 };
         assert_eq!(installers.install(id(MAX_MODULES + 1), &[nowhere]), Err(InstallError::Backend(E_IMPORT)));
-        // an entry of the SHARC goes to the SHARC backend, which this runtime does not have yet
+        // an entry of the SHARC goes to the SHARC backend (the DSP slots of `DspInstaller`): it claims the slot and a restore gives it back, with the ColdFire installer untouched
         let sharc = Entry::Slot { slot: SlotRef::new(Cpu::Sharc, 1), target: 4 };
-        assert_eq!(installers.install(id(MAX_MODULES + 2), &[sharc]), Err(InstallError::Backend(E_CONTEXT)));
+        assert_eq!(installers.install(id(MAX_MODULES + 2), &[sharc]), Ok(()));
         assert_eq!(l.installer.count(), 0);
+        assert_eq!(installers.restore(id(MAX_MODULES + 2)), Ok(()));
     }
 }
 
@@ -345,14 +355,129 @@ fn the_manifest_holds_the_tables_of_the_modules_and_providers_and_the_apis_of_th
         let mut s = shared(&mut l);
         let m = RtManifest::of(&s, 2);
         let ids: Vec<u8> = m.tables().iter().map(|(p, _)| p.0).collect();
-        // module 1 has no table (nothing was captured for it); provider 0 has none either
-        assert_eq!(ids, [0, MAX_MODULES as u8 + 1]);
-        assert_eq!(m.tables()[1].1, &t[..]);
+        // module 1 has no table (nothing was captured for it): it is a node with the empty table, so the loader's own checks refuse its file with their code; provider 0 has none
+        // and is left out
+        assert_eq!(ids, [0, 1, MAX_MODULES as u8 + 1]);
+        let empty = dkneeds::keys::Keys::parse(m.tables()[1].1).expect("the empty table parses");
+        assert_eq!((empty.words(dkneeds::keys::tag::NEEDS, 0), empty.words(dkneeds::keys::tag::PROVIDES, 0)), (None, None));
+        assert_eq!(m.tables()[2].1, &t[..]);
         assert!(m.core_apis().iter().any(|a| a.name() == name_hash("runtime") && a.version() == dkrt_sdk::RUNTIME_VERSION));
         assert!(m.resources(id(0)).is_empty() && m.wants(id(0)).is_empty() && m.core_resources().is_empty());
         // the graph the manager builds from it
         let (p, li, i, h) = s.seams();
         let pm = PackageManager::new(m, p, li, i, h).unwrap();
         assert!(pm.graph().node(id(0)).is_some() && pm.graph().node(id(MAX_MODULES + 1)).is_some());
+    }
+}
+
+/// A section of records as the commit leaves it: the header (magic, version, device, count) and each record as kind, whole length and a body word.
+fn registry_block(kinds: &[u32]) -> Vec<u8> {
+    let mut b = Vec::new();
+    for w in [0x444b_5247u32, 1, 0, kinds.len() as u32] {
+        b.extend_from_slice(&w.to_be_bytes());
+    }
+    for &k in kinds {
+        for w in [k, 12, 0] {
+            b.extend_from_slice(&w.to_be_bytes());
+        }
+    }
+    b
+}
+
+/// A service that owns the kinds of one parity (`T` = 1: odd, 2: even) and logs each call with its tag; a record of kind 99 is refused.
+struct Tag<const T: u32>;
+impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Service<C> for Tag<T> {
+    dkrt_abi::accepts_records!();
+    dkrt_abi::accepts_teardown!();
+    unsafe fn apply(_: &C, _: &dkrt_abi::service::ApplyCtx) -> i32 {
+        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 0));
+        OK
+    }
+    unsafe fn apply_record(_: &C, kind: u32, _body: *const u8, _: &dkrt_abi::service::ApplyCtx) -> i32 {
+        if kind % 2 != T % 2 {
+            return OK;
+        }
+        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, kind));
+        if kind == 99 {
+            E_INIT
+        } else {
+            OK
+        }
+    }
+    unsafe fn remove(_: &C, owner: u8) {
+        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 1000 + owner as u32));
+    }
+}
+static WALKED: std::sync::Mutex<Vec<(u32, u32)>> = std::sync::Mutex::new(Vec::new());
+static ODD: ServiceRow = ServiceRow::of::<Tag<1>, crate::core_api::RealCore>("odd", &[]);
+static EVEN: ServiceRow = ServiceRow::of::<Tag<2>, crate::core_api::RealCore>("even", &[]);
+struct Pair2([*const ServiceRow; 2]);
+unsafe impl Sync for Pair2 {}
+static BOTH: Pair2 = Pair2([&ODD as *const ServiceRow, &EVEN as *const ServiceRow]);
+
+fn walked() -> Vec<(u32, u32)> {
+    core::mem::take(&mut *WALKED.lock().unwrap_or_else(|e| e.into_inner()))
+}
+
+#[test]
+fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_as_the_old_apply_did_and_a_refusal_is_undone() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let _ = crate::handlers::services(); // the first call adds the test row of the machines service, at the last provider record
+        let mut l = loader_of(Init::Ok, module_file());
+        let mut s = shared(&mut l);
+        let (.., mut host) = s.seams();
+        let (odd, even) = (MAX_MODULES, MAX_MODULES + 1);
+        // the callback order: odd, then even; the records interleave as in the file (kinds of both services, the shared rows are numbered in this order)
+        assert_eq!(crate::svc_rows::add(odd, &ODD, Some(10)), OK);
+        assert_eq!(crate::svc_rows::add(even, &EVEN, Some(20)), OK);
+        let block = registry_block(&[4, 3, 2, 5]);
+        l.reg_block[3] = (block.as_ptr(), block.len() as u32);
+        walked();
+        let table = ServiceTable { rows: &BOTH.0, ..crate::handlers::services() };
+        assert_eq!(crate::registry::apply_with(table, 4, block.as_ptr(), block.len() as u32, 0), OK);
+        let old = walked();
+        assert_eq!(old, [(1, 0), (2, 0), (2, 4), (1, 3), (2, 2), (1, 5)], "the old walk: every apply, then the records in file order");
+        // the consumer's services in any order give the same walk
+        host.attach(id(3), &[id(even), id(odd)]).unwrap();
+        assert_eq!(walked(), old, "one attach over the services walks as the old registry apply did");
+        // a service the module does not need is not called, and the records it owns are not applied
+        host.attach(id(3), &[id(even)]).unwrap();
+        assert_eq!(walked(), [(2, 0), (2, 4), (2, 2)]);
+        // a service with no row, a module with no records and a consumer that is no module apply nothing
+        host.attach(id(3), &[id(even + 1)]).unwrap();
+        host.attach(id(2), &[id(odd), id(even)]).unwrap();
+        host.attach(id(MAX_MODULES), &[id(odd), id(even)]).unwrap();
+        assert_eq!(walked(), []);
+        // the first refusal stops the walk and is the answer; the walk then undid what it wrote (`remove` for the owner on the same rows, the last first), so no detach follows
+        let bad = registry_block(&[3, 99, 4]);
+        l.reg_block[3] = (bad.as_ptr(), bad.len() as u32);
+        assert_eq!(host.attach(id(3), &[id(odd), id(even)]), Err(E_INIT));
+        assert_eq!(walked(), [(1, 0), (2, 0), (1, 3), (1, 99), (2, 1004), (1, 1004)]);
+        crate::svc_rows::remove(odd);
+        crate::svc_rows::remove(even);
+    }
+}
+
+#[test]
+fn start_dsp_hands_a_package_with_a_dsp_part_to_the_dsp_loader_once_and_a_package_without_one_to_nobody() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        *crate::dsp::ds() = core::mem::zeroed();
+        crate::dsp::init_once();
+        let mut l = loader_of(Init::Ok, module_file());
+        let mut s = shared(&mut l);
+        s.dsp_wanted[0] = false;
+        let (.., mut host) = s.seams();
+        assert!(!host.start_dsp(id(0)), "no DSP part: nothing is queued");
+        assert_eq!(crate::dsp::ds().phase, 0);
+        drop(host);
+        s.dsp_wanted[0] = true;
+        let (.., mut host) = s.seams();
+        assert!(host.start_dsp(id(0)));
+        assert_eq!((crate::dsp::ds().pending.rec, crate::dsp::ds().pending.early), (0, 1), "the load of record 0 started, early (the CF part is live)");
+        assert_ne!(crate::dsp::ds().phase, 0);
+        assert!(!host.start_dsp(id(0)), "the part is handed over once");
+        *crate::dsp::ds() = core::mem::zeroed();
     }
 }

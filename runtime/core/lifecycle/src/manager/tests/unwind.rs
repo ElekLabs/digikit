@@ -91,7 +91,7 @@ fn install_fails_with_nothing_to_restore() {
 
 #[test]
 fn attach_fails_after_install_so_the_entries_are_restored() {
-    let (calls, pm, e) = load_a_failing(Attach(id(1), id(2)));
+    let (calls, pm, e) = load_a_failing(Attach(id(2)));
     assert_eq!(
         calls,
         [
@@ -100,7 +100,7 @@ fn attach_fails_after_install_so_the_entries_are_restored() {
             Start(id(2)),
             Install(id(2)),
             Activate(id(2)),
-            Attach(id(1), id(2)),
+            Attach(id(2)),
             Deactivate(id(2)),
             Restore(id(2)),
             Stop(id(2)),
@@ -113,8 +113,42 @@ fn attach_fails_after_install_so_the_entries_are_restored() {
 }
 
 #[test]
-fn a_failed_second_attach_detaches_the_first() {
-    // module 3 needs services "ref" (1) and "other" (4); it attaches by ascending id: 1 then 4
+fn attach_is_one_call_over_the_services_in_callback_rank_and_detach_gets_the_same_list() {
+    // module 3 needs "ref" (id 1, rank 20) and "other" (id 4, rank 10): the rows call "other" first, and the host gets both in one call
+    let pkgs = [
+        reference().with_rank(20),
+        Pkg::service(4, "other", V1).with_rank(10),
+        user(3).needs("other", V1),
+    ];
+    let (mut pm, probe) = world(&pkgs);
+    pm.boot(&[id(1), id(4)]).unwrap();
+    probe.clear();
+    pm.load(id(3)).unwrap();
+    assert_eq!(
+        probe
+            .calls()
+            .iter()
+            .filter(|c| **c == Attach(id(3)))
+            .count(),
+        1
+    );
+    assert_eq!(probe.walk_of(id(3)), [id(4), id(1)]);
+    probe.clear();
+    pm.take_down_closure(id(3)).unwrap();
+    assert_eq!(
+        probe
+            .calls()
+            .iter()
+            .filter(|c| **c == Detach(id(3)))
+            .count(),
+        1
+    );
+    assert_eq!(probe.walk_of(id(3)), [id(4), id(1)]);
+}
+
+#[test]
+fn a_failed_attach_leaves_nothing_attached_so_there_is_no_detach_and_the_entries_are_restored() {
+    // the host undoes a walk that failed half way; the manager does not detach what was never attached
     let pkgs = [
         reference(),
         Pkg::service(4, "other", V1),
@@ -123,15 +157,14 @@ fn a_failed_second_attach_detaches_the_first() {
     let (mut pm, probe) = world(&pkgs);
     pm.boot(&[id(1), id(4)]).unwrap();
     probe.clear();
-    probe.fail(Attach(id(4), id(3)), E_MISSING);
+    probe.fail(Attach(id(3)), E_MISSING);
     assert!(matches!(
         err(pm.load(id(3))),
         LifecycleError::Failed { package, .. } if package == id(3)
     ));
     let calls = probe.calls();
-    assert!(calls.contains(&Detach(id(1), id(3))));
-    assert!(!calls.contains(&Detach(id(4), id(3))));
-    assert!(before(&calls, Detach(id(1), id(3)), Restore(id(3))));
+    assert!(!calls.contains(&Detach(id(3))));
+    assert!(before(&calls, Deactivate(id(3)), Restore(id(3))));
     assert_eq!(live(&pm, &[1, 3, 4]), [1, 4]);
 }
 
@@ -177,7 +210,7 @@ fn a_service_chain_started_for_a_failed_consumer_goes_down_consumer_first() {
 fn a_busy_restore_during_the_unwind_is_finished_by_a_retry_that_then_frees_the_orphans() {
     // 2 fails to attach after its entries went in; the restore of 2 answers busy; 1 was started for it
     let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
-    probe.fail(Attach(id(1), id(2)), E_MISSING);
+    probe.fail(Attach(id(2)), E_MISSING);
     probe.busy_restore(id(2), 1);
     assert!(matches!(err(pm.load(id(2))), LifecycleError::Failed { .. }));
     assert_eq!(pm.state_of(id(2)), Some(State::RestorePending));
@@ -200,6 +233,7 @@ fn a_busy_restore_during_the_unwind_is_finished_by_a_retry_that_then_frees_the_o
             Stop(id(2)),
             Unbind(id(2)),
             Free(id(2)),
+            Detach(id(1)),
             Deactivate(id(1)),
             Restore(id(1)),
             Stop(id(1)),
@@ -219,7 +253,7 @@ fn a_busy_restore_during_the_unwind_is_finished_by_a_retry_that_then_frees_the_o
 #[test]
 fn a_busy_restore_in_a_boot_refuses_what_is_left_and_the_retry_finishes_it() {
     let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
-    probe.fail(Attach(id(1), id(2)), E_MISSING);
+    probe.fail(Attach(id(2)), E_MISSING);
     probe.busy_restore(id(2), 1);
     let report = pm.boot(&[id(2), id(3)]).unwrap();
     assert_eq!(brought(&report), ids(&[1]));
@@ -303,7 +337,7 @@ fn a_pool_declared_twice_is_a_ledger_refusal() {
 fn a_busy_orphan_restore_after_a_boot_is_reported_as_pending() {
     // 2 fails to attach and unwinds; the restore of the orphan 1, started for it, is busy
     let (mut pm, probe) = world(&[reference(), user(2)]);
-    probe.fail(Attach(id(1), id(2)), E_MISSING);
+    probe.fail(Attach(id(2)), E_MISSING);
     probe.busy_restore(id(1), 1);
     let report = pm.boot(&[id(2)]).unwrap();
     assert_eq!(report.pending(), Some(id(1)));

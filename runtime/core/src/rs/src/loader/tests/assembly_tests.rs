@@ -273,7 +273,7 @@ fn cap_hash(kind: u8) -> u32 {
 
 /// The capacity before anything loads, as `dkrt_capacity` builds it: the limits of the kinds the runtime counts itself are as large as they can be here (their
 /// unit tests own them), the rest come from the image's `cap_<kind>` entries and the rows of the services loaded so far.
-unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
+pub(super) unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
     let table = crate::handlers::services();
     (0..CAP_KINDS.len())
         .map(|k| {
@@ -309,7 +309,7 @@ impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
 /// table declares (no ColdFire code runs on the host).
 pub(super) struct Card {
-    files: Vec<(Vec<u8>, Vec<u8>)>,
+    pub(super) files: Vec<(Vec<u8>, Vec<u8>)>,
     staged: Vec<u8>,
     staged_path: Vec<u8>,
     pub(super) live: Vec<(u32, Vec<u128>)>,
@@ -484,7 +484,7 @@ pub(super) struct Fixture {
     nx: &'static str,
 }
 
-const SINE: Fixture = Fixture { leaf: "sine", nx: "test/sine" };
+pub(super) const SINE: Fixture = Fixture { leaf: "sine", nx: "test/sine" };
 const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
 const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
@@ -495,15 +495,15 @@ pub(super) const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/l
 pub(super) const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };
 pub(super) const LOCAL_PING_USER_B: Fixture = Fixture { leaf: "local-ping-user-b", nx: "test/local-ping-user-b" };
 /// A module that binds a key combination with `dk_shortcut_add`: a user of the shortcuts service file, no DSP section.
-const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortcut-demo" };
+pub(super) const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortcut-demo" };
 /// A module that calls `dk_sample_pool_open` and the pool calls without owning a table: a user of the samples service file, no DSP section.
 const TRACK_SELECT: Fixture = Fixture { leaf: "track-select", nx: "test/track-select" };
 
 /// A module that keeps one setting and calls `dk_project_status`: a user of the project service file, no DSP section; it knows nothing of projects.
-const PROJECT_USER: Fixture = Fixture { leaf: "project-user", nx: "test/project-user" };
+pub(super) const PROJECT_USER: Fixture = Fixture { leaf: "project-user", nx: "test/project-user" };
 
 /// The service files of the card: the services of the runtime and the test service.
-const SERVICES: [Fixture; 7] = [
+pub(super) const SERVICES: [Fixture; 7] = [
     Fixture { leaf: "fx", nx: "core/services/fx" },
     Fixture { leaf: "machines", nx: "core/services/machines" },
     Fixture { leaf: "lfo", nx: "core/services/lfo" },
@@ -639,7 +639,7 @@ fn dsp_info_of(dev: Dev, l: &Boot, plan: &Plan) -> Option<Vec<u32>> {
 }
 
 /// The DSP of a provider's load for a host test (see `dsp_info_of`): the table is in place and the link acknowledges while this lives.
-struct DspEnv {
+pub(super) struct DspEnv {
     _info: Vec<u32>,
     _guard: crate::cleanup_tests::VoiceInfoGuard,
 }
@@ -650,7 +650,7 @@ impl Drop for DspEnv {
     }
 }
 
-unsafe fn dsp_env(dev: Dev, l: &Boot, plan: &Plan) -> Option<DspEnv> {
+pub(super) unsafe fn dsp_env(dev: Dev, l: &Boot, plan: &Plan) -> Option<DspEnv> {
     let info = dsp_info_of(dev, l, plan)?;
     let guard = crate::cleanup_tests::VoiceInfoGuard::set(info.as_ptr());
     crate::cleanup_tests::script_link(true);

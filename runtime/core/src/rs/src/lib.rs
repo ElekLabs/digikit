@@ -129,7 +129,6 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
 
 
 
-#[cfg(test)]
 mod lifecycle;
 #[cfg(test)]
 mod cleanup_tests;

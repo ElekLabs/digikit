@@ -198,19 +198,11 @@ pub unsafe extern "C" fn dkrt_boot() {
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them
     read_tables(&r);
-    // the boot plan over the header tables that read gave, with the providers the search found for the hard needs the runtime does not meet: the order to
-    // load in, and a module the plan refuses is not loaded
-    let mut planned = loader::plan_selection(r.count as usize);
-    // the providers load before any module; a module that needs one that did not load is refused before the module stage
-    loader::load_providers(&planned);
-    loader::settle(&mut planned, r.count as usize);
-    let mut k = 0;
-    while k < r.count as usize {
-        states().planned(k, planned.verdicts[k]);
-        k += 1;
-    }
-    loader::boot(&r, &planned);
-    crate::selection::BOOT_IDX = u32::MAX;
+    // the boot plan over the header tables that read gave, with the providers the search found for the hard needs the runtime does not meet: a module the plan refuses is
+    // not loaded
+    let planned = loader::plan_selection(r.count as usize);
+    // the package manager loads the accepted modules and the services they need (services first), reports each module in plan order and the providers in the log
+    crate::lifecycle::boot(&r, planned);
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
 }

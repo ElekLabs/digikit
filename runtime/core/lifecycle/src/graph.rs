@@ -16,6 +16,12 @@ enum Resolved {
     None,
 }
 
+/// No packages: what a graph is built from, in place (`PackageGraph::init_from_tables`).
+const EMPTY: PackageGraph = PackageGraph {
+    nodes: [Node::new(PackageId(0)); MAX_PACKAGES],
+    len: 0,
+};
+
 /// The packages and their needs.
 #[derive(Clone, Debug)]
 pub struct PackageGraph {
@@ -28,13 +34,24 @@ impl PackageGraph {
     /// one name and major version and a cycle of needs. A graph is acyclic by construction, so every walk over it ends. A need that nothing meets is no
     /// edge here: [`PackageGraph::bring_up_order`] refuses it.
     pub fn from_nodes(nodes: &[Node]) -> Result<PackageGraph, Refusal> {
+        let mut g = EMPTY;
+        g.fill(nodes)?;
+        Ok(g)
+    }
+
+    /// Takes `nodes` and checks them (the refusals of [`PackageGraph::from_nodes`]); a refusal leaves the graph unusable.
+    fn fill(&mut self, nodes: &[Node]) -> Result<(), Refusal> {
         if nodes.len() > MAX_PACKAGES {
             return Err(Refusal::TooManyPackages);
         }
-        let mut g = PackageGraph {
-            nodes: [Node::new(PackageId(0)); MAX_PACKAGES],
-            len: 0,
-        };
+        self.nodes[..nodes.len()].copy_from_slice(nodes);
+        self.len = nodes.len();
+        self.validate()
+    }
+
+    /// The refusals of [`PackageGraph::from_nodes`] over the nodes held.
+    fn validate(&self) -> Result<(), Refusal> {
+        let nodes = self.nodes();
         for (i, n) in nodes.iter().enumerate() {
             if n.need_count() > MAX_NEEDS {
                 return Err(Refusal::TooManyNeeds { package: n.id() });
@@ -52,11 +69,8 @@ impl PackageGraph {
                     }
                 }
             }
-            g.nodes[i] = *n;
         }
-        g.len = nodes.len();
-        g.refuse_cycle()?;
-        Ok(g)
+        self.refuse_cycle()
     }
 
     /// The one cycle check: depth first from each package over the needs that a service meets. `path` holds the packages being visited.
@@ -85,7 +99,7 @@ impl PackageGraph {
         Ok(())
     }
 
-    fn nodes(&self) -> &[Node] {
+    pub(crate) fn nodes(&self) -> &[Node] {
         &self.nodes[..self.len]
     }
 

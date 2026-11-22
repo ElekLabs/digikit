@@ -12,6 +12,9 @@ use super::*;
 use dkrt_abi::provider::MAX_ENTRIES;
 use dkrt_lifecycle::{Cpu, Entry, SiteRef, SlotRef};
 
+// every hook site and slot word that `service_items` can derive is an entry: the bound is the sum of their own bounds, whatever the file lists
+const _: () = assert!(MAX_ENTRIES >= SITES_MAX + dkneeds::SLOTS_MAX as usize);
+
 /// What a package carries from its place to its start: the checked file (the staged bytes stay in the staging buffer until the next `stage`) and where the image went.
 pub(crate) struct Flight {
     c: Checked,
@@ -49,6 +52,15 @@ impl Entries {
         self.n += 1;
         Ok(())
     }
+}
+
+/// See `Loader::failure_detail`.
+#[derive(Clone, Copy)]
+pub(crate) struct FailureDetail {
+    pub missing: [u8; NEEDS_LEN],
+    pub decl_diff: (u32, u32),
+    pub import_hash: u32,
+    pub name: [u8; LOG_NAME],
 }
 
 fn record_of(id: PackageId) -> usize {
@@ -100,8 +112,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
     /// Place package `id` from the file at `path`: stage it, run every check of a load but the imports, take the memory, copy the image, apply the relocations that name the
-    /// image and make the record. The answer is the base of the image. A refusal leaves nothing taken. A file with a DSP section is refused (`E_CONTEXT`): the DSP part
-    /// comes up over the UI passes, which the package manager does not drive yet.
+    /// image and make the record. The answer is the base of the image. A refusal leaves nothing taken. The DSP range and the relocated DSP image of a file with a DSP section are reserved
+    /// here (`dsp::reserve`); the DSP part itself starts after the package is active (`package_start_dsp`).
     pub(crate) unsafe fn package_place(&mut self, id: PackageId, path: *const u8, f: &mut Flight) -> Result<u32, i32> {
         self.with_boot_idx(id, |l| l.place_inner(id, path, f))
     }
@@ -129,15 +141,24 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return Err(r);
         }
-        if f.c.dsp_size != 0 {
-            return Err(E_CONTEXT);
-        }
         let name = f.c.f.add(H_NAME);
         let claimed = self.claim_record(slot, name)?;
         debug_assert!(claimed == rec);
         self.torn[rec] = 0;
         let image::Head { image_size, bss, .. } = f.c.head;
-        let blk = self.m.alloc(image_size + bss).ok_or(E_NOMEM)?;
+        // the DSP range and image come first: nothing else is allocated yet if they fail
+        if f.c.dsp_size != 0 {
+            let r = dsp::reserve(rec, &f.c.job);
+            if r != OK {
+                return Err(r);
+            }
+        }
+        let Some(blk) = self.m.alloc(image_size + bss) else {
+            if f.c.dsp_size != 0 {
+                dsp::cancel(rec);
+            }
+            return Err(E_NOMEM);
+        };
         f.placed = self.place_image(rec, path, &f.c, blk, image::Pass::Base);
         f.package = Some(id);
         Ok(blk.addr)
@@ -176,7 +197,10 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let steps = RoleSteps::<P, M, R>::of(role);
         let image::Head { image_size, .. } = f.c.head;
         let keys = &f.c.keys;
+        // the records of the loaded service files wait for `package_attach`
+        self.split_apply = true;
         let r = self.init_and_commit(rec, keys, f.placed.init, image_size, steps, f.placed.place);
+        self.split_apply = false;
         if r != OK {
             return Err(r);
         }
@@ -192,11 +216,12 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
 
     /// Make the started package `id` public: a service publishes its exports and its resident query entry, then the record is live (tick, listing client, intro). Called
     /// after the entries are installed. A refusal leaves nothing published.
-    pub(crate) unsafe fn package_activate(&mut self, id: PackageId, f: &mut Flight) -> Result<(), i32> {
+    /// `Ok(true)` when the package has a DSP part to start once it is active.
+    pub(crate) unsafe fn package_activate(&mut self, id: PackageId, f: &mut Flight) -> Result<bool, i32> {
         self.with_boot_idx(id, |l| l.activate_inner(id, f))
     }
 
-    unsafe fn activate_inner(&mut self, id: PackageId, f: &mut Flight) -> Result<(), i32> {
+    unsafe fn activate_inner(&mut self, id: PackageId, f: &mut Flight) -> Result<bool, i32> {
         debug_assert!(f.package == Some(id));
         let rec = record_of(id);
         if f.c.role == 1 {
@@ -208,10 +233,70 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 }
             }
         }
+        // the plan's settle and `resident_query` read it: a service whose DSP part follows is live on the ColdFire from here
+        if rec >= MAX_MODULES {
+            self.loaded[rec - MAX_MODULES] = true;
+        }
         self.go_live(rec, f.placed.tick);
         #[cfg(not(test))]
         crate::invariants::check();
-        Ok(())
+        Ok(f.c.dsp_size != 0)
+    }
+
+    /// Hand the DSP part of the active package `id` to the DSP loader (it comes over the UI passes: `dsp_step`). The reservation was made by `package_place`.
+    pub(crate) unsafe fn package_start_dsp(&mut self, id: PackageId) {
+        let rec = record_of(id);
+        let idx = if rec < MAX_MODULES { self.sel_of(rec) as u32 } else { PROVIDER_IDX };
+        dsp::launch(dsp::Pending { rec: rec as u32, reg: 0, reg_size: 0, init: 0, early: 1, boot_idx: idx, send_base: 0, send_len: 0, send_buf: 0 });
+    }
+
+    /// The module `consumer` is attached to the services it needs: the walk of the old registry apply over the rows of the in-crate services and the loaded rows of `services`
+    /// (`svc_rows::walk_rows`): every row's `apply` in the order of the table, then every record in file order, each to the row that owns its kind (a record of a kind a row does
+    /// not own is `OK` there), so that native pages and effect pages interleave as they do in the file and take their reserved rows in that order. The commit of the module
+    /// (`init_and_commit` in `package_start`) only keeps the section (`reg_block`). A consumer with no records, or a package that is no module, has nothing to apply. The first
+    /// refusal is the answer, after the walk undid what it wrote (`remove` for the consumer on the same rows); the manager does not detach a consumer that was refused.
+    pub(crate) unsafe fn package_attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), i32> {
+        let rec = record_of(consumer);
+        if rec >= MAX_MODULES {
+            return Ok(());
+        }
+        let (reg, size) = self.reg_block[rec];
+        if size == 0 {
+            return Ok(());
+        }
+        let base = records::module(rec).base;
+        let table = ServiceTable { rows: crate::svc_rows::walk_rows(services), ..crate::handlers::services() };
+        let r = crate::registry::apply_with(table, rec as u8 + 1, reg, size, base);
+        if r == OK {
+            Ok(())
+        } else {
+            crate::registry::remove_with(table, rec as u8 + 1);
+            Err(r)
+        }
+    }
+
+    /// The module `consumer` goes down: the rows of `services` give back what they hold for it (`remove`, the last row of the walk first). The rows of the in-crate services are
+    /// asked too; `package_stop` repeats it for every row.
+    pub(crate) unsafe fn package_detach(&mut self, consumer: PackageId, services: &[PackageId]) {
+        let rec = record_of(consumer);
+        if rec >= MAX_MODULES {
+            return;
+        }
+        let table = ServiceTable { rows: crate::svc_rows::walk_rows(services), ..crate::handlers::services() };
+        crate::registry::remove_with(table, rec as u8 + 1);
+    }
+
+    /// What the last failed step of a package left in the loader for a report: the missing module's name, the item that the declarations and the table do not both hold
+    /// (`decl_diff`), the name hash that the port file did not list, and the name of the file's header.
+    pub(crate) fn failure_detail(&self) -> FailureDetail {
+        FailureDetail { missing: self.missing, decl_diff: self.decl_diff, import_hash: self.import_hash, name: self.last_name }
+    }
+
+    /// Forget what the last failed step left (`failure_detail`): a load starts with none, so a refusal that no step of the loader made does not report an earlier package's.
+    pub(crate) fn clear_failure_detail(&mut self) {
+        self.missing = [0; NEEDS_LEN];
+        self.decl_diff = (0, 0);
+        self.import_hash = 0;
     }
 
     /// Undo `package_activate`, before the entries are restored: a service has no tick, no resident query entry and no export any more. A module has nothing public but
@@ -247,6 +332,12 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         for &(word, value) in &it.slots[..it.ns] {
             if let Err(e) = out.push(Entry::Slot { slot: SlotRef::new(Cpu::ColdFire, word), target: value }) {
+                return e;
+            }
+        }
+        // the DSP slots: the index in the slot block and the pc of the dispatch code (the backend claims them; the DSP loader writes them once the code is acknowledged)
+        for &(idx, pc) in &it.dsp_slots[..it.nd] {
+            if let Err(e) = out.push(Entry::Slot { slot: SlotRef::new(Cpu::Sharc, idx), target: pc }) {
                 return e;
             }
         }
@@ -301,6 +392,29 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         Backend::install(&mut self.installer, &self.p, rec as u8, &cf)
     }
 
+    /// Claim the DSP slots of `entries` for package `id` (`DspInstaller`): the stubs stay stock until the DSP acknowledges the code (`dsp_step`).
+    pub(crate) unsafe fn package_install_dsp(&mut self, id: PackageId, entries: &[Entry]) -> Result<(), i32> {
+        let mut slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
+        let mut n = 0;
+        for e in entries.iter().filter(|e| e.cpu() == Cpu::Sharc) {
+            if let Entry::Slot { slot, target } = *e {
+                if n == slots.len() {
+                    return Err(E_PLAN_FIT);
+                }
+                slots[n] = (slot.slot(), target);
+                n += 1;
+            } else {
+                return Err(E_FORMAT);
+            }
+        }
+        Backend::install(&mut self.dsp_install, &self.p, record_of(id) as u8, &install::DspItems { slots: &slots[..n] })
+    }
+
+    /// Return the DSP slots of package `id` to zero (the clear sequence goes to the DSP): `false` when the DSP does not take it (the caller keeps everything, busy).
+    pub(crate) unsafe fn package_restore_dsp(&mut self, id: PackageId) -> bool {
+        self.uninstall_dsp(record_of(id))
+    }
+
     /// Return the hook sites and slot words of package `id` to stock.
     pub(crate) unsafe fn package_restore(&mut self, id: PackageId) {
         self.uninstall_cf(record_of(id));
@@ -334,11 +448,65 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if self.cannot_retire(rec) {
             return false;
         }
+        // a reservation that was never started (the place or link failed after it)
+        dsp::cancel(rec);
         self.m.free(m.base);
         m.used = 0;
         crate::entry::unbind(rec);
         true
     }
+
+    /// The store path of provider `j` of the search, for the log.
+    pub(crate) fn provider_file(&self, j: usize) -> &[u8] {
+        self.found.path(j)
+    }
+
+    /// The selection index of module record `rec` (`u8::MAX`: none).
+    pub(crate) fn sel_index(&self, rec: usize) -> u8 {
+        if rec < MAX_MODULES {
+            self.sel_of(rec)
+        } else {
+            u8::MAX
+        }
+    }
+
+    /// The name part of the module id that `capture` read for selection index `k` (zero: no header was read), as the log shows it.
+    pub(crate) fn captured_name(&self, k: usize) -> [u8; LOG_NAME] {
+        if k < SEL_MAX {
+            self.log_name[k]
+        } else {
+            [0; LOG_NAME]
+        }
+    }
+
+    /// The boot tried provider `j` and refused it: the live plan counts it as missing from now on.
+    pub(crate) fn mark_provider_unusable(&mut self, j: usize) {
+        self.unusable[j] = true;
+    }
+
+    /// The steps of a take-down that can answer busy, run while the package is whole: no listing or I/O job of the record is running (`unload_body` runs them first, and they are
+    /// repeatable), and the DSP rows are cleared (`dsp::quiesce`, which `unload_body` repeats). The live job asks before it takes a module down, so that a busy module still gets its tick back.
+    pub(crate) unsafe fn package_retire_ready(&mut self, id: PackageId) -> bool {
+        let rec = record_of(id);
+        crate::files::retire(rec) && crate::worker::retire(rec) && retire_sdk(rec) && dsp::quiesce(rec)
+    }
+
+    /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).
+    pub(crate) fn set_phase(&mut self, phase: PhaseKind) {
+        self.phase = match phase {
+            PhaseKind::Closed => Phase::Closed,
+            PhaseKind::Boot => Phase::Boot,
+            PhaseKind::Live => Phase::Live,
+        };
+    }
+}
+
+/// The phases of `Loader::set_phase`.
+#[derive(Clone, Copy)]
+pub(crate) enum PhaseKind {
+    Closed,
+    Boot,
+    Live,
 }
 
 fn role_hook() -> install::HookItem {

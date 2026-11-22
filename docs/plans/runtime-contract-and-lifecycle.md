@@ -1,6 +1,6 @@
 # Runtime contract and package lifecycle
 
-Date: 2026-11-22. Status: **approved by Em 2026-11-22; RC1 active.** Items: **RC0** to **RC6**, plus the deferred **RC-D** (DSP-side installer).
+Date: 2026-11-22. Status: **approved by Em 2026-11-22; RC2 active (RC2b), RC2s designed.** Items: **RC0** to **RC6**, plus the deferred **RC-D** (DSP-side installer).
 
 This plan replaces the open parts of [runtime-and-services.md](runtime-and-services.md) and the "Remaining ownership work" of [ARCHITECTURE.md](../ARCHITECTURE.md). Where it disagrees with older docs, this plan wins and the older text is overwritten when the item lands. The static evidence is [finding 158](../findings/158-service-entry-survey.md) (service entries) and [finding 147](../findings/147-syntakt-flash-image-size.md) (Syntakt image size).
 
@@ -13,7 +13,7 @@ Done means:
 - A new service, and the modules that use it, ship as card files. No runtime edit, no runtime rebuild, no reflash. The exception: a service that needs a new SHARC entry site needs a flash until RC-D lands (section 9).
 - Loading, unloading and reloading a module or a service from the DIGIKIT menu use one code path. Unloading the last consumer of a service unloads the service, unless the selection pins it.
 - `image-modules/` does not exist. Everything resident (flashed) is in `runtime/`. A service has no resident code.
-- The runtime is smaller after every item (section 11). The Syntakt image fits its container.
+- The flashed runtime is a small resident core: boot, safe mode and recovery, store and Transfer, the platform, and a stage-1 loader. The lifecycle, the full loader and the menu app load from the card as a system package (item RC2s). Every item states its size change and justifies any growth (section 11). The Syntakt image fits its container.
 - Every behaviour has its test at the lowest layer that sees it (section 10).
 
 ## 2. Glossary
@@ -354,7 +354,7 @@ impl<S: Store, P: Placer, L: Linker, I: Installer, H: ProviderHost> PackageManag
         self.ledger.declare_all(p, &decl.resources)?;
         self.ledger.claim(p, &self.graph.wants_of(p))?;
         self.installer.install(p, &decl.entries)?;
-        for s in self.graph.services_of(p) { self.host.attach(s, p)?; }
+        self.host.attach(p, &self.graph.services_of(p))?;    // one call: the host walks the records over all the services
         self.live.insert(p);
         Ok(())
     }
@@ -482,7 +482,7 @@ Every item records, before and after:
 - the stored container size against `container_max` for the `device` set of DT2 1.17, DN2 1.12 and Syntakt 1.42, and for `core/runtime` alone;
 - the runtime object's code and data sizes, grouped by Rust module.
 
-The tool is `patchkit size` (built first in RC1; section 14 has the baseline). "The runtime did not change" is shown with `patchkit objdiff` against the committed object, not with the text size: a change to the dependencies or files of a crate the runtime links (`dkrt-abi`, `dkrt-fit`) changes the crate hash in symbol names, relocations and rodata layout, so the committed objects are rebuilt and the image hash changes even when the code bytes do not (RC1d). An item that grows the core states why in its PR. RC2 and RC3 must shrink it. RC6 runs only if the Syntakt still does not fit after RC5.
+The tool is `patchkit size` (built first in RC1; section 14 has the baseline). "The runtime did not change" is shown with `patchkit objdiff` against the committed object, not with the text size: a change to the dependencies or files of a crate the runtime links (`dkrt-abi`, `dkrt-fit`) changes the crate hash in symbol names, relocations and rodata layout, so the committed objects are rebuilt and the image hash changes even when the code bytes do not (RC1d). An item that grows the core states why in its PR. Measured in RC2b-2: one lifecycle costs about 15-20 KB more than the old planner and loader paths it replaces, so the flashed runtime shrinks only when the lifecycle moves to the card (RC2s). The Syntakt fit has its own track (the 70 KB packing loss, finding 147).
 
 ## 12. Decisions
 
@@ -513,32 +513,27 @@ Each item is one PR or a small stack, lands green and merges before the next sta
 | **RC1 Contract and fixtures** | `patchkit size` (section 14); `Provider`, parts, `ProviderRow`, `Installer`, manifest schema (`[[service.resource]]`, `[[service.record]]`; entries keep the existing `[[hook]]` and `[[fill]]`) parsed and validated in patchkit, not packed; `PackageGraph` and `ResourceLedger` test-first, not wired; `PackageGraph::from_tables` over the packed `local-ping` fixtures | `core/runtime:rust-tests`, patchkit tests, fixture pack checks | no change in the image | 1-2 days, high |
 | **RC1g Device test diet** | Inventory of every device test (what it proves, firmware-only or logic, lowest layer that sees it, minutes); a smoke set per device approved by Em, run only for changes to inputs every device test reads (runtime image, SDK, patchkit, platform), in place of every selected device test; a change local to one owner runs only that owner's device tests; from RC2 on, each item moves the device assertions of the area it touches to unit or assembly tests and deletes the redundant device tests (adversarial review, Em decides); Nx keys simplified once device tests are few. The gate target `gate-device-smoke` runs the 8 smoke tests on DT2 and DN2; AGENTS.md states the rule. | Inventory reviewed; smoke set approved | none | inventory 0.5 day, then per item |
 | **RC2 One lifecycle** | `PackageManager` replaces the provider and module paths, `take_down`, `needs_hash` and `plan.rs` provider handling; replaces the loader's two inline version checks (loader/mod.rs, `[[service_import]]` and live plan) with `dkrt_abi::version::version_satisfies`; reload of services from the menu; services listed in MODULES; orphans; pins (decided 2026-11-22: no new field; a service path in the selection is a pin, sharing the selection's paths with modules); MIDI snapshot. Splits the device tests of ledger item RC2 (loading and lifecycle; 17 files, see [ledgers/device-test-inventory.md](ledgers/device-test-inventory.md)). | Unit and `core/runtime:test-assembly`; one device test per device: `core/runtime-tests:test-device--service-reload` | must shrink | 3-5 days, medium |
+| **RC2s Resident core and system package** (design: [resident-core-and-system-package.md](resident-core-and-system-package.md); then RC2s-1 boundary in one binary, RC2s-2 package and stage 1, RC2s-3 menu) | What stays resident (reset installer, platform hooks, boot counter, safe mode and recovery screen, store and Transfer, a stage-1 loader) and what moves to a card system package (package manager, graph, ledger, the runtime's seams, planner, reload job, service registration, settings overlay, full loader, the menu app); the stage-1 format, the resident function table and its versioning, the recovery path when the system package is missing or broken, how apps load; measured sizes per part. Re-cuts RC2c-RC6 | Em approves the design | measured | 1 day design, medium |
 | **RC3 Service contract v2** | Owner-object services; tagged parts; provider-local record kinds and resources; `Describe` and query replace both bridges; `svc_rows` fallback, `[records.kinds]` owners and domain capacity ids deleted; header table version 4 with the new schema packed (provider-qualified resources with aggregate and parent, provider-local record kinds, entries); `.dkm` record format version bump; the fixtures gain resources, records, a query, a hook and one settings field of each scope; the `Settings` part (6.6) with FX's route choice moved to it and the menu's FX route panel deleted; all 6 services and content modules repacked. Splits the device tests of ledger item RC3 (FX, services, settings; 16 files, see the ledger). | Service unit tests, assembly, the device tests `test:plan` selects for the services | must shrink | 4-6 days, medium |
 | **RC3m Module settings schema** | SDK builder calls for module settings fields, packed as records and rendered by the RC3 renderer; values keep the SDK get/put calls; `menu` stays supported | SDK header tests, assembly (packed fields reach the renderer), one menu device test per device | small | 1-2 days, medium |
 | **RC4 Installers and ColdFire points** | `Installers` with both backends; `lfo` first (deletes `points/lfo`), then `machines`, `dynreg`, `params` content, `fxpages` into their services and `services/rows`. Splits the LFO, machine and row device tests (ledger item RC4). | Backend unit tests; the existing device tests of each service | the image shrinks | 3-5 days, medium (lfo 1 day, high) |
 | **RC5 Remove image-modules and tidy runtime/core** | SHARC slot catalogue and drivers to `runtime/platform`; platform stops naming services; proofs to tests; `overdrive` deleted; the crates of `runtime/core` move to `runtime/core/crates/<name>` (the runtime crate from `src/rs` to `crates/dkrt`, assembly from `src/cf` to `asm/`); the runtime crate's remaining flat files grouped into concept folders. Splits the platform, storage, +Drive, upload and fault device tests (ledger item RC5). | Byte manifest for pure moves; named tests for the de-naming | neutral or smaller | 1-2 days, high |
-| **RC6 Runtime size** (only if the Syntakt still does not fit) | First candidate: load `digikit-menu` from the card (19.1 KB stored on the Syntakt). Then move optional core parts to services, ranked by measured bytes; Transfer and recovery stay in the core | Per moved part | Syntakt fits | sized after RC5 |
+| **RC6 Runtime size** (folded into RC2s) | The menu app and the lifecycle move to the card system package (RC2s). Transfer and recovery stay resident | Per moved part | Syntakt fits | sized after RC5 |
 | **RC-D DSP-side installer** (deferred) | A resident DSP installer that patches sites at block tail; `SharcInstaller` v2; SHARC slots leave the image | Static design, emulator, one hardware test | the image shrinks | 2-4 days, low-medium |
 
 Before RC2 and RC3 start: state payoff and confidence again with the RC1 results, and stop if they are weak.
 
 ### Status (for a restart)
 
-Update this block whenever the state changes.
+Update this block whenever the state changes; keep it a current summary, not a log.
 
-- PR #692 (the FX route query and RC1) merged into main as `82e5f39ee` on 2026-11-22. Lane `fx-route-policy` (worktree `/Users/em/src/digi/lanes/fx-route-policy`, branch `lane/fx-route-policy`) continues with RC1g.
-- Working rules from Em: no commits until Em has reviewed the step; every step ends with the static checks, `test:plan` against the phase base, an independent reviewer, then Em; plan rows are kept current.
-- RC1g: the inventory is [ledgers/device-test-inventory.md](ledgers/device-test-inventory.md) (105 device test files, 173 halves; 44 firmware-only, 11 logic, 46 mixed). Proposed smoke set (same 8 per device): boot-restart, live, services/providers, dynreg/equiv, settings-api, safe-mode, transfer-live, digikit-menu zero menu; approved by Em 2026-11-22. Each logic or mixed file is mapped to the item that splits it (ledger column `item`); AGENTS.md states the rule.
-- RC2 is split into RC2a manager over fakes, RC2b real seams and boot, RC2c service reload and unload with orphans and MODULES listing, RC2d pins (service paths in the selection), RC2e MIDI snapshot; each step splits its ledger device tests.
-- RC1g done (PR #693): `gate-device-smoke:device` (tools/gate/device-smoke/project.json, 16 halves), TESTING.md "Device smoke set", the ledger, generic AGENTS.md wording. Not yet part of `mise run test` (a later step after one measured run).
-- PR #693 (RC1g) merged as `43e4f3cb7`. RC2a active on branch `rc/rc2a-package-manager` in the lane.
-- Open: the launcher summary's phantom "1 failed" is a parser bug in `tools/nx/failures.mjs`: a task whose output Nx prints gets no tick line, so its section is closed by the next task's tick and counted failed; headers with a cache note (`[existing outputs match the cache, left as is]`) do not match `HEADER`. Fix on its own branch from main (approved).
-- RC2a merged in PR #695 (`3a27bd7dc`). RC2b active on branch `rc/rc2b-runtime-seams`, in three sub-steps (RC2b-1 seams, RC2b-2 boot on the manager, RC2b-3 deletions and device-test split), each reviewed by a reviewer and Em.
-- Open for RC2b: the DSP part after Active (over UI passes); module init timing; `Limit::Init` and entry-name checks; `load` and `reload` errors should carry a pending take-down like `Report::pending()`; the runtime crate depends on dkrt-lifecycle (since RC2b-1), so its object's source hash changes with every lifecycle edit.
-- RC2b sub-steps stack into one PR, merged after RC2b-3 (RC2b-1 grows runtime text by 1,152 bytes from the loader splits; RC2b-3 deletes the old path). Each sub-step is reviewed and committed after Em's review.
-- RC2b-1 open items for RC2b-2: `can_stop` should use `Service::teardown_refusal`; attach is a no-op; `MAX_ENTRIES` (16) is below machines' 13 hooks + 4 fills; module record = selection index (decided); DSP sections and slots as entries; manifest pools.
-- RC2b-1 committed on the branch (not merged: RC2b stacks). Decided 2026-11-22: a module's record follows its selection index.
-- Next: RC2b-2.
+- **Merged:** PR #692 (FX route query, RC1, `82e5f39ee`), #693 (RC1g device test inventory and smoke set, `43e4f3cb7`), #694 (device-literals baseline), #695 (RC2a package manager, `3a27bd7dc`), #696 (launcher summary counted phantom failures, `bdc73c995`).
+- **Working rules from Em:** no commit before Em has reviewed the step; each step updates ARCHITECTURE.md for what it changes, runs the static checks and `test:plan` against the phase base, then an independent reviewer, then Em; device tests prove only the integrations a change touches (TESTING.md "Device smoke set"); plan rows stay current.
+- **Decisions:** pins are service paths in the selection (no new field); a module's record follows its selection index; RC2b sub-steps stack into one PR merged after RC2b-3.
+- **Lane:** `/Users/em/src/digi/lanes/fx-route-policy`, branch `rc/rc2b-runtime-seams` (from `3a27bd7dc`; merge main into it before the PR). RC2b-1 committed (`e641202aa`, not pushed). RC2b-2 built, uncommitted: boot and the reload job run through the manager; host-green.
+- **RC2b-2 and RC2b-2s** committed on the branch: boot and the reload job run through the manager; boot frame 6,740 B, worst boot chain about 24 KB; runtime text 250,070 (+38 KB over main, accepted until RC2s). Behaviour changes: modules load in id order after all services; a service nothing needs is not loaded or logged (device tests `commit`, `providers`, `lfo` and `runtime-menu.ts` read provider events: RC2b-3's device proof shows which need updating); unload and reload leave services up until RC2c.
+- **Next:** RC2b-3: the graph replaces `plan.rs` in boot and reload; old loader paths deleted (`live_load`, `reload_load`, `cancel_dsp`, `dsp_step_with`, `undo_early`, `unload_rec`/`take_down`, the old boot loops, `refusal_with_services`, the `loaded` flag); a load-time refusal of a record whose owner is not among the module's needs; `last_name` cleared; the attach test against the full walk table; RC2 device tests split (ledger item RC2); main merged in; device proof (smoke set, remaining loading tests, the provider-event tests) on DT2 and DN2; then the RC2b PR. Then RC2s-1.
+- **Later in RC2:** RC2c service reload/unload from the menu with orphans and MODULES listing; RC2d pins; RC2e MIDI snapshot; the RC2 device-test split (ledger item RC2).
 
 ### Progress
 
@@ -562,8 +557,14 @@ Status: `todo`, `active`, `review`, `done`. Each item and step ends the same way
 | RC2 One lifecycle | active | lane `fx-route-policy` |
 | RC2a `PackageManager` in `dkrt-lifecycle` over seam traits, test-first with fakes; ledger bound check against `REC_MAX` | done | PR #695 (`132db2ece`), merged as `3a27bd7dc` |
 | RC2b-1 the runtime's real seams (placer, linker, host, installer, manifest) over the existing loader code, unit-tested over FakePlatform/FakeStorage and assembly-tested with packed fixtures; boot unchanged | done | committed on `rc/rc2b-runtime-seams` (merged with RC2b-3) |
-| RC2b-2 boot and the reload job go through `PackageManager`; the DSP part as a seam step | todo | |
-| RC2b-3 the old provider path, `take_down`, `needs_hash`, planner provider handling and inline version checks deleted; RC2 device tests split; size gate shows the runtime smaller | todo | |
+| RC2b-2 boot and the reload job go through `PackageManager`; the DSP part as a seam step | done | committed on `rc/rc2b-runtime-seams` (merged with RC2b-3) |
+| RC2b-2s stack and regressions: build `Rt` in place (boot frame 60 KB to about 7 KB), attach in callback order, a busy module keeps its tick on unload, `live_plan` and a refused-then-unloaded service | done | committed on `rc/rc2b-runtime-seams` (merged with RC2b-3) |
+| RC2b-3 the old provider path, `take_down`, `needs_hash`, planner provider handling and inline version checks deleted; RC2 device tests split; size gate shows the runtime smaller | active | |
+| RC2s Resident core and system package: design | done (approved by Em 2026-11-22) | [resident-core-and-system-package.md](resident-core-and-system-package.md) |
+| RC2s-1 boundary in one binary (resident table, hooks, layer rule) | todo | |
+| RC2s-2 system package artifact, stage 1, the three levels | todo | |
+| RC2s-3 the menu moves into the system package | todo | |
+| Syntakt fit: deferred to RC2s. Finding 159: the stored size of MAIN is bounded by its unpacked size (in-place unpack), so each flashed byte removed saves one stored byte; RC2s moves about 167 KB to the card. Fallback: lower `main_margin_min` (about 7.9 KB) after the depacker's read loop is checked a second time and `depack_check` passes | deferred to RC2s | finding 159 |
 | RC3 Service contract v2 | todo | |
 | RC3m Module settings schema | todo | |
 | RC4 Installers and ColdFire points | todo | |

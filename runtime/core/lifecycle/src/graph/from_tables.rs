@@ -2,6 +2,8 @@ use super::PackageGraph;
 use crate::node::{Api, Need, Node};
 use crate::refusal::Refusal;
 use crate::{PackageId, MAX_PACKAGES};
+use core::mem::MaybeUninit;
+use core::ptr::addr_of_mut;
 use dkneeds::keys::{tag, Keys};
 use dkrt_abi::version::version_satisfies;
 
@@ -18,14 +20,39 @@ impl PackageGraph {
         packages: &[(PackageId, &[u8])],
         core_apis: &[Api],
     ) -> Result<PackageGraph, Refusal> {
+        let mut g = MaybeUninit::<PackageGraph>::uninit();
+        // SAFETY: `init_from_tables` writes the whole graph before it answers, also when it refuses
+        unsafe {
+            PackageGraph::init_from_tables(g.as_mut_ptr(), packages, core_apis)?;
+            Ok(g.assume_init())
+        }
+    }
+
+    /// [`PackageGraph::from_tables`] into the graph at `out`, with no copy of it on the stack (a graph is 1.6 KB; the boot's stack is shared with the firmware). A refusal leaves
+    /// the graph at `out` empty or unusable: callers that keep the old graph build into a place of their own first.
+    ///
+    /// # Safety
+    /// `out` is valid for writes of a graph and not read while this runs.
+    pub unsafe fn init_from_tables(
+        out: *mut PackageGraph,
+        packages: &[(PackageId, &[u8])],
+        core_apis: &[Api],
+    ) -> Result<(), Refusal> {
+        // slot by slot: a copy of a constant would be built on the stack first
+        let nodes = addr_of_mut!((*out).nodes).cast::<Node>();
+        for i in 0..MAX_PACKAGES {
+            nodes.add(i).write(Node::new(PackageId(0)));
+        }
+        addr_of_mut!((*out).len).write(0);
+        let g = &mut *out;
         if packages.len() > MAX_PACKAGES {
             return Err(Refusal::TooManyPackages);
         }
-        let mut nodes = [Node::new(PackageId(0)); MAX_PACKAGES];
         for (i, (id, bytes)) in packages.iter().enumerate() {
-            nodes[i] = node_of(*id, bytes, core_apis)?;
+            g.nodes[i] = node_of(*id, bytes, core_apis)?;
         }
-        PackageGraph::from_nodes(&nodes[..packages.len()])
+        g.len = packages.len();
+        g.validate()
     }
 }
 

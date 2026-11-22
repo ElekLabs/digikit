@@ -49,6 +49,7 @@ pub(crate) mod exports;
 mod image;
 pub(crate) mod install;
 pub(crate) mod package;
+pub(crate) use package::PhaseKind;
 mod port;
 pub(crate) mod records;
 pub(crate) mod role;
@@ -152,6 +153,9 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     last_name: [u8; LOG_NAME],
     /// Whether provider `j` of the plan loaded (settle reads it).
     loaded: [bool; PROVIDER_MAX],
+    /// The providers the boot tried and refused (the plan, or the manager's bring-up): the live plan does not count them. A provider that is only not up (nothing needed it, or
+    /// the manager took it down when its last consumer went) is not here: a live load brings it up again.
+    unusable: [bool; PROVIDER_MAX],
     /// The table copy of each provider record (`role.rs`).
     provs: [ProvRec; PROVIDER_MAX],
     /// The functions the loaded providers offer by name; an import that the runtime's table lacks resolves here.
@@ -169,6 +173,11 @@ pub struct Loader<P: Platform, M: Images, R: Registry> {
     saved_tick: [u32; MAX_MODULES],
     /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
     drain_at: [Option<u32>; MAX_MODULES],
+    /// A package the package manager starts applies the records of the services in the table first and leaves those of the loaded service files to `attach`
+    /// (`package_attach`): set for the duration of `package_start`.
+    split_apply: bool,
+    /// The block of each module's records that `attach` applies (pointer and size), kept from the commit to the take-down.
+    reg_block: [(*const u8, u32); MAX_MODULES],
 }
 
 /// Bits of `Loader::torn`.
@@ -185,6 +194,11 @@ static mut LOADER: Real = Loader::new(RealPlatform, RealImages, RealRegistry);
 
 fn loader() -> &'static mut Real {
     unsafe { &mut *addr_of_mut!(LOADER) }
+}
+
+/// The loader of the device, for the package manager's session (`lifecycle`).
+pub(crate) fn real() -> *mut Real {
+    addr_of_mut!(LOADER)
 }
 
 /// The address a loaded service file published for the export `hash`, if any (`handlers::exports::find_export`).
@@ -502,6 +516,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             log_name: [[0; LOG_NAME]; SEL_MAX],
             last_name: [0; LOG_NAME],
             loaded: [false; PROVIDER_MAX],
+            unusable: [false; PROVIDER_MAX],
             provs: [ProvRec::EMPTY; PROVIDER_MAX],
             exports: Exports::new(),
             installer: Installer::new(),
@@ -510,6 +525,8 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             torn: [0; records::REC_MAX],
             saved_tick: [0; MAX_MODULES],
             drain_at: [None; MAX_MODULES],
+            split_apply: false,
+            reg_block: [(core::ptr::null(), 0); MAX_MODULES],
         }
     }
 
@@ -1134,7 +1151,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             Some(b) => b,
             None => return Ok((0, 0, rows)),
         };
-        let r = crate::registry::apply(rec as u8 + 1, b.ptr, size as u32, base);
+        let r = if self.split_apply && rec < MAX_MODULES {
+            // the records are applied when the module is attached, over the rows of its services in one walk (`package_attach`)
+            self.reg_block[rec] = (b.ptr as *const u8, size as u32);
+            OK
+        } else {
+            crate::registry::apply(rec as u8 + 1, b.ptr, size as u32, base)
+        };
         if r != OK {
             free(self);
             return Err(r);
@@ -1151,13 +1174,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// One UI-loop pass of the DSP loader. `dsp` only advances its state and reports what it found; the module teardown, the machine
     /// listing and the boot result belong here, so `dsp` depends on neither the loader nor the boot.
     pub unsafe fn dsp_step_with(&mut self, l: ServiceTable) {
-        // the DSP backend of the installer writes the slots of a service file after its code is acknowledged (`dsp::step_with` asks for them)
-        let area = if dsp::have_link() { dsp::area_base() } else { 0 };
-        let adv = {
-            let di = &mut self.dsp_install;
-            dsp::step_with(l, &mut |rec| di.sequence(rec as u8, area))
-        };
-        match adv {
+        match self.dsp_advance(l) {
             dsp::Advance::Pending => {}
             dsp::Advance::Failed(code) => {
                 let (rec, idx) = {
@@ -1169,16 +1186,26 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 crate::boot::report_dsp(idx, code);
                 dsp::fail_done(reclaimed, code);
             }
-            dsp::Advance::Loaded => {
-                let (rec, idx) = {
-                    let p = &dsp::ds().pending;
-                    (p.rec as usize, p.boot_idx)
-                };
-                l.on_loaded(rec);
-                crate::boot::report_dsp(idx, OK);
-                dsp::loaded_done();
-            }
+            dsp::Advance::Loaded => self.dsp_loaded(l),
         }
+    }
+
+    /// One pass of the DSP state machine (`dsp::step_with`), with the DSP backend of the installer writing the slots of a service file once its code is acknowledged.
+    pub(crate) unsafe fn dsp_advance(&mut self, l: ServiceTable) -> dsp::Advance {
+        let area = if dsp::have_link() { dsp::area_base() } else { 0 };
+        let di = &mut self.dsp_install;
+        dsp::step_with(l, &mut |rec| di.sequence(rec as u8, area))
+    }
+
+    /// Every row of the load in flight is in: the services hear it, the boot record lists the module, the next load starts.
+    pub(crate) unsafe fn dsp_loaded(&mut self, l: ServiceTable) {
+        let (rec, idx) = {
+            let p = &dsp::ds().pending;
+            (p.rec as usize, p.boot_idx)
+        };
+        l.on_loaded(rec);
+        crate::boot::report_dsp(idx, OK);
+        dsp::loaded_done();
     }
 
     /// Give up the DSP part of module record `rec`: the transfer in flight is taken down and the queue goes on, or the queued load is removed, exactly as when the
@@ -1234,7 +1261,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
     /// The hash of the service that provider `j` provides (its PROVIDES item), 0 when unknown.
-    unsafe fn provided_hash(&self, j: usize) -> u32 {
+    pub(crate) unsafe fn provided_hash(&self, j: usize) -> u32 {
         match Keys::parse(self.found.table(j)) {
             Ok(k) => k.words(dkneeds::keys::tag::PROVIDES, 0).map_or(0, |w| w.0),
             Err(_) => 0,
@@ -1381,6 +1408,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             self.r.remove(rec);
         }
         if module {
+            self.reg_block[rec] = (core::ptr::null(), 0);
             let committed = crate::collect::release(rec);
             if committed != 0 {
                 self.m.free(committed);
@@ -1501,7 +1529,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut provs = parse_provs(&self.found, np);
         let mut j = 0;
         while j < np.min(PROVIDER_MAX) {
-            if !self.loaded[j] {
+            if self.unusable[j] {
                 provs[j] = None;
             }
             j += 1;
@@ -1582,6 +1610,24 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// Load the new file of a reload into the record `rec` of the module that `unload_rec` took down: the file's header table replaces the old one in the selection
     /// index of the record, so the services number its keys at `init` as they did the old file's, and the load keeps the record, its owner id and its selection index.
     pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
+        let r = self.reload_prepare(rec, path);
+        if r != OK {
+            return r;
+        }
+        let k = self.sel_of(rec) as usize;
+        self.phase = Phase::Live;
+        crate::selection::BOOT_IDX = k as u32;
+        self.missing = [0; NEEDS_LEN];
+        self.decl_diff = (0, 0);
+        let r = self.load_file(path, Slot::Module(rec));
+        crate::selection::BOOT_IDX = u32::MAX;
+        self.phase = Phase::Closed;
+        r
+    }
+
+    /// The part of `reload_load` before the file loads: the rules of the check for the bytes that load, the file's header table kept at the module's index, the
+    /// services' numbering. The package manager loads the file after it.
+    pub(crate) unsafe fn reload_prepare(&mut self, rec: usize, path: *const u8) -> i32 {
         let k = if rec < MAX_MODULES { self.sel_of(rec) as usize } else { SEL_MAX };
         if k >= SEL_MAX {
             return E_NOT_FOUND;
@@ -1616,14 +1662,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         // the services number the live set again: the live modules keep their numbers (sticky), a key the new file adds takes a free one
         let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
         services().settle(&sel);
-        self.phase = Phase::Live;
-        crate::selection::BOOT_IDX = k as u32;
-        self.missing = [0; NEEDS_LEN];
-        self.decl_diff = (0, 0);
-        let r = self.load_file(path, Slot::Module(rec));
-        crate::selection::BOOT_IDX = u32::MAX;
-        self.phase = Phase::Closed;
-        r
+        OK
     }
 
     /// The services number the keys of `file` as if it were the module at selection index `k` (`settle` over the live set with its table there); the kept table of `k` is as it was after.
@@ -1706,6 +1745,25 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// modules keep their numbers, the file's keys take their sticky numbers or free ones) and the file loads as at the boot. `OK`, `LOADING` (the DSP part follows: the
     /// boot record's `report_dsp`), or the refusal; a refusal leaves the index free again (`retire_index`).
     pub unsafe fn live_load(&mut self, k: usize, path: *const u8) -> i32 {
+        let r = self.live_prepare(k, path);
+        if r != OK {
+            return r;
+        }
+        self.phase = Phase::Live;
+        crate::selection::BOOT_IDX = k as u32;
+        self.missing = [0; NEEDS_LEN];
+        self.decl_diff = (0, 0);
+        let r = self.load_file(path, Slot::Free);
+        crate::selection::BOOT_IDX = u32::MAX;
+        self.phase = Phase::Closed;
+        if r != OK && r != LOADING {
+            self.retire_index(k);
+        }
+        r
+    }
+
+    /// The part of `live_load` before the file loads (see `reload_prepare`): the file's header table kept at index `k`, the services' numbering.
+    pub(crate) unsafe fn live_prepare(&mut self, k: usize, path: *const u8) -> i32 {
         if k >= SEL_MAX {
             return E_SEL_COUNT;
         }
@@ -1729,17 +1787,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         self.accepted[k] = true;
         let sel = live_settle_ctx(&self.tables, &self.table_len, &self.live_at(k));
         services().settle(&sel);
-        self.phase = Phase::Live;
-        crate::selection::BOOT_IDX = k as u32;
-        self.missing = [0; NEEDS_LEN];
-        self.decl_diff = (0, 0);
-        let r = self.load_file(path, Slot::Free);
-        crate::selection::BOOT_IDX = u32::MAX;
-        self.phase = Phase::Closed;
-        if r != OK && r != LOADING {
-            self.retire_index(k);
-        }
-        r
+        OK
     }
 
     /// Selection index `k` has no module any more (an unload, or a load that failed): the plan's acceptance goes, and no free record keeps the index. The kept header table

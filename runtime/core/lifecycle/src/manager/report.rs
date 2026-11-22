@@ -9,6 +9,7 @@ pub struct Report {
     pub(super) taken_down: Steps,
     pub(super) refused: RefusedList,
     pub(super) pending: Option<PackageId>,
+    pub(super) dsp_pending: Steps,
 }
 
 impl Report {
@@ -25,6 +26,12 @@ impl Report {
     /// The packages that were not brought up and why: a cause comes before the packages that needed it.
     pub fn refused(&self) -> &[Refused] {
         self.refused.as_slice()
+    }
+
+    /// The packages whose DSP part is coming up (`ProviderHost::start_dsp` answered `true`), in bring-up order. A failure of one is reported with
+    /// [`PackageManager::take_down_closure`](super::PackageManager::take_down_closure).
+    pub fn dsp_pending(&self) -> &Steps {
+        &self.dsp_pending
     }
 
     /// The package whose restore was busy when the operation ended: a take-down waits ([`PackageManager::retry_pending`](super::PackageManager::retry_pending))

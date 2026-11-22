@@ -19,7 +19,8 @@ impl<P: Platform, M: Images, R: Registry> Linker for RtLinker<P, M, R> {
     fn link(&mut self, package: PackageId, _at: u32, services: &[PackageId]) -> Result<(), Status> {
         unsafe {
             let (s, l) = self.0.get();
-            l.package_link(package, services, &mut s.flight)
+            let r = l.package_link(package, services, &mut s.flight);
+            s.track(package, r)
         }
     }
 

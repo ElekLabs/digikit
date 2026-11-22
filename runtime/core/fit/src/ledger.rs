@@ -5,6 +5,7 @@
 //! Pure and fixed-size, like the rest of this crate. The planner asks [`ResourceLedger::fits`] from header tables before any code runs; the package
 //! manager (RC2) claims on bring-up and releases on take-down. Nothing in the runtime uses it yet. The device-facing fit rule in `lib.rs` is unchanged.
 
+use core::ptr::addr_of_mut;
 use dkrt_sdk::{CAP_MAX, PROVIDER_MAX, SEL_MAX};
 
 /// Most pools: the CAPACITY reply has room for this many entries.
@@ -47,6 +48,22 @@ impl ResourceLedger {
         ResourceLedger {
             pools: [None; MAX_POOLS],
             claims: [None; MAX_CLAIMS],
+        }
+    }
+
+    /// An empty ledger at `out`, with no copy of it on the stack (a ledger is 2.4 KB).
+    ///
+    /// # Safety
+    /// `out` is valid for writes of a ledger.
+    pub unsafe fn init(out: *mut ResourceLedger) {
+        // slot by slot: a copy of a constant would be built on the stack first
+        let pools = addr_of_mut!((*out).pools).cast::<Option<Pool>>();
+        for i in 0..MAX_POOLS {
+            pools.add(i).write(None);
+        }
+        let claims = addr_of_mut!((*out).claims).cast::<Option<Claim>>();
+        for i in 0..MAX_CLAIMS {
+            claims.add(i).write(None);
         }
     }
 

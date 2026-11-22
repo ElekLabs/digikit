@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::vec::Vec;
 
-/// One call a seam received. `Attach` and `Detach` carry the service, then the consumer.
+/// One call a seam received. `Attach` and `Detach` carry the consumer; the services of the call are in [`Probe::walk_of`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Call {
     Place(PackageId),
@@ -13,11 +13,12 @@ pub enum Call {
     Install(PackageId),
     Activate(PackageId),
     Deactivate(PackageId),
-    Attach(PackageId, PackageId),
+    Attach(PackageId),
     CanStop(PackageId),
-    Detach(PackageId, PackageId),
+    Detach(PackageId),
     Restore(PackageId),
     Stop(PackageId),
+    StartDsp(PackageId),
     Unbind(PackageId),
     Free(PackageId),
 }
@@ -27,6 +28,7 @@ struct Inner {
     calls: Vec<Call>,
     faults: Vec<(Call, Status)>,
     busy: Vec<(PackageId, usize)>,
+    walks: Vec<(PackageId, Vec<PackageId>)>,
 }
 
 /// The call log and the faults of one fake world. Clones share the same state.
@@ -51,6 +53,24 @@ impl Probe {
     /// The next `times` restores of `package` answer busy.
     pub fn busy_restore(&self, package: PackageId, times: usize) {
         self.0.borrow_mut().busy.push((package, times));
+    }
+
+    /// The services of the last `attach` or `detach` of `consumer`, in the order the call gave them.
+    pub fn walk_of(&self, consumer: PackageId) -> Vec<PackageId> {
+        let i = self.0.borrow();
+        i.walks
+            .iter()
+            .rev()
+            .find(|(c, _)| *c == consumer)
+            .map(|(_, s)| s.clone())
+            .unwrap_or_default()
+    }
+
+    pub(super) fn walk(&self, consumer: PackageId, services: &[PackageId]) {
+        self.0
+            .borrow_mut()
+            .walks
+            .push((consumer, services.to_vec()));
     }
 
     /// Records `call`; the status of a matching fault, once.

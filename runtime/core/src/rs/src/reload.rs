@@ -75,6 +75,7 @@ pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
 }
 
 /// `refusal`, then the refusals of the services about module record `owner - 1` (`Service::teardown_refusal`, every service in table order). The reload job calls this.
+#[cfg_attr(not(test), allow(dead_code))]
 pub unsafe fn refusal_with_services<P: Platform>(p: &P, f: &Facts, services: &dkrt_abi::service::ServiceTable, owner: u8) -> Option<i32> {
     if let Some(r) = refusal(p, f) {
         return Some(r);
@@ -486,9 +487,11 @@ impl Ops for RealOps {
             card_busy: crate::api::card_busy(),
             menus,
         };
-        match rec {
-            Some(r) => refusal_with_services(&crate::PLATFORM, &f, &crate::handlers::services(), r as u8 + 1),
-            None => refusal(&crate::PLATFORM, &f),
+        // the generic refusals are the job's; the service-specific ones come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
+        let generic = refusal(&crate::PLATFORM, &f);
+        match (generic, rec) {
+            (None, Some(r)) => crate::lifecycle::get().and_then(|rt| rt.refusal(r)),
+            (generic, _) => generic,
         }
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
@@ -511,7 +514,10 @@ impl Ops for RealOps {
         rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec])) != 0
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
-        crate::loader::unload_rec(rec)
+        match crate::lifecycle::get() {
+            Some(rt) => rt.unload(rec),
+            None => dkrt_sdk::E_NOT_FOUND,
+        }
     }
     unsafe fn dsp_retained(&mut self) -> bool {
         crate::loader::dsp_retained()
@@ -523,7 +529,11 @@ impl Ops for RealOps {
         crate::boot::begin_live(k);
     }
     unsafe fn load(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
-        let r = if op == LIVE_LOAD { crate::loader::live_load(k, path) } else { crate::loader::reload_load(rec, path) };
+        let r = match crate::lifecycle::get() {
+            Some(rt) if op == LIVE_LOAD => rt.live_load(k, path),
+            Some(rt) => rt.reload_load(rec, path),
+            None => dkrt_sdk::E_NOT_FOUND,
+        };
         let missing = if r == E_IMPORT { crate::loader::missing() } else { [0u8; dkrt_sdk::NEEDS_LEN] };
         crate::boot::states().finished(k, r);
         crate::boot::report_module(k, path, r, &missing, &crate::loader::last_name());
@@ -547,7 +557,10 @@ impl Ops for RealOps {
         }
     }
     unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool {
-        crate::loader::cancel_dsp(rec, code)
+        match crate::lifecycle::get() {
+            Some(rt) => rt.cancel_dsp(rec, code),
+            None => false,
+        }
     }
     unsafe fn on_loaded(&mut self, rec: usize) {
         crate::handlers::services().on_loaded(rec)

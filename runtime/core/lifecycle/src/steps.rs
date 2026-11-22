@@ -44,6 +44,10 @@ impl Steps {
         &self.ids[..self.len]
     }
 
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [PackageId] {
+        &mut self.ids[..self.len]
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
