@@ -81,6 +81,7 @@
         "core/services/samples:pack",
         "core/services/project:pack",
         "test/track-select:pack",
+        "digikit/debug:pack",
         "patchkit:ports-test",
         "patchkit:cli",
         "patchkit:device-images"
