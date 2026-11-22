@@ -13,8 +13,23 @@
       },
       "description": "Device ids and names outside the allowed places may not grow beyond tools/nx/device-literals.baseline.json (reads every tracked file: not cached, and any tracked-file change selects it in the affected gate; `lint` depends on it)."
     },
+    "test-source": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/**/*.rs",
+        "{workspaceRoot}/config/test-source-patterns.json",
+        "{workspaceRoot}/tools/nx/test-source.mjs"
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/test-source.mjs --check",
+        "cwd": "."
+      },
+      "description": "Every Rust file that matches config/test-source-patterns.json is declared behind #[cfg(test)]: the daemon, patchkit and device-test keys leave such files out by name."
+    },
     "lint": {
-      "dependsOn": ["device-literals"],
+      "dependsOn": ["device-literals", "test-source"],
       "executor": "nx:run-commands",
       "cache": true,
       "outputs": [],

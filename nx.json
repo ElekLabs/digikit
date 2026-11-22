@@ -83,7 +83,7 @@
     ],
     "production": [
       "default",
-      "!{projectRoot}/tests/**/*",
+      "!{projectRoot}/**/tests/**/*",
       "!{projectRoot}/**/*.md",
       "!{projectRoot}/**/{tests.rs,tests_*.rs,*_tests.rs,fake_*.rs}"
     ]

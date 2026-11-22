@@ -7,6 +7,7 @@
 //! crate's own global symbols, so only what they reach stays (docs/findings/26-rust-on-coldfire.md).
 
 use super::elf::{self, Proto};
+use super::test_source::TestSources;
 use super::toolchain::{self as tc, Env, TempDir};
 use crate::error::*;
 use serde::Deserialize;
@@ -107,9 +108,14 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in rd.flatten() {
         let p = e.path();
         let Ok(ft) = e.file_type() else { continue };
+        let name = e.file_name().to_string_lossy().into_owned();
         if ft.is_dir() {
-            rs_files(&p, out);
-        } else if p.extension().is_some_and(|x| x == "rs") {
+            if !TestSources::get().is_test_dir(&name) {
+                rs_files(&p, out);
+            }
+        } else if p.extension().is_some_and(|x| x == "rs")
+            && !TestSources::get().is_test_file(&name)
+        {
             out.push(p);
         }
     }
@@ -673,6 +679,42 @@ pub fn object_proto(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_source_hash_ignores_unit_test_files_only() {
+        let work = TempDir::new("pk-hash-").unwrap();
+        let src = work.path().join("src");
+        std::fs::create_dir_all(src.join("a/tests")).unwrap();
+        std::fs::write(work.path().join("Cargo.toml"), "[package]\nname = \"c\"\n").unwrap();
+        for f in [
+            "lib.rs",
+            "a/mod.rs",
+            "a/tests.rs",
+            "a/tests/x.rs",
+            "b_tests.rs",
+            "tests_b.rs",
+            "fake_p.rs",
+        ] {
+            std::fs::write(src.join(f), "// 1\n").unwrap();
+        }
+        let manifest = work.path().join("Cargo.toml");
+        let before = source_sha256(&manifest).unwrap();
+        for f in [
+            "a/tests.rs",
+            "a/tests/x.rs",
+            "b_tests.rs",
+            "tests_b.rs",
+            "fake_p.rs",
+        ] {
+            std::fs::write(src.join(f), "// 2\n").unwrap();
+        }
+        assert_eq!(source_sha256(&manifest).unwrap(), before);
+        for f in ["lib.rs", "a/mod.rs"] {
+            std::fs::write(src.join(f), "// 2\n").unwrap();
+            assert_ne!(source_sha256(&manifest).unwrap(), before, "{f}");
+            std::fs::write(src.join(f), "// 1\n").unwrap();
+        }
+    }
 
     #[test]
     fn a_staged_dependency_loses_its_workspace_root() {

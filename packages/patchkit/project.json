@@ -33,6 +33,7 @@
         "{workspaceRoot}/ports/bindings/rs/**/*",
         "{workspaceRoot}/packages/dkneeds/**/*",
         "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/config/test-source-patterns.json",
         "{workspaceRoot}/sdk/sdk.toml",
         "{workspaceRoot}/sdk/include/**/*",
         "{workspaceRoot}/sdk/dsp/contract/**/*",
