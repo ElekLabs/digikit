@@ -4,13 +4,13 @@
 // what is read and done is profile-backend.ts (the recorder), over the target's one session (target.ts).
 // Reads: once a second, only while the tab is shown and the target records, one at a time (read-gate-core.ts); a tab that is shown while the target
 // is stopped reads once. Start and Stop, Reset and Export are the recorder's. A target without the debug module gets one button that adds it.
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
-import type { DkSession } from '@digi/dk-session';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { sameTarget } from '@digi/workbench-core/transfer/target.ts';
+import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import {
   buildRows,
@@ -31,7 +31,7 @@ import {
 } from '@digi/workbench-core/profile/profile-core.ts';
 import { cardRefresh } from './card-state';
 import { createDkProfLoader } from './dkprof-env';
-import { createEmulatorNames } from './log-names-backend';
+import { createEmulatorNames, createDeviceNames } from './log-names-backend';
 import { deviceOfPort } from './remote-core';
 import { createRecorder, type ProfileReading } from './profile-backend';
 import { createReadGate } from './read-gate-core';
@@ -56,22 +56,16 @@ const COLUMN_PX = 4;
 const GAP_PX = 2;
 const GRAPH_PX = 90;
 
-/**
- * `session`: the device to read (the emulator, or the selected target). `where`: its name for an error line. `track`: read again when this
- * changes (the selected target). `host`: the controller's rpc for `cf.profile` and `sharc.profile` and the save dialog.
- */
 export default function ProfilePanel(props: {
   visible: boolean;
-  session: () => Promise<DkSession>;
-  where: () => string;
-  track?: () => unknown;
+  source: TargetBinding;
   host?: Host;
   /** What the Profile and Calibration tabs share (a run in progress, the active calibration). */
   hub: CalibrationHub;
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
   const app = useTransferApp();
-  const { asked, noteReply } = app.connection;
+  const { noteReply } = app.connection;
   const { checkRuntime, emulatorRuntime, target } = app.target;
   const [reading, setReading] = createSignal<ProfileReading>();
   const [dsp, setDsp] = createSignal<DspView>();
@@ -83,19 +77,17 @@ export default function ProfilePanel(props: {
   const history = createHistory();
   const [version, setVersion] = createSignal(0); // the history changed
 
-  const readsEmulator = () => props.where() === 'the emulator';
-  const readsTarget = () => !readsEmulator() || target().kind === 'emulator';
-  const onEmulator = () => readsEmulator() || target().kind === 'emulator';
+  const onEmulator = () => props.source.target.kind === 'emulator';
 
   const prof = props.host ? createDkProfLoader(props.host) : undefined;
   const recorder = createRecorder({
-    session: async () => props.session(),
+    session: async () => props.source.session(),
     get rpc() {
       return onEmulator() ? props.host?.rpc : undefined;
     },
     loadLibrary: app.loadLibrary,
     prof,
-    names: props.host && prof ? createEmulatorNames(props.host, prof) : undefined,
+    names: props.host && prof ? (onEmulator() ? createEmulatorNames : createDeviceNames)(props.host, prof) : undefined,
   });
 
   // a calibration run (the Calibration tab) owns the counters and the target: this pane does not read while it plays and locks its other actions
@@ -110,12 +102,10 @@ export default function ProfilePanel(props: {
   const gate = createReadGate({
     run: async (current) => {
       setBusy(true);
-      const t0 = target();
+
       try {
-        const check = () => checkRuntime(readsEmulator() ? { kind: 'emulator' } : target());
-        if (readsTarget()) await asked(async () => check());
-        else check();
-        const r = readsTarget() ? await asked(() => recorder.read()) : await recorder.read();
+        checkRuntime(props.source.target);
+        const r = await recorder.read();
         if (current()) {
           if (!r.noDebug) {
             history.push(r.snap, r.modules);
@@ -125,18 +115,18 @@ export default function ProfilePanel(props: {
           setReading(r);
           setError('');
           setNoRuntime(false);
-          if (readsTarget()) void noteReply(await props.session(), () => sameTarget(t0, target()));
+          void noteReply(await props.source.session(), () => props.source.target === target());
         }
         return true;
       } catch (e) {
         if (!current()) return true;
         if (isCancelled(e)) return true;
         if (isNoRuntime(e)) {
-          setError(failureLine(e, props.where()));
+          setError(failureLine(e, targetLabel(props.source.target)));
           setNoRuntime(true);
           return true;
         }
-        setError(failureLine(e, props.where()));
+        setError(failureLine(e, targetLabel(props.source.target)));
         return false;
       } finally {
         setBusy(false);
@@ -148,8 +138,8 @@ export default function ProfilePanel(props: {
   // read when the tab is shown, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
-    props.track?.();
-    emulatorRuntime();
+
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
     untrack(() => {
       history.clear();
       setReading(undefined);
@@ -159,8 +149,8 @@ export default function ProfilePanel(props: {
   });
   createEffect(() => {
     cardRefresh();
-    props.track?.();
-    emulatorRuntime();
+
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
     if (active()) untrack(() => gate.request());
     else untrack(() => gate.stop());
   });
@@ -180,7 +170,7 @@ export default function ProfilePanel(props: {
       setError('');
       gate.request();
     } catch (e) {
-      setError(failureLine(e, props.where()));
+      setError(failureLine(e, targetLabel(props.source.target)));
     } finally {
       setActing('');
     }
@@ -205,11 +195,15 @@ export default function ProfilePanel(props: {
       await props.host.fs.saveLog(new TextEncoder().encode(f.text), f.name, 'profile');
     });
   const addDebug = () =>
-    act('add', async () => {
-      // the debug module is in the library; the runtime loads it at the next start
-      await app.backend.install([DEBUG_MODULE], () => {});
-      await app.backend.restart(() => {});
-    });
+    act('add', () =>
+      app.jobs.runJob('Install debug module', { group: 'target' }, async () => {
+        // the debug module is in the library; the runtime loads it at the next start
+        props.source.check();
+        await app.backend.install([DEBUG_MODULE], () => {});
+        props.source.check();
+        await app.backend.restart(() => {});
+      }),
+    );
   const openReference = async (file: File | undefined) => {
     if (!file) return;
     try {

@@ -136,6 +136,7 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     sessions.cancel(targetKey(target()));
   }
 
+  const leaveHandlers = new Set<() => Promise<void>>();
   const [switching, setSwitching] = createSignal(false);
 
   /** Change the target: the next request uses the session of the new one (and opens the port). A MIDI port that cannot be opened leaves the old target. */
@@ -144,8 +145,10 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     if (sameTarget(next, target())) return;
     // A dropped MIDI link cancels its own waiting requests (dropMidi). The emulator's link stays open, so its waiting requests are cancelled here.
     if (target().kind !== 'midi') cancelPending();
+    const leaving = [...leaveHandlers];
     setSwitching(true);
     try {
+      for (const release of leaving) await release();
       if (next.kind === 'midi') await linkOf(next);
       else await dropMidi();
       batch(() => {
@@ -184,9 +187,10 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     let made: DkSession | undefined;
     // The session reports each request's outcome; only the selected target's reports reach the indicator.
     let noting = false;
-    const onLink = (ok: boolean, reason?: string): void => {
+    const onLink = (ok: boolean, reason?: string, silentInfo?: boolean): void => {
       if (!sameTarget(t, target())) return;
       if (!ok) {
+        if (silentInfo && connection.connection().state === 'noruntime') return;
         noteConnection({ type: 'lost', reason: reason ?? 'No reply from the device.' });
         return;
       }
@@ -212,6 +216,11 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     return {
       target: initialTarget,
       check,
+      beforeLeave(release: () => Promise<void>) {
+        check();
+        leaveHandlers.add(release);
+        return () => leaveHandlers.delete(release);
+      },
       session: () => {
         check();
         return sessionOf(initialTarget, check);
@@ -245,18 +254,38 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
    * The transport of the selected MIDI port, opened if it is not (the Firmware page sends its messages through it, one by one, without the
    * session). The port is the target's: a request of the session in the meantime would mix its reply with the page's.
    */
+  let releaseRaw: (() => void) | undefined;
+  function finishRawTransport() {
+    releaseRaw?.();
+    releaseRaw = undefined;
+  }
+
   async function portTransport(): Promise<DkTransport> {
     const t = target();
     if (t.kind !== 'midi') throw new Error('No MIDI port is selected.');
-    await sessionOf(t);
-    return (midiLink as { transport: Promise<DkTransport> }).transport;
+    const binding = bindSession();
+    const session = await binding.session();
+    const release = await session.reserveTransport();
+    try {
+      binding.check();
+      if (midiLink?.port !== t.port) throw new Error('The selected MIDI port closed.');
+      releaseRaw = release;
+      return await midiLink.transport;
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   /** Let go of the selected MIDI port (the device restarts): the next request opens it again, and fails while it is not there. */
   async function releasePort(): Promise<void> {
     const t = target();
     if (t.kind !== 'midi' || midiLink?.port !== t.port) return;
-    await dropMidi();
+    try {
+      await dropMidi();
+    } finally {
+      finishRawTransport();
+    }
   }
 
   return {
@@ -277,7 +306,9 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     lastMidiSession,
     reconnect,
     portTransport,
+    finishRawTransport,
     releasePort,
   };
 }
 export type TargetApp = ReturnType<typeof createTarget>;
+export type TargetBinding = ReturnType<TargetApp['bindSession']>;

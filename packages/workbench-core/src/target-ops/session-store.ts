@@ -80,5 +80,5 @@ export function targetOps(
         await act();
       };
   }
-  return { target: binding.target, store: sessionStoreOps(binding.session, binding.check), run };
+  return { ...binding, store: sessionStoreOps(binding.session, binding.check), run };
 }

@@ -131,7 +131,9 @@ Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls`
 
 `packages/workbench-core/src/target-ops/` has `TargetOps { target; store: StoreOps; run: RunOps }`: what the UI asks of the selected target, the emulator or a device. `Host` stays the catalogue of platform services (files, dialogs, ports, firmware, `emu.*`); it does not describe a target.
 
-`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). The desktop binds Files and the native pause, resume and reset controls through `targetOps`. A binding belongs to one selection, including when the user leaves and comes back to the same port. It checks that selection around store requests. A target only exposes the run operations its adapter supplies.
+`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). The desktop binds Files and the native pause, resume and reset controls through `targetOps`. A binding belongs to one selection, including when the user leaves and comes back to the same port. It checks that selection around store requests. A target only exposes the run operations its adapter supplies. Run shows the native emulator or the selected MIDI device. The inspector and footer share the selected binding. Hardware CF and DSP readings come from the runtime log’s HEALTH event. When switching ports the Remote panel releases its held keys on the original session first.
+
+To check the desktop target switch with fake devices, start the UI preview and run `node tools/devtools/ui_shots.mjs run-target-switch`. The scene opens Remote during an emulator boot, visits Files, and opens the selected device’s Metrics from the footer. It checks the readings and writes a screenshot under `out/runs/ui-shots/`.
 
 Tests and the preview use fakes: `fakeStoreOps` and `demoStore` (`target/fake-store.ts`). The first user is the Files page (`packages/workbench-core/ui/files/FilesPage.tsx`), which shows the store read-only; open it in the desktop UI preview with `?page=files`.
 

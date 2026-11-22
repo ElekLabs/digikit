@@ -1,6 +1,6 @@
 // Operations on one selection of a workbench target.
 import { fmtVersion, type DkEntry, type DkInfoFull, type DkModule, type ModuleState } from '@digi/dk-session';
-import type { Target } from '../transfer/target';
+import type { TargetBinding } from '../transfer/target';
 import type { DkmHeader, StoreUsage } from './store';
 
 export interface StoreFacts {
@@ -57,8 +57,7 @@ export interface RunOps {
   why(op: RunOp): string | null;
 }
 
-export interface TargetOps {
-  readonly target: Target;
+export interface TargetOps extends TargetBinding {
   readonly store: StoreOps;
   readonly run: RunOps;
 }

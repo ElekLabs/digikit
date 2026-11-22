@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { DkSession } from '@digi/dk-session';
 import { test } from 'vitest';
 import { targetOps } from '../src/target-ops/session-store';
 import { createFakeSessions, createFakeTransferApp } from '../src/transfer/fake-app';
@@ -70,4 +71,57 @@ test('a background MIDI session cannot reclaim the host slot while the next port
   await switching;
   await target.session();
   assert.deepEqual(opened, ['A', 'B']);
+});
+
+test('the raw firmware transport waits for an outstanding session read before taking the MIDI port', async () => {
+  let receiving!: () => void;
+  const started = new Promise<void>((resolve) => {
+    receiving = resolve;
+  });
+  let reply!: () => void;
+  const waiting = new Promise<null>((resolve) => {
+    reply = () => resolve(null);
+  });
+  const link = {
+    send() {},
+    recv: () => {
+      receiving();
+      return waiting;
+    },
+  };
+  const { target } = createFakeTransferApp({
+    env: { targets: { emulator: true, ports: async () => ['A'], open: async () => link } },
+    sessions: createFakeSessions((_key, transport) => new DkSession(transport, { timeoutMs: 1, retries: 0 })),
+  });
+  await target.selectTarget({ kind: 'midi', port: 'A' });
+  const session = await target.session();
+  const reading = session.logPage(0, true).catch(() => {});
+  await started;
+  const order: string[] = [];
+  const raw = target.portTransport().then((port) => {
+    order.push('handoff');
+    return port;
+  });
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  order.push('reply');
+  reply();
+  await reading;
+  assert.equal(await raw, link);
+  await assert.rejects(session.logPage(0, true), { kind: 'cancelled' });
+  await assert.rejects(session.screen(), { kind: 'cancelled' });
+  target.finishRawTransport();
+  assert.deepEqual(order, ['reply', 'handoff']);
+});
+
+test('a background runtime INFO timeout preserves the identity of a confirmed stock device', async () => {
+  const app = createFakeTransferApp({
+    sessions: createFakeSessions((_key, transport, options) => new DkSession(transport, options)),
+  });
+  await app.target.selectTarget({ kind: 'midi', port: 'A' });
+  const session = await app.target.session();
+  app.connection.noteConnection({ type: 'noruntime', reason: 'Stock firmware' });
+  await assert.rejects(session.info(1), { kind: 'timeout' });
+  assert.equal(app.connection.connection().state, 'noruntime');
+  app.connection.noteConnection({ type: 'lost', reason: 'Stock screenshot failed' });
+  assert.equal(app.connection.connection().state, 'disconnected');
 });

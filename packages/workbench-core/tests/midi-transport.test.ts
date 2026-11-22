@@ -1,5 +1,6 @@
 // The MIDI port transport owns its link: it opens the named port, opens the same port again on recover, and closes it.
 import assert from 'node:assert/strict';
+import { DkSession } from '@digi/dk-session';
 import { test } from 'vitest';
 import { createFakeHost } from '../src/host/fake-host.ts';
 import { MidiPortTransport } from '../src/host/midi-transport.ts';
@@ -60,4 +61,41 @@ test('close drains an outstanding native port recovery before releasing the MIDI
   finish();
   await Promise.all([recovery, closing]);
   assert.equal(host.argsOf('ports.midi.close').length, 1);
+});
+
+test('raw handoff waits for the native receive and cancel after a session request has rejected', async () => {
+  let receiving!: () => void;
+  const started = new Promise<void>((resolve) => {
+    receiving = resolve;
+  });
+  let received!: () => void;
+  const nativeRead = new Promise<ArrayBuffer>((resolve) => {
+    received = () => resolve(new ArrayBuffer(0));
+  });
+  let cancelled!: () => void;
+  const nativeCancel = new Promise<void>((resolve) => {
+    cancelled = resolve;
+  });
+  const host = createFakeHost({
+    'ports.midi.recv': () => {
+      receiving();
+      return nativeRead;
+    },
+    'ports.midi.cancel': () => nativeCancel,
+  });
+  const session = new DkSession(await MidiPortTransport.open(host.ports.midi, 'A'));
+  const read = session.logPage(0);
+  await started;
+  session.cancelPending();
+  await assert.rejects(read, { kind: 'cancelled' });
+  let ready = false;
+  const raw = session.reserveTransport().then((release) => {
+    ready = true;
+    return release;
+  });
+  received();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  assert.equal(ready, false);
+  cancelled();
+  (await raw)();
 });

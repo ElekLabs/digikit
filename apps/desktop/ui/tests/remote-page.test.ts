@@ -1,3 +1,4 @@
+import { createFakeTransferApp, createFakeSessions } from '@digi/workbench-core/transfer/fake-app.ts';
 // The pure logic of the desktop Remote page (apps/desktop/ui/src/remote-core.ts).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -13,7 +14,6 @@ import {
   remoteNotice,
   remotePaused,
   remoteRuntime,
-  remoteReleaseDue,
   remoteStateWanted,
   stateProbeKey,
 } from '../src/remote-core.ts';
@@ -144,9 +144,19 @@ test('a module listed without the state request is not asked again until the tar
   );
 });
 
-test('held keys are released on leaving when the module answered the state or is listed', () => {
-  assert.equal(remoteReleaseDue({ enabled: true, format: 1, turnLimit: 30 }, undefined), true);
-  assert.equal(remoteReleaseDue(undefined, true), true);
-  assert.equal(remoteReleaseDue(undefined, false), false);
-  assert.equal(remoteReleaseDue(undefined, undefined), false);
+test('switching away releases latched keys on the port that received the press', async () => {
+  const sent: string[] = [];
+  const { target } = createFakeTransferApp({
+    sessions: createFakeSessions((key) => ({
+      remoteKey: async () => sent.push(key + ' press'),
+      remoteRelease: async () => sent.push(key + ' release'),
+    })),
+  });
+  await target.selectTarget({ kind: 'midi', port: 'A' });
+  const source = target.bindSession();
+  const panel = remoteRuntime(source.session);
+  source.beforeLeave(panel.releaseHeld);
+  await panel.press(1);
+  await target.selectTarget({ kind: 'midi', port: 'B' });
+  assert.deepEqual(sent, ['midi:A press', 'midi:A release']);
 });

@@ -660,7 +660,9 @@ body {
   min-height: 0;
   display: flex;
 }
-.emu-row[hidden] {
+.emu-row[hidden],
+.emu-row > .stage[hidden],
+.emu-head[hidden] {
   display: none;
 }
 .emu-row > .stage {

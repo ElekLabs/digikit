@@ -61,6 +61,10 @@ export class MidiPortTransport implements DkTransport {
     }
   }
 
+  async drain(): Promise<void> {
+    await Promise.allSettled([...this.reads, ...this.writes]);
+  }
+
   close(): Promise<void> {
     return (this.closing ??= this.drainAndClose());
   }

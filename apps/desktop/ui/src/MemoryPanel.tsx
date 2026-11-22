@@ -8,10 +8,10 @@
 // the window gets the focus, and with its Refresh button. One read at a time (read-gate-core.ts); a read that fails is tried again a few
 // times with a growing gap (a device that is still booting after a restart). A panel whose tab is not shown reads nothing. Nothing pending or
 // ticked is shown.
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
-import type { DkSession } from '@digi/dk-session';
 import { cardRefresh } from './card-state';
 import { deviceOfPort } from './remote-core';
 import { freeTitle, moduleRows, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
@@ -19,7 +19,7 @@ import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
 import { focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { sameTarget } from '@digi/workbench-core/transfer/target.ts';
+import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import { reloadWithRuntime } from './emulator-actions';
 import './card-panel.css';
@@ -35,48 +35,34 @@ const LEGEND = [
 // The rows of a reading (memory-core.ts), shown greyed and empty while the emulator has no runtime.
 const SKELETON_ROWS = ['DSP memory', 'CPU memory', 'Machines', 'Parameters', 'Pages', 'Modules'];
 
-/**
- * `session`: the device to read (the emulator, or the selected target). `track`: read again when this changes (the selected target).
- * `where`: its name for an error line ("No reply from Emulator").
- */
 export default function MemoryPanel(props: {
   visible: boolean;
-  session: () => Promise<DkSession>;
-  where: () => string;
-  track?: () => unknown;
+  source: TargetBinding;
   /** Set when the panel is a tab of the column (SidePanels.tsx): the tabpanel's id and the id of its tab. */
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
   const app = useTransferApp();
-  const { asked, noteReply } = app.connection;
+  const { noteReply } = app.connection;
   const { checkRuntime, emulatorRuntime, target } = app.target;
   const [reading, setReading] = createSignal<MemoryReading>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [noRuntime, setNoRuntime] = createSignal(false);
 
-  // the Emulator page passes the emulator's session; the Remote page passes the selected target's
-  const readsEmulator = () => props.where() === 'the emulator';
-  // The Emulator page's panel reads the emulator whatever the target is; only a read of the selected target may move the connection indicator.
-  const readsTarget = () => !readsEmulator() || target().kind === 'emulator';
-  const emulatorRead = () => readsEmulator() || target().kind === 'emulator';
+  const emulatorRead = () => props.source.target.kind === 'emulator';
   const gate = createReadGate({
     run: async (current) => {
       setBusy(true);
-      const t0 = target();
+
       try {
-        const check = () => checkRuntime(readsEmulator() ? { kind: 'emulator' } : target());
-        if (readsTarget()) await asked(async () => check());
-        else check();
-        const s = await props.session();
-        const r = readsTarget()
-          ? await asked(() => readMemory(s, app.loadLibrary))
-          : await readMemory(s, app.loadLibrary);
+        checkRuntime(props.source.target);
+        const s = await props.source.session();
+        const r = await readMemory(s, app.loadLibrary);
         if (current()) {
           setReading(r);
           setError('');
           setNoRuntime(false);
-          if (readsTarget()) void noteReply(s, () => sameTarget(t0, target()));
+          void noteReply(s, () => props.source.target === target());
         }
         return true;
       } catch (e) {
@@ -85,11 +71,11 @@ export default function MemoryPanel(props: {
         if (isCancelled(e)) return true;
         // nothing changes until the emulator boots again: no retry
         if (isNoRuntime(e)) {
-          setError(failureLine(e, props.where()));
+          setError(failureLine(e, targetLabel(props.source.target)));
           setNoRuntime(true);
           return true;
         }
-        setError(failureLine(e, props.where()));
+        setError(failureLine(e, targetLabel(props.source.target)));
         return false;
       } finally {
         setBusy(false);
@@ -102,8 +88,8 @@ export default function MemoryPanel(props: {
   // read when the panel is shown and opened, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
-    props.track?.();
-    emulatorRuntime();
+
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
     if (active()) untrack(() => gate.request());
     else untrack(() => gate.stop());
   });

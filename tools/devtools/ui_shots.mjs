@@ -77,7 +77,68 @@ const modulesReady = async (p) => {
   }
 };
 /** Page helpers: `p.eval(js)`, `p.click(text)`, `p.tick(labelRegexSource)`, `p.hover(selector)`, `p.wait(ms)`. */
+const pickTarget = (p, label) =>
+  p.eval(`(() => {
+        const select = document.querySelector('select[aria-label="Target"]');
+        select.value = [...select.options].find(o => o.text.includes(${JSON.stringify(label)})).value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+
 const SCENES = [
+  {
+    name: 'run-target-switch',
+    q: 'page=run',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, 'Digitone II');
+      await p.click(/^Files$/);
+      await p.eval('document.querySelector("footer button[title*=Metrics]").click()');
+      const check = () =>
+        p.eval(`(() => {
+        const footer = document.querySelector('footer').innerText;
+        return document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Remote'
+          && ![...document.querySelectorAll('nav button')].some(b => b.textContent.trim() === 'Emulator')
+          && document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === 'Metrics'
+          && /Emulator · Loading Digitakt/.test(footer) && /CF 21%/.test(footer) && /DSP 35%/.test(footer)
+          && !/underruns|× RT|DSP est/.test(footer);
+      })()`);
+      for (let n = 0; !(await check()); n++) {
+        if (n === 40)
+          throw new Error(
+            'Remote Run, Metrics or footer did not follow the selected device: ' +
+              (await p.eval('document.body.innerText')),
+          );
+        await p.wait(100);
+      }
+      await pickTarget(p, 'Emulator');
+      if (
+        !(await p.eval(`document.querySelector('nav [aria-current="page"]')?.textContent.trim() === 'Emulator'
+          && document.querySelector('footer').innerText.includes('Booting')`))
+      )
+        throw new Error('Emulator boot was lost');
+      await pickTarget(p, 'Digitone II');
+    },
+  },
+  {
+    name: 'run-stock-remote',
+    q: 'page=run&stock',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, 'Digitone II');
+      for (let i = 0; i < 40; i++) {
+        if (
+          await p.eval(`(() => {
+          const canvas = document.querySelector('.remote-page canvas');
+          return document.querySelector('footer')?.innerText.includes('No runtime') &&
+            canvas && canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some((v,i) => i%4 === 0 && v > 128);
+        })()`)
+        )
+          return;
+        await p.wait(100);
+      }
+      throw new Error('The stock device did not display its screenshot');
+    },
+  },
   { name: 'modules', q: 'mode=modules', size: WIDE, steps: modulesReady },
   {
     name: 'modules-select-partial',

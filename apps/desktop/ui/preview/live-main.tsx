@@ -108,14 +108,14 @@ function Shell() {
               </div>
             </main>
             <Show when={!idle}>
-              <SidePanels host={host} visible={shown()} session={emulatorSession} where={() => 'the emulator'} />
+              <SidePanels host={host} visible={shown()} source={apps.app.target.bindSession()} />
             </Show>
           </div>
           <Show when={page() === 'transfer'}>
             <TransferPage />
           </Show>
           <Show when={page() === 'remote'}>
-            <RemotePage fallbackDevice={device()} emulatorLoaded={true} />
+            <RemotePage source={apps.app.target.bindSession()} />
           </Show>
         </div>
       </div>

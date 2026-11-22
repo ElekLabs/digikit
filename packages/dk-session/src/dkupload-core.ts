@@ -73,6 +73,8 @@ export interface DkTransport {
    * Must not throw when the device is not back yet; the next failure calls it again. Does nothing after close().
    */
   recover?(): Promise<void>;
+  /** Wait for host commands still completing after a cancelled request. */
+  drain?(): Promise<void>;
   /** Let go of the link. */
   close?(): Promise<void>;
 }
@@ -800,7 +802,7 @@ export interface DkSessionOptions {
   /** Time source of `waitForBoot` and `waitForRestart` (default `wallClock`). A harness and `wb --emu` give `emulatedClock(status)`; a paused daemon gives a stepping clock. */
   clock?: Clock;
   /** Called once per request: true after the matching reply, false after the last failed try (not for a cancelled request), with the reason. */
-  onLink?: (ok: boolean, reason?: string) => void;
+  onLink?: (ok: boolean, reason?: string, silentInfo?: boolean) => void;
 }
 
 /** Options of `waitForBoot` and `waitForRestart`. */
@@ -1017,6 +1019,26 @@ export class DkSession {
     old.abort();
   }
 
+  private rawPortHeld = false;
+
+  /** Reserve the link for raw firmware traffic. Queued exchanges finish before the handoff.
+   * New session requests are cancelled until the owner releases the link. */
+  async reserveTransport(): Promise<() => void> {
+    if (this.rawPortHeld) throw cancelledError();
+    this.rawPortHeld = true;
+    const release = () => {
+      this.rawPortHeld = false;
+    };
+    try {
+      await this.turn;
+      await this.t.drain?.();
+      return release;
+    } catch (error) {
+      release();
+      throw error;
+    }
+  }
+
   /** One request and its reply (any status), after the requests queued before it. A timeout sends the request again with a new seq. */
   request(cmd: number, body: Uint8Array = new Uint8Array(), quick: Quick = false): Promise<RawReply> {
     return this.withTurn((signal) => this.exchange(cmd, body, quick, signal));
@@ -1024,6 +1046,7 @@ export class DkSession {
 
   /** `fn` alone on the link, after the requests queued before it. */
   private withTurn<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    if (this.rawPortHeld) return Promise.reject(cancelledError());
     const signal = this.ctl.signal;
     const next = this.turn.then(() => {
       if (signal.aborted) throw cancelledError();
@@ -1142,7 +1165,11 @@ export class DkSession {
         }
       }
       if (!(failure instanceof DkError && failure.kind === 'cancelled'))
-        this.onLink?.(false, failure instanceof Error ? failure.message : String(failure));
+        this.onLink?.(
+          false,
+          failure instanceof Error ? failure.message : String(failure),
+          cmd === GCMD.INFO && failure instanceof DkError && failure.kind === 'timeout',
+        );
       throw failure;
     } finally {
       release();
@@ -1832,6 +1859,7 @@ export class DkSession {
    * timed out may have been done, so the caller decides (`RpcFiles` does not repeat one).
    */
   rpc(type: number, payload: Uint8Array = new Uint8Array(), timeoutMs: number = this.timeoutMs): Promise<Uint8Array> {
+    if (this.rawPortHeld) return Promise.reject(cancelledError());
     const next = this.turn.then(async () => {
       if (!this.rpcProven) await this.waitRpcService();
       return this.rpcOnce(type, payload, timeoutMs);

@@ -33,10 +33,11 @@ export function createConnection(env: { deviceName(device: string): Promise<stri
     if (connection().state === 'connected') return;
     try {
       const info = await s.info(true);
+      const name = await env.deviceName(info.port);
       if (!still()) return;
       noteConnection({
         type: 'answered',
-        device: { id: info.port, name: await env.deviceName(info.port), runtime: fmtVersion(info.runtime) },
+        device: { id: info.port, name, runtime: fmtVersion(info.runtime) },
       });
     } catch {
       /* the page says what failed */

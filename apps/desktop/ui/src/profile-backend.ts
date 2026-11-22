@@ -2,7 +2,8 @@
 // profileState / profileAll, PROFILE_STATE and PROFILE_READ), and on the emulator also `cf.profile` and `sharc.profile` of the controller (the
 // Host's `rpc`). One recorder per panel: no module state; the session, the rpc, the library and dkprof.wasm are arguments, so a test gives fakes.
 // The preview replaces this module (preview/profile-backend.mock.ts). Host tests: tests/profile-backend.test.ts.
-import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
+import { latestDeviceHealth } from './device-health';
+import { CAP } from '@digi/dk-session/gen_proto';
 import { DkError, type DkSession, type PollSlot } from '@digi/dk-session';
 import type { DkProf } from '@digi/dk-session/dkprof';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
@@ -388,19 +389,6 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     return dspView(report, modules, headroom);
   }
 
-  /** The newest HEALTH event of the ring (the whole-block DSP load the runtime logs), or undefined. */
-  async function health(s: ProfileSession): Promise<DeviceDsp | undefined> {
-    try {
-      const [oldest, newest, first] = await s.logPage(0);
-      let events = first;
-      if (newest > oldest + first.length) events = (await s.logPage(Math.max(oldest, newest - 26)))[2];
-      const h = [...events].reverse().find((e) => e.kind === LOG_KIND.HEALTH && ((e.args[0]! >>> 16) & 4) !== 0);
-      return h ? { avgPct: h.args[1]! / 10, maxPct: h.args[2]! / 10 } : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   return {
     async read() {
       const s = await deps.session();
@@ -438,8 +426,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         if (!hasDsp()) r.noDsp = true;
         if (instructionNote) r.note = instructionNote;
       } else {
-        const d = await health(s);
-        if (d) r.deviceDsp = d;
+        const h = await latestDeviceHealth(s).catch(() => undefined);
+        if (h?.dsp != null && h.peak != null) r.deviceDsp = { avgPct: h.dsp, maxPct: h.peak };
       }
       return r;
     },
@@ -449,14 +437,15 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       kept = {};
       device = ((await s.info()).port ?? '').split('-')[0] || device;
       await spansSource(s).start();
-      if (!deps.rpc) return;
-      active = {};
-      restarts = {};
+
       try {
         await deps.names?.refresh(s); // the maps of the image that runs now (a reload changes them)
       } catch {
         // no names: the DSP view has the total only
       }
+      if (!deps.rpc) return;
+      active = {};
+      restarts = {};
       const faults: ProfileFaults = { without: [], other: [] };
       const wanted: [keyof typeof active, string, Source<Part>][] = [['cf', 'cf.profile', cfSource()]];
       if (hasDsp()) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
