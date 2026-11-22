@@ -22,7 +22,7 @@ impl<S: PackageSource, P: Placer> Stage1<'_, S, P> {
     /// Find the package, check it and place its body. Checks in this order, each before the work after it: the file exists, the header reads (a header
     /// of another magic or format is incompatible, a file too short for one is damaged), the resident table is compatible, the file has the size the
     /// header says, then the body is streamed through the chunk buffer into the placer and its hash is compared. A body that does not match is abandoned.
-    /// Only a file the card does not have is `Missing`. A card read that fails (after `BUSY_RETRIES` for a busy store) is `Unreadable`: the boot goes on
+    /// A body that cannot be made runnable (`Placer::finish`: a relocation outside the image) is damaged too. Only a file the card does not have is `Missing`. A card read that fails (after `BUSY_RETRIES` for a busy store) is `Unreadable`: the boot goes on
     /// without the package this time, and the next boot tries again.
     pub unsafe fn load(&mut self) -> PackageStatus {
         let file_size = match retrying(|| self.source.open()) {
@@ -47,11 +47,20 @@ impl<S: PackageSource, P: Placer> Stage1<'_, S, P> {
         if file_size as u64 != HEADER_BYTES as u64 + header.size() as u64 {
             return PackageStatus::Damaged;
         }
-        if self.placer.begin(header.size()).is_err() {
+        if self.placer.begin(header.size(), &self.chunk[HEADER_BYTES..first]).is_err() {
             return PackageStatus::Damaged;
         }
         match self.stream(&header, file_size) {
-            Ok(true) => PackageStatus::Ok,
+            Ok(true) => match self.placer.finish() {
+                Ok(entry) => {
+                    self.placed = Some((entry, header.table_minor()));
+                    PackageStatus::Ok
+                }
+                Err(_) => {
+                    self.placer.abandon();
+                    PackageStatus::Damaged
+                }
+            },
             Ok(false) => {
                 self.placer.abandon();
                 PackageStatus::Damaged

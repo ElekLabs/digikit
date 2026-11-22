@@ -2,8 +2,8 @@
 //! resident file reaches the package only through these functions. A hook the package did not install (or no package at all: a core-only level) has the default each
 //! caller documents, so the core still boots, serves its own upload commands and writes the hang record.
 //!
-//! The one name of the package here is `attach_package`: the resident core gives the package its table and takes the package's hooks in return, once, in `boot::run`; stage 1 will
-//! do the same with a table from the package's own file.
+//! The package's hooks come from stage 1 (`stage1::start`), which gives the package its table and takes its hooks in return, once, in `boot::run`; `install` is the one call that
+//! makes them the table every caller reads. Host tests attach the package linked into their binary (`attach_package`).
 
 use core::ptr::{addr_of, read_volatile, write_volatile};
 use dkrt_abi::hooks::{DspArea, ModuleExtra, PackageHooks, CMD_NONE, NO_MODULE, NO_OVERLAY};
@@ -28,20 +28,15 @@ fn table() -> &'static PackageHooks {
     unsafe { &*read_volatile(addr_of!(INSTALLED)) }
 }
 
-/// The package gets the resident table and gives its hooks: once per boot, from `boot::run` when the level is not core-only (a core-only boot attaches nothing: no package code runs and the callers keep their defaults). A table the package refuses (`dkrt_abi::resident::check`) is logged with its
-/// reason and no hooks are installed: the core runs without the package.
-#[cfg(any(test, feature = "link-package"))]
+/// Host tests: the package of this binary gets the resident table and gives its hooks, as `boot::run` does for the package stage 1 placed (`FakeBootEnv::start_package`). A table
+/// the package refuses (`dkrt_abi::resident::check`) is logged with its reason and no hooks are installed.
+#[cfg(test)]
 pub(crate) unsafe fn attach_package(table: &'static dkrt_abi::resident::ResidentTable) {
     match crate::package::attach(table) {
         Ok(hooks) => install(hooks),
-        Err(why) => crate::state::log_at(dkrt_sdk::logk::L_ERROR as u32, why.message().as_ptr(), why.found),
+        Err(why) => crate::stage1::log_refusal(&why),
     }
 }
-
-/// The resident object without the `link-package` feature holds no package code: no hooks are installed and every caller keeps its default (the core-only level),
-/// until stage 1 places the package file and calls `dkpkg_entry` (RC2s-2 step d).
-#[cfg(not(any(test, feature = "link-package")))]
-pub(crate) unsafe fn attach_package(_table: &'static dkrt_abi::resident::ResidentTable) {}
 
 /// Host tests: is a package table installed? (A core-only level has none.)
 #[cfg(test)]

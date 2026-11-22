@@ -15,7 +15,6 @@
 
 use crate::platform::st;
 use crate::boot_env::{BootEnv, RealBootEnv};
-use crate::hooks;
 use crate::level::{decide, Inputs, Level, SafeReason};
 use crate::safe_mode::{key_held_with, DKRT_STABLE_BLOCKS, KEEP_COUNTER, LATE_FLOOR};
 use crate::selection::{current_with, update_with, Choice, REC, REC_COPY, REC_VALID};
@@ -50,6 +49,7 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
     detail: [[0; 2]; SEL_MAX],
     unloads: 0,
     reloads: 0,
+    core_cause: 0,
 };
 
 /// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
@@ -108,7 +108,7 @@ pub fn info() -> &'static mut DkrtBootInfo {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_boot() {
     crate::state::init_once();
-    enter(crate::dev::valid(), &RealBootEnv);
+    enter(crate::dev::valid(), &RealBootEnv::new());
 }
 
 /// `dkrt_boot` over a device validity and a boot env. An invalid device object (a patch bug, no firmware to read) takes no boot at all: no module loads, nothing is written, and no
@@ -172,7 +172,7 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
         dsp_hang_seen: fault::seen().hang != 0,
         panic_seen: fault::seen().panic != 0,
         boot_counter: r.boot_counter,
-        package: env.package_status(),
+        package: env.load_package(),
     });
     dlog::ev(
         logk::BOOT_RECORD,
@@ -183,14 +183,22 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     let core_only = if let Level::CoreOnly(_) = level { true } else { false };
     if !core_only {
         // the package gets the resident table and gives its hooks (declare-check-commit of its services); a core-only boot runs none of its code
-        hooks::attach_package(&crate::resident::TABLE);
+        env.start_package();
     }
     if level != Level::Normal {
-        let reason = if let Level::Safe(why) = level { why.code() } else { SAFE_NONE };
-        let core_only_code = if let Level::CoreOnly(why) = level { why.code() } else { 0 };
+        // if chains, not a `match` (a jump table is not ColdFire code)
+        let reason = if let Level::Safe(why) = level {
+            why.code()
+        } else if core_only {
+            SAFE_CORE_ONLY
+        } else {
+            SAFE_NONE
+        };
+        let core_only_code = if let Level::CoreOnly(why) = level { why.code() } else { CORE_NONE };
         // a boot that loads no module (safe or core-only) reports `safe` to the hosts; the core-only reason is the SAFE event's argument 3
         b.safe = 1;
         b.reason = reason;
+        b.core_cause = core_only_code;
         LATE_FLOOR = 0;
         dlog::ev(logk::SAFE, logk::F_ERROR, [reason, r.boot_counter, r.seq, core_only_code, 0]);
         if level == Level::Safe(SafeReason::Flag) || (core_only && r.flags & sel::FLAG_SAFE_ONCE != 0) {
@@ -442,6 +450,7 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         detail: b.detail,
         unloads: b.unloads,
         reloads: b.reloads,
+        core_cause: b.core_cause,
     };
 }
 

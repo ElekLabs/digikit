@@ -82,6 +82,20 @@ pub const SAFE_DSP: u32 = 4;
 pub const SAFE_PANIC: u32 = 5;
 /// DkrtBootInfo.reason: no selection copy is valid and a copy could not be read; no modules load and the selection is not written during this boot.
 pub const SAFE_READ: u32 = 6;
+/// DkrtBootInfo.reason: the resident core runs alone (no system package, no modules, no DIGIKIT menu); DkrtBootInfo.core_cause says why. The resident store and the upload commands still answer.
+pub const SAFE_CORE_ONLY: u32 = 7;
+/// DkrtBootInfo.core_cause: this boot is not core-only.
+pub const CORE_NONE: u32 = 0;
+/// DkrtBootInfo.core_cause: the boot counter reached its second threshold (boots kept crashing, in safe mode too); writing the package or a RETRY command clears it.
+pub const CORE_CRASHES: u32 = 1;
+/// DkrtBootInfo.core_cause: the card has no digikit/system.dksp.
+pub const CORE_MISSING: u32 = 2;
+/// DkrtBootInfo.core_cause: the package file is of another format, or asks for a resident table this core does not have, or the core refused its table.
+pub const CORE_INCOMPATIBLE: u32 = 3;
+/// DkrtBootInfo.core_cause: the package file is not whole (too short, another size than its header says, a body that does not match its hash, a relocation outside the image, or no room for it in the arena).
+pub const CORE_DAMAGED: u32 = 4;
+/// DkrtBootInfo.core_cause: the card could not be read for the package; the next boot asks again.
+pub const CORE_UNREADABLE: u32 = 5;
 /// Rows of DkrtDiag.fault_text.
 pub const FAULT_ROWS: usize = 4;
 /// Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode.
@@ -511,8 +525,10 @@ pub struct DkrtBootInfo {
     pub unloads: u32,
     /// reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes
     pub reloads: u32,
+    /// CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE otherwise
+    pub core_cause: u32,
 }
-const _: () = assert!(size_of::<DkrtBootInfo>() == 256, "DkrtBootInfo size");
+const _: () = assert!(size_of::<DkrtBootInfo>() == 260, "DkrtBootInfo size");
 const _: () = assert!(offset_of!(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 const _: () = assert!(offset_of!(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 const _: () = assert!(offset_of!(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -531,6 +547,7 @@ const _: () = assert!(offset_of!(DkrtBootInfo, states) == 176, "DkrtBootInfo.sta
 const _: () = assert!(offset_of!(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
 const _: () = assert!(offset_of!(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
 const _: () = assert!(offset_of!(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
+const _: () = assert!(offset_of!(DkrtBootInfo, core_cause) == 256, "DkrtBootInfo.core_cause");
 
 /// dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end.
 #[repr(C)]

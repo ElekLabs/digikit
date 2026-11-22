@@ -7,6 +7,7 @@ use crate::fake_storage::FakeStorage;
 use dkrt_abi::sha256::Sha;
 use dkrt_abi::storage::{Storage, ROOT_STORE};
 use dkrt_sdk::syspkg::{Header, HEADER_BYTES};
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_sdk::*;
 use std::vec;
 use std::vec::Vec;
@@ -14,6 +15,9 @@ use std::vec::Vec;
 mod assembly_tests;
 
 const PATH: &[u8] = b"digikit/system.dksp";
+
+/// The entry the recording placer gives for every body.
+const ENTRY: u32 = 0x1000;
 
 /// What a card does wrong, per source: the answers the next calls give instead of the file's bytes.
 #[derive(Default)]
@@ -79,13 +83,20 @@ pub(crate) struct RecordingPlacer {
     pub(crate) abandoned: bool,
     /// `begin` refuses when set.
     pub(crate) full: bool,
+    /// `finish` refuses when set.
+    pub(crate) unfinishable: bool,
+    /// The first bytes of the body, as `begin` was given them.
+    pub(crate) head: Vec<u8>,
+    /// `finish` ran.
+    pub(crate) finished: bool,
 }
 
 impl Placer for RecordingPlacer {
-    fn begin(&mut self, size: u32) -> Result<(), i32> {
+    fn begin(&mut self, size: u32, head: &[u8]) -> Result<(), i32> {
         if self.full {
             return Err(E_TOO_BIG);
         }
+        self.head = head.to_vec();
         self.body = vec![0; size as usize];
         Ok(())
     }
@@ -94,6 +105,13 @@ impl Placer for RecordingPlacer {
     }
     fn abandon(&mut self) {
         self.abandoned = true;
+    }
+    fn finish(&mut self) -> Result<DevAddr, i32> {
+        self.finished = true;
+        if self.unfinishable {
+            return Err(E_FORMAT);
+        }
+        Ok(DevAddr::new(ENTRY))
     }
 }
 
@@ -164,7 +182,7 @@ fn a_changed_body_byte_is_damaged_and_abandoned() {
     f[HEADER_BYTES + 700] ^= 1;
     let (status, placer) = run(&card_with(&f), 512);
     assert_eq!(status, PackageStatus::Damaged);
-    assert!(placer.abandoned);
+    assert!(placer.abandoned && !placer.finished, "a body that does not match its hash is never made runnable");
 }
 
 #[test]
@@ -228,6 +246,33 @@ fn a_placer_that_cannot_hold_the_body_leaves_the_package_unusable() {
 }
 
 #[test]
+fn a_package_that_cannot_be_made_runnable_is_damaged_and_abandoned() {
+    let storage = card_with(&package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR, &body(100)));
+    let mut buf = vec![0u8; 512];
+    let placer = RecordingPlacer { unfinishable: true, ..Default::default() };
+    let mut s = Stage1::new(StorageSource::new(&storage), placer, &mut buf);
+    assert_eq!(unsafe { s.load() }, PackageStatus::Damaged);
+    assert!(s.placer().abandoned && s.placed().is_none());
+}
+
+#[test]
+fn a_placed_package_gives_its_entry_and_the_minor_it_was_built_against_and_a_refused_one_gives_none() {
+    let b = body(1300);
+    let storage = card_with(&package(RESIDENT_TABLE_MAJOR, 0, &b));
+    let mut buf = vec![0u8; 512];
+    let mut s = Stage1::new(StorageSource::new(&storage), RecordingPlacer::default(), &mut buf);
+    assert_eq!(unsafe { s.load() }, PackageStatus::Ok);
+    assert_eq!(s.placed(), Some((DevAddr::new(ENTRY), 0)));
+    // the placer saw the start of the body before the rest of it, and `finish` came after the hash matched
+    assert_eq!(s.placer().head, b[..512 - HEADER_BYTES]);
+    assert!(s.placer().finished);
+    let storage = card_with(&package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR + 1, &b));
+    let mut s = Stage1::new(StorageSource::new(&storage), RecordingPlacer::default(), &mut buf);
+    assert_eq!(unsafe { s.load() }, PackageStatus::Incompatible);
+    assert!(s.placed().is_none() && !s.placer().finished);
+}
+
+#[test]
 fn a_busy_store_is_asked_again_a_bounded_number_of_times() {
     let card = card_with(&package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR, &body(1300)));
     let ok = Faults { open_busy: BUSY_RETRIES, read_busy: BUSY_RETRIES, ..Default::default() };
@@ -260,4 +305,5 @@ fn a_read_error_is_unreadable_at_the_header_and_in_the_middle_of_the_body() {
     }
 }
 
+mod start_tests;
 mod store_source_tests;

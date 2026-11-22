@@ -26,6 +26,7 @@ shared = [
   "dkrt::package::handlers",
   "dkrt::resident_query",
   "dkrt::resident",    # the resident table: the thunks the package calls
+  "dkrt::stage1",      # stage 1: loads the system package from the card, places it at the arena top and starts it
   "dkrt::package::resident", # the package's facade over it
   "dkrt::package::boot_idx",
   "dkrt::hooks",       # the resident core's calls into the package, and the package's table of them

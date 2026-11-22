@@ -29,8 +29,11 @@ impl BootEnv for HostBootEnv {
         unsafe { &(*self.l).p }
     }
     /// The package of the host's boot is the one linked into the test: stage 1 is not part of this environment.
-    unsafe fn package_status(&self) -> crate::level::PackageStatus {
+    unsafe fn load_package(&self) -> crate::level::PackageStatus {
         crate::level::PackageStatus::Ok
+    }
+    unsafe fn start_package(&self) {
+        crate::hooks::attach_package(&crate::resident::TABLE);
     }
     /// The host has no settings store (`FakeStorage` models the files, not the record).
     unsafe fn settings_load(&self) {}

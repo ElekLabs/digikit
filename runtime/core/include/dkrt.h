@@ -87,6 +87,20 @@
 #define DKRT_SAFE_PANIC 5
 /* DkrtBootInfo.reason: no selection copy is valid and a copy could not be read; no modules load and the selection is not written during this boot. */
 #define DKRT_SAFE_READ 6
+/* DkrtBootInfo.reason: the resident core runs alone (no system package, no modules, no DIGIKIT menu); DkrtBootInfo.core_cause says why. The resident store and the upload commands still answer. */
+#define DKRT_SAFE_CORE_ONLY 7
+/* DkrtBootInfo.core_cause: this boot is not core-only. */
+#define DKRT_CORE_NONE 0
+/* DkrtBootInfo.core_cause: the boot counter reached its second threshold (boots kept crashing, in safe mode too); writing the package or a RETRY command clears it. */
+#define DKRT_CORE_CRASHES 1
+/* DkrtBootInfo.core_cause: the card has no digikit/system.dksp. */
+#define DKRT_CORE_MISSING 2
+/* DkrtBootInfo.core_cause: the package file is of another format, or asks for a resident table this core does not have, or the core refused its table. */
+#define DKRT_CORE_INCOMPATIBLE 3
+/* DkrtBootInfo.core_cause: the package file is not whole (too short, another size than its header says, a body that does not match its hash, a relocation outside the image, or no room for it in the arena). */
+#define DKRT_CORE_DAMAGED 4
+/* DkrtBootInfo.core_cause: the card could not be read for the package; the next boot asks again. */
+#define DKRT_CORE_UNREADABLE 5
 /* Rows of DkrtDiag.fault_text. */
 #define DKRT_FAULT_ROWS 4
 /* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode. */
@@ -385,6 +399,7 @@ typedef struct DkrtBootInfo {
     uint32_t detail[DKRT_SEL_MAX][2];            /* per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise */
     uint32_t unloads;                            /* modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes */
     uint32_t reloads;                            /* reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes */
+    uint32_t core_cause;                         /* CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE otherwise */
 } DkrtBootInfo;
 
 /* dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end. */
@@ -566,7 +581,7 @@ _Static_assert(sizeof(DkrtSelection) == 456, "DkrtSelection size");
 _Static_assert(offsetof(DkrtSelection, count) == 0, "DkrtSelection.count");
 _Static_assert(offsetof(DkrtSelection, flags) == 4, "DkrtSelection.flags");
 _Static_assert(offsetof(DkrtSelection, paths) == 8, "DkrtSelection.paths");
-_Static_assert(sizeof(DkrtBootInfo) == 256, "DkrtBootInfo size");
+_Static_assert(sizeof(DkrtBootInfo) == 260, "DkrtBootInfo size");
 _Static_assert(offsetof(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 _Static_assert(offsetof(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 _Static_assert(offsetof(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -585,6 +600,7 @@ _Static_assert(offsetof(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
 _Static_assert(offsetof(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
 _Static_assert(offsetof(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
 _Static_assert(offsetof(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
+_Static_assert(offsetof(DkrtBootInfo, core_cause) == 256, "DkrtBootInfo.core_cause");
 _Static_assert(sizeof(DkrtDiag) == 172, "DkrtDiag size");
 _Static_assert(offsetof(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 _Static_assert(offsetof(DkrtDiag, version) == 4, "DkrtDiag.version");

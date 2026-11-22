@@ -5,6 +5,11 @@ use crate::platform::RealPlatform;
 use crate::fault;
 use crate::level::PackageStatus;
 use crate::hooks;
+use crate::stage1::{self, ArenaPlacer, Stage1, StoreSource, PACKAGE_PATH};
+use crate::state::DKRT_STAGE;
+use core::cell::Cell;
+use core::ptr::addr_of_mut;
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
 
@@ -21,9 +26,11 @@ pub(crate) trait BootEnv {
     unsafe fn keep_probe(&self);
     /// The keep area's crash record of the boot before: logged and cleared; true when there was one.
     unsafe fn crash_at_boot(&self) -> bool;
-    /// What stage 1 found of the system package: the one input of the level decision that is not read from the record, the key or the crash records. Until
-    /// stage 1 is wired in (RC2s-2 step d) the device reports `Ok` for the package that is linked into the image.
-    unsafe fn package_status(&self) -> PackageStatus;
+    /// Stage 1: find the system package on the card, place it at the arena top and check that the resident table fits it. What it found is the one input of the level
+    /// decision that is not read from the record, the key or the crash records. A package that is not `Ok` is not left in the arena.
+    unsafe fn load_package(&self) -> PackageStatus;
+    /// Give the placed package the resident table and take its hooks (`stage1::start`). Only after `load_package` gave `Ok`, and only when the level runs the package.
+    unsafe fn start_package(&self);
     /// A safe boot: the installer writes nothing.
     unsafe fn set_safe(&self);
     /// Read the file of each selected module and keep its header table for the boot's graph.
@@ -34,8 +41,17 @@ pub(crate) trait BootEnv {
     unsafe fn load(&self, rec: &Record);
 }
 
-/// The device's boot: the real platform, the loader and the lifecycle of the image.
-pub(crate) struct RealBootEnv;
+/// The device's boot: the real platform, the loader and the lifecycle of the image. `placed` is stage 1's result for `start_package`: the entry of the package and the
+/// resident table minor it was built against.
+pub(crate) struct RealBootEnv {
+    placed: Cell<Option<(DevAddr, u16)>>,
+}
+
+impl RealBootEnv {
+    pub(crate) const fn new() -> RealBootEnv {
+        RealBootEnv { placed: Cell::new(None) }
+    }
+}
 
 impl BootEnv for RealBootEnv {
     type P = RealPlatform;
@@ -52,8 +68,25 @@ impl BootEnv for RealBootEnv {
     unsafe fn crash_at_boot(&self) -> bool {
         fault::at_boot()
     }
-    unsafe fn package_status(&self) -> PackageStatus {
-        PackageStatus::Ok
+    unsafe fn load_package(&self) -> PackageStatus {
+        let chunk = &mut (*addr_of_mut!(DKRT_STAGE)).0;
+        let mut stage1 = Stage1::new(StoreSource::new(PACKAGE_PATH), ArenaPlacer::new(), chunk);
+        let status = stage1.load();
+        let Some((entry, built_minor)) = stage1.placed() else { return status };
+        // the table must fit the package before its entry is called: a refusal has its reason in the log and the block goes back to the arena
+        if let Err(why) = stage1::accept_table(&crate::resident::TABLE, built_minor) {
+            stage1::log_refusal(&why);
+            stage1.abandon();
+            return PackageStatus::Incompatible;
+        }
+        self.placed.set(Some((entry, built_minor)));
+        status
+    }
+    unsafe fn start_package(&self) {
+        let Some((entry, _)) = self.placed.get() else { return };
+        if let Some(hooks) = stage1::start(entry, &crate::resident::TABLE) {
+            hooks::install(hooks);
+        }
     }
     unsafe fn set_safe(&self) {
         hooks::boot_safe()

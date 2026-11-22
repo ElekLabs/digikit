@@ -7,17 +7,23 @@
 //! `dkrt_sdk::syspkg::Header` (patchkit writes it with the same type).
 //!
 //! - `source`: where the bytes come from (`PackageSource`), and the store implementation;
-//! - `placer`: where the bytes go (`Placer`); the arena-top placement joins after RC2s-1 S7.
-//! - `load`: the steps.
+//! - `placer`: where the bytes go (`Placer`), and `arena_placer`, the device's: a block at the arena top, relocated in place;
+//! - `load`: the steps;
+//! - `start`: the table check before the entry and the call of the entry.
 
+mod arena_placer;
 mod load;
 mod placer;
 mod source;
+mod start;
 
+pub use arena_placer::ArenaPlacer;
 pub use placer::Placer;
 pub use source::{PackageSource, StoreSource};
+pub use start::{accept_table, log_refusal, start};
 
 use crate::level::PackageStatus;
+use dkrt_abi::dev_addr::DevAddr;
 
 /// The system package's path in the store (the root `ROOT_STORE`, a NUL-terminated key as `store::find` takes it).
 pub const PACKAGE_PATH: &[u8] = b"digikit/system.dksp\0";
@@ -32,12 +38,25 @@ pub struct Stage1<'a, S: PackageSource, P: Placer> {
     source: S,
     placer: P,
     chunk: &'a mut [u8],
+    /// After a `load` that gave `Ok`: the package's entry and the resident table minor it was built against.
+    placed: Option<(DevAddr, u16)>,
 }
 
 impl<'a, S: PackageSource, P: Placer> Stage1<'a, S, P> {
     pub fn new(source: S, placer: P, chunk: &'a mut [u8]) -> Self {
         assert!(chunk.len() >= 512 && chunk.len() % 512 == 0);
-        Stage1 { source, placer, chunk }
+        Stage1 { source, placer, chunk, placed: None }
+    }
+
+    /// The entry of the placed package and the resident table minor it was built against: `Some` after a `load` that gave `PackageStatus::Ok`.
+    pub fn placed(&self) -> Option<(DevAddr, u16)> {
+        self.placed
+    }
+
+    /// Give the placed package back (its table was refused after all): the block returns to the arena and `placed` is empty.
+    pub fn abandon(&mut self) {
+        self.placer.abandon();
+        self.placed = None;
     }
 
     /// The placer, after `load` (what it holds is the package when the status was `Ok`).

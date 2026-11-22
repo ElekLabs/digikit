@@ -59,21 +59,22 @@ impl SafeReason {
     }
 }
 
-/// Why a boot runs the resident core only.
+/// Why a boot runs the resident core only. The discriminant is the `CORE_*` value of `DkrtBootInfo.core_cause` (`code`).
+#[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoreOnlyReason {
-    PackageMissing,
-    PackageIncompatible,
-    PackageDamaged,
-    PackageUnreadable,
+    PackageMissing = CORE_MISSING,
+    PackageIncompatible = CORE_INCOMPATIBLE,
+    PackageDamaged = CORE_DAMAGED,
+    PackageUnreadable = CORE_UNREADABLE,
     /// The counter reached `CORE_ONLY_AFTER`: crashes went on in safe mode.
-    Crashes,
+    Crashes = CORE_CRASHES,
 }
 
 impl CoreOnlyReason {
-    /// The word the SAFE log event carries for a core-only boot (argument 3; 0 is a boot that is not core-only).
+    /// `DkrtBootInfo.core_cause` and the SAFE log event's argument 3 (`CORE_NONE`, 0, is a boot that is not core-only).
     pub fn code(self) -> u32 {
-        self as u32 + 1
+        self as u32
     }
 }
 

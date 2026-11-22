@@ -50,8 +50,14 @@ impl BootEnv for FakeBootEnv<'_> {
     fn platform(&self) -> &FakePlatform {
         self.p
     }
-    unsafe fn package_status(&self) -> PackageStatus {
+    unsafe fn load_package(&self) -> PackageStatus {
+        self.note("stage1");
         self.package.get()
+    }
+    /// The test-only attach: the package of this binary gets the resident table (the device's stage 1 places the package file instead).
+    unsafe fn start_package(&self) {
+        self.note("package");
+        crate::hooks::attach_package(&crate::resident::TABLE);
     }
     unsafe fn settings_load(&self) {
         self.note("settings");

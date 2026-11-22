@@ -67,3 +67,130 @@ fn the_built_package_artifact_has_its_entry_and_links_only_through_the_table() {
         assert_eq!(now, was + BASE);
     }
 }
+
+// ---- the arena placer: the real artifact at the arena top -------------------------------------------------------------------
+
+mod arena_top {
+    use super::*;
+    use crate::arena;
+    use crate::fake_platform::test_arena::TestArena;
+    use crate::platform::st;
+    use dkrt_sdk::syspkg::body::BodyHeader;
+
+    const BASE_CHUNK: usize = 4096;
+
+    /// Stage 1 over `file` with the device's placer, in a fresh arena; `then` sees the result while the arena is up.
+    fn placed<R>(file: &[u8], then: impl FnOnce(PackageStatus, &Stage1<'_, StorageSource<'_>, ArenaPlacer>) -> R) -> R {
+        let _arena = TestArena::lock();
+        let card = card_with(file);
+        let mut chunk = vec![0u8; BASE_CHUNK];
+        unsafe {
+            arena::init();
+            let mut s = Stage1::new(StorageSource::new(&card), ArenaPlacer::new(), &mut chunk);
+            let status = s.load();
+            then(status, &s)
+        }
+    }
+
+    /// A package file whose body header names `image` bytes of image, `bss` bytes of bss and the relocations `relocs` (image offsets).
+    fn small_package(image: u32, bss: u32, relocs: &[u32]) -> Vec<u8> {
+        let h = BodyHeader { entry: 2, image, bss, relocs: relocs.len() as u32, align: 4 };
+        let mut b = h.encode().to_vec();
+        b.extend((0..image).map(|i| (i * 5 + 1) as u8));
+        for r in relocs {
+            b.extend_from_slice(&r.to_be_bytes());
+        }
+        package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR, &b)
+    }
+
+    fn round16(n: u32) -> u32 {
+        (n + 15) & !15
+    }
+
+    #[test]
+    fn the_built_artifact_sits_at_the_arena_top_relocated_to_its_block_with_its_bss_cleared() {
+        let f = artifact();
+        let body = &f[HEADER_BYTES..];
+        let h = BodyHeader::decode(body).unwrap();
+        let _arena = TestArena::lock();
+        let card = card_with(&f);
+        let mut chunk = vec![0u8; BASE_CHUNK];
+        unsafe {
+            arena::init();
+            let before = arena::stats();
+            // dirty memory where the package will lie: a bss that stage 1 did not clear, or a relocation table left in it, shows
+            let need = h.placed_bytes() as u32;
+            let hi = st().arena.hi;
+            core::ptr::write_bytes(DevAddr::new(hi - round16(need)).ptr::<u8>(), 0xa5, round16(need) as usize);
+            let mut s = Stage1::new(StorageSource::new(&card), ArenaPlacer::new(), &mut chunk);
+            assert_eq!(s.load(), PackageStatus::Ok);
+            let (entry, minor) = s.placed().expect("a placed package has its entry");
+            assert_eq!(minor, RESIDENT_TABLE_MINOR);
+            let base = entry.get() - h.entry;
+            // the block ends at the top of the arena, and the arena counts it as used (headers included)
+            assert_eq!(base - dkrt_sdk::syspkg::body::HEADER_BYTES as u32 + round16(need), hi, "the block ends at the arena top");
+            let (free_now, _) = arena::stats();
+            assert_eq!(before.0 - free_now, round16(need) + dkneeds::ARENA_HDR);
+            // the image is the unrelocated one plus the base at each relocation entry
+            let mut want = body[dkrt_sdk::syspkg::body::HEADER_BYTES..][..h.image as usize].to_vec();
+            relocate(&mut want, h.reloc_table(body), base).unwrap();
+            let got = core::slice::from_raw_parts(DevAddr::new(base).ptr::<u8>(), h.image as usize);
+            assert!(got == &want[..], "the placed image differs from the relocated one");
+            // the bss after it is zero
+            let bss = core::slice::from_raw_parts(DevAddr::new(base + h.image).ptr::<u8>(), h.bss as usize);
+            assert!(bss.iter().all(|b| *b == 0), "the bss is cleared");
+            // the entry is inside the image, and the table it was built against fits this core's
+            assert!(entry.get() >= base && entry.get() < base + h.image);
+            accept_table(&crate::resident::TABLE, minor).expect("the artifact's table fits this core");
+            // an abandoned package gives the arena back whole
+            s.abandon();
+            assert_eq!(arena::stats(), before);
+        }
+    }
+
+    #[test]
+    fn a_package_that_does_not_fit_the_arena_is_damaged_and_takes_none_of_it() {
+        placed(&small_package(16, ARENA_BYTES as u32, &[]), |status, s| {
+            assert_eq!(status, PackageStatus::Damaged);
+            assert!(s.placed().is_none());
+            let (free, largest) = unsafe { arena::stats() };
+            assert!(free >= largest && largest > 0, "the arena is whole");
+            assert!(unsafe { !arena::alloc(ARENA_BYTES as u32 - 64).is_null() }, "the whole arena is still free");
+        });
+    }
+
+    #[test]
+    fn a_body_that_has_no_body_header_is_damaged_before_anything_is_placed() {
+        placed(&package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR, &body(300)), |status, s| {
+            assert_eq!(status, PackageStatus::Damaged);
+            assert!(s.placed().is_none());
+            assert!(unsafe { !arena::alloc(ARENA_BYTES as u32 - 64).is_null() });
+        });
+    }
+
+    #[test]
+    fn a_relocation_outside_the_image_is_damaged_and_the_block_goes_back() {
+        // a relocation at 14 would be a word that ends past the 16-byte image
+        placed(&small_package(16, 8, &[14]), |status, s| {
+            assert_eq!(status, PackageStatus::Damaged);
+            assert!(s.placed().is_none());
+            assert!(unsafe { !arena::alloc(ARENA_BYTES as u32 - 64).is_null() });
+        });
+    }
+
+    #[test]
+    fn a_small_package_is_placed_whole_with_its_relocation_applied() {
+        placed(&small_package(16, 8, &[4]), |status, s| {
+            assert_eq!(status, PackageStatus::Ok);
+            let (entry, _) = s.placed().unwrap();
+            let base = entry.get() - 2;
+            let image = unsafe { core::slice::from_raw_parts(DevAddr::new(base).ptr::<u8>(), 16) };
+            let pattern: Vec<u8> = (0..16u32).map(|i| (i * 5 + 1) as u8).collect();
+            // every byte is the file's, but the word at 4, which lies in the relocation table and has the base added
+            assert_eq!(&image[..4], &pattern[..4]);
+            assert_eq!(&image[8..], &pattern[8..]);
+            let was = u32::from_be_bytes(pattern[4..8].try_into().unwrap());
+            assert_eq!(u32::from_be_bytes(image[4..8].try_into().unwrap()), was.wrapping_add(base));
+        });
+    }
+}

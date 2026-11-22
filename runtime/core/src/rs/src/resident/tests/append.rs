@@ -69,7 +69,7 @@ fn expected() -> std::vec::Vec<u8> {
 /// The fields of the table, in one list for the tests that go through every group.
 macro_rules! each_group {
     ($m:ident) => {
-        $m!(views, platform, boot, dlog, store, store_writer, card, settings, arena, selection, worker, io, intro, sdk_files, api, fault, transport, state, imports);
+        $m!(views, platform, boot, dlog, store, store_writer, card, settings, arena, selection, worker, io, intro, sdk_files, api, fault, transport, state, imports, links);
     };
 }
 
@@ -141,4 +141,27 @@ fn a_missing_group_is_refused_by_name() {
         })*};
     }
     each_group!(one);
+}
+
+/// `links` is the group that version 1.1 appended (RC2s-2 step c): the layout of a 1.0 package is the prefix of a 1.1 table and of the checked `Resident`, so a 1.0 package
+/// reads a 1.1 table at the offsets it always had, and a 1.1 package finds a 1.0 core out by its minor (and by the pointer the table is too short for).
+#[test]
+fn the_links_group_is_the_last_one_so_a_1_0_package_is_a_prefix() {
+    use core::mem::{offset_of, size_of};
+    assert_eq!(RESIDENT_MINOR, 1, "this test is about the first append: a later minor appends after `links` and needs its own case");
+    let pointer = size_of::<*const ()>();
+    assert_eq!(offset_of!(ResidentTable, links) + pointer, size_of::<ResidentTable>());
+    assert_eq!(offset_of!(Resident, links) + size_of::<dkrt_abi::resident::LinkRows>(), size_of::<Resident>());
+    // the 1.0 table, as the 1.0 core built it: no `links` pointer, minor 0
+    let table_1_0_bytes = offset_of!(ResidentTable, links) as u32;
+    let mut core_1_0 = copy();
+    core_1_0.header.minor = 0;
+    core_1_0.header.size = table_1_0_bytes;
+    core_1_0.links = core::ptr::null();
+    // a 1.1 package on that core: refused by the minor, before any group is read
+    let refused = open(&core_1_0, RESIDENT_MINOR).err().expect("a 1.1 package on a 1.0 core is refused");
+    assert_eq!((refused.reason, refused.found, refused.need), (Reason::Minor, 0, 1));
+    // a 1.0 package on the 1.1 table: accepted (the version rule); it reads the groups before `links` as they were
+    assert!(open(&copy(), 0).is_ok());
+    assert_eq!(copy().header.minor, RESIDENT_MINOR);
 }

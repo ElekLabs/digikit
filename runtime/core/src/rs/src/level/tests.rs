@@ -86,6 +86,15 @@ fn safe_reason_codes_are_the_boot_info_reasons() {
 }
 
 #[test]
+fn core_only_reason_codes_are_the_boot_info_causes() {
+    assert_eq!(CoreOnlyReason::Crashes.code(), CORE_CRASHES);
+    assert_eq!(CoreOnlyReason::PackageMissing.code(), CORE_MISSING);
+    assert_eq!(CoreOnlyReason::PackageIncompatible.code(), CORE_INCOMPATIBLE);
+    assert_eq!(CoreOnlyReason::PackageDamaged.code(), CORE_DAMAGED);
+    assert_eq!(CoreOnlyReason::PackageUnreadable.code(), CORE_UNREADABLE);
+}
+
+#[test]
 fn the_first_safe_trigger_found_is_the_reason() {
     let all = Inputs {
         safe_once: true,

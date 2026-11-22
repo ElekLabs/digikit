@@ -58,8 +58,10 @@ enum End {
 #[derive(Debug, PartialEq, Eq)]
 struct Booted {
     safe: bool,
-    /// `DkrtBootInfo.reason`: a `SAFE_*` value; `SAFE_NONE` for a normal boot and for a core-only one.
+    /// `DkrtBootInfo.reason`: a `SAFE_*` value; `SAFE_NONE` for a normal boot, `SAFE_CORE_ONLY` for a core-only one.
     reason: u32,
+    /// `DkrtBootInfo.core_cause`: a `CORE_*` value; `CORE_NONE` unless the boot is core-only.
+    cause: u32,
     core_only: bool,
     loaded: bool,
 }
@@ -81,7 +83,7 @@ unsafe fn boot_with(f: &FakePlatform, env: &FakeBootEnv, end: End) -> Booted {
         End::Stable => stable_period(f),
     }
     let b = info();
-    Booted { safe: b.safe != 0, reason: b.reason, core_only: b.safe != 0 && b.reason == SAFE_NONE, loaded: env.loaded() }
+    Booted { safe: b.safe != 0, reason: b.reason, cause: b.core_cause, core_only: b.safe != 0 && b.reason == SAFE_CORE_ONLY, loaded: env.loaded() }
 }
 
 /// A boot with nothing special about it.
@@ -313,8 +315,9 @@ fn a_core_only_boot_attaches_no_package_and_runs_none_of_its_code() {
             let env = FakeBootEnv::new(&f);
             env.package.set(PackageStatus::Missing);
             let b = boot_with(&f, &env, End::FirstPass);
-            assert_eq!((b.safe, b.core_only), (true, true));
+            assert_eq!((b.safe, b.core_only, b.reason, b.cause), (true, true, SAFE_CORE_ONLY, CORE_MISSING));
             assert!(!hooks::installed(), "no package hook is installed after a core-only boot");
+            assert!(env.steps.borrow().contains(&"stage1") && !env.steps.borrow().contains(&"package"), "stage 1 looked, the package was not started");
             assert!(!env.steps.borrow().contains(&"safe"), "the package was not told to go safe");
             // the same core boots normally the next time: the boot attaches the package
             let b = boot(&f, End::Early);
@@ -404,5 +407,46 @@ fn a_device_object_the_runtime_cannot_read_takes_no_boot_and_attaches_no_package
             boot::enter(true, &env);
             assert!(hooks::installed(), "a valid device boots and attaches");
         });
+    }
+}
+
+#[test]
+fn stage_1_runs_before_the_decision_and_the_package_starts_only_in_a_boot_that_runs_it() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        let env = FakeBootEnv::new(&f);
+        let b = boot_with(&f, &env, End::Early);
+        assert_eq!((b.safe, b.reason, b.cause), (false, SAFE_NONE, CORE_NONE));
+        let steps = env.steps.borrow().clone();
+        let at = |name: &str| steps.iter().position(|s| *s == name).unwrap_or_else(|| panic!("no step {name}: {steps:?}"));
+        assert!(at("stage1") < at("package") && at("package") < at("tables") && at("tables") < at("load"), "{steps:?}");
+        // a safe boot (a DSP hang before) starts the package for its menu; it loads no module
+        let env = FakeBootEnv::new(&f);
+        env.hang.set(true);
+        let b = boot_with(&f, &env, End::Early);
+        assert_eq!((b.safe, b.reason, b.core_only), (true, SAFE_DSP, false));
+        assert!(env.steps.borrow().contains(&"package") && !env.steps.borrow().contains(&"load"));
+    }
+}
+
+#[test]
+fn every_way_a_package_is_refused_is_a_core_only_boot_with_its_own_cause() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        for (status, cause) in [
+            (PackageStatus::Missing, CORE_MISSING),
+            (PackageStatus::Incompatible, CORE_INCOMPATIBLE),
+            (PackageStatus::Damaged, CORE_DAMAGED),
+            (PackageStatus::Unreadable, CORE_UNREADABLE),
+        ] {
+            let f = fresh_card();
+            hooks::without_package(|| {
+                let env = FakeBootEnv::new(&f);
+                env.package.set(status);
+                let b = boot_with(&f, &env, End::Early);
+                assert_eq!((b.safe, b.core_only, b.reason, b.cause, b.loaded), (true, true, SAFE_CORE_ONLY, cause, false), "{status:?}");
+            });
+        }
     }
 }

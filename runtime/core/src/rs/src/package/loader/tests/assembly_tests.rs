@@ -129,14 +129,14 @@ fn object_abi(json: &str) -> &str {
     json[from..].split('"').next().unwrap()
 }
 
-/// The committed runtime object (its sections, joined): `cmpi.l #SVC_ABI,d0` of `abi_ok` is `0c80` and the word. A host build of the runtime has another `SVC_ABI`
-/// (64-bit sizes), so the runtime of the device is the object.
-fn runtime_object() -> String {
-    let json = read(&repo().join("runtime/core/build/runtime.dko.json"), "patchkit build runtime/core");
+/// The committed object of the system package (its sections, joined): `cmpi.l #SVC_ABI,d0` of `abi_ok` is `0c80` and the word. The loader, and so the check, is package
+/// code since RC2s-2 step d (the resident object holds none). A host build has another `SVC_ABI` (64-bit sizes), so the code of the device is the object.
+fn package_object() -> String {
+    let json = read(&repo().join("runtime/core/build/package.dko.json"), "patchkit build runtime/core");
     hex_sections(std::str::from_utf8(&json).unwrap()).join("|")
 }
 
-/// The registry of the device: the ABI check of the runtime object, the rows of the runtime's own registry.
+/// The registry of the device: the ABI check of the package object, the rows of the runtime's own registry.
 pub(super) struct DeviceRegistry {
     runtime: String,
 }
@@ -610,7 +610,7 @@ pub(super) unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modu
     for (addr, bytes) in stock_sites(dev).values() {
         p.put_code(*addr, bytes);
     }
-    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: runtime_object() });
+    let mut l = Loader::new(p, Card::new(files, dev.profile.id), DeviceRegistry { runtime: package_object() });
     l.reset_plan();
     for (k, m) in modules.iter().enumerate() {
         l.capture(k, &packed(dev, m.leaf, "dkm", m.nx));
@@ -1913,17 +1913,17 @@ fn every_hook_and_firmware_import_of_a_service_file_is_listed_by_the_port_file()
 
 // ---- consistency of the generated artifacts (no firmware needed) ----------------------------------------------------------------
 
-/// The committed objects of the service files carry the ABI word the runtime object compares with (`dk_svc_abi` against the immediate of `abi_ok`), and the packed
+/// The committed objects of the service files carry the ABI word the package object compares with (`dk_svc_abi` against the immediate of `abi_ok`), and the packed
 /// file of each device has it in header word 0x3c. A source change that moves `SVC_ABI` leaves a service object stale: the loader then refuses every service file.
 #[test]
-fn the_service_objects_and_files_carry_the_abi_word_of_the_runtime_object() {
-    let runtime = runtime_object();
+fn the_service_objects_and_files_carry_the_abi_word_of_the_package_object() {
+    let package = package_object();
     for s in SERVICES.iter().filter(|s| s.nx.starts_with("core/") && s.leaf != "samples") {
         let json = read(&repo().join(format!("services/{}/dks/build/{}.dko.json", s.leaf, s.leaf)), "patchkit build --tree services");
         let abi = object_abi(std::str::from_utf8(&json).unwrap()).to_string();
         assert!(
-            runtime.contains(&std::format!("0c80{abi}")),
-            "{}.dko.json carries ABI word {abi}, the runtime object another: patchkit build services/{}/dks",
+            package.contains(&std::format!("0c80{abi}")),
+            "{}.dko.json carries ABI word {abi}, the package object another: patchkit build services/{}/dks",
             s.leaf,
             s.leaf
         );

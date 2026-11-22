@@ -26,7 +26,7 @@ const KINDS = {
 /**
  * The guard of a wait for the reset after a crash, in emulator steps (4.5 DSP blocks each): the crash comes `blocks` after the first UI-loop pass and the run is paused after that
  * pass, so a wait never needs more than the longest delay in steps. It is a hang guard in emulated time; the wait itself ends on the firmware's own events (`cpu.reset`, then
- * the cold boot's `firmware.loaded` and a ready ColdFire side). Measured on DT2: the early crash is reached in about 575 steps, the late one in about 1015.
+ * the cold boot's `firmware.loaded` and a ready ColdFire side). Measured on the device of the test (its `devices` record): the early crash is reached in about 575 steps, the late one in about 1015.
  */
 const WAIT_STEPS = Math.ceil(Math.max(...Object.values(KINDS).map((k) => k.blocks)) / 4.5);
 
