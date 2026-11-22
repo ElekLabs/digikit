@@ -1,6 +1,6 @@
 //! The refusal of a live job before anything changes: what the caller knows (`Facts`) put in order.
 use super::*;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_sdk::*;
 
 /// What the caller knows about the system when a reload is asked for. Each field is read where it lives (the loader, the card, the module's
@@ -31,7 +31,7 @@ impl Facts {
 }
 
 /// The refusal of a job on module record `rec` (`None` for a load): the generic ones (`refusal` over `Facts::of`), then for a module those of its services (`service`).
-pub(crate) unsafe fn refusal_for<P: Platform>(p: &P, rec: Option<usize>, card_busy: bool, service: impl FnOnce(usize) -> Option<i32>) -> Option<i32> {
+pub(crate) unsafe fn refusal_for<P: PackagePlatform>(p: &P, rec: Option<usize>, card_busy: bool, service: impl FnOnce(usize) -> Option<i32>) -> Option<i32> {
     match (refusal(p, &Facts::of(rec, card_busy)), rec) {
         (None, Some(r)) => service(r),
         (generic, _) => generic,
@@ -42,7 +42,7 @@ pub(crate) unsafe fn refusal_for<P: Platform>(p: &P, rec: Option<usize>, card_bu
 /// readable), an open upload, card operations, menus of the module (`Facts::menus`: false for a load, which has no module yet). The first that holds names the status.
 /// The services' own refusals (`Service::teardown_refusal`: a service that cannot give back the module's state now) come after it, for an unload and a reload: the manager asks them
 /// (`RtHost::can_stop`).
-pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
+pub unsafe fn refusal<P: PackagePlatform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {
         return Some(E_SAFE_MODE);
     }

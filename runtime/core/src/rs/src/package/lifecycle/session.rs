@@ -7,7 +7,7 @@ use crate::package::admission::Admission;
 use core::ptr::addr_of_mut;
 use dkrt_abi::package::PackageId;
 use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::Status;
 use dkrt_abi::REC_MAX;
 use dkrt_lifecycle::{Installers, LiveSet, PackageGraph};
@@ -32,7 +32,7 @@ impl Outcome {
 /// its activation, because the manager brings packages up one at a time), the entries its start derived, and the paths of the selected modules.
 ///
 /// The seams hold a pointer to this value: it must not move and must outlive the manager. The loader is a static of the UI task on the device and a local of the test.
-pub struct Session<P: Platform, M: Images, R: Registry> {
+pub struct Session<P: PackagePlatform, M: Images, R: Registry> {
     pub(super) loader: *mut Loader<P, M, R>,
     pub(super) flight: Flight,
     pub(super) entries: Entries,
@@ -60,16 +60,16 @@ pub struct Session<P: Platform, M: Images, R: Registry> {
 }
 
 /// A pointer to a [`Session`], held by each seam.
-pub(super) struct Handle<P: Platform, M: Images, R: Registry>(pub(super) *mut Session<P, M, R>);
+pub(super) struct Handle<P: PackagePlatform, M: Images, R: Registry>(pub(super) *mut Session<P, M, R>);
 
-impl<P: Platform, M: Images, R: Registry> Clone for Handle<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Clone for Handle<P, M, R> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<P: Platform, M: Images, R: Registry> Copy for Handle<P, M, R> {}
+impl<P: PackagePlatform, M: Images, R: Registry> Copy for Handle<P, M, R> {}
 
-impl<P: Platform, M: Images, R: Registry> Handle<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Handle<P, M, R> {
     /// The shared state and the loader. The seams run on one task, one call at a time.
     pub(super) unsafe fn get<'a>(self) -> (&'a mut Session<P, M, R>, &'a mut Loader<P, M, R>) {
         let s = &mut *self.0;
@@ -78,7 +78,7 @@ impl<P: Platform, M: Images, R: Registry> Handle<P, M, R> {
     }
 }
 
-impl<P: Platform, M: Images, R: Registry> Session<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Session<P, M, R> {
     /// The state for `loader`, with the store paths of the selected modules by selection index (`None`: no module there). By value, for host tests: the session is 4.4 KB, so the
     /// device builds it in place (`Session::init`).
     #[cfg(test)]

@@ -23,7 +23,7 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::Owner;
 use dkrt_abi::package::PackageId;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_sdk::*;
 
 /// The most bytes of a header table the loader keeps for the planning of a boot (a module with eight machines, three effects and nine needs has about 260; a larger table is not
@@ -150,7 +150,7 @@ impl Slot {
 /// What module code can reach while `init` or `fini` runs is not in here: the module records (`DKRT_STATE.modules`), `DKRT_PATHS`, `DKRT_MENUS`,
 /// `DKRT_MODULE_RUNTIME`, `DKRT_CTXS`, `DKRT_TICKS`, `BOOT_IDX`, `CALLED_NEED`, `collect::ACTIVE`, `DKRT_BOOT` and the service rows. The loader is their
 /// only writer.
-pub struct Loader<P: Platform, M: Images, R: Registry> {
+pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     p: P,
     m: M,
     r: R,
@@ -299,7 +299,7 @@ pub(crate) unsafe fn test_clear_torn() {
     loader().torn = [0; records::REC_MAX];
 }
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// Safe mode: the installer writes nothing.
     pub(crate) fn set_safe(&mut self) {
         self.installer.set_armed(false)

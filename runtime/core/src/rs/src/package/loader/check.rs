@@ -41,7 +41,7 @@ impl Checked {
 }
 
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// The selection index of module record `rec`, `u8::MAX` when it has none.
     pub(super) fn sel_of(&self, rec: usize) -> u8 {
         self.sel_of_rec[rec].wrapping_sub(1)

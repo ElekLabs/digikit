@@ -193,7 +193,7 @@ fn name(keys: &Keys, kind: u8, hash: u32, n: u16) -> Lookup {
 }
 
 /// The check value of the `len` live bytes at `addr`: the first 8 bytes of their SHA-256.
-pub unsafe fn site_check<P: dkrt_abi::platform::Platform>(p: &P, addr: u32, len: usize) -> [u8; 8] {
+pub unsafe fn site_check<P: dkrt_abi::package_platform::PackagePlatform>(p: &P, addr: u32, len: usize) -> [u8; 8] {
     let mut cur = [0u8; SITE_LEN_MAX as usize];
     p.read_code(addr, &mut cur[..len]);
     let mut sha = crate::sha256::Sha::new();

@@ -1,7 +1,7 @@
 use super::session::Session;
 use crate::package::loader::{Images, Registry};
 use dkrt_abi::package::PackageId;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::Status;
 use dkrt_abi::REC_MAX;
 use dkrt_fit::ledger::{ResourceDecl, Want};
@@ -13,7 +13,7 @@ use dkrt_lifecycle::{Api, Entry, Manifest};
 ///
 /// Today's headers pack no pools and no claims, so the manifest has none (RC3 packs them). `admit` is the rules of the core (`admission.rs`) over the loader's tables. The entries of a package are those its start derived (`Session`), and are valid
 /// from the start of that package to the start of the next, which is when the manager installs them.
-pub struct RtManifest<P: Platform, M: Images, R: Registry> {
+pub struct RtManifest<P: PackagePlatform, M: Images, R: Registry> {
     shared: *mut Session<P, M, R>,
     views: [(PackageId, &'static [u8]); REC_MAX],
     n: usize,
@@ -63,7 +63,7 @@ impl CoreApis {
     }
 }
 
-impl<P: Platform, M: Images, R: Registry> RtManifest<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> RtManifest<P, M, R> {
     /// The manifest of the first `modules` selection indices and the providers of the search, over the loader of `shared`.
     ///
     /// # Safety
@@ -103,7 +103,7 @@ impl<P: Platform, M: Images, R: Registry> RtManifest<P, M, R> {
     }
 }
 
-impl<P: Platform, M: Images, R: Registry> Manifest for RtManifest<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Manifest for RtManifest<P, M, R> {
     fn tables(&self) -> &[(PackageId, &[u8])] {
         &self.views[..self.n]
     }

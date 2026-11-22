@@ -6,7 +6,7 @@ use crate::package::loader::{Images, Loader, PhaseKind, Registry};
 use crate::package::admission::Admission;
 use dkrt_abi::package::PackageId;
 use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::MAX_MODULES;
 use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report};
 use dkrt_sdk::sel::Record;
@@ -19,14 +19,14 @@ pub type Manager<P, M, R> = PackageManager<RtManifest<P, M, R>, RtPlacer<P, M, R
 
 /// The runtime's package lifecycle: the session the seams share and the manager over them. It lives for the whole run: the boot brings the selection up through it, the live job loads,
 /// unloads and reloads modules through it, and the DSP loader reports a failed DSP part to it. It must not move once `init` has run (the seams point into the session).
-pub struct Rt<P: Platform, M: Images, R: Registry> {
+pub struct Rt<P: PackagePlatform, M: Images, R: Registry> {
     session: Session<P, M, R>,
     /// Written in place by `init`; valid while `up`.
     manager: MaybeUninit<Manager<P, M, R>>,
     up: bool,
 }
 
-impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// The lifecycle over `loader` at `out`, with no manager yet, written in place: `Rt` is 8.8 KB and the boot's stack is shared with the firmware, so it is never built on the
     /// stack and moved.
     ///

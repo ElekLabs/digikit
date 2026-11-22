@@ -1,7 +1,6 @@
 //! The teardown of a reload before the old code goes: close every way into the module, then wait until nothing is inside (`Loader::reload_quiesce`), or give the module back
 //! its tick and commands (`Loader::reload_abort`).
 use super::*;
-use dkrt_abi::platform::blocks_since;
 
 /// DSP blocks the reload waits after it closed every way into the module's code (its tick, its commands, its sinks): the tasks that were inside have
 /// returned and a DSP block that read its rows has ended. The block clock runs about 1500 times a second.
@@ -9,11 +8,11 @@ const DRAIN_BLOCKS: u32 = 2;
 
 /// Have `DRAIN_BLOCKS` blocks passed since `start` (the block count when the entries were closed)? A platform with no block clock (a device without a DSP,
 /// the host tests) has nothing to wait for: always true.
-fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
-    blocks_since(p, start).is_none_or(|n| n >= DRAIN_BLOCKS)
+fn drained<P: PackagePlatform>(p: &P, start: Option<u32>) -> bool {
+    p.blocks_since(start).is_none_or(|n| n >= DRAIN_BLOCKS)
 }
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// The first step of a reload's teardown, called once per pass until it returns `OK`: close every way into the module's code, then wait until nothing is inside.
     /// The tick stops; its SysEx commands answer `E_BUSY` from now on; its sinks, with the span clock, are cleared (under the interrupt mask); the block count is
     /// noted. It returns `E_BUSY` until no command of the module is in flight and `DRAIN_BLOCKS` blocks have passed (no spinning: the next UI pass asks again).

@@ -10,7 +10,7 @@
 //! its listing: the next tick frees the block and cancels the request, and the client's next `poll` of that ticket gives `E_LOST` (the closest existing
 //! code; there is no timeout code). A request of the same client replaces the expired state. Without a block counter nothing expires.
 use core::ptr::{addr_of, addr_of_mut, null_mut};
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::storage::{DirEntry, EntryKind, ListStep, Storage};
 use dkrt_sdk::{
     api::FilesEventFn,
@@ -128,7 +128,7 @@ pub unsafe fn client() -> i32 {
 }
 /// Is a path of `n` bytes too long for `root`? The store's limit is the store path (159 bytes); the samples root's is the device's own
 /// (`DeviceProfile::sample_path_max`, from the device file). The empty path is the root itself.
-pub(crate) fn path_too_big<P: dkrt_abi::platform::Platform>(p: &P, root: u32, n: usize) -> bool {
+pub(crate) fn path_too_big<P: dkrt_abi::package_platform::PackagePlatform>(p: &P, root: u32, n: usize) -> bool {
     (root == STORE && n > 159) || (root == SAMPLES && n != 0 && n > p.sample_path_max() as usize)
 }
 
@@ -215,7 +215,7 @@ unsafe fn kill(i: usize) {
     }
 }
 
-pub unsafe fn list_with<P: Platform + Storage>(
+pub unsafe fn list_with<P: PackagePlatform + Storage>(
     p: &P,
     client: u32,
     root: u32,
@@ -308,7 +308,7 @@ pub unsafe fn list_with<P: Platform + Storage>(
 pub unsafe fn poll(client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
     poll_with(&crate::platform::PLATFORM, client, ticket, out, capacity)
 }
-pub(crate) unsafe fn poll_with<P: Platform>(p: &P, client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
+pub(crate) unsafe fn poll_with<P: PackagePlatform>(p: &P, client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
     // Validate before consuming even if no row is currently available.
     if out.is_null()
         || capacity < core::mem::size_of::<FileEntry>() as u32
@@ -457,7 +457,7 @@ pub unsafe fn tick() {
     tick_with(&crate::platform::PLATFORM)
 }
 
-pub(crate) unsafe fn tick_with<P: Platform + Storage>(p: &P) {
+pub(crate) unsafe fn tick_with<P: PackagePlatform + Storage>(p: &P) {
     let entered = locked(|_| {
         if TICKING {
             false

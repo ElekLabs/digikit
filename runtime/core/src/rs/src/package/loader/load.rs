@@ -1,7 +1,7 @@
 //! The load of one file into a record: claim, place, `init` and the end of a load (`Loader::load`).
 use super::*;
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// Validate and load the `.dkm` at `path`. The tables are checked after every attempt, and none starts once a check has failed (`invariants::check`).
     pub unsafe fn load(&mut self, path: *const u8) -> i32 {
         self.load_file(path, Slot::Free)

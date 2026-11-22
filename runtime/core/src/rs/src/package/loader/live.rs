@@ -6,7 +6,7 @@ use crate::package::admission::Admission;
 use dkrt_lifecycle::{LiveSet, PackageGraph};
 use core::mem::MaybeUninit;
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// The selection indices of the modules that are loaded, and `extra` (the index a reload is about to load into).
     pub(super) unsafe fn live_at(&self, extra: usize) -> [bool; SEL_MAX] {
         let mut live = [false; SEL_MAX];
@@ -129,7 +129,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     }
 }
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the
     /// record is a live module of the boot selection; the file passes every check of a load (`check_file`), has the same name, a header table the planner can keep, and
     /// every key of the old file (`E_RELOAD_KEYS`); the planner accepts the live set with the file in the old module's slot (`caps`: `live_caps`). `OK`, or the refusal.

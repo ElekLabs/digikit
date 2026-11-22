@@ -30,7 +30,7 @@ mod unload;
 //
 // The package manager runs a record's steps in its own order (`package.rs`, `lifecycle/`); the tests of the file checks and the role steps below drive the same step functions one
 // record at a time over the loader's fakes, through the one-file load that `dkrt_load` still is. A take-down, a reload and a live load run through the manager (`adopt`).
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// Load the service file at `path` into provider record `j`.
     pub(super) unsafe fn load_provider(&mut self, path: *const u8, j: usize) -> i32 {
         self.load_file(path, Slot::Provider(MAX_MODULES + j))

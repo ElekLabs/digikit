@@ -67,7 +67,7 @@ fn record_of(id: PackageId) -> usize {
     id.0 as usize
 }
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// The header table of package `id` that the planner kept: the module of the selection index (`capture`), the provider the search found. `None` when there is none.
     pub(crate) fn package_table(&self, id: PackageId) -> Option<&[u8]> {
         let rec = record_of(id);

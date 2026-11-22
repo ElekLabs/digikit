@@ -1,7 +1,7 @@
 //! The boot plan over the header tables of the selection: capture, provider search, admission and the numbering of keys.
 use super::*;
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// Keep the header table of the `.dkm` `file` (the whole file in the staging buffer) for selection index `k`.
     pub unsafe fn capture(&mut self, k: usize, file: &[u8]) {
         if k >= SEL_MAX || file.len() < dkneeds::HEADER as usize {

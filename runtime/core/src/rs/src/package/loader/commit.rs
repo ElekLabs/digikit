@@ -1,7 +1,7 @@
 //! The commit of a loaded file: its declarations, the services' records and the DSP rows (`Loader::commit`).
 use super::*;
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 
     /// The commit of 6.3 steps 1 to 3: the declarations of a service file against its header table, the services' part (they check what their builder calls collected, write their
     /// records and declare their DSP rows), the registry walker over the block; the record block stays in the arena.

@@ -1,8 +1,7 @@
 //! The firmware identity of the flashed image.
-use crate::platform::Platform;
 
 /// The `fw_id` entry of the image's info table: the first 8 bytes of the SHA-256 of the stock firmware (two words, kept big endian); `None` for an image that has none.
-pub unsafe fn image_fw_id<P: Platform>(p: &P) -> Option<[u8; 8]> {
+pub unsafe fn image_fw_id<P: crate::package_platform::PackagePlatform>(p: &P) -> Option<[u8; 8]> {
     let at = p.info(dkneeds::keys::name_hash("fw_id"));
     if at.is_null() {
         return None;

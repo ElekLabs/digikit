@@ -6,13 +6,13 @@ use crate::state::{init_once, MAX_MODULES, STAGE_BYTES};
 use crate::{arena, boot, card, settings, store};
 use crate::package::{dsp};
 use core::ptr::read_volatile;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_sdk::*;
 
 /// The value of capacity kind number `k` (the index in `CAP_KINDS`): `base` is the runtime's own row for it. A loaded service that counts the kind answers for it
 /// and owns `used`; else the image's `cap_<kind>` info entry (an `[[info]]` of the image adapter that reserves the capacity, a pointer to a u32 limit word)
 /// gives the limit with `used` 0; else `base` (zeros for a kind with no row). The runtime names no service and no adapter: only the generic `cap_<kind>` name.
-pub(crate) unsafe fn kind_value<P: Platform>(p: &P, table: &dkrt_abi::service::ServiceTable, k: usize, base: (u8, u32, u32, u32)) -> (u8, u32, u32, u32) {
+pub(crate) unsafe fn kind_value<P: PackagePlatform>(p: &P, table: &dkrt_abi::service::ServiceTable, k: usize, base: (u8, u32, u32, u32)) -> (u8, u32, u32, u32) {
     use dkrt_sdk::proto::{CAP_CEILING, CAP_INFO_HASHES, CAP_KINDS};
     let kind = CAP_KINDS[k];
     if let Some((limit, used)) = table.cap(kind) {

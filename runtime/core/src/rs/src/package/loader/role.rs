@@ -7,7 +7,7 @@ use super::image::Head;
 use super::install::{Backend, CfItems, DspItems, HookItem, SITES_MAX};
 use super::{Images, Loader, ProvRec, Registry};
 use dkneeds::keys::{tag, Keys, FLAG_ABSENT};
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_sdk::{E_FORMAT, E_HOOK_STOCK, E_IMPORT, E_NOMEM, E_PLAN_FIT, E_RANGE, E_SVC_ABI, OK};
 
 /// What a role step may need of the file besides the record: the staged file (valid until `init` runs) and where its table and image are.
@@ -28,21 +28,21 @@ pub struct PlaceArgs {
 /// The steps of one role, in the order the loader runs them. `check` runs after the header parse and before anything is allocated (`file` is the staged
 /// file); `place` after the image is copied and before `init` (it copies what `init` could overwrite in the staging buffer); `activate` after the commit,
 /// the last thing a load does; `undo` when a later step fails or the record goes away. A step has what it needs in the Loader and its seams.
-pub struct RoleSteps<P: Platform, M: Images, R: Registry> {
+pub struct RoleSteps<P: PackagePlatform, M: Images, R: Registry> {
     pub check: unsafe fn(&mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32,
     pub place: unsafe fn(&mut Loader<P, M, R>, rec: usize, args: &PlaceArgs) -> i32,
     pub activate: unsafe fn(&mut Loader<P, M, R>, rec: usize) -> i32,
     pub undo: unsafe fn(&mut Loader<P, M, R>, rec: usize),
 }
 
-impl<P: Platform, M: Images, R: Registry> Clone for RoleSteps<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Clone for RoleSteps<P, M, R> {
     fn clone(&self) -> Self {
         *self
     }
 }
-impl<P: Platform, M: Images, R: Registry> Copy for RoleSteps<P, M, R> {}
+impl<P: PackagePlatform, M: Images, R: Registry> Copy for RoleSteps<P, M, R> {}
 
-impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> RoleSteps<P, M, R> {
     /// The steps of the role word `role`: 1 is a service, 2 the port file; every other word is a module, as before the table (`role_ok` refuses another word in the
     /// search).
     pub const fn of(role: u32) -> Self {
@@ -63,12 +63,12 @@ impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
     pub const SERVICE: Self = RoleSteps { check: service_check, place: service_place, activate: service_activate, undo: service_undo };
 }
 
-impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> RoleSteps<P, M, R> {
     /// The port file (a provider with no code): the check refuses another firmware and a bad table; place keeps the table; it publishes and installs nothing.
     pub const PORT: Self = RoleSteps { check: port_check, place: port_place, activate: no_activate, undo: service_undo };
 }
 
-unsafe fn module_check<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, file: *const u8, _: &Head) -> i32 {
+unsafe fn module_check<P: PackagePlatform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, file: *const u8, _: &Head) -> i32 {
     // only the role is checked here; a table outside the file or damaged keeps the error of the later steps
     let (off, len) = (dkrt_abi::mem::rd32(file.add(super::H_REG_OFF)), dkrt_abi::mem::rd32(file.add(super::H_REG_SIZE)));
     let size = dkrt_abi::mem::rd32(file.add(dkneeds::H_SIZE as usize));
@@ -80,13 +80,13 @@ unsafe fn module_check<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M,
         Err(_) => OK,
     }
 }
-unsafe fn no_place<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize, _: &PlaceArgs) -> i32 {
+unsafe fn no_place<P: PackagePlatform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize, _: &PlaceArgs) -> i32 {
     OK
 }
-unsafe fn no_activate<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize) -> i32 {
+unsafe fn no_activate<P: PackagePlatform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize) -> i32 {
     OK
 }
-unsafe fn no_undo<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize) {}
+unsafe fn no_undo<P: PackagePlatform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, _: usize) {}
 
 /// The table of the staged file, or the refusal.
 #[inline(never)]
@@ -98,7 +98,7 @@ unsafe fn table_of<'a>(file: *const u8, off: u32, len: u32) -> Result<Keys<'a>, 
 /// displaced length and check value. A hook the firmware lacks (the item has the `absent` flag) is skipped. A hook the port file does not list (or no port file loaded) is
 /// `E_IMPORT`, the hash kept for the log; a site the runtime cannot use is `E_RANGE`; more sites than the installer holds is `E_PLAN_FIT`.
 #[inline(never)]
-unsafe fn hook_items<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, keys: &Keys, out: &mut [HookItem; SITES_MAX]) -> Result<usize, i32> {
+unsafe fn hook_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, keys: &Keys, out: &mut [HookItem; SITES_MAX]) -> Result<usize, i32> {
     let mut n = 0;
     let mut i = 0;
     while let Some((hash, entry, _)) = keys.words(tag::HOOKS, i) {
@@ -130,7 +130,7 @@ unsafe fn hook_items<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R
 /// The `FW` item of the port file against the `fw_id` entry of the image's info table (the first 8 bytes of the SHA-256 of the stock firmware, two words). A port file
 /// for another firmware, or an image with no `fw_id`, is `E_HOOK_STOCK`, the text of a site that is not stock. (`role_ok` made sure the file has one `FW` item.)
 #[inline(never)]
-unsafe fn fw_check<P: Platform>(p: &P, keys: &Keys) -> Result<(), i32> {
+unsafe fn fw_check<P: PackagePlatform>(p: &P, keys: &Keys) -> Result<(), i32> {
     let Some(id) = keys.fw(0) else {
         return Err(E_HOOK_STOCK);
     };
@@ -140,7 +140,7 @@ unsafe fn fw_check<P: Platform>(p: &P, keys: &Keys) -> Result<(), i32> {
     Ok(())
 }
 
-unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
+unsafe fn service_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
     if !l.r.abi_ok(dkrt_abi::mem::rd32(file.add(dkneeds::H_SVC_ABI as usize))) {
         return E_SVC_ABI;
     }
@@ -176,7 +176,7 @@ unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
 /// match: the mask is dropped, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it). A `SLOTS` item
 /// carries a device mask too (bits 16 to 23 of its flags): an item for another device is dropped, and the mask of the others is cleared (`init` declares flags without it).
 #[inline(never)]
-pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::package::collect::KeysCopy) {
+pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::package::collect::KeysCopy) {
     let port = l.port_keys();
     let d = &mut keys.decl;
     let (mut from, mut to) = (0, 0);
@@ -213,7 +213,7 @@ fn index_of(rec: usize) -> usize {
     rec - dkrt_abi::MAX_MODULES
 }
 
-unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, a: &PlaceArgs) -> i32 {
+unsafe fn service_place<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, a: &PlaceArgs) -> i32 {
     let idx = index_of(rec);
     l.provs[idx] = ProvRec::EMPTY;
     l.provs[idx].image_size = a.image_size;
@@ -253,7 +253,7 @@ unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
 /// The port file's checks, all before anything is allocated: the table fits the role; the file is for this image's firmware (`FW` against `fw_id`, `E_HOOK_STOCK`
 /// otherwise); the image starts with the `rts` that every `dk_ret_` resolves to and its bss holds the copies of the sites; every site is one the runtime can use; and
 /// the live bytes of each site that is copied are the stock ones (the check value, `E_HOOK_STOCK`).
-unsafe fn port_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
+unsafe fn port_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
     let (off, len) = (dkrt_abi::mem::rd32(file.add(super::H_REG_OFF)), dkrt_abi::mem::rd32(file.add(super::H_REG_SIZE)));
     let size = dkrt_abi::mem::rd32(file.add(dkneeds::H_SIZE as usize));
     if !super::in_file(off, len, size) {
@@ -292,7 +292,7 @@ unsafe fn port_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R
 /// The port file keeps its whole table in an arena block (the staged file is overwritten while `init` reads from the store, and the imports of the services that load
 /// after it are looked up in it), and fills the copies of its tail and stock sites in the bss of its image: the displaced bytes from flash, then `jmp.l` behind the site.
 /// The check of the file compared those bytes with the check value; the caches are written back at the end.
-unsafe fn port_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, a: &PlaceArgs) -> i32 {
+unsafe fn port_place<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, a: &PlaceArgs) -> i32 {
     let idx = index_of(rec);
     l.provs[idx] = ProvRec::EMPTY;
     l.provs[idx].image_size = a.image_size;
@@ -326,7 +326,7 @@ unsafe fn port_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R
 }
 
 /// The table of the loaded service file `rec` that its place step kept, and the record's copy of what it keeps; `None` when it kept none (no hooks, exports or slots).
-unsafe fn kept_table<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, rec: usize) -> Result<Option<(Keys<'static>, ProvRec)>, i32> {
+unsafe fn kept_table<P: PackagePlatform, M: Images, R: Registry>(l: &Loader<P, M, R>, rec: usize) -> Result<Option<(Keys<'static>, ProvRec)>, i32> {
     let pr = l.provs[index_of(rec)];
     let Some(blk) = pr.block else {
         return Ok(None);
@@ -339,7 +339,7 @@ unsafe fn kept_table<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, r
 
 /// Publish the exports of the loaded service file `rec` (`Exports`): each `EXPORTS` item is an image offset. Returns the address of its resident query entry (0: none), or
 /// `None` when the file kept no table. The query address is kept by the install (`service_install`), so it is public to a load only when the install has succeeded.
-pub(super) unsafe fn service_publish<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> Result<Option<u32>, i32> {
+pub(super) unsafe fn service_publish<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> Result<Option<u32>, i32> {
     let Some((keys, _)) = kept_table(l, rec)? else {
         return Ok(None);
     };
@@ -386,7 +386,7 @@ impl ServiceItems {
 
 /// The items of the loaded service file `rec` into `it` (zeroed by the caller: `ServiceItems::empty`), `false` when it kept no table. A hook the port file does not list, a slot the image lacks or a bad entry refuses the file
 /// before anything is installed.
-pub(super) unsafe fn service_items<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, it: &mut ServiceItems) -> Result<bool, i32> {
+pub(super) unsafe fn service_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, it: &mut ServiceItems) -> Result<bool, i32> {
     let Some((keys, pr)) = kept_table(l, rec)? else {
         return Ok(false);
     };
@@ -426,7 +426,7 @@ pub(super) unsafe fn service_items<P: Platform, M: Images, R: Registry>(l: &mut 
     Ok(true)
 }
 
-unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> i32 {
+unsafe fn service_activate<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> i32 {
     let query_v1 = match service_publish(l, rec) {
         Ok(Some(q)) => q,
         Ok(None) => return OK,
@@ -458,7 +458,7 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
     }
 }
 
-unsafe fn service_undo<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) {
+unsafe fn service_undo<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) {
     let idx = index_of(rec);
     l.exports.withdraw(rec);
     crate::package::settings_overlay::withdraw(rec);

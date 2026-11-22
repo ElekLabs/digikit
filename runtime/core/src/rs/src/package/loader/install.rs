@@ -6,7 +6,7 @@
 //! interrupt mask, flushes the covered lines and fills the slot words.
 
 use dkrt_abi::link::Sequence;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_sdk::*;
 
 /// What one installer backend installs for one record and takes down again. The ColdFire backend ([`Installer`]) writes `jmp.l` over hook sites and fills slot words in
@@ -16,9 +16,9 @@ pub trait Backend {
     /// The items of one install.
     type Items<'a>;
     /// Install `items` for record `rec`, all or nothing.
-    unsafe fn install<P: Platform>(&mut self, p: &P, rec: u8, items: &Self::Items<'_>) -> Result<(), i32>;
+    unsafe fn install<P: PackagePlatform>(&mut self, p: &P, rec: u8, items: &Self::Items<'_>) -> Result<(), i32>;
     /// Take everything of `rec` down again (hook sites back to stock, slots cleared or released). Nothing of `rec` is left behind.
-    unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8);
+    unsafe fn restore<P: PackagePlatform>(&mut self, p: &P, rec: u8);
     /// Items installed for all records.
     fn count(&self) -> usize;
 }
@@ -88,7 +88,7 @@ impl Installer {
     /// Pass 1: check every item, write nothing. Errors: `E_RANGE` (length, entry), `E_PLAN_FIT` (no room for the sites), `E_PLAN_OWNER` (an installed site or an
     /// earlier item overlaps), `E_HOOK_STOCK` (the live bytes are not the stock bytes: their check value differs from the item's).
     #[inline(never)]
-    pub unsafe fn check<P: Platform>(&self, p: &P, hooks: &[HookItem], image_size: u32) -> Result<(), i32> {
+    pub unsafe fn check<P: PackagePlatform>(&self, p: &P, hooks: &[HookItem], image_size: u32) -> Result<(), i32> {
         if self.n + hooks.len() > SITES_MAX {
             return Err(E_PLAN_FIT);
         }
@@ -127,7 +127,7 @@ impl Installer {
     /// Install the hooks of record `rec` and fill `slots` (slot address, value). Safe mode (not armed): `Ok` with no platform call. One mask:
     /// pass 1 again, then the stock bytes are read, then the writes, then the flush of the covered lines, then the slot words, then the restore. A refusal in pass 1
     /// writes nothing.
-    pub unsafe fn install<P: Platform>(
+    pub unsafe fn install<P: PackagePlatform>(
         &mut self,
         p: &P,
         rec: u8,
@@ -188,7 +188,7 @@ impl Installer {
     }
 
     /// Write the stock bytes back for every site of `rec`, clear the slot words it filled and drop the sites. One mask.
-    pub unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8) {
+    pub unsafe fn restore<P: PackagePlatform>(&mut self, p: &P, rec: u8) {
         // a record that installed nothing (a file that failed before its install) costs no platform call
         if !self.sites[..self.n].iter().any(|s| s.rec == rec) && !self.slot_words[..self.ns].iter().any(|s| s.0 == rec) {
             return;
@@ -226,10 +226,10 @@ impl Installer {
 
 impl Backend for Installer {
     type Items<'a> = CfItems<'a>;
-    unsafe fn install<P: Platform>(&mut self, p: &P, rec: u8, items: &CfItems<'_>) -> Result<(), i32> {
+    unsafe fn install<P: PackagePlatform>(&mut self, p: &P, rec: u8, items: &CfItems<'_>) -> Result<(), i32> {
         Installer::install(self, p, rec, items.hooks, items.image_base, items.image_size, items.slots)
     }
-    unsafe fn restore<P: Platform>(&mut self, p: &P, rec: u8) {
+    unsafe fn restore<P: PackagePlatform>(&mut self, p: &P, rec: u8) {
         Installer::restore(self, p, rec)
     }
     fn count(&self) -> usize {
@@ -312,7 +312,7 @@ impl DspInstaller {
 
 impl Backend for DspInstaller {
     type Items<'a> = DspItems<'a>;
-    unsafe fn install<P: Platform>(&mut self, _p: &P, rec: u8, items: &DspItems<'_>) -> Result<(), i32> {
+    unsafe fn install<P: PackagePlatform>(&mut self, _p: &P, rec: u8, items: &DspItems<'_>) -> Result<(), i32> {
         if items.slots.is_empty() {
             return Ok(());
         }
@@ -343,7 +343,7 @@ impl Backend for DspInstaller {
         self.claims[at] = c;
         Ok(())
     }
-    unsafe fn restore<P: Platform>(&mut self, _p: &P, rec: u8) {
+    unsafe fn restore<P: PackagePlatform>(&mut self, _p: &P, rec: u8) {
         if let Some(c) = self.claims.iter_mut().find(|c| c.used && c.rec == rec) {
             *c = NO_CLAIM;
         }
@@ -354,7 +354,7 @@ impl Backend for DspInstaller {
 }
 
 /// Flush the 16-byte lines that cover `len` bytes at `addr`.
-fn flush_site<P: Platform>(p: &P, addr: u32, len: u8) {
+fn flush_site<P: PackagePlatform>(p: &P, addr: u32, len: u8) {
     let start = addr & !15;
     let end = (addr + len as u32 + 15) & !15;
     p.flush(start, end - start);

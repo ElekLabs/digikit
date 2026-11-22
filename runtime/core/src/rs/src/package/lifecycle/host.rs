@@ -2,7 +2,7 @@ use super::session::Handle;
 use crate::package::handlers::services;
 use crate::package::loader::{Images, Registry};
 use dkrt_abi::package::PackageId;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::{Declarations, Status};
 use dkrt_lifecycle::{LiveSet, PackageGraph, ProviderHost};
 use dkrt_sdk::OK;
@@ -26,15 +26,15 @@ use dkrt_sdk::OK;
 ///   manager asks every package it would take down. A service has no refusal of its own yet.
 /// - `stop` is `fini` and the rest of the unload (`Loader::package_stop`); it cannot refuse, so a record that still has a file or I/O step answers busy and the placer's
 ///   `free` repeats it.
-pub struct RtHost<P: Platform, M: Images, R: Registry>(Handle<P, M, R>);
+pub struct RtHost<P: PackagePlatform, M: Images, R: Registry>(Handle<P, M, R>);
 
-impl<P: Platform, M: Images, R: Registry> RtHost<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> RtHost<P, M, R> {
     pub(super) fn new(h: Handle<P, M, R>) -> Self {
         RtHost(h)
     }
 }
 
-impl<P: Platform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R> {
     fn start(&mut self, package: PackageId) -> Result<Declarations, Status> {
         unsafe {
             let (s, l) = self.0.get();

@@ -2,22 +2,22 @@ use super::session::Handle;
 use crate::package::loader::discover::PATH_CAP;
 use crate::package::loader::{Images, Registry};
 use dkrt_abi::package::PackageId;
-use dkrt_abi::platform::Platform;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::Status;
 use dkrt_lifecycle::Placer;
 use dkrt_sdk::E_NOT_FOUND;
 
 /// Gives a package its memory: the checks of its file, the arena block, the image with the relocations that name the image, and its record
 /// (`Loader::package_place`; `Loader::package_free` for a record that was placed and not started).
-pub struct RtPlacer<P: Platform, M: Images, R: Registry>(Handle<P, M, R>);
+pub struct RtPlacer<P: PackagePlatform, M: Images, R: Registry>(Handle<P, M, R>);
 
-impl<P: Platform, M: Images, R: Registry> RtPlacer<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> RtPlacer<P, M, R> {
     pub(super) fn new(h: Handle<P, M, R>) -> Self {
         RtPlacer(h)
     }
 }
 
-impl<P: Platform, M: Images, R: Registry> Placer for RtPlacer<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Placer for RtPlacer<P, M, R> {
     fn place(&mut self, package: PackageId) -> Result<u32, Status> {
         unsafe {
             let (s, l) = self.0.get();

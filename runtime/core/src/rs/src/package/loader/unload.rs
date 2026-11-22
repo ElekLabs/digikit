@@ -1,7 +1,7 @@
 //! The take-down of a record: hooks, ticks, services and the block (`Loader::unload_body`).
 use super::*;
 
-impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// The ColdFire part of `uninstall`: the hook sites back to stock and the slot words zero.
     pub(super) unsafe fn uninstall_cf(&mut self, rec: usize) {
         self.installer.restore(&self.p, rec as u8);

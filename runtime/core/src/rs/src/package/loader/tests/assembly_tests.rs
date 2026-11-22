@@ -1490,9 +1490,9 @@ fn the_image_info_table_holds_the_dsp_and_effect_tables_the_services_read() {
             let bare = Image { entries: Vec::new(), modules: Vec::new() }.platform(*dev, &[]);
             unsafe {
                 use dkrt_abi::platform::Platform;
-                assert!(bare.info(name_hash("dyndsp_info")).is_null() && bare.info(name_hash("dynfx_info")).is_null());
+                assert!(Platform::info(&bare, name_hash("dyndsp_info")).is_null() && Platform::info(&bare, name_hash("dynfx_info")).is_null());
                 let full = image.platform(*dev, &[]);
-                assert!(!full.info(name_hash("dyndsp_info")).is_null() && !full.info(name_hash("dynfx_info")).is_null());
+                assert!(!Platform::info(&full, name_hash("dyndsp_info")).is_null() && !Platform::info(&full, name_hash("dynfx_info")).is_null());
             }
         }
     }
