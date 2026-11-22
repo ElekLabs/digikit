@@ -49,6 +49,7 @@ mod worker;
 mod health;
 mod mailbox;
 mod platform;
+pub mod level;
 mod safe_mode;
 mod selection;
 mod report;

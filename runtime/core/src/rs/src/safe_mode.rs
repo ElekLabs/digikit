@@ -78,7 +78,7 @@ pub unsafe fn ui_pass() {
 
 /// Do the boots counted in the record call for safe mode (`SAFE_AFTER` boots that did not reach the stable period)?
 pub(crate) fn counter_is_safe(r: &Record) -> bool {
-    r.boot_counter >= SAFE_AFTER
+    crate::level::counter_is_safe(r.boot_counter)
 }
 
 /// Count this boot: raise the boot counter in the selection record and write it before anything of a module runs. Every boot that is not safe
