@@ -53,7 +53,8 @@ pub struct Facts {
 
 /// The refusal of a live job (a load, an unload or a reload), or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
 /// readable), an open upload, card operations, menus of the module (`Facts::menus`: false for a load, which has no module yet). The first that holds names the status.
-/// The services' own refusals (`Service::teardown_refusal`: a service that cannot give back the module's state now) come after it, for an unload and a reload: `refusal_with_services`.
+/// The services' own refusals (`Service::teardown_refusal`: a service that cannot give back the module's state now) come after it, for an unload and a reload: the manager asks them
+/// (`RtHost::can_stop`).
 pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {
         return Some(E_SAFE_MODE);
@@ -73,19 +74,6 @@ pub unsafe fn refusal<P: Platform>(p: &P, f: &Facts) -> Option<i32> {
     }
     None
 }
-
-/// `refusal`, then the refusals of the services about module record `owner - 1` (`Service::teardown_refusal`, every service in table order). The reload job calls this.
-pub unsafe fn refusal_with_services<P: Platform>(p: &P, f: &Facts, services: &dkrt_abi::service::ServiceTable, owner: u8) -> Option<i32> {
-    if let Some(r) = refusal(p, f) {
-        return Some(r);
-    }
-    let r = services.teardown_refusal(owner);
-    if r != OK {
-        return Some(r);
-    }
-    None
-}
-
 
 // ---- the job ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -111,7 +99,7 @@ pub trait Ops {
     /// Was a menu object built for module record `rec` since the refusal was read (`dkrt_menu_built`)? The drain lasts many UI passes, and a menu built meanwhile points into the
     /// module's code, so the job asks again right before the teardown.
     unsafe fn menu_built(&mut self, rec: usize) -> bool;
-    /// `Loader::unload_rec`.
+    /// `Rt::unload`: the manager takes the module and its consumers down.
     unsafe fn unload(&mut self, rec: usize) -> i32;
     /// Does the DSP loader hold a module it could not release? Permanent until the next boot.
     unsafe fn dsp_retained(&mut self) -> bool;
@@ -364,7 +352,7 @@ impl Job {
                     self.step = step::LOAD;
                 }
             } else if r != E_BUSY || o.dsp_retained() || self.timed_out(o) {
-                // `unload_rec` answers E_BUSY only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so the old module is whole and gets
+                // `Rt::unload` answers E_BUSY only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so the old module is whole and gets
                 // its tick and commands back. A DSP loader that holds rows it could not clear is permanent: say so at once instead of waiting out the budget.
                 o.abort(self.rec);
                 let retained = o.dsp_retained();
@@ -486,9 +474,11 @@ impl Ops for RealOps {
             card_busy: crate::api::card_busy(),
             menus,
         };
-        match rec {
-            Some(r) => refusal_with_services(&crate::PLATFORM, &f, &crate::handlers::services(), r as u8 + 1),
-            None => refusal(&crate::PLATFORM, &f),
+        // the generic refusals are the job's; the service-specific ones come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
+        let generic = refusal(&crate::PLATFORM, &f);
+        match (generic, rec) {
+            (None, Some(r)) => crate::lifecycle::get().and_then(|rt| rt.refusal(r)),
+            (generic, _) => generic,
         }
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
@@ -511,7 +501,10 @@ impl Ops for RealOps {
         rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec])) != 0
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
-        crate::loader::unload_rec(rec)
+        match crate::lifecycle::get() {
+            Some(rt) => rt.unload(rec),
+            None => dkrt_sdk::E_NOT_FOUND,
+        }
     }
     unsafe fn dsp_retained(&mut self) -> bool {
         crate::loader::dsp_retained()
@@ -523,7 +516,11 @@ impl Ops for RealOps {
         crate::boot::begin_live(k);
     }
     unsafe fn load(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
-        let r = if op == LIVE_LOAD { crate::loader::live_load(k, path) } else { crate::loader::reload_load(rec, path) };
+        let r = match crate::lifecycle::get() {
+            Some(rt) if op == LIVE_LOAD => rt.live_load(k, path),
+            Some(rt) => rt.reload_load(rec, path),
+            None => dkrt_sdk::E_NOT_FOUND,
+        };
         let missing = if r == E_IMPORT { crate::loader::missing() } else { [0u8; dkrt_sdk::NEEDS_LEN] };
         crate::boot::states().finished(k, r);
         crate::boot::report_module(k, path, r, &missing, &crate::loader::last_name());
@@ -547,7 +544,10 @@ impl Ops for RealOps {
         }
     }
     unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool {
-        crate::loader::cancel_dsp(rec, code)
+        match crate::lifecycle::get() {
+            Some(rt) => rt.cancel_dsp(rec, code),
+            None => false,
+        }
     }
     unsafe fn on_loaded(&mut self, rec: usize) {
         crate::handlers::services().on_loaded(rec)
@@ -613,41 +613,6 @@ mod tests {
         assert_eq!(code(&p, f), None);
     }
 
-    use crate::core_api::{CoreApi, REAL_CORE};
-    use dkrt_abi::service::{RowPtrs, Service, ServiceRow, ServiceTable};
-
-    /// A service that refuses the reload of module owner 2 only.
-    struct Refuser;
-    impl<C: CoreApi> Service<C> for Refuser {
-        dkrt_abi::accepts_records!();
-        unsafe fn teardown_refusal(_core: &C, owner: u8) -> i32 {
-            if owner == 2 {
-                E_RELOAD_ROUTED
-            } else {
-                OK
-            }
-        }
-    }
-    struct Quiet;
-    impl<C: CoreApi> Service<C> for Quiet {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
-    }
-    static ROWS: [ServiceRow; 2] = [ServiceRow::of::<Quiet, crate::core_api::RealCore>("quiet", &[]), ServiceRow::of::<Refuser, crate::core_api::RealCore>("refuser", &[])];
-    static ROWS_P: RowPtrs<2> = RowPtrs::of(&ROWS);
-
-    #[test]
-    fn the_services_refuse_after_the_generic_refusals_and_only_for_their_module() {
-        let p = FakePlatform::new(dkrt_abi::profiles::ALL[0]);
-        let table = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
-        let go = |f: Facts, owner: u8| unsafe { refusal_with_services(&p, &f, &table, owner) };
-        assert_eq!(go(Facts::default(), 1), None);
-        assert_eq!(go(Facts::default(), 2), Some(E_RELOAD_ROUTED));
-        // a generic refusal comes first
-        assert_eq!(go(Facts { menus: true, ..Facts::default() }, 2), Some(E_RELOAD_MENUS));
-        p.play.set(Some(1));
-        assert_eq!(go(Facts::default(), 2), Some(E_RELOAD_PLAYING));
-    }
 
     // ---- the job over a scripted system ------------------------------------------------------------------------------------------
 

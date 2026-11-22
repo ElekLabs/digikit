@@ -131,3 +131,36 @@ it('refuses distinct aliases that would overwrite the same pack output', () => {
     'Pack aliases first/alias and second/alias both write',
   );
 });
+
+it.each([
+  ['a string', 'fixture/dep-only:pack'],
+  ['an object with a target id', { target: 'fixture/dep-only:pack' }],
+  ['an object with projects', { projects: ['fixture/dep-only'], target: 'pack' }],
+])('gives a fixture a pack target when a project target names it in dependsOn as %s', (_form, dep) => {
+  const root = mkdtempSync(join(tmpdir(), 'digikit-dep-only-'));
+  mkdirSync(join(root, 'tools/patchkit/toolchain'), { recursive: true });
+  writeFileSync(join(root, 'tools/patchkit/toolchain/pins.toml'), '[include]\ncf = ["sdk/include"]\nsharc = []\n');
+  mkdirSync(join(root, 'devices'));
+  const dir = 'relocated/fixtures/dep-only';
+  mkdirSync(join(root, dir), { recursive: true });
+  writeFileSync(
+    join(root, dir, 'module.toml'),
+    '[module]\nid = "fixture/dep-only"\ncategory = "test"\ntype = "raw"\ndynamic = true\n[[object]]\npath = "build/object.dko.json"\nsources = ["src/a.c"]\n',
+  );
+  const owner = 'relocated/assembly-owner';
+  mkdirSync(join(root, owner), { recursive: true });
+  writeFileSync(
+    join(root, owner, 'project.json'),
+    JSON.stringify({ name: 'assembly-owner', targets: { 'test-assembly': { dependsOn: [dep] } } }),
+  );
+  const run = (files: string[]) => {
+    const inferred = createNodesV2[1](files, {}, { workspaceRoot: root });
+    return Object.assign({}, ...inferred.map(([, result]) => result.projects));
+  };
+  try {
+    expect(run([`${dir}/module.toml`])[dir].targets?.pack).toBeUndefined();
+    expect(run([`${dir}/module.toml`, `${owner}/project.json`])[dir].targets.pack).toBeDefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

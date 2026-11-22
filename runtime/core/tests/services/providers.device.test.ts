@@ -26,7 +26,6 @@ const PROVIDER_IDX = 0xfffffffe;
 const E_PLAN_OWNER = loadCode('E_PLAN_OWNER');
 const E_HOOK_STOCK = loadCode('E_HOOK_STOCK');
 const E_MISSING = loadCode('E_MISSING');
-const E_IMPORT = loadCode('E_IMPORT');
 /** The hook the fixture takes, and what the stock site holds (the displaced `movea.l (a2),a0` and `pea (2).w`). */
 const HOOK = 'cf.menu.hook.settings_list.test';
 const STOCK_SITE = [0x2052, 0x4878, 0x0002];
@@ -168,7 +167,7 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     expect(await siteBytes(safe, bound.site), 'safe mode leaves the site stock').toEqual(STOCK_SITE);
   });
 
-  test('a port file whose check value differs is E_HOOK_STOCK and the service and its dependent are refused', async () => {
+  test('a port file whose check value differs is E_HOOK_STOCK and the service that needs it and its dependent are refused', async () => {
     const bound = bind(h);
     const f = Buffer.from(fs.readFileSync(bound.port));
     // one byte of the check value of the hook's SITES item: the live site bytes no longer hash to it
@@ -181,9 +180,13 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
       selection: [debug.name, user.name],
     });
     const log = await h.usb(rt, (dk) => dk.readLog());
-    // the port file is refused before anything is placed; the service has no port file to take its site from
-    expect(providerOf(log, nameHash('port')).map((p) => [p.result, p.base]), 'the port file is refused before it is placed').toEqual([[E_HOOK_STOCK, 0]]);
-    expect(providerOf(log, nameHash(HOOK)).map((p) => [p.result, p.base]), 'the service is refused, naming the hook the port file does not give').toEqual([[E_IMPORT, 0]]);
+    // the port file is refused before anything is placed; the service needs it, so the manager refuses the service for the failed need without placing it (RC2b). Before, the
+    // loader placed it and its hook import failed (E_IMPORT, naming the hook). The log line of a refused service names the need that failed (the root cause: the port file's hash,
+    // `lifecycle/rt.rs` report_boot), so both lines are under the port file's hash: its own refusal first, then the service's E_MISSING. The user's refusal below is the same.
+    expect(providerOf(log, nameHash('port')).map((p) => [p.result, p.base]), 'the port file is refused before it is placed, and the service that needs it is refused for it, not placed').toEqual([
+      [E_HOOK_STOCK, 0],
+      [E_MISSING, 0],
+    ]);
     expect(await siteBytes(rt, bound.site), 'the site was never written').toEqual(STOCK_SITE);
     const states = await h.usb(rt, (dk) => dk.loadStates());
     expect([states[1]!.state, states[1]!.result, states[1]!.detail], 'the user is REFUSED, with the hash of its service').toEqual([

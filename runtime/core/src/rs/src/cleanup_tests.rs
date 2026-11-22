@@ -76,6 +76,23 @@ impl Drop for NoFxInfoGuard {
     }
 }
 
+/// The `dynreg_info` table of an image (the assembly tests read it from the image's info file), while a `DynregInfoGuard` lives; the other host tests have none.
+static mut DYNREG_INFO_OVERRIDE: *const u32 = core::ptr::null();
+
+/// Sets the `dynreg_info` table for its lifetime and clears it on drop, also when the test panics. Hold it under `LOCK`; `info` outlives the guard's use.
+pub(crate) struct DynregInfoGuard;
+impl DynregInfoGuard {
+    pub(crate) unsafe fn set(info: *const u32) -> Self {
+        DYNREG_INFO_OVERRIDE = info;
+        DynregInfoGuard
+    }
+}
+impl Drop for DynregInfoGuard {
+    fn drop(&mut self) {
+        unsafe { DYNREG_INFO_OVERRIDE = core::ptr::null() }
+    }
+}
+
 pub fn voice_info() -> *const u32 {
     unsafe {
         if VOICE_INFO_OVERRIDE.is_null() {
@@ -94,7 +111,9 @@ pub unsafe fn fx_info() -> *const u32 {
 }
 /// The image's info table `name_hash` of the host tests: `dyndsp_info` and `dynfx_info` are the tables of this file (`voice_info`, `fx_info`); none for any other name.
 pub unsafe fn test_info(name_hash: u32) -> Option<*const u32> {
-    if name_hash == dkneeds::keys::name_hash("dyndsp_info") {
+    if name_hash == dkneeds::keys::name_hash("dynreg_info") && !DYNREG_INFO_OVERRIDE.is_null() {
+        Some(DYNREG_INFO_OVERRIDE)
+    } else if name_hash == dkneeds::keys::name_hash("dyndsp_info") {
         Some(voice_info())
     } else if name_hash == dkneeds::keys::name_hash("dynfx_info") {
         // the table is for the device the test runs on (the service compares the device word with `CoreApi::device_id`)
@@ -210,7 +229,7 @@ pub unsafe fn arena_free(p: *mut u8) -> bool {
 /// One UI pass: the link settles and starts, then the loader steps (the order of `dkrt_tick`).
 unsafe fn pass() {
     crate::link::pump();
-    crate::loader::dsp_step();
+    crate::lifecycle::dsp_step();
 }
 
 /// No transfer is on the wire and the loader has none in flight.
@@ -284,6 +303,8 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
         d.waiting[0].rec = 1;
         d.waiting[0].send_buf = 0xe000;
     }
+    // the modules of the seed are up as the package manager would have left them: a failed DSP part takes them down through it
+    crate::lifecycle::test_up(2, if queued { &[0, 1][..] } else { &[0][..] });
 }
 
 #[test]
@@ -474,14 +495,14 @@ fn acknowledged_voice_cleanup_reclaims_and_advances_queue() {
         assert_eq!(LINK.accepted, 1);
     }
 }
-/// A reload gives up a DSP part that does not end (`loader::cancel_dsp`): the transfer in flight is taken down as a failed one is, the record is free, no tick runs, the
+/// A reload gives up a DSP part that does not end (`Rt::cancel_dsp`): the transfer in flight is taken down as a failed one is, the record is free, no tick runs, the
 /// queue goes on, and the boot record says the module failed with the code.
 #[test]
 fn a_cancelled_dsp_part_ends_like_a_failed_one() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         seed(Completion::Ack, false, true, true);
-        assert!(crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert!(crate::lifecycle::get().unwrap().cancel_dsp(0, E_DSP_XFER));
         assert_eq!(st().modules[0].used, 0, "the record is free");
         assert!(!entry::has_tick(0));
         assert_eq!(dsp::ds().mod_len[0], 0);
@@ -489,7 +510,7 @@ fn a_cancelled_dsp_part_ends_like_a_failed_one() {
         assert!(!dsp::retained());
         assert_eq!(boot::info().results[0], E_DSP_XFER);
         // nothing is left to cancel: the DSP part of record 0 has ended
-        assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert!(!crate::lifecycle::get().unwrap().cancel_dsp(0, E_DSP_XFER));
     }
 }
 /// The load that waits in the queue is given up: it is removed and its record taken down, the load in flight goes on, and the DSP is not retained.
@@ -502,11 +523,11 @@ fn a_cancelled_queued_dsp_part_is_removed_and_the_load_in_flight_goes_on() {
         let d = dsp::ds();
         d.waiting[0].rec = 0;
         d.pending.rec = 1;
-        assert!(crate::loader::cancel_dsp(0, E_DSP_XFER));
+        assert!(crate::lifecycle::get().unwrap().cancel_dsp(0, E_DSP_XFER));
         assert_eq!((dsp::ds().nwait, dsp::ds().pending.rec), (0, 1), "nothing waits, the load in flight goes on");
         assert_eq!(st().modules[0].used, 0, "the queued module is taken down");
         assert!(st().modules[1].used == 1 && !dsp::retained());
-        assert!(!crate::loader::cancel_dsp(0, E_DSP_XFER), "nothing is left to cancel");
+        assert!(!crate::lifecycle::get().unwrap().cancel_dsp(0, E_DSP_XFER), "nothing is left to cancel");
     }
 }
 #[test]
@@ -550,14 +571,14 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
         let d = dsp::ds();
         vrows().row_owner = [0; dsp::MAX_ROWS];
         d.step = 0; // no row of module 0 in the fake's list: every row is in
-        crate::loader::dsp_step_with(TWO);
+        crate::lifecycle::get().unwrap().dsp_step(TWO);
         // each service hears it once, in list order, and the load is over
         assert_eq!(*log(), vec![Call::OnLoaded { svc: 1, rec: 0 }, Call::OnLoaded { svc: 2, rec: 0 }]);
         assert_eq!(dsp::ds().phase, dsp::PH_IDLE);
         assert_eq!(boot::info().loaded, 1);
         // an idle loader has nothing to list
         log().clear();
-        crate::loader::dsp_step_with(TWO);
+        crate::lifecycle::get().unwrap().dsp_step(TWO);
         assert!(log().is_empty());
     }
 }
@@ -825,7 +846,7 @@ fn a_loaded_dsp_part_makes_its_module_active() {
         vrows().row_owner = [0; dsp::MAX_ROWS];
         d.step = 0;
         dsp_loading();
-        crate::loader::dsp_step_with(TWO);
+        crate::lifecycle::get().unwrap().dsp_step(TWO);
         assert_eq!(boot::info().results[0], OK);
         assert_eq!(boot::info().states[0], STATE_ACTIVE);
     }

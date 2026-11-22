@@ -13,6 +13,7 @@
         "files": [
           "refusal.device.test.ts"
         ],
+        "firmwareOnly": "the module state, code and detail of a real boot read through DKRT_BOOT, LOADS and MODULES agree",
         "modules": [
           "test/lfo-shape",
           "core/services/lfo"

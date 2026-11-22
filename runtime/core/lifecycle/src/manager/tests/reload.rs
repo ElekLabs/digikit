@@ -13,8 +13,8 @@ fn reloading_a_service_reloads_its_consumers_and_ends_with_the_same_live_set() {
     assert_eq!(live(&pm, &[1, 2, 3]), [1, 2, 3]);
     let calls = probe.calls();
     assert!(before(&calls, Free(id(1)), Place(id(1))));
-    assert!(before(&calls, Detach(id(1), id(2)), Stop(id(1))));
-    assert!(before(&calls, Start(id(1)), Attach(id(1), id(2))));
+    assert!(before(&calls, Detach(id(2)), Stop(id(1))));
+    assert!(before(&calls, Start(id(1)), Attach(id(2))));
     for n in [1, 2, 3] {
         assert_eq!(pm.state_of(id(n)), Some(State::Active));
     }
@@ -56,7 +56,7 @@ fn a_service_that_cannot_stop_refuses_the_reload_and_nothing_is_touched() {
         err(pm.reload(id(1))),
         LifecycleError::CannotStop { .. }
     ));
-    assert_eq!(probe.calls(), [CanStop(id(1))]);
+    assert_eq!(probe.calls(), [CanStop(id(2)), CanStop(id(1))]);
 }
 
 #[test]

@@ -13,6 +13,8 @@ pub enum State {
     Claimed,
     /// Its entries are in firmware.
     Installed,
+    /// Public: its exports and resident entry points are visible, its tick runs. Nothing is public before the entries are installed.
+    Activated,
     /// Attached to every service it needs: up.
     Active,
     /// Taken down as far as the restore of its entries: waiting for a retry.

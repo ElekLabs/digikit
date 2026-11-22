@@ -31,6 +31,12 @@ def _num(t: str) -> int:
     return -v if neg else v
 
 
+def _sext(v: int, bits: int) -> int:
+    """The disassembler prints an immediate or a displacement as unsigned hex: read it as a signed `bits` wide value."""
+    v &= (1 << bits) - 1
+    return v - (1 << bits) if v >> (bits - 1) else v
+
+
 def _regs_count(regs: str) -> int:
     n = 0
     for part in regs.split("/"):
@@ -69,11 +75,13 @@ def scan(sec: dict, relocs: list[dict]) -> Fn:
         ):
             sp += _num(g.group(1))
         elif m in ("addq", "addi", "adda") and (
-            g := re.fullmatch(r"#(\$?[0-9a-f]+),a7", o)
+            g := re.fullmatch(r"#(-?\$?[0-9a-f]+),a7", o)
         ):
-            sp -= _num(g.group(1))
+            # `adda.l #-N,a7` allocates (a 32-bit immediate, printed unsigned), `addq` releases
+            sp -= _sext(_num(g.group(1)), 32 if mn.endswith(".l") else 16)
         elif m == "link" and (g := re.fullmatch(r"a\d,#(-?\$?[0-9a-f]+)", o)):
-            sp += 4 - _num(g.group(1))
+            # `link.w` has a signed 16 bit displacement, `link.l` a 32 bit one
+            sp += 4 - _sext(_num(g.group(1)), 32 if mn.endswith(".l") else 16)
         elif m == "unlk":
             sp = max(0, sp - 4)
         elif m == "pea" or (m == "move" and o.endswith(",-(a7)")):

@@ -35,7 +35,7 @@
     "test-assembly": {
       "executor": "nx:run-commands",
       "cache": true,
-      "description": "Host assembly tests: the seams between the real packed outputs (fixtures, service files, bound files, the runtime object, the info table of the image) through the plan, the role checks and the installs of the boot over FakePlatform. Every test-device target depends on it.",
+      "description": "Host assembly tests: the seams between the real packed outputs (fixtures, service files, bound files, the runtime object, the info table of the image) through the package graph and admission, the role checks and the installs of the boot over FakePlatform. Every test-device target depends on it.",
       "inputs": [
         "{projectRoot}/src/rs/**/*",
         {
@@ -81,6 +81,7 @@
         "core/services/samples:pack",
         "core/services/project:pack",
         "test/track-select:pack",
+        "digikit/debug:pack",
         "patchkit:ports-test",
         "patchkit:cli",
         "patchkit:device-images"

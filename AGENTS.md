@@ -65,7 +65,7 @@ not complete verification. Do not use `--skip-nx-cache` to rerun a failed test: 
 | JS/TS host helpers | `pnpm nx:pilot run <project>:test-host` and `<project>:typecheck`. |
 | Desktop UI | `pnpm nx:pilot run @digi/desktop:test-host` and `@digi/desktop:check:ui`; `@digi/desktop:typecheck` checks its test sources. |
 | Runtime Rust | `pnpm nx:pilot run core/runtime:rust-tests`: standalone host units, no generated core or daemon prerequisites. |
-| Runtime seams | `pnpm nx:pilot run core/runtime:test-assembly`: the real packed fixtures, service files, the port file, runtime object and image info table through the boot's plan, role checks and installs on the host (seconds, cached; a device without firmware is skipped). |
+| Runtime seams | `pnpm nx:pilot run core/runtime:test-assembly`: the real packed fixtures, service files, the port file, runtime object and image info table through the boot's package graph and admission, role checks and installs on the host (seconds, cached; a device without firmware is skipped). |
 | Module DSP on the rig | `pnpm nx:pilot run <module-id>:test-dsp` runs the module's DSP behavior checks. `pnpm nx:pilot run-many -t test-dsp-conformance` runs cached machine and effect contract checks on the SHARC-only rig. Kit host tests: `@digi/sharc-rig-kit:test-host`; the writer of `dsp_cost_*`: `patchkit uses set` ([testing](docs/TESTING.md) "The Vitest kit"). |
 | Web tests | `pnpm nx:pilot run @digi/web:test-host` (Vitest, no wasm); `@digi/web:test-wasm` loads the real `public/*.wasm` (`tests/*.wasm.test.ts`: wasm and command-line parity) |
 | Python tools | Named pytest files under `tests/<owner>/` (never a directory) and `mise run lint:py`. Typed files are listed in pyproject `[tool.mypy] files`. |

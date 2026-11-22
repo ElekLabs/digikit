@@ -34,11 +34,10 @@ import {
  * - full set: one module per limit takes it to the last unit (machine types, parameter and page rows, voice rows, the DSP area to its last whole granule,
  *   the arena to the last byte), and the next module of each kind is refused with the limit's own code. ColdFire only, then coupled with a real reference
  *   module whose DSP bytes in L2 are compared with its packed image.
- * - files and arena: a file of the staging buffer's size loads and one 4 bytes over does not; a bss that fills the arena, one above it.
+ * - files and arena: a file of the staging buffer's size loads and one 4 bytes over does not (a repeated module name, E_LOADED, is a host test: `loader/tests.rs`); a bss that fills the arena, one above it.
  */
 
 const E_FORMAT = -5;
-const E_LOADED = -10;
 const E_TOO_BIG = -13;
 
 /** Pack the synthetic modules SPECS (with their wanted results) for the rig's device into the card entries. */
@@ -110,20 +109,19 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
   );
 
   test(
-    'files: a file of the staging buffer size loads with its whole image, 4 bytes more is E_TOO_BIG, a repeated name is E_LOADED',
+    'files: a file of the staging buffer size loads with its whole image, 4 bytes more is E_TOO_BIG',
     async () => {
       await rig.first();
       const g = geometryOf(rig.device, rig.plan);
       const entries = await synthEntries(rig, 'files', [
         { spec: { name: 'cap/f-first' }, want: LOADED },
-        { spec: { name: 'cap/f-first', pad: 4 }, want: E_LOADED },
         { spec: { name: 'cap/f-exact', pad: stageFilePad(g.stageBytes), fill: 0xa5 }, want: LOADED },
         { spec: { name: 'cap/f-big', pad: stageFilePad(g.stageBytes, 4), oversize: true }, want: E_TOO_BIG },
       ]);
       expect(
         entries.map((e) => fs.statSync(e.file).size),
         'the fixtures are exactly the staging buffer size and 4 bytes over',
-      ).toEqual([expect.any(Number), expect.any(Number), g.stageBytes, g.stageBytes + 4]);
+      ).toEqual([expect.any(Number), g.stageBytes, g.stageBytes + 4]);
       const got = await bootEntries(rig, 'files', entries);
       const mods = await expectBoot(rig, g, entries, got);
       expect(mods[1]!.cf_size, 'the module of the staging buffer size is in the arena with its whole image').toBe(

@@ -337,18 +337,25 @@ unsafe fn port_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R
     OK
 }
 
-unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> i32 {
-    let idx = index_of(rec);
-    let pr = l.provs[idx];
-    let blk = match pr.block {
-        Some(b) => b,
-        None => return OK,
+/// The table of the loaded service file `rec` that its place step kept, and the record's copy of what it keeps; `None` when it kept none (no hooks, exports or slots).
+unsafe fn kept_table<P: Platform, M: Images, R: Registry>(l: &Loader<P, M, R>, rec: usize) -> Result<Option<(Keys<'static>, ProvRec)>, i32> {
+    let pr = l.provs[index_of(rec)];
+    let Some(blk) = pr.block else {
+        return Ok(None);
+    };
+    match Keys::parse(core::slice::from_raw_parts(blk.ptr as *const u8, pr.len as usize)) {
+        Ok(k) => Ok(Some((k, pr))),
+        Err(_) => Err(E_FORMAT),
+    }
+}
+
+/// Publish the exports of the loaded service file `rec` (`Exports`): each `EXPORTS` item is an image offset. Returns the address of its resident query entry (0: none), or
+/// `None` when the file kept no table. The query address is kept by the install (`service_install`), so it is public to a load only when the install has succeeded.
+pub(super) unsafe fn service_publish<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> Result<Option<u32>, i32> {
+    let Some((keys, _)) = kept_table(l, rec)? else {
+        return Ok(None);
     };
     let base = super::records::module(rec).base;
-    let keys = match Keys::parse(core::slice::from_raw_parts(blk.ptr, pr.len as usize)) {
-        Ok(k) => k,
-        Err(_) => return E_FORMAT,
-    };
     let mut i = 0;
     let mut query_v1 = 0;
     while let Some(w) = keys.words(tag::EXPORTS, i) {
@@ -357,20 +364,48 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
         if w.1 & dkneeds::keys::EXPORT_QUERY != 0 {
             query_v1 = addr;
         } else if let Err(e) = l.exports.publish_with_scope(rec, w.0, addr, bound) {
-            return e;
+            return Err(e);
         }
         i += 1;
     }
-    let mut hooks = core::mem::zeroed::<[HookItem; SITES_MAX]>();
-    let nh = match hook_items(l, &keys, &mut hooks) {
-        Ok(n) => n,
-        Err(e) => return e,
+    Ok(Some(query_v1))
+}
+
+/// What a service file installs: its hook sites and the slot words it fills, from its kept table and the port file.
+pub(super) struct ServiceItems {
+    pub hooks: [HookItem; SITES_MAX],
+    pub nh: usize,
+    /// ColdFire slots: (address of the word, value).
+    pub slots: [(u32, u32); dkneeds::SLOTS_MAX as usize],
+    pub ns: usize,
+    /// DSP slots: (index in the slot block, pc of the dispatch code).
+    pub dsp_slots: [(u32, u32); dkneeds::SLOTS_MAX as usize],
+    pub nd: usize,
+}
+
+impl ServiceItems {
+    pub(super) const fn empty() -> ServiceItems {
+        ServiceItems {
+            hooks: [HookItem { addr: 0, len: 0, check: [0; 8], entry: 0 }; SITES_MAX],
+            nh: 0,
+            slots: [(0u32, 0u32); dkneeds::SLOTS_MAX as usize],
+            ns: 0,
+            dsp_slots: [(0u32, 0u32); dkneeds::SLOTS_MAX as usize],
+            nd: 0,
+        }
+    }
+}
+
+/// The items of the loaded service file `rec` into `it` (zeroed by the caller: `ServiceItems::empty`), `false` when it kept no table. A hook the port file does not list, a slot the image lacks or a bad entry refuses the file
+/// before anything is installed.
+pub(super) unsafe fn service_items<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, it: &mut ServiceItems) -> Result<bool, i32> {
+    let Some((keys, pr)) = kept_table(l, rec)? else {
+        return Ok(false);
     };
+    let base = super::records::module(rec).base;
+    it.nh = hook_items(l, &keys, &mut it.hooks)?;
     // the pointer slots the file fills: a SLOTS item is the name hash of a `[[slot]]` of an image adapter (the image's info table gives the address of its word) and the entry
     // of this file. A slot the image does not have, or a name that is an `[[info]]` data table, refuses the file, before anything is installed.
-    let mut slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
-    let mut dsp_slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
-    let (mut ns, mut nd) = (0, 0);
     for sl in keys.slots() {
         // a slot of another device's image: the file serves every device, and its mask says which fills are for this one
         if !dkneeds::keys::slot_for_device(sl.flags, l.p.device_id()) {
@@ -379,33 +414,50 @@ unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P
         if sl.flags & dkneeds::keys::SLOT_DSP != 0 {
             // a DSP slot: the name is a `[[slot]] space = "dsp"` of an image adapter (its index in the slot block comes from the info table) and the entry is a byte offset in
             // this file's DSP image, which must be there and even (a pc is whole words)
-            if nd == dsp_slots.len() || pr.dsp_image == 0 || sl.entry >= pr.dsp_image || sl.entry & 1 != 0 {
-                return E_FORMAT;
+            if it.nd == it.dsp_slots.len() || pr.dsp_image == 0 || sl.entry >= pr.dsp_image || sl.entry & 1 != 0 {
+                return Err(E_FORMAT);
             }
             let idx = match l.p.info_dsp_slot(sl.id) {
                 Some(i) => i,
-                None => return E_FORMAT,
+                None => return Err(E_FORMAT),
             };
-            dsp_slots[nd] = (idx, crate::dsp::placed_pc(rec, sl.entry));
-            nd += 1;
+            it.dsp_slots[it.nd] = (idx, crate::dsp::placed_pc(rec, sl.entry));
+            it.nd += 1;
             continue;
         }
-        if ns == slots.len() || sl.entry >= pr.image_size {
-            return E_FORMAT;
+        if it.ns == it.slots.len() || sl.entry >= pr.image_size {
+            return Err(E_FORMAT);
         }
         let at = l.p.info_slot(sl.id);
         if at.is_null() {
-            return E_FORMAT;
+            return Err(E_FORMAT);
         }
-        slots[ns] = (at as usize as u32, base.wrapping_add(sl.entry));
-        ns += 1;
+        it.slots[it.ns] = (at as usize as u32, base.wrapping_add(sl.entry));
+        it.ns += 1;
     }
+    Ok(true)
+}
+
+unsafe fn service_activate<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize) -> i32 {
+    let query_v1 = match service_publish(l, rec) {
+        Ok(Some(q)) => q,
+        Ok(None) => return OK,
+        Err(e) => return e,
+    };
+    let mut it = ServiceItems::empty();
+    match service_items(l, rec, &mut it) {
+        Ok(true) => {}
+        Ok(false) => return OK,
+        Err(e) => return e,
+    }
+    let base = super::records::module(rec).base;
+    let image_size = l.provs[index_of(rec)].image_size;
     // the DSP slots are claimed (not written: the stubs stay stock until the DSP acknowledges the code), then the hooks go in last: nothing after this can fail, so a live
     // site is never taken down again. A failure of the hooks gives the claim back.
-    if let Err(e) = Backend::install(&mut l.dsp_install, &l.p, rec as u8, &DspItems { slots: &dsp_slots[..nd] }) {
+    if let Err(e) = Backend::install(&mut l.dsp_install, &l.p, rec as u8, &DspItems { slots: &it.dsp_slots[..it.nd] }) {
         return e;
     }
-    let cf = CfItems { hooks: &hooks[..nh], image_base: base, image_size: pr.image_size, slots: &slots[..ns] };
+    let cf = CfItems { hooks: &it.hooks[..it.nh], image_base: base, image_size, slots: &it.slots[..it.ns] };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
         Ok(()) => {
             l.provs[index_of(rec)].query_v1 = query_v1;

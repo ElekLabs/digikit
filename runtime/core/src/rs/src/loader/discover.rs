@@ -12,9 +12,34 @@
 use super::role::role_ok;
 use super::{Images, Staged};
 use crate::handlers::ServiceTable;
-use crate::plan::{is_runtime_service, TABLE_MAX};
-use dkneeds::keys::{name_hash_bytes, tag, Keys};
+use super::TABLE_MAX;
+use dkneeds::keys::{name_hash, name_hash_bytes, tag, Keys};
 use dkrt_sdk::{DkrtStoreEntry, PROVIDER_MAX};
+
+/// Whether service name hash `h` is one the runtime provides itself (the `runtime` floor, the services of the image and the in-crate rows): a need of it is no provider's to meet,
+/// and a provider file cannot take the name. The services that have handle types in the SDK but are service files (`fx`) are not here.
+pub(crate) fn is_runtime_service(h: u32, services: &ServiceTable) -> bool {
+    if h == name_hash("runtime") {
+        return true;
+    }
+    let mut i = 0;
+    // the static prefix only: the rows after it are loaded services
+    let n = if services.rows.len() < crate::gen_services::STATIC { services.rows.len() } else { crate::gen_services::STATIC };
+    while i < n {
+        if name_hash(unsafe { &*services.rows[i] }.name()) == h {
+            return true;
+        }
+        i += 1;
+    }
+    let mut k = 0;
+    while k < dkrt_sdk::records::HANDLE_SERVICES.len() {
+        if name_hash(dkrt_sdk::records::HANDLE_SERVICES[k]) == h {
+            return true;
+        }
+        k += 1;
+    }
+    false
+}
 
 /// The folder of the provider files in the store root, and the file extension.
 const DIR: &[u8] = b"services/";
@@ -27,14 +52,14 @@ const PORT_EXT: &[u8] = b".dkport";
 const STEM_MAX: usize = 50;
 pub const PATH_CAP: usize = DIR.len() + STEM_MAX + EXT.len();
 /// Most `.dks` files of the folder the search remembers. A folder with more `.dks` files sets `Found::truncated`; the files past the limit are not looked at. `truncated` is also
-/// set when every provider slot (`PROVIDER_MAX`) is taken and a need is left unsearched, or the port file has no slot: `plan_with_caps` logs it (`E_PLAN_FIT`).
+/// set when every provider slot (`PROVIDER_MAX`) is taken and a need is left unsearched, or the port file has no slot: `find_providers` logs it (`E_PLAN_FIT`).
 const CAND_MAX: usize = 32;
 /// Most service hashes the search keeps. Distinct non-runtime needs beyond the provider slots can never all be met; 4 times `PROVIDER_MAX` leaves room for
 /// needs of refused or unmatched services. A need past the limit sets `Found::truncated`.
 const WANT_MAX: usize = 4 * PROVIDER_MAX;
 
 /// The causes of `Found::truncated` (a set of bits): the provider table has no slot left for a service or the port file, the folder has more files than `CAND_MAX`,
-/// the search list has no room for a need (`WANT_MAX`). Each has its own text in the provider log (`Loader::plan_with_caps`).
+/// the search list has no room for a need (`WANT_MAX`). Each has its own text in the provider log (`Loader::find_providers`).
 pub const TRUNC_TABLE: u8 = 1;
 pub const TRUNC_FILES: u8 = 2;
 pub const TRUNC_NEEDS: u8 = 4;
@@ -569,7 +594,7 @@ mod tests {
     }
 
     #[test]
-    fn a_port_file_whose_full_table_is_over_the_planner_limit_is_found_and_planned() {
+    fn a_port_file_whose_full_table_is_over_the_table_limit_is_found_and_its_need_is_met() {
         let f = big_port_file(80);
         let full = u32::from_be_bytes(f[dkneeds::H_REG_SIZE as usize..][..4].try_into().unwrap()) as usize;
         assert!(full > TABLE_MAX, "{full}");
@@ -582,11 +607,11 @@ mod tests {
         assert_eq!(keys.count(tag::PROVIDES), 1);
         assert!(out.table(0).len() <= TABLE_MAX);
         let user = table_of_t(&Table { needs: &[Need { service: name_hash("port"), min_version: 0x000100, hard: true }], ..KEEP });
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
-        let caps = [dkrt_sdk::DkrtCap { kind: dkrt_sdk::proto::CAPK_MODULES as u32, limit: 8, used: 0, largest: 8 }];
-        let env = crate::plan::Env { services, runtime: 0x000900, caps: &caps };
-        let p = crate::plan::plan_with(&env, &[Some(Keys::parse(&user).unwrap())], &[Some(keys)]);
-        assert_eq!((p.provider_verdicts[0], p.verdicts[0]), (dkrt_abi::plan::Verdict::Accepted, dkrt_abi::plan::Verdict::Accepted));
+        // the graph of the user and the port file as the search kept it: the need is met
+        let tables = [(dkrt_abi::package::PackageId(0), user.as_slice()), (dkrt_abi::package::PackageId(dkrt_abi::MAX_MODULES as u8), out.table(0))];
+        let g = dkrt_lifecycle::PackageGraph::from_tables(&tables, &[]).unwrap();
+        let order = g.bring_up_order(&[dkrt_abi::package::PackageId(0)], &dkrt_lifecycle::LiveSet::new()).unwrap();
+        assert_eq!(order.as_slice(), [dkrt_abi::package::PackageId(dkrt_abi::MAX_MODULES as u8), dkrt_abi::package::PackageId(0)]);
     }
 
 

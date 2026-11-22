@@ -554,7 +554,7 @@ pub(crate) unsafe fn next_job() {
     }
 }
 
-/// What one pass of `step` found: the loader (`loader::dsp_step`) acts on a result, then calls back `fail_done` or `loaded_done`.
+/// What one pass of `step` found: the package manager (`Rt::dsp_step`) acts on a result, then calls back `fail_done` or `loaded_done`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Advance {
     /// Nothing to settle: idle, waiting for the DSP, or a step done.

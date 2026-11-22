@@ -545,7 +545,6 @@
   "runtime/core/tests/card-safety.device.test.ts": 2,
   "runtime/core/tests/crash-capture.device.test.ts": 2,
   "runtime/core/tests/debug-guard.device.test.ts": 15,
-  "runtime/core/tests/entry/entry.device.test.ts": 2,
   "runtime/core/tests/file-write/file-write.device.test.ts": 3,
   "runtime/core/tests/fixtures/module-load.device.test.ts": 10,
   "runtime/core/tests/fixtures/project.json": 1,

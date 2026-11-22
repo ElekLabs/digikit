@@ -488,3 +488,28 @@ fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them
     rstate().mach_owner[3] = 0;
     dkrt_svc_machines::rows::reset();
 }
+
+#[test]
+fn apply_refuses_a_machine_without_a_run_time_type_number_instead_of_indexing_the_rows() {
+    let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut inf = table();
+    inf[w::M_FIRST] = 7;
+    inf[w::M_DYN0] = 16;
+    inf[w::M_DYN_N] = 8;
+    let mut core = core();
+    core.set_dynreg(inf);
+    // a machine key that `assign` has no number for (nothing was planned for the module being loaded: the boot index is not the module's), and a pinned number below the range
+    for key in [0x1100u32, 0x5] {
+        let mut b = std::vec![0u8; LEN_MACHINE as usize - 8];
+        put(&mut b, 0, key);
+        put(&mut b, 4, 0);
+        put(&mut b, 8, 255);
+        let reg = section(&[param(0, SLOT_BASE, 0, 255, 0, "LEVEL"), (KIND_MACHINE, b)]);
+        assert_eq!(
+            unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
+            E_TYPE_RANGE,
+            "key {key:#x}"
+        );
+        assert_eq!(&rstate().param_owner[..2], [0, 0], "nothing was written");
+    }
+}

@@ -13,12 +13,16 @@ fn take_down_detaches_before_restore_restores_before_stop_and_unbinds_before_fre
     assert_eq!(
         probe.calls(),
         [
+            CanStop(id(2)),
             CanStop(id(1)),
-            Detach(id(1), id(2)),
+            Detach(id(2)),
+            Deactivate(id(2)),
             Restore(id(2)),
             Stop(id(2)),
             Unbind(id(2)),
             Free(id(2)),
+            Detach(id(1)),
+            Deactivate(id(1)),
             Restore(id(1)),
             Stop(id(1)),
             Unbind(id(1)),
@@ -29,7 +33,7 @@ fn take_down_detaches_before_restore_restores_before_stop_and_unbinds_before_fre
 }
 
 #[test]
-fn can_stop_is_asked_of_every_service_of_the_closure_before_anything_is_touched() {
+fn can_stop_is_asked_of_every_package_of_the_closure_before_anything_is_touched() {
     let (mut pm, probe) = world(&[
         reference(),
         Pkg::service(4, "top", V1).needs("ref", V1),
@@ -39,8 +43,11 @@ fn can_stop_is_asked_of_every_service_of_the_closure_before_anything_is_touched(
     probe.clear();
     pm.unload(id(5)).unwrap();
     let calls = probe.calls();
-    let first_touch = position(&calls, Detach(id(4), id(5)));
-    assert_eq!(&calls[..first_touch], [CanStop(id(4)), CanStop(id(1))]);
+    let first_touch = position(&calls, Detach(id(5)));
+    assert_eq!(
+        &calls[..first_touch],
+        [CanStop(id(5)), CanStop(id(4)), CanStop(id(1))]
+    );
 }
 
 #[test]
@@ -56,7 +63,7 @@ fn a_service_that_cannot_stop_refuses_the_unload_and_nothing_is_touched() {
             status: E_BUSY
         }
     );
-    assert_eq!(probe.calls(), [CanStop(id(1))]);
+    assert_eq!(probe.calls(), [CanStop(id(2)), CanStop(id(1))]);
     assert_eq!(live(&pm, &[1, 2]), [1, 2]);
     assert_eq!(pm.state_of(id(2)), Some(State::Active));
 }
@@ -115,7 +122,7 @@ fn a_busy_restore_keeps_the_package_pending_and_a_retry_finishes_it() {
     assert_eq!(pm.restore_pending(), Some(id(2)));
     assert!(pm.live().contains(id(2)));
     let calls = probe.calls();
-    assert!(calls.contains(&Detach(id(1), id(2))));
+    assert!(calls.contains(&Detach(id(2))));
     assert!(
         !calls.contains(&Stop(id(2))),
         "not stopped while its entries are in firmware"
@@ -244,4 +251,65 @@ fn retry_pending_without_a_pending_take_down_is_refused() {
     probe.clear();
     assert_eq!(err(pm.retry_pending()), LifecycleError::NothingPending);
     assert!(probe.calls().is_empty());
+}
+
+#[test]
+fn a_module_that_cannot_stop_refuses_the_unload_like_a_service_does() {
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.load(id(2)).unwrap();
+    probe.clear();
+    probe.fail(CanStop(id(2)), E_BUSY);
+    assert_eq!(
+        err(pm.unload(id(2))),
+        LifecycleError::CannotStop {
+            package: id(2),
+            status: E_BUSY
+        }
+    );
+    assert_eq!(probe.calls(), [CanStop(id(2))]);
+    assert_eq!(live(&pm, &[1, 2]), [1, 2]);
+}
+
+#[test]
+fn the_closure_take_down_leaves_the_orphaned_service_and_the_pin_and_asks_nothing() {
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.load(id(2)).unwrap();
+    probe.clear();
+    probe.fail(CanStop(id(2)), E_BUSY);
+    let r = pm.take_down_closure(id(2)).unwrap();
+    assert_eq!(taken(&r), ids(&[2]));
+    assert_eq!(
+        live(&pm, &[1, 2]),
+        [1],
+        "the service stays up with no consumer"
+    );
+    assert!(!probe.calls().iter().any(|c| matches!(c, CanStop(_))));
+    assert!(
+        pm.graph().node(id(2)).unwrap().is_pinned(),
+        "the pin stays for the load that follows"
+    );
+    // the second half of a split reload: the module comes back, the service is not touched
+    probe.clear();
+    pm.load(id(2)).unwrap();
+    assert!(!probe.calls().contains(&Place(id(1))));
+    assert_eq!(live(&pm, &[1, 2]), [1, 2]);
+}
+
+#[test]
+fn check_stop_asks_the_closure_and_touches_nothing() {
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.load(id(2)).unwrap();
+    probe.clear();
+    assert_eq!(pm.check_stop(id(2)), Ok(()));
+    assert_eq!(probe.calls(), [CanStop(id(2))]);
+    probe.fail(CanStop(id(1)), E_BUSY);
+    assert!(matches!(
+        pm.check_stop(id(1)),
+        Err(LifecycleError::CannotStop { package, .. }) if package == id(1)
+    ));
+    assert_eq!(
+        pm.check_stop(id(9)),
+        Err(LifecycleError::NotLive { package: id(9) })
+    );
+    assert_eq!(live(&pm, &[1, 2]), [1, 2]);
 }

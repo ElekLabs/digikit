@@ -81,13 +81,26 @@ impl Images for RealImages {
     unsafe fn free(&mut self, addr: u32) {
         crate::arena::free(addr as *mut u8);
     }
+    // host tests link no device imports (as `platform.rs`): the real loader of the cleanup tests resolves none
     unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
+        #[cfg(test)]
+        {
+            let _ = name;
+            0
+        }
+        #[cfg(not(test))]
         crate::import_addr(name)
     }
     unsafe fn svc_import_addr(&mut self, name: *const u8) -> u32 {
         crate::svc_imports::svc_import_addr(name)
     }
     unsafe fn import_needs(&mut self, name: *const u8) -> Option<&'static str> {
+        #[cfg(test)]
+        {
+            let _ = name;
+            None
+        }
+        #[cfg(not(test))]
         crate::import_needs(name)
     }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {

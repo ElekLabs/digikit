@@ -13,12 +13,14 @@
       },
       {
         "files": ["reload.device.test.ts"],
+        "firmwareOnly": "the audible swap of a reload and the transport refusal on the real firmware",
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],
         "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"]
       },
       {
         "files": ["reload-fx.device.test.ts"],
+        "firmwareOnly": "the audio of an effect and of the send bus across reload, unload and load, the real effect rows and the page frame",
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "A:core/fx"],
         "modules": ["digikit/debug", "test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-send", "core/services/machines", "core/services/fx"],
@@ -28,6 +30,7 @@
       },
       {
         "files": ["reload-project.device.test.ts"],
+        "firmwareOnly": "a project saved with a reloaded machine plays the same sound on the firmware",
         "devices": ["dt2"],
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "C:storage", "S:machines"],
@@ -35,6 +38,7 @@
       },
       {
         "files": ["reload-menus.device.test.ts"],
+        "firmwareOnly": "the real core/ui reports a built menu object to the runtime",
         "tags": ["C:loading", "C:state"],
         "modules": ["digikit/debug", "test/entry-demo"]
       },
@@ -51,6 +55,7 @@
       },
       {
         "files": ["missing.device.test.ts"],
+        "firmwareOnly": "the audio silence of an absent machine and the sound after its load",
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],
         "modules": ["digikit/debug", "test/sine", "test/native-page", "core/services/machines"],
@@ -62,6 +67,7 @@
       },
       {
         "files": ["modules-capacity.device.test.ts"],
+        "firmwareOnly": "the MODULES and CAPACITY ranges against the real arena and DSP area",
         "devices": ["dt2"],
         "dsp": "sharc",
         "tags": ["C:loading"],

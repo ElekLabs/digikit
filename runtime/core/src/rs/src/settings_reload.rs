@@ -217,7 +217,7 @@ pub unsafe fn note_opened(rec: usize) {
     queue().note_opened(rec)
 }
 
-/// The module of record `rec` is unloaded (`Loader::unload_rec`).
+/// The module of record `rec` is unloaded (`Loader::unload_body`).
 pub unsafe fn note_unloaded(rec: usize) {
     queue().note_unloaded(rec)
 }
