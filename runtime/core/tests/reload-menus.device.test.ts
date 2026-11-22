@@ -2,7 +2,6 @@ import { expect } from 'vitest';
 import type { Device } from '@digi/test-support';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { REDRAW } from '@digi/regression/runtime/fx-live.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
@@ -36,10 +35,19 @@ const E_RELOAD_MENUS = loadCode('E_RELOAD_MENUS');
 const DEBUG_ROW = 0;
 const MENU_ROW = 1;
 
-const tapOf = (rt: TestRuntime) => (key: string, why = REDRAW) => rt.ui.tap(key, { until: { ms: 300, why } });
+const tapOf = (rt: TestRuntime) => (key: string) => rt.ui.tap(key, { until: { drained: true } });
+
+/** What a key's last effect leaves in the firmware: the menu object count the next step reads (`drained` only means the key reached the UART, not that the UI task handled it). */
+interface MenuCount {
+  objs: number;
+  done: (n: number) => boolean;
+  what: string;
+}
+const tapUntilCount = (rt: TestRuntime, key: string, c: MenuCount) =>
+  rt.ui.tap(key, { until: { state: () => menuObjects(rt, c.objs), done: c.done, what: c.what, withinMs: 10_000 } });
 
 /** Open the settings page of the module on MODULES row `row` in the DIGIKIT menu; the page stays open. */
-async function openModuleSettings(rt: TestRuntime, row: number): Promise<void> {
+async function openModuleSettings(rt: TestRuntime, row: number, built: MenuCount): Promise<void> {
   const tap = tapOf(rt);
   await openDigikitMenu(rt);
   for (let i = 0; i < 3; i++) await tap('DOWN'); // ABOUT, HEALTH, MEMORY, MODULES
@@ -47,13 +55,14 @@ async function openModuleSettings(rt: TestRuntime, row: number): Promise<void> {
   for (let i = 0; i < row; i++) await tap('DOWN');
   await tap('RIGHT'); // the side panel of the row
   await tap('DOWN'); // UNLOAD / LOAD, then SETTINGS...
-  await tap('YES'); // SETTINGS...: the page is built and opened
+  await tapUntilCount(rt, 'YES', built); // SETTINGS...: the page is built and opened
 }
 
 /** Back out of every menu to the main screen. */
-async function leaveMenus(rt: TestRuntime): Promise<void> {
+async function leaveMenus(rt: TestRuntime, left: MenuCount): Promise<void> {
   const tap = tapOf(rt);
-  for (let i = 0; i < 6; i++) await tap('NO');
+  for (let i = 0; i < 5; i++) await tap('NO');
+  await tapUntilCount(rt, 'NO', left);
 }
 
 /** The menu holds the runtime counts for all module records (`DKRT_MENU_OBJS`, one byte per record, 8 records): `test/entry-demo`'s menu objects and an open page's hold. */
@@ -77,17 +86,17 @@ async function expectMenuRefusal(rt: TestRuntime): Promise<void> {
   // a rows-only settings page: digikit/debug's page holds its module while open, and gives the hold back when left
   const debugPath = moduleStorePath(device, DEBUG_MODULE);
   expect(await menuObjects(rt, objs), 'no hold before any page is opened').toBe(0);
-  await openModuleSettings(rt, DEBUG_ROW);
+  await openModuleSettings(rt, DEBUG_ROW, { objs, done: (n) => n === 1, what: 'the DEBUG page holds its module' });
   expect(await menuObjects(rt, objs), 'the open DEBUG settings page holds its module: if this is 0 the key path is misaligned').toBe(1);
   expect(await rt.dk.reloadAndWait(debugPath), 'RELOAD of debug while its settings page is open').toEqual({ result: E_RELOAD_MENUS, unloaded: false });
-  await leaveMenus(rt);
+  await leaveMenus(rt, { objs, done: (n) => n === 0, what: 'leaving the DEBUG page gave the hold back' });
   expect(await menuObjects(rt, objs), 'leaving the page gave the hold back').toBe(0);
   expect(await rt.dk.reloadAndWait(debugPath), 'RELOAD of debug after its settings page was left').toEqual({ result: 0, unloaded: true });
   // no menu object yet (the count is the proof; a reload would also reset it): a reload goes through
   expect(await menuObjects(rt, objs), 'no menu object before the settings page is opened').toBe(0);
   expect(await rt.dk.reloadAndWait(path), 'before the settings page is opened').toEqual({ result: 0, unloaded: true });
-  await openModuleSettings(rt, MENU_ROW);
-  await leaveMenus(rt);
+  await openModuleSettings(rt, MENU_ROW, { objs, done: (n) => n > 0, what: 'the entry-demo page built a menu object' });
+  await leaveMenus(rt, { objs, done: (n) => n > 0, what: 'the menu object stays after leaving' });
   expect(
     await menuObjects(rt, objs),
     'the module built a menu object when its settings page opened: if this is 0 the key path of openModuleSettings is misaligned (take a dk:dev screenshot of each step)',
