@@ -52,6 +52,8 @@ SOURCE_GLOBS = (
     "packages/dksample/**",
     "packages/dkupload/**",
     "packages/patchkit/**",
+    # patchkit compiles in the test-source patterns (include_str! in src/build/test_source.rs), and this key reads them
+    "config/test-source-patterns.json",
     "runtime/core/fit/Cargo.toml",
     "runtime/core/fit/build.rs",
     "runtime/core/fit/src/**",
