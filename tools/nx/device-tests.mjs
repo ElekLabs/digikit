@@ -3,12 +3,11 @@
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
-import { mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
+import { isUploadable, mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
   DEVICE_INPUTS,
   VITEST_SETUP,
   serviceIds,
-  builtSourceExclusions,
   deviceInputs,
   forDevice,
   serviceLeaves,
@@ -182,12 +181,13 @@ const fileTargets = (
   const merge = opts.mergeTests ?? [];
   const isMerge = (test) => !opts.twin || merge.includes(test);
   // `merge`: the key of the merge target (the target everything selects); the `-all` twins keep the full key.
-  const build = (list, narrow, recList = recs, merge = false, fullTier = false) =>
+  const build = (list, narrow, recList = recs, merge = false, fullTier = false, siblingTests = false) =>
     deviceTarget(root, list, recList, imageInput, importInputs, pythonInputs, uploadable, {
       ...opts,
       narrow,
       merge,
       fullTier,
+      siblingTests,
     });
   if (tests.length === 1) {
     const [test] = tests;
@@ -204,11 +204,8 @@ const fileTargets = (
     const own = recs.filter((rec) => rec.files?.includes(test));
     const narrow = !isMerge(test);
     // A sibling test file is not an input. This file's own closure comes from importInputs.
-    const make = (isNarrow, merge = false, fullTier = false) => {
-      const target = build([test], isNarrow, own.length ? own : recs, merge, fullTier);
-      target.inputs.push('!{projectRoot}/**/*.device.test.ts');
-      return target;
-    };
+    const make = (isNarrow, merge = false, fullTier = false) =>
+      build([test], isNarrow, own.length ? own : recs, merge, fullTier, true);
     targets[child] = make(narrow, Boolean(opts.twin));
     if (opts.twin) all[`${allName}--${suffix}`] = make(false, false, true);
   }
@@ -239,32 +236,46 @@ export const checkMergeTests = (workspaceRoot, root, deviceTests, fullTier) => {
 
 // The shared conformance suite loads every uploadable module (`isUploadable` in module-manifests.mjs).
 // `full`: the `-all` twin keeps the driver packages in its key; the merge target leaves them out.
-export const conformanceTarget = (workspaceRoot, root, m, f, importInputs, full = false) => ({
-  executor: 'nx:run-commands',
-  cache: true,
-  inputs: [
-    ...DEVICE_INPUTS,
-    { env: 'DIGI_DEVICE' },
-    'production',
-    ...builtSourceExclusions(root, workspaceRoot),
-    ...((imports) => (full ? imports : withoutDriver(imports)))(
-      importInputs([...globSync('tests/conformance/**/*.device.test.ts', { cwd: workspaceRoot }), VITEST_SETUP]),
-    ),
-  ],
-  dependsOn: ['pack', 'digikit/debug:pack', 'digi-control:daemons', IMAGE_BUILD, DEVICE_BYTES, TEST_ASSEMBLY],
-  outputs: [],
-  options: {
-    command: `${EMU_SLOT} pnpm --filter @digi/regression test:conformance`,
-    env: {
-      DIGI_CONFORMANCE_MODULES: m.id,
-      DIGI_CONFORMANCE_MANIFEST: f,
-      DIGI_PATCHKIT_LIVE: '1',
-      // as tests/conformance/manifests.ts: a dynamic module that is no service runs with the SHARC
-      DIGI_EMU_DSP: m.dynamic === true && m.type !== 'service' ? 'sharc' : 'zero',
+export const conformanceTarget = (workspaceRoot, root, m, f, importInputs, full = false) => {
+  // the run loads the packs of every uploadable module and runs patchkit live (DIGI_PATCHKIT_LIVE): the merge key follows the
+  // packs, the image hashes, the daemon key and the patchkit key of the devices, not the binaries (`-all`: the full key).
+  // Its files: the conformance tests and the manifest it reads, not the module's sources.
+  const { inputs } = deviceInputs(root, [], [{ sources: [f] }], undefined, importInputs, () => [], false, {
+    merge: !full,
+    patchkitLive: true,
+    own: [],
+    base: workspaceRoot,
+    testPaths: globSync('tests/conformance/**/*.device.test.ts', { cwd: workspaceRoot }),
+  });
+  return {
+    executor: 'nx:run-commands',
+    cache: true,
+    inputs: [...forDevice(inputs, null), { env: 'DIGI_DEVICE' }],
+    // DEVICE_IMAGES and patchkit:cli write the image hashes and the patchkit key that the merge key holds
+    dependsOn: [
+      'pack',
+      'digikit/debug:pack',
+      'digi-control:daemons',
+      'patchkit:cli',
+      IMAGE_BUILD,
+      DEVICE_BYTES,
+      DEVICE_IMAGES,
+      TEST_ASSEMBLY,
+    ],
+    outputs: [],
+    options: {
+      command: `${EMU_SLOT} pnpm --filter @digi/regression test:conformance`,
+      env: {
+        DIGI_CONFORMANCE_MODULES: m.id,
+        DIGI_CONFORMANCE_MANIFEST: f,
+        DIGI_PATCHKIT_LIVE: '1',
+        // as tests/conformance/manifests.ts: a dynamic module that is no service runs with the SHARC
+        DIGI_EMU_DSP: m.dynamic === true && m.type !== 'service' ? 'sharc' : 'zero',
+      },
+      cwd: '.',
     },
-    cwd: '.',
-  },
-});
+  };
+};
 
 // Nodes of the test-only projects (their device targets); appended to `nodes`.
 export const testOnlyNodes = (
@@ -303,6 +314,9 @@ export const testOnlyNodes = (
       throw new Error(
         `Test-only project ${config.name}: the narrow merge key needs the subject module; name it in implicitDependencies`,
       );
+    // a module that goes on the card as a pack: a service (`role`) or an uploadable module
+    const services = serviceIds(byId);
+    const packed = (id, manifest) => isUploadable(manifest) || services.has(id);
     const targets = deviceTargets(
       targetName,
       root,
@@ -315,16 +329,21 @@ export const testOnlyNodes = (
       {
         twin: targetName === 'test-device',
         subjects: config.implicitDependencies,
-        // image-module subjects (patched into the image): their root, to leave the built sources out of the key (the image
-        // hashes hold them). Pack-loaded subjects (content modules, services, fixtures) keep `production` with their sources.
-        // `devices`: the devices whose image holds the subject; the other halves keep its built sources.
+        // subjects that are built to objects: their root, to leave the built sources out of the key. Their bytes reach the run
+        // through the image hashes (`devices`: the devices whose image holds the subject) or, for a subject that is packed
+        // (`pack`: a service or content module), through its pack output. A subject with neither keeps `production`.
         subjectRoots: Object.fromEntries(
           (config.implicitDependencies ?? [])
-            .filter((id) => byId.has(id) && coreBuilds.has(id) && imageModules.has(id))
-            .map((id) => [id, { root: dirname(byId.get(id).file), devices: [...imageModules.get(id)].sort() }]),
+            .filter((id) => byId.has(id))
+            .map((id) => [id, { manifest: byId.get(id).manifest, devices: [...(imageModules.get(id) ?? [])].sort() }])
+            .filter(([id, { manifest, devices }]) => (coreBuilds.has(id) && devices.length) || packed(id, manifest))
+            .map(([id, { manifest, devices }]) => [
+              id,
+              { root: dirname(byId.get(id).file), devices, pack: packed(id, manifest) },
+            ]),
         ),
         services: serviceLeaves(byId),
-        serviceIds: serviceIds(byId),
+        serviceIds: services,
         base: workspaceRoot,
         mergeTests: mergeTests(join(workspaceRoot, root)),
       },

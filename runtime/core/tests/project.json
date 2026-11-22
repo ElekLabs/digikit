@@ -16,7 +16,13 @@
         "firmwareOnly": "the audible swap of a reload and the transport refusal on the real firmware",
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "S:machines"],
-        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"]
+        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"],
+        "compiles": true,
+        "sources": [
+          "tests/fixtures/modules/sine/module.toml",
+          "tests/fixtures/modules/sine/src/**/*",
+          "tests/fixtures/modules/sine/build/gen/**/*"
+        ]
       },
       {
         "files": ["reload-fx.device.test.ts"],

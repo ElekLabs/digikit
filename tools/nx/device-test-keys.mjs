@@ -3,7 +3,10 @@
 // - full key (DEVICE_INPUTS): all shared reads plus the built outputs, including the patchkit binary;
 // - merge key: only the bytes the test loads (the image hashes and the daemon key of its device, its packs) plus the reads its
 //   import closure needs, without the files of the other devices; used for the files not listed in metadata.mergeTests;
-// - narrow key: the production files of the project, the packs the test loads and its imports.
+// - narrow key: the same bytes (image hashes, daemon key), the packs the test loads, and its imports.
+// Merge and narrow keys hold only the artifacts the test loads, its own test files and setup (`ownFiles`), its records' `sources`,
+// its import closure and DRIVER_SUBJECT_FILES; the conformance merge key is built by the same function (`deviceInputs`).
+// Builds key on sources, tests key on what they run: no merge or narrow key holds a source file of the project or its subject.
 // Python tool inputs: the import closure (py-imports.mjs) of the `.py` tools a record lists in its `sources`. A test that
 // runs a new Python tool must list it there.
 import { existsSync, globSync } from 'node:fs';
@@ -76,7 +79,7 @@ export const VITEST_SETUP = 'tests/regression/setup-temp.ts';
 // - the imports of the test files and of the Vitest setup file (importInputs, a closure over TypeScript sources);
 // - the outputs of the pack, CLI and daemons targets (dependentTasksOutputFiles; dist/daemons.json names the
 //   content-keyed daemon), and the production files of the core modules of the patched image (imageInput);
-// - the module itself (`production` of the project: its sources, without tests/ and docs);
+// - the module itself (`production` of the project: its sources, without tests/ and docs) in a full key only;
 // - the files in READ_BY_TESTS, the SDK, config/emulator.json (sets SHARC_* env) and each record's `sources`;
 // - the firmware and ready dirs via device-inputs.mjs, and the env switches below.
 // A package or a harness file that no test imports is not an input.
@@ -173,11 +176,22 @@ export const forDevice = (inputs, device) =>
 // Tests that run `patchkit build` or `pack` at run time, or patch with explicit fixture modules, compile sources:
 // they keep the SDK and the toolchain as inputs (record flag `compiles`, `patchModules`, or any Python tool the test names: the Python devtools may build or pack).
 export const COMPILE_INPUTS = [...SHARED_SDK_INPUTS, '{workspaceRoot}/tools/patchkit/toolchain/**/*'];
+// The pack outputs of module ids (`.dks` for a service leaf, else `.dkm`; `services`: the set of `serviceLeaves`).
+export const packOutputs = (ids, services) =>
+  [...new Set(ids.map((id) => id.split('/').at(-1)))].map((leaf) => ({
+    dependentTasksOutputFiles: `dist/modules/*/${leaf}.${services?.has(leaf) ? 'dks' : 'dkm'}`,
+    transitive: true,
+  }));
 // Directories of a module project that its objects are built from (see the pack and image outputs).
 export const builtSourceExclusions = (root, base = '.') =>
   ['src', 'include', 'fit', 'sdk']
     .filter((dir) => existsSync(join(base, root, dir)) && !root.includes('/tests'))
     .map((dir) => `!{projectRoot}/${dir}/**/*`);
+
+// The files of a test-only project that is a tests directory (`runtime/core/tests`): its setup and fixtures. A module project
+// holds none: its tests reach the run through the import closure and the records' `sources`.
+export const ownFiles = (root) =>
+  root.split('/').at(-1) === 'tests' || root.includes('/tests/') ? [`{workspaceRoot}/${root}/**/*`] : [];
 
 // What a test-only project hashes of a module subject that is built into the image: its files without the directories its
 // objects are built from (the image hashes hold those). `{ input: 'production', projects }` cannot take exclusions, so the
@@ -193,6 +207,8 @@ export const subjectInputs = (root, base = '.') => {
     ...['src', 'include', 'fit', 'sdk', 'build', 'tests'].map((d) => `!{workspaceRoot}/${root}/${d}/**`),
     ...[...new Set(nested)].sort().map((d) => `!{workspaceRoot}/${root}/${d}/**`),
     `!{workspaceRoot}/${root}/**/*.md`,
+    // a pack stages its crate from the patchkit sources; no test reads the manifests
+    `!{workspaceRoot}/${root}/Cargo.{toml,lock}`,
     ...testSourceGlobs(`{workspaceRoot}/${root}`),
   ];
 };
@@ -233,7 +249,7 @@ export const withoutDriver = (imports) =>
   );
 
 // The cache inputs of one device test target, and whether its key follows patchkit (`patchkitLive`).
-// `opts`: `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
+// `opts`: `testPaths` (workspace paths) replaces the test files of the project; `own` replaces its own files; `siblingTests` leaves the other test files out; `narrow` selects the narrow input set; `moduleId` is the project's module id (its pack is loaded when
 // `uploadable`); `subjects` are the projects a test-only project tests; `services` is the set of service leaves
 // (`serviceLeaves`): a narrow key follows the `.dks` pack of those, the `.dkm` pack of every other leaf.
 export const deviceInputs = (
@@ -247,7 +263,7 @@ export const deviceInputs = (
   opts = {},
 ) => {
   // The test files and the setup file with everything they import.
-  const imports = importInputs([...tests.map((test) => join(root, test)), VITEST_SETUP]);
+  const imports = importInputs([...(opts.testPaths ?? tests.map((test) => join(root, test))), VITEST_SETUP]);
   // The `.py` tools a record lists in `sources` seed the Python input walk.
   const seeds = [
     ...new Set(
@@ -268,11 +284,13 @@ export const deviceInputs = (
   // A test that runs patchkit for its own sake (or patches with explicit fixture modules) depends on the patchkit code, not only on
   // the image bytes: its key follows patchkit.
   const patchkitCompiles = recs.some((rec) => rec.patchModules?.length);
-  const patchkitLive = imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
+  const patchkitLive = opts.patchkitLive || imports.some((file) => PATCHKIT_LIVE.includes(file)) || patchkitCompiles;
   const patchkitWasm = imports.some((file) => PATCHKIT_WASM_USERS.includes(file));
   // the files the records name in `sources`; driver files named there follow the same rule as the imports
   const sources = [...new Set(recs.flatMap((rec) => (rec.sources ?? []).map((s) => `{workspaceRoot}/${s}`)))];
   const driverless = opts.merge || opts.narrow;
+  const own = driverless ? (opts.own ?? ownFiles(root)) : null;
+  const wideProject = !driverless || own.length > 0;
   const inputs = [
     ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
     // a test that reads the precomputed `needs` of committed packs keys on that file's content
@@ -284,17 +302,15 @@ export const deviceInputs = (
           ...TEST_READS,
           // the packs the test loads, not every pack output
           // (the own module, the records' modules and their alias packs)
-          ...[
-            ...new Set(
-              [
-                ...(uploadable && opts.moduleId ? [opts.moduleId] : []),
-                ...recs.flatMap((r) => [...(r.modules ?? []), ...Object.keys(r.aliases ?? {})]),
-              ].map((id) => id.split('/').at(-1)),
-            ),
-          ].map((leaf) => ({
-            dependentTasksOutputFiles: `dist/modules/*/${leaf}.${opts.services?.has(leaf) ? 'dks' : 'dkm'}`,
-            transitive: true,
-          })),
+          ...packOutputs(
+            [
+              ...(uploadable && opts.moduleId ? [opts.moduleId] : []),
+              ...recs.flatMap((r) => [...(r.modules ?? []), ...Object.keys(r.aliases ?? {})]),
+            ],
+            opts.services,
+          ),
+          // the image hashes and the daemon key of the half
+          ...outputFiles(MERGE_BYTES),
           // the port files that go on the card with a service (the fixture service takes the port file of the test image)
           ...(recs.some((r) => (r.modules ?? []).some((id) => opts.services?.has(id.split('/').at(-1))))
             ? [
@@ -312,27 +328,24 @@ export const deviceInputs = (
           ...(recs.some((r) => r.dkprofWasm)
             ? [{ dependentTasksOutputFiles: 'apps/web/public/dkprof.wasm', transitive: true }]
             : []),
-          // an edit of the subject module reruns a test-only project
-          // (its built sources reach the run through the image hashes below)
-          ...(opts.subjects?.length
-            ? opts.subjects.map((id) => {
-                const subject = opts.subjectRoots?.[id];
-                const built = { input: 'production', projects: [id] };
-                // `forDevice` picks per half: the fileset with the image hashes when the device's image holds the subject, else `built`
-                return subject
-                  ? {
-                      [IMAGE_SUBJECT]: {
-                        devices: subject.devices,
-                        inImage: [
-                          ...subjectInputs(subject.root, opts.base),
-                          ...outputFiles(['dist/bytes/images-{device}.sha256']),
-                        ],
-                        built: [built],
-                      },
-                    }
-                  : built;
-              })
-            : []),
+          // the subject module of a test-only project: its files that are not built, and the bytes it builds to (the image
+          // hashes above, or its pack)
+          ...(opts.subjects ?? []).map((id) => {
+            const subject = opts.subjectRoots?.[id];
+            const production = { input: 'production', projects: [id] };
+            if (!subject) return production;
+            const files = subjectInputs(subject.root, opts.base);
+            const pack = subject.pack ? packOutputs([id], opts.services) : [];
+            // `forDevice` picks per half: a half whose image holds the subject follows the image hashes; the others follow the
+            // pack, or the subject's production files when it has none
+            return {
+              [IMAGE_SUBJECT]: {
+                devices: subject.devices,
+                inImage: [...files, ...pack],
+                built: subject.pack ? [...files, ...pack] : [production],
+              },
+            };
+          }),
           // fixture image modules that a record names are chosen by the test itself
           ...(recs.some((r) => r.patchModules?.length)
             ? [{ input: 'production', projects: [...new Set(recs.flatMap((r) => r.patchModules ?? []))] }]
@@ -344,13 +357,17 @@ export const deviceInputs = (
           // an explicit fixture image is built from the sources of its modules at run time
           ...(imageInput ? [imageInput] : []),
         ]),
-    // the module itself (its sources, without tests/ and docs). Full set: the sources that become objects reach the
-    // run through the pack outputs and the image hashes.
-    ...(opts.narrow ? ['production'] : ['production', ...builtSourceExclusions(root, opts.base)]),
+    // a full key holds the module itself (its files without tests/ and docs, and without the directories its objects are built
+    // from); a merge or narrow key holds the test's own files and setup (`ownFiles`): the objects reach the run through the
+    // pack outputs and the image hashes, no other source file is an input
+    ...(driverless ? (opts.own ?? ownFiles(root)) : ['production', ...builtSourceExclusions(root, opts.base)]),
     ...(driverless ? withoutDriver(imports) : imports),
-    ...(!opts.narrow && (patchkitCompiles || recs.some((rec) => rec.compiles || seeds.length)) ? COMPILE_INPUTS : []),
+    // a record that compiles at run time (`compiles`) keeps the SDK and the toolchain in every key, the narrow one included
+    ...(recs.some((rec) => rec.compiles) || (!opts.narrow && (patchkitCompiles || seeds.length)) ? COMPILE_INPUTS : []),
     ...(driverless ? withoutDriver(sources) : sources),
     ...(seeds.length ? pythonInputs(seeds) : []),
+    // `siblingTests`: the target of one test file leaves the other test files of the project out of a project-wide set
+    ...(opts.siblingTests && wideProject ? ['!{projectRoot}/**/*.device.test.ts'] : []),
   ];
   return { inputs, patchkitLive, patchkitWasm };
 };
