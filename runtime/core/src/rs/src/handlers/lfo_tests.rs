@@ -3,7 +3,7 @@
 use super::exports::{number_of, owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
 use crate::collect::Collect;
 use super::tests::LOCK;
-use crate::plan::{self, Env};
+use crate::admission::Admission;
 use crate::registry;
 use dkneeds::keys::{write_table, KeyGroup, Keys, Table};
 use crate::core_api::RealCore;
@@ -151,18 +151,17 @@ fn table(keys: &[(u32, &[u32])]) -> Vec<u8> {
     b
 }
 
-fn plan_of(tables: &[Vec<u8>]) -> plan::Plan {
-    let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+/// The verdicts of the rules of the core for `tables`, one module each, in selection order.
+fn plan_of(tables: &[Vec<u8>]) -> Vec<Verdict> {
     let c = |kind: u8, limit: u32| DkrtCap { kind: kind as u32, limit, used: 0, largest: limit };
-    caps[0] = c(CAPK_MODULES, 8);
-    caps[1] = c(CAPK_SELECTION, 8);
-    let env = Env { services: crate::handlers::services(), runtime: dkrt_sdk::RUNTIME_VERSION, caps: &caps[..2] };
+    let caps = [c(CAPK_MODULES, 8), c(CAPK_SELECTION, 8)];
     let keys: Vec<Option<Keys>> = tables.iter().map(|t| Some(Keys::parse(t).unwrap())).collect();
-    plan::plan(&env, &keys)
+    let mut a = Admission::new(&caps);
+    (0..keys.len()).map(|j| a.judge_module(&crate::handlers::services(), &keys, &[], j)).collect()
 }
 
 #[test]
-fn the_planner_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and_a_second_owner() {
+fn admission_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and_a_second_owner() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _l = Loaded::new();
     let one = table(&[(KIND_LFO_SHAPE, &[7])]);
@@ -170,17 +169,17 @@ fn the_planner_knows_the_kind_from_the_service_table_refuses_an_unowned_kind_and
     let other = table(&[(KIND_LFO_SHAPE, &[9])]);
     // the lfo service owns the kind: a module with a shape key is accepted
     let p = plan_of(&[one.clone()]);
-    assert_eq!(p.verdicts[0], Verdict::Accepted);
+    assert_eq!(p[0], Verdict::Accepted);
     // the same shape key in a second module is refused, another key is not
     let p = plan_of(&[one.clone(), same, other]);
-    assert_eq!(p.verdicts[..3], [Verdict::Accepted, Verdict::Refused(Reason::DuplicateKey(KIND_LFO_SHAPE, 7)), Verdict::Accepted]);
-    assert_eq!(p.verdicts[1].result(), E_PLAN_KEY);
+    assert_eq!(p[..3], [Verdict::Accepted, Verdict::Refused(Reason::DuplicateKey(KIND_LFO_SHAPE, 7)), Verdict::Accepted]);
+    assert_eq!(p[1].result(), E_PLAN_KEY);
     // a shape key twice in one module is refused too, so the assignment (`sticky::assign`) never sees a repeated key
     let twice = table(&[(KIND_LFO_SHAPE, &[5, 5])]);
     let p = plan_of(&[twice]);
-    assert_eq!(p.verdicts[0], Verdict::Refused(Reason::DuplicateKey(KIND_LFO_SHAPE, 5)));
+    assert_eq!(p[0], Verdict::Refused(Reason::DuplicateKey(KIND_LFO_SHAPE, 5)));
     // a kind no service owns
     let p = plan_of(&[table(&[(77, &[1])])]);
-    assert_eq!(p.verdicts[0], Verdict::Refused(Reason::UnownedKind(77)));
-    assert_eq!(p.verdicts[0].result(), E_PLAN_KIND);
+    assert_eq!(p[0], Verdict::Refused(Reason::UnownedKind(77)));
+    assert_eq!(p[0].result(), E_PLAN_KIND);
 }

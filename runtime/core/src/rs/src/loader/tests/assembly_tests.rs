@@ -4,8 +4,9 @@
 //! (`core/services/{fx,machines,lfo}`, `test/svc-test`) as the card holds them (the packed file of `dist/modules/<device>/`, and the port file of `dist/ports/` beside them), the committed
 //! runtime object (`runtime/core/build/runtime.dko.json`, the immediate of its ABI check) and the info table of the patched image
 //! (`dist/bytes/images/<device>/set-<set>.info`, written by `patchkit:device-images` from the plan of `patchkit apply`). They go through the code of the boot:
-//! the search for providers on the card, the plan (needs, owners of kinds, capacity limits from the `cap_<kind>` entries), the role checks of a provider file (ABI word, stock
-//! bytes of every hook site), the install of its hooks and slots over `FakePlatform`, and the load of a module without a DSP section.
+//! the search for providers on the card, the package manager's boot (the graph's order and needs, the rules of the core for owners of kinds and keys, capacity limits from the
+//! `cap_<kind>` entries), the role checks of a provider file (ABI word, stock bytes of every hook site), the install of its hooks and slots over `FakePlatform`, and the load of
+//! a module without a DSP section.
 //!
 //! What the host cannot show stays out: no ColdFire code runs (in the loader cases the `init` of a service replays what its header table declares; one case runs the glue of each Rust service file natively and compares), and the DSP part of a module is
 //! not loaded (its DSP loader needs the DSP). One case per seam shows that it fits and one the refusal that is typical for it. The edge cases of each part are unit
@@ -14,7 +15,9 @@
 //! The tests need the outputs of the Nx target `core/runtime:test-assembly` (its `dependsOn`). A device without its firmware image is skipped, as its device tests are.
 use super::*;
 use crate::fake_platform::{Call, FakePlatform};
+use crate::lifecycle::{Manager, RtManifest, Session};
 use crate::test_lock::LOCK;
+use dkrt_lifecycle::{LifecycleError, PackageId, Report};
 use dkneeds::keys::{name_hash, tag, Keys};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::profiles;
@@ -523,8 +526,14 @@ fn card_of(dev: Dev, modules: &[&Fixture], services: &[Fixture]) -> Vec<(String,
     files
 }
 
-/// The plan of a boot of `modules` from a card with `services`, over the platform of `image`: the loader with every module captured and the plan made. The
-/// providers are not loaded yet.
+/// What `planned` leaves: the number of modules of the selection and of providers the search found.
+pub(super) struct Plan {
+    pub n: usize,
+    pub np: usize,
+}
+
+/// The selection `modules` of a boot from a card with `services`, over the platform of `image`: the loader with every module captured and the providers the search found for their
+/// hard needs. Nothing is loaded yet.
 pub(super) unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modules: &[&Fixture], services: &[Fixture]) -> (Boot, Plan) {
     let files = card_of(dev, modules, services);
     let p = image.platform(dev, limits);
@@ -537,12 +546,96 @@ pub(super) unsafe fn planned(dev: Dev, image: &Image, limits: &[(u8, u32)], modu
     for (k, m) in modules.iter().enumerate() {
         l.capture(k, &packed(dev, m.leaf, "dkm", m.nx));
     }
-    let caps = capacity(&l.p);
-    let plan = l.plan_with_caps(modules.len(), &caps);
-    (l, plan)
+    l.find_providers(modules.len());
+    let np = l.found.n;
+    (l, Plan { n: modules.len(), np })
 }
 
-/// The store paths of the providers the plan found.
+/// A boot of the selection through the package manager over the real seams: what it did, and the means to ask about the packages afterwards.
+pub(super) struct Run {
+    pub pm: Manager<FakePlatform, Card, DeviceRegistry>,
+    pub report: Report,
+    s: Box<Session<FakePlatform, Card, DeviceRegistry>>,
+    _paths: Vec<Vec<u8>>,
+}
+
+impl Run {
+    /// The verdict the module states show for selection index `k`: the graph's or the rules of the core's refusal with its reason, else accepted (the load can still have failed
+    /// for a reason of its own: `refusal`).
+    pub fn verdict(&self, k: usize) -> Verdict {
+        let id = PackageId(k as u8);
+        match self.refusal(k) {
+            None => Verdict::Accepted,
+            Some(why) => {
+                let service = if let LifecycleError::NeedRefused { service, .. } = why { service } else { id };
+                let hash = self.pm.graph().node(service).and_then(|n| n.provides()).map_or(0, |a| a.name());
+                crate::lifecycle::verdict_of(&why, self.s.reason(id), hash)
+            }
+        }
+    }
+
+    /// Why the manager did not bring up the module at selection index `k`, if it did not.
+    pub fn refusal(&self, k: usize) -> Option<LifecycleError> {
+        let id = PackageId(k as u8);
+        self.report.refused().iter().find(|r| r.package == id).map(|r| r.reason)
+    }
+
+    /// The load status of the refusal of module `k`: `OK` when it was brought up.
+    pub fn code(&self, k: usize) -> i32 {
+        self.refusal(k).map_or(OK, |why| crate::lifecycle::code_of(&why))
+    }
+
+    pub fn is_up(&self, id: PackageId) -> bool {
+        self.pm.live().contains(id)
+    }
+}
+
+/// The live capacity of the platform of `l`: what the live check counts (`live_caps`, nothing given back).
+pub(super) unsafe fn live_cap(l: &Boot) -> Vec<DkrtCap> {
+    let mut c = capacity(&l.p);
+    crate::loader::live_caps(&mut c, (0, 0));
+    c
+}
+
+/// The boot record of the selection `modules` (`modules/<leaf>.dkm`), as `dkrt_boot` leaves it before the load: empty, with the count.
+pub(super) unsafe fn boot_record(leaves: &[&str]) -> dkrt_sdk::sel::Record {
+    let mut rec = dkrt_sdk::sel::Record::empty();
+    rec.count = leaves.len() as u32;
+    for (k, leaf) in leaves.iter().enumerate() {
+        let path = std::format!("modules/{leaf}.dkm");
+        rec.paths[k][..path.len()].copy_from_slice(path.as_bytes());
+    }
+    *crate::boot::info() = core::mem::zeroed();
+    crate::boot::info().count = leaves.len() as u32;
+    crate::boot::states().begin();
+    rec
+}
+
+/// Boot `modules` (the first `plan.n` of the selection) through the package manager over `l`, with the capacity of its platform. With `pin_services` the providers the search found
+/// are roots too, so they stay up whatever happens to a module that the host cannot load.
+pub(super) unsafe fn boot_run(l: &mut Boot, plan: &Plan, modules: &[&Fixture], pin_services: bool) -> Run {
+    let paths: Vec<Vec<u8>> = modules.iter().map(|m| std::format!("modules/{}.dkm\0", m.leaf).into_bytes()).collect();
+    let mut at = [None; MAX_MODULES];
+    for (k, p) in paths.iter().enumerate() {
+        at[k] = Some(p.as_ptr());
+    }
+    let mut s = Box::new(Session::new(l as *mut _, at));
+    s.begin_boot(&capacity(&l.p), modules.len());
+    let manifest = RtManifest::of(&mut *s, modules.len());
+    let (placer, linker, installers, host) = s.seams();
+    let mut pm = Manager::new(manifest, placer, linker, installers, host).unwrap();
+    let mut roots: Vec<PackageId> = (0..modules.len()).map(|k| PackageId(k as u8)).collect();
+    if pin_services {
+        roots.extend((0..plan.np).map(|j| PackageId((MAX_MODULES + j) as u8)));
+    }
+    l.phase = Phase::Boot;
+    let report = pm.boot(&roots).unwrap();
+    l.phase = Phase::Closed;
+    crate::selection::BOOT_IDX = u32::MAX;
+    Run { pm, report, s, _paths: paths }
+}
+
+/// The store paths of the providers the search found.
 fn found(l: &Boot, plan: &Plan) -> BTreeSet<String> {
     (0..plan.np).map(|j| String::from_utf8(l.found.path(j).to_vec()).unwrap()).collect()
 }
@@ -555,7 +648,7 @@ fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
     let mut out = Vec::new();
     for j in 0..plan.np {
         let path = String::from_utf8(l.found.path(j).to_vec()).unwrap();
-        if !path.starts_with("services/") || !l.loaded[j] {
+        if !path.starts_with("services/") || unsafe { records::module(MAX_MODULES + j).used } == 0 {
             continue;
         }
         let (_, file) = l.m.files.iter().find(|(n, _)| *n == path.as_bytes()).unwrap();
@@ -589,7 +682,8 @@ unsafe fn imports_resolve(l: &mut Boot, image: &Image, file: &[u8], what: &str) 
             a = l.m.svc_import_addr(name.as_ptr());
         }
         if a == 0 {
-            a = l.exports.resolve(name_hash(std::str::from_utf8(&name[..len]).unwrap())).unwrap_or(0);
+            // the export of a loaded provider, bound to the consumers that need it
+            a = l.exports.owned(name_hash(std::str::from_utf8(&name[..len]).unwrap())).map_or(0, |e| e.0);
         }
         // a service of an image adapter: the host cannot link it, so it is accepted when the image set has the adapter (the module then loads there, and its `_open`
         // answers DK_E_MISSING on a device without it); an image without the adapter is no place for the module
@@ -657,32 +751,31 @@ pub(super) unsafe fn dsp_env(dev: Dev, l: &Boot, plan: &Plan) -> Option<DspEnv> 
     Some(DspEnv { _info: info, _guard: guard })
 }
 
-/// The seam of a fixture with its provider: the plan accepts the module and finds `want` on the card, the providers load (the ABI word, the stock bytes of every
-/// hook site), their hooks and slots are installed as their bind records say, and a module without a DSP section loads.
+/// The seam of a fixture with its provider: the graph and the rules of the core accept the module and the search finds `want` on the card, the package manager brings the providers up (the
+/// ABI word, the stock bytes of every hook site), their hooks and slots are installed as their bind records say, and a module without a DSP section loads.
 unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     let image = Image::read(dev, set);
-    let (mut l, mut plan) = planned(dev, &image, &[], modules, &SERVICES);
+    let (mut l, plan) = planned(dev, &image, &[], modules, &SERVICES);
     let what = std::format!("{} {set} {:?}", dev.name, modules.iter().map(|m| m.leaf).collect::<Vec<_>>());
-    for k in 0..modules.len() {
-        assert_eq!(plan.verdicts[k], Verdict::Accepted, "{what}: {}", modules[k].leaf);
-    }
     let got = found(&l, &plan);
     for w in want {
         assert!(got.contains(&std::format!("services/{w}.dks")), "{what}: the search found {got:?}, not {w}");
     }
-    for j in 0..plan.np {
-        assert_eq!(plan.provider_verdicts[j], Verdict::Accepted, "{what}: provider {j}");
-    }
     // a provider with a DSP part (the machines service) reaches the DSP loader from its load: the host gives it the import table of `core/dyndsp` (every name of its
     // sources, an address that is not 0) and a link that acknowledges, and stops there (the DSP code and the slots follow in the UI loop, `dsp_provider_tests`)
     let _dsp = dsp_env(dev, &l, &plan);
-    l.load_providers(&plan);
-    for j in 0..plan.np {
-        assert!(l.loaded[j], "{what}: provider {} did not load", String::from_utf8_lossy(l.found.path(j)));
-    }
-    l.settle(&mut plan, modules.len());
+    // the providers are roots too: they stay up whatever happens to a module that the host cannot load
+    let run = boot_run(&mut l, &plan, modules, true);
     for k in 0..modules.len() {
-        assert_eq!(plan.verdicts[k], Verdict::Accepted, "{what}: {} after the providers loaded", modules[k].leaf);
+        assert_eq!(run.verdict(k), Verdict::Accepted, "{what}: {}: {:?} missing {:?} import_hash {:x} found {:?}", modules[k].leaf, run.report.refused(), String::from_utf8_lossy(&l.missing), l.import_hash, found(&l, &plan));
+    }
+    for j in 0..plan.np {
+        assert!(
+            run.is_up(PackageId((MAX_MODULES + j) as u8)),
+            "{what}: provider {} did not load: {:?}",
+            String::from_utf8_lossy(l.found.path(j)),
+            run.report.refused().iter().map(|r| r.reason).collect::<Vec<_>>()
+        );
     }
     // the rows the files declared are in the table of the services
     let rows: Vec<&str> = crate::svc_rows::rows().iter().map(|r| unsafe { (**r).name() }).collect();
@@ -704,10 +797,7 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
         // a module with a service of an image adapter among its imports (core/ui) is not loaded here: its link needs the adapter
         let adapter_imports = imports_resolve(&mut l, &image, &file, m.leaf);
         if be(&file, dkneeds::H_DSP_SIZE) == 0 && !adapter_imports {
-            l.phase = Phase::Boot;
-            let path = std::format!("modules/{}.dkm\0", m.leaf);
-            let r = l.load(path.as_ptr());
-            assert_eq!(r, OK, "{what}: load of {} (module {k})", m.leaf);
+            assert!(run.is_up(PackageId(k as u8)), "{what}: load of {} (module {k}): {:?}", m.leaf, run.refusal(k));
         }
     }
 }
@@ -723,14 +813,13 @@ fn a_selected_consumer_loads_a_service_declared_outside_the_sdk() {
             let (l, plan) = planned(dev, &image, &[], &[], &[LOCAL_PING]);
             assert!(found(&l, &plan).is_empty(), "an unneeded provider on the card is not loaded");
 
-            let (l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[]);
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[]);
             assert!(found(&l, &plan).is_empty());
             let service = name_hash("local-ping");
-            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(service)));
+            assert_eq!(boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false).verdict(0), Verdict::Refused(Reason::NeedMissing(service)));
 
-            let (mut l, mut plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let (mut l, plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
             assert_eq!(found(&l, &plan), BTreeSet::from(["services/local-ping.dks".into()]));
-            assert_eq!(plan.verdicts[0], Verdict::Accepted);
 
             let mut newer_client = packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx);
             let table = table_of(&newer_client);
@@ -739,21 +828,22 @@ fn a_selected_consumer_loads_a_service_declared_outside_the_sdk() {
             newer_client[at..at + 4].copy_from_slice(&0x010201u32.to_be_bytes());
             seal(&mut newer_client);
             l.capture(0, &newer_client);
-            let too_new = l.plan_with_caps(1, &capacity(&l.p));
-            assert_eq!(too_new.verdicts[0], Verdict::Refused(Reason::NeedVersion));
+            let too_new = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
+            assert_eq!(too_new.verdict(0), Verdict::Refused(Reason::NeedVersion));
             newer_client[at..at + 4].copy_from_slice(&0x000100u32.to_be_bytes());
             seal(&mut newer_client);
             l.capture(0, &newer_client);
-            let different_major = l.plan_with_caps(1, &capacity(&l.p));
-            assert_eq!(different_major.verdicts[0], Verdict::Refused(Reason::NeedVersion));
+            let different_major = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
+            assert_eq!(different_major.verdict(0), Verdict::Refused(Reason::NeedVersion));
+            // a module the graph refuses brings up none of its services
+            assert!(!crate::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
 
             l.capture(0, &packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx));
-            l.load_providers(&plan);
-            assert!(l.loaded[0]);
+            let run = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
+            assert_eq!(run.verdict(0), Verdict::Accepted);
+            assert!(run.is_up(PackageId(MAX_MODULES as u8)));
             assert!(crate::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
-            l.settle(&mut plan, 1);
-            l.phase = Phase::Boot;
-            assert_eq!(l.load(b"modules/local-ping-user.dkm\0".as_ptr()), OK);
+            assert!(run.is_up(PackageId(0)), "the consumer loads against the provider: {:?}", run.refusal(0));
         }
         clean_state();
     }
@@ -860,14 +950,13 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         unsafe {
-            let (mut l, mut plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
             let _dsp = dsp_env(*dev, &l, &plan);
-            l.load_providers(&plan);
-            l.settle(&mut plan, 1);
             let path = "modules/lfo-shape.dkm\0";
-            l.phase = Phase::Boot;
-            crate::selection::BOOT_IDX = 0;
-            assert_eq!(l.load(path.as_ptr()), OK, "{}", dev.name);
+            let rec = boot_record(&["lfo-shape"]);
+            let mut rt = Box::new(crate::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().results[0], OK, "{}", dev.name);
             crate::selection::BOOT_IDX = u32::MAX;
             l.phase = Phase::Closed;
             let mut caps = capacity(&l.p);
@@ -877,8 +966,8 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
             assert_eq!(records::module(0).used, 1);
             for round in 0..2 {
                 assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
-                assert_eq!(l.unload_rec(0), OK, "{} round {round}", dev.name);
-                assert_eq!(l.reload_load(0, path.as_ptr()), OK, "{} round {round}", dev.name);
+                assert_eq!(rt.unload(0), OK, "{} round {round}", dev.name);
+                assert_eq!(rt.reload_load_with(0, path.as_ptr(), &live_cap(&l)), OK, "{} round {round}", dev.name);
                 assert_eq!((records::module(0).used, l.sel_of(0)), (1, 0));
             }
         }
@@ -895,16 +984,15 @@ fn a_packed_module_is_unloaded_loaded_under_a_new_path_and_loaded_again_at_run_t
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         unsafe {
-            let (mut l, mut plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
             let _dsp = dsp_env(*dev, &l, &plan);
-            l.load_providers(&plan);
-            l.settle(&mut plan, 1);
             let (path, copy) = ("modules/lfo-shape.dkm\0", "modules/lfo-shape-copy.dkm\0");
             let bytes = l.m.files.iter().find(|(n, _)| n == b"modules/lfo-shape.dkm").expect("the module is on the card").1.clone();
             l.m.files.push((b"modules/lfo-shape-copy.dkm".to_vec(), bytes));
-            l.phase = Phase::Boot;
-            crate::selection::BOOT_IDX = 0;
-            assert_eq!(l.load(path.as_ptr()), OK, "{}", dev.name);
+            let rec = boot_record(&["lfo-shape"]);
+            let mut rt = Box::new(crate::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().results[0], OK, "{}", dev.name);
             crate::selection::BOOT_IDX = u32::MAX;
             l.phase = Phase::Closed;
             let caps = |l: &Boot| {
@@ -916,18 +1004,19 @@ fn a_packed_module_is_unloaded_loaded_under_a_new_path_and_loaded_again_at_run_t
             assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), E_LOADED, "{}", dev.name);
             assert_eq!((records::module(1).used, l.accepted[1]), (0, false));
             // an unload, then the copy at a new index (its file name was not in the boot's selection)
-            assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
+            assert_eq!(rt.unload(0), OK, "{}", dev.name);
             l.retire_index(0);
             assert_eq!((records::module(0).used, l.accepted[0], l.sel_of(0)), (0, false, u8::MAX), "{}", dev.name);
             assert_eq!(l.live_check_load(1, copy.as_ptr(), &caps(&l)), OK, "{}", dev.name);
-            assert_eq!(l.live_load(1, copy.as_ptr()), OK, "{}", dev.name);
-            assert_eq!((records::module(0).used, l.sel_of(0), l.accepted[1]), (1, 1, true), "{}", dev.name);
+            assert_eq!(rt.live_load_with(1, copy.as_ptr(), &live_cap(&l)), OK, "{}", dev.name);
+            assert_eq!((records::module(1).used, l.sel_of(1), l.accepted[1]), (1, 1, true), "{}", dev.name);
             // and down again, then the first path at its index
-            assert_eq!(l.unload_rec(0), OK, "{}", dev.name);
+            assert_eq!(rt.unload(1), OK, "{}", dev.name);
             l.retire_index(1);
             assert_eq!(l.live_check_load(0, path.as_ptr(), &caps(&l)), OK, "{}", dev.name);
-            assert_eq!(l.live_load(0, path.as_ptr()), OK, "{}", dev.name);
+            assert_eq!(rt.live_load_with(0, path.as_ptr(), &live_cap(&l)), OK, "{}", dev.name);
             assert_eq!((records::module(0).used, l.sel_of(0), l.accepted[0], l.accepted[1]), (1, 0, true, false), "{}", dev.name);
+            assert!(rt.manager().unwrap().live().contains(PackageId(0)), "{}", dev.name);
         }
         let _ = clean_state();
     }
@@ -953,8 +1042,9 @@ fn a_sample_pool_user_is_refused_without_the_samples_service_file() {
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         unsafe {
-            let (_l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &[]);
-            assert_ne!(plan.verdicts[0], Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &[]);
+            let run = boot_run(&mut l, &plan, &[&TRACK_SELECT], false);
+            assert_ne!(run.verdict(0), Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
         }
         let _ = clean_state();
     }
@@ -969,13 +1059,12 @@ fn a_sample_pool_user_is_refused_when_the_image_has_no_sample_pool_adapter() {
         let image = Image::read(*dev, "device");
         assert!(!image.modules.iter().any(|r| r == "core/sample-pool"), "the set is expected to leave the adapter out");
         unsafe {
-            let (mut l, mut plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
-            // the plan finds the file and cannot tell what the image lacks: the file fills a slot of the sample-pool adapter, the image has no such slot, so the file is refused at its activation (`E_FORMAT`) and the module then misses its service; the stand-in address of its optional imports plays no part
+            let (mut l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
+            // the search finds the file and cannot tell what the image lacks: the file fills a slot of the sample-pool adapter, the image has no such slot, so the file is refused at its activation (`E_FORMAT`) and the module then misses its service; the stand-in address of its optional imports plays no part
             assert_eq!(plan.np, 1);
-            l.load_providers(&plan);
-            assert!(!l.loaded[0], "{}: samples.dks loaded without the sample-pool adapter", dev.name);
-            l.settle(&mut plan, 1);
-            assert!(matches!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(_))), "{}: {:?}", dev.name, plan.verdicts[0]);
+            let run = boot_run(&mut l, &plan, &[&TRACK_SELECT], false);
+            assert_eq!(records::module(MAX_MODULES).used, 0, "{}: samples.dks loaded without the sample-pool adapter", dev.name);
+            assert!(matches!(run.verdict(0), Verdict::Refused(Reason::NeedMissing(_))), "{}: {:?}", dev.name, run.verdict(0));
         }
         let _ = clean_state();
     }
@@ -1084,8 +1173,9 @@ fn a_project_user_is_refused_without_the_project_service_file_and_every_site_sta
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         unsafe {
-            let (l, plan) = planned(*dev, &image, &[], &[&PROJECT_USER], &[]);
-            assert_ne!(plan.verdicts[0], Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&PROJECT_USER], &[]);
+            let run = boot_run(&mut l, &plan, &[&PROJECT_USER], false);
+            assert_ne!(run.verdict(0), Verdict::Accepted, "{}: the module needs a service the card does not hold", dev.name);
             assert_eq!(plan.np, 0, "{}", dev.name);
             assert!(!l.p.calls.borrow().iter().any(|c| matches!(c, Call::Write { .. } | Call::Word { .. })), "{}: no site is written", dev.name);
         }
@@ -1138,7 +1228,7 @@ fn an_adapter_import_resolves_only_in_an_image_with_the_adapter() {
         let file = packed(*dev, TRACK_SELECT.leaf, "dkm", TRACK_SELECT.nx);
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&TRACK_SELECT], &SERVICES);
-            l.load_providers(&plan);
+            let _run = boot_run(&mut l, &plan, &[&TRACK_SELECT], true);
             assert!(imports_resolve(&mut l, &image, &file, "track-select"), "{}: the image has core/ui", dev.name);
             let bare = Image { entries: Vec::new(), modules: Vec::new() };
             let refused = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| imports_resolve(&mut l, &bare, &file, "track-select")));
@@ -1221,9 +1311,11 @@ fn the_image_gives_the_limits_the_plan_judges_by() {
         }
         // a limit under the uses of the module refuses it, naming the resource
         unsafe {
-            let (_l, plan) = planned(*dev, &image, &[(CAPK_MACHINE_ROWS, 0)], &[&SINE], &SERVICES);
-            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS)), "{}", dev.name);
-            assert_eq!(plan.verdicts[0].result(), E_PLAN_FIT);
+            let (mut l, plan) = planned(*dev, &image, &[(CAPK_MACHINE_ROWS, 0)], &[&SINE], &SERVICES);
+            let run = boot_run(&mut l, &plan, &[&SINE], false);
+            assert_eq!(run.verdict(0), Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS)), "{}", dev.name);
+            assert_eq!(run.verdict(0).result(), E_PLAN_FIT);
+            assert_eq!(run.code(0), E_PLAN_FIT);
         }
         let _ = clean_state();
     }
@@ -1235,15 +1327,16 @@ fn a_card_without_the_service_file_refuses_its_user_naming_the_service() {
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         unsafe {
-            let (_l, plan) = planned(*dev, &image, &[], &[&SINE], &SERVICES[..1]); // fx only
-            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("machines"))), "{}", dev.name);
-            assert_eq!(plan.verdicts[0].result(), E_MISSING);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&SINE], &SERVICES[..1]); // fx only
+            let run = boot_run(&mut l, &plan, &[&SINE], false);
+            assert_eq!(run.verdict(0), Verdict::Refused(Reason::NeedMissing(name_hash("machines"))), "{}", dev.name);
+            assert_eq!(run.verdict(0).result(), E_MISSING);
         }
         let _ = clean_state();
     }
 }
 
-/// One key rule for every kind: the same packed module twice has the same machine key, so the boot plan refuses the second with the kind and the key that the first
+/// One key rule for every kind: the same packed module twice has the same machine key, so the rules of the core refuse the second with the kind and the key that the first
 /// has (`E_PLAN_KEY`), on both devices. A different module with other keys is accepted next to the first.
 #[test]
 fn the_same_machine_key_in_two_packed_modules_is_refused_by_the_boot_plan() {
@@ -1253,10 +1346,12 @@ fn the_same_machine_key_in_two_packed_modules_is_refused_by_the_boot_plan() {
         let table = table_of(&packed(*dev, SINE.leaf, "dkm", SINE.nx));
         let key = Keys::parse(&table).unwrap().keys_of(dkneeds::KIND_MACHINE).next().expect("the sine fixture has a machine key");
         unsafe {
-            let (_l, plan) = planned(*dev, &image, &[], &[&SINE, &SINE], &SERVICES[1..2]); // machines only
-            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
-            assert_eq!(plan.verdicts[1], Verdict::Refused(Reason::DuplicateKey(dkneeds::KIND_MACHINE, key)), "{}", dev.name);
-            assert_eq!(plan.verdicts[1].result(), dkrt_sdk::E_PLAN_KEY);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&SINE, &SINE], &SERVICES[1..2]); // machines only
+            let _dsp = dsp_env(*dev, &l, &plan);
+            let run = boot_run(&mut l, &plan, &[&SINE, &SINE], false);
+            assert_eq!(run.verdict(0), Verdict::Accepted, "{}", dev.name);
+            assert_eq!(run.verdict(1), Verdict::Refused(Reason::DuplicateKey(dkneeds::KIND_MACHINE, key)), "{}", dev.name);
+            assert_eq!(run.verdict(1).result(), dkrt_sdk::E_PLAN_KEY);
         }
         let _ = clean_state();
     }
@@ -1269,9 +1364,10 @@ fn a_card_without_the_fx_service_file_refuses_an_effect_naming_the_service() {
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
         unsafe {
-            let (_l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES[1..]); // machines, lfo and the test service
-            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("fx"))), "{}", dev.name);
-            assert_eq!(plan.verdicts[0].result(), E_MISSING);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES[1..]); // machines, lfo and the test service
+            let run = boot_run(&mut l, &plan, &[&FX_GAIN], false);
+            assert_eq!(run.verdict(0), Verdict::Refused(Reason::NeedMissing(name_hash("fx"))), "{}", dev.name);
+            assert_eq!(run.verdict(0).result(), E_MISSING);
         }
         let _ = clean_state();
     }
@@ -1299,16 +1395,15 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
         let image = Image::read(*dev, "emulator");
         unsafe {
             // with the file on the card the module is accepted and the file is the provider that loads, and its builder import is one of its exports
-            let (mut l, mut plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[5..6]);
-            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[5..6]);
             assert!(found(&l, &plan).contains("services/shortcuts.dks"), "{}", dev.name);
-            l.load_providers(&plan);
-            l.settle(&mut plan, 1);
+            let run = boot_run(&mut l, &plan, &[&SHORTCUT_DEMO], true);
+            assert_eq!(run.verdict(0), Verdict::Accepted, "{}", dev.name);
             // the hook site is one `jmp` at the walker entry of the device's firmware
             let binds = binds_of(*dev, &l, &plan);
             assert_eq!(binds.len(), 1, "{}: the sites shortcuts.dks installs", dev.name);
             assert_eq!(binds[0].0, name_hash("cf.input.hook.key_event"), "{}", dev.name);
-            assert!(l.exports.resolve(name_hash("dk_shortcut_add")).is_some(), "{}: dk_shortcut_add is no export of shortcuts.dks", dev.name);
+            assert!(l.exports.owned(name_hash("dk_shortcut_add")).is_some(), "{}: dk_shortcut_add is no export of shortcuts.dks", dev.name);
             let listed: Vec<u32> = (0..keys.count(tag::EXPORTS)).map(|i| keys.words(tag::EXPORTS, i).unwrap().0).collect();
             assert_eq!(listed, [name_hash("dk_shortcut_add")], "{}: the header table's exports", dev.name);
             assert!(import_names(&packed(*dev, SHORTCUT_DEMO.leaf, "dkm", SHORTCUT_DEMO.nx)).iter().any(|n| n == "dk_shortcut_add"), "{}", dev.name);
@@ -1316,9 +1411,10 @@ fn a_module_that_binds_a_shortcut_needs_the_shortcuts_service_file() {
         let _ = clean_state();
         unsafe {
             // a card without the file refuses it, naming the service
-            let (_l, plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[..5]);
-            assert_eq!(plan.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("shortcuts"))), "{}", dev.name);
-            assert_eq!(plan.verdicts[0].result(), E_MISSING);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&SHORTCUT_DEMO], &SERVICES[..5]);
+            let run = boot_run(&mut l, &plan, &[&SHORTCUT_DEMO], false);
+            assert_eq!(run.verdict(0), Verdict::Refused(Reason::NeedMissing(name_hash("shortcuts"))), "{}", dev.name);
+            assert_eq!(run.verdict(0).result(), E_MISSING);
         }
         let _ = clean_state();
     }
@@ -1353,12 +1449,12 @@ fn the_builder_calls_of_a_module_resolve_to_the_exports_of_the_service_that_owns
             unsafe {
                 let (mut l, plan) = planned(*dev, &image, &[], &[module], &SERVICES);
                 let _dsp = dsp_env(*dev, &l, &plan);
-                l.load_providers(&plan);
+                let _run = boot_run(&mut l, &plan, &[module], true);
                 let file = packed(*dev, module.leaf, "dkm", module.nx);
                 let used: Vec<String> = import_names(&file).into_iter().filter(|n| builders.contains(&n.as_str())).collect();
                 assert!(used.len() >= 3, "{} {}: the module calls {used:?} of the {service} builders", dev.name, module.leaf);
                 for n in &used {
-                    assert!(l.exports.resolve(name_hash(n)).is_some(), "{} {}: {n} is no export of {service}.dks", dev.name, module.leaf);
+                    assert!(l.exports.owned(name_hash(n)).is_some(), "{} {}: {n} is no export of {service}.dks", dev.name, module.leaf);
                 }
                 // and the file that owns them lists them in its header table
                 let owner = service_file(*dev, service, if service == "fx" { "core/services/fx" } else { "core/services/machines" });
@@ -1420,7 +1516,7 @@ fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
             let _dsp = dsp_env(*dev, &l, &plan);
             assert_eq!(l.resident_query(name, fx_version), Err(E_MISSING));
-            l.load_providers(&plan);
+            let _run = boot_run(&mut l, &plan, &[&FX_GAIN], true);
             let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/fx.dks").unwrap();
             let base = records::module(MAX_MODULES + j).base;
             assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
@@ -1518,9 +1614,8 @@ fn the_port_file_carries_the_identity_of_its_image_and_a_port_file_for_another_f
             // another firmware: the image's id differs by one bit; the search finds no port file, and a load by path is refused
             let h = name_hash("fw_id");
             l.p.info_entries.borrow_mut().iter_mut().find(|(x, _)| *x == h).unwrap().1[1] ^= 1;
-            let caps = capacity(&l.p);
-            let plan2 = l.plan_with_caps(1, &caps);
-            assert!(!(0..plan2.np).any(|j| l.found.path(j).starts_with(b"ports/")), "{}: a port file for another firmware was found", dev.name);
+            l.find_providers(1);
+            assert!(!(0..l.found.n).any(|j| l.found.path(j).starts_with(b"ports/")), "{}: a port file for another firmware was found", dev.name);
             l.phase = Phase::Boot;
             let allocs = l.m.allocs;
             let p0 = std::format!("{ppath}\0");
@@ -1688,10 +1783,10 @@ pub(super) fn clean_state() {
     }
 }
 
-/// The boot's own loop (`Loader::boot`) over a plan of real files: the accepted module loads in plan order and is reported to the boot record, the refused one is
-/// reported with the planner's reason and detail words and its file is never staged.
+/// The runtime's boot over real files (`Rt::boot_with`): the accepted module loads and is reported to the boot record, the refused one is reported with the reason and detail words of
+/// the rules of the core and its file is never staged.
 #[test]
-fn the_boot_loop_loads_accepted_modules_in_plan_order_and_reports_a_refused_one_without_loading_it() {
+fn the_boot_loads_accepted_modules_and_reports_a_refused_one_without_loading_it() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
@@ -1700,33 +1795,19 @@ fn the_boot_loop_loads_accepted_modules_in_plan_order_and_reports_a_refused_one_
             continue;
         }
         unsafe {
-            // a machine row limit of 0 refuses `sine` (the plan names the resource); `svc-test-user` needs no machine row
-            let (mut l, mut plan) = planned(*dev, &image, &[(CAPK_MACHINE_ROWS, 0)], &[&SVC_USER, &SINE], &SERVICES);
-            l.load_providers(&plan);
-            l.settle(&mut plan, 2);
-            assert_eq!(plan.verdicts[0], Verdict::Accepted, "{}", dev.name);
-            assert_eq!(plan.verdicts[1], Verdict::Refused(Reason::Fit(CAPK_MACHINE_ROWS)), "{}", dev.name);
-
-            // the boot record as `dkrt_boot` leaves it before the loop: the verdicts are in
-            *crate::boot::info() = core::mem::zeroed();
-            crate::boot::info().count = 2;
-            crate::boot::states().begin();
-            for k in 0..2 {
-                crate::boot::states().planned(k, plan.verdicts[k]);
-            }
-            let mut rec = dkrt_sdk::sel::Record::empty();
-            rec.count = 2;
-            for (k, m) in [&SVC_USER, &SINE].iter().enumerate() {
-                let path = std::format!("modules/{}.dkm", m.leaf);
-                rec.paths[k][..path.len()].copy_from_slice(path.as_bytes());
-            }
-            l.boot(&rec, &plan);
+            // a machine row limit of 0 refuses `sine` (the rules of the core name the resource); `svc-test-user` needs no machine row
+            let (mut l, _plan) = planned(*dev, &image, &[(CAPK_MACHINE_ROWS, 0)], &[&SVC_USER, &SINE], &SERVICES);
+            let rec = boot_record(&[SVC_USER.leaf, SINE.leaf]);
+            let mut rt = Box::new(crate::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
 
             let b = crate::boot::info();
             assert_eq!(b.results[..2], [OK, E_PLAN_FIT], "{}", dev.name);
             assert_eq!(b.loaded, 1, "{}", dev.name);
             assert_eq!((b.states[0], b.states[1]), (STATE_ACTIVE, STATE_REFUSED), "{}", dev.name);
             assert_eq!(b.detail[1], [CAPK_MACHINE_ROWS as u32, 0], "{}", dev.name);
+            // the services were told which modules stay: the refused one takes no number
+            assert_eq!((l.accepted[0], l.accepted[1]), (true, false), "{}", dev.name);
             // the accepted module is live in the first record; the refused file was never read from the store
             assert_eq!((st().modules[0].used, st().modules[1].used, st().loads), (1, 0, 1), "{}", dev.name);
             assert_eq!(l.m.staged_path, b"modules/svc-test-user.dkm".to_vec(), "{}: the last file staged", dev.name);
@@ -1734,7 +1815,7 @@ fn the_boot_loop_loads_accepted_modules_in_plan_order_and_reports_a_refused_one_
             let leaf = |k: usize| core::slice::from_raw_parts(crate::boot::boot_name(k), dkrt_abi::state::NAME_LEN).to_vec();
             assert_eq!(&leaf(0)[..17], b"svc-test-user.dkm");
             assert_eq!(&leaf(1)[..8], b"sine.dkm");
-            // the loop leaves the loader closed
+            // the boot leaves the loader closed
             assert!(l.phase == Phase::Closed);
             assert_eq!(l.load(b"modules/svc-test-user.dkm\0".as_ptr()), E_BOOT_ONLY);
         }

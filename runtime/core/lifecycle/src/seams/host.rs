@@ -1,4 +1,4 @@
-use crate::PackageId;
+use crate::{LiveSet, PackageGraph, PackageId};
 use dkrt_abi::provider::{Declarations, Status};
 
 /// Calls into the code of packages. One seam serves services and modules: the manager runs the same steps for both (plan section 8.2), and the real
@@ -39,6 +39,11 @@ pub trait ProviderHost {
 
     /// Last call before the entries are restored and the package is freed.
     fn stop(&mut self, package: PackageId);
+
+    /// A boot has tried every service and is about to bring up the first module (or has no module to bring up): `live` holds the services that are up. The host
+    /// plans what the services keep for each module that can still come up, which is one whose services are all in `live`. Called once per boot, never for a
+    /// load.
+    fn services_up(&mut self, _graph: &PackageGraph, _live: &LiveSet) {}
 
     /// `package` is `Active`: start its DSP part, if it has one. The DSP part comes up over later UI passes, so this call returns at once: `true` when a DSP part is
     /// coming (the package counts in [`Report::dsp_pending`](crate::Report::dsp_pending)), `false` for a package with none. The host reports the end of a DSP part that failed with

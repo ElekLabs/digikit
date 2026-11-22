@@ -72,7 +72,7 @@ export const ROWS: Record<string, Row> = {
   E_TYPE_IN_USE: { kind: 'reserved', reason: 'hot reload is archived; never returned' },
   E_DECL_ID: { fail: { file: COMMIT, test: 'a machine index that the keys table lacks is E_DECL_ID' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_DECL_USES: { fail: { file: COMMIT, test: 'more rows than [uses] is E_DECL_USES' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
-  E_FX_ID_DUP: { kind: 'reserved', reason: 'the planner refuses a repeated effect id (E_PLAN_KEY) at the boot and at a live load or reload (plan.rs `an_effect_id_a_live_module_has_is_refused_like_any_key`); never returned' },
+  E_FX_ID_DUP: { kind: 'reserved', reason: 'the rules of the core refuse a repeated effect id (E_PLAN_KEY) at the boot and at a live load or reload (admission.rs `an_effect_id_a_live_module_has_is_refused_like_any_key`); never returned' },
   E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: MACHINES_BUILD, test: 'E_DECL_FULL' }] },
   E_PLAN_KIND: { fail: mine('keys for a kind nobody owns are refused'), pass: loads },
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },

@@ -1,10 +1,11 @@
 //! A service file with a DSP part over fakes (docs/plans/r12-8-sharc-stubs.md 2.5 and 2.6). The ColdFire half is live from the boot hook; the DSP code and then the slots of
-//! the file follow over the UI-loop passes; a failure of the DSP part takes the service and its dependents down again through the one `unload_rec` that modules use. The
+//! the file follow over the UI-loop passes; a failure of the DSP part takes the service and its dependents down again through the package manager. The
 //! DSP link is scripted (`cleanup_tests::script_link`): the area image and the slot words arrive as sends that the script logs.
 use super::*;
 use crate::cleanup_tests as link_script;
 use crate::fake_platform::Call;
 use dkneeds::keys::{name_hash, Slot, Table};
+use dkrt_lifecycle::PackageId;
 
 const SLOT_NAME: &str = "voice_render";
 
@@ -56,26 +57,26 @@ fn dsp_provider_file() -> Vec<u8> {
     service_file_dsp(&table, &dsp_part(16))
 }
 
-/// A loader whose store holds that provider and the consumer module `consumer` (a hard need of `SVC`), the image has the DSP slot, and the link is scripted.
-unsafe fn boot_with_dsp_provider(ack: bool) -> (Fake, Plan) {
+/// A loader whose store holds that provider and the consumer module `consumer` (a hard need of `SVC`), the image has the DSP slot, the link is scripted and the search found the
+/// provider.
+unsafe fn boot_with_dsp_provider(ack: bool) -> Fake {
     let mut l = staged_boot(dsp_provider_file(), consumer_file(&user_table()));
     l.p.info_dsp.borrow_mut().push((name_hash(SLOT_NAME), 1));
     // the DSP of the test: the link is idle and answers as scripted
     *dsp::ds() = core::mem::zeroed();
     dsp::init_once();
     link_script::script_link(ack);
-    *crate::boot::info() = core::mem::zeroed();
-    crate::boot::states().begin();
-    let plan = l.plan_with_caps(1, &wide_caps());
-    (l, plan)
+    l.find_providers(1);
+    assert_eq!(l.found.n, 1, "the search found the provider");
+    l
 }
 
-/// UI-loop passes until the DSP loader is idle again (at most 200).
-unsafe fn run_passes(l: &mut Fake) {
+/// UI-loop passes until the DSP loader is idle again (at most 200), through the lifecycle as the device does.
+unsafe fn run_passes(rt: &mut crate::lifecycle::Rt<FakePlatform, FakeImages, FakeRegistry>) {
     let mut n = 0;
     loop {
         crate::link::pump();
-        l.dsp_step_with(crate::handlers::services());
+        rt.dsp_step(crate::handlers::services());
         n += 1;
         if (dsp::state() == STATE_IDLE && dsp::ds().nwait == 0) || n > 200 {
             break;
@@ -88,15 +89,15 @@ unsafe fn run_passes(l: &mut Fake) {
 fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_sequence() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let (mut l, plan) = boot_with_dsp_provider(true);
-        l.load_providers(&plan);
+        let mut l = boot_with_dsp_provider(true);
+        let mut rt = boot_selection(&mut l, &[PATH]);
         let rec = MAX_MODULES;
         // the ColdFire half is live from the boot hook, the DSP half is under way: the file is `LOADING`, its hooks are in, its slot is claimed and not written
-        assert_eq!((l.loaded[0], records::module(rec).used), (true, 1));
+        assert_eq!(records::module(rec).used, 1);
         assert_ne!(site_bytes(&l, 2), STOCK[..2], "the ColdFire hook is live");
         assert!(l.dsp_install.claimed(rec as u8));
         assert!(link_script::image_sends().is_empty(), "nothing is sent in the boot hook");
-        run_passes(&mut l);
+        run_passes(&mut rt);
         let sends = link_script::image_sends();
         let area = dsp::area_base();
         assert_eq!(sends.len(), 2, "the code, then the slots: {sends:x?}");
@@ -109,30 +110,25 @@ fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_s
 }
 
 #[test]
-fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_unload() {
+fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_the_manager() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let (mut l, mut plan) = boot_with_dsp_provider(false);
-        l.load_providers(&plan);
-        l.settle(&mut plan, 1);
+        let mut l = boot_with_dsp_provider(false);
+        let mut rt = boot_selection(&mut l, &[PATH]);
         let rec = MAX_MODULES;
-        // the dependent loads against the provider's export, and its own DSP load is queued behind the provider's
-        crate::selection::BOOT_IDX = 0;
-        l.phase = Phase::Boot;
-        assert_eq!(l.load(PATH.as_ptr()), OK);
+        // the dependent loaded against the provider's export, and its own DSP load is queued behind the provider's
         let b = crate::boot::info();
-        b.loaded = 1;
-        b.states[0] = STATE_ACTIVE;
+        assert_eq!((b.states[0], b.loaded), (STATE_ACTIVE, 1));
         dsp::ds().waiting[0].rec = 0;
         dsp::ds().nwait = 1;
-        run_passes(&mut l);
+        run_passes(&mut rt);
         // nothing of the provider is left: hooks stock, slot claim gone, no export, record free; the DSP range is back
         assert_eq!(records::module(rec).used, 0);
         assert_eq!(site_bytes(&l, 6), STOCK, "the ColdFire hooks are back to stock");
         assert_eq!((l.installer.count(), l.dsp_install.claimed(rec as u8)), (0, false));
         assert_eq!(l.exports.resolve(name_hash("dk_svctest_ping")), None);
         assert_eq!(dsp::ds().mod_len[rec], 0);
-        assert!(!l.loaded[0], "settle would now refuse a dependent");
+        assert!(!rt.manager().unwrap().live().contains(PackageId(rec as u8)), "the service is down");
         // the dependent went first, with E_MISSING in its module state; its queued DSP job is gone
         assert_eq!(records::module(0).used, 0);
         assert_eq!((crate::boot::info().states[0], crate::boot::info().results[0], crate::boot::info().loaded), (STATE_FAILED, E_MISSING, 0));
@@ -141,7 +137,7 @@ fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_unlo
         assert_eq!(l.r.log.iter().filter(|e| matches!(e, Ev::Remove(_))).copied().collect::<Vec<_>>(), vec![Ev::Remove(0), Ev::Remove(rec)]);
         let fini = |r: usize| l.m.log.iter().position(|e| matches!(e, Ev::Fini(x, _) if *x == r));
         assert!(fini(0).unwrap() < fini(rec).unwrap(), "dependents first");
-        // the slot was never written, so there is nothing to clear; a restore went to the platform under one mask
+        // the slot was never written, so there is nothing to clear; a restore went to the platform under one mask (only a service restores hook sites)
         assert_eq!(link_script::image_sends().len(), 1, "only the image was sent");
         assert!(l.p.calls.borrow().contains(&Call::Mask));
         assert!(!dsp::retained());
@@ -150,38 +146,41 @@ fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_unlo
 }
 
 #[test]
-fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_keeps_the_memory() {
+fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_keeps_the_memory_until_a_retry() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let (mut l, plan) = boot_with_dsp_provider(true);
-        l.load_providers(&plan);
-        run_passes(&mut l);
+        let mut l = boot_with_dsp_provider(true);
+        let mut rt = boot_selection(&mut l, &[PATH]);
+        run_passes(&mut rt);
         let rec = MAX_MODULES;
         let area = dsp::area_base();
         assert_eq!(link_script::image_sends().len(), 2);
-        // the service goes away (hot reload, or a later failure): the slot is zeroed through the link before anything is freed
+        // the service goes away (a reload from the menu, or a later failure): the slot is zeroed through the link before anything is freed
         let base = records::module(rec).base;
-        assert_eq!(l.unload_rec(rec), OK);
+        rt.manager().unwrap().unload(PackageId(rec as u8)).unwrap();
         let sends = link_script::image_sends();
         assert_eq!(sends.last().copied(), Some((area - 64 + 4, 0)), "the slot word is zero again");
         let free = l.m.log.iter().position(|e| *e == Ev::Free(base)).unwrap();
         assert!(free > l.m.log.iter().position(|e| matches!(e, Ev::Fini(..))).unwrap());
         assert_eq!(site_bytes(&l, 6), STOCK);
         link_script::script_end();
-        // a link that does not take the zeros: the service stays (E_BUSY), nothing is freed
-        let (mut l, plan) = boot_with_dsp_provider(true);
-        l.load_providers(&plan);
-        run_passes(&mut l);
+        // a link that does not take the zeros: the take-down stops at the restore, nothing is freed, and a retry with a link that answers finishes it
+        let mut l = boot_with_dsp_provider(true);
+        let mut rt = boot_selection(&mut l, &[PATH]);
+        run_passes(&mut rt);
         let rec = MAX_MODULES;
+        let service = PackageId(rec as u8);
         link_script::script_link(false);
-        // a service that stays loaded keeps its tick and its file client
-        crate::entry::publish_tick(rec, 0x1234);
         crate::files::ready(rec);
-        assert_eq!(l.unload_rec(rec), E_BUSY);
-        assert_eq!(crate::entry::tick_of(rec), 0x1234, "the tick is back");
+        let busy = rt.manager().unwrap().unload(service);
+        assert!(matches!(busy, Err(dkrt_lifecycle::LifecycleError::Busy { package }) if package == service), "{busy:?}");
+        assert_eq!(rt.manager().unwrap().restore_pending(), Some(service));
         assert_eq!(crate::files::ready_state(rec), 2, "the file client is not retired");
         assert_eq!(records::module(rec).used, 1, "the record and its memory are kept");
-        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..))), "no fini before the slots are known to be zero");
+        assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..)) && *e != Ev::Fini(0, records::module(0).base + 4)), "no fini of the service before the slots are known to be zero");
+        link_script::script_link(true);
+        rt.manager().unwrap().retry_pending().unwrap();
+        assert_eq!(records::module(rec).used, 0, "the retry took the service down");
         link_script::script_end();
     }
 }
@@ -191,55 +190,12 @@ fn a_dsp_slot_fill_needs_a_dsp_slot_of_the_image_and_an_entry_inside_the_dsp_ima
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the image has no such slot: the file is refused as a whole, nothing is installed
-        let (mut l, plan) = boot_with_dsp_provider(true);
+        let mut l = boot_with_dsp_provider(true);
         l.p.info_dsp.borrow_mut().clear();
-        l.load_providers(&plan);
-        assert!(!l.loaded[0]);
+        let _rt = boot_selection(&mut l, &[PATH]);
+        assert_eq!(records::module(MAX_MODULES).used, 0);
         assert_eq!((l.installer.count(), l.dsp_install.claimed(MAX_MODULES as u8)), (0, false));
         assert_eq!(site_bytes(&l, 6), STOCK);
         link_script::script_end();
-    }
-}
-
-/// What a take-down asked of the fakes, without the record numbers and addresses: fini, registry remove, free (the memory of the record last).
-fn shape(l: &Fake) -> Vec<&'static str> {
-    let mut v: Vec<&'static str> = l
-        .m
-        .log
-        .iter()
-        .filter_map(|e| match e {
-            Ev::Fini(..) => Some("fini"),
-            Ev::Free(_) => Some("free"),
-            _ => None,
-        })
-        .collect();
-    v.insert(1, "remove");
-    assert_eq!(l.r.log.iter().filter(|e| matches!(e, Ev::Remove(_))).count(), 1);
-    v
-}
-
-/// The DSP loader takes a module and a service down through one function (`take_down`, then `unload_rec`): the same steps for both, a service's hooks and slots first.
-#[test]
-fn a_module_and_a_service_whose_dsp_part_fails_are_taken_down_by_the_same_lifecycle() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    unsafe {
-        let mut m = loader(Init::Ok);
-        assert_eq!(m.load(PATH.as_ptr()), OK);
-        m.m.log.clear();
-        m.r.log.clear();
-        assert_eq!(m.take_down(0, E_DSP_XFER), OK);
-        let (mut s, plan) = boot_with_dsp_provider(true);
-        s.load_providers(&plan);
-        s.m.log.clear();
-        s.r.log.clear();
-        s.p.calls.borrow_mut().clear();
-        assert_eq!(s.take_down(MAX_MODULES, E_DSP_XFER), OK);
-        link_script::script_end();
-        assert_eq!(shape(&s)[..2], shape(&m)[..2], "fini, then the registry");
-        assert_eq!(shape(&s).last(), shape(&m).last());
-        assert_eq!((records::module(0).used, records::module(MAX_MODULES).used), (0, 0));
-        // only the service restores hook sites
-        assert!(s.p.calls.borrow().contains(&Call::Mask));
-        assert!(!m.p.calls.borrow().contains(&Call::Mask));
     }
 }

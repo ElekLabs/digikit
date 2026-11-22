@@ -7,6 +7,10 @@ use std::vec::Vec;
 /// One call a seam received. `Attach` and `Detach` carry the consumer; the services of the call are in [`Probe::walk_of`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Call {
+    /// `Manifest::admit`: only for `Probe::fail`; the asks are in [`Probe::admitted`].
+    Admit(PackageId),
+    /// `ProviderHost::services_up`.
+    ServicesUp,
     Place(PackageId),
     Link(PackageId),
     Start(PackageId),
@@ -29,6 +33,7 @@ struct Inner {
     faults: Vec<(Call, Status)>,
     busy: Vec<(PackageId, usize)>,
     walks: Vec<(PackageId, Vec<PackageId>)>,
+    admits: Vec<PackageId>,
 }
 
 /// The call log and the faults of one fake world. Clones share the same state.
@@ -42,7 +47,25 @@ impl Probe {
     }
 
     pub fn clear(&self) {
-        self.0.borrow_mut().calls.clear();
+        let mut i = self.0.borrow_mut();
+        i.calls.clear();
+        i.admits.clear();
+    }
+
+    /// The packages `Manifest::admit` was asked about, in order. They are not in [`Probe::calls`]: the manifest is not a seam of the steps of a package.
+    pub fn admitted(&self) -> Vec<PackageId> {
+        self.0.borrow().admits.clone()
+    }
+
+    /// Records an `admit` of `package`; the status of a fault set with `fail(Call::Admit(package), ..)`, once.
+    pub(super) fn record_admit(&self, package: PackageId) -> Result<(), Status> {
+        let mut i = self.0.borrow_mut();
+        i.admits.push(package);
+        let call = Call::Admit(package);
+        match i.faults.iter().position(|(c, _)| *c == call) {
+            Some(k) => Err(i.faults.remove(k).1),
+            None => Ok(()),
+        }
     }
 
     /// The next call equal to `call` fails with `status` (the call is recorded; a failed `Restore` or `CanStop` keeps the package as it is).

@@ -201,7 +201,7 @@ fn a_service_starts_with_its_entries_and_the_installers_put_the_hook_in_and_back
         found_at(&mut l, 1);
         let svc = id(MAX_MODULES + 1);
         let mut s = shared(&mut l);
-        let manifest = RtManifest::of(&s, 0);
+        let manifest = RtManifest::of(&mut s, 0);
         let (mut placer, mut linker, mut installers, mut host) = s.seams();
         let base = placer.place(svc).unwrap();
         linker.link(svc, base, &[]).unwrap();
@@ -277,7 +277,7 @@ fn the_installers_take_all_or_nothing() {
         found_at(&mut l, 1);
         let svc = id(MAX_MODULES + 1);
         let mut s = shared(&mut l);
-        let manifest = RtManifest::of(&s, 0);
+        let manifest = RtManifest::of(&mut s, 0);
         let (mut placer, mut linker, mut installers, mut host) = s.seams();
         let base = placer.place(svc).unwrap();
         linker.link(svc, base, &[]).unwrap();
@@ -301,7 +301,7 @@ fn the_seams_leave_the_boot_index_as_they_found_it() {
         let svc = id(MAX_MODULES + 1);
         let mut s = shared(&mut l);
         let (mut placer, mut linker, mut installers, mut host) = s.seams();
-        let manifest = RtManifest::of(&s, 0);
+        let manifest = RtManifest::of(&mut s, 0);
         let idx = || core::ptr::read_volatile(core::ptr::addr_of!(crate::selection::BOOT_IDX));
         crate::selection::BOOT_IDX = 77;
         let base = placer.place(svc).unwrap();
@@ -353,14 +353,15 @@ fn the_manifest_holds_the_tables_of_the_modules_and_providers_and_the_apis_of_th
         l.found.table_len[1] = t.len();
         found_at(&mut l, 1);
         let mut s = shared(&mut l);
-        let m = RtManifest::of(&s, 2);
+        let m = RtManifest::of(&mut s, 2);
         let ids: Vec<u8> = m.tables().iter().map(|(p, _)| p.0).collect();
-        // module 1 has no table (nothing was captured for it): it is a node with the empty table, so the loader's own checks refuse its file with their code; provider 0 has none
-        // and is left out
-        assert_eq!(ids, [0, 1, MAX_MODULES as u8 + 1]);
+        // module 1 has no table (nothing was captured for it) and neither has provider 0: each is a node with the empty table, so the loader's own checks refuse its file
+        // with their code and it meets no need
+        assert_eq!(ids, [0, 1, MAX_MODULES as u8, MAX_MODULES as u8 + 1]);
         let empty = dkneeds::keys::Keys::parse(m.tables()[1].1).expect("the empty table parses");
         assert_eq!((empty.words(dkneeds::keys::tag::NEEDS, 0), empty.words(dkneeds::keys::tag::PROVIDES, 0)), (None, None));
-        assert_eq!(m.tables()[2].1, &t[..]);
+        assert_eq!(m.tables()[2].1, m.tables()[1].1, "provider 0 has the empty table too");
+        assert_eq!(m.tables()[3].1, &t[..]);
         assert!(m.core_apis().iter().any(|a| a.name() == name_hash("runtime") && a.version() == dkrt_sdk::RUNTIME_VERSION));
         assert!(m.resources(id(0)).is_empty() && m.wants(id(0)).is_empty() && m.core_resources().is_empty());
         // the graph the manager builds from it
@@ -409,11 +410,8 @@ impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Service<C> for Tag<T> {
     }
 }
 static WALKED: std::sync::Mutex<Vec<(u32, u32)>> = std::sync::Mutex::new(Vec::new());
-static ODD: ServiceRow = ServiceRow::of::<Tag<1>, crate::core_api::RealCore>("odd", &[]);
-static EVEN: ServiceRow = ServiceRow::of::<Tag<2>, crate::core_api::RealCore>("even", &[]);
-struct Pair2([*const ServiceRow; 2]);
-unsafe impl Sync for Pair2 {}
-static BOTH: Pair2 = Pair2([&ODD as *const ServiceRow, &EVEN as *const ServiceRow]);
+static ODD: ServiceRow = ServiceRow::of::<Tag<1>, crate::core_api::RealCore>("odd", &[(3, 12), (5, 12), (99, 12)]);
+static EVEN: ServiceRow = ServiceRow::of::<Tag<2>, crate::core_api::RealCore>("even", &[(2, 12), (4, 12)]);
 
 fn walked() -> Vec<(u32, u32)> {
     core::mem::take(&mut *WALKED.lock().unwrap_or_else(|e| e.into_inner()))
@@ -424,6 +422,9 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::handlers::services(); // the first call adds the test row of the machines service, at the last provider record
+        // the walk is over the rows of this test alone: the machines row takes the place of its record again at the end
+        let machines = MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1;
+        crate::svc_rows::remove(machines);
         let mut l = loader_of(Init::Ok, module_file());
         let mut s = shared(&mut l);
         let (.., mut host) = s.seams();
@@ -434,18 +435,27 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
         let block = registry_block(&[4, 3, 2, 5]);
         l.reg_block[3] = (block.as_ptr(), block.len() as u32);
         walked();
-        let table = ServiceTable { rows: &BOTH.0, ..crate::handlers::services() };
+        // the old walk was over the whole table of services (the rows loaded from the files)
+        let table = crate::handlers::services();
         assert_eq!(crate::registry::apply_with(table, 4, block.as_ptr(), block.len() as u32, 0), OK);
         let old = walked();
         assert_eq!(old, [(1, 0), (2, 0), (2, 4), (1, 3), (2, 2), (1, 5)], "the old walk: every apply, then the records in file order");
-        // the consumer's services in any order give the same walk
+        // a consumer that needs every loaded service, in any order, gets the same walk
         host.attach(id(3), &[id(even), id(odd)]).unwrap();
         assert_eq!(walked(), old, "one attach over the services walks as the old registry apply did");
         // a service the module does not need is not called, and the records it owns are not applied
+        let even_only = registry_block(&[4, 2]);
+        l.reg_block[3] = (even_only.as_ptr(), even_only.len() as u32);
         host.attach(id(3), &[id(even)]).unwrap();
         assert_eq!(walked(), [(2, 0), (2, 4), (2, 2)]);
-        // a service with no row, a module with no records and a consumer that is no module apply nothing
-        host.attach(id(3), &[id(even + 1)]).unwrap();
+        // a record whose kind belongs to a loaded service that the module does not need is refused before anything is applied
+        l.reg_block[3] = (block.as_ptr(), block.len() as u32);
+        assert_eq!(host.attach(id(3), &[id(even)]), Err(E_MISSING));
+        assert_eq!(walked(), []);
+        // a service with no row owns no kind: the module's records are refused (and none is applied)
+        assert_eq!(host.attach(id(3), &[id(even + 1)]), Err(E_MISSING));
+        assert_eq!(walked(), []);
+        // a module with no records and a consumer that is no module apply nothing
         host.attach(id(2), &[id(odd), id(even)]).unwrap();
         host.attach(id(MAX_MODULES), &[id(odd), id(even)]).unwrap();
         assert_eq!(walked(), []);
@@ -456,7 +466,52 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
         assert_eq!(walked(), [(1, 0), (2, 0), (1, 3), (1, 99), (2, 1004), (1, 1004)]);
         crate::svc_rows::remove(odd);
         crate::svc_rows::remove(even);
+        crate::svc_rows::add(machines, crate::handlers::exports::machines_row(), None);
     }
+}
+
+/// A service that refuses the take-down of module owner 2 only (the module of record 1).
+struct Refuser;
+impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Refuser {
+    dkrt_abi::accepts_records!();
+    unsafe fn teardown_refusal(_core: &C, owner: u8) -> i32 {
+        if owner == 2 {
+            E_RELOAD_ROUTED
+        } else {
+            OK
+        }
+    }
+}
+static REFUSER: ServiceRow = ServiceRow::of::<Refuser, crate::core_api::RealCore>("refuser", &[]);
+
+#[test]
+fn can_stop_of_a_module_asks_the_services_about_that_module_only_and_a_service_is_not_asked() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let _ = crate::handlers::services();
+        let rec = MAX_MODULES + 1;
+        assert_eq!(crate::svc_rows::add(rec, &REFUSER, None), OK);
+        let mut l = loader_of(Init::Ok, module_file());
+        let mut s = shared(&mut l);
+        let (.., mut host) = s.seams();
+        assert_eq!(host.can_stop(id(0)), Ok(()));
+        assert_eq!(host.can_stop(id(1)), Err(E_RELOAD_ROUTED), "the module of owner 2");
+        assert_eq!(host.can_stop(id(rec)), Ok(()), "a service is asked nothing: its consumers are");
+        crate::svc_rows::remove(rec);
+    }
+}
+
+#[test]
+fn a_load_starts_with_no_detail_of_an_earlier_refusal() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut l = unsafe { loader_of(Init::Ok, module_file()) };
+    l.missing = [7; NEEDS_LEN];
+    l.decl_diff = (1, 2);
+    l.import_hash = 5;
+    l.last_name = [9; LOG_NAME];
+    l.clear_failure_detail();
+    let d = l.failure_detail();
+    assert_eq!((d.missing, d.decl_diff, d.import_hash, d.name), ([0; NEEDS_LEN], (0, 0), 0, [0; LOG_NAME]));
 }
 
 #[test]

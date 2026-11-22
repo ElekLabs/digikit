@@ -26,7 +26,7 @@ pub fn manager(pkgs: &[Pkg]) -> (FakeManager, Probe) {
         }
     }
     let pm = PackageManager::new(
-        FakeManifest::new(pkgs),
+        FakeManifest::new(pkgs).with_probe(probe.clone()),
         FakePlacer::new(probe.clone()),
         FakeLinker::new(probe.clone()),
         FakeInstaller::new(probe.clone()),

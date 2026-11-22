@@ -2,10 +2,9 @@ use super::session::Handle;
 use crate::handlers::services;
 use crate::loader::{Images, Registry};
 use dkrt_abi::package::PackageId;
-use dkrt_abi::plan::Verdict;
 use dkrt_abi::platform::Platform;
 use dkrt_abi::provider::{Declarations, Status};
-use dkrt_lifecycle::ProviderHost;
+use dkrt_lifecycle::{LiveSet, PackageGraph, ProviderHost};
 use dkrt_sdk::OK;
 
 /// The calls into the code of packages, through the rows today's services register and the module's own `init` and `fini`.
@@ -61,6 +60,13 @@ impl<P: Platform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R> {
         unsafe {
             let (_, l) = self.0.get();
             l.package_deactivate(package);
+        }
+    }
+
+    fn services_up(&mut self, graph: &PackageGraph, live: &LiveSet) {
+        unsafe {
+            let (s, _) = self.0.get();
+            s.number_keys(graph, live);
         }
     }
 

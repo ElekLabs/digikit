@@ -11,7 +11,7 @@ impl PackageGraph {
         if !live.contains(target) {
             return out;
         }
-        self.consumers_down(target, live, &mut out);
+        self.consumers_down(target, live, &mut Steps::new(), &mut out);
         // orphans: the services of the packages removed so far, then of the orphans themselves
         let mut i = 0;
         while i < out.len() {
@@ -27,26 +27,29 @@ impl PackageGraph {
     pub fn reload_order(&self, target: PackageId, live: &LiveSet) -> Steps {
         let mut out = Steps::new();
         if live.contains(target) {
-            self.consumers_down(target, live, &mut out);
+            self.consumers_down(target, live, &mut Steps::new(), &mut out);
         }
         out
     }
 
-    fn consumers_down(&self, p: PackageId, live: &LiveSet, out: &mut Steps) {
-        if out.contains(p) {
+    /// `path` holds the packages being visited: a loop of soft needs ends there.
+    fn consumers_down(&self, p: PackageId, live: &LiveSet, path: &mut Steps, out: &mut Steps) {
+        if out.contains(p) || path.contains(p) {
             return;
         }
+        path.push(p);
         for c in self.consumers_of(p) {
             if live.contains(c) {
-                self.consumers_down(c, live, out);
+                self.consumers_down(c, live, path, out);
             }
         }
+        path.pop();
         out.push(p);
     }
 
     /// Adds the unpinned services of `p` that no live package outside `out` still needs, and their own orphaned services.
     fn orphans_of(&self, p: PackageId, live: &LiveSet, out: &mut Steps) {
-        for s in self.services_of(p) {
+        for s in self.dependencies_of(p) {
             if out.contains(s) || !live.contains(s) {
                 continue;
             }

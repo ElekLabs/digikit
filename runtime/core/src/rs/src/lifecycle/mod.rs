@@ -26,12 +26,17 @@ mod placer;
 mod rt;
 mod session;
 
+pub(crate) use codes::code_of;
 pub(crate) use host::RtHost;
 pub(crate) use install::{RtColdFire, RtInstallers, RtSharc};
 pub(crate) use linker::RtLinker;
-pub(crate) use manifest::RtManifest;
+pub(crate) use manifest::{CoreApis, RtManifest};
 pub(crate) use placer::RtPlacer;
-pub(crate) use rt::{boot, dsp_step, get, Rt};
+pub(crate) use rt::{boot, dsp_step, get};
+#[cfg(test)]
+pub(crate) use rt::{verdict_of, Manager, Rt};
+#[cfg(test)]
+pub(crate) use rt::test_up;
 pub(crate) use session::Session;
 
 #[cfg(test)]

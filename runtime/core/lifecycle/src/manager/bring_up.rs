@@ -21,6 +21,8 @@ pub(super) struct Request<'a> {
     pub(super) roots: &'a [PackageId],
     pub(super) pin: bool,
     pub(super) stop_on_failure: bool,
+    /// A boot: the host plans what the services keep once every service has been tried ([`ProviderHost::services_up`]).
+    pub(super) numbering: bool,
 }
 
 impl<M, P, L, I, H> PackageManager<M, P, L, I, H>
@@ -65,6 +67,7 @@ where
             roots: sorted.as_slice(),
             pin: true,
             stop_on_failure: false,
+            numbering: true,
         };
         self.run_bring_up(&order, &request, &mut report);
         Ok(report)
@@ -86,6 +89,7 @@ where
             roots: &[id],
             pin: true,
             stop_on_failure: true,
+            numbering: false,
         };
         self.run_bring_up(&order, &request, &mut report);
         match report.refused().first() {
@@ -142,9 +146,15 @@ where
     /// Brings up `order` as far as it fits and comes up (see [`PackageManager::boot`]), pins the roots that are up, then settles: what a failure left behind
     /// goes down again.
     pub(super) fn run_bring_up(&mut self, order: &Steps, request: &Request, report: &mut Report) {
-        let kept = self.plan_fit(order, request.roots, &[], &mut report.refused);
+        let admitted = self.admit_order(order, &mut report.refused);
+        let kept = self.plan_fit(&admitted, request.roots, &[], &mut report.refused);
         let mut started = Steps::new();
+        let mut services_done = !request.numbering;
         for (k, &p) in kept.as_slice().iter().enumerate() {
+            if !services_done && !self.graph.node(p).is_some_and(|n| n.provides().is_some()) {
+                services_done = true;
+                self.host.services_up(&self.graph, &self.live);
+            }
             if let Some(service) = refused_need(&self.graph, p, &report.refused) {
                 report.refused.push(
                     p,
@@ -181,6 +191,9 @@ where
                     }
                 }
             }
+        }
+        if !services_done {
+            self.host.services_up(&self.graph, &self.live);
         }
         if request.pin {
             for &r in request.roots {
@@ -286,11 +299,11 @@ where
     }
 }
 
-/// A service `p` needs that this operation refused.
+/// A service `p` has a hard need of that this operation refused (a soft need never refuses its consumer).
 pub(super) fn refused_need(
     graph: &PackageGraph,
     p: PackageId,
     refused: &RefusedList,
 ) -> Option<PackageId> {
-    graph.services_of(p).find(|&s| refused.contains(s))
+    graph.hard_services_of(p).find(|&s| refused.contains(s))
 }

@@ -302,3 +302,62 @@ fn a_soft_need_orders_after_a_present_provider_and_is_met_by_none() {
     let g = graph(&[service(1, REF, 0x020000), soft]);
     assert_eq!(up(&g, &[2], &[]).unwrap(), ids(&[2]));
 }
+
+fn soft_on(n: u8, service_name: u32, provides: u32) -> Node {
+    Node::new(id(n))
+        .providing(Api::new(provides, V1))
+        .needing(Need::soft(service_name, V1))
+}
+
+#[test]
+fn mutual_soft_needs_both_come_up() {
+    let g = graph(&[soft_on(1, BASE, REF), soft_on(2, REF, BASE)]);
+    assert_eq!(up(&g, &[1], &[]).unwrap(), ids(&[2, 1]));
+    assert_eq!(up(&g, &[2], &[]).unwrap(), ids(&[1, 2]));
+    assert_eq!(up(&g, &[1, 2], &[]).unwrap(), ids(&[2, 1]));
+    // taking down terminates
+    assert_eq!(down(&g, 1, &[1, 2]), ids(&[2, 1]));
+    assert_eq!(g.reload_order(id(1), &live(&[1, 2])).len(), 2);
+}
+
+#[test]
+fn a_hard_edge_decides_the_order_over_a_soft_one() {
+    // 1 needs 2 hard, 2 needs 1 soft: 2 first
+    let one = Node::new(id(1))
+        .providing(Api::new(REF, V1))
+        .needing(Need::new(BASE, V1));
+    let two = soft_on(2, REF, BASE);
+    let g = graph(&[one, two]);
+    assert_eq!(up(&g, &[1], &[]).unwrap(), ids(&[2, 1]));
+    assert_eq!(up(&g, &[2], &[]).unwrap(), ids(&[2]));
+}
+
+#[test]
+fn a_hard_cycle_is_still_refused() {
+    let a = Node::new(id(1))
+        .providing(Api::new(REF, V1))
+        .needing(Need::new(BASE, V1));
+    let b = Node::new(id(2))
+        .providing(Api::new(BASE, V1))
+        .needing(Need::new(REF, V1));
+    assert!(matches!(
+        PackageGraph::from_nodes(&[a, b]),
+        Err(Refusal::Cycle { .. })
+    ));
+}
+
+#[test]
+fn an_owner_that_cannot_come_up_leaves_the_emitter_to_the_core_rules() {
+    // 2 owns a kind but needs a service nothing provides; 1 emits keys for it
+    let owner = needs(module(2), 0x77, V1);
+    let emitter = module(1).after_owner(id(2));
+    let g = graph(&[emitter, owner]);
+    assert_eq!(up(&g, &[1], &[]).unwrap(), ids(&[1]));
+    assert_eq!(
+        up(&g, &[2], &[]).unwrap_err(),
+        Refusal::Unmet {
+            package: id(2),
+            service: 0x77
+        }
+    );
+}

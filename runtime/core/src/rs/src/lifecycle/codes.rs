@@ -6,13 +6,17 @@ use dkrt_sdk::*;
 /// The status of a package that `PackageManager` refused or stopped, `reason`.
 ///
 /// - a status of a step (`place`, `link`, `start`, `activate`, `attach`) is the loader's own code, unchanged;
+/// - the rules of the core refused the package (`Manifest::admit`): their status (`E_PLAN_*`);
 /// - a service that this package needs was refused: `E_MISSING` (the code of a module whose provider did not load);
-/// - an unmet or incompatible need in the graph: `E_MISSING`, `E_CONTRACT` (the codes of the planner for the same causes);
+/// - an unmet or incompatible need in the graph: `E_MISSING`, `E_CONTRACT`; a cycle (packages that need each other, or declare the kinds the other has keys for):
+///   `E_MISSING`; a second service of one name: `E_PLAN_OWNER` (the codes of the planner for the same causes);
 /// - the claims do not fit, or a table is full: `E_PLAN_FIT`; the declarations differ from the header: `E_DECL_KIND`;
 /// - a refusal to stop or a busy restore: `E_BUSY`.
 pub(crate) fn code_of(reason: &LifecycleError) -> i32 {
     // if-let chains, not a `match`: a dense match becomes a PC-relative jump table, which is not ColdFire code
     if let LifecycleError::Failed { status, .. } = *reason {
+        status
+    } else if let LifecycleError::Admission { status, .. } = *reason {
         status
     } else if let LifecycleError::NeedRefused { .. } = *reason {
         E_MISSING
@@ -45,6 +49,10 @@ fn graph_code(g: Refusal) -> i32 {
         E_MISSING
     } else if let Refusal::Incompatible { .. } = g {
         E_CONTRACT
+    } else if let Refusal::Cycle { .. } = g {
+        E_MISSING
+    } else if let Refusal::DuplicateService { .. } = g {
+        E_PLAN_OWNER
     } else if let Refusal::UnknownPackage { .. } = g {
         E_NOT_FOUND
     } else if let Refusal::BadTable { .. } = g {
@@ -75,8 +83,11 @@ mod tests {
         let failed = LifecycleError::Failed { package: P, entering: State::Started, status: E_INIT };
         assert_eq!(code_of(&failed), E_INIT);
         assert_eq!(code_of(&LifecycleError::NeedRefused { package: P, service: PackageId(9) }), E_MISSING);
+        assert_eq!(code_of(&LifecycleError::Admission { package: P, status: E_PLAN_KEY }), E_PLAN_KEY);
         assert_eq!(code_of(&LifecycleError::Graph(Refusal::Unmet { package: P, service: 7 })), E_MISSING);
         assert_eq!(code_of(&LifecycleError::Graph(Refusal::Incompatible { package: P, service: 7 })), E_CONTRACT);
+        assert_eq!(code_of(&LifecycleError::Graph(Refusal::Cycle { package: P })), E_MISSING);
+        assert_eq!(code_of(&LifecycleError::Graph(Refusal::DuplicateService { package: P, service: 7 })), E_PLAN_OWNER);
         assert_eq!(code_of(&LifecycleError::Declaration { package: P }), E_DECL_KIND);
         assert_eq!(code_of(&LifecycleError::Install { package: P, error: InstallError::Backend(E_IMPORT) }), E_IMPORT);
         assert_eq!(code_of(&LifecycleError::Install { package: P, error: InstallError::TableFull }), E_PLAN_FIT);

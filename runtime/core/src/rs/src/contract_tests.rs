@@ -343,7 +343,6 @@ mod service_fixtures {
     use crate::fake_storage::FakeStorage;
     use crate::loader::discover::{find, Found};
     use crate::handlers::ServiceTable;
-    use crate::plan::{plan_with, Env};
     use crate::loader::role::{role_of, role_ok};
     use dkneeds::keys::name_hash;
     use dkrt_abi::plan::{Reason, Verdict};
@@ -413,28 +412,28 @@ mod service_fixtures {
     }
 
     #[test]
-    fn the_plan_loads_the_provider_before_the_user_and_the_user_alone_is_missing_its_service() {
+    fn the_graph_orders_the_provider_before_the_user_and_the_user_alone_is_missing_its_service() {
+        use dkrt_abi::package::PackageId;
+        use dkrt_lifecycle::{LifecycleError, LiveSet, PackageGraph, Refusal};
         for (dev, _) in DEVICES {
             let user = packed(dev, "svc-test-user");
             let (svc, _) = found(dev);
-            // the service names the firmware, so it needs the port file: a provider of `port` (the planner reads only its PROVIDES)
+            // the service names the firmware, so it needs the port file: a provider of `port` (the graph reads only its PROVIDES)
             let port = {
                 let t = dkneeds::keys::Table { provides: &[dkneeds::keys::Pair { a: name_hash("port"), b: 0x000100 }], ..Default::default() };
                 let mut b = vec![0u8; dkneeds::keys::table_size(&t)];
                 dkneeds::keys::write_table(&t, &mut b).unwrap();
                 b
             };
-            let (mods, provs) = ([Some(Keys::parse(table(&user)).unwrap())], [Some(Keys::parse(table(&svc)).unwrap()), Some(Keys::parse(&port).unwrap())]);
-            let c = caps();
-            let env = Env { services: ServiceTable::new(&ROWS_P.0, &REAL_CORE), runtime: 0x000900, caps: &c };
-            let p = plan_with(&env, &mods, &provs);
-            assert_eq!((p.n, p.np), (1, 2), "{dev}");
-            assert_eq!((p.provider_verdicts[0], p.provider_verdicts[1], p.verdicts[0]), (Verdict::Accepted, Verdict::Accepted, Verdict::Accepted), "{dev}");
-            // the port file loads first, then the service that needs it
-            assert_eq!((p.provider_order[0], p.provider_order[1]), (1, 0), "{dev}");
-            let p = plan_with(&env, &mods, &[]);
-            assert_eq!(p.verdicts[0], Verdict::Refused(Reason::NeedMissing(name_hash("svc-test"))), "{dev}");
-            assert_eq!(p.verdicts[0].result(), E_MISSING, "{dev}");
+            let (u, s, p) = (PackageId(0), PackageId(crate::MAX_MODULES as u8), PackageId(crate::MAX_MODULES as u8 + 1));
+            let core = crate::lifecycle::CoreApis::new();
+            let g = PackageGraph::from_tables(&[(u, table(&user)), (s, table(&svc)), (p, port.as_slice())], core.as_slice()).unwrap();
+            // the port file comes first, then the service that needs it, then the user
+            assert_eq!(g.bring_up_order(&[u], &LiveSet::new()).unwrap().as_slice(), [p, s, u], "{dev}");
+            let g = PackageGraph::from_tables(&[(u, table(&user))], core.as_slice()).unwrap();
+            let why = g.bring_up_order(&[u], &LiveSet::new()).unwrap_err();
+            assert_eq!(why, Refusal::Unmet { package: u, service: name_hash("svc-test") }, "{dev}");
+            assert_eq!(crate::lifecycle::code_of(&LifecycleError::Graph(why)), E_MISSING, "{dev}");
         }
     }
 }

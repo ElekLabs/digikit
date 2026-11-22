@@ -5,7 +5,7 @@
 //! dev-dependencies enable it.
 //!
 //! - A **node** is one package: an id, the API it provides (a service) or none (a module), its needs and whether a selection pins it.
-//! - A need is met by the one package that provides the service name with a compatible version (`dkrt_abi::version::version_satisfies`).
+//! - A need is met by the one package that provides the service name with a compatible version (`dkrt_abi::version::provider_meets`). A package that emits keys for a record kind comes up after the package that declares it.
 //! - Every order is deterministic: ties go by ascending [`PackageId`].
 #![cfg_attr(not(any(test, feature = "fake")), no_std)]
 

@@ -1,5 +1,5 @@
 use super::{Call, Probe};
-use crate::{PackageId, ProviderHost};
+use crate::{LiveSet, PackageGraph, PackageId, ProviderHost};
 use dkrt_abi::provider::{Declarations, Limit, Status};
 use std::vec::Vec;
 
@@ -56,6 +56,10 @@ impl ProviderHost for FakeHost {
 
     fn deactivate(&mut self, package: PackageId) {
         let _ = self.probe.record(Call::Deactivate(package));
+    }
+
+    fn services_up(&mut self, _graph: &PackageGraph, _live: &LiveSet) {
+        let _ = self.probe.record(Call::ServicesUp);
     }
 
     fn attach_rank(&self, service: PackageId) -> u32 {

@@ -3,12 +3,12 @@ use super::codes::code_of;
 use crate::dsp;
 use crate::handlers::ServiceTable;
 use crate::loader::{Images, Loader, PhaseKind, Registry};
-use crate::plan::Plan;
+use crate::admission::Admission;
 use dkrt_abi::package::PackageId;
-use dkrt_abi::plan::Verdict;
+use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::platform::Platform;
 use dkrt_abi::MAX_MODULES;
-use dkrt_lifecycle::{LifecycleError, PackageManager, Report};
+use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report};
 use dkrt_sdk::sel::Record;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
@@ -56,7 +56,7 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
         for (k, p) in paths.iter().enumerate() {
             self.session.modules[k] = p.unwrap_or(core::ptr::null());
         }
-        let manifest = RtManifest::of(&self.session, modules);
+        let manifest = RtManifest::of(&mut self.session, modules);
         let (placer, linker, installers, host) = self.session.seams();
         self.up = false;
         PackageManager::init(self.manager.as_mut_ptr(), manifest, placer, linker, installers, host)?;
@@ -86,40 +86,52 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
         &mut *self.session.loader
     }
 
-    /// The boot's load: the modules `planned` accepted are the roots of `PackageManager::boot`. The manager brings the services they need up first, then each module; a
-    /// package it refuses is reported with the code the loader gave before (`code_of`), and the rest goes on. The boot record, the log and the module states are written
-    /// as the boot's load loop wrote them: the providers (log only), then every module in plan order.
+    /// The boot's load: every module of the selection is a root of `PackageManager::boot`. The manager orders the services and modules by the package graph, asks the rules of
+    /// the core about each package (`Session::admit`), brings the services they need up first, then each module; a package it refuses is reported with the code the loader gave before
+    /// (`code_of`), and the rest goes on. The boot record, the log and the module states are written as the boot's load loop wrote them: the providers (log only), then every module
+    /// in selection order.
     ///
     /// # Safety
-    /// As for `init`; the boot hook's task, once per boot, after `read_tables` and the plan.
+    /// As for `init`; the boot hook's task, once per boot, after `read_tables` and `loader::find_providers`.
     #[inline(never)]
-    pub unsafe fn boot(&mut self, rec: &Record, planned: Plan) {
+    pub unsafe fn boot(&mut self, rec: &Record) {
+        let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+        let n = crate::loader::boot_caps(&mut caps);
+        self.boot_with(rec, &caps[..n]);
+    }
+
+    /// `boot` against the capacity `caps` (`loader::boot_caps`): the host tests give the capacity of the device they boot.
+    ///
+    /// # Safety
+    /// As for `boot`.
+    #[inline(never)]
+    pub unsafe fn boot_with(&mut self, rec: &Record, caps: &[DkrtCap]) {
         let count = (rec.count as usize).min(SEL_MAX);
         let mut paths = [None; MAX_MODULES];
         for k in 0..count.min(MAX_MODULES) {
             paths[k] = Some(rec.paths[k].as_ptr());
         }
         let init = self.init(&paths, count);
-        self.session.plan = planned;
-        self.session.plan_count = count;
-        self.session.settled = false;
-        for j in 0..self.session.plan.np {
-            if let Verdict::Refused(why) = self.session.plan.provider_verdicts[j] {
-                self.session.provider_refusal[j] = why.code();
-            }
-        }
+        self.session.begin_boot(caps, count);
         for k in 0..count {
             crate::boot::note_boot_path(k, rec.paths[k].as_ptr());
         }
-        let mut roots = [PackageId(0); SEL_MAX];
+        let mut roots = [PackageId(0); dkrt_abi::REC_MAX];
         let mut n = 0;
         for k in 0..count.min(MAX_MODULES) {
-            if self.session.plan.verdicts[k].is_accepted() {
-                roots[n] = PackageId(k as u8);
+            roots[n] = PackageId(k as u8);
+            n += 1;
+        }
+        let l = self.loader();
+        // a provider whose table the shared parser does not accept is in no graph edge, so nothing would ask for it: it is tried as a root, so that its file is refused with the
+        // loader's own code and logged, as the boot always did
+        for j in 0..l.provider_count() {
+            let id = PackageId((MAX_MODULES + j) as u8);
+            if !l.package_table(id).is_some_and(|t| dkneeds::keys::Keys::parse(t).is_ok()) {
+                roots[n] = id;
                 n += 1;
             }
         }
-        let l = self.loader();
         l.set_phase(PhaseKind::Boot);
         let report = match (init, self.mgr()) {
             (Ok(()), Some(m)) => m.boot(&roots[..n]),
@@ -127,15 +139,28 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
             (Ok(()), None) => Err(LifecycleError::NothingPending),
         };
         l.set_phase(PhaseKind::Closed);
-        self.session.settle_once();
+        // a boot that did not get as far as its first module still numbers the keys of the modules (none stay)
+        if !self.session.numbered {
+            match self.mgr() {
+                Some(m) => self.session.number_keys(m.graph(), m.live()),
+                None => {
+                    self.session.numbered = true;
+                    l.number_boot_keys(&[false; SEL_MAX], count);
+                }
+            }
+        }
         self.report_boot(rec, report);
-        // the plan's verdicts and the refusals of its services are the boot's: a live load decides again from the services as they are then
-        self.session.plan_count = 0;
-        self.session.provider_refusal = [0; PROVIDER_MAX];
         crate::selection::BOOT_IDX = u32::MAX;
     }
 
-    /// The boot record and the log from what the manager did and the plan after its settle.
+    /// The verdict the module states show for the package `id` the manager refused for `why`.
+    unsafe fn verdict_of(&mut self, id: PackageId, why: &LifecycleError) -> Verdict {
+        let service = if let LifecycleError::NeedRefused { service, .. } = *why { service } else { id };
+        let hash = self.mgr().and_then(|m| m.graph().node(service).and_then(|n| n.provides())).map_or(0, |a| a.name());
+        verdict_of(why, self.session.reason(id), hash)
+    }
+
+    /// The boot record and the log from what the manager did.
     #[inline(never)]
     unsafe fn report_boot(&mut self, rec: &Record, report: Result<Report, LifecycleError>) {
         let count = (rec.count as usize).min(SEL_MAX);
@@ -146,31 +171,23 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
         };
         let up = |id: PackageId| report.brought_up().as_slice().contains(&id);
         let dsp_part = |id: PackageId| report.dsp_pending().as_slice().contains(&id);
+        let refusal = |id: PackageId| report.refused().iter().find(|r| r.package == id).map(|r| r.reason);
         let l = self.loader();
-        // the providers: log only
-        let mut pos = 0;
-        while pos < self.session.plan.np {
-            let j = self.session.plan.provider_order[pos] as usize;
-            pos += 1;
-            let id = PackageId((MAX_MODULES + j) as u8);
-            let refused = report.refused().iter().find(|r| r.package == id).map(|r| code_of(&r.reason));
-            let res = if self.session.provider_refusal[j] != 0 {
-                self.session.provider_refusal[j]
-            } else if let Some(code) = refused {
-                code
-            } else if up(id) {
-                if dsp_part(id) {
-                    LOADING
-                } else {
-                    OK
-                }
+        // the providers: log only, in the order the manager tried them (a provider nothing needed was never tried)
+        let tried = report.brought_up().as_slice().iter().copied().chain(report.refused().iter().map(|r| r.package));
+        for id in tried {
+            let Some(j) = (id.0 as usize).checked_sub(MAX_MODULES) else { continue };
+            let res = if let Some(why) = refusal(id) {
+                code_of(&why)
+            } else if dsp_part(id) {
+                LOADING
             } else {
-                continue; // nothing needed it: it was never tried
+                OK
             };
             let o = self.session.outcome[id.0 as usize];
             let ok = res == OK || res == LOADING;
             if !ok {
-                // refused at the boot: the live plan must not count on it (a provider only taken down since is another matter)
+                // refused at the boot: the live check must not count on it (a provider only taken down since is another matter)
                 l.mark_provider_unusable(j);
             }
             let (hash, base) = if res == E_DECL_KIND && o.decl_diff.0 != 0 {
@@ -182,35 +199,35 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
             };
             crate::boot::report_provider(l.provider_file(j), res, hash, base);
         }
-        // the modules: the plan's verdict after settle, then the load in plan order
+        // the modules: the verdict of the graph and the rules of the core, then the load, in selection order
+        let mut verdicts = [Verdict::Accepted; SEL_MAX];
         for k in 0..count {
-            crate::boot::states().planned(k, self.session.plan.verdicts[k]);
+            if let Some(why) = refusal(PackageId(k as u8)) {
+                verdicts[k] = self.verdict_of(PackageId(k as u8), &why);
+            }
+            crate::boot::states().planned(k, verdicts[k]);
         }
-        let mut pos = 0;
-        while pos < count {
-            let k = self.session.plan.order[pos] as usize;
-            pos += 1;
+        for k in 0..count {
             let id = PackageId(k as u8);
-            let res = match self.session.plan.verdicts[k] {
-                Verdict::Refused(why) => why.code(),
-                Verdict::Accepted => {
-                    crate::boot::states().init(k);
-                    let res = if let Some(e) = failed {
-                        code_of(&e)
-                    } else if up(id) {
-                        if dsp_part(id) {
-                            LOADING
-                        } else {
-                            OK
-                        }
-                    } else if let Some(r) = report.refused().iter().find(|r| r.package == id) {
-                        code_of(&r.reason)
+            let res = if let Verdict::Refused(why) = verdicts[k] {
+                why.code()
+            } else {
+                crate::boot::states().init(k);
+                let res = if let Some(e) = failed {
+                    code_of(&e)
+                } else if up(id) {
+                    if dsp_part(id) {
+                        LOADING
                     } else {
-                        E_NOT_FOUND
-                    };
-                    crate::boot::states().finished(k, res);
-                    res
-                }
+                        OK
+                    }
+                } else if let Some(why) = refusal(id) {
+                    code_of(&why)
+                } else {
+                    E_NOT_FOUND
+                };
+                crate::boot::states().finished(k, res);
+                res
             };
             let missing = if res == E_IMPORT { self.session.outcome[k].missing } else { [0u8; NEEDS_LEN] };
             crate::boot::report_module(k, rec.paths[k].as_ptr(), res, &missing, &l.captured_name(k));
@@ -255,13 +272,20 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
     /// Load the file at `path` into selection index `k` as module record `k` (`Loader::live_prepare`, then `PackageManager::load`). `OK`, `LOADING` (the DSP part follows), or the
     /// refusal in the loader's codes.
     pub unsafe fn live_load(&mut self, k: usize, path: *const u8) -> i32 {
+        let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+        let n = crate::loader::live_capacity(&mut caps, (0, 0));
+        self.live_load_with(k, path, &caps[..n])
+    }
+
+    /// `live_load` against the live capacity `caps` (`loader::live_capacity`): the host tests give the capacity of the device they boot.
+    pub unsafe fn live_load_with(&mut self, k: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
         let r = self.loader().live_prepare(k, path);
         if r != OK {
             return r;
         }
-        let r = self.load_prepared(k, path);
+        let r = self.load_prepared(k, path, caps);
         if r != OK && r != LOADING {
-            // as `Loader::live_load` did: the plan's acceptance goes and no free record keeps the index
+            // the acceptance of the index goes and no free record keeps it
             self.loader().retire_index(k);
         }
         r
@@ -269,14 +293,21 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// Load the new file of a reload into record `rec`, which `unload` took down (`Loader::reload_prepare`, then `PackageManager::load`).
     pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
+        let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+        let n = crate::loader::live_capacity(&mut caps, (0, 0));
+        self.reload_load_with(rec, path, &caps[..n])
+    }
+
+    /// `reload_load` against the live capacity `caps` (the old module's own blocks are given back already: it was taken down before).
+    pub unsafe fn reload_load_with(&mut self, rec: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
         let r = self.loader().reload_prepare(rec, path);
         if r != OK {
             return r;
         }
-        self.load_prepared(rec, path)
+        self.load_prepared(rec, path, caps)
     }
 
-    unsafe fn load_prepared(&mut self, rec: usize, path: *const u8) -> i32 {
+    unsafe fn load_prepared(&mut self, rec: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
         let id = PackageId(rec as u8);
         self.session.modules[rec] = path;
         self.session.outcome[rec] = super::session::Outcome::NONE;
@@ -285,6 +316,11 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
         let Some(m) = self.mgr() else {
             return E_NOT_FOUND;
         };
+        // the rules of the core judge the module against the live set: the capacity as the live check counts it, and every live module has taken its share
+        self.session.admission = Admission::new(caps);
+        l.seed_live(&mut self.session.admission, rec);
+        self.session.reasons[rec] = None;
+        self.session.admitted[rec] = false;
         // the file's table and the needs it names are the ones the graph must hold
         m.manifest_mut().reread(SEL_MAX);
         if let Err(e) = m.refresh_graph() {
@@ -383,6 +419,27 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
     }
 }
 
+/// The verdict the module states show for a package the manager refused for `why`: the planner's reasons for a refusal that is the graph's or the rules of the core's, none for a
+/// failure of a step (its code is its result). `admission` is why the rules of the core refused the package, `service` the name hash of the service a need refused.
+pub(crate) fn verdict_of(why: &LifecycleError, admission: Option<Reason>, service: u32) -> Verdict {
+    // if-let chains, not a `match`: a dense match becomes a PC-relative jump table, which is not ColdFire code
+    if let LifecycleError::Graph(Refusal::Unmet { service, .. }) = *why {
+        Verdict::Refused(Reason::NeedMissing(service))
+    } else if let LifecycleError::Graph(Refusal::Incompatible { .. }) = *why {
+        Verdict::Refused(Reason::NeedVersion)
+    } else if let LifecycleError::Graph(Refusal::Cycle { .. }) = *why {
+        Verdict::Refused(Reason::NeedMissing(0))
+    } else if let LifecycleError::Graph(Refusal::DuplicateService { service, .. }) = *why {
+        Verdict::Refused(Reason::DuplicateOwner(service))
+    } else if let LifecycleError::Admission { .. } = *why {
+        admission.map_or(Verdict::Accepted, Verdict::Refused)
+    } else if let LifecycleError::NeedRefused { .. } = *why {
+        Verdict::Refused(Reason::NeedMissing(service))
+    } else {
+        Verdict::Accepted
+    }
+}
+
 /// The lifecycle of the device.
 mod device {
     use super::*;
@@ -407,22 +464,55 @@ mod device {
         }
     }
 
-    /// Start the lifecycle in its place and run the boot's load (once per boot).
-    pub unsafe fn boot(rec: &Record, planned: Plan) {
-        Rt::init_at((*addr_of_mut!(RT)).as_mut_ptr(), crate::loader::real());
+    /// Start the lifecycle in its place, over `loader`.
+    pub unsafe fn start(loader: *mut crate::loader::Real) {
+        Rt::init_at((*addr_of_mut!(RT)).as_mut_ptr(), loader);
         *addr_of_mut!(UP) = true;
+    }
+
+    /// Start the lifecycle in its place and run the boot's load (once per boot).
+    pub unsafe fn boot(rec: &Record) {
+        start(crate::loader::real());
         if let Some(rt) = get() {
-            rt.boot(rec, planned);
+            rt.boot(rec);
         }
     }
 }
 
 pub(crate) use device::{boot, get};
 
-/// One UI-loop pass of the DSP loader: through the lifecycle once the boot has started it, else the loader's own step (a safe boot has no DSP load).
+/// A host test's lifecycle over the real loader (the static of the cleanup tests): a manager over `modules` module packages from the loader's kept tables, with the modules `active`
+/// up as if their bring-up had run.
+#[cfg(test)]
+pub(crate) unsafe fn test_up(modules: usize, active: &[usize]) {
+    device::start(crate::loader::real());
+    let rt = get().unwrap();
+    rt.init(&[None; MAX_MODULES], modules).unwrap();
+    for &r in active {
+        rt.manager().unwrap().assume_active(PackageId(r as u8));
+    }
+}
+
+/// One UI-loop pass of the DSP loader, through the lifecycle once the boot has started it (a safe boot has no DSP load and starts none).
 pub(crate) unsafe fn dsp_step() {
-    match get() {
-        Some(rt) => rt.dsp_step(crate::handlers::services()),
-        None => crate::loader::dsp_step(),
+    if let Some(rt) = get() {
+        rt.dsp_step(crate::handlers::services());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_graphs_refusals_are_the_planners_verdicts() {
+        let p = PackageId(1);
+        let graph = |r| verdict_of(&LifecycleError::Graph(r), None, 0);
+        assert_eq!(graph(Refusal::Unmet { package: p, service: 7 }), Verdict::Refused(Reason::NeedMissing(7)));
+        assert_eq!(graph(Refusal::Incompatible { package: p, service: 7 }), Verdict::Refused(Reason::NeedVersion));
+        assert_eq!(graph(Refusal::Cycle { package: p }), Verdict::Refused(Reason::NeedMissing(0)));
+        // a second provider of one service: the planner's `DuplicateOwner` with the service's hash
+        assert_eq!(graph(Refusal::DuplicateService { package: p, service: 7 }), Verdict::Refused(Reason::DuplicateOwner(7)));
+        assert_eq!(graph(Refusal::DuplicateService { package: p, service: 7 }).result(), E_PLAN_OWNER);
     }
 }

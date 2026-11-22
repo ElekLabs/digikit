@@ -1,7 +1,7 @@
-//! The loader one package at a time, for the package manager's seams (`lifecycle/`, docs/plans/runtime-contract-and-lifecycle.md section 7). The boot's loops run the
-//! steps of `load_inner`, `complete` and `unload_rec_inner` for a record one after the other; the package manager runs the same steps with its own order and unwind. The steps are
-//! the same functions: `check_head`, `check_body`, `resolve_imports`, `place_image`, `init_and_commit`, `go_live`, `quiesce_service`, `unload_body`. This file holds the
-//! calls that string them together for one package, nothing else. Each call that runs module or service code or reads the selection index sets `BOOT_IDX` to the record for its duration and puts back what it found (`with_boot_idx`). Nothing in the runtime calls them yet (RC2b-2).
+//! The loader one package at a time, for the package manager's seams (`lifecycle/`, docs/plans/runtime-contract-and-lifecycle.md section 7). The package manager runs the steps
+//! of a load and of a take-down in its own order and unwinds a failure itself; the steps are functions of the loader: `check_head`, `check_body`, `resolve_imports`,
+//! `place_image`, `init_and_commit`, `go_live`, `quiesce_service`, `unload_body`. (`dkrt_load` still loads one file through `load_inner` and `complete`, which share the steps.) This file holds the
+//! calls that string them together for one package, nothing else. Each call that runs module or service code or reads the selection index sets `BOOT_IDX` to the record for its duration and puts back what it found (`with_boot_idx`).
 //!
 //! A package id is the record: below `MAX_MODULES` the module record of the selection index with the same number, from there the provider record `id - MAX_MODULES`.
 //!
@@ -233,10 +233,6 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 }
             }
         }
-        // the plan's settle and `resident_query` read it: a service whose DSP part follows is live on the ColdFire from here
-        if rec >= MAX_MODULES {
-            self.loaded[rec - MAX_MODULES] = true;
-        }
         self.go_live(rec, f.placed.tick);
         #[cfg(not(test))]
         crate::invariants::check();
@@ -266,6 +262,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let base = records::module(rec).base;
         let table = ServiceTable { rows: crate::svc_rows::walk_rows(services), ..crate::handlers::services() };
+        // a record whose kind a loaded service owns that the module does not need is refused before anything is applied (the module's needs and its builder imports are the same data: a
+        // module whose file says otherwise is not one the packer made)
+        let mut unowned = false;
+        dkrt_abi::registry::each(reg, |kind, _| unowned |= table.len(kind).is_none());
+        if unowned {
+            return Err(E_MISSING);
+        }
         let r = crate::registry::apply_with(table, rec as u8 + 1, reg, size, base);
         if r == OK {
             Ok(())
@@ -292,11 +295,13 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         FailureDetail { missing: self.missing, decl_diff: self.decl_diff, import_hash: self.import_hash, name: self.last_name }
     }
 
-    /// Forget what the last failed step left (`failure_detail`): a load starts with none, so a refusal that no step of the loader made does not report an earlier package's.
+    /// Forget what the last failed step left (`failure_detail`, the name of the last header read included): a load starts with none, so a refusal that no step of the loader made does
+    /// not report an earlier package's.
     pub(crate) fn clear_failure_detail(&mut self) {
         self.missing = [0; NEEDS_LEN];
         self.decl_diff = (0, 0);
         self.import_hash = 0;
+        self.last_name = [0; LOG_NAME];
     }
 
     /// Undo `package_activate`, before the entries are restored: a service has no tick, no resident query entry and no export any more. A module has nothing public but
@@ -305,7 +310,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let rec = record_of(id);
         if rec >= MAX_MODULES && records::module(rec).used != 0 {
             self.with_boot_idx(id, |l| {
-                l.quiesce_service(rec, false);
+                l.quiesce_service(rec);
                 l.exports.withdraw(rec);
             });
         }

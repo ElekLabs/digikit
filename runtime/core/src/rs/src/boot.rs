@@ -198,16 +198,16 @@ pub unsafe extern "C" fn dkrt_boot() {
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them
     read_tables(&r);
-    // the boot plan over the header tables that read gave, with the providers the search found for the hard needs the runtime does not meet: a module the plan refuses is
-    // not loaded
-    let planned = loader::plan_selection(r.count as usize);
-    // the package manager loads the accepted modules and the services they need (services first), reports each module in plan order and the providers in the log
-    crate::lifecycle::boot(&r, planned);
+    // the providers for the hard needs the runtime does not meet, searched on the card from the header tables that read gave
+    loader::find_providers(r.count as usize);
+    // the package manager orders the selection and the services it needs by the package graph, refuses what the graph or the rules of the core refuse, loads the rest (services
+    // first), reports each module in selection order and the providers in the log
+    crate::lifecycle::boot(&r);
     // core/introblank: no module took the intro, so the black intro has nothing to wait for
     crate::intro::end_blank();
 }
 
-/// Read the file of each selected module into the staging buffer and keep its header table for the boot plan (`loader::capture`). A file that is missing, torn or
+/// Read the file of each selected module into the staging buffer and keep its header table for the boot's graph (`loader::capture`). A file that is missing, torn or
 /// not a `.dkm` has none (its load reports the error).
 unsafe fn read_tables(rec: &Record) {
     loader::reset_plan();

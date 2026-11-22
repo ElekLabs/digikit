@@ -115,6 +115,13 @@ where
         Ok(())
     }
 
+    /// A host test's manager with `package` up as if its bring-up had run: `Active`, live, not attached. What the steps would have done is the test's own state.
+    #[cfg(any(test, feature = "fake"))]
+    pub fn assume_active(&mut self, package: PackageId) {
+        self.progress.set(package, State::Active);
+        self.live.insert(package);
+    }
+
     pub fn graph(&self) -> &PackageGraph {
         &self.graph
     }

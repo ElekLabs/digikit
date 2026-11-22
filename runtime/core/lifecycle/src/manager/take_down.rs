@@ -114,6 +114,7 @@ where
                 roots: work.rebuild.as_slice(),
                 pin: false,
                 stop_on_failure: true,
+                numbering: false,
             };
             self.run_bring_up(&order, &request, &mut report);
             if let Some(refused) = report.refused().first() {

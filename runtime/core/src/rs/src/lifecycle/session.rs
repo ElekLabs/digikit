@@ -2,14 +2,15 @@ use super::{RtColdFire, RtHost, RtInstallers, RtLinker, RtPlacer, RtSharc};
 use crate::loader::discover::PATH_CAP;
 use crate::loader::package::{Entries, Flight};
 use crate::loader::{Images, Loader, Registry, LOG_NAME};
-use crate::plan::Plan;
+use crate::admission::Admission;
 use core::ptr::addr_of_mut;
 use dkrt_abi::package::PackageId;
-use dkrt_abi::plan::Verdict;
+use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::platform::Platform;
+use dkrt_abi::provider::Status;
 use dkrt_abi::REC_MAX;
-use dkrt_lifecycle::Installers;
-use dkrt_sdk::{NEEDS_LEN, PROVIDER_MAX, SEL_MAX};
+use dkrt_lifecycle::{Installers, LiveSet, PackageGraph};
+use dkrt_sdk::{DkrtCap, NEEDS_LEN, SEL_MAX};
 
 /// What a package that was refused left for the report of the boot or the live job: the name of the missing module, the log's items and the header's name, as the
 /// loader held them when the step failed (the next package overwrites them).
@@ -44,13 +45,15 @@ pub struct Session<P: Platform, M: Images, R: Registry> {
     pub(super) retained: [bool; REC_MAX],
     /// The packages that are active and whose DSP part `start_dsp` has not started yet.
     pub(crate) dsp_wanted: [bool; REC_MAX],
-    /// The plan of the boot in progress: the verdicts the boot reports, the providers the plan refused, and whether `settle` ran (it runs once, before the first module starts, so
-    /// the services number the keys of the modules that stay).
-    pub(super) plan: Plan,
-    pub(super) plan_count: usize,
-    pub(super) settled: bool,
-    /// The load status of a provider the plan refused (0: none): its place answers it.
-    pub(super) provider_refusal: [i32; PROVIDER_MAX],
+    /// The rules of the core over the packages admitted so far (`Manifest::admit`): the boot's, or a live load's seeded from the live set.
+    pub(super) admission: Admission,
+    /// Why admission refused each package (`None`: it did not), for the verdict the boot record shows.
+    pub(super) reasons: [Option<Reason>; REC_MAX],
+    /// Whether admission admitted each package in this boot or live load.
+    pub(super) admitted: [bool; REC_MAX],
+    /// The boot's selection count, and whether the services were told which modules stay (once per boot, when every service has been tried: `RtHost::services_up`).
+    pub(super) boot_count: usize,
+    pub(super) numbered: bool,
     /// What each record's last failed step left.
     pub(super) outcome: [Outcome; REC_MAX],
 }
@@ -97,15 +100,7 @@ impl<P: Platform, M: Images, R: Registry> Session<P, M, R> {
     pub unsafe fn init(out: *mut Self, loader: *mut Loader<P, M, R>) {
         const FLIGHT: Flight = Flight::new();
         const ENTRIES: Entries = Entries::new();
-        const PLAN: Plan = Plan {
-            n: 0,
-            verdicts: [Verdict::Accepted; SEL_MAX],
-            order: [0; SEL_MAX],
-            dsp_load: (0, 0),
-            np: 0,
-            provider_verdicts: [Verdict::Accepted; PROVIDER_MAX],
-            provider_order: [0; PROVIDER_MAX],
-        };
+        const REASONS: [Option<Reason>; REC_MAX] = [None; REC_MAX];
         const OUTCOMES: [Outcome; REC_MAX] = [Outcome::NONE; REC_MAX];
         addr_of_mut!((*out).loader).write(loader);
         addr_of_mut!((*out).flight).write(FLIGHT);
@@ -115,10 +110,11 @@ impl<P: Platform, M: Images, R: Registry> Session<P, M, R> {
         addr_of_mut!((*out).stop_busy).write([false; REC_MAX]);
         addr_of_mut!((*out).retained).write([false; REC_MAX]);
         addr_of_mut!((*out).dsp_wanted).write([false; REC_MAX]);
-        addr_of_mut!((*out).plan).write(PLAN);
-        addr_of_mut!((*out).plan_count).write(0);
-        addr_of_mut!((*out).settled).write(true);
-        addr_of_mut!((*out).provider_refusal).write([0; PROVIDER_MAX]);
+        addr_of_mut!((*out).admission).write(Admission::new(&[]));
+        addr_of_mut!((*out).reasons).write(REASONS);
+        addr_of_mut!((*out).admitted).write([false; REC_MAX]);
+        addr_of_mut!((*out).boot_count).write(0);
+        addr_of_mut!((*out).numbered).write(true);
         addr_of_mut!((*out).outcome).write(OUTCOMES);
     }
 
@@ -137,13 +133,57 @@ impl<P: Platform, M: Images, R: Registry> Session<P, M, R> {
         r
     }
 
-    /// Run the plan's settle once: a module the plan accepted whose hard need only a failed service could meet is refused, and the services number the keys of the modules that
-    /// stay. Needs every service of the boot attempted, so it runs at the first module's start (the manager brings the services up first) or at the end of the boot.
-    pub(super) unsafe fn settle_once(&mut self) {
-        if !self.settled {
-            self.settled = true;
-            (*self.loader).settle(&mut self.plan, self.plan_count);
+    /// The start of a boot of `count` modules: the admission starts from `caps` (`loader::boot_caps`) with nothing admitted, and no service has been told which modules stay.
+    pub(crate) fn begin_boot(&mut self, caps: &[DkrtCap], count: usize) {
+        self.admission = Admission::new(caps);
+        self.reasons = [None; REC_MAX];
+        self.admitted = [false; REC_MAX];
+        self.boot_count = count;
+        self.numbered = false;
+    }
+
+    /// Why admission refused `package` (`None`: it did not).
+    pub(crate) fn reason(&self, package: PackageId) -> Option<Reason> {
+        self.reasons[package.0 as usize]
+    }
+
+    /// The rules of the core about `package` (`Manifest::admit`). A refusal keeps its reason for the boot record and answers with its load status.
+    pub(super) unsafe fn admit(&mut self, package: PackageId) -> Result<(), Status> {
+        let rec = package.0 as usize;
+        match (*self.loader).admit_package(&mut self.admission, package) {
+            Verdict::Accepted => {
+                self.admitted[rec] = true;
+                Ok(())
+            }
+            Verdict::Refused(why) => {
+                self.reasons[rec] = Some(why);
+                Err(why.code())
+            }
         }
+    }
+
+    /// Tell the services which modules of the boot stay, once, when every service has been tried: a module stays when admission admitted it and every service it needs is up.
+    /// A refused module takes no number from a service.
+    pub(super) unsafe fn number_keys(&mut self, graph: &PackageGraph, live: &LiveSet) {
+        if self.numbered {
+            return;
+        }
+        self.numbered = true;
+        let mut stays = [false; SEL_MAX];
+        let mut k = 0;
+        while k < self.boot_count.min(dkrt_abi::MAX_MODULES) {
+            let id = PackageId(k as u8);
+            stays[k] = self.admitted[k] && graph.services_of(id).all(|s| live.contains(s));
+            k += 1;
+        }
+        (*self.loader).number_boot_keys(&stays, self.boot_count);
+    }
+
+    /// The memory of `package` after its stop, as the manager's take-down frees it: kept when the stop answered busy (it ran the DSP's invalidation, which must not be asked again in the
+    /// same pass: the live job's retry, `retry_free`, runs the stop once more), else released.
+    pub(super) unsafe fn free_after_stop(&mut self, package: PackageId) {
+        let rec = package.0 as usize;
+        self.retained[rec] = self.stop_busy[rec] || !(*self.loader).package_free(package);
     }
 
     /// Run `free` of `package` again: a `stop` that answered busy and a record that could not be released are tried once more. Used by the live job's retry.
