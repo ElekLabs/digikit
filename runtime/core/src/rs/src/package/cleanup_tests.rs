@@ -783,6 +783,12 @@ pub extern "C" fn midi_send(_: u32, _: *const u8, _: u32) {
 #[no_mangle]
 pub extern "C" fn dkrt_info_table() {}
 
+/// The firmware's allocator: the hooks table makes the real package code reachable from every host test, and none of it may allocate firmware memory.
+#[export_name = "cf.mem.fn.new"]
+pub extern "C" fn mem_new(_: u32) -> *mut u8 {
+    panic!("host tests must not allocate firmware memory")
+}
+
 #[export_name = "cf.storage.fn.capacity"]
 pub extern "C" fn card_capacity() -> u32 {
     crate::host_io::card_capacity()

@@ -5,7 +5,7 @@ use crate::{platform::fw_blocks, platform::has_dsp};
 use crate::platform::st;
 use crate::state::init_once;
 use crate::{arena, store};
-use crate::package::{dsp};
+use crate::hooks;
 use dkrt_sdk::*;
 
 extern "C" {
@@ -111,13 +111,13 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     o.arena_total = s.arena_hi - s.arena_lo;
     o.arena_free = afree;
     o.arena_largest = alargest;
-    o.dsp_area_total = dsp::area_bytes();
+    let area = hooks::dsp_area();
+    o.dsp_area_total = area.total;
     if !has_dsp() {
         o.flags |= HEALTH_NO_DSP;
     }
-    let (dfree, dlargest) = dsp::area_stats();
-    o.dsp_area_free = dfree;
-    o.dsp_area_largest = dlargest;
+    o.dsp_area_free = area.free;
+    o.dsp_area_largest = area.largest;
     let p = crate::platform::profile();
     o.dsp_period = p.dsp_block_cycles;
     o.store_total = if p.has_store { store::layout().limit() / 2 } else { 0 };

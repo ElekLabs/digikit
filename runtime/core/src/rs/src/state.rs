@@ -142,7 +142,7 @@ pub unsafe fn init_once() {
     crate::dev::valid(); // checks and keeps the device object's validity (an invalid object has no capability)
     arena::init();
     // the in-crate services declare their record kinds and the runtime compares them with the generated table (declare-check-commit)
-    crate::package::handlers::check_declarations();
+    crate::package::hooks::install();
     s.runtime = RUNTIME_VERSION;
     s.magic = STATE_MAGIC;
 }

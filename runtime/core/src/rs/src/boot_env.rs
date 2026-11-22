@@ -3,7 +3,7 @@
 
 use crate::platform::RealPlatform;
 use crate::{fault};
-use crate::package::{loader};
+use crate::hooks;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
 
@@ -49,15 +49,15 @@ impl BootEnv for RealBootEnv {
         fault::at_boot()
     }
     unsafe fn set_safe(&self) {
-        loader::set_safe()
+        hooks::boot_safe()
     }
     unsafe fn read_tables(&self, rec: &Record) {
-        crate::package::boot_steps::read_tables(rec)
+        hooks::boot_read_tables(rec)
     }
     unsafe fn find_providers(&self, count: usize) {
-        crate::package::boot_steps::find_providers(count)
+        hooks::boot_find_providers(count)
     }
     unsafe fn load(&self, rec: &Record) {
-        crate::package::boot_steps::load(rec)
+        hooks::boot_load(rec)
     }
 }

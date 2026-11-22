@@ -1,6 +1,6 @@
 //! The DSP diagnostics poll and its heartbeat watch, the effect and voice guards, the module list for a stop, and the health snapshot. They stay in
 //! the runtime: the fault record, `dk/fault`, ABOUT and the machine table read their results. What they log goes through `dlog::ev`.
-use crate::package::handlers::services;
+use crate::hooks;
 use crate::dlog::{ev, sink_present, word_of, INFO};
 use crate::{arena, platform::fw_blocks, platform::st};
 use dkrt_abi::platform::Platform;
@@ -244,7 +244,7 @@ unsafe fn poll_diag(w: &mut Watch, now: u32) {
     w.n = n as u32;
     w.last = buf;
     if n >= DIAG_WORDS {
-        services().diag(&buf);
+        hooks::watch_diag(&buf);
     }
     // the words, raw: the first time, when a word other than a counter changed, and every ten seconds
     if !w.logged || differs(&buf, &w.logged_words, n) || due(now, w.next_log) {
@@ -326,23 +326,30 @@ fn merge_stop(w: &mut Watch, buf: &[u32; DIAG_WORDS]) {
     }
 }
 
+/// The site of a stop: (site, stage, id, last, module). The site word names the route an effect ran on; the module behind its row is the same for both. With no call pending
+/// the stop was in the core itself and the site is `SITE_NONE`; with no package, no module is behind any site.
+#[inline(always)]
+pub(crate) unsafe fn hang_site(m_fx: u32, m_voice: u32, stop_crumb: u32) -> (u32, u32, u32, u32, Option<usize>) {
+    use dkrt_sdk::fault::*;
+    if m_fx != 0 {
+        let site = (m_fx >> 8) & 0xff;
+        let off = m_fx >> 16;
+        (site, m_fx & 0xff, off, m_fx, hooks::watch_attribute(site, off))
+    } else if m_voice != 0 {
+        let ty = m_voice >> 16;
+        (SITE_VOICE, m_voice & 0xff, ty, m_voice, hooks::watch_attribute(SITE_VOICE, ty))
+    } else {
+        (SITE_NONE, 0, 0, stop_crumb, None)
+    }
+}
+
 /// Write the hang record and reset (fault.rs). The site is the one with a call pending: an effect (the master or the send route) or a voice; with none, the stop was
 /// in the core itself and the record has no site.
 unsafe fn write_hang(w: &mut Watch) {
     use dkrt_sdk::fault::*;
     let mut diag = w.seen[0];
     diag[D_STEP] = w.m_step;
-    // the site word names the route an effect ran on; the module behind its row is the same for both
-    let (site, stage, id, last, module) = if w.m_fx != 0 {
-        let site = (w.m_fx >> 8) & 0xff;
-        let off = w.m_fx >> 16;
-        (site, w.m_fx & 0xff, off, w.m_fx, services().attribute(site, off))
-    } else if w.m_voice != 0 {
-        let ty = w.m_voice >> 16;
-        (SITE_VOICE, w.m_voice & 0xff, ty, w.m_voice, services().attribute(SITE_VOICE, ty))
-    } else {
-        (SITE_NONE, 0, 0, w.stop_crumb, None)
-    };
+    let (site, stage, id, last, module) = hang_site(w.m_fx, w.m_voice, w.stop_crumb);
     ev(logk::FAULT_FOUND, logk::F_ERROR, [KIND_DSP | site << 8 | stage << 16, id, w.m_step, last, module.map_or(u32::MAX, |m| m as u32)]);
     crate::settings::flush_if_dirty();
     crate::fault::write_hang(&Hang { site, id, stage, step: w.m_step, last, module: module.unwrap_or(usize::MAX), diag });
@@ -358,7 +365,7 @@ unsafe fn list_modules() {
             ev(
                 logk::MOD_LIST,
                 logk::F_ERROR,
-                [i as u32, crate::package::entry::has_tick(i) as u32, word_of(m.name.as_ptr(), 0, 32), word_of(m.name.as_ptr(), 4, 32), word_of(m.name.as_ptr(), 8, 32)],
+                [i as u32, hooks::module_has_tick(i) as u32, word_of(m.name.as_ptr(), 0, 32), word_of(m.name.as_ptr(), 4, 32), word_of(m.name.as_ptr(), 8, 32)],
             );
         }
         i += 1;

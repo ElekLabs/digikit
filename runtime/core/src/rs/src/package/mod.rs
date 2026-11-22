@@ -2,8 +2,8 @@
 //! the services' tables, the handlers of the module commands and the module admin commands, the module file and settings files, the live reload and the
 //! capacity.
 //!
-//! Resident code still calls into this folder (the hooks come with RC2s-1 S6); this folder calls the resident core through `crate::` paths until the resident
-//! table (S7) replaces them.
+//! The resident core reaches this folder only through the hooks (`hooks.rs`, `dkrt_abi::hooks`; one call, `hooks::install`, in `init_once`); this folder calls the
+//! resident core through `crate::` paths until the resident table (S7) replaces them.
 
 pub(crate) mod admission;
 pub(crate) mod boot_steps;
@@ -18,6 +18,7 @@ pub(crate) mod files;
 #[rustfmt::skip]
 pub(crate) mod gen_services;
 pub(crate) mod handlers;
+pub(crate) mod hooks;
 pub(crate) mod imports;
 pub(crate) mod invariants;
 pub(crate) mod lifecycle;

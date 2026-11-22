@@ -4,7 +4,7 @@ use crate::platform::{self, device};
 use crate::platform::st;
 use crate::state::{init_once, MAX_MODULES};
 use crate::{arena, card, fault, dlog, settings, speed, watch};
-use crate::package::{dsp};
+use crate::hooks;
 use core::ptr::{addr_of, read_volatile};
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::*;
@@ -72,7 +72,7 @@ const STOCK_FILTER_TYPES: u32 = 6;
 /// Import `dk_debug_setup`: set the machine type (`op` 1) or the filter type (`op` 2) of a track through the firmware's own kit commit. `E_RANGE` for an op, a
 /// track or a type no chooser offers, else what `Platform::set_track_type` reports. Run it in the UI task.
 pub(crate) unsafe extern "C" fn debug_setup(op: u32, track: u32, ty: u32) -> i32 {
-    if !setup_args_ok(&platform::profile(), &crate::package::module_cmds::machine_type_loaded, op, track, ty) {
+    if !setup_args_ok(&platform::profile(), &|ty| unsafe { hooks::machine_type_loaded(ty) }, op, track, ty) {
         return E_RANGE;
     }
     crate::platform::PLATFORM.set_track_type(op, track, ty)
@@ -153,11 +153,11 @@ pub unsafe extern "C" fn dkrt_status(out: *mut DkrtStatus) {
     o.last_result = s.last_result;
     o.loads = s.loads;
     o.tick_calls = s.tick_calls;
-    o.state = dsp::state();
-    o.dsp_size = dsp::area_bytes();
-    let (dfree, dlargest) = dsp::area_stats();
-    o.dsp_free = dfree;
-    o.dsp_largest = dlargest;
+    let area = hooks::dsp_area();
+    o.state = area.state;
+    o.dsp_size = area.total;
+    o.dsp_free = area.free;
+    o.dsp_largest = area.largest;
 }
 
 /// `dkrt_diag(out)`: what the debug log, the card check and the DSP watch found (a `DkrtDiag`).

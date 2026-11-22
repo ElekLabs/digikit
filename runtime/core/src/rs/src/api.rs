@@ -5,7 +5,7 @@ use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use crate::state::{init_once, DKRT_UNLOAD_OBSERVERS, OBSERVERS, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
 use crate::{boot, dlog, selection, settings};
-use crate::package::{dsp, entry, loader, scan};
+use crate::hooks;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
@@ -18,7 +18,7 @@ use dkrt_sdk::*;
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_load(path: *const u8) -> i32 {
     init_once();
-    let r = loader::load(path);
+    let r = hooks::load(path);
     st().last_result = r;
     r
 }
@@ -93,11 +93,7 @@ pub unsafe extern "C" fn dkrt_unload_observer_remove(f: usize) {
 /// The owner id of a module context: its record index; `E_CONTRACT` for a pointer that is not the live context of a content module (a service has none given out).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_ctx_owner(ctx: usize) -> i32 {
-    match crate::package::entry::ctx_owner(ctx as *mut u8) {
-        // a service file's context is not given out: the unload observers are for content modules
-        Some(rec) if rec < MAX_MODULES => rec as i32,
-        _ => E_CONTRACT,
-    }
+    hooks::ctx_owner(ctx)
 }
 
 /// What the running module code is (`dlog::PHASE_*`); 0 outside module code. UI task.
@@ -206,7 +202,7 @@ pub unsafe extern "C" fn dkrt_poll_remove(f: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
     init_once();
-    scan::module_header(first, out)
+    hooks::module_header(first, out)
 }
 
 
@@ -229,9 +225,10 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
                 o.size = m.size;
                 o.path = (*addr_of!(DKRT_PATHS))[i];
                 o.state = if m.used == 2 { MOD_LOADING } else { MOD_LOADED };
-                o.dsp_size = dsp::ds().mod_len[i];
+                let extra = hooks::module_extra(i);
+                o.dsp_size = extra.dsp_size;
                 o.menu = (*addr_of!(DKRT_MENUS))[i];
-                o.ctx = entry::ctx_addr(i).get();
+                o.ctx = extra.ctx;
                 return OK;
             }
             seen += 1;
@@ -246,7 +243,7 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
     init_once();
-    crate::package::handlers::exports::fx_entry(index, &mut *out)
+    hooks::fx_entry(index, out)
 }
 
 

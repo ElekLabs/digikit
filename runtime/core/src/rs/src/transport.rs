@@ -19,7 +19,7 @@ use crate::dlog;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::proto::*;
 use dkrt_sdk::{logk, E_BUSY, OK};
-use crate::package::module_cmds::{service, service_of};
+use crate::hooks;
 use crate::store_cmds::*;
 use crate::admin_cmds::*;
 
@@ -216,7 +216,9 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
     let buf = buffer();
     let blen = unpack(msg.add(7), wire as usize, buf.add(BODY_AT));
     let ent = find(cmd);
-    let big = ent.is_some_and(|e| e.flags & BIG != 0);
+    // a built-in command of the package has no entry here: its flags come from the package
+    let flags = flags_of(cmd, ent);
+    let big = flags.is_some_and(|f| f & BIG != 0);
     // Every command but DATA and SELECT has a small body. Copy it out: the commands stream the table through the buffer.
     // (DATA and SELECT read theirs in place: SELECT's is up to 8 paths of 56 bytes and it never touches the table; DATA's is a chunk.)
     let req = &mut *addr_of_mut!(REQ);
@@ -227,39 +229,42 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
         copy(req.as_mut_ptr(), buf.add(BODY_AT), blen);
     }
     let body = if big { buf.add(BODY_AT) as *const u8 } else { req.as_ptr() };
-    if let Some(e) = ent {
-        if e.flags & STORE == 0 {
-            return (e.h)(seq, buf, body, blen);
+    if let Some(f) = flags {
+        if f & STORE == 0 {
+            return run_builtin(ent, cmd, seq, buf, body, blen);
         }
         if !sw::try_lock() {
             return reply(cmd, seq, E_BUSY, 0); // an SDK call is inside the store: the host asks again
         }
-        let r = (e.h)(seq, buf, body, blen);
+        let r = run_builtin(ent, cmd, seq, buf, body, blen);
         sw::unlock();
         return r;
     }
-    // a command a module registered
-    match crate::package::module_cmds::begin_cmd(cmd) {
-        Err(()) => reply(cmd, seq, E_BUSY, 0), // its module is being reloaded: the host asks again
-        Ok(Some((h, owner))) => {
-            let out = (addr_of_mut!(RBODY) as *mut u8).add(1);
-            // what the handler logs carries its module's source (owner 255: registered by no module)
-            let prev = if owner != 255 && owner > 0 { dlog::enter_module(owner as usize - 1, dlog::PHASE_CALLBACK) } else { 0 };
-            let r = h(cmd as u32, seq, body, blen as u32, out);
-            if owner != 255 && owner > 0 {
-                dlog::leave_module(prev);
-            }
-            // counted since `begin_cmd`: a reload of the module waits for it
-            crate::package::module_cmds::end_cmd(owner);
-            if r < 0 {
-                reply(cmd, seq, r, 0)
-            } else if r as usize > REPLY_BODY_MAX - 1 {
-                reply(cmd, seq, E_LENGTH, 0)
-            } else {
-                reply(cmd, seq, OK, r as usize)
-            }
-        }
-        Ok(None) => reply(cmd, seq, E_PROTO, 0),
+    // a command a module registered (the package runs it: BUSY while its module is reloaded, PROTO when no module registered it)
+    let out = (addr_of_mut!(RBODY) as *mut u8).add(1);
+    let r = hooks::command_run_registered(cmd, seq, body, blen, out);
+    if r < 0 {
+        reply(cmd, seq, r, 0)
+    } else if r as usize > REPLY_BODY_MAX - 1 {
+        reply(cmd, seq, E_LENGTH, 0)
+    } else {
+        reply(cmd, seq, OK, r as usize)
+    }
+}
+
+/// The flags of command `cmd` when the core or the package has it built in; `ent` is the core's entry for it.
+fn flags_of(cmd: u8, ent: Option<&Cmd>) -> Option<u8> {
+    match ent {
+        Some(e) => Some(e.flags),
+        None => unsafe { hooks::command_flags(cmd) },
+    }
+}
+
+/// Run the built-in command `cmd`: the core's handler `ent`, or the package's (`ent` is `None`).
+unsafe fn run_builtin(ent: Option<&Cmd>, cmd: u8, seq: u32, buf: *mut u8, body: *const u8, blen: usize) -> i32 {
+    match ent {
+        Some(e) => (e.h)(seq, buf, body, blen),
+        None => hooks::command_run(cmd, seq, buf, body, blen),
     }
 }
 
@@ -281,7 +286,7 @@ pub(crate) struct Cmd {
     pub(crate) h: Handler,
 }
 
-/// The commands of the resident core, looked up one after the other (a jump table is not ColdFire code); the others are the system package's (`package::commands`).
+/// The commands of the resident core, looked up one after the other (a jump table is not ColdFire code); the others are the system package's (`hooks::command_flags`).
 pub(crate) static CMDS: [Cmd; 16] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG | STORE, h: h_info },
     Cmd { cmd: CMD_LIST, flags: STORE, h: h_list },
@@ -309,15 +314,15 @@ pub(crate) fn find(cmd: u8) -> Option<&'static Cmd> {
         }
         i += 1;
     }
-    crate::package::commands::find(cmd)
+    None
 }
 
 /// Is the reply to `cmd` with `status` logged as an UPLOAD event? Not a read-only built-in (flag), and a service command only when it failed
 /// (a key press must not fill the ring).
 pub(crate) fn logged(cmd: u8, status: i32) -> bool {
-    match find(cmd) {
-        Some(e) => e.flags & NOLOG == 0,
-        None => status != 0 || service(cmd).is_none(),
+    match flags_of(cmd, find(cmd)) {
+        Some(f) => f & NOLOG == 0,
+        None => status != 0 || unsafe { !hooks::command_registered(cmd) },
     }
 }
 
