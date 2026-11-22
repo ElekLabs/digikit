@@ -18,7 +18,7 @@ execution requirements, not levels. A successful boot proves only what the run a
 | Level | What | Command |
 | --- | --- | --- |
 | Static (JS/TS) | oxlint, Prettier check, host Vitest, `pnpm -r run typecheck` | `pnpm verify:host` |
-| Static (Python) | ruff check and format over pyproject `[tool.ruff] include`; mypy over `[tool.mypy] files` | `mise run lint:py`; `mise run check:layers` (module layering, docs/ARCHITECTURE.md) |
+| Static (Python) | ruff check and format over pyproject `[tool.ruff] include`; mypy over `[tool.mypy] files` | `mise run lint:py`; `mise run check:layers` (module layering, docs/ARCHITECTURE.md); `layercheck --boundary-report` lists the resident/package crossings |
 | Fast preflight | Affected projects only; no builds, no devices | `mise run test:changed` |
 | Unit (TS host) | Packages, desktop UI logic, regression helpers; no device | `pnpm test:host` |
 | Unit (web) | Web app suites in `apps/web/tests`: Vitest `*.test.ts` (`test-host`, no wasm) and the real-wasm suites `*.wasm.test.ts` (`test-wasm`) | `pnpm nx:pilot run @digi/web:test-host`, `@digi/web:test-wasm` |

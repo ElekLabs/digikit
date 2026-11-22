@@ -44,6 +44,10 @@ Rules:
             (`device() == 1`): the code asks the device profile (`samples_in_store()`), whose values come from the device files. The runtime
             module patches the firmware only with the machine page hooks (finding 128: runtime-owned, with slots); the UI loop, main-OS task and MIDI
             receive hooks and the exception hook install are in the adapter `core/platform`.
+  boundary-hook, boundary-table, boundary-abi
+            The resident core (the runtime crate outside `package/`) reaches package code only through `hooks.rs`; package code reaches resident code only through `package/resident.rs`
+            (the resident table rows); a type that crosses is in the abi crate (docs/plans/resident-core-and-system-package.md, section 4). Not enforced until RC2s-1 S7 adds both files:
+            `BOUNDARY_ENFORCED` switches `check()` on, `--boundary-report` lists the crossings at any time.
   imports   Every function of <dk/platform/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -738,6 +742,197 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
     return out
 
 
+# The resident/package boundary (docs/plans/resident-core-and-system-package.md, section 4; RC2s-1 S8). Resident code is the runtime crate outside `package/`; package code is `package/`.
+# Resident code reaches package code only through the hooks module `hooks.rs` (the struct the package fills at entry); package code reaches resident code only through
+# `package/resident.rs` (the rows of the resident table) and the abi crate. Types that cross the boundary live in dkrt-abi.
+# The rules are not enforced until S7 has added `hooks.rs` and `package/resident.rs`: `check()` runs them when BOUNDARY_ENFORCED is True, `--boundary-report` lists the crossings any time.
+BOUNDARY_ENFORCED = False
+BOUNDARY_HOOKS_FILE = "hooks.rs"
+BOUNDARY_TABLE_FILE = "package/resident.rs"
+BOUNDARY_HOOK_HINT = "call the package through a hook of `hooks.rs` (a function pointer the package fills at entry; null keeps the stock behaviour)"
+BOUNDARY_TABLE_HINT = "reach the resident code through a row of the resident table (`package/resident.rs`); the package names no resident module itself"
+BOUNDARY_ABI_HINT = "move the type to the abi crate (runtime/core/abi) and name it as `dkrt_abi::...` on both sides"
+BOUNDARY_USE = re.compile(r"\buse\s+([^;]+);", re.S)
+BOUNDARY_PATH = re.compile(r"(?<![\w:])(crate|package|self|super)((?:::\w+)+)")
+
+
+def expand_use_tree(tree: str) -> list[list[str]]:
+    """The paths of a `use` tree: `a::{b, c::D}` gives [a, b] and [a, c, D]; `self` and `*` end a path."""
+    tree = tree.strip()
+    brace = tree.find("{")
+    if brace < 0:
+        return [[x.strip() for x in tree.split(" as ")[0].split("::") if x.strip()]]
+    prefix = [x.strip() for x in tree[:brace].split("::") if x.strip()]
+    depth, start, parts = 0, brace + 1, []
+    for i in range(brace + 1, len(tree)):
+        c = tree[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            if depth == 0:
+                parts.append(tree[start:i])
+                break
+            depth -= 1
+        elif c == "," and depth == 0:
+            parts.append(tree[start:i])
+            start = i + 1
+    out: list[list[str]] = []
+    for part in parts:
+        if part.strip():
+            out += [prefix + p for p in expand_use_tree(part)]
+    return out
+
+
+BOUNDARY_TYPE_KINDS = {"struct", "enum", "type", "trait", "union"}
+BOUNDARY_DECL = re.compile(
+    r"^[ \t]*(?:pub(?:\([^)]*\))?[ \t]+)?(?:(?:const|unsafe|async)[ \t]+)*(?:extern[ \t]+\"[^\"]*\"[ \t]+)?"
+    r"(struct|enum|type|trait|union|fn|const|static)[ \t]+(?:mut[ \t]+)?([A-Za-z_]\w*)",
+    re.M,
+)
+BOUNDARY_MOD_LINE = re.compile(
+    r"^[ \t]*(?:pub(?:\([^)]*\))?[ \t]+)?mod[ \t]+\w+[ \t]*;", re.M
+)
+
+
+def module_path(rel: Path) -> list[str]:
+    """The module path of a source file of the runtime crate: `package/files.rs` is [package, files], `a/mod.rs` is [a], `lib.rs` is []."""
+    parts = list(rel.with_suffix("").parts)
+    if parts and parts[-1] in ("mod", "lib"):
+        parts.pop()
+    return parts
+
+
+def resolve_relative(segs: list[str], mod: list[str]) -> list[str]:
+    """Resolve a path from `crate`, `self`, `super` (any chain) or a bare `package` to segments below the crate root; [] when it climbs out of the crate."""
+    if not segs:
+        return []
+    if segs[0] == "crate":
+        return segs[1:]
+    if segs[0] == "package":
+        return segs
+    if segs[0] in ("self", "super"):
+        base, i = list(mod), 0
+        while i < len(segs) and segs[i] in ("self", "super"):
+            if segs[i] == "super":
+                if not base:
+                    return []
+                base.pop()
+            i += 1
+        return base + segs[i:]
+    return []
+
+
+def crate_paths(text: str, mod: list[str] | None = None) -> list[tuple[int, list[str]]]:
+    """Every path of `text` that starts with `crate`, `self`, `super` or `package`, as (line, segments below the crate root), from `use` trees and inline paths. A bare `package::` counts as `crate::package::`; `self` and `super` chains resolve against the module path `mod` of the file."""
+    mod = mod or []
+    found: list[tuple[int, list[str]]] = []
+
+    def add(line: int, path: list[str]) -> None:
+        while path and path[-1] in ("self", "*"):
+            path = path[:-1]
+        if path and path[0] in ("crate", "package", "self", "super"):
+            segs = resolve_relative(path, mod)
+            if segs:
+                found.append((line, segs))
+
+    for m in BOUNDARY_USE.finditer(text):
+        line = text.count("\n", 0, m.start()) + 1
+        for path in expand_use_tree(m.group(1)):
+            add(line, path)
+    inline = BOUNDARY_USE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+    for m in BOUNDARY_PATH.finditer(inline):
+        add(
+            inline.count("\n", 0, m.start()) + 1,
+            [m.group(1), *[x for x in m.group(2).split("::") if x]],
+        )
+    return found
+
+
+def declared_items(src: Path) -> dict[tuple[str, ...], str]:
+    """The items declared in the runtime crate's sources (test files and test modules left out): module path plus name -> struct, enum, type, trait, union, fn, const or static."""
+    items: dict[tuple[str, ...], str] = {}
+    for f in sorted(src.rglob("*.rs")):
+        r = f.relative_to(src)
+        if is_runtime_test_file(r):
+            continue
+        lines = f.read_text(encoding="utf-8").split("\n")
+        text = rust_without_comments("\n".join(without_test_modules(lines)))
+        mod = module_path(r)
+        for m in BOUNDARY_DECL.finditer(text):
+            items.setdefault((*mod, m.group(2)), m.group(1))
+    return items
+
+
+def names_a_type(segs: list[str], items: dict[tuple[str, ...], str]) -> bool:
+    """True when the path names a type or something of it (an associated function, an enum variant): some prefix resolves to a type declaration. A path whose prefixes resolve to no declaration (a re-export) is looked up by the name of its segments in the whole crate when that name is declared once."""
+    hit = False
+    for i in range(1, len(segs) + 1):
+        kind = items.get(tuple(segs[:i]))
+        if kind in BOUNDARY_TYPE_KINDS:
+            return True
+        hit = hit or kind is not None
+    if hit:
+        return False
+    for seg in segs:
+        kinds = {k for key, k in items.items() if key[-1] == seg}
+        if kinds & BOUNDARY_TYPE_KINDS and not kinds - BOUNDARY_TYPE_KINDS:
+            return True
+    return False
+
+
+def check_resident_boundary(root: Path) -> list[Violation]:
+    """The resident/package boundary: hooks one way, the resident table the other, shared types in the abi crate. Host-test files and inline test modules are not read.
+    Exemptions: `hooks.rs` may call package functions and `package/resident.rs` may name resident functions, but neither may name a type of the other side (resident types in the table's signatures come from the abi crate); `lib.rs` is read except its `mod` lines."""
+    src = root / RT_SRC
+    if not src.is_dir():
+        return []
+    items = declared_items(src)
+    resident = {
+        p.stem for p in src.glob("*.rs") if p.stem not in ("lib", "package")
+    } | {p.name for p in src.iterdir() if p.is_dir() and p.name != "package"}
+    resident |= {k[0] for k in items if len(k) == 1}
+    out: list[Violation] = []
+    for f in sorted(src.rglob("*.rs")):
+        r = f.relative_to(src)
+        if is_runtime_test_file(r):
+            continue
+        rp = r.as_posix()
+        in_package = r.parts[0] == "package"
+        lines = f.read_text(encoding="utf-8").split("\n")
+        text = rust_without_comments("\n".join(without_test_modules(lines)))
+        if rp == "lib.rs":
+            text = BOUNDARY_MOD_LINE.sub(
+                lambda m: re.sub(r"[^\n]", " ", m.group(0)), text
+            )
+        seen: set[tuple[int, str]] = set()
+        for line, segs in crate_paths(text, module_path(r)):
+            first = segs[0]
+            is_type = names_a_type(segs, items)
+            if in_package:
+                if first not in resident:
+                    continue
+                crossing = f"package code names crate::{'::'.join(segs)}"
+                allowed = rp == BOUNDARY_TABLE_FILE and not is_type
+                target = "package"
+            else:
+                if first != "package":
+                    continue
+                crossing = f"resident code names crate::{'::'.join(segs)}"
+                allowed = rp == BOUNDARY_HOOKS_FILE and not is_type
+                target = "resident"
+            if allowed or (line, crossing) in seen:
+                continue
+            seen.add((line, crossing))
+            if is_type:
+                rule, hint = "boundary-abi", BOUNDARY_ABI_HINT
+            elif target == "package":
+                rule, hint = "boundary-table", BOUNDARY_TABLE_HINT
+            else:
+                rule, hint = "boundary-hook", BOUNDARY_HOOK_HINT
+            out.append(Violation(f"{RT_SRC}/{rp}:{line}", rule, crossing, hint))
+    return out
+
+
 # L1 files of the runtime crate: the real platform and the adapter of `dkrt_abi::fw::Fw` (`fw.rs` at the source root), the only places that name the
 # firmware crate. The adapter file must implement the interface it is declared for.
 RT_PLATFORM_FILE = "platform.rs"
@@ -1191,7 +1386,7 @@ def check_self_contained(root: Path, mods: list[Module]) -> list[Violation]:
     ]
 
 
-def check(root: Path = ROOT) -> list[Violation]:
+def check(root: Path = ROOT, boundary_enforced: bool | None = None) -> list[Violation]:
     mods = load_modules(root)
     return [
         *check_roles(root, mods),
@@ -1203,10 +1398,36 @@ def check(root: Path = ROOT) -> list[Violation]:
         *check_imports(root),
         *check_runtime_arrows(root),
         *check_runtime_platform(root),
+        *(
+            check_resident_boundary(root)
+            if (BOUNDARY_ENFORCED if boundary_enforced is None else boundary_enforced)
+            else []
+        ),
         *check_service_crates(root),
         *check_core_kind_free(root),
         *check_self_contained(root, mods),
     ]
+
+
+def boundary_report(root: Path) -> int:
+    found = check_resident_boundary(root)
+    for v in found:
+        print(v)
+    by_rule: dict[str, int] = {}
+    by_file: dict[tuple[str, str], int] = {}
+    for v in found:
+        by_rule[v.rule] = by_rule.get(v.rule, 0) + 1
+        key = (v.rule, v.where.rsplit(":", 1)[0])
+        by_file[key] = by_file.get(key, 0) + 1
+    print("\nper rule:")
+    for k, n in sorted(by_rule.items()):
+        print(f"  {k}: {n}")
+    print("per file:")
+    for (rule, file), n in sorted(
+        by_file.items(), key=lambda kv: (kv[0][0], -kv[1], kv[0][1])
+    ):
+        print(f"  {rule} {n:4d} {file}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1217,7 +1438,14 @@ def main(argv: list[str] | None = None) -> int:
         default=ROOT,
         help="repository root (default: this repository)",
     )
+    ap.add_argument(
+        "--boundary-report",
+        action="store_true",
+        help="list the crossings of the resident/package boundary (rules boundary-hook, boundary-table, boundary-abi) with counts per rule and file, and exit 0",
+    )
     args = ap.parse_args(argv)
+    if args.boundary_report:
+        return boundary_report(args.root.resolve())
     found = check(args.root.resolve())
     for v in found:
         print(v)
