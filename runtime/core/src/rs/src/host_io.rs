@@ -28,6 +28,8 @@ pub(crate) struct HostCard {
     pub writes: u32,
     /// A read that covers one of these sectors fails.
     pub bad_reads: Vec<u32>,
+    /// Every sector written, in order (a test asks which sectors a step touched).
+    pub log: Vec<u32>,
 }
 
 static CARD: Mutex<Option<HostCard>> = Mutex::new(None);
@@ -37,7 +39,7 @@ pub(crate) struct CardGuard;
 
 impl CardGuard {
     pub(crate) fn install() -> CardGuard {
-        *grab(&CARD) = Some(HostCard { sectors: BTreeMap::new(), fill: 0xff, total: 1 << 20, reads: 0, writes: 0, bad_reads: Vec::new() });
+        *grab(&CARD) = Some(HostCard { sectors: BTreeMap::new(), fill: 0xff, total: 1 << 20, reads: 0, writes: 0, bad_reads: Vec::new(), log: Vec::new() });
         CardGuard
     }
 }
@@ -95,6 +97,7 @@ pub(crate) fn card_write(sector: u32, bytes: u32, buf: *const u8) -> Option<i32>
         let mut s = [0u8; 512];
         unsafe { core::ptr::copy_nonoverlapping(buf.add(i as usize * 512), s.as_mut_ptr(), 512) };
         c.sectors.insert(sector + i, s);
+        c.log.push(sector + i);
     }
     Some(0)
 }

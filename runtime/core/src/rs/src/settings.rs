@@ -62,21 +62,26 @@ pub struct State {
     pub off: u32,
 }
 
+impl State {
+    /// The state of a fresh start: nothing loaded, no copy, nothing changed. `DKRT_SET` starts as this, and a host test boots again from it.
+    pub const INITIAL: State = State {
+        loaded: 0,
+        copy: set::NONE,
+        card_seq: 0,
+        dirty: 0,
+        changed: 0,
+        writes: 0,
+        fails: 0,
+        last_result: 0,
+        damaged: 0,
+        passes: 0,
+        changed_pass: 0,
+        off: 0,
+    };
+}
+
 #[no_mangle]
-pub static mut DKRT_SET: State = State {
-    loaded: 0,
-    copy: set::NONE,
-    card_seq: 0,
-    dirty: 0,
-    changed: 0,
-    writes: 0,
-    fails: 0,
-    last_result: 0,
-    damaged: 0,
-    passes: 0,
-    changed_pass: 0,
-    off: 0,
-};
+pub static mut DKRT_SET: State = State::INITIAL;
 
 fn state() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_SET) }

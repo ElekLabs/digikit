@@ -140,5 +140,7 @@ mod host_io;
 mod store_tests;
 #[cfg(test)]
 mod package_counter_tests;
+#[cfg(test)]
+mod settings_tests;
 
 
