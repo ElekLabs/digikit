@@ -87,6 +87,11 @@ fn a_missing_file_or_folder_of_the_layout_fails() {
         ("Cargo.toml", "Cargo.toml is missing"),
     ] {
         let (dir, sdk) = service("layout-file", &[]);
+        // slots.rs is required of a service that fills slots
+        append(
+            &dir.join("dks/module.toml"),
+            "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\n",
+        );
         fs::remove_file(dir.join(gone)).unwrap();
         assert!(
             mentions(&problems(&dir, &sdk), what),
@@ -97,6 +102,27 @@ fn a_missing_file_or_folder_of_the_layout_fails() {
     let (dir, sdk) = service("layout-tests", &[]);
     fs::remove_dir_all(dir.join("tests")).unwrap();
     assert!(mentions(&problems(&dir, &sdk), "tests/ has no .rs file"));
+}
+
+#[test]
+fn slots_rs_is_required_only_for_a_service_with_fills() {
+    // no fills: the file may be absent (and its `pub mod` need not be declared)
+    let (dir, sdk) = service("slots-optional", &[]);
+    fs::remove_file(dir.join("src/slots.rs")).unwrap();
+    fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod records;\n").unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(!mentions(&found, "slots"), "{found:?}");
+    // a [[fill]]: the file and its declaration are required
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\n",
+    );
+    let found = problems(&dir, &sdk);
+    assert!(mentions(&found, "src/slots.rs is missing"), "{found:?}");
+    assert!(
+        mentions(&found, "does not declare `pub mod slots;`"),
+        "{found:?}"
+    );
 }
 
 #[test]
