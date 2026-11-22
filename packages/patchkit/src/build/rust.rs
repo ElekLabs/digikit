@@ -165,7 +165,7 @@ pub fn crate_files(manifest: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// The crate's sources (relative names and bytes) and the toolchain pins: what a build depends on.
-pub fn source_sha256(manifest: &Path) -> Result<String> {
+pub fn source_sha256(manifest: &Path, cargo_flags: &[String]) -> Result<String> {
     let manifest = tc::canon(manifest);
     let base = manifest.parent().unwrap_or(Path::new("."));
     let mut h = Sha256::new();
@@ -187,6 +187,11 @@ pub fn source_sha256(manifest: &Path) -> Result<String> {
     );
     h.update(tc::RUST_TARGET_JSON);
     h.update(CF_HELPERS.as_bytes());
+    // The features of the build are part of what it makes (none: the hash of a build without flags is the same as before).
+    for f in cargo_flags {
+        h.update(f.as_bytes());
+        h.update([0u8]);
+    }
     Ok(hex(&h.finalize()))
 }
 
@@ -350,7 +355,7 @@ pub fn target_dir(env: &Env) -> PathBuf {
 
 /// Build the crate and copy its static library into `out_dir`. A lock on the shared target dir covers the cargo run and the copy, so a
 /// build of the same crate from another worktree cannot replace the library in between.
-fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf> {
+fn build_staticlib(env: &Env, manifest: &Path, cargo_flags: &[String], out_dir: &Path) -> Result<PathBuf> {
     if !env.codegen_gcc_ready() {
         return Err(err!(
             "Rust-for-ColdFire toolchain not installed (uv run python -m tools.patchkit.pk_toolchains codegen-gcc)"
@@ -416,6 +421,7 @@ fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf
         .arg(&tc::pins().rust_nightly)
         .args(["cargo", "rustc", "--release"])
         .args(CARGO_ARGS)
+        .args(cargo_flags)
         .arg("--target")
         .arg(&target)
         .arg("--target-dir")
@@ -535,13 +541,13 @@ fn check_flags(blob: &[u8], what: &str) -> Result<()> {
 }
 
 /// Crate -> one relocatable ELF at `out`. Returns the exported symbols.
-fn build_object(env: &Env, manifest: &Path, out: &Path) -> Result<Vec<String>> {
+fn build_object(env: &Env, manifest: &Path, cargo_flags: &[String], out: &Path) -> Result<Vec<String>> {
     let crate_name = parse_cargo(&tc::read_text(manifest)?, manifest)?
         .package
         .name
         .replace('-', "_");
     let work = TempDir::new("pk-rust-")?;
-    let lib = build_staticlib(env, manifest, work.path())?;
+    let lib = build_staticlib(env, manifest, cargo_flags, work.path())?;
     tc::run(
         &env.m68k("ar")?,
         &["x".to_string(), tc::canon(&lib).display().to_string()],
@@ -656,11 +662,12 @@ fn build_object(env: &Env, manifest: &Path, out: &Path) -> Result<Vec<String>> {
 pub fn object_proto(
     env: &Env,
     manifest: &Path,
+    cargo_flags: &[String],
 ) -> Result<(Proto, String, BTreeMap<String, String>)> {
     let manifest = tc::canon(manifest);
     let tmp = TempDir::new("pk-rust-o-")?;
     let o = tmp.path().join("crate.o");
-    let exports = build_object(env, &manifest, &o)?;
+    let exports = build_object(env, &manifest, cargo_flags, &o)?;
     let proto = elf::proto_from_elf(&tc::read(&o)?)?;
     for r in &proto.relocs {
         if r.rtype != "32" {
@@ -673,7 +680,7 @@ pub fn object_proto(
     }
     let mut toolchain = toolchain_info(env);
     toolchain.insert("exports".into(), exports.join(" "));
-    Ok((proto, source_sha256(&manifest)?, toolchain))
+    Ok((proto, source_sha256(&manifest, cargo_flags)?, toolchain))
 }
 
 #[cfg(test)]
@@ -698,7 +705,7 @@ mod tests {
             std::fs::write(src.join(f), "// 1\n").unwrap();
         }
         let manifest = work.path().join("Cargo.toml");
-        let before = source_sha256(&manifest).unwrap();
+        let before = source_sha256(&manifest, &[]).unwrap();
         for f in [
             "a/tests.rs",
             "a/tests/x.rs",
@@ -708,10 +715,10 @@ mod tests {
         ] {
             std::fs::write(src.join(f), "// 2\n").unwrap();
         }
-        assert_eq!(source_sha256(&manifest).unwrap(), before);
+        assert_eq!(source_sha256(&manifest, &[]).unwrap(), before);
         for f in ["lib.rs", "a/mod.rs"] {
             std::fs::write(src.join(f), "// 2\n").unwrap();
-            assert_ne!(source_sha256(&manifest).unwrap(), before, "{f}");
+            assert_ne!(source_sha256(&manifest, &[]).unwrap(), before, "{f}");
             std::fs::write(src.join(f), "// 1\n").unwrap();
         }
     }
@@ -743,13 +750,13 @@ mod tests {
         let dep_text = "[package]\nname = \"dep\"\n";
         std::fs::write(&dep_manifest, dep_text).unwrap();
         assert_eq!(staged_dir_name(&dep_manifest).unwrap(), "moved");
-        let before = source_sha256(&manifest).unwrap();
+        let before = source_sha256(&manifest, &[]).unwrap();
         std::fs::write(
             &dep_manifest,
             format!("{dep_text}[package.metadata.patchkit]\nstaged-dir = \"original\"\n"),
         )
         .unwrap();
-        assert_ne!(source_sha256(&manifest).unwrap(), before);
+        assert_ne!(source_sha256(&manifest, &[]).unwrap(), before);
 
         let dest = work.path().join("staged");
         let deps_dir = dest.join(".deps");
