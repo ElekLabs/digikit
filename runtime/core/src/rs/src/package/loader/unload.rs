@@ -100,14 +100,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 }
 
-extern "C" {
-    /// `core/dsp-link`: clears the per-block callback when it points into [lo, hi). Resolves to 0 when the module is not in the image.
-    fn dl_tick_cb_drop();
-}
-
 /// After a module's `fini`: no per-block callback of `core/dsp-link` may point into its memory (a module that forgot to clear it).
 unsafe fn drop_tick_cb(base: u32, size: u32) {
-    let a = core::hint::black_box(dl_tick_cb_drop as unsafe extern "C" fn() as usize);
+    // `core/dsp-link`: clears the per-block callback when it points into [lo, hi); 0 when the module is not in the image.
+    let a = crate::package::resident::links::dl_tick_cb_drop();
     if a != 0 {
         let f: unsafe extern "C" fn(u32, u32) = core::mem::transmute(a);
         f(base, base.wrapping_add(size));

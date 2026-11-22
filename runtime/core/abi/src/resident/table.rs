@@ -6,7 +6,7 @@ pub const RESIDENT_MAGIC: u32 = 0xc44b_5254;
 /// Raised when an entry is removed, reordered or changed, or the layout of a shared view changes (rules in `resident.rs`).
 pub const RESIDENT_MAJOR: u16 = 1;
 /// Raised when an entry is added at the end of a group, or a group at the end of the table.
-pub const RESIDENT_MINOR: u16 = 0;
+pub const RESIDENT_MINOR: u16 = 1;
 
 /// The first words of the table: what it is, which version and how many bytes the producer built.
 #[repr(C)]
@@ -69,6 +69,7 @@ groups! {
     transport: TransportFns,
     state: StateFns,
     imports: ImportRows,
+    links: LinkRows,
 }
 
 // The table holds pointers to groups of function pointers and to the resident statics: it is built once and only read.

@@ -2806,18 +2806,17 @@ fn gen_exports(sdk: &Sdk, root: &std::path::Path) -> Result<Vec<(String, String)
     Ok(out)
 }
 
-/// The macro `optional_imports!` for the runtime crate: the imports that another module provides (`requires`). It declares each as an external
-/// function (patchkit links an `[object] optional` symbol to 0 when its module is not in the image), the stub of each that has `absent`, and
-/// `optional::table()`: per import its name, the address the module gave (0 when absent), the address of the stub (0 when it has none) and the module that provides it. It is
-/// a macro because the undefined symbols must belong to the runtime's own object, not to this crate.
+/// The imports that another module provides (`requires`), for the runtime crate, as two macros and one constant. `optional_links!` is for the resident core: it
+/// declares each import as an external function (patchkit links an `[object] optional` symbol to 0 when its module is not in the image) and `ADDRESSES`, the address of each
+/// in the order of `optional_imports!`'s table (null in a host test, which links no other module). `optional_imports!` is for the system package, which links to nothing by
+/// symbol: the stub of each import that has `absent`, and `optional::table(addresses)`: per import its name, the address the module gave (0 when absent; the resident core's
+/// row of the resident table), the address of the stub (0 when it has none) and the module that provides it. Both are macros because the undefined symbols must belong to
+/// the resident object, not to this crate. `OPTIONAL_COUNT` is the length of the list.
 fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
     let opt: Vec<_> = imps
         .iter()
         .filter(|(im, _)| im.requires.is_some())
         .collect();
-    let mut s = String::from(
-        "\n/// The imports that another module provides (`[[import]] requires`): the external functions, the stubs for an absent module and\n/// the table of both. Expand it once in the runtime's object; its symbols must be in the `optional` list of the runtime's module.toml.\n#[macro_export]\nmacro_rules! optional_imports {\n    () => {\n        #[allow(dead_code, trivial_numeric_casts)]\n        pub mod optional {\n            #[allow(unused_imports)]\n            use $crate::api::*;\n            extern \"C\" {\n",
-    );
     let decl = |sig: &Sig, keep: bool| -> String {
         sig.args
             .iter()
@@ -2839,6 +2838,13 @@ fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
             format!(" -> {}", rust_ty(&sig.ret))
         }
     };
+    let mut s = format!(
+        "\n/// How many imports another module provides (`[[import]] requires`): the length of the resident table's `optional` row.\npub const OPTIONAL_COUNT: usize = {};\n",
+        opt.len()
+    );
+    s.push_str(
+        "\n/// The resident core's side of the imports that another module provides: the external functions and the address of each (null in a host test). Expand it once in the\n/// runtime's object; its symbols must be in the `optional` list of the runtime's module.toml.\n#[macro_export]\nmacro_rules! optional_links {\n    () => {\n        #[allow(dead_code, trivial_numeric_casts)]\n        pub mod optional_link {\n            #[allow(unused_imports)]\n            use $crate::api::*;\n            extern \"C\" {\n",
+    );
     for (im, sig) in &opt {
         let sig = sig.as_ref().expect("a requires import has a sig");
         let _ = writeln!(
@@ -2849,7 +2855,22 @@ fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
             ret(sig)
         );
     }
-    s.push_str("            }\n\n            /// What an absent module's import calls: the failure value of the API.\n            pub mod absent {\n                #[allow(unused_imports)]\n                use $crate::api::*;\n");
+    let _ = writeln!(
+        s,
+        "            }}\n\n            /// The address of each import, in the order of the package's `optional::table`: 0 when the module is not in the image.\n            pub const ADDRESSES: [*const (); {}] = [",
+        opt.len()
+    );
+    for (im, _) in &opt {
+        let _ = writeln!(
+            s,
+            "                if cfg!(test) {{ core::ptr::null() }} else {{ {} as *const () }},",
+            im.name
+        );
+    }
+    s.push_str("            ];\n        }\n    };\n}\n");
+    s.push_str(
+        "\n/// The package's side: the stubs for an absent module and the table of the imports. The addresses come from the resident table (`optional_links!`).\n#[macro_export]\nmacro_rules! optional_imports {\n    () => {\n        #[allow(dead_code, trivial_numeric_casts)]\n        pub mod optional {\n            /// What an absent module's import calls: the failure value of the API.\n            pub mod absent {\n                #[allow(unused_imports)]\n                use $crate::api::*;\n",
+    );
     for (im, sig) in &opt {
         let (Some(a), Some(sig)) = (&im.absent, sig) else {
             continue;
@@ -2882,10 +2903,11 @@ fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
     s.push_str("            }\n\n");
     let _ = writeln!(
         s,
-        "            /// (name, address from the module or 0, address of the stub or 0, the module that provides it)\n            pub fn table() -> [(&'static str, usize, usize, &'static str); {}] {{\n                [",
+        "            /// (name, address from the module or 0, address of the stub or 0, the module that provides it); `addresses` is the resident table's row.\n            pub fn table(addresses: &[*const (); {}]) -> [(&'static str, usize, usize, &'static str); {}] {{\n                [",
+        opt.len(),
         opt.len()
     );
-    for (im, _) in &opt {
+    for (i, (im, _)) in opt.iter().enumerate() {
         let stub = if im.absent.is_some() {
             format!("absent::{} as usize", im.name)
         } else {
@@ -2893,8 +2915,7 @@ fn rust_optional(imps: &[(&Import, Option<Sig>)], missing: i32) -> String {
         };
         let _ = writeln!(
             s,
-            "                    ({:?}, core::hint::black_box({} as usize), {stub}, {:?}),",
-            im.name,
+            "                    ({:?}, addresses[{i}] as usize, {stub}, {:?}),",
             im.name,
             im.requires.as_deref().unwrap_or("")
         );

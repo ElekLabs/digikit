@@ -23,4 +23,5 @@ pub(crate) static TABLE: ResidentTable = ResidentTable {
     transport: &super::transport::FNS,
     state: &super::state::FNS,
     imports: &super::imports::ROWS,
+    links: &super::links::ROWS,
 };

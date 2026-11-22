@@ -9,6 +9,8 @@
 //! A package is compatible with a core when the majors are equal and the package's minor is not newer than the core's (the core's table only grows
 //! by appending, so a package that wants fewer functions runs on a newer core; one that wants more does not).
 
+pub mod body;
+
 pub const MAGIC: u32 = 0x444b_5350; // "DKSP"
 /// The layout of this header. A header of another format is refused, never guessed at.
 pub const FORMAT: u32 = 1;

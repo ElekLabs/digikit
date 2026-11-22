@@ -11,12 +11,6 @@ use dkrt_abi::link::{STATS_CLEAR, STATS_ON, STATS_PERIOD};
 use dkrt_link::stats::{Mirror, WINDOW_WORDS};
 use dkrt_sdk::{E_BUSY, E_CONTEXT, OK};
 
-extern "C" {
-    /// `core/dsp-link`: `void dl_stats_hook(u32 (*cb)(u32, u32, u32))`, the feed of the stats pages from `dl_tick`. 0 when the image has no such function
-    /// (`[object] optional`).
-    fn dl_stats_hook();
-}
-
 /// Words `dk_dsp_stats_read` gives: the window and the three counters.
 const READ_WORDS: usize = WINDOW_WORDS + 3;
 
@@ -26,10 +20,12 @@ static mut LAST_CLEAR: u32 = 0;
 
 /// Set (the feed) or clear (0) the hook of `dl_tick`. The feed is set while the counters run and only then: with stats off the slot holds stock data.
 unsafe fn set_hook(feed: usize) {
-    if core::hint::black_box(dl_stats_hook as usize) == 0 {
+    // `core/dsp-link`: `void dl_stats_hook(u32 (*cb)(u32, u32, u32))`, the feed of the stats pages from `dl_tick`. 0 when the image has no such function.
+    let hook = crate::package::resident::links::dl_stats_hook();
+    if hook == 0 {
         return;
     }
-    let set: unsafe extern "C" fn(usize) = core::mem::transmute(dl_stats_hook as unsafe extern "C" fn());
+    let set: unsafe extern "C" fn(usize) = core::mem::transmute(hook);
     set(feed);
 }
 

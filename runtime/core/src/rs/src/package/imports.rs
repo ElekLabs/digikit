@@ -208,7 +208,7 @@ pub unsafe fn import_addr(name: *const u8) -> u32 {
         }
         i += 1;
     }
-    let t = optional::table();
+    let t = optional::table(crate::package::resident::links::optional());
     i = 0;
     while i < t.len() {
         if cstr_eq_str(name, t[i].0) {
@@ -222,7 +222,7 @@ pub unsafe fn import_addr(name: *const u8) -> u32 {
 /// The module whose absence leaves the import `name` (NUL-terminated) without an address, without the `core/` prefix ("usb-bulk" for an import of core/usb-bulk
 /// that has no stub); None when the table has no such import, or it has an address or a stub. Every import of another module has a stub today.
 pub unsafe fn import_needs(name: *const u8) -> Option<&'static str> {
-    let t = optional::table();
+    let t = optional::table(crate::package::resident::links::optional());
     let mut i = 0;
     while i < t.len() {
         if cstr_eq_str(name, t[i].0) {

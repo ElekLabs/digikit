@@ -357,7 +357,7 @@ pub mod fault;
 /// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the runtime version.
 #[rustfmt::skip]
 mod gen_sdk;
-pub use gen_sdk::{limits, logk, proto};
+pub use gen_sdk::{limits, logk, proto, OPTIONAL_COUNT};
 
 #[cfg(test)]
 mod tests {

@@ -12,6 +12,7 @@ mod fault;
 mod imports;
 mod intro;
 mod io;
+mod links;
 mod platform;
 mod sdk_files;
 mod selection;

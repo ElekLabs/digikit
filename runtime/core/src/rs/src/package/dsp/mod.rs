@@ -21,13 +21,11 @@
 //! module's range behind the image, bss and voice states (`state_bytes` of its `dk_fx_desc`).
 //!
 //! Nothing here runs unless the file has a DSP section; the link to `core/dsp-link`, `core/dyndsp` and `core/dynfx` is optional.
-#[cfg(not(test))]
-use dkrt_abi::dev_addr::fn_addr;
 use crate::package::handlers::{services, Claim, ServiceTable};
 use dkrt_abi::mem::cstr_eq;
 use dkrt_abi::mem::cstr_len;
 use dkrt_abi::mem::rd32;
-use crate::package::resident::arena;
+use crate::package::resident::{arena, links};
 use core::ptr::{addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Stream, Ticket, SEQ_MAX};
@@ -38,13 +36,7 @@ pub(crate) use dkrt_abi::dsp::*;
 pub unsafe fn retained() -> bool { ds().phase == PH_RETAINED }
 
 
-extern "C" {
-    // Symbols of core/dsp-link and core/dyndsp; each resolves to 0 when the module is not in the image (`[object] optional`).
-    fn dl_send();
-    fn dl_send_win();
-    fn dl_poll();
-    fn dyndsp_info();
-}
+// The addresses of core/dsp-link and core/dyndsp come from the resident table (`resident::links`); each is 0 when the module is not in the image.
 
 #[repr(C)]
 pub struct DlStatus {
@@ -71,7 +63,7 @@ pub fn ds() -> &'static mut DspState {
 pub(crate) unsafe fn info() -> *const u32 {
     #[cfg(test)] { return crate::package::cleanup_tests::voice_info(); }
     #[cfg(not(test))] {
-        let a = fn_addr(dyndsp_info);
+        let a = crate::package::resident::links::dyndsp_info();
         if a == 0 || !crate::package::resident::platform::has_dsp() {
             return core::ptr::null();
         }
@@ -91,7 +83,7 @@ pub(crate) unsafe fn have_link() -> bool {
     // the host tests have no `core/dsp-link` symbols: the link is there when they give a `dyndsp_info` table
     #[cfg(test)] { return !info().is_null(); }
     #[cfg(not(test))] {
-        fn_addr(dl_send) != 0 && fn_addr(dl_send_win) != 0 && fn_addr(dl_poll) != 0 && !info().is_null()
+        links::dl_send() != 0 && links::dl_send_win() != 0 && links::dl_poll() != 0 && !info().is_null()
     }
 }
 
@@ -99,7 +91,7 @@ pub(crate) unsafe fn call_send(dst: u32, buf: *const u8, len: u32) -> i32 {
     if retained() { return -2; }
     #[cfg(test)] { return crate::package::cleanup_tests::send_image(dst, buf, len); }
     #[cfg(not(test))] {
-        let f: unsafe extern "C" fn(u32, *const u8, u32) -> i32 = core::mem::transmute(fn_addr(dl_send));
+        let f: unsafe extern "C" fn(u32, *const u8, u32) -> i32 = core::mem::transmute(links::dl_send());
         f(dst, buf, len)
     }
 }
@@ -108,7 +100,7 @@ pub(crate) unsafe fn call_send_win(win: u32, dst: u32, buf: *const u32, len: u32
     #[cfg(test)] { return crate::package::cleanup_tests::send_word(win, dst, buf, len); }
     #[cfg(not(test))] {
         let f: unsafe extern "C" fn(u32, u32, *const u32, u32) -> i32 =
-            core::mem::transmute(fn_addr(dl_send_win));
+            core::mem::transmute(links::dl_send_win());
         f(win, dst, buf, len)
     }
 }
@@ -121,7 +113,7 @@ pub(crate) unsafe fn call_poll(s: *mut DlStatus) -> i32 {
         return 0;
     }
     #[cfg(not(test))] {
-        let f: unsafe extern "C" fn(*mut DlStatus) -> i32 = core::mem::transmute(fn_addr(dl_poll));
+        let f: unsafe extern "C" fn(*mut DlStatus) -> i32 = core::mem::transmute(links::dl_poll());
         f(s)
     }
 }

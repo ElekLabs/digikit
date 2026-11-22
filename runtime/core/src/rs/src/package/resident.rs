@@ -13,6 +13,7 @@ pub(crate) mod dlog;
 pub(crate) mod fault;
 pub(crate) mod io;
 pub(crate) mod intro;
+pub(crate) mod links;
 pub(crate) mod platform;
 pub(crate) mod sdk_files;
 pub(crate) mod selection;
