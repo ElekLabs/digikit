@@ -183,8 +183,9 @@ pub trait Platform: Tasking + SamplePool + StagedWriter + crate::storage::Storag
     /// of an adapter's data table or of a slot word; null when the image has no such entry. The one lookup behind `CoreApi::info`: the runtime names no service and
     /// no adapter table. A real platform searches the image's table with [`info_find`]; a fake gives its own.
     unsafe fn info(&self, name_hash: u32) -> *const u32;
-    /// Like [`Platform::info`], but null unless the entry is a `[[slot]]` word (not an `[[info]]` data table): the only entries a service file's `SLOTS` item may fill.
-    unsafe fn info_slot(&self, name_hash: u32) -> *const u32;
+    /// Like [`Platform::info`], but the device address of the word, and `NULL` unless the entry is a `[[slot]]` word (not an `[[info]]` data table): the only entries a service
+    /// file's `SLOTS` item may fill.
+    unsafe fn info_slot(&self, name_hash: u32) -> crate::dev_addr::DevAddr;
     /// The index in core/dsp-link's slot block (window 0 words 0 to 15) of the entry `name_hash`, when it is a DSP slot (`[[slot]] space = "dsp"`, kind [`INFO_KIND_DSP_SLOT`]);
     /// `None` for every other entry and for a missing one. The only entries a `SLOTS` item with `SLOT_DSP` may fill.
     unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32>;

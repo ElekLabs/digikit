@@ -129,7 +129,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             free(self);
             return Err(r);
         }
-        Ok((b.addr, size as u32, rows))
+        Ok((b.addr.get(), size as u32, rows))
     }
 
 

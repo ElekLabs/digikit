@@ -315,8 +315,8 @@ impl Platform for RealPlatform {
         }
         dkrt_abi::platform::info_find(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
     }
-    unsafe fn info_slot(&self, name_hash: u32) -> *const u32 {
-        dkrt_abi::platform::info_find_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
+    unsafe fn info_slot(&self, name_hash: u32) -> dkrt_abi::dev_addr::DevAddr {
+        dkrt_abi::dev_addr::DevAddr::of_ptr(dkrt_abi::platform::info_find_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash))
     }
     unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32> {
         dkrt_abi::platform::info_find_dsp_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)

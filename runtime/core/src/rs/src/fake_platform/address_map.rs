@@ -3,7 +3,7 @@
 //! `map(range, host_ptr)` says that the device addresses of `range` are the bytes at `host_ptr`; `intern_fn` gives a host function a device address in a code range that no memory
 //! mapping covers. An address that nothing covers is an error of the test, not of the code under test: every lookup answers `None` and `DevAddr` panics with the address.
 
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use crate::{ARENA_BYTES, DKRT_ARENA};
 use core::ops::Range;
 use core::ptr::addr_of_mut;
@@ -13,6 +13,8 @@ use std::vec::Vec;
 /// The first device address that `intern_fn` hands out; one function takes `FN_STEP` addresses.
 const FN_BASE: u32 = 0xF000_0000;
 const FN_STEP: u32 = 4;
+/// The first device address that `place` hands out; the arena is below, the function range above.
+const PLACE_BASE: u32 = 0x4000_0000;
 /// The device address where `map_arena` puts the module arena.
 const ARENA_DEV_BASE: u32 = 0x2000_0000;
 
@@ -25,6 +27,8 @@ struct Mapping {
 pub struct AddressMap {
     maps: RefCell<Vec<Mapping>>,
     fns: RefCell<Vec<usize>>,
+    /// The bytes `place` has handed out so far.
+    placed: Cell<u32>,
 }
 
 impl AddressMap {
@@ -52,6 +56,18 @@ impl AddressMap {
         let host = addr_of_mut!(DKRT_ARENA) as *mut u8;
         let start = ARENA_DEV_BASE + (host as usize & 15) as u32;
         self.map(start..start + ARENA_BYTES as u32, host);
+    }
+
+    /// The device address of the host memory of `len` bytes at `host`: the one it has, or a new range from `PLACE_BASE` on. The memory stays valid while the map is installed.
+    pub fn place(&self, host: *mut u8, len: usize) -> u32 {
+        let len = len.max(4);
+        if let Some(a) = self.of_host(host) {
+            return a;
+        }
+        let start = PLACE_BASE + self.placed.get();
+        self.placed.set(self.placed.get() + ((len as u32 + 15) & !15).max(16));
+        self.map(start..start + len as u32, host);
+        start
     }
 
     /// The device address of the host function at `f`: the same address for the same function.

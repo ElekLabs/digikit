@@ -218,7 +218,7 @@ pub unsafe fn import_addr(name: *const u8) -> u32 {
     let mut i = 0;
     while i < IMPORTS.0.len() {
         if cstr_eq(IMPORTS.0[i].name.as_ptr(), name) {
-            return IMPORTS.0[i].addr as usize as u32;
+            return DevAddr::of_fn(IMPORTS.0[i].addr as usize).get();
         }
         i += 1;
     }
@@ -226,7 +226,7 @@ pub unsafe fn import_addr(name: *const u8) -> u32 {
     i = 0;
     while i < t.len() {
         if cstr_eq_str(name, t[i].0) {
-            return (if t[i].1 != 0 { t[i].1 } else { t[i].2 }) as u32;
+            return DevAddr::of_fn(if t[i].1 != 0 { t[i].1 } else { t[i].2 }).get();
         }
         i += 1;
     }

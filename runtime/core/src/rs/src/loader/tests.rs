@@ -157,9 +157,10 @@ impl Images for FakeImages {
         let ptr = mem.as_mut_ptr() as *mut u8;
         self.live.push((addr, mem));
         self.log.push(Ev::Alloc(addr, n));
-        Some(Block { ptr, addr })
+        Some(Block { ptr, addr: dkrt_abi::dev_addr::DevAddr::new(addr) })
     }
-    unsafe fn free(&mut self, addr: u32) {
+    unsafe fn free(&mut self, addr: dkrt_abi::dev_addr::DevAddr) {
+        let addr = addr.get();
         let at = self.live.iter().position(|b| b.0 == addr).expect("free of a block that is not live");
         self.live.remove(at);
         self.log.push(Ev::Free(addr));
@@ -453,7 +454,7 @@ unsafe fn put_port(l: &mut Fake, sites: &[((&str, u32, u16, u8, [u8; 8]), u8)]) 
     write_table(&t, &mut bytes).unwrap();
     let j = PROVIDER_MAX - 1;
     let bytes: &'static mut [u8] = Box::leak(bytes.into_boxed_slice());
-    l.provs[j] = ProvRec { block: Some(Block { ptr: bytes.as_mut_ptr(), addr: 0 }), len: bytes.len() as u32, image_size: 16, ..ProvRec::EMPTY };
+    l.provs[j] = ProvRec { block: Some(Block { ptr: bytes.as_mut_ptr(), addr: dkrt_abi::dev_addr::DevAddr::NULL }), len: bytes.len() as u32, image_size: 16, ..ProvRec::EMPTY };
     l.roles[MAX_MODULES + j] = 2;
     records::module(MAX_MODULES + j).used = 1;
     records::module(MAX_MODULES + j).base = 0x7000_0000;

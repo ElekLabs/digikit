@@ -84,15 +84,14 @@ pub unsafe fn wr16(a: u32, v: i32) {
     write_volatile(a.add(1).ptr::<u8>(), v as u8);
 }
 
-/// Call the function at address `a` with `args` (at most `CALL_ARGS` words) and give its result. The ColdFire C calling convention passes the arguments on the stack and the
-/// caller takes them off, so a function that wants fewer arguments reads the first of them. An address of 0 is a word that nobody bound: nothing is called and the answer is 0.
+/// Call the function at the device address `a` with `args` (at most `CALL_ARGS` words) and give its result. The ColdFire C calling convention passes the arguments on the stack
+/// and the caller takes them off, so a function that wants fewer arguments reads the first of them. An address of 0 is a word that nobody bound: nothing is called and the answer
+/// is 0.
 ///
 /// # Safety
 /// `a` is the address of a function of the C calling convention that takes the first words of `args` (the image's code or the firmware's), or 0.
-///
-/// `call(u32)` keeps the body and `call_at(DevAddr)` delegates to it: the other direction would have changed the code of machines.dks. S3 moves the callers to `call_at` and removes `call`.
-pub unsafe fn call(a: u32, args: &[usize]) -> usize {
-    if a == 0 {
+pub unsafe fn call_at(a: DevAddr, args: &[usize]) -> usize {
+    if a.is_null() {
         return 0;
     }
     let mut v = [0usize; CALL_ARGS];
@@ -122,21 +121,15 @@ pub unsafe fn call(a: u32, args: &[usize]) -> usize {
     ) -> usize;
     // On the device the address is the code address; the host maps it to the host function of its address space.
     #[cfg(target_pointer_width = "32")]
-    let f: F = core::mem::transmute(a as usize);
+    let f: F = core::mem::transmute(a.get() as usize);
     #[cfg(not(target_pointer_width = "32"))]
-    let f: F = core::mem::transmute(DevAddr::new(a).code_addr());
+    let f: F = core::mem::transmute(a.code_addr());
     f(
         v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11],
     )
 }
 
-/// `call` of the device address `a`.
-#[inline(always)]
-pub unsafe fn call_at(a: DevAddr, args: &[usize]) -> usize {
-    call(a.get(), args)
-}
-
-/// The most arguments `call` passes.
+/// The most arguments `call_at` passes.
 pub const CALL_ARGS: usize = 12;
 
 /// Firmware memory and code by address: word reads and writes of the rows and tables of the image that a service fills, and calls of the image's functions. A service
@@ -169,8 +162,8 @@ pub trait FwMem {
     unsafe fn wr_half(&self, a: u32, v: u32) {
         write_volatile(DevAddr::new(a).ptr::<u16>(), v as u16)
     }
-    /// `call`: the function at `a` (0: none, answers 0).
+    /// `call_at`: the function at `a` (0: none, answers 0).
     unsafe fn call(&self, a: u32, args: &[usize]) -> usize {
-        call(a, args)
+        call_at(DevAddr::new(a), args)
     }
 }

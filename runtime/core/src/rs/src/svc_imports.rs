@@ -8,6 +8,7 @@
 //! `RealCore` method (or the runtime function) and converts the C shape back. The loader looks the table up for role 1 only, after `IMPORTS`.
 //! In host tests the shims are exported under their names (`no_mangle`), so a test can link `ImportCore` to them.
 use crate::core_api::{CoreApi, REAL_CORE};
+use dkrt_abi::dev_addr::DevAddr;
 
 /// The shims, one per entry of `dkrt_abi::core_imports!`.
 pub mod shims {
@@ -271,7 +272,7 @@ pub unsafe fn svc_import_addr(name: *const u8) -> u32 {
     let mut i = 0;
     while i < SVC_IMPORTS.0.len() {
         if SVC_IMPORTS.0[i].hash == h {
-            return SVC_IMPORTS.0[i].addr as usize as u32;
+            return DevAddr::of_fn(SVC_IMPORTS.0[i].addr as usize).get();
         }
         i += 1;
     }
@@ -281,16 +282,20 @@ pub unsafe fn svc_import_addr(name: *const u8) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fake_platform::address_map::AddressMap;
 
     #[test]
     fn the_table_is_in_the_order_of_the_list_with_the_hash_of_each_name() {
+        // a shim has the device address that the host's map gives it
+        let map = AddressMap::new();
+        let _space = map.install();
         assert_eq!(SVC_IMPORTS.0.len(), SVC_COUNT);
         for (i, n) in SVC_NAMES.iter().enumerate() {
             assert_eq!(SVC_IMPORTS.0[i].hash, name_hash(n.as_bytes()), "{n}");
             assert!(!SVC_IMPORTS.0[i].addr.is_null());
             // each name finds its own entry through the C string the loader has
             let c = std::format!("{n}\0");
-            assert_eq!(unsafe { svc_import_addr(c.as_ptr()) }, SVC_IMPORTS.0[i].addr as usize as u32, "{n}");
+            assert_eq!(unsafe { svc_import_addr(c.as_ptr()) }, DevAddr::of_fn(SVC_IMPORTS.0[i].addr as usize).get(), "{n}");
         }
         // none of the module imports is here, so the order of the lookups does not matter
         for n in dkrt_sdk::api::BUILTIN_NAMES.iter() {
@@ -302,8 +307,10 @@ mod tests {
 
     #[test]
     fn a_name_resolves_to_its_shim_and_an_unknown_name_to_zero() {
+        let map = AddressMap::new();
+        let _space = map.install();
         unsafe {
-            assert_eq!(svc_import_addr(b"dkc_device_id\0".as_ptr()), shims::dkc_device_id as usize as u32);
+            assert_eq!(svc_import_addr(b"dkc_device_id\0".as_ptr()), DevAddr::of_fn(shims::dkc_device_id as usize).get());
             assert_eq!(svc_import_addr(b"dkc_nothing\0".as_ptr()), 0);
             assert_eq!(svc_import_addr(b"dk_alloc\0".as_ptr()), 0, "the module imports are the other table's");
         }

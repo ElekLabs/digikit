@@ -59,7 +59,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if m.fini != 0 && self.torn[rec] & TORN_FINI == 0 {
             // from here the old code is gone for good: a reload cannot give the tick back
             self.torn[rec] |= TORN_FINI;
-            let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
+            let ctx = crate::entry::ctx_ptr(rec);
             self.m.enter_fini(rec, m.fini, ctx);
         }
         // a sink it set is released with it, with or without a `fini`; nothing may point into its range
@@ -83,11 +83,11 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             self.reg_block[rec] = (core::ptr::null(), 0);
             let committed = crate::collect::release(rec);
             if committed != 0 {
-                self.m.free(committed);
+                self.m.free(DevAddr::new(committed));
             }
         }
         dsp::release_range(rec);
-        self.m.free(m.base);
+        self.m.free(DevAddr::new(m.base));
         m.used = 0;
         records::set_menu(rec, 0);
         crate::entry::unbind(rec);

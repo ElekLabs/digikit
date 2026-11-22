@@ -61,7 +61,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 return E_NOMEM;
             }
         };
-        let base = blk.addr;
+        let base = blk.addr.get();
         let Placed { place, init: initaddr, tick: tickaddr } = self.place_image(rec, path, &c, blk, image::Pass::Both);
         let image::Head { image_size, .. } = c.head;
         let keys = &c.keys;
@@ -75,7 +75,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 if dsp::retained() { return E_BUSY; }
                 dsp::cancel(rec);
                 if self.cannot_retire(rec) { return E_BUSY; }
-                self.m.free(base);
+                self.m.free(blk.addr);
                 m.used = 0;
                 crate::entry::unbind(rec);
                 return r;
@@ -89,14 +89,14 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
                 boot_idx: read_volatile(addr_of!(BOOT_IDX)),
                 send_base: 0,
                 send_len: 0,
-                send_buf: 0,
+                send_buf: DevAddr::NULL,
             });
             return LOADING;
         }
         let r = self.complete(rec, keys, initaddr, tickaddr, image_size, steps, place);
         if r != OK {
             if self.cannot_retire(rec) { return E_BUSY; }
-            self.m.free(base);
+            self.m.free(blk.addr);
             m.used = 0;
             crate::entry::unbind(rec);
         }
@@ -135,7 +135,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let image::Head { needs, image_size, bss, init, fini, menu, tick, .. } = c.head;
         let name = f.add(H_NAME);
         let total = image_size + bss;
-        let (mem, base) = (blk.ptr, blk.addr);
+        let (mem, base) = (blk.ptr, blk.addr.get());
         image::copy(mem, f, &c.head);
         image::relocate(mem, f, &c.head, base, &c.import_addrs, pass);
         // ---- caches: write the lines back and drop them from both caches ----
@@ -206,7 +206,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         crate::collect::begin(block as *mut crate::collect::Collect);
         self.r.module_begin(rec);
         if init != 0 {
-            let ctx = crate::entry::ctx_addr(rec) as usize as *const Ctx;
+            let ctx = crate::entry::ctx_ptr(rec);
             CALLED_NEED = [0; NEEDS_LEN];
             let r = self.m.enter_init(rec, init, ctx);
             if r != 0 {

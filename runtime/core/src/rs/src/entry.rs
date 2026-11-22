@@ -10,6 +10,7 @@
 use crate::{dlog, files, settings, state::REC_MAX, store, store_writer, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use crate::PLATFORM;
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::storage::Storage;
 use dkrt_sdk::*;
 
@@ -72,13 +73,17 @@ pub unsafe fn is_entry(rec: usize) -> bool {
     rec < REC_MAX && read_volatile(addr_of!(DKRT_CTXS[rec].magic)) == CTX_MAGIC
 }
 
-/// The context of record `rec` as a pointer (0 when the record is not loaded), for `dkrt_module`.
-pub unsafe fn ctx_addr(rec: usize) -> u32 {
-    if is_entry(rec) {
-        addr_of!(DKRT_CTXS[rec]) as usize as u32
-    } else {
-        0
+/// The context of record `rec` as a pointer (null when the record is not loaded): what the loader hands to `init` and `fini`.
+pub unsafe fn ctx_ptr(rec: usize) -> *const Ctx {
+    if !is_entry(rec) {
+        return core::ptr::null();
     }
+    addr_of!(DKRT_CTXS[rec])
+}
+
+/// The device address of the context of record `rec` (`NULL` when the record is not loaded), for `dkrt_module`.
+pub unsafe fn ctx_addr(rec: usize) -> DevAddr {
+    DevAddr::of_ptr(ctx_ptr(rec))
 }
 
 /// The record a `dk_module_ctx *` belongs to; None for a pointer that is not one of `DKRT_CTXS`' live entries.
@@ -264,6 +269,10 @@ mod tests {
         let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let rec = MAX_MODULES - 1;
+            // the table of contexts at a device address
+            let map = crate::fake_platform::address_map::AddressMap::new();
+            map.map(0x3000_0000..0x3000_0000 + core::mem::size_of::<[Ctx; REC_MAX]>() as u32, addr_of_mut!(DKRT_CTXS) as *mut u8);
+            let _space = map.install();
             unbind(rec);
             let before = addr_of!(DKRT_CTXS[rec]) as usize as *mut u8;
             assert!(ctx_rec(before).is_none(), "an unbound record is not a context");
@@ -271,12 +280,12 @@ mod tests {
             let c = bind(rec);
             assert_eq!(c as usize, before as usize);
             assert_eq!(ctx_rec(before), Some(rec));
-            assert!(is_entry(rec) && ctx_addr(rec) == before as usize as u32);
+            assert!(is_entry(rec) && ctx_addr(rec) == DevAddr::of_ptr(before));
             assert!(ctx_rec((before as usize + 1) as *mut u8).is_none(), "an unaligned pointer is no context");
             assert!(ctx_rec(core::ptr::null_mut()).is_none());
             assert!(ctx_rec(addr_of!(DKRT_TICKS) as usize as *mut u8).is_none(), "another table is no context");
             unbind(rec);
-            assert!(ctx_rec(before).is_none() && ctx_addr(rec) == 0);
+            assert!(ctx_rec(before).is_none() && ctx_addr(rec).is_null());
         }
     }
 

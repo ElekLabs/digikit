@@ -161,7 +161,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         };
         f.placed = self.place_image(rec, path, &f.c, blk, image::Pass::Base);
         f.package = Some(id);
-        Ok(blk.addr)
+        Ok(blk.addr.get())
     }
 
     /// Bind the imports of the placed package `id` to `services`, the packages of its needs: the import addresses are those of the runtime's tables, the port file, or an
@@ -243,7 +243,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     pub(crate) unsafe fn package_start_dsp(&mut self, id: PackageId) {
         let rec = record_of(id);
         let idx = if rec < MAX_MODULES { self.sel_of(rec) as u32 } else { PROVIDER_IDX };
-        dsp::launch(dsp::Pending { rec: rec as u32, reg: 0, reg_size: 0, init: 0, early: 1, boot_idx: idx, send_base: 0, send_len: 0, send_buf: 0 });
+        dsp::launch(dsp::Pending { rec: rec as u32, reg: 0, reg_size: 0, init: 0, early: 1, boot_idx: idx, send_base: 0, send_len: 0, send_buf: DevAddr::NULL });
     }
 
     /// The module `consumer` is attached to the services it needs: the walk of the old registry apply over the rows of the in-crate services and the loaded rows of `services`
@@ -462,7 +462,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         // a reservation that was never started (the place or link failed after it)
         dsp::cancel(rec);
-        self.m.free(m.base);
+        self.m.free(DevAddr::new(m.base));
         m.used = 0;
         crate::entry::unbind(rec);
         true

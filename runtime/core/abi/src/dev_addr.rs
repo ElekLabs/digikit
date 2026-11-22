@@ -2,9 +2,8 @@
 //!
 //! On the device (`target_pointer_width = "32"`) a `DevAddr` is the pointer value and `ptr`, `of_ptr` and `of_fn` are plain casts: the type adds no code. On the host a pointer is 64
 //! bits wide, so the conversions go through the `AddressSpace` that a test installed (`with_space`): `of_ptr` and `of_fn` give the device address of a host object, `ptr` gives the host
-//! pointer of a mapped device address. An address that no mapping covers panics with the address. With no space installed the host casts like the device does (the host tests
-//! that do not use the seam keep working). `ptr` gives a pointer, so the caller keeps its own access kind (plain or volatile); `mem::read32`, `write32` and `call_at` are the one
-//! access path.
+//! pointer of a mapped device address. An address that no mapping covers panics with the address, and so does a conversion on a thread with no space installed. `ptr` gives a
+//! pointer, so the caller keeps its own access kind (plain or volatile); `mem::read32`, `write32` and `call_at` are the one access path.
 
 /// The device's 32-bit address of memory or code.
 #[repr(transparent)]
@@ -57,6 +56,13 @@ impl DevAddr {
     #[inline(always)]
     pub fn ptr<T>(self) -> *mut T {
         self.0 as usize as *mut T
+    }
+
+    /// The device address that module code passed as a pointer argument of the C ABI (`dk_service_declare_*`): the module runs in the device's space, so the pointer value is the
+    /// address.
+    #[inline(always)]
+    pub fn of_abi_ptr<T>(p: *const T) -> DevAddr {
+        DevAddr(p as u32)
     }
 }
 
@@ -131,19 +137,35 @@ mod host {
             match current(|s| s.of_host(p as *const u8)) {
                 Some(Some(a)) => DevAddr(a),
                 Some(None) => panic!("host pointer {:#x} is in no mapped range", p as usize),
-                // No space installed: cast like the device (host tests that install nothing). S2 and S3 install a map in every host test and make this arm a panic.
-                None => DevAddr(p as usize as u32),
+                None => panic!(
+                    "DevAddr::of_ptr({:#x}) on a host thread with no address space installed",
+                    p as usize
+                ),
             }
         }
 
         /// The device address of the function whose code address is `f` (`f as usize`).
         #[inline(always)]
         pub fn of_fn(f: usize) -> DevAddr {
+            if f == 0 {
+                return DevAddr::NULL;
+            }
             match current(|s| s.of_host_fn(f)) {
                 Some(a) => DevAddr(a),
-                // No space installed: cast like the device (host tests that install nothing). S2 and S3 install a map in every host test and make this arm a panic.
-                None => DevAddr(f as u32),
+                None => panic!(
+                    "DevAddr::of_fn({f:#x}) on a host thread with no address space installed"
+                ),
             }
+        }
+
+        /// The device address that module code passed as a pointer argument of the C ABI (`dk_service_declare_*`). A value that fits 32 bits is the address itself (a host test
+        /// passes an address of the image under test as the pointer value); a wider one is a host function of a service compiled for the host, and the installed space names it.
+        #[inline(always)]
+        pub fn of_abi_ptr<T>(p: *const T) -> DevAddr {
+            if p as usize > u32::MAX as usize {
+                return DevAddr::of_fn(p as usize);
+            }
+            DevAddr(p as usize as u32)
         }
 
         /// The pointer to the object at this address. It is `*mut T` for reads too: the caller keeps its own access kind (plain or volatile). The address 0 is the null pointer. An unmapped address panics.
@@ -155,8 +177,10 @@ mod host {
             match current(|s| s.to_host(self.0)) {
                 Some(Some(p)) => p as *mut T,
                 Some(None) => panic!("device address {:#010x} is not mapped", self.0),
-                // No space installed: cast like the device (host tests that install nothing). S2 and S3 install a map in every host test and make this arm a panic.
-                None => self.0 as usize as *mut T,
+                None => panic!(
+                    "DevAddr::ptr({:#010x}) on a host thread with no address space installed",
+                    self.0
+                ),
             }
         }
 
@@ -169,8 +193,10 @@ mod host {
             match current(|s| s.to_host_fn(self.0)) {
                 Some(Some(f)) => f,
                 Some(None) => panic!("device address {:#010x} is no function", self.0),
-                // No space installed: cast like the device (host tests that install nothing). S2 and S3 install a map in every host test and make this arm a panic.
-                None => self.0 as usize,
+                None => panic!(
+                    "DevAddr::code_addr({:#010x}) on a host thread with no address space installed",
+                    self.0
+                ),
             }
         }
     }

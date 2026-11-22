@@ -110,6 +110,9 @@ mod glue {
 #[test]
 fn the_service_macro_gives_the_fingerprint_and_an_init_that_declares_kinds_and_row() {
     let _g = lock();
+    // the handler is a host function of this file: the map gives it its device address
+    let map = crate::fake_platform::address_map::AddressMap::new();
+    let _space = map.install();
     assert_eq!(glue::abi(), SVC_ABI);
     assert_ne!(SVC_ABI, 0);
     let m = glue::module();

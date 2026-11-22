@@ -423,7 +423,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     d.mod_len[rec] = len;
     d.send_base = base;
     d.send_len = job.image_size;
-    d.send_buf = block.get();
+    d.send_buf = block;
     OK
 }
 
@@ -457,8 +457,8 @@ pub(crate) unsafe fn dequeue(rec: usize) -> bool {
     let mut i = 0;
     while i < d.nwait as usize {
         if d.waiting[i].rec as usize == rec {
-            if d.waiting[i].send_buf != 0 {
-                arena::free(DevAddr::new(d.waiting[i].send_buf));
+            if !d.waiting[i].send_buf.is_null() {
+                arena::free(d.waiting[i].send_buf);
             }
             let mut k = i + 1;
             while k < d.nwait as usize {
@@ -477,9 +477,9 @@ pub(crate) unsafe fn dequeue(rec: usize) -> bool {
 pub unsafe fn cancel(rec: usize) {
     if retained() { return; }
     let d = ds();
-    if d.send_buf != 0 {
-        arena::free(DevAddr::new(d.send_buf));
-        d.send_buf = 0;
+    if !d.send_buf.is_null() {
+        arena::free(d.send_buf);
+        d.send_buf = DevAddr::NULL;
     }
     unreserve(rec);
 }
@@ -518,7 +518,7 @@ pub unsafe fn launch(mut p: Pending) {
     p.send_base = d.send_base;
     p.send_len = d.send_len;
     p.send_buf = d.send_buf;
-    d.send_buf = 0;
+    d.send_buf = DevAddr::NULL;
     if d.phase == PH_IDLE && d.nwait == 0 {
         start(p);
     } else {
@@ -576,9 +576,9 @@ pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
         d.phase = PH_RETAINED;
         return;
     }
-    if d.pending.send_buf != 0 {
-        arena::free(DevAddr::new(d.pending.send_buf));
-        d.pending.send_buf = 0;
+    if !d.pending.send_buf.is_null() {
+        arena::free(d.pending.send_buf);
+        d.pending.send_buf = DevAddr::NULL;
     }
     next_job();
 }
@@ -623,7 +623,7 @@ pub(crate) unsafe fn step_with(l: ServiceTable, slots: &mut dyn FnMut(usize) -> 
         match d.phase {
             PH_SEND => {
                 if d.ticket == 0 {
-                    let stream = Stream::Bulk { dst: d.pending.send_base, src: d.pending.send_buf as *const u8, len: d.pending.send_len };
+                    let stream = Stream::Bulk { dst: d.pending.send_base, src: d.pending.send_buf.ptr::<u8>() as *const u8, len: d.pending.send_len };
                     if let Some(t) = crate::link::lk().submit(Owner::Loader, &stream) {
                         d.ticket = t.id as u32;
                     }
@@ -633,8 +633,8 @@ pub(crate) unsafe fn step_with(l: ServiceTable, slots: &mut dyn FnMut(usize) -> 
                     LinkResult::Pending => return Advance::Pending,
                     LinkResult::Done => {
                         d.ticket = 0;
-                        arena::free(DevAddr::new(d.pending.send_buf));
-                        d.pending.send_buf = 0;
+                        arena::free(d.pending.send_buf);
+                        d.pending.send_buf = DevAddr::NULL;
                         d.phase = PH_ROWS;
                         d.step = 0;
                         d.ticks = 0;

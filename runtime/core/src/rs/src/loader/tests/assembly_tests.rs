@@ -334,6 +334,8 @@ pub(super) struct Card {
     pub(super) skew_kind_handler: bool,
     /// The `init` and `fini` the loader entered, in order: `(is_fini, record)`.
     pub(super) hooks: Vec<(bool, usize)>,
+    /// The device addresses of the runtime's functions that the imports of a service file name (`svc_import_addr`).
+    imports: crate::fake_platform::address_map::AddressMap,
 }
 
 /// A builder call of a module's `init`, made on the real machines or effects service with the index of the module's keys table.
@@ -367,6 +369,7 @@ impl Card {
             real_rows: false,
             skew_kind_handler: false,
             hooks: Vec::new(),
+            imports: crate::fake_platform::address_map::AddressMap::new(),
         }
     }
 }
@@ -389,9 +392,10 @@ impl Images for Card {
         let mut mem = std::vec![0u128; (n as usize + 15) / 16];
         let ptr = mem.as_mut_ptr() as *mut u8;
         self.live.push((addr, mem));
-        Some(Block { ptr, addr })
+        Some(Block { ptr, addr: dkrt_abi::dev_addr::DevAddr::new(addr) })
     }
-    unsafe fn free(&mut self, addr: u32) {
+    unsafe fn free(&mut self, addr: dkrt_abi::dev_addr::DevAddr) {
+        let addr = addr.get();
         let at = self.live.iter().position(|b| b.0 == addr).expect("free of a block that is not live");
         let (_, mem) = self.live.remove(at);
         self.freed.push((addr, mem.len() as u32 * 16));
@@ -409,7 +413,7 @@ impl Images for Card {
         }
     }
     unsafe fn svc_import_addr(&mut self, name: *const u8) -> u32 {
-        RealImages.svc_import_addr(name)
+        self.imports.with_addresses(|| RealImages.svc_import_addr(name))
     }
     unsafe fn import_needs(&mut self, name: *const u8) -> Option<&'static str> {
         let _ = name;
@@ -1960,6 +1964,9 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
         }
     }
     let _g = clean();
+    // the entries a service declares are host functions here: the map gives them device addresses
+    let map = crate::fake_platform::address_map::AddressMap::new();
+    let _space = map.install();
     let services: Vec<(&Fixture, crate::handlers::dks_decls::DeclareFn)> = crate::handlers::dks_decls::declarations()
         .iter()
         .map(|(leaf, declare)| (SERVICES.iter().find(|s| s.leaf == *leaf).unwrap(), *declare))

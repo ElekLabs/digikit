@@ -31,7 +31,7 @@ impl Hold {
 impl Drop for Hold {
     fn drop(&mut self) {
         unsafe { BLOCKS = (0, 0) }
-        crate::fake_checked_images::watch(0);
+        crate::fake_checked_images::watch(DevAddr::NULL);
     }
 }
 
@@ -268,7 +268,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     *st() = core::mem::zeroed();
     crate::arena::init();
     BLOCKS = (crate::arena::alloc(240).get(), crate::arena::alloc(496).get());
-    crate::fake_checked_images::watch(BLOCKS.0);
+    crate::fake_checked_images::watch(DevAddr::new(BLOCKS.0));
     *dsp::ds() = core::mem::zeroed();
     reset_rows();
     *boot::info() = core::mem::zeroed();
@@ -303,7 +303,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     d.ticket = crate::link::lk().test_in_flight(Owner::Loader).id as u32;
     d.pending.rec = 0;
     d.pending.boot_idx = 0;
-    d.pending.send_buf = if published { 0 } else { image() };
+    d.pending.send_buf = if published { DevAddr::NULL } else { DevAddr::new(image()) };
     d.row_steps = 0x11223344;
     d.mod_len[0] = 256;
     d.transfers = 1;
@@ -329,7 +329,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
         d.mod_len[1] = 256;
         d.nwait = 1;
         d.waiting[0].rec = 1;
-        d.waiting[0].send_buf = 0xe000;
+        d.waiting[0].send_buf = DevAddr::new(0xe000);
     }
     // the modules of the seed are up as the package manager would have left them: a failed DSP part takes them down through it
     crate::lifecycle::test_up(2, if queued { &[0, 1][..] } else { &[0][..] });
@@ -361,13 +361,13 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert!(dsp::retained());
     assert!(!entry::has_tick(0), "teardown stops the tick before fini");
     assert_eq!(d.pending.rec, 0);
-    assert_eq!(d.pending.send_buf, pending_buf);
+    assert_eq!(d.pending.send_buf.get(), pending_buf);
     assert_eq!(d.mod_len[0], 256);
     assert_eq!(d.mod_len[1], 256);
     // Publication metadata is inline now, rather than an arena-allocated step list.
     assert_eq!(if fx { frows().fx_pc[0] } else { vrows().row_pc[0] }, PUB_PC);
     assert_eq!(d.nwait, 1);
-    assert_eq!(d.waiting[0].send_buf, 0xe000);
+    assert_eq!(d.waiting[0].send_buf.get(), 0xe000);
     assert_eq!(d.transfers, 1);
     assert_eq!(d.failures, 1);
     assert_eq!(st().last_result, E_DSP_XFER);
@@ -580,7 +580,7 @@ fn never_started_cancel_is_reclaimable() {
     let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, false, false);
-        dsp::ds().send_buf = image();
+        dsp::ds().send_buf = DevAddr::new(image());
         dsp::cancel(0);
         assert_eq!(dsp::ds().mod_len[0], 0);
         assert!(!live(image()));

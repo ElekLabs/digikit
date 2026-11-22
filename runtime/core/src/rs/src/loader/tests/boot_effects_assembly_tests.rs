@@ -258,12 +258,12 @@ impl Phases {
     }
 }
 
-/// The name of a platform address of the installer path, or a failure: a slot word lives in the platform's table of the image's info entries (a host address narrowed to 32 bits) and
+/// The name of a platform address of the installer path, or a failure: a slot word lives in the platform's table of the image's info entries (at the device address the fake platform placed it) and
 /// is named by the entry's name hash and the offset in the entry; an arena stand-in and an address of the firmware's code (a patched site, a flushed line) are their own names. An
 /// address that is none of these is a host pointer, and the snapshot would change from run to run. `slot_only`: a slot word, which has no other form.
 fn address(l: &Boot, addr: u32, len: u32, slot_only: bool) -> String {
     for (hash, words) in l.p.info_entries.borrow().iter() {
-        let at = words.as_ptr() as usize as u32;
+        let at = l.p.addresses.place(words.as_ptr() as *mut u8, words.len() * 4);
         if addr >= at && addr - at < 4 * words.len() as u32 {
             return std::format!("slot:{hash:08x}+{}", addr - at);
         }
@@ -520,10 +520,11 @@ const SCENARIO: &str = "BOOT_EFFECTS_SCENARIO";
 /// The scenarios and the snapshot of each: the good boot with the live job, and the error paths.
 const SCENARIOS: [(&str, &str); 2] = [("good", "boot-effects"), ("errors", "boot-effects-errors")];
 
-/// The run of one device, in a process of its own. This isolation is temporary: the services keep their rows, builds and assignments in statics that nothing resets between two
-/// runs, and the host seam narrows addresses to 32 bits, so a second run in one process records a different arena and can crash. A later step removes the narrowing, and the
-/// two runs then share one process. Until then the parent below starts this test (`--ignored`: it is no test of its own) in a fresh process per device, and it fails when the
-/// variable is not set.
+/// The run of one device, in a process of its own. Tried in one process (RC2s-1 S3): the 32-bit narrowing is gone (the arena, the slot words and the code addresses are names
+/// of the fake platform's address map), and the same scenario repeats for both devices in one process with the same text. A scenario run after another differs: the runtime
+/// keeps state that nothing resets between two runs (the path words and tick words of the records), and so do the services (rows, builds and assignments in
+/// statics, until RC3 gives them an owner that resets). So each scenario and device starts a fresh process: the parent below starts this test (`--ignored`: it is no test of
+/// its own), and it fails when the variable is not set.
 #[test]
 #[ignore = "run by the_boot_effects_match_the_snapshots, one process per device"]
 fn boot_effects_of_one_device() {

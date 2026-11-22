@@ -2,6 +2,7 @@
 //! module entry and the registry; the fakes of the host tests log the calls. Each trait has one real implementation, so there is no `dyn`.
 
 use crate::entry::Ctx;
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::service::{ModuleCommitCtx, ServiceRow};
 
 /// A staged file: `size` bytes at `ptr`, valid until the next `stage`.
@@ -11,11 +12,11 @@ pub struct Staged {
     pub size: u32,
 }
 
-/// An arena block: the host pointer to write through, and the address the module sees (the same number on the device).
+/// An arena block: the host pointer to write through, and the device address the module sees (the same value on the device).
 #[derive(Clone, Copy)]
 pub struct Block {
     pub ptr: *mut u8,
-    pub addr: u32,
+    pub addr: DevAddr,
 }
 
 /// Where a module's bytes come from and where they go: the file store, the runtime's import table, the arena and the calls into module code.
@@ -24,7 +25,7 @@ pub trait Images {
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32>;
     /// A block of at least `n` bytes; `None` when none fits.
     unsafe fn alloc(&mut self, n: u32) -> Option<Block>;
-    unsafe fn free(&mut self, addr: u32);
+    unsafe fn free(&mut self, addr: DevAddr);
     /// The address of the import `name` (NUL-terminated), 0 when the runtime has none (`import_addr`).
     unsafe fn import_addr(&mut self, name: *const u8) -> u32;
     /// The address of the service-only import `name` (`SVC_IMPORTS`: the `dkc_*` of interface C, `dk_service_declare_row`, `dkc_panic`), 0 when there is none. The loader
@@ -85,11 +86,11 @@ impl Images for RealImages {
         if a.is_null() {
             None
         } else {
-            Some(Block { ptr: a.ptr(), addr: a.get() })
+            Some(Block { ptr: a.ptr(), addr: a })
         }
     }
-    unsafe fn free(&mut self, addr: u32) {
-        crate::arena::free(dkrt_abi::dev_addr::DevAddr::new(addr));
+    unsafe fn free(&mut self, addr: DevAddr) {
+        crate::arena::free(addr);
     }
     // host tests link no device imports (as `platform.rs`): the real loader of the cleanup tests resolves none
     unsafe fn import_addr(&mut self, name: *const u8) -> u32 {

@@ -8,6 +8,7 @@
 //! (`BLOCKS`); the `MODULE_COMMIT` event carries its address and size.
 use crate::MAX_MODULES;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::service::{DeclItem, Declare, RecordSink};
 use dkrt_sdk::*;
 
@@ -162,20 +163,20 @@ pub unsafe extern "C" fn dk_service_declare_row(ctx: *mut u8, row: *const dkrt_a
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_service_declare_kind(ctx: *mut u8, kind: u32, len: u32, handler: *const u8) -> i32 {
     // a handler is an image address: the header table carries its offset in the image
-    declare(ctx, Declare::KIND, kind, len, handler as usize as u32)
+    declare(ctx, Declare::KIND, kind, len, DevAddr::of_abi_ptr(handler).get())
 }
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_service_declare_slot(ctx: *mut u8, slot: u32, flags: u32, entry: *const u8) -> i32 {
     // the entry is an image address: the header table carries its offset in the image
-    declare(ctx, Declare::SLOT, slot, flags, entry as usize as u32)
+    declare(ctx, Declare::SLOT, slot, flags, DevAddr::of_abi_ptr(entry).get())
 }
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_service_declare_hook(ctx: *mut u8, site: u32, entry: *const u8) -> i32 {
-    declare(ctx, Declare::HOOK, site, entry as usize as u32, 0)
+    declare(ctx, Declare::HOOK, site, DevAddr::of_abi_ptr(entry).get(), 0)
 }
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_service_declare_export(ctx: *mut u8, name_hash: u32, entry: *const u8) -> i32 {
-    declare(ctx, Declare::EXPORT, name_hash, entry as usize as u32, 0)
+    declare(ctx, Declare::EXPORT, name_hash, DevAddr::of_abi_ptr(entry).get(), 0)
 }
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_service_declare_resource(ctx: *mut u8, resource: u32, limit: u32) -> i32 {

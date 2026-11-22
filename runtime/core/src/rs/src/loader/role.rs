@@ -432,7 +432,7 @@ pub(super) unsafe fn service_items<P: Platform, M: Images, R: Registry>(l: &mut 
         if at.is_null() {
             return Err(E_FORMAT);
         }
-        it.slots[it.ns] = (at as usize as u32, base.wrapping_add(sl.entry));
+        it.slots[it.ns] = (at.get(), base.wrapping_add(sl.entry));
         it.ns += 1;
     }
     Ok(true)

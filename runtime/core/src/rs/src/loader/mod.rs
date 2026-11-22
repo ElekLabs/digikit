@@ -14,6 +14,7 @@ use crate::platform::RealPlatform;
 use crate::selection::BOOT_IDX;
 use crate::{cstr_eq, cstr_len, rd32, st, wr32, Module, MAX_MODULES};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::Owner;
 use dkrt_abi::package::PackageId;
 use dkrt_abi::platform::Platform;

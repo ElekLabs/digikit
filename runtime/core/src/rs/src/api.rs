@@ -230,7 +230,7 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
                 o.state = if m.used == 2 { MOD_LOADING } else { MOD_LOADED };
                 o.dsp_size = dsp::ds().mod_len[i];
                 o.menu = (*addr_of!(DKRT_MENUS))[i];
-                o.ctx = entry::ctx_addr(i);
+                o.ctx = entry::ctx_addr(i).get();
                 return OK;
             }
             seen += 1;

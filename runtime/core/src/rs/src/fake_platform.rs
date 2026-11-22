@@ -16,6 +16,7 @@ use crate::storage::layout::TEST_LAYOUT;
 use crate::transport::{reply_with, tx_room_with, TX_RING};
 use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::platform::{blocks_since, locked, DeviceProfile, Platform, SamplePool, StagedWriter, Tasking};
 use dkrt_abi::profiles;
 use dkrt_abi::storage::{DirEntry, Stat, Storage, ROOT_SAMPLES};
@@ -197,11 +198,15 @@ impl Platform for FakePlatform {
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         self.info_entries.borrow().iter().find(|(h, _)| *h == name_hash).map_or(core::ptr::null(), |(_, w)| w.as_ptr())
     }
-    unsafe fn info_slot(&self, name_hash: u32) -> *const u32 {
+    unsafe fn info_slot(&self, name_hash: u32) -> DevAddr {
         if self.info_data.borrow().contains(&name_hash) {
-            return core::ptr::null();
+            return DevAddr::NULL;
         }
-        self.info(name_hash)
+        let entries = self.info_entries.borrow();
+        match entries.iter().find(|(h, _)| *h == name_hash) {
+            None => DevAddr::NULL,
+            Some((_, words)) => DevAddr::new(self.addresses.place(words.as_ptr() as *mut u8, words.len() * 4)),
+        }
     }
     unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32> {
         self.info_dsp.borrow().iter().find(|(h, _)| *h == name_hash).map(|(_, i)| *i)

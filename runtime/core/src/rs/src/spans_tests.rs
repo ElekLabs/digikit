@@ -298,7 +298,7 @@ fn a_module_context_names_its_owner() {
             crate::entry::unbind(rec);
         }
         crate::entry::bind(2);
-        // the host's addresses are 64 bits wide: take the address of the context itself, not `ctx_addr`'s u32
+        // the host's addresses are 64 bits wide: `dkrt_ctx_owner` takes the address of the context itself, a host pointer
         let ctx = core::ptr::addr_of!(entry::DKRT_CTXS[2]) as usize;
         assert_eq!(crate::dkrt_ctx_owner(ctx), 2);
         assert_eq!(crate::dkrt_ctx_owner(ctx + 1), E_CONTRACT);

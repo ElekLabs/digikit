@@ -3,15 +3,16 @@
 
 use crate::entry::Ctx;
 use crate::loader::{Block, Images, RealImages, Staged};
+use dkrt_abi::dev_addr::DevAddr;
 use std::cell::Cell;
 
 std::thread_local! {
-    /// The module block of the cleanup test of this thread (0: none).
-    static WATCHED: Cell<u32> = const { Cell::new(0) };
+    /// The module block of the cleanup test of this thread (`NULL`: none).
+    static WATCHED: Cell<DevAddr> = const { Cell::new(DevAddr::NULL) };
 }
 
-/// Check the free of the block at `block` from now on (0: check none).
-pub(crate) fn watch(block: u32) {
+/// Check the free of the block `block` from now on (`DevAddr::NULL`: check none).
+pub(crate) fn watch(block: DevAddr) {
     WATCHED.with(|w| w.set(block));
 }
 
@@ -24,8 +25,8 @@ impl Images for CheckedImages {
     unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
         RealImages.alloc(n)
     }
-    unsafe fn free(&mut self, addr: u32) {
-        if addr != 0 && addr == WATCHED.with(|w| w.get()) {
+    unsafe fn free(&mut self, addr: DevAddr) {
+        if !addr.is_null() && addr == WATCHED.with(|w| w.get()) {
             assert_eq!(crate::dsp::ds().mod_len[0], 0, "the module block is freed after its DSP length is cleared");
         }
         RealImages.free(addr)
