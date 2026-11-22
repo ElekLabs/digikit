@@ -18,15 +18,15 @@ fn the_package_table_has_every_hook() {
         ("boot.find_providers", t.boot.find_providers.is_none()),
         ("boot.load", t.boot.load.is_none()),
         ("tick.tick", t.tick.tick.is_none()),
-        ("tick.load", t.tick.load.is_none()),
-        ("command.flags", t.command.flags.is_none()),
+                ("command.flags", t.command.flags.is_none()),
         ("command.registered", t.command.registered.is_none()),
         ("command.run", t.command.run.is_none()),
         ("command.run_registered", t.command.run_registered.is_none()),
         ("module.ctx_owner", t.module.ctx_owner.is_none()),
-        ("module.extra", t.module.extra.is_none()),
+        ("module.load_file", t.module.load_file.is_none()),
+        ("module.read_extra", t.module.read_extra.is_none()),
         ("module.fx_entry", t.module.fx_entry.is_none()),
-        ("module.header", t.module.header.is_none()),
+        ("module.read_header", t.module.read_header.is_none()),
         ("module.has_tick", t.module.has_tick.is_none()),
         ("module.machine_type_loaded", t.module.machine_type_loaded.is_none()),
         ("menu.scan", t.menu.scan.is_none()),
@@ -35,7 +35,7 @@ fn the_package_table_has_every_hook() {
         ("menu.capacity", t.menu.capacity.is_none()),
         ("menu.live", t.menu.live.is_none()),
         ("menu.live_state", t.menu.live_state.is_none()),
-        ("diag.diag", t.diag.diag.is_none()),
+        ("diag.publish_words", t.diag.publish_words.is_none()),
         ("diag.attribute", t.diag.attribute.is_none()),
         ("diag.dsp_area", t.diag.dsp_area.is_none()),
         ("diag.dsp_stats_owner_gone", t.diag.dsp_stats_owner_gone.is_none()),
@@ -63,7 +63,7 @@ fn with_no_package_every_hook_has_its_default() {
         boot_load(&rec);
         // tick and mailbox
         tick(dkrt_abi::hooks::tick_phase::MODULES);
-        assert_eq!(load(core::ptr::null()), E_BOOT_ONLY);
+        assert_eq!(module_load(core::ptr::null()), E_BOOT_ONLY);
         // upload commands
         assert_eq!(command_flags(CMD_MODULES), None);
         assert!(!command_registered(0x40));
@@ -100,6 +100,19 @@ fn with_no_package_every_hook_has_its_default() {
         assert_eq!(overlay_remove(b"mod", b"key"), OK);
         // providers
         assert_eq!(provider_query(1, 1), Err(E_NOT_FOUND));
+    });
+}
+
+/// `init_once` is the one place the package gives its table: before it a core has none, after it the callers reach the package.
+#[test]
+fn init_once_installs_the_package_table() {
+    let _arena = crate::fake_platform::test_arena::TestArena::lock();
+    without_package(|| unsafe {
+        crate::platform::st().magic = 0;
+        assert!(!installed());
+        crate::state::init_once();
+        assert!(installed());
+        assert!(core::ptr::eq(table(), &crate::package::hooks::HOOKS));
     });
 }
 

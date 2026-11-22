@@ -18,7 +18,7 @@ use dkrt_sdk::*;
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_load(path: *const u8) -> i32 {
     init_once();
-    let r = hooks::load(path);
+    let r = hooks::module_load(path);
     st().last_result = r;
     r
 }

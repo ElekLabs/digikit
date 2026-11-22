@@ -10,57 +10,45 @@ use dkrt_sdk::sel::Record;
 use dkrt_sdk::proto::{E_PROTO, E_STATE};
 use dkrt_sdk::{DkrtCap, DkrtFitOut, DkrtFx, DkrtLive, DkrtModuleHeader, DkrtScan, E_CONTRACT, E_NOT_FOUND, OK};
 
-static mut INSTALLED: *const PackageHooks = core::ptr::null();
+/// What a core with no package holds: no entry is given, so each caller answers with its documented default. `Option<fn>` is its null pointer when `None`, so the
+/// all-zero table is the empty one.
+static NO_PACKAGE: PackageHooks = unsafe { core::mem::zeroed() };
 
-/// Host tests: act as a core with no package, whatever a test before installed.
-#[cfg(test)]
-static mut TEST_NO_PACKAGE: bool = false;
+/// The table every typed caller reads: `NO_PACKAGE` until the package installs its own.
+static mut INSTALLED: *const PackageHooks = &NO_PACKAGE;
 
 /// The package gives its table: every typed caller below goes through it from now on. Once per boot; installing the same table again is harmless.
 pub(crate) unsafe fn install(table: &'static PackageHooks) {
     write_volatile(core::ptr::addr_of_mut!(INSTALLED), table);
 }
 
-/// Is a table installed? (A core-only level has none.)
-pub(crate) fn installed() -> bool {
-    table().is_some()
-}
-
-#[cfg(not(test))]
 #[inline(always)]
-fn table() -> Option<&'static PackageHooks> {
-    unsafe { read_volatile(addr_of!(INSTALLED)).as_ref() }
+fn table() -> &'static PackageHooks {
+    unsafe { &*read_volatile(addr_of!(INSTALLED)) }
 }
 
-/// Host tests run the code of the core over the package of this crate without an `init_once` first: the table is that of the package until a test asks for none.
+/// Host tests: is a package table installed? (A core-only level has none.)
 #[cfg(test)]
-fn table() -> Option<&'static PackageHooks> {
-    unsafe {
-        if read_volatile(addr_of!(TEST_NO_PACKAGE)) {
-            return None;
-        }
-        match read_volatile(addr_of!(INSTALLED)).as_ref() {
-            Some(t) => Some(t),
-            None => Some(&crate::package::hooks::HOOKS),
-        }
-    }
+pub(crate) fn installed() -> bool {
+    !core::ptr::eq(table(), &NO_PACKAGE)
 }
 
-/// Host tests: run `f` as a core with no package installed (the tests hold `test_lock::LOCK`).
+/// Host tests: run `f` as a core with no package installed, then give back the table that was (the tests hold `test_lock::LOCK`).
 #[cfg(test)]
 pub(crate) fn without_package<R>(f: impl FnOnce() -> R) -> R {
     unsafe {
-        write_volatile(core::ptr::addr_of_mut!(TEST_NO_PACKAGE), true);
+        let before = read_volatile(addr_of!(INSTALLED));
+        write_volatile(core::ptr::addr_of_mut!(INSTALLED), &NO_PACKAGE);
         let r = f();
-        write_volatile(core::ptr::addr_of_mut!(TEST_NO_PACKAGE), false);
+        write_volatile(core::ptr::addr_of_mut!(INSTALLED), before);
         r
     }
 }
 
-/// Call `table.<group>.<hook>(args)`; `default` when no table is installed or the hook is missing.
+/// Call `table.<group>.<hook>(args)`; `default` when the hook is missing (always, with no package installed).
 macro_rules! call {
     ($group:ident . $hook:ident ( $($arg:expr),* ), $default:expr) => {
-        match table().and_then(|t| t.$group.$hook) {
+        match table().$group.$hook {
             Some(f) => f($($arg),*),
             None => $default,
         }
@@ -89,16 +77,11 @@ pub(crate) unsafe fn boot_load(rec: &Record) {
     call!(boot.load(rec as *const Record as *const u8), ())
 }
 
-// ---- tick and mailbox ----------------------------------------------------------------------------------------------------
+// ---- tick ----------------------------------------------------------------------------------------------------
 
 /// One phase of the UI-loop pass (`tick_phase`). Default: nothing runs.
 pub(crate) unsafe fn tick(phase: u32) {
     call!(tick.tick(phase), ())
-}
-
-/// `dkrt_load`: the module file `path`. Default: `E_BOOT_ONLY`, as for any caller after the boot.
-pub(crate) unsafe fn load(path: *const u8) -> i32 {
-    call!(tick.load(path), dkrt_sdk::E_BOOT_ONLY)
 }
 
 // ---- upload commands -----------------------------------------------------------------------------------------------------
@@ -135,10 +118,15 @@ pub(crate) unsafe fn ctx_owner(ctx: usize) -> i32 {
     call!(module.ctx_owner(ctx), E_CONTRACT)
 }
 
+/// `dkrt_load`: the module file `path`. Default: `E_BOOT_ONLY`, as for any caller after the boot.
+pub(crate) unsafe fn module_load(path: *const u8) -> i32 {
+    call!(module.load_file(path), dkrt_sdk::E_BOOT_ONLY)
+}
+
 /// The DSP size and the context of the module with record index `i`. Default: both 0.
 pub(crate) unsafe fn module_extra(i: usize) -> ModuleExtra {
     let mut out = ModuleExtra::default();
-    call!(module.extra(i as u32, &mut out), ());
+    call!(module.read_extra(i as u32, &mut out), ());
     out
 }
 
@@ -149,7 +137,7 @@ pub(crate) unsafe fn fx_entry(index: u32, out: *mut DkrtFx) -> i32 {
 
 /// `dkrt_module_header`. Default: `E_NOT_FOUND`: no module file is read.
 pub(crate) unsafe fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
-    call!(module.header(first, out), E_NOT_FOUND)
+    call!(module.read_header(first, out), E_NOT_FOUND)
 }
 
 /// Does the module with record index `i` have a `tick`? Default: no.
@@ -198,7 +186,7 @@ pub(crate) unsafe fn live_state(out: *mut DkrtLive) {
 
 /// A full set of DSP diagnostics words goes to the services. Default: nobody reads it.
 pub(crate) unsafe fn watch_diag(words: &[u32; dkrt_sdk::fault::DIAG_WORDS]) {
-    call!(diag.diag(words.as_ptr()), ())
+    call!(diag.publish_words(words.as_ptr()), ())
 }
 
 /// The module behind the fault site `site` with call offset `off` (a record index). Default: none, so the hang record names no module.

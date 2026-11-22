@@ -12,13 +12,14 @@ use dkrt_sdk::{DkrtFx, DkrtModuleHeader, E_BUSY, E_CONTRACT};
 /// The package's table, in the one binary of the runtime.
 pub(crate) static HOOKS: PackageHooks = PackageHooks {
     boot: BootHooks { safe: Some(boot_safe), read_tables: Some(boot_read_tables), find_providers: Some(boot_find_providers), load: Some(boot_load) },
-    tick: TickHooks { tick: Some(tick), load: Some(load) },
+    tick: TickHooks { tick: Some(tick) },
     command: CommandHooks { flags: Some(command_flags), registered: Some(command_registered), run: Some(command_run), run_registered: Some(command_run_registered) },
     module: ModuleHooks {
         ctx_owner: Some(ctx_owner),
-        extra: Some(module_extra),
+        load_file: Some(load_file),
+        read_extra: Some(module_extra),
         fx_entry: Some(fx_entry),
-        header: Some(module_header),
+        read_header: Some(module_header),
         has_tick: Some(module_has_tick),
         machine_type_loaded: Some(machine_type_loaded),
     },
@@ -30,7 +31,7 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
         live: Some(reload::dkrt_live),
         live_state: Some(reload::dkrt_live_state),
     },
-    diag: DiagHooks { diag: Some(watch_diag), attribute: Some(watch_attribute), dsp_area: Some(dsp_area), dsp_stats_owner_gone: Some(dsp_stats_owner_gone) },
+    diag: DiagHooks { publish_words: Some(watch_diag), attribute: Some(watch_attribute), dsp_area: Some(dsp_area), dsp_stats_owner_gone: Some(dsp_stats_owner_gone) },
     settings: SettingsHooks {
         in_init: Some(files_in_init),
         opened: Some(settings_opened),
@@ -66,7 +67,7 @@ unsafe extern "C" fn boot_load(rec: *const u8) {
     crate::package::boot_steps::load(&*(rec as *const Record))
 }
 
-// ---- tick and mailbox ----------------------------------------------------------------------------------------------------
+// ---- tick ----------------------------------------------------------------------------------------------------
 
 /// One phase of the UI-loop pass. An if chain, not a `match`: a dense match becomes a PC-relative jump table, which is not ColdFire code.
 unsafe extern "C" fn tick(phase: u32) {
@@ -83,10 +84,6 @@ unsafe extern "C" fn tick(phase: u32) {
     } else {
         handlers::services().tick(phase);
     }
-}
-
-unsafe extern "C" fn load(path: *const u8) -> i32 {
-    loader::load(path)
 }
 
 // ---- upload commands -----------------------------------------------------------------------------------------------------
@@ -136,6 +133,10 @@ unsafe extern "C" fn ctx_owner(ctx: usize) -> i32 {
         Some(rec) if rec < dkrt_abi::MAX_MODULES => rec as i32,
         _ => E_CONTRACT,
     }
+}
+
+unsafe extern "C" fn load_file(path: *const u8) -> i32 {
+    loader::load(path)
 }
 
 unsafe extern "C" fn module_extra(i: u32, out: *mut ModuleExtra) {

@@ -62,14 +62,12 @@ pub struct BootHooks {
     pub load: Option<unsafe extern "C" fn(rec: *const u8)>,
 }
 
-/// The UI-loop pass and the mailbox.
+/// The UI-loop pass.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct TickHooks {
     /// One `tick_phase`.
     pub tick: Option<unsafe extern "C" fn(phase: u32)>,
-    /// `dkrt_load`: the module file `path` (NUL-terminated), 0 or a negative code.
-    pub load: Option<unsafe extern "C" fn(path: *const u8) -> i32>,
 }
 
 /// The upload commands the package owns (`transport.rs`): its built-in ones and those a module registered.
@@ -97,12 +95,14 @@ pub struct CommandHooks {
 pub struct ModuleHooks {
     /// The record index of a module context: 0 or more; `E_CONTRACT` for a pointer that is not the live context of a content module.
     pub ctx_owner: Option<unsafe extern "C" fn(ctx: usize) -> i32>,
-    /// The DSP size and the context of the module with record index `i`.
-    pub extra: Option<unsafe extern "C" fn(i: u32, out: *mut ModuleExtra)>,
+    /// `dkrt_load`: the module file `path` (NUL-terminated), 0 or a negative code.
+    pub load_file: Option<unsafe extern "C" fn(path: *const u8) -> i32>,
+    /// Read the DSP size and the context of the module with record index `i`.
+    pub read_extra: Option<unsafe extern "C" fn(i: u32, out: *mut ModuleExtra)>,
     /// `dkrt_fx`: the `index`th effect that has a page; `E_NOT_FOUND` past the end.
     pub fx_entry: Option<unsafe extern "C" fn(index: u32, out: *mut DkrtFx) -> i32>,
-    /// `dkrt_module_header`: the header fields of the `.dkm` at store sector `first`.
-    pub header: Option<unsafe extern "C" fn(first: u32, out: *mut DkrtModuleHeader) -> i32>,
+    /// `dkrt_module_header`: read the header fields of the `.dkm` at store sector `first`.
+    pub read_header: Option<unsafe extern "C" fn(first: u32, out: *mut DkrtModuleHeader) -> i32>,
     /// Does the module with record index `i` have a `tick`?
     pub has_tick: Option<unsafe extern "C" fn(i: u32) -> bool>,
     /// Does a loaded module have machine type `ty`?
@@ -132,8 +132,8 @@ pub struct MenuHooks {
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct DiagHooks {
-    /// The services see a full set of DSP diagnostics words (`DIAG_WORDS` of them).
-    pub diag: Option<unsafe extern "C" fn(words: *const u32)>,
+    /// Publish a full set of DSP diagnostics words (`DIAG_WORDS` of them) to the services.
+    pub publish_words: Option<unsafe extern "C" fn(words: *const u32)>,
     /// The module behind the fault site `site` with call offset `off`, `NO_MODULE` for none.
     pub attribute: Option<unsafe extern "C" fn(site: u32, off: u32) -> u32>,
     /// The DSP area: total, free, largest block and the loader's state.
