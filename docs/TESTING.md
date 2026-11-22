@@ -100,6 +100,8 @@ remains uncached; all test-only device targets, including `core/runtime-tests`, 
 Plugin sources are not inputs of module device targets. A `runtimeAcceptance` record may set `dksampleWasm: true`
 (depends on `dksample:wasm`) or `dkprofWasm: true` (depends on `dkprof:wasm`). Python tools need no record flag: list the `.py` tools a test runs in the record's `sources`. `tools/nx/py-imports.mjs` follows their `tools.*` imports (including function-local imports and `-m tools.x` strings) and hashes those files. Relative imports are not followed.
 
+A `runtimeAcceptance` record of a device test of the runtime loading and lifecycle sets `firmwareOnly`: one line that names what only the firmware or hardware shows in its files (the rest is a unit or assembly test). Nothing reads it: it is the reason the test exists, kept next to the record (RC2 split, [ledger](plans/ledgers/device-test-inventory.md)).
+
 | Command | What runs |
 | --- | --- |
 | `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host`, `python-checks` and `objects-check` (about 25 s uncached; `patchkit` is affected by edits of its own files, of core module sources, manifests or toolchain inputs, so a stale committed `.dko.json` fails here). Does not run Rust, module builds or devices. |

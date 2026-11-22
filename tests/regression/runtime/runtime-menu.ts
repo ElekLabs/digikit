@@ -194,10 +194,22 @@ export function providerFailureLine(args: readonly number[]): string {
  * only says that its provider did not load: this says why.
  */
 export async function providerFailures(session: Session, plan: RuntimePlan): Promise<string> {
-  const lines = ofKind(await readSmallRing(session, plan), LOG_KIND.MOD_LOAD)
-    .filter((e) => e.args[0] === PROVIDER_INDEX && (e.args[1]! | 0) < 0)
-    .map((e) => providerFailureLine(e.args));
-  return lines.join('; ');
+  const failed = ofKind(await readSmallRing(session, plan), LOG_KIND.MOD_LOAD).filter(
+    (e) => e.args[0] === PROVIDER_INDEX && (e.args[1]! | 0) < 0,
+  );
+  return rootProviderFailures(failed)
+    .map((e) => providerFailureLine(e.args))
+    .join('; ');
+}
+
+/**
+ * The failed provider lines without the dependents: the boot also logs a provider that was refused only because a service it needs was refused (E_MISSING, and its service
+ * hash word is the hash of that need). That line repeats the cause, so it is dropped when a provider of that hash failed with a cause of its own (a result other than
+ * E_MISSING); an E_MISSING line whose need is not such a provider is itself the best answer and stays.
+ */
+export function rootProviderFailures<T extends { args: readonly number[] }>(failed: readonly T[]): T[] {
+  const withCause = new Set(failed.filter((e) => (e.args[1]! | 0) !== E_MISSING).map((e) => e.args[3]));
+  return failed.filter((e) => (e.args[1]! | 0) !== E_MISSING || !withCause.has(e.args[3]));
 }
 
 /**

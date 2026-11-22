@@ -13,6 +13,7 @@
         "files": [
           "capacity.device.test.ts"
         ],
+        "firmwareOnly": "the real memory map: every limit filled to its last unit and the staging buffer size",
         "dsp": "sharc",
         "tags": ["C:loading"],
         "modules": [
@@ -25,6 +26,7 @@
         "files": [
           "commit.device.test.ts"
         ],
+        "firmwareOnly": "the committed rows, the knob ranges and the latch mask in the real DSP voice row, and a refusal leaves the real tables clean",
         "dsp": "sharc",
         "tags": ["C:loading", "S:machines"],
         "modules": [

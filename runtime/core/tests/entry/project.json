@@ -7,6 +7,7 @@
     "runtimeAcceptance": [
       {
         "files": ["entry.device.test.ts"],
+        "firmwareOnly": "the UI loop calls tick and a settings write queued by a command runs in tick; the image has no usb-bulk module",
         "tags": ["C:loading"],
         "modules": ["test/entry-demo"]
       }

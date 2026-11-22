@@ -5,6 +5,7 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/fits.device.test.ts"],
+        "firmwareOnly": "the real runtime scan path on the real MODULES page: its rows and the confirm of a module that does not fit",
         "dsp": "sharc",
         "tags": ["A:core/digikit-menu", "C:loading"],
         "modules": [],
@@ -12,12 +13,14 @@
       },
       {
         "files": ["tests/needs.device.test.ts"],
+        "firmwareOnly": "the name of the missing module on the real BOOT page, the side panel and the LOADS reply",
         "tags": ["A:core/digikit-menu", "C:loading"],
         "modules": ["digikit/usb-fast"],
         "plusdrive": true
       },
       {
         "files": ["tests/apply-live.device.test.ts"],
+        "firmwareOnly": "the real MODULES page applies a change without a boot, and a playing transport refuses it",
         "tags": ["A:core/digikit-menu", "C:loading"],
         "modules": [],
         "plusdrive": true

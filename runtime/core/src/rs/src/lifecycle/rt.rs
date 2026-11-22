@@ -153,11 +153,15 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
         crate::selection::BOOT_IDX = u32::MAX;
     }
 
+    /// The name hash of the service package `service` provides (0 when it provides none).
+    unsafe fn provided_name(&self, service: PackageId) -> u32 {
+        self.mgr().and_then(|m| m.graph().node(service).and_then(|n| n.provides())).map_or(0, |a| a.name())
+    }
+
     /// The verdict the module states show for the package `id` the manager refused for `why`.
     unsafe fn verdict_of(&mut self, id: PackageId, why: &LifecycleError) -> Verdict {
         let service = if let LifecycleError::NeedRefused { service, .. } = *why { service } else { id };
-        let hash = self.mgr().and_then(|m| m.graph().node(service).and_then(|n| n.provides())).map_or(0, |a| a.name());
-        verdict_of(why, self.session.reason(id), hash)
+        verdict_of(why, self.session.reason(id), self.provided_name(service))
     }
 
     /// The boot record and the log from what the manager did.
@@ -194,6 +198,9 @@ impl<P: Platform, M: Images, R: Registry> Rt<P, M, R> {
                 (o.decl_diff.1, o.decl_diff.0)
             } else if res == E_IMPORT && o.import_hash != 0 {
                 (o.import_hash, 0)
+            } else if let Some(LifecycleError::NeedRefused { service, .. }) = refusal(id) {
+                // refused because a need failed: the line names that need (the root cause), not the service's own hash
+                (self.provided_name(service), 0)
             } else {
                 (l.provided_hash(j), if ok { crate::loader::records::module(id.0 as usize).base } else { 0 })
             };

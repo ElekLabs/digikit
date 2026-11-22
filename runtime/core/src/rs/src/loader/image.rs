@@ -266,6 +266,24 @@ mod tests {
         refuses(dkneeds::H_RUNTIME, 0x7fff_ff00, E_CONTRACT);
     }
 
+    /// The runtime version a module needs is E_CONTRACT for another major, another minor or a higher patch; the runtime's own version, a lower patch and none (0) load.
+    /// (The device test `entry` showed this once on the firmware before the rule had a host test.)
+    #[test]
+    fn a_need_of_another_major_or_minor_or_a_higher_patch_is_refused() {
+        let v = dkrt_sdk::RUNTIME_VERSION;
+        refuses(dkneeds::H_RUNTIME, v.wrapping_add(0x1_0000), E_CONTRACT);
+        refuses(dkneeds::H_RUNTIME, v.wrapping_add(0x100), E_CONTRACT);
+        if v & 255 != 255 {
+            refuses(dkneeds::H_RUNTIME, v | 255, E_CONTRACT);
+        }
+        for ok in [v, v & !255, 0] {
+            let mut f = good();
+            put(&mut f, dkneeds::H_RUNTIME, ok);
+            seal(&mut f);
+            assert!(run(&f).is_ok(), "{ok:#x}");
+        }
+    }
+
     #[test]
     fn refuses_bad_name() {
         let mut v = good();

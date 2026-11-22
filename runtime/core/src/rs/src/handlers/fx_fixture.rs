@@ -22,12 +22,22 @@ pub(crate) fn reset_rows() {
     dkrt_svc_fx::rows::reset()
 }
 
+/// The row of the fx service file as the host tests have it.
+pub(crate) fn row() -> &'static ServiceRow {
+    static ROW: ServiceRow = ServiceRow::of::<Fx, RealCore>("fx", &KINDS_FX);
+    &ROW
+}
+
+/// The builder call `dk_module_ctx_add_fx` of the module whose context is `ctx` (its `init` is open), for the effect of `index` of its header table.
+pub(crate) unsafe fn add_fx(ctx: *mut u8, index: u32) {
+    dkrt_svc_fx::build::add_fx(&RealCore, ctx, index, b"Test\0".as_ptr(), b"TST\0".as_ptr());
+}
+
 pub(crate) struct LoadedFx;
 
 impl LoadedFx {
     pub(crate) fn new() -> LoadedFx {
-        static ROW: ServiceRow = ServiceRow::of::<Fx, RealCore>("fx", &KINDS_FX);
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW, None) }, OK);
+        assert_eq!(unsafe { svc_rows::add(FILE_REC, row(), None) }, OK);
         LoadedFx
     }
 }

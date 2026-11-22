@@ -42,7 +42,12 @@ import {
   type RuntimePlan,
 } from '../runtime/runtime-plan.ts';
 import { fakeClock } from './fake-status.ts';
-import { readAboutRows, expectRuntimeAbout, providerFailureLine } from '../runtime/runtime-menu.ts';
+import {
+  readAboutRows,
+  expectRuntimeAbout,
+  providerFailureLine,
+  rootProviderFailures,
+} from '../runtime/runtime-menu.ts';
 import { openRuntimeAbout } from '../runtime/flows/menu.ts';
 
 const patchedSha256 = 'c'.repeat(64);
@@ -591,4 +596,18 @@ test('a provider refused by the declare-check names the item that differs', () =
   expect(e(-79, 0x00000006, 4)).toBe('provider mach res -79 E_DECL_KIND (KINDS 00000006 not in the header)');
   expect(e(-79, 0x12345678, 0)).toBe('provider mach res -79 E_DECL_KIND');
   expect(e(-7, 0x12345678, 0)).toBe('provider mach res -7 E_IMPORT');
+});
+
+test('a provider refused for a failed need is dropped only when that need failed with a cause of its own', () => {
+  const index = 0xffff_fffe;
+  const line = (res: number, hash: number) => ({ args: [index, res >>> 0, 0x73766320, hash, 0] });
+  const port = line(-90, 0xaaaa); // the port file: its own cause
+  const dependent = line(-73, 0xaaaa); // a service refused for the port file: the line names the port file's hash
+  const other = line(-73, 0xbbbb); // refused for a need that is not a failed provider of the log
+  expect(rootProviderFailures([port, dependent])).toEqual([port]);
+  expect(rootProviderFailures([dependent, port, other])).toEqual([port, other]);
+  expect(rootProviderFailures([dependent])).toEqual([dependent]);
+  // two refusals with a cause of their own both stay
+  const second = line(-7, 0xbbbb);
+  expect(rootProviderFailures([port, second, other, dependent])).toEqual([port, second]);
 });

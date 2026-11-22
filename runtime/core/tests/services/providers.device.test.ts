@@ -26,7 +26,6 @@ const PROVIDER_IDX = 0xfffffffe;
 const E_PLAN_OWNER = loadCode('E_PLAN_OWNER');
 const E_HOOK_STOCK = loadCode('E_HOOK_STOCK');
 const E_MISSING = loadCode('E_MISSING');
-const E_IMPORT = loadCode('E_IMPORT');
 /** The hook the fixture takes, and what the stock site holds (the displaced `movea.l (a2),a0` and `pea (2).w`). */
 const HOOK = 'cf.menu.hook.settings_list.test';
 const STOCK_SITE = [0x2052, 0x4878, 0x0002];
@@ -168,7 +167,7 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     expect(await siteBytes(safe, bound.site), 'safe mode leaves the site stock').toEqual(STOCK_SITE);
   });
 
-  test('a port file whose check value differs is E_HOOK_STOCK and the service and its dependent are refused', async () => {
+  test('a port file whose check value differs is E_HOOK_STOCK and the service that needs it and its dependent are refused', async () => {
     const bound = bind(h);
     const f = Buffer.from(fs.readFileSync(bound.port));
     // one byte of the check value of the hook's SITES item: the live site bytes no longer hash to it
@@ -183,7 +182,9 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     const log = await h.usb(rt, (dk) => dk.readLog());
     // the port file is refused before anything is placed; the service has no port file to take its site from
     expect(providerOf(log, nameHash('port')).map((p) => [p.result, p.base]), 'the port file is refused before it is placed').toEqual([[E_HOOK_STOCK, 0]]);
-    expect(providerOf(log, nameHash(HOOK)).map((p) => [p.result, p.base]), 'the service is refused, naming the hook the port file does not give').toEqual([[E_IMPORT, 0]]);
+    // changed with the new boot (RC2b): the service needs the port file, so the manager refuses it for the refused need without placing it (E_MISSING, its own hash); before,
+    // the loader placed it and its hook import failed (E_IMPORT, naming the hook). The user's refusal below is the same.
+    expect(providerOf(log, nameHash('svc-test')).map((p) => [p.result, p.base]), 'the service is refused for the port file it needs, and not placed').toEqual([[E_MISSING, 0]]);
     expect(await siteBytes(rt, bound.site), 'the site was never written').toEqual(STOCK_SITE);
     const states = await h.usb(rt, (dk) => dk.loadStates());
     expect([states[1]!.state, states[1]!.result, states[1]!.detail], 'the user is REFUSED, with the hash of its service').toEqual([

@@ -13,8 +13,8 @@ import { packSynth, type SynthSpec } from '@digi/regression/runtime/synth.ts';
  * docs/plans/ledgers/debug-card-safe.md, section fits). The fit rule (runtime/core/fit) and the page logic (runtime/platform/ui/host/tests/menu.rs)
  * are tested on the host; this test is the real runtime scan path on the real page: a store of four synthetic modules (one small, two a little over half the
  * DSP area each, one larger than the area), the rows read from DK_LOAD. Each row shows the memory the module takes and its kind; YES on the larger one
- * opens the confirm "HUGE DOES NOT FIT" with the reason and ticks nothing; with the first half-size one ticked, the second is refused the same way; unticking
- * the first makes room.
+ * opens the confirm "HUGE DOES NOT FIT" with the reason and ticks nothing; a half-size one ticks. What counts what is ticked already (the second half-size module refused,
+ * unticking makes room) is a host test: `runtime/platform/ui/host/tests/menu.rs` `fit_counts_what_is_checked_already` and `runtime/core/fit` (`dkrt-fit:rust-tests`).
  */
 
 const SYMBOLS = ['DK_LOAD', 'DK_LOAD_N', 'DK_POPUP', 'DK_POPUP_TEXT', 'DK_POPUPS'];
@@ -37,14 +37,13 @@ function pageRow(file: string, n: Record<string, number>): string {
 
 cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit-menu'], symbols: SYMBOLS }, (rig) => {
   test(
-    'a module larger than the DSP area and a second half-size module are refused with the reason; unticking makes room',
+    'a module larger than the DSP area is refused with the reason and a half-size module ticks',
     async () => {
       await rig.first();
       const area = deviceProfile(rig.device).digikit.dsp_area_bytes;
       const half = area / 2 + 4096;
       const specs: Record<string, SynthSpec> = {
         'half-a': { name: 'fit/half-a', dsp: { image: 64, bss: half - 64 } },
-        'half-b': { name: 'fit/half-b', dsp: { image: 64, bss: half - 64 } },
         huge: { name: 'fit/huge', dsp: { image: 64, bss: area } },
         small: { name: 'fit/small', pad: 64 },
       };
@@ -82,7 +81,7 @@ cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit
         rt.ui.tap('YES', { until: { state: () => peek(at('DK_POPUPS')), done: (n) => n === count, what: 'confirm opened' } });
       const yesUntilTicked = (want: number[]) =>
         rt.ui.tap('YES', { until: { state: ticked, done: (v: number[]) => v.join() === want.join(), what: 'ticked rows' } });
-      const [first, second, huge] = ['half-a', 'half-b', 'huge'].map((k) => names.indexOf(k)) as [number, number, number];
+      const [first, huge] = ['half-a', 'huge'].map((k) => names.indexOf(k)) as [number, number];
       const want = names.map((k, i) => pageRow(`${k}.dkm`, needs[i]!));
 
       // SETTINGS > DIGIKIT (the ninth row) > MODULES (the fourth row)
@@ -117,27 +116,6 @@ cardRigs('MODULES page: what fits', { dsp: 'sharc', roots: [...RT, 'core/digikit
         rows: want,
       });
 
-      // the other half-size module next to it is refused: the mark stays off and the confirm says which resource is short
-      await presses('DOWN', second - first);
-      const popups2 = await peek(at('DK_POPUPS'));
-      await yesUntilPopups(popups2 + 1);
-      const setWhy = (await fit(cap, [needs[first]!, needs[second]!], true)).set;
-      expect(
-        [await peek(at('DK_POPUPS')), await ticked(), await dialog()],
-        'the other half-size module is refused: the mark stays off and the confirm says which resource is short',
-      ).toEqual([popups2 + 1, onlyFirst, ['HALF-B DOES NOT FIT', setWhy.text]]);
-      await press('YES');
-
-      // untick the first: there is room for the second again
-      await presses('UP', second - first);
-      await yesUntilTicked(names.map(() => 0));
-      await presses('DOWN', second - first);
-      const popups3 = await peek(at('DK_POPUPS'));
-      await yesUntilTicked(names.map((_, i) => Number(i === second)));
-      expect(
-        [await ticked(), await peek(at('DK_POPUPS'))],
-        'unticking the first module makes room: the second can be ticked',
-      ).toEqual([names.map((_, i) => Number(i === second)), popups3]);
       await rpc(session, 'run.mode', { mode: 'paused' });
     },
   );

@@ -14,6 +14,7 @@
       },
       {
         "files": ["tests/shot-live-dt2.device.test.ts"],
+        "firmwareOnly": "the audio of a held voice across an unload and a load with the sample pool, and the capacity counts of the real image",
         "devices": ["dt2"],
         "dsp": "sharc",
         "tags": ["C:loading", "S:machines", "S:samples"],

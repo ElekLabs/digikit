@@ -280,6 +280,19 @@ mod tests {
     }
 
     #[test]
+    fn a_bound_context_gives_the_device_and_the_runtime_version_and_an_unbound_one_gives_zero() {
+        unsafe {
+            let rec = MAX_MODULES - 1;
+            unbind(rec);
+            let ctx = bind(rec) as usize as *mut u8;
+            assert_eq!(dk_module_ctx_device(ctx), crate::device());
+            assert_eq!(dk_module_ctx_runtime_version(ctx), RUNTIME_VERSION);
+            unbind(rec);
+            assert_eq!((dk_module_ctx_device(ctx), dk_module_ctx_runtime_version(ctx)), (0, 0));
+        }
+    }
+
+    #[test]
     fn a_handle_is_the_client_number() {
         unsafe {
             let mut out: *mut u8 = core::ptr::null_mut();

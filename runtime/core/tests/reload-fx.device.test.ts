@@ -14,14 +14,14 @@ import type { FxProfile } from '@digi/regression/runtime/fx-session.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 
 /**
  * Reload, unload and load of an effect module while the device runs (docs/plans/extension-model.md E5b): the fx service tears an effect down on any route, so the effect modules
  * `test/dyn-fx-gain` (master route, GAIN default 0.5, MIX wet) and `test/dyn-fx-gain-send` (starts as a send) are no longer refused with `E_RELOAD_ROUTED`.
  *
- * After every job: RELOAD_STATE says finished with result 0; no new boot (the epoch); the `reloads` counter moved by one; no `TABLE_BAD` in the log. AMP HOLD is NOTE and the stock FX sends are 0, so a
+ * After every job: the job ends with result 0; no new boot (the epoch); no `TABLE_BAD` in the log. AMP HOLD is NOTE and the stock FX sends are 0, so a
  * capture holds the voice and the run-time effect only.
  *
  * After every job FX_SLOTS and SEND_SLOTS in use are read (two capacity reads): 1 and the module's send cell (0 or 1) while it is loaded, 0 and 0 after an unload. Only the device shows a real effect
@@ -53,8 +53,6 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  */
 const MASTER_ID = 'test/dyn-fx-gain';
 const SEND_ID = 'test/dyn-fx-gain-send';
-/** Byte offsets in DkrtBootInfo (runtime/core/abi.toml). */
-const BOOT_RELOADS = 252;
 const MIDI_CHANNEL = 1;
 const AMP_CC = { dt2: { hold: 80, decay: 81 }, dn2: { hold: 85, decay: 86 } } as const;
 const SEND_CC = { dt2: [84, 85, 12], dn2: [30, 31, 29] } as const;
@@ -79,15 +77,11 @@ const peakOf = (xs: Float32Array, from: number, to: number): number => {
 
 type Op = 'reload' | 'unload' | 'load';
 
-/** One live job on `file`, then what every job leaves (see the header). The `reloads` counter moves by one for every live job (load, reload and unload), as in live.device.test.ts. */
-async function job(rt: TestRuntime, plan: RuntimePlan, op: Op, file: string, why: string, epoch: number, send: 0 | 1): Promise<void> {
-  const before = await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS);
+/** One live job on `file`, then what every job leaves (see the header). The job's end result is the proof that the live job ran; its state body and the `reloads` counter (one for each live job) are host tests (`reload.rs` `the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body`, `a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none`). */
+async function job(rt: TestRuntime, _plan: RuntimePlan, op: Op, file: string, why: string, epoch: number, send: 0 | 1): Promise<void> {
   const end = await (op === 'reload' ? rt.dk.reloadAndWait(file) : op === 'unload' ? rt.dk.unloadAndWait(file) : rt.dk.loadAndWait(file));
   expect(end, `${why}: ${op} of ${file}`).toEqual({ result: 0, unloaded: op !== 'load' });
-  const st = await rt.dk.reloadState();
-  expect([st.phase, st.result], `${why}: RELOAD_STATE (phase 2 = finished, result 0)`).toEqual([2, 0]);
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
-  expect(await word(rt.session, planSymbol(plan, 'DKRT_BOOT') + BOOT_RELOADS), `${why}: the reloads counter`).toBe(before + 1);
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
   const cap = await rt.dk.capacity();
   expect({ fx: cap['FX_SLOTS']?.used, send: cap['SEND_SLOTS']?.used }, `${why}: FX_SLOTS and SEND_SLOTS in use`).toEqual(op === 'unload' ? { fx: 0, send: 0 } : { fx: 1, send });

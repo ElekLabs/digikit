@@ -10,15 +10,14 @@ import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
  * A module whose imports belong to a module that is not in the image says which one (docs/plans/sdk-runtime-roadmap.md, "show why a module did not load").
  * The image has the runtime and the menu but not core/usb-bulk, and usb-fast is selected: its load ends with E_IMPORT and the runtime keeps `usb-bulk` in
  * DkrtBootInfo.needs. The name reaches the LOADS command (the Transfer pane), the MOD_NEEDS event, the BOOT page (`- NEEDS USB-BULK`) and the side panel
- * of the module's row in MODULES (the detail line of a row that shows a dash).
+ * of the module's row in MODULES (the detail line of a row that shows a dash). The runtime's record of the name (`DkrtBootInfo.needs`) and the module that is refused
+ * for a missing core API are host tests (`boot.rs` boot-record tests, assembly `an_adapter_import_resolves_only_in_an_image_with_the_adapter`).
  */
 
 const SYMBOLS = ['DK_ABOUT', 'DK_ABOUT_N', 'DK_PANEL', 'DK_PANEL_N', 'DK_LOAD_N'];
-const BOOT_NEEDS_OFFSET = 80; // DkrtBootInfo.needs (runtime/core/abi.toml)
-const NEEDS_LEN = 12;
 
 cardRigs('a module that needs a missing module', { roots: [...RT, 'core/digikit-menu'], symbols: SYMBOLS }, (rig) => {
-  test('usb-fast without core/usb-bulk: the missing module is stored, logged, in LOADS, on the BOOT page and in the module row', async () => {
+  test('usb-fast without core/usb-bulk: the missing module is logged, in LOADS, on the BOOT page and in the module row', async () => {
     await rig.first();
     const mod = rig.mod('digikit/usb-fast');
     const rt = await rig.load('needs', { modules: [mod], selection: [mod.name] });
@@ -29,12 +28,6 @@ cardRigs('a module that needs a missing module', { roots: [...RT, 'core/digikit-
       for (let k = 0; k < stride; k += 4) bytes.writeUInt32BE(await peek(planSymbol(rig.plan, symbol) + stride * i + k), k);
       return bytes.toString('latin1').split('\0')[0]!;
     };
-
-    // the runtime's record of the boot: slot 0 holds the name
-    const needs = Buffer.alloc(NEEDS_LEN);
-    for (let k = 0; k < NEEDS_LEN; k += 4)
-      needs.writeUInt32BE(await peek(planSymbol(rig.plan, 'DKRT_BOOT') + BOOT_NEEDS_OFFSET + k), k);
-    expect(needs.toString('latin1').split('\0')[0], 'DkrtBootInfo.needs[0]').toBe('usb-bulk');
 
     // the event after MOD_LOAD (error level), and the host's reading of it
     const ring = await readSmallRing(session, rig.plan);

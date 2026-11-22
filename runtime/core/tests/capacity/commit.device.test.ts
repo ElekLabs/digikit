@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PROVIDER_IDX } from '@digi/dk-session';
 import { RESOURCE } from '@digi/dk-session/gen_proto';
-import { committedRecords, decodeCommitEvent } from '@digi/test-support/commit-records';
+import { committedRecords } from '@digi/test-support/commit-records';
 import { expect, test } from 'vitest';
 import { cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { dspBytes, word } from '@digi/regression/runtime/fx-live.ts';
@@ -11,9 +10,9 @@ import { derivedModule } from '@digi/regression/runtime/service-files.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
-import { moduleRingEvents, ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
+import { moduleRingEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { block, LOADED } from '@digi/regression/runtime/synth.ts';
+import { LOADED } from '@digi/regression/runtime/synth.ts';
 import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from './capacity-helpers.ts';
 
 /**
@@ -22,18 +21,19 @@ import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from './capacity-help
  *
  * - the MODULE_COMMIT event gives the rows the module uses and the committed record block; the block holds the params and the effect page;
  * - the machine's voice row in the DSP has the knob ranges and the latch mask of the params;
- * - a module that declares more rows than its `[uses]`, an id that is not in its keys table, or an effect id that another loaded module has (the boot plan's E_PLAN_KEY), is refused with
- *   its own status and changes nothing: no row, no DSP range, no arena block (the refusals are made from the packed fixture by patching its bytes).
+ * - a module that declares more rows than its `[uses]` is refused with E_DECL_USES and changes nothing on the real tables: no row, no DSP range, no arena block, no service left
+ *   up for it. The other refusals are host tests: E_DECL_ID (an id that is not in the keys table: `services/machines/tests/build.rs`, `services/fx/tests/build.rs`,
+ *   `collect/tests.rs`), E_DECL_USES itself (`services/machines/tests/build.rs`), E_PLAN_KEY (an effect id that another module has: `admission.rs`) and that a refused
+ *   consumer takes down the service this boot started for it (`dkrt-lifecycle` `manager/tests/unwind.rs`, `bring_up.rs`).
+ *
+ * The services the new boot starts only for a module are taken down again when that module is refused (the manager's unwind), so the arena of a refused boot holds no provider
+ * block; the MOD_LOAD events of a provider that came up are still logged (the boot report lists what came up, then what was refused), which is why the test no longer counts
+ * provider events to know the arena it expects.
  */
 const ID = 'test/commit-demo';
-const E_DECL_ID = -27;
 const E_DECL_USES = -28;
-const E_PLAN_KEY = -77;
 /** Header fields of a .dkm (docs/design/digikit-dkm.md). */
-const H_NAME = 0x40;
 const H_KEYS_OFF = 0x90;
-const H_KEYS_SIZE = 0x94;
-const H_DSP_SIZE = 0x9c;
 const ROW_BYTES = 96;
 const ROW_RANGE0 = 2;
 const ROW_LATCH = 22;
@@ -51,38 +51,6 @@ function usesCountAt(f: Buffer, id: number): number {
   throw new Error(`no uses entry for resource ${id}`);
 }
 
-/** The key group of machine keys (kind 2) taken out of the KEYS entry (tag 3) of the header table: the entries after it move up and the table shrinks by the group. */
-function dropMachineKeys(f: Buffer): void {
-  const KIND_MACHINE = 2;
-  const table = f.readUInt32BE(H_KEYS_OFF);
-  const size = f.readUInt32BE(H_KEYS_SIZE);
-  let at = table + 8;
-  for (let i = f.readUInt16BE(table + 6); i > 0; i--) {
-    const len = f.readUInt32BE(at + 4);
-    if (f.readUInt16BE(at) === 3) {
-      let g = at + 8;
-      for (let k = f.readUInt16BE(at + 2); k > 0; k--) {
-        const bytes = 8 + 4 * f.readUInt32BE(g + 4);
-        if (f.readUInt32BE(g) === KIND_MACHINE) {
-          const end = table + size;
-          f.copy(f, g, g + bytes, end);
-          f.fill(0, end - bytes, end);
-          f.writeUInt16BE(f.readUInt16BE(at + 2) - 1, at + 2);
-          f.writeUInt32BE(len - bytes, at + 4);
-          f.writeUInt32BE(size - bytes, H_KEYS_SIZE);
-          return;
-        }
-        g += bytes;
-      }
-    }
-    at += 8 + len;
-  }
-  throw new Error('no machine key group');
-}
-
-/** The machine key the packer writes for the fixture's `test/commit-demo:cmach` (the keys table and the DSP voice record; init passes the index 0). */
-const KEY = Buffer.from([0xa6, 0x51, 0x3f, 0x00]);
-const KEY2 = Buffer.from([0xa6, 0x51, 0x3e, 0x00]);
 /** Knob position of each param (`[adapter.machine] param_slots` of the device file), the sound-array slot of knob 0 and the stock row of the default glyph. */
 const DEVICE = {
   dt2: { positions: [1, 2, 4], slotBase: 0, encoder: 0xcc, pageRows: 0 },
@@ -96,74 +64,29 @@ function rehash(file: Buffer): Buffer {
   return file;
 }
 
-function replaceAll(buf: Buffer, from: Buffer, to: Buffer, lo = 0, hi = buf.length): number {
-  let n = 0;
-  for (let at = buf.indexOf(from, lo); at >= 0 && at + from.length <= hi; at = buf.indexOf(from, at + 1)) {
-    to.copy(buf, at);
-    n++;
-  }
-  return n;
-}
-
-/** What the good boot of the fixture holds in the arena: all of it, and the part the providers (services the module needs) hold. */
-interface GoodArena {
-  used: number;
-  providers: number;
-}
-/** The result of a provider whose DSP part follows (fx.dks, machines.dks): live on the ColdFire, its blocks are in the arena. */
-const LOADING = 1;
-const goodArena = new Map<string, GoodArena>();
-
 /**
- * Boot the fixture alone and record its arena: `providers` is `ARENA.used` less the module's image block and its committed record block (the Collect
- * of its load is freed). The runtime does not publish the providers' own blocks.
+ * Boot the fixture alone: the good boot of a rig (the first test reads its commit event and records).
  */
 async function bootGood(rig: CardRig): Promise<Awaited<ReturnType<typeof bootEntries>>> {
   const entries: Entry[] = [{ name: ID, file: moduleArtifact(rig.device, ID), want: LOADED }];
-  const got = await bootEntries(rig, 'commit-good', entries);
-  const [event] = await moduleRingEvents(got.rt.session, rig.plan, 'MODULE_COMMIT');
-  const used = got.cap.ARENA!.used;
-  const providers = used - block(got.mods[0]!.cf_size) - block(decodeCommitEvent(event!).size);
-  goodArena.set(rig.device, { used, providers });
-  return got;
-}
-
-/** The arena of the good boot (a boot of its own, made before the boots under test). */
-async function goodArenaOf(rig: CardRig): Promise<GoodArena> {
-  if (!goodArena.has(rig.device)) await bootGood(rig);
-  return goodArena.get(rig.device)!;
+  return bootEntries(rig, 'commit-good', entries);
 }
 
 /**
- * Refused and left nothing behind: no module listed, no row, no DSP range, no arena block. `good` is `goodArenaOf` of the rig, read before this boot. With no
- * module loaded the arena holds the providers' blocks only, and none when the refused file needed no service (no provider loaded on this boot).
+ * Refused and left nothing behind: no module listed, no row, no DSP range, no arena block, no MODULE_COMMIT event. With the only module refused, the new boot has taken down
+ * the services it started for it, so the arena is empty (before RC2b the providers' blocks stayed: a provider logged as loaded is no longer one that is still in the arena).
  */
-async function expectNothing(
-  rig: CardRig,
-  got: Awaited<ReturnType<typeof bootEntries>>,
-  loaded: string[],
-  rows: number,
-  good: GoodArena,
-) {
+async function expectNothing(rig: CardRig, got: Awaited<ReturnType<typeof bootEntries>>) {
   const { mods, cap, rt } = got;
-  const providersLoaded = (await ringEvents(rt.session, rig.plan, 'MOD_LOAD')).filter(
-    (e) => e.args[0] === PROVIDER_IDX && (e.args[1] === 0 || e.args[1] === LOADING),
-  ).length;
-  const providers = providersLoaded ? good.providers : 0;
-  expect(
-    mods.map((m) => m.name),
-    'MODULES lists only the modules that loaded',
-  ).toEqual(loaded);
+  expect(mods.map((m) => m.name), 'MODULES lists no module').toEqual([]);
   expect(
     [cap.MACHINE_ROWS!.used, cap.PARAM_ROWS!.used, cap.VOICE_ROWS!.used],
     'the refused module owns no machine, parameter or voice row (its number may hold a MISSING placeholder, which CAPACITY does not count)',
-  ).toEqual([rows, rows * 3, rows]);
-  expect(cap.DSP_AREA!.used > 0, 'and holds no DSP range unless an earlier module does').toBe(rows > 0);
-  expect(cap.ARENA!.used, 'and no arena block beyond the providers and the modules that loaded').toBe(
-    rows > 0 ? good.used : providers,
-  );
+  ).toEqual([0, 0, 0]);
+  expect(cap.DSP_AREA!.used, 'and holds no DSP range').toBe(0);
+  expect(cap.ARENA!.used, 'and no arena block: the services started for it went down with it').toBe(0);
   expect((await word(rt.session, planSymbol(rig.plan, 'DKRT_TABLE_BAD'))) >>> 24, 'the firmware tables are intact').toBe(0);
-  expect(await moduleRingEvents(rt.session, rig.plan, 'MODULE_COMMIT'), 'a refused commit logs no MODULE_COMMIT').toHaveLength(rows);
+  expect(await moduleRingEvents(rt.session, rig.plan, 'MODULE_COMMIT'), 'a refused commit logs no MODULE_COMMIT').toHaveLength(0);
 }
 
 cardRigs(
@@ -247,42 +170,9 @@ cardRigs(
         expect(f.readUInt32BE(at), 'the fixture declares three param rows').toBe(3);
         f.writeUInt32BE(2, at);
       });
-      const good = await goodArenaOf(rig);
       const got = await bootEntries(rig, 'commit-uses', [{ name: ID, file, want: E_DECL_USES }]);
       expect(got.info.results).toEqual([E_DECL_USES]);
-      await expectNothing(rig, got, [], 0, good);
-    });
-
-    test('a machine index that the keys table lacks is E_DECL_ID and writes nothing', async () => {
-      await rig.first();
-      // init declares machine 0 and effect 0. The header table keeps its NEEDS and USES, so the builder imports link, and loses its machine keys, so row 0 is not in it
-      // (the machines service refuses in its commit check); without the DSP section, whose voice record would name the machine key (E_DSP_TYPE)
-      const file = patched('id.dkm', (f) => {
-        dropMachineKeys(f);
-        f.writeUInt32BE(0, H_DSP_SIZE);
-      });
-      const good = await goodArenaOf(rig);
-      const got = await bootEntries(rig, 'commit-id', [{ name: ID, file, want: E_DECL_ID }]);
-      expect(got.info.results).toEqual([E_DECL_ID]);
-      await expectNothing(rig, got, [], 0, good);
-    });
-
-    test('an effect id that a loaded module has is E_PLAN_KEY and the first module stays intact', async () => {
-      await rig.first();
-      // the copy has another name and another machine key (in the keys table and the DSP voice record), the same effect id
-      const copy = patched('dup.dkm', (f) => {
-        Buffer.alloc(32).copy(f, H_NAME);
-        Buffer.from('test/commit-copy').copy(f, H_NAME);
-        expect(replaceAll(f, KEY, KEY2), 'the machine key is in the keys table and the voice record').toBeGreaterThanOrEqual(2);
-      });
-      const entries: Entry[] = [
-        { name: ID, file: moduleArtifact(rig.device, ID), want: LOADED },
-        { name: 'test/commit-copy', file: copy, want: E_PLAN_KEY },
-      ];
-      const good = await goodArenaOf(rig);
-      const got = await bootEntries(rig, 'commit-dup', entries);
-      expect(got.info.results[1]).toBe(E_PLAN_KEY);
-      await expectNothing(rig, got, [ID], 1, good);
+      await expectNothing(rig, got);
     });
   },
 );

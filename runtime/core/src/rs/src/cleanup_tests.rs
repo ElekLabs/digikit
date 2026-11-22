@@ -76,6 +76,23 @@ impl Drop for NoFxInfoGuard {
     }
 }
 
+/// The `dynreg_info` table of an image (the assembly tests read it from the image's info file), while a `DynregInfoGuard` lives; the other host tests have none.
+static mut DYNREG_INFO_OVERRIDE: *const u32 = core::ptr::null();
+
+/// Sets the `dynreg_info` table for its lifetime and clears it on drop, also when the test panics. Hold it under `LOCK`; `info` outlives the guard's use.
+pub(crate) struct DynregInfoGuard;
+impl DynregInfoGuard {
+    pub(crate) unsafe fn set(info: *const u32) -> Self {
+        DYNREG_INFO_OVERRIDE = info;
+        DynregInfoGuard
+    }
+}
+impl Drop for DynregInfoGuard {
+    fn drop(&mut self) {
+        unsafe { DYNREG_INFO_OVERRIDE = core::ptr::null() }
+    }
+}
+
 pub fn voice_info() -> *const u32 {
     unsafe {
         if VOICE_INFO_OVERRIDE.is_null() {
@@ -94,7 +111,9 @@ pub unsafe fn fx_info() -> *const u32 {
 }
 /// The image's info table `name_hash` of the host tests: `dyndsp_info` and `dynfx_info` are the tables of this file (`voice_info`, `fx_info`); none for any other name.
 pub unsafe fn test_info(name_hash: u32) -> Option<*const u32> {
-    if name_hash == dkneeds::keys::name_hash("dyndsp_info") {
+    if name_hash == dkneeds::keys::name_hash("dynreg_info") && !DYNREG_INFO_OVERRIDE.is_null() {
+        Some(DYNREG_INFO_OVERRIDE)
+    } else if name_hash == dkneeds::keys::name_hash("dyndsp_info") {
         Some(voice_info())
     } else if name_hash == dkneeds::keys::name_hash("dynfx_info") {
         // the table is for the device the test runs on (the service compares the device word with `CoreApi::device_id`)

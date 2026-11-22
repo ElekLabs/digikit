@@ -27,6 +27,8 @@ const REFUSAL = 'runtime/core/tests/refusal/refusal.device.test.ts';
 const CAPACITY = 'runtime/core/tests/capacity/capacity.device.test.ts';
 const COMMIT = 'runtime/core/tests/capacity/commit.device.test.ts';
 const NEEDS = 'runtime/apps/digikit-menu/tests/needs.device.test.ts';
+const ASSEMBLY = 'runtime/core/src/rs/src/loader/tests/assembly_tests.rs';
+const IMAGE_RS = 'runtime/core/src/rs/src/loader/image.rs';
 const SAFE = 'runtime/core/tests/safe-mode.device.test.ts';
 const COLLECT = 'runtime/core/src/rs/src/collect/tests.rs';
 const MACHINES_BUILD = 'services/machines/tests/build.rs';
@@ -49,11 +51,11 @@ export const ROWS: Record<string, Row> = {
   E_BAD_STORE: { kind: 'not-a-load', reason: 'the store header is checked before any module is selected', covered: [{ file: STORE_RS, test: 'E_BAD_STORE' }] },
   E_READ: { kind: 'open', reason: 'no boot rig makes the firmware block read fail while a module loads', covered: [{ file: STORE_RS, test: 'E_READ' }] },
   E_SHA: { fail: mine('a changed sha256 is E_SHA'), pass: loads },
-  E_FORMAT: { fail: mine('a wrong magic is E_FORMAT'), pass: loads },
+  E_FORMAT: { fail: { file: IMAGE_RS, test: 'refuses_bad_magic_format_and_sizes' }, pass: loads },
   E_RUNTIME: { kind: 'reserved', reason: 'never returned: E_CONTRACT says a module needs another runtime' },
   E_IMPORT: { fail: { file: NEEDS, test: 'usb-fast without core/usb-bulk' }, pass: { file: 'modules/tool/digikit/usb-fast/tests/usb-fast.device.test.ts', test: 'the speed switches' } },
   E_NOMEM: { fail: { file: CAPACITY, test: 'arena: filled to the last byte' }, pass: { file: CAPACITY, test: 'arena: filled to the last byte' } },
-  E_INIT: { fail: mine('an init that returns non-zero is E_INIT'), pass: loads },
+  E_INIT: { fail: { file: ASSEMBLY, test: 'an_init_that_returns_non_zero_is_refused_with_e_init_and_leaves_nothing' }, pass: loads },
   E_LOADED: { fail: { file: CAPACITY, test: 'files: a file of the staging buffer size' }, pass: { file: CAPACITY, test: 'files: a file of the staging buffer size' } },
   E_BUSY: { kind: 'not-a-load', reason: 'a task is still inside the module: only a teardown returns it, never the boot', covered: [{ file: CLEANUP, test: 'E_BUSY' }] },
   E_TOO_BIG: { fail: { file: CAPACITY, test: 'files: a file of the staging buffer size' }, pass: { file: CAPACITY, test: 'files: a file of the staging buffer size' } },
@@ -70,16 +72,16 @@ export const ROWS: Record<string, Row> = {
   E_PARAM_FULL: { kind: 'host', reason: 'collect tests fill the rows', covered: [{ file: MACHINES_BUILD, test: 'E_PARAM_FULL' }] },
   E_PAGE_FULL: { kind: 'host', reason: 'collect tests fill the rows', covered: [{ file: MACHINES_BUILD, test: 'E_PAGE_FULL' }] },
   E_TYPE_IN_USE: { kind: 'reserved', reason: 'hot reload is archived; never returned' },
-  E_DECL_ID: { fail: { file: COMMIT, test: 'a machine index that the keys table lacks is E_DECL_ID' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
+  E_DECL_ID: { fail: { file: ASSEMBLY, test: 'a_machine_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leaves_nothing' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_DECL_USES: { fail: { file: COMMIT, test: 'more rows than [uses] is E_DECL_USES' }, pass: { file: COMMIT, test: 'the commit logs its rows' } },
   E_FX_ID_DUP: { kind: 'reserved', reason: 'the rules of the core refuse a repeated effect id (E_PLAN_KEY) at the boot and at a live load or reload (admission.rs `an_effect_id_a_live_module_has_is_refused_like_any_key`); never returned' },
   E_DECL_FULL: { kind: 'host', reason: 'more builder calls than the record limit', covered: [{ file: MACHINES_BUILD, test: 'E_DECL_FULL' }] },
-  E_PLAN_KIND: { fail: mine('keys for a kind nobody owns are refused'), pass: loads },
+  E_PLAN_KIND: { fail: { file: ASSEMBLY, test: 'a_boot_leaves_the_kind_and_the_full_resource_in_the_detail_words_of_a_refusal' }, pass: loads },
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },
   E_PLAN_KEY: { fail: mine('a second owner of one key is E_PLAN_KEY'), pass: mine('the first owner of the key loads') },
-  E_PLAN_FIT: { fail: mine('uses over the capacity are refused'), pass: loads },
+  E_PLAN_FIT: { fail: { file: ASSEMBLY, test: 'a_boot_leaves_the_kind_and_the_full_resource_in_the_detail_words_of_a_refusal' }, pass: loads },
   E_DECL_KIND: { fail: { file: LFO_DEVICE, test: 'a kind table' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
-  E_HOOK_STOCK: { fail: prov('a port file whose check value differs is E_HOOK_STOCK and the service and its dependent are refused'), pass: prov('a provider installs its hook and the consumer calls it') },
+  E_HOOK_STOCK: { fail: prov('a port file whose check value differs is E_HOOK_STOCK and the service that needs it and its dependent are refused'), pass: prov('a provider installs its hook and the consumer calls it') },
   E_NO_DSP: { kind: 'host', reason: 'needs an image without the DSP loader', covered: [{ file: CLEANUP, test: 'E_NO_DSP' }] },
   E_DSP_FORMAT: { kind: 'host', reason: 'a malformed DSP section', covered: [{ file: CONTRACT, test: 'E_DSP_FORMAT' }] },
   E_DSP_IMPORT: { kind: 'open', reason: 'no fixture imports a DSP symbol the image lacks' },
@@ -103,13 +105,13 @@ export const ROWS: Record<string, Row> = {
   E_BOOT_ONLY: { kind: 'open', reason: 'a load call after the boot hook: no module or host command makes one' },
   E_RANGE: { kind: 'not-a-load', reason: 'a card write outside the store', covered: [{ file: 'runtime/core/tests/card-safety.device.test.ts', test: 'E_RANGE' }] },
   E_CARD_RO: { kind: 'not-a-load', reason: 'the card area is not ours', covered: [{ file: 'runtime/core/tests/card-safety.device.test.ts', test: 'E_CARD_RO' }] },
-  E_CONTRACT: { fail: mine('a module that needs a newer runtime is E_CONTRACT'), pass: loads },
+  E_CONTRACT: { fail: { file: IMAGE_RS, test: 'a_need_of_another_major_or_minor_or_a_higher_patch_is_refused' }, pass: loads },
   E_TABLE: { kind: 'open', reason: 'the runtime tables fail their check: needs a corrupted table' },
-  E_MISSING: { fail: mine('a hard need nobody provides is E_MISSING'), pass: loads },
+  E_MISSING: { fail: { file: ASSEMBLY, test: 'a_card_without_the_service_file_refuses_its_user_naming_the_service' }, pass: loads },
   E_SVC_ABI: { fail: { file: LFO_DEVICE, test: 'another ABI' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
   E_RELOAD_PLAYING: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it; `reload.device.test.ts` drives it on both devices (the transport plays)', covered: [{ file: RELOAD_RS, test: 'playing_paused_mixed_or_unreadable' }] },
   E_RELOAD_MENUS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_refusals_come_in_the_documented_order' }] },
-  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_services_refuse_after_the_generic_refusals' }] },
+  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'an_unload_that_is_refused_changes_nothing_and_one_of_a_module_that_is_gone_is_not_found' }] },
   E_RELOAD_RETAINED: { kind: 'host', reason: 'only a DSP loader that could not clear rows causes it', covered: [{ file: RELOAD_RS, test: 'a_retained_dsp_refuses_at_the_queue' }] },
   E_RELOAD_KEYS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: 'packages/dkneeds/src/keys.rs', test: 'a_reload_may_add_keys_but_not_drop_one' }] },
 };
