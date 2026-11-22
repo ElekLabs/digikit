@@ -1,5 +1,4 @@
-// The Memory panel's backend in the preview (replaces ../src/memory-backend.ts): CAPACITY and MODULES of a fake device, built from the library of
-// sim.ts. The state is in the address: `card=dn2|dt2` (the device: the Digitakt II has no page rows), `mem=pluck|full|empty|dsp` (what is loaded):
+// The Memory panel's backend in the preview (replaces ../src/memory-backend.ts): CAPACITY and MODULES of a fake device, for explicit layout fixtures. The state is in the address: `card=dn2|dt2` (the device: the Digitakt II has no page rows), `mem=pluck|full|empty|dsp` (what is loaded):
 //   pluck  Pluck and Remote control, and one module that is not in the library (the default)
 //   full   a machine pair, an effect, a tool and the unknown module
 //   empty  nothing loaded
@@ -10,14 +9,13 @@
 import type { Caps } from '@digi/workbench-core/modules/fit.ts';
 import { buildBars, type KnownModule } from '../src/memory-core';
 import { PAUSED } from '../src/desktop-env';
-import { LIBRARY } from './sim';
 
 export { PAUSED };
-import type { MemoryReading } from '../src/memory-backend';
+import { readMemory as readTargetMemory, type MemoryReading } from '../src/memory-backend';
 
 const query = new URLSearchParams(location.search);
 const dev = query.get('card') === 'dt2' ? 'dt2' : 'dn2';
-const mem = query.get('mem') ?? 'pluck';
+const mem = query.get('mem');
 const LOADED: Record<string, string[]> = {
   pluck: ['pluck', 'remote', 'someone/mystery'],
   full: ['sine', 'pluck', 'chorus', 'remote', 'someone/mystery'],
@@ -28,12 +26,36 @@ const LOADED: Record<string, string[]> = {
 };
 const KiB = 1024;
 
-export async function readMemory(): Promise<MemoryReading> {
+const machine = (name: string, label: string, size: number, dsp: number): KnownModule => ({
+  name,
+  label,
+  group: 'Machines',
+  needs: {
+    file_size: size * KiB,
+    ARENA: 4096,
+    ARENA_XFER: 2048,
+    DSP_AREA: dsp * KiB,
+    DSP_ALIGN: 8,
+    MACHINE_ROWS: 1,
+    VOICE_ROWS: 1,
+    PARAM_ROWS: 4,
+  },
+});
+const known: KnownModule[] = [
+  machine('sine', 'Sine', 18, 200),
+  machine('pluck', 'Pluck', 42, 259),
+  machine('wavetable', 'Wavetable Voyager with a rather long display name', 60, 420),
+  machine('fm4', 'FM 4-op', 61, 600),
+  { name: 'chorus', label: 'Chorus', group: 'Effects', needs: { ARENA: 4096 } },
+  { name: 'remote', label: 'Remote control', group: 'Tools', needs: { ARENA: 4096 } },
+];
+
+export async function readMemory(...args: Parameters<typeof readTargetMemory>): Promise<MemoryReading> {
+  if (!mem) return readTargetMemory(...args);
   const names = LOADED[mem] ?? [];
-  const known: KnownModule[] = LIBRARY.map((m) => ({ name: m.id, label: m.label, group: m.group, needs: m.needs }));
   const used = { ARENA: 0, DSP_AREA: 0, MACHINE_ROWS: 0, PARAM_ROWS: 0, PAGE_ROWS: 0 };
   for (const n of names) {
-    const m = LIBRARY.find((l) => l.id === n);
+    const m = known.find((module) => module.name === n);
     // a module that is not in the library takes arena, DSP memory and rows of its own (the panel shows them as "other")
     const needs = m?.needs ?? { ARENA: 12 * KiB, DSP_AREA: 40 * KiB, MACHINE_ROWS: 1, PARAM_ROWS: 2 };
     used.ARENA += needs.ARENA ?? 0;

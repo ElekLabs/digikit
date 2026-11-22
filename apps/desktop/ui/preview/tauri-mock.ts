@@ -1,13 +1,16 @@
 // The native command boundary of the browser preview. Desktop components call the same TauriHost as in the app.
+import { previewHome } from './preview-home';
 import { previewEmulator } from './emulator-mock';
 import { cardCall, pickFolder, reloadCard } from './card-mock';
 import type { RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
+import dkprofUrl from '../../../web/public/dkprof.wasm?url';
+import sampleUrl from '../../../web/public/dksample.wasm?url';
 import * as firmware from './firmware-mock';
 import { sim } from './sim';
 import { previewSymbolImage } from './symbols-mock';
 
 const query = new URLSearchParams(location.search);
-const emulator = previewEmulator(query);
+export const emulator = previewEmulator(query);
 export const isTauri = (): boolean => true;
 
 const remotePort = 'Elektron Digitone II';
@@ -41,6 +44,8 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
     case 'emu_step':
       return (symbols ? symbolsSnapshot : await emulator.snapshot(false)) as T;
     case 'emu_tap':
+      emulator.screen.key(args.code, true);
+      emulator.screen.key(args.code, false);
       return (symbols ? symbolsSnapshot : await emulator.snapshot()) as T;
     case 'emu_audio_status':
       return null as T;
@@ -49,8 +54,9 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
     case 'emu_pick_syx':
       return emulator.source.path as T;
     case 'emu_set_source':
-    case 'emu_source_info':
       return emulator.source as T;
+    case 'emu_source_info':
+      return (emulator.isLoaded() ? emulator.source : null) as T;
     case 'emu_build_info':
       return {} as T;
     case 'local_pick_folder':
@@ -66,14 +72,9 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
     case 'remote_audio_stop':
       return undefined as T;
     case 'midi_ports':
-      return (
-        firmware.page
-          ? firmware.ports()
-          : query.get('page') === 'run'
-            ? [remotePort]
-            : ['Elektron Digitakt II', remotePort, 'IAC Driver Bus 1']
-      ) as T;
+      return firmware.midi.ports() as T;
     case 'midi_open':
+      firmware.midi.open(String(args?.name));
       return undefined as T;
     case 'midi_close':
       firmware.midi.close();
@@ -86,6 +87,12 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
       return undefined as T;
     case 'midi_recv':
       return (await firmware.midi.recv(Number(args?.timeoutMs))) as T;
+    case 'bulk_list':
+      return [] as T;
+    case 'dkprof_wasm':
+      return (await (await fetch(dkprofUrl)).arrayBuffer()) as T;
+    case 'sample_wasm':
+      return (await (await fetch(sampleUrl)).arrayBuffer()) as T;
     case 'patchkit_wasm':
       return (await firmware.patchkitWasm()) as T;
     case 'firmware_prepare':
@@ -107,7 +114,7 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
         name,
         text: new TextDecoder().decode(args as Uint8Array),
       });
-      return `/Users/em/Downloads/${name}` as T;
+      return `${previewHome}/Downloads/${name}` as T;
     }
     case 'emu_call': {
       const method = String(args?.method);
@@ -126,12 +133,14 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
           symbols: {},
         } as T;
       }
-      if (method === 'firmware.load') return (await emulator.load()) as T;
+      if (method === 'input.button') return emulator.screen.key(args.params.code, args.params.down) as T;
+      if (method === 'input.turn') return emulator.screen.turn(args.params.encoder, args.params.detents) as T;
+      if (method === 'firmware.load') return (await emulator.load(!!args.params.runtime, !!args.params.dsp)) as T;
       if (method === 'restart') return (await reloadCard()) as T;
       if (method === 'status')
         return {
           mode: sim.paused ? 'paused' : 'running',
-          firmware: { runtime: { patched: true, set: 'core/dynreg' } },
+          ...emulator.status(),
         } as T;
       if (method.startsWith('card.'))
         return (await cardCall(method, (args?.params as Record<string, unknown>) ?? {})) as T;

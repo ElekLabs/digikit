@@ -2,7 +2,6 @@
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
 import {
-  type ComponentProps,
   For,
   Show,
   batch,
@@ -143,7 +142,6 @@ const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
 export interface ConsoleOptions {
   initialPage?: Page;
   browserPreview?: boolean;
-  files?: Pick<ComponentProps<typeof FilesPage>, 'store' | 'library'>;
   logSources?: Pick<FollowEnv, 'emulator' | 'device'>;
   initialDockHeight?: number;
 }
@@ -1266,8 +1264,7 @@ export default function Console(
           <Show when={page() === 'files' && !app.target.switching() && selected()} keyed>
             {(ops) => (
               <FilesPage
-                store={props.files?.store ?? ops.store}
-                library={props.files?.library}
+                store={ops.store}
                 refresh={cardRefresh}
                 halted={() =>
                   target().kind === 'emulator' && paused()

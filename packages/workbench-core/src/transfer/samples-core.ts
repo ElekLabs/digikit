@@ -61,7 +61,7 @@ export interface LocalRow {
   sample?: Prepared['kind'];
 }
 
-/** The last part of a path (`/Users/em/samples` is `samples`; either separator). */
+/** The last part of a path (`/Users/preview/samples` is `samples`; either separator). */
 export const baseName = (path: string): string => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 /** The breadcrumb of the local folder: the chosen folder by its name, then one crumb per level. */

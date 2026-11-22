@@ -1,6 +1,6 @@
 // The names of the fake emulator in the preview (log=crash): the app's own `createEmulatorNames` and dkprof.wasm over a fake Host whose controller
 // answers `runtime.maps` for a small ship map and one module map; the load table is read through PEEK of the fake session (runtime-log-mock.ts).
-import dkprofUrl from '../../../web/public/dkprof.wasm?url';
+import type { Host } from '@digi/workbench-core/host/host.ts';
 import { createDkProfLoader } from '../src/dkprof-env';
 import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 import { createEmulatorNames } from '../src/log-names-backend';
@@ -28,14 +28,16 @@ const moduleMap = {
   key: { module: 'test/dyn-demo' },
   entries: [entry(0, 0x40, 'init', 'test/dyn-demo'), entry(0x40, 0x40, 'render', 'test/dyn-demo')],
 };
-const host = createFakeHost({
-  'rpc.call': async () => ({
-    image_sha256: 'preview',
-    matches: true,
-    ship: JSON.stringify(ship),
-    symbols: { DKRT_STATE: PREVIEW_STATE },
-  }),
-  'library.readMaps': { ships: [], modules: [{ id: 'test/dyn-demo', json: JSON.stringify(moduleMap) }] },
-  'firmware.dkprofWasm': async () => (await fetch(dkprofUrl)).arrayBuffer(),
-});
-export const previewNames = createEmulatorNames(host, createDkProfLoader(host));
+export function createPreviewNames(firmware: Host['firmware']) {
+  const host = createFakeHost({
+    'rpc.call': async () => ({
+      image_sha256: 'preview',
+      matches: true,
+      ship: JSON.stringify(ship),
+      symbols: { DKRT_STATE: PREVIEW_STATE },
+    }),
+    'library.readMaps': { ships: [], modules: [{ id: 'test/dyn-demo', json: JSON.stringify(moduleMap) }] },
+    'firmware.dkprofWasm': firmware.dkprofWasm,
+  });
+  return createEmulatorNames(host, createDkProfLoader(host));
+}
