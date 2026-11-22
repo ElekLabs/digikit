@@ -81,3 +81,65 @@ it('shows what Nx said when no task ran', () => {
   filter.end(0);
   expect(printed[0]).toBe(' NX   No tasks were run');
 });
+
+const compact = (text: string, status: number) => {
+  const printed: string[] = [];
+  const filter = new NxCompactor({ print: (l: string) => printed.push(l) });
+  filter.push(text);
+  filter.end(status);
+  return { printed, tasks: filter.tasks, out: printed.join('\n') };
+};
+
+const SECTION = (id: string, note = '') =>
+  `> nx run ${id}${note ? `  ${note}` : ''}\n\n> some command\n\nrt.dko.json: unchanged\n\n`;
+
+it('does not fail a task whose output was shown and whose tick never came', () => {
+  const text = `✔  nx run a:pack\n${SECTION('core/runtime:build-objects')}✔  nx run b:pack\n\n NX   Successfully ran target x for project y\n`;
+  const { tasks, out } = compact(text, 0);
+  expect(tasks.map((t) => [t.id, t.ok])).toEqual([
+    ['a:pack', true],
+    ['core/runtime:build-objects', true],
+    ['b:pack', true],
+  ]);
+  expect(out).toMatch(/nx: 3 ok, 0 failed/);
+});
+
+it('starts a section at a header with a cache note and keeps the note', () => {
+  const note = '[existing outputs match the cache, left as is]';
+  const text = `${SECTION('core/runtime:build-objects')}${SECTION('core/runtime:test-assembly', note)}warning: x\n\n NX   Successfully ran target x\n`;
+  const { tasks, out } = compact(text, 0);
+  expect(tasks.map((t) => t.id)).toEqual(['core/runtime:build-objects', 'core/runtime:test-assembly']);
+  expect(tasks[0].output).not.toContain('warning: x');
+  expect(tasks[1].output).toContain('warning: x');
+  expect(tasks[1].cache).toBe(note);
+  expect(out).toContain(`✔ core/runtime:test-assembly  ${note}`);
+});
+
+it('still fails a task with a failure tick or one listed under Failed tasks', () => {
+  const tick = compact('✖  nx run a:t\n✔  nx run b:t\n', 1);
+  expect(tick.tasks.map((t) => [t.id, t.ok])).toEqual([
+    ['a:t', false],
+    ['b:t', true],
+  ]);
+  const listed =
+    `${SECTION('good:t')}> nx run bad:t\n\n FAIL  p  f.test.ts > x\nAssertionError: boom\n\n` +
+    ' NX   Running target t for 2 projects failed\n\nFailed tasks:\n\n- bad:t\n\n Hint: see log\n';
+  const { tasks, out } = compact(listed, 1);
+  expect(tasks.map((t) => [t.id, t.ok])).toEqual([
+    ['good:t', true],
+    ['bad:t', false],
+  ]);
+  expect(out).toContain('  | AssertionError: boom');
+  expect(out).toMatch(/nx: 1 ok, 1 failed/);
+});
+
+it('with a non-zero exit and no list, fails the section that holds a failure block', () => {
+  const text = `${SECTION('good:t')}> nx run bad:t\n\n FAIL  p  f.test.ts > x\nAssertionError: boom\n\n✔  nx run c:t\n`;
+  const { tasks, out } = compact(text, 1);
+  expect(tasks.map((t) => [t.id, t.ok])).toEqual([
+    ['good:t', true],
+    ['bad:t', false],
+    ['c:t', true],
+  ]);
+  expect(out).toContain('  | AssertionError: boom');
+});
