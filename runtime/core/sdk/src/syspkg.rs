@@ -77,7 +77,11 @@ impl Header {
 
     /// Can a core whose resident table is `resident_major.resident_minor` run this package?
     pub fn compatible(&self, resident_major: u16, resident_minor: u16) -> bool {
-        self.table_major == resident_major && self.table_minor <= resident_minor
+        crate::table_version::check(
+            (self.table_major, self.table_minor),
+            (resident_major, resident_minor),
+        )
+        .is_ok()
     }
 
     /// Does a body of `len` bytes with digest `sha256` (as the caller computed it) match the header?

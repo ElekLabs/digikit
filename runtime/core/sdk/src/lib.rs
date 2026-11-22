@@ -339,6 +339,9 @@ pub mod capacity;
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").
 pub mod settings;
 
+/// The one rule of resident table versions, shared by the package header and the table check.
+pub mod table_version;
+
 /// The header of the system package, shared by the resident stage 1 and patchkit's packer.
 pub mod syspkg;
 
