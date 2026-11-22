@@ -67,6 +67,7 @@ export const CMD = {
   RELOAD_STATE: 0x07,
   LOAD: 0x08,
   UNLOAD: 0x09,
+  RETRY: 0x0b,
   BEGIN: 0x10,
   DATA: 0x11,
   END: 0x12,

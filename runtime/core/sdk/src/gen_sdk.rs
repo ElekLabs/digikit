@@ -288,6 +288,7 @@ pub mod proto {
     pub const CMD_RELOAD_STATE: u8 = 0x07;
     pub const CMD_LOAD: u8 = 0x08;
     pub const CMD_UNLOAD: u8 = 0x09;
+    pub const CMD_RETRY: u8 = 0x0b;
     pub const CMD_BEGIN: u8 = 0x10;
     pub const CMD_DATA: u8 = 0x11;
     pub const CMD_END: u8 = 0x12;

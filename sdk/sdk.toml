@@ -1879,9 +1879,10 @@ SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit
 FAULT = 0x23        # dev: make the runtime fail on purpose to test the fault path; body byte 0 = 1: a Rust panic (a bounds check)
 SELECT = 0x30
 RESTART = 0x31
+RETRY = 0x0b        # the resident core's own command: clear the boot counter without an upload, so that the next boot tries the system package again (a core-only boot caused by crashes keeps its counter until the package file is written; writing digikit/system.dksp through the store clears it too). No body; status 0, or E_INUSE (the card is not writable: the counter cannot be written), E_STATE (an upload is open or a store write is in flight). The counter changes on the card only; this boot goes on as it is: RESTART follows
 
 [protocol.ranges]   # command numbers a run-time module may register with dk_host_register (a request number is 6 bits: bit 6 of the command byte marks a reply)
-# 0x0b-0x0f are reserved for the commands of test fixtures and are never built-in commands (the built-in numbers are in [protocol.commands]); 0x0a is the debug module's SETUP; `ui_views_test` is the first fixture.
+# 0x0c-0x0f are reserved for the commands of test fixtures and are never built-in commands (the built-in numbers are in [protocol.commands], RETRY took 0x0b: the 6-bit command space has no other free number); 0x0a is the debug module's SETUP; `ui_views_test` is the first fixture.
 ui_views_test = [0x0f, 0x0f]   # test/ui-views: its report (rows, views, text input); with a body byte 1 it closes its overlay
 remote = [0x38, 0x3d]   # digikit/remote: key and turn of the panel (docs/plans/remote-control.md)
 remote_state = [0x3e, 0x3f]   # digikit/remote: the state

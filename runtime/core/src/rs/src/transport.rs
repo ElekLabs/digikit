@@ -273,7 +273,7 @@ unsafe fn run_builtin(ent: Option<&Cmd>, cmd: u8, seq: u32, buf: *mut u8, body: 
 pub(crate) use dkrt_abi::command::{Cmd, BIG, NOLOG, STORE};
 
 /// The commands of the resident core, looked up one after the other (a jump table is not ColdFire code); the others are the system package's (`hooks::command_flags`).
-pub(crate) static CMDS: [Cmd; 16] = [
+pub(crate) static CMDS: [Cmd; 17] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG | STORE, h: h_info },
     Cmd { cmd: CMD_LIST, flags: STORE, h: h_list },
     Cmd { cmd: CMD_BEGIN, flags: STORE, h: h_begin },
@@ -290,6 +290,7 @@ pub(crate) static CMDS: [Cmd; 16] = [
     Cmd { cmd: CMD_FAULT, flags: 0, h: h_fault },
     Cmd { cmd: CMD_SELECT, flags: BIG, h: h_select },
     Cmd { cmd: CMD_RESTART, flags: 0, h: h_restart },
+    Cmd { cmd: CMD_RETRY, flags: 0, h: h_retry },
 ];
 
 pub(crate) fn find(cmd: u8) -> Option<&'static Cmd> {

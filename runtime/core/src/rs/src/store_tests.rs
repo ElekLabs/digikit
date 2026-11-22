@@ -95,7 +95,7 @@ pub(crate) fn pattern(n: usize, m: usize) -> Vec<u8> {
     (0..n).map(|i| (i * m + 1) as u8).collect()
 }
 
-fn slot(data: &[u8]) -> [u8; 32] {
+pub(crate) fn slot(data: &[u8]) -> [u8; 32] {
     unsafe { hash32::slot_of(data.as_ptr(), data.len() as u32) }
 }
 
@@ -142,7 +142,7 @@ fn delete(path: &str) -> i32 {
     send(store_cmds::cmd_delete, &zpath(path))
 }
 
-fn rename(from: &str, to: &str) -> i32 {
+pub(crate) fn rename(from: &str, to: &str) -> i32 {
     let mut b = zpath(from);
     b.extend(zpath(to));
     send(store_cmds::cmd_rename, &b)
@@ -154,7 +154,7 @@ fn clear_with(magic: u32) -> i32 {
     send(store_cmds::cmd_clear, &b)
 }
 
-fn begin(path: &str, size: usize, sha: [u8; 32]) -> i32 {
+pub(crate) fn begin(path: &str, size: usize, sha: [u8; 32]) -> i32 {
     let mut b = zpath(path);
     let at = b.len();
     b.extend([0u8; 4 + 32]);
@@ -343,7 +343,7 @@ fn the_last_file_of_the_store_reads_to_its_end_and_a_whole_sector_file_gives_its
 struct Aligned([u8; 8192]);
 
 /// Run `f` as a step of an I/O job of `OWNER`: the context `file_*` calls need.
-fn in_step<R>(f: impl FnOnce() -> R) -> R {
+pub(crate) fn in_step<R>(f: impl FnOnce() -> R) -> R {
     unsafe { crate::io::test_in_step(OWNER, f) }
 }
 
@@ -354,7 +354,7 @@ fn sdk_open(root: u32, path: &str, size: usize, flags: u32) -> i32 {
 }
 
 /// `file_create`, `file_write`, `file_close`: the first status that is not OK (the handle counts as OK).
-fn sdk_put(root: u32, path: &str, bytes: &[u8], flags: u32) -> i32 {
+pub(crate) fn sdk_put(root: u32, path: &str, bytes: &[u8], flags: u32) -> i32 {
     assert!(bytes.len() <= 8192);
     let mut buf = Aligned([0; 8192]);
     buf.0[..bytes.len()].copy_from_slice(bytes);
@@ -379,7 +379,7 @@ fn sdk_delete(root: u32, path: &str) -> i32 {
 }
 
 const SAMPLES: u32 = dkrt_sdk::files::SAMPLES;
-const STORE: u32 = dkrt_sdk::files::STORE;
+pub(crate) const STORE: u32 = dkrt_sdk::files::STORE;
 
 // ---- write sessions -------------------------------------------------------------------------------------------------------------------
 

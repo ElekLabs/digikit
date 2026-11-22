@@ -421,6 +421,10 @@ unsafe fn do_commit_hinted(b: &Bufs, cur: &Hdr, edit: Edit, pend: Option<(u32, u
         Some(k) if k.valid && k.h == *cur && k.n == extra.len() && same_extents(&k.extra[..k.n], extra) => Some(k.at),
         _ => None,
     };
+    if edit_names_package(edit) {
+        // the commit puts a file at the system package's path: the safe-mode owner decides what that means for the boot counter, before the commit writes
+        crate::safe_mode::package_written_with(&PLATFORM);
+    }
     match store::commit_at(&io(), &lay(), cur, b.tin, b.tout, TBL_CAP, b.scr, edit, extra, at) {
         Ok(c) => {
             crate::store::note_commit(&c.h);
@@ -428,6 +432,39 @@ unsafe fn do_commit_hinted(b: &Bufs, cur: &Hdr, edit: Edit, pend: Option<(u32, u
         }
         Err(e) => pe(e),
     }
+}
+
+/// Does `edit` put a file at the system package's path (`digikit/system.dksp`)? Compares the NUL-terminated path that starts the entry.
+unsafe fn edit_names_package(edit: Edit) -> bool {
+    if let Edit::Insert(ent) = edit {
+        return is_package_path(ent);
+    }
+    if let Edit::InsertMany(ents, n) = edit {
+        let mut i = 0;
+        while i < n {
+            if is_package_path(*ents.add(i)) {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+    if let Edit::Rename(_, to, _) = edit {
+        return is_package_path(to);
+    }
+    false
+}
+
+unsafe fn is_package_path(ent: *const u8) -> bool {
+    let want = crate::stage1::PACKAGE_PATH;
+    let mut i = 0;
+    while i < want.len() {
+        if *ent.add(i) != want[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 fn same_extents(a: &[(u32, u32)], b: &[(u32, u32)]) -> bool {

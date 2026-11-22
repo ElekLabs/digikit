@@ -128,6 +128,20 @@ pub(crate) unsafe fn cmd_fault(seq: u32, body: *const u8, blen: usize) -> i32 {
     reply(CMD_FAULT, seq, OK, a[i] as usize)
 }
 
+/// RETRY (resident core): clear the boot counter in the selection record without an upload, so that the next boot tries the system package again
+/// (`safe_mode::package_written_with`, the call that writing `digikit/system.dksp` makes too). No body. Status: 0, `E_STATE` while an upload is open or a store
+/// operation is in flight, `E_INUSE` when the card is not writable (a counter that cannot be written is not cleared either).
+pub(crate) unsafe fn cmd_retry(seq: u32) -> i32 {
+    if sw::is_open() || sw::is_locked() {
+        return reply(CMD_RETRY, seq, E_STATE, 0);
+    }
+    if !card::writable() {
+        return reply(CMD_RETRY, seq, E_INUSE, 0);
+    }
+    crate::safe_mode::package_written_with(&crate::platform::PLATFORM);
+    reply(CMD_RETRY, seq, OK, 0)
+}
+
 /// Ticks to wait for the reply to leave the TX ring, at most, before the restart goes anyway.
 pub(crate) const RESTART_TICKS_MAX: u32 = 4000;
 /// 0: no restart pending; else 1 + the UI passes waited so far.
@@ -175,3 +189,6 @@ pub(crate) unsafe fn h_restart(seq: u32, _buf: *mut u8, _body: *const u8, _blen:
     cmd_restart(seq)
 }
 
+pub(crate) unsafe fn h_retry(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> i32 {
+    cmd_retry(seq)
+}
