@@ -1,7 +1,7 @@
 //! The device object `dkrt_dev` (struct `DkrtDevice` of `abi.toml`): the facts that differ between devices, as data. The runtime is one image
 //! for all devices and has no device value in its code; `patchkit gen` writes the object from the device files (the `gas-dkdv` kind of
 //! module.toml) and patchkit places it in `cf.expansion` with the runtime. This module is the one reader of the object: `RealPlatform` (`platform.rs`) fills
-//! its `DeviceProfile` from it, and the rest of the runtime asks the profile (`crate::profile()`, `Platform::has_dsp` and the other facts); a service takes
+//! its `DeviceProfile` from it, and the rest of the runtime asks the profile (`crate::platform::profile()`, `Platform::has_dsp` and the other facts); a service takes
 //! its profile from the generated table by device id. Host tests run `RealPlatform` as a device profile (`platform::with_profile`), so only `valid` and the
 //! tests of this file read the object.
 #![cfg_attr(test, allow(dead_code))]
@@ -204,8 +204,8 @@ mod tests {
 
     #[test]
     fn without_the_safe_key_capability_no_key_starts_safe_mode() {
-        with_profile(device(|p| p.safe_key = None), || assert_eq!(crate::PLATFORM.safe_key(), None));
-        assert_eq!(crate::PLATFORM.safe_key(), Some(19));
+        with_profile(device(|p| p.safe_key = None), || assert_eq!(crate::platform::PLATFORM.safe_key(), None));
+        assert_eq!(crate::platform::PLATFORM.safe_key(), Some(19));
     }
 
     #[test]
@@ -220,9 +220,9 @@ mod tests {
             p.dsp_block_cycles = 0;
         }), || unsafe {
             assert_eq!(crate::dsp::area_bytes(), 0);
-            assert_eq!(crate::dkrt_blocks(), 0);
+            assert_eq!(crate::health::dkrt_blocks(), 0);
             let mut h: DkrtHealth = core::mem::zeroed();
-            crate::dkrt_health_light(&mut h, false);
+            crate::health::dkrt_health_light(&mut h, false);
             assert!(h.flags & HEALTH_NO_DSP != 0 && h.flags & HEALTH_DSP == 0);
             assert_eq!((h.dsp_area_total, h.dsp_area_free, h.dsp_area_largest), (0, 0, 0));
         });
@@ -230,7 +230,7 @@ mod tests {
         with_profile(device(|p| p.has_store = false), || unsafe {
             assert_ne!(crate::dsp::area_bytes(), 0);
             let mut h: DkrtHealth = core::mem::zeroed();
-            crate::dkrt_health_light(&mut h, false);
+            crate::health::dkrt_health_light(&mut h, false);
             assert!(h.flags & HEALTH_NO_DSP == 0);
         });
     }
@@ -246,13 +246,13 @@ mod tests {
             // a card write is refused: the card never counts as ours
             assert!(!crate::card::writable());
             let mut h: DkrtHealth = core::mem::zeroed();
-            crate::dkrt_health_light(&mut h, false);
+            crate::health::dkrt_health_light(&mut h, false);
             assert_eq!(h.store_total, 0);
         });
     }
 
     #[test]
     fn without_an_sdhc_controller_the_card_is_never_busy() {
-        with_profile(device(|p| p.has_sdhc = false), || assert!(!unsafe { crate::card_busy() }));
+        with_profile(device(|p| p.has_sdhc = false), || assert!(!unsafe { crate::api::card_busy() }));
     }
 }

@@ -5,7 +5,8 @@
 //! words through `DevAddr::ptr` and `of_ptr` (plain, not `mem::read32`: the arena is ordinary RAM that only this module
 //! touches, and a volatile read would keep the compiler from combining the free list's reads).
 
-use crate::{st, ARENA_BYTES, DKRT_ARENA};
+use crate::{platform::st, state::DKRT_ARENA};
+use dkrt_sdk::ARENA_BYTES;
 use core::ptr::{addr_of_mut, null_mut};
 use dkrt_abi::dev_addr::DevAddr;
 
@@ -40,9 +41,9 @@ pub unsafe fn init() {
 /// A block of at least `n` bytes, 16-byte aligned; `NULL` when none fits.
 pub unsafe fn alloc(n: u32) -> DevAddr {
     // dk_alloc runs in any task: the free list walk is one critical section (the mask nests).
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let a = alloc_walk(n);
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     DevAddr::of_ptr(a)
 }
 
@@ -85,9 +86,9 @@ unsafe fn alloc_walk(n: u32) -> *mut u8 {
 
 /// Return a block. An address that is not a live block of this arena is ignored; returns whether it was freed.
 pub unsafe fn free(p: DevAddr) -> bool {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let freed = free_walk(p.get());
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     freed
 }
 

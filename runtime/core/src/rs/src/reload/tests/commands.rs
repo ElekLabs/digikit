@@ -54,7 +54,7 @@ fn a_service_queues_a_live_job_and_reads_its_state_through_the_core_imports() {
     let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // `dkrt_live` runs `init_once`, which sets up the arena at a 32-bit address that a 64-bit host cannot write: the runtime counts as initialised
-        crate::st().magic = crate::state::STATE_MAGIC;
+        crate::platform::st().magic = crate::state::STATE_MAGIC;
         *job() = Job::new();
         // the refusals are those of `dkrt_live`: no loaded module came from the path, an empty path, an unknown op; nothing is queued
         assert_eq!(dkc_live(LIVE_RELOAD, b"mods/x.dkm\0".as_ptr()), E_NOT_FOUND);
@@ -83,10 +83,10 @@ fn a_service_cannot_load_unload_or_reload_the_file_of_a_loaded_service() {
     use crate::svc_imports::shims::dkc_live;
     let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        crate::st().magic = crate::state::STATE_MAGIC;
+        crate::platform::st().magic = crate::state::STATE_MAGIC;
         *job() = Job::new();
         // a loaded service: the first provider record, with its path
-        let rec = crate::MAX_MODULES;
+        let rec = dkrt_abi::MAX_MODULES;
         let path = b"services/svc.dks\0";
         crate::loader::records::module(rec).used = 1;
         crate::loader::records::path(rec)[..path.len()].copy_from_slice(path);

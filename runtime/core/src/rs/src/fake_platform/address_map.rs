@@ -4,7 +4,8 @@
 //! mapping covers. An address that nothing covers is an error of the test, not of the code under test: every lookup answers `None` and `DevAddr` panics with the address.
 
 use core::cell::{Cell, RefCell};
-use crate::{ARENA_BYTES, DKRT_ARENA};
+use dkrt_sdk::ARENA_BYTES;
+use crate::{state::DKRT_ARENA};
 use core::ops::Range;
 use core::ptr::addr_of_mut;
 use dkrt_abi::dev_addr::{install, with_space, AddressSpace, SpaceGuard};

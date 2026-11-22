@@ -59,17 +59,17 @@ pub unsafe extern "C" fn dk_dsp_stats_ctl(on: u32, clear: u32) -> i32 {
     if !ARMED || clear != LAST_CLEAR {
         // the DSP clears its window for the new generation: the sweep the mirror holds, and what it counted, are stale. The block interrupt feeds the mirror:
         // it is masked while the main context starts it again.
-        let sr = crate::irq_mask();
+        let sr = crate::platform::irq_mask();
         LAST_CLEAR = clear;
         ARMED = true;
         mirror().reset_for(clear as u8);
-        crate::irq_restore(sr);
+        crate::platform::irq_restore(sr);
     }
     set_hook(if on & 1 != 0 { dkrt_dsp_stats_feed as usize } else { 0 });
     let l = crate::link::lk();
     l.set_stats_ctl(STATS_ON, on & 1);
     l.set_stats_ctl(STATS_CLEAR, clear);
-    l.set_stats_ctl(STATS_PERIOD, crate::profile().dsp_block_cycles);
+    l.set_stats_ctl(STATS_PERIOD, crate::platform::profile().dsp_block_cycles);
     OK
 }
 

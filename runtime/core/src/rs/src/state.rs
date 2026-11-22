@@ -77,7 +77,7 @@ pub static mut DKRT_MENU_OBJS: [u8; MAX_MODULES] = [0; MAX_MODULES];
 
 /// Was a menu object built for module record `rec` (`dkrt_menu_built`)?
 pub(crate) unsafe fn menus_held(rec: usize) -> bool {
-    rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(DKRT_MENU_OBJS[rec])) != 0
+    rec < dkrt_abi::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(DKRT_MENU_OBJS[rec])) != 0
 }
 
 /// Bit 31 of the `.dkm` header word at 0x30: the module was built with `DK_TRACE`; the other bits are the runtime version it needs.

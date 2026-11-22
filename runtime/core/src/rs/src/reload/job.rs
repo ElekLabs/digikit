@@ -132,7 +132,7 @@ impl Job {
         if op != LIVE_LOAD && op != LIVE_UNLOAD && op != LIVE_RELOAD {
             return dkrt_sdk::proto::E_MSG;
         }
-        let n = crate::cstr_len(path, 64);
+        let n = dkrt_abi::mem::cstr_len(path, 64);
         if n == 0 || n >= 64 {
             return dkrt_sdk::proto::E_MSG;
         }

@@ -37,7 +37,7 @@ impl BootEnv for RealBootEnv {
     type P = RealPlatform;
 
     fn platform(&self) -> &RealPlatform {
-        &crate::PLATFORM
+        &crate::platform::PLATFORM
     }
     unsafe fn settings_load(&self) {
         crate::settings::load()

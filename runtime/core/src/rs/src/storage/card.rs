@@ -20,7 +20,8 @@
 //!
 //! The reads go through the staging buffer (`DKRT_STAGE`), so `check` must not run while a module file is staged: the boot hook runs it first.
 use crate::dlog;
-use crate::{rd32, DKRT_STAGE, PLATFORM};
+use dkrt_abi::mem::rd32;
+use crate::{state::DKRT_STAGE, platform::PLATFORM};
 use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::sel;
@@ -74,7 +75,7 @@ pub fn info() -> &'static mut CardInfo {
 /// The state of the card's store area. A device without a store (`DEV_HAS_STORE` clear) has the state of a card too small for one: nothing is read or
 /// written, uploads answer `E_NOSTORE`, the boot goes on.
 pub fn state() -> u32 {
-    if !crate::has_store() {
+    if !crate::platform::has_store() {
         return CARD_TOO_SMALL;
     }
     unsafe { read_volatile(addr_of!(DKRT_CARD.state)) }

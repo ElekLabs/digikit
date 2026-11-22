@@ -75,7 +75,7 @@ pub(crate) unsafe extern "C" fn debug_setup(op: u32, track: u32, ty: u32) -> i32
     if !setup_args_ok(&platform::profile(), &crate::module_cmds::machine_type_loaded, op, track, ty) {
         return E_RANGE;
     }
-    crate::PLATFORM.set_track_type(op, track, ty)
+    crate::platform::PLATFORM.set_track_type(op, track, ty)
 }
 
 /// A machine type is one of the device's stock types (`0 .. stock_machine_types`) or a run-time type of a loaded module (`loaded`): the built-in rows between them,
@@ -118,7 +118,7 @@ mod setup_tests {
 /// Import `dk_debug_track_type`: the machine type of a track of the active kit, from the firmware's own accessors (read-only); -1 past track 15 or when the
 /// firmware has no type for it, -2 when there is no project yet.
 pub(crate) unsafe extern "C" fn debug_track_type(track: u32) -> i32 {
-    match crate::PLATFORM.track_type(track) {
+    match crate::platform::PLATFORM.track_type(track) {
         None => -2,
         Some(t) => t,
     }
@@ -233,7 +233,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
             }
             e += 1;
         }
-        v = kind_value(&crate::PLATFORM, &table, k, v);
+        v = kind_value(&crate::platform::PLATFORM, &table, k, v);
         *out.add(k) = DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 };
         k += 1;
     }

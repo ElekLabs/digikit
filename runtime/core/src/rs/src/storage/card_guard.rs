@@ -64,8 +64,8 @@ pub unsafe fn tick_with<P: Platform>(p: &P, reported: *mut u32, last: *mut u32, 
 
 /// Called from the UI tick. The clock is the firmware's block counter; without it (no core/health) the UI pass count, which only ever rises too.
 pub unsafe fn tick() {
-    let now = crate::fw_blocks().unwrap_or_else(|| crate::platform::st().ticks);
-    tick_with(&crate::PLATFORM, addr_of_mut!(REPORTED), addr_of_mut!(LAST_EVENT), addr_of_mut!(RAISED), now);
+    let now = crate::platform::fw_blocks().unwrap_or_else(|| crate::platform::st().ticks);
+    tick_with(&crate::platform::PLATFORM, addr_of_mut!(REPORTED), addr_of_mut!(LAST_EVENT), addr_of_mut!(RAISED), now);
 }
 
 #[cfg(test)]

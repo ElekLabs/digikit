@@ -2,7 +2,9 @@
 //! The loader calls `head` first, then its import check, then `sections`. Each returns the error code the loader returns.
 
 use crate::sha256::Sha;
-use crate::{cstr_len, rd32};
+use dkrt_abi::mem::cstr_len;
+use dkrt_abi::mem::rd32;
+
 use dkrt_sdk::*;
 
 const MAGIC: u32 = dkneeds::MAGIC;
@@ -59,7 +61,7 @@ pub unsafe fn head(f: *const u8, size: u32) -> Result<Head, i32> {
     }
     // the runtime version the module needs: another major or minor than the runtime's, or a higher patch, refuses (0.x: a minor breaks)
     let needs = rd32(f.add(dkneeds::H_RUNTIME as usize));
-    if !crate::runtime_accepts(needs) {
+    if !crate::state::runtime_accepts(needs) {
         return Err(E_CONTRACT);
     }
     let name = f.add(dkneeds::H_NAME as usize);
@@ -84,7 +86,7 @@ pub unsafe fn head(f: *const u8, size: u32) -> Result<Head, i32> {
         || align & (align - 1) != 0
         || image_size == 0
         || image_size > size
-        || bss > crate::ARENA_BYTES as u32
+        || bss > dkrt_sdk::ARENA_BYTES as u32
     {
         return Err(E_FORMAT);
     }
@@ -166,7 +168,7 @@ pub unsafe fn relocate(mem: *mut u8, f: *const u8, head: &Head, base: u32, impor
             imports[(kind & 0xff_ffff) as usize]
         };
         let p = mem.add(off);
-        crate::wr32(p, rd32(p).wrapping_add(add));
+        dkrt_abi::mem::wr32(p, rd32(p).wrapping_add(add));
     }
 }
 
@@ -304,7 +306,7 @@ mod tests {
         refuses(dkneeds::H_ALIGN, 3, E_FORMAT);
         refuses(dkneeds::H_IMAGE_SIZE, 0, E_FORMAT);
         refuses(dkneeds::H_IMAGE_SIZE, LEN as u32 + 1, E_FORMAT);
-        refuses(dkneeds::H_BSS, crate::ARENA_BYTES as u32 + 1, E_FORMAT);
+        refuses(dkneeds::H_BSS, dkrt_sdk::ARENA_BYTES as u32 + 1, E_FORMAT);
     }
 
     #[test]

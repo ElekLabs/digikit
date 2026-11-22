@@ -70,8 +70,8 @@ impl<P: Platform, M: Images, R: Registry> RoleSteps<P, M, R> {
 
 unsafe fn module_check<P: Platform, M: Images, R: Registry>(_: &mut Loader<P, M, R>, file: *const u8, _: &Head) -> i32 {
     // only the role is checked here; a table outside the file or damaged keeps the error of the later steps
-    let (off, len) = (crate::rd32(file.add(super::H_REG_OFF)), crate::rd32(file.add(super::H_REG_SIZE)));
-    let size = crate::rd32(file.add(dkneeds::H_SIZE as usize));
+    let (off, len) = (dkrt_abi::mem::rd32(file.add(super::H_REG_OFF)), dkrt_abi::mem::rd32(file.add(super::H_REG_SIZE)));
+    let size = dkrt_abi::mem::rd32(file.add(dkneeds::H_SIZE as usize));
     if !super::in_file(off, len, size) {
         return OK;
     }
@@ -153,11 +153,11 @@ pub unsafe fn image_fw_id<P: Platform>(p: &P) -> Option<[u8; 8]> {
 }
 
 unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
-    if !l.r.abi_ok(crate::rd32(file.add(dkneeds::H_SVC_ABI as usize))) {
+    if !l.r.abi_ok(dkrt_abi::mem::rd32(file.add(dkneeds::H_SVC_ABI as usize))) {
         return E_SVC_ABI;
     }
-    let (off, len) = (crate::rd32(file.add(super::H_REG_OFF)), crate::rd32(file.add(super::H_REG_SIZE)));
-    let size = crate::rd32(file.add(dkneeds::H_SIZE as usize));
+    let (off, len) = (dkrt_abi::mem::rd32(file.add(super::H_REG_OFF)), dkrt_abi::mem::rd32(file.add(super::H_REG_SIZE)));
+    let size = dkrt_abi::mem::rd32(file.add(dkneeds::H_SIZE as usize));
     if !super::in_file(off, len, size) {
         return E_FORMAT;
     }
@@ -222,7 +222,7 @@ pub(super) unsafe fn filter_hooks<P: Platform, M: Images, R: Registry>(l: &Loade
 
 /// The provider index of record `rec`.
 fn index_of(rec: usize) -> usize {
-    rec - crate::MAX_MODULES
+    rec - dkrt_abi::MAX_MODULES
 }
 
 unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, rec: usize, a: &PlaceArgs) -> i32 {
@@ -266,8 +266,8 @@ unsafe fn service_place<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M
 /// otherwise); the image starts with the `rts` that every `dk_ret_` resolves to and its bss holds the copies of the sites; every site is one the runtime can use; and
 /// the live bytes of each site that is copied are the stock ones (the check value, `E_HOOK_STOCK`).
 unsafe fn port_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {
-    let (off, len) = (crate::rd32(file.add(super::H_REG_OFF)), crate::rd32(file.add(super::H_REG_SIZE)));
-    let size = crate::rd32(file.add(dkneeds::H_SIZE as usize));
+    let (off, len) = (dkrt_abi::mem::rd32(file.add(super::H_REG_OFF)), dkrt_abi::mem::rd32(file.add(super::H_REG_SIZE)));
+    let size = dkrt_abi::mem::rd32(file.add(dkneeds::H_SIZE as usize));
     if !super::in_file(off, len, size) {
         return E_FORMAT;
     }

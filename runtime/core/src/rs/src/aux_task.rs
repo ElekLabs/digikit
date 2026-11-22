@@ -47,7 +47,7 @@ static mut CTX: *mut u8 = core::ptr::null_mut();
 #[cfg(not(test))]
 mod kernel {
     use super::*;
-    use crate::PLATFORM;
+    use crate::platform::PLATFORM;
     use dkrt_abi::platform::Tasking;
 
     pub unsafe fn create() -> bool {
@@ -105,7 +105,7 @@ extern "C" fn entry() -> ! {
 }
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    dkrt_abi::platform::locked(&crate::PLATFORM, f)
+    dkrt_abi::platform::locked(&crate::platform::PLATFORM, f)
 }
 
 /// Create the task when it does not exist yet (the same hand-over as `io::ensure_task`: a second caller meanwhile gets false).

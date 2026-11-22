@@ -6,7 +6,7 @@
 //! by one: on overflow, on a bad argument or outside `init` it returns an error and the first error is kept. The commit (`loader::commit`) reports it, compares the declarations
 //! with the header table (`decl_matches`) and appends the generic records to the block the services write. The record block stays in the arena while the module is loaded
 //! (`BLOCKS`); the `MODULE_COMMIT` event carries its address and size.
-use crate::MAX_MODULES;
+use dkrt_abi::MAX_MODULES;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::service::{DeclItem, Declare, RecordSink};

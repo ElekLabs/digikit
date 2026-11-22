@@ -162,7 +162,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             i += 1;
         }
         m.version = rd32(f.add(H_VERSION));
-        records::set_runtime(rec, needs & !crate::FLAG_TRACE);
+        records::set_runtime(rec, needs & !crate::state::FLAG_TRACE);
         m.base = base;
         m.size = total;
         m.fini = if fini == NONE { 0 } else { base + fini };

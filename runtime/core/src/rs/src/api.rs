@@ -1,7 +1,7 @@
 //! The public C ABI of the runtime: load, poll functions, module and effect listings, the selection, boot info and restart.
 
 use crate::platform::st;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use crate::state::{init_once, DKRT_UNLOAD_OBSERVERS, OBSERVERS, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
 use crate::{boot, dlog, dsp, entry, loader, scan, settings};
@@ -307,7 +307,7 @@ unsafe fn save_working_state() {
 const MCF5441X_ESDHC_PRSSTAT: u32 = 0x24;
 /// Is a card transfer in flight? The card's eSDHC controller is the profile's (`[board] esdhc_base` of the device file); a device without one has no busy card.
 pub(crate) unsafe fn card_busy() -> bool {
-    let p = crate::profile();
+    let p = crate::platform::profile();
     p.has_sdhc && read_volatile((p.esdhc_base + MCF5441X_ESDHC_PRSSTAT) as *const u32) & 7 != 0
 }
 

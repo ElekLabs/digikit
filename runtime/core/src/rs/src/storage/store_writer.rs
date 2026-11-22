@@ -13,7 +13,7 @@
 //! Rules: no `match` on integers (a dense one becomes a jump table, which is not ColdFire code), no `core::fmt`, no slice indexing.
 
 use crate::hash32::{self, Hash32};
-use crate::{block_read, block_write, card, PLATFORM};
+use crate::{platform::block_read, block_write, card, platform::PLATFORM};
 use dkrt_abi::platform::{Platform, StagedWriter};
 #[cfg(not(test))]
 use dkrt_abi::platform::Tasking;
@@ -157,7 +157,7 @@ const IDLE_BLOCKS: u32 = 20 * 1500;
 
 #[cfg(not(test))]
 pub(crate) unsafe fn now() -> u32 {
-    crate::fw_blocks().unwrap_or(0)
+    crate::platform::fw_blocks().unwrap_or(0)
 }
 #[cfg(test)]
 pub static mut TEST_NOW: u32 = 0;
@@ -175,7 +175,7 @@ pub unsafe fn tick() {
         return;
     }
     #[cfg(not(test))]
-    if crate::fw_blocks().is_none() {
+    if crate::platform::fw_blocks().is_none() {
         return;
     }
     if u.pd && read_volatile(addr_of!(PD_BUSY)) {
@@ -720,7 +720,7 @@ unsafe fn pend_tick() {
         return;
     }
     #[cfg(not(test))]
-    if crate::fw_blocks().is_none() {
+    if crate::platform::fw_blocks().is_none() {
         return;
     }
     if !pend_due(p, now()) {
@@ -1112,7 +1112,7 @@ unsafe fn rb_free(_: *mut u8) {}
 /// bytes over it) and drop them after each read. Nothing writes these buffers but the DMA, so the lines stay clean between the two.
 #[cfg(not(test))]
 fn cache_sync(p: *const u8, n: usize) {
-    crate::flush(p as u32, n as u32);
+    crate::platform::flush(p as u32, n as u32);
 }
 #[cfg(test)]
 fn cache_sync(_: *const u8, _: usize) {}

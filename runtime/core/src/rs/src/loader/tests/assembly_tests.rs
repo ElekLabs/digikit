@@ -2124,7 +2124,7 @@ fn sdk_versions() -> (std::collections::BTreeMap<String, u32>, u32, [u32; 2]) {
 /// imports it links (at least the version of the header table; a module with a service-local API has the registration version, which is above both), and it names the
 /// runtime's own major and minor with a patch the runtime has.
 fn runtime_word_problem(f: &[u8], since: &std::collections::BTreeMap<String, u32>, table: u32, floors: [u32; 2]) -> Option<String> {
-    let word = be(f, dkneeds::H_RUNTIME) & !crate::FLAG_TRACE;
+    let word = be(f, dkneeds::H_RUNTIME) & !crate::state::FLAG_TRACE;
     let want = import_names(f).iter().filter_map(|n| since.get(n)).copied().max().unwrap_or(0).max(table);
     let v = dkrt_sdk::RUNTIME_VERSION;
     if word != want && !(word > want && floors.contains(&word)) {

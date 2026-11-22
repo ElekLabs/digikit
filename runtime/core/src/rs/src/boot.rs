@@ -103,7 +103,7 @@ pub fn info() -> &'static mut DkrtBootInfo {
 /// The boot hook (once per boot, main-OS task).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_boot() {
-    crate::init_once();
+    crate::state::init_once();
     if !crate::dev::valid() {
         return; // a device object this runtime cannot read (a patch bug): load nothing, leave the firmware alone
     }
@@ -126,7 +126,7 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     };
     let valid = rec.is_some();
     let mut r = rec.unwrap_or(Record::empty());
-    dlog::ev(logk::BOOT_START, dlog::INFO, [RUNTIME_VERSION, crate::device(), r.stable_blocks, r.seq, r.boot_counter]);
+    dlog::ev(logk::BOOT_START, dlog::INFO, [RUNTIME_VERSION, crate::platform::device(), r.stable_blocks, r.seq, r.boot_counter]);
     // the card's area: ours, blank or neither (read-only), before anything is written
     card::check_with(env.platform());
     // the settings record (the fx routes and send amounts): into RAM before the UI starts
@@ -220,7 +220,7 @@ static mut BOOT_PATH: [u32; SEL_MAX] = [0; SEL_MAX];
 
 /// The hash of a store path (the bytes up to the NUL): FNV-1a, never 0.
 pub unsafe fn path_hash(path: *const u8) -> u32 {
-    let n = crate::cstr_len(path, 64);
+    let n = dkrt_abi::mem::cstr_len(path, 64);
     let h = dkneeds::keys::name_hash_bytes(core::slice::from_raw_parts(path, n));
     if h == 0 {
         1

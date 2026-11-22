@@ -4,7 +4,8 @@
 //! scanned through the staging buffer.
 
 use crate::hash32;
-use crate::{DKRT_STAGE, STAGE_BYTES};
+use dkrt_sdk::STAGE_BYTES;
+use crate::{state::DKRT_STAGE};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::store::{self, Hdr, Io, Layout, Table, KIND_FILE};
 use dkrt_sdk::*;
@@ -31,7 +32,7 @@ unsafe fn scratch() -> *mut u8 {
 }
 
 unsafe extern "C" fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
-    crate::block_read(sector, bytes, buf)
+    crate::platform::block_read(sector, bytes, buf)
 }
 
 unsafe extern "C" fn no_write(_sector: u32, _bytes: u32, _buf: *mut u8) -> i32 {
@@ -441,7 +442,7 @@ pub unsafe extern "C" fn dkrt_store_stat(path: *const u8, out: *mut DkrtStoreFil
     if path.is_null() || out.is_null() {
         return E_CONTRACT;
     }
-    crate::init_once();
+    crate::state::init_once();
     match find(path) {
         Ok(f) => {
             let o = &mut *out;
@@ -461,7 +462,7 @@ pub unsafe extern "C" fn dkrt_store_read(f: *const DkrtStoreFile, sector: u32, c
     if f.is_null() || dst.is_null() || (dst as usize) & 15 != 0 {
         return E_CONTRACT;
     }
-    crate::init_once();
+    crate::state::init_once();
     if crate::card::state() == CARD_TOO_SMALL {
         return E_NOT_FOUND;
     }
@@ -519,7 +520,7 @@ pub unsafe extern "C" fn dkrt_store_lease(path: *const u8, out: *mut DkrtStoreFi
     if path.is_null() || out.is_null() {
         return E_CONTRACT;
     }
-    crate::init_once();
+    crate::state::init_once();
     lease(0, path, &mut *out)
 }
 

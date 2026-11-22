@@ -56,7 +56,7 @@ pub trait System {
 }
 
 pub struct ReloadQueue {
-    mods: [ModuleReload; crate::MAX_MODULES],
+    mods: [ModuleReload; dkrt_abi::MAX_MODULES],
     /// The record whose reload job is queued or running, and the generation the job started with.
     queued: Option<(usize, u16)>,
     /// UI passes to wait before the next try.
@@ -65,12 +65,12 @@ pub struct ReloadQueue {
 
 impl ReloadQueue {
     pub const fn new() -> ReloadQueue {
-        ReloadQueue { mods: [ModuleReload::NONE; crate::MAX_MODULES], queued: None, wait: 0 }
+        ReloadQueue { mods: [ModuleReload::NONE; dkrt_abi::MAX_MODULES], queued: None, wait: 0 }
     }
 
     /// The module of record `rec` opened its settings.
     pub fn note_opened(&mut self, rec: usize) {
-        if rec < crate::MAX_MODULES {
+        if rec < dkrt_abi::MAX_MODULES {
             self.mods[rec].opened = true;
         }
     }
@@ -78,7 +78,7 @@ impl ReloadQueue {
     /// The module of record `rec` is unloaded (or replaced by another file): the next module in the record has opened nothing, and a wait for the old one is not the new one's.
     /// The reload job itself unloads its record: its own wait stays.
     pub fn note_unloaded(&mut self, rec: usize) {
-        if rec >= crate::MAX_MODULES {
+        if rec >= dkrt_abi::MAX_MODULES {
             return;
         }
         let m = &mut self.mods[rec];
@@ -194,12 +194,12 @@ impl System for Real {
         crate::reload::dkrt_live(LIVE_RELOAD, crate::loader::records::path(rec).as_ptr())
     }
     fn rec_of(&self, id: &[u8]) -> Option<usize> {
-        (0..crate::MAX_MODULES).find(|&rec| unsafe { crate::st().modules[rec].used != 0 } && self.named(rec, id))
+        (0..dkrt_abi::MAX_MODULES).find(|&rec| unsafe { crate::platform::st().modules[rec].used != 0 } && self.named(rec, id))
     }
     fn named(&self, rec: usize, id: &[u8]) -> bool {
         unsafe {
-            let m = &crate::st().modules[rec];
-            core::slice::from_raw_parts(m.name.as_ptr(), crate::cstr_len(m.name.as_ptr(), 31)) == id
+            let m = &crate::platform::st().modules[rec];
+            core::slice::from_raw_parts(m.name.as_ptr(), dkrt_abi::mem::cstr_len(m.name.as_ptr(), 31)) == id
         }
     }
     fn loaded(&self, rec: usize) -> bool {
@@ -239,7 +239,7 @@ mod tests {
 
     /// A scripted system: module ids by record (`None`: not loaded), the live job, and the answers of the next queueing.
     struct Fake {
-        names: [Option<&'static [u8]>; crate::MAX_MODULES],
+        names: [Option<&'static [u8]>; dkrt_abi::MAX_MODULES],
         phase: u32,
         result: i32,
         queue_answer: i32,
@@ -247,7 +247,7 @@ mod tests {
     }
     impl Fake {
         fn new() -> Fake {
-            Fake { names: [None; crate::MAX_MODULES], phase: 0, result: OK, queue_answer: OK, queued: Vec::new() }
+            Fake { names: [None; dkrt_abi::MAX_MODULES], phase: 0, result: OK, queue_answer: OK, queued: Vec::new() }
         }
         fn with(mut self, rec: usize, id: &'static [u8]) -> Fake {
             self.names[rec] = Some(id);

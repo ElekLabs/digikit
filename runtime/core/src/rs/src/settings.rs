@@ -10,7 +10,7 @@
 //! A `.dkm` module uses `dk_settings_open`, `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` (`module_*` below): the runtime
 //! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `dk_settings_put` and `dk_settings_remove`
 //! must be called from the UI task (a menu, `tick`, `init`), not from a host command handler (MIDI task) or an interrupt.
-use crate::{block_read, block_write, card, dlog};
+use crate::{platform::block_read, block_write, card, dlog};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::settings as set;
@@ -100,7 +100,7 @@ fn io() -> Io {
 
 /// The time now and the delay in the same unit: blocks when the firmware's counter is there, else UI-loop passes.
 unsafe fn clock() -> (u32, u32) {
-    match crate::fw_blocks() {
+    match crate::platform::fw_blocks() {
         Some(b) => (b, DELAY_BLOCKS),
         None => (state().passes, DELAY_PASSES),
     }
@@ -366,7 +366,7 @@ unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
 /// The card is written about 2 s after the last change. UI task.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len: u32) -> i32 {
-    crate::init_once();
+    crate::state::init_once();
     if len as usize > set::VALUE_MAX {
         return E_SET_VALUE;
     }
@@ -384,7 +384,7 @@ pub unsafe fn module_client() -> i32 {
     }
     let rec = source as usize - 1;
     // a service file reads the device scope through the core, not through a module handle
-    if rec >= crate::MAX_MODULES || !crate::files::in_init(rec) {
+    if rec >= dkrt_abi::MAX_MODULES || !crate::files::in_init(rec) {
         return E_NOT_FOUND;
     }
     // the module reads its settings in `init`: a change of what they return reloads it (`settings_reload`)
@@ -396,14 +396,14 @@ pub unsafe fn module_client() -> i32 {
 /// caller. A handle that is 0, past the table or of a record that is not loaded (and not inside its `init`) is stale: `E_SET_KEY`, the settings
 /// argument error, as for a key that breaks the rules. The prefix stops mistakes, not hostile code: modules are native code with no memory protection.
 unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY_MAX]) -> Result<usize, i32> {
-    if client == 0 || client as usize > crate::MAX_MODULES || key.is_null() {
+    if client == 0 || client as usize > dkrt_abi::MAX_MODULES || key.is_null() {
         return Err(E_SET_KEY);
     }
-    let m = &crate::st().modules[client as usize - 1];
+    let m = &crate::platform::st().modules[client as usize - 1];
     if m.used == 0 {
         return Err(E_SET_KEY);
     }
-    let name = core::slice::from_raw_parts(m.name.as_ptr(), crate::cstr_len(m.name.as_ptr(), 31));
+    let name = core::slice::from_raw_parts(m.name.as_ptr(), dkrt_abi::mem::cstr_len(m.name.as_ptr(), 31));
     match set::module_key(name, key_of(key), out) {
         Some(n) => Ok(n),
         None => Err(E_SET_KEY),
@@ -412,14 +412,14 @@ unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY
 
 /// The module id of a settings handle (the name of its record), as `module_stored_key` takes it: `None` for a handle that is 0, past the table or of a record that is not loaded.
 unsafe fn module_id<'a>(client: u32) -> Option<&'a [u8]> {
-    if client == 0 || client as usize > crate::MAX_MODULES {
+    if client == 0 || client as usize > dkrt_abi::MAX_MODULES {
         return None;
     }
-    let m = &crate::st().modules[client as usize - 1];
+    let m = &crate::platform::st().modules[client as usize - 1];
     if m.used == 0 {
         return None;
     }
-    Some(core::slice::from_raw_parts(m.name.as_ptr(), crate::cstr_len(m.name.as_ptr(), 31)))
+    Some(core::slice::from_raw_parts(m.name.as_ptr(), dkrt_abi::mem::cstr_len(m.name.as_ptr(), 31)))
 }
 
 /// `settings_get`: the length of the value (0 is valid), `E_SET_NOKEY`, `E_SET_VALUE` (`cap` too small: nothing is written), `E_SET_KEY` (bad handle or
@@ -511,7 +511,7 @@ pub unsafe fn flush_if_dirty() -> i32 {
 /// to the 2 s delay; `dkrt_restart` does it too): 0 (also when nothing was changed), or `E_WRITE`, `E_RANGE`, `E_CARD_RO`, `E_SET_OFF`. UI task.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_settings_flush() -> i32 {
-    crate::init_once();
+    crate::state::init_once();
     flush_if_dirty()
 }
 
@@ -641,7 +641,7 @@ mod tests {
         ENTRIES.lock().unwrap().clear();
         *PUT_ANSWER.lock().unwrap() = None;
         *REMOVE_ANSWER.lock().unwrap() = None;
-        let m = &mut crate::st().modules[0];
+        let m = &mut crate::platform::st().modules[0];
         m.used = 1;
         m.name = [0; 32];
         m.name[..6].copy_from_slice(b"test/m");
@@ -653,7 +653,7 @@ mod tests {
     }
     unsafe fn teardown() {
         settings_overlay::withdraw(0);
-        crate::st().modules[0].used = 0;
+        crate::platform::st().modules[0].used = 0;
     }
     unsafe fn rd(key: &[u8]) -> i32 {
         let mut out = [0u8; 8];

@@ -100,7 +100,7 @@ impl Images for RealImages {
             0
         }
         #[cfg(not(test))]
-        crate::import_addr(name)
+        crate::imports::import_addr(name)
     }
     unsafe fn svc_import_addr(&mut self, name: *const u8) -> u32 {
         crate::svc_imports::svc_import_addr(name)
@@ -112,7 +112,7 @@ impl Images for RealImages {
             None
         }
         #[cfg(not(test))]
-        crate::import_needs(name)
+        crate::imports::import_needs(name)
     }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
         let call: unsafe extern "C" fn(*const Ctx) -> i32 = core::mem::transmute(init as usize);
@@ -147,7 +147,7 @@ impl Registry for RealRegistry {
     }
     unsafe fn remove(&mut self, rec: usize) {
         // the registry rows of a module record first (the service's own `remove` runs over the table with its row in), then the service row
-        if rec < crate::MAX_MODULES {
+        if rec < dkrt_abi::MAX_MODULES {
             #[cfg(test)]
             crate::cleanup_tests::registry_remove(rec as u8 + 1);
             #[cfg(not(test))]

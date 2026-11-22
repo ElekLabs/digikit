@@ -11,7 +11,10 @@
 //!    follow one rule: every owned row belongs to a used record whose row mask has the row's bit, and every bit of a used record's mask is a row it owns; an unused
 //!    record has no rows).
 //! 4. no two used records have the same name.
-use crate::{cstr_eq, dlog, dsp, st, ARENA_BYTES, DKRT_ARENA, MAX_MODULES};
+use crate::{dlog, dsp, platform::st, state::DKRT_ARENA};
+use dkrt_abi::MAX_MODULES;
+use dkrt_abi::mem::cstr_eq;
+use dkrt_sdk::ARENA_BYTES;
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::*;
 

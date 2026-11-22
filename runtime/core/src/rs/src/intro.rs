@@ -140,7 +140,7 @@ unsafe extern "C" fn tramp(_index: u32, _count: u32, bitmap: *mut u8) {
 #[cfg(not(test))]
 pub unsafe fn take(frame: Option<IntroFrameFn>, done: Option<IntroDoneFn>, ctx: *mut u8, ticks: u32) -> i32 {
     let source = dlog::current_source();
-    let in_init = source != 0 && (source as usize) <= crate::MAX_MODULES && crate::files::in_init(source as usize - 1);
+    let in_init = source != 0 && (source as usize) <= dkrt_abi::MAX_MODULES && crate::files::in_init(source as usize - 1);
     let r = check(in_init, read_volatile(addr_of!(STATE)) != 0, frame.is_some(), ticks, intro_running());
     if r != OK {
         return r;

@@ -62,7 +62,7 @@ impl CoreApi for RealCore {
         PLATFORM.device_id()
     }
     unsafe fn module_name(&self, owner: u8) -> *const u8 {
-        crate::st().modules[owner as usize - 1].name.as_ptr()
+        crate::platform::st().modules[owner as usize - 1].name.as_ptr()
     }
     unsafe fn module_of(&self, ctx: *const u8) -> u8 {
         match crate::entry::own_rec(ctx as *mut u8) {

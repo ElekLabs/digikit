@@ -13,7 +13,7 @@
 //! the worker runs exactly one step per submit.
 //!
 //! Values `JOB_MORE` and `JOB_E_CANCELLED` must match sdk/include/dk/platform/job.h.
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use core::ffi::c_void;
 #[cfg(not(test))]
 use dkrt_abi::platform::SamplePool;
@@ -86,9 +86,9 @@ static mut FN: [u32; 4] = [0; 4];
 static mut DONE: [u32; 8] = [0; 8];
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let result = f();
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     result
 }
 
@@ -111,7 +111,7 @@ extern "C" fn invoker(_storage: *const u8) {
 unsafe fn run_flight() {
     let step = read_volatile(addr_of!(FLIGHT_STEP));
     let ctx = read_volatile(addr_of!(FLIGHT_CTX));
-    let start = crate::fw_blocks();
+    let start = crate::platform::fw_blocks();
     let mut result = JOB_E_CANCELLED;
     if let Some(step) = step {
         loop {

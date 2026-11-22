@@ -74,15 +74,7 @@ mod store_cmds;
 mod admin_cmds;
 mod module_cmds;
 
-// The items that moved out of this file are still reachable as `crate::name`.
-pub use api::*;
-pub use health::*;
-pub use imports::*;
-pub use platform::*;
-pub use report::*;
 pub use resident_query::dkrt_service_query;
-pub use state::*;
-pub use tick::*;
 
 #[cfg(not(test))]
 #[panic_handler]

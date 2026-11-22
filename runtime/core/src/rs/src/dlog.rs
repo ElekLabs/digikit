@@ -13,7 +13,7 @@
 //!
 //! Appends mask interrupts for a few instructions: the UI task, the MIDI task and the crash handler all append.
 use crate::entry::Ctx;
-use crate::{fw_blocks, irq_mask, irq_restore};
+use crate::{platform::fw_blocks, platform::irq_mask, platform::irq_restore};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -484,15 +484,15 @@ pub unsafe fn copy_event(seq: u32, dst: *mut u8) -> bool {
     if e.seq != seq {
         return false;
     }
-    crate::wr32(dst, e.seq);
-    crate::wr32(dst.add(4), e.time);
+    dkrt_abi::mem::wr32(dst, e.seq);
+    dkrt_abi::mem::wr32(dst.add(4), e.time);
     *dst.add(8) = (e.kind >> 8) as u8;
     *dst.add(9) = e.kind as u8;
     *dst.add(10) = (e.flags >> 8) as u8;
     *dst.add(11) = e.flags as u8;
     let mut i = 0;
     while i < 5 {
-        crate::wr32(dst.add(12 + 4 * i), e.a[i]);
+        dkrt_abi::mem::wr32(dst.add(12 + 4 * i), e.a[i]);
         i += 1;
     }
     true

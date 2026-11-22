@@ -22,7 +22,10 @@
 //!
 //! Nothing here runs unless the file has a DSP section; the link to `core/dsp-link`, `core/dyndsp` and `core/dynfx` is optional.
 use crate::handlers::{services, Claim, ServiceTable};
-use crate::{arena, cstr_eq, cstr_len, rd32};
+use dkrt_abi::mem::cstr_eq;
+use dkrt_abi::mem::cstr_len;
+use dkrt_abi::mem::rd32;
+use crate::{arena};
 use core::ptr::{addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Stream, Ticket, SEQ_MAX};
@@ -71,7 +74,7 @@ pub(crate) unsafe fn info() -> *const u32 {
     #[cfg(test)] { return crate::cleanup_tests::voice_info(); }
     #[cfg(not(test))] {
         let a = fn_addr(dyndsp_info);
-        if a == 0 || !crate::has_dsp() {
+        if a == 0 || !crate::platform::has_dsp() {
             return core::ptr::null();
         }
         let p = a as *const u32;
@@ -137,7 +140,7 @@ pub unsafe fn init_once() {
 
 /// Bytes of the area (0: the image has no DSP loader, or the device has no DSP).
 pub unsafe fn area_bytes() -> u32 {
-    if !crate::has_dsp() || info().is_null() {
+    if !crate::platform::has_dsp() || info().is_null() {
         0
     } else {
         iw(I_AREA_BYTES)
@@ -153,7 +156,7 @@ pub unsafe fn area_stats() -> (u32, u32) {
     let d = ds();
     let mut used = 0;
     let mut i = 0;
-    while i < crate::MAX_MODULES {
+    while i < dkrt_abi::MAX_MODULES {
         used += d.mod_len[i];
         i += 1;
     }
@@ -162,7 +165,7 @@ pub unsafe fn area_stats() -> (u32, u32) {
     loop {
         let mut next = total;
         i = 0;
-        while i < crate::MAX_MODULES {
+        while i < dkrt_abi::MAX_MODULES {
             if d.mod_len[i] != 0 && d.mod_off[i] >= cursor && d.mod_off[i] < next {
                 next = d.mod_off[i];
             }
@@ -176,7 +179,7 @@ pub unsafe fn area_stats() -> (u32, u32) {
         }
         let mut len = 0;
         i = 0;
-        while i < crate::MAX_MODULES {
+        while i < dkrt_abi::MAX_MODULES {
             if d.mod_len[i] != 0 && d.mod_off[i] == next {
                 len = d.mod_len[i];
             }
@@ -571,7 +574,7 @@ pub enum Advance {
 pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
     let d = ds();
     d.failures += 1;
-    crate::st().last_result = code;
+    crate::platform::st().last_result = code;
     if !reclaimed {
         d.phase = PH_RETAINED;
         return;
@@ -585,7 +588,7 @@ pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
 
 /// The loader listed the loaded module and told the boot: start the next waiting load or go idle.
 pub(crate) unsafe fn loaded_done() {
-    crate::st().last_result = OK;
+    crate::platform::st().last_result = OK;
     next_job();
 }
 

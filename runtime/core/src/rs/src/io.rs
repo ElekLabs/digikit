@@ -128,7 +128,7 @@ pub(crate) unsafe fn test_in_step<R>(owner: u8, f: impl FnOnce() -> R) -> R {
 }
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    dkrt_abi::platform::locked(&crate::PLATFORM, f)
+    dkrt_abi::platform::locked(&crate::platform::PLATFORM, f)
 }
 
 fn next_seq() -> u32 {
@@ -156,7 +156,7 @@ static mut TASK_UP: u32 = 0;
 #[cfg(not(test))]
 mod kernel {
     use super::*;
-    use crate::PLATFORM;
+    use crate::platform::PLATFORM;
     use dkrt_abi::platform::Tasking;
 
     /// Create and start the task. False: the kernel refused.
@@ -747,7 +747,7 @@ mod tests {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
-            let rec = crate::MAX_MODULES + 2;
+            let rec = dkrt_abi::MAX_MODULES + 2;
             let mut a = script(1, 0);
             crate::dlog::set_source_for_test(rec as u8 + 1);
             assert!(post(crate::dlog::current_source(), Some(step), Some(done), ptr(&mut a)) > 0);

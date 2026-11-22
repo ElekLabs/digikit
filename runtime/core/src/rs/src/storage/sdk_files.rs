@@ -6,7 +6,7 @@ use super::backends::plusdrive::*;
 use super::lock::{acquire, sdk_bufs, unlock};
 use super::route::root_route;
 use super::store_writer::*;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::proto::*;
 use dkrt_sdk::store;

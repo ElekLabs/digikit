@@ -23,7 +23,7 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     *rb.add(1) = VERSION; // protocol 1
     *rb.add(2) = (RUNTIME_VERSION >> 8) as u8;
     *rb.add(3) = RUNTIME_VERSION as u8;
-    wr32(rb.add(4), crate::device_name()); // the device's short name from its device file
+    wr32(rb.add(4), crate::platform::device_name()); // the device's short name from its device file
     put32(1 + 8, free);
     put32(1 + 12, MAX_CHUNK);
     let flags = (boot::info().safe & 1)
@@ -43,7 +43,7 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     let log_caps = if dlog::sink_present() { CAP_LOG | CAP_PEEK | CAP_LOGCFG } else { 0 };
     wr32(rb.add(29), log_caps | CAP_SELECT | CAP_RESTART | CAP_MODULES | CAP_CAPACITY | CAP_READ | CAP_VERIFY | CAP_SERVICE_CMDS | CAP_FOLDERS | CAP_SETTINGS | CAP_FILEHASH | CAP_RENAME | CAP_READBACK | CAP_LOADS | CAP_SVC_ABI | CAP_RELOAD | CAP_LIVE | fw_cap);
     // appended after the capability bits: the id of the flashed image (patchkit stamps it; zeros when there is none)
-    let id = crate::image_id();
+    let id = crate::platform::image_id();
     let mut i = 0;
     while i < 8 {
         *rb.add(33 + i) = id[i];
@@ -63,11 +63,11 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
     }
     // then the card's capacity in sectors (0xFFFFFFFF: the driver is not ready) and the card check's state (0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable,
     // 5 too small); a client that stops earlier ignores them
-    wr32(rb.add(n), crate::PLATFORM.card_sectors());
+    wr32(rb.add(n), crate::platform::PLATFORM.card_sectors());
     wr32(rb.add(n + 4), card::state());
     // then the card write guard's counters (core/card-guard): `u32 version` (0: the module is not in the image; the other words are then 0), refused writes, refused erases,
     // and the last refused request (first sector, length in sectors, class | kind << 8; class 0 stock, 1 runtime; kind 0 write, 1 erase)
-    let g = crate::storage::card_guard::stats(&crate::PLATFORM).words();
+    let g = crate::storage::card_guard::stats(&crate::platform::PLATFORM).words();
     let mut k = 0;
     while k < 6 {
         wr32(rb.add(n + 8 + 4 * k), g[k]);
@@ -81,7 +81,7 @@ pub(crate) unsafe fn cmd_info(seq: u32, buf: *mut u8) -> i32 {
 /// no meaning). A host skips a kind it does not know; new kinds are appended.
 pub(crate) unsafe fn cmd_capacity(seq: u32) -> i32 {
     let mut entries = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-    let n = crate::dkrt_capacity(entries.as_mut_ptr(), CAP_MAX as u32) as usize;
+    let n = crate::report::dkrt_capacity(entries.as_mut_ptr(), CAP_MAX as u32) as usize;
     let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
     *rb = 1;
     *rb.add(1) = n as u8;
@@ -180,7 +180,7 @@ pub unsafe fn restart_poll() {
     let drained = matches!(tx_in_flight(), Some(0));
     if (drained && RESTART_WAIT > 3) || RESTART_WAIT > RESTART_TICKS_MAX {
         RESTART_WAIT = 0;
-        let r = crate::dkrt_restart();
+        let r = crate::api::dkrt_restart();
         dlog::ev(logk::UPLOAD, logk::F_ERROR, [CMD_RESTART as u32, r as u32, 0, 0, 0]);
     }
 }

@@ -2,7 +2,7 @@
 //! the runtime: the fault record, `dk/fault`, ABOUT and the machine table read their results. What they log goes through `dlog::ev`.
 use crate::handlers::services;
 use crate::dlog::{ev, sink_present, word_of, INFO};
-use crate::{arena, fw_blocks, st};
+use crate::{arena, platform::fw_blocks, platform::st};
 use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::fault::{Hang, DIAG_HEARTBEAT, DIAG_MAGIC, DIAG_WORDS};
@@ -146,7 +146,7 @@ pub unsafe fn tick() {
             w.hang_wait -= 1;
             // not while the firmware takes or flashes an OS upgrade: a reset in the flash write would leave the container half written (finding 77, section 5);
             // the stop stays in the log
-            if w.hang_wait == 0 && hang_may_reset(&crate::PLATFORM) {
+            if w.hang_wait == 0 && hang_may_reset(&crate::platform::PLATFORM) {
                 write_hang(w);
             }
         }
@@ -364,7 +364,7 @@ unsafe fn list_modules() {
         i += 1;
     }
 }
-const MAX_MODULES_N: usize = crate::MAX_MODULES;
+const MAX_MODULES_N: usize = dkrt_abi::MAX_MODULES;
 
 /// A health snapshot: CPU and DSP load, arena free, and (every fourth time) the free firmware heap in KiB.
 unsafe fn snapshot(w: &mut Watch) {
@@ -377,9 +377,9 @@ unsafe fn snapshot(w: &mut Watch) {
     let mut a = [0u32; 5];
     a[3] = afree;
     a[4] = 0xffff_ffff;
-    if crate::health_present() {
+    if crate::health::health_present() {
         let mut h: DkrtHealth = core::mem::zeroed();
-        crate::dkrt_health_light(&mut h, walk);
+        crate::health::dkrt_health_light(&mut h, walk);
         a[0] = (h.flags << 16) | h.cpu_x10.min(0xffff);
         a[1] = h.dsp_avg_x10;
         a[2] = h.dsp_max_x10;

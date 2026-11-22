@@ -161,7 +161,7 @@ pub fn rows() -> &'static [*const ServiceRow] {
 pub fn test_machines() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| unsafe {
-        add(crate::MAX_MODULES + PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None);
+        add(dkrt_abi::MAX_MODULES + PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None);
     });
 }
 

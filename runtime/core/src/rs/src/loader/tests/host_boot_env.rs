@@ -43,7 +43,7 @@ impl BootEnv for HostBootEnv {
         let l = &mut *self.l;
         l.reset_plan();
         for k in 0..rec.count as usize {
-            let n = crate::cstr_len(rec.paths[k].as_ptr(), 64);
+            let n = dkrt_abi::mem::cstr_len(rec.paths[k].as_ptr(), 64);
             let file = l.m.files.iter().find(|(name, _)| name[..] == rec.paths[k][..n]).map(|(_, bytes)| bytes.clone());
             if let Some(file) = file {
                 l.capture(k, &file);

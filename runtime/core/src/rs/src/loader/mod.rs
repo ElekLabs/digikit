@@ -1,6 +1,11 @@
 //! The `.dkm` loader (docs/design/digikit-dkm.md). Every check runs before anything is written to the arena.
 
 use crate::dsp;
+use dkrt_abi::MAX_MODULES;
+use dkrt_abi::mem::cstr_eq;
+use dkrt_abi::mem::cstr_len;
+use dkrt_abi::mem::rd32;
+use dkrt_abi::mem::wr32;
 use crate::entry::Ctx;
 use crate::admission::Admission;
 use discover::Found;
@@ -12,7 +17,7 @@ use role::{PlaceArgs, RoleSteps};
 use exports::Exports;
 use crate::platform::RealPlatform;
 use crate::selection::BOOT_IDX;
-use crate::{cstr_eq, cstr_len, rd32, st, wr32, Module, MAX_MODULES};
+use crate::{platform::st, state::Module};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::Owner;
@@ -257,7 +262,7 @@ pub unsafe fn set_safe() {
 
 /// The capacity of the platform: `dkrt_capacity` into `caps`; its count.
 pub(crate) fn dkrt_capacity_into(caps: &mut [DkrtCap; CAP_MAX]) -> usize {
-    unsafe { crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize }
+    unsafe { crate::report::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize }
 }
 
 /// The module record loaded from the store path `path` (NUL terminated), and its selection index: what a live job names its module by.

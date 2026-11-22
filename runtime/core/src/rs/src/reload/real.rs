@@ -33,7 +33,7 @@ pub fn state() -> State {
 /// `dkrt_live(op, path)`: queue a live job from the DIGIKIT menu (the UI task). The same refusals as the SysEx commands: an open upload or a store write in flight is `E_STATE`.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
-    crate::init_once();
+    crate::state::init_once();
     if crate::store_writer::is_open() || crate::store_writer::is_locked() {
         return dkrt_sdk::proto::E_STATE;
     }
@@ -69,7 +69,7 @@ impl Ops for RealOps {
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
         // the service-specific refusals come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
-        refusal_for(&crate::PLATFORM, rec, crate::api::card_busy(), |r| crate::lifecycle::get().and_then(|rt| rt.refusal(r)))
+        refusal_for(&crate::platform::PLATFORM, rec, crate::api::card_busy(), |r| crate::lifecycle::get().and_then(|rt| rt.refusal(r)))
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
         if op == LIVE_LOAD {

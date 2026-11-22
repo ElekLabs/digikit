@@ -13,7 +13,7 @@
 use crate::store_writer::{self as sw, SCRATCH_AT};
 use crate::store_writer::{copy, DKRT_UPLOAD_WRITES};
 use crate::platform::wr32;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use crate::dlog;
 use core::ptr::addr_of_mut;
@@ -200,7 +200,7 @@ pub unsafe extern "C" fn dkrt_midi_rx(msg: *const u8, len: u32, _source: u32) ->
     if len < 5 || *msg != 0xf0 || *msg.add(1) != 0x7d || *msg.add(2) != 0x64 || *msg.add(3) != 0x6b {
         return 0;
     }
-    crate::init_once();
+    crate::state::init_once();
     if len < 8 || *msg.add(len as usize - 1) != 0xf7 {
         return reply(0, 0, E_MSG, 0);
     }

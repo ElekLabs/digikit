@@ -11,9 +11,9 @@ use crate::transport::*;
 /// Does a loaded module have machine type `ty` (a run-time type some module owns)? The machines service answers per module (`module_info`, the same export the
 /// MODULES reply reads). A row nobody loaded is a gap row: it plays as type 0.
 pub(crate) fn machine_type_loaded(ty: u32) -> bool {
-    let s = crate::st();
+    let s = crate::platform::st();
     let mut i = 0;
-    while i < crate::MAX_MODULES {
+    while i < dkrt_abi::MAX_MODULES {
         if s.modules[i].used != 0 {
             if let Some(mm) = unsafe { crate::handlers::exports::module_info(i as u8 + 1) } {
                 if mm.types[..(mm.nt as usize).min(8)].iter().any(|t| *t as u32 == ty) {
@@ -36,7 +36,7 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         return reply(CMD_MODULES, seq, E_MSG, 0);
     }
     let start = *body as usize;
-    let s = crate::st();
+    let s = crate::platform::st();
     let rb = (addr_of_mut!(RBODY) as *mut u8).add(1);
     let (af, al) = crate::arena::stats();
     let (df, dl) = crate::dsp::area_stats();
@@ -46,7 +46,7 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
     wr32(rb.add(12), dl);
     let mut total = 0u8;
     let mut i = 0;
-    while i < crate::MAX_MODULES {
+    while i < dkrt_abi::MAX_MODULES {
         if s.modules[i].used != 0 {
             total += 1;
         }
@@ -57,7 +57,7 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
     let mut n = 0u8;
     let d = crate::dsp::ds();
     i = start;
-    while i < crate::MAX_MODULES {
+    while i < dkrt_abi::MAX_MODULES {
         let m = &s.modules[i];
         if m.used == 0 {
             i += 1;
@@ -73,7 +73,7 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         copy(rb.add(at + 1), m.name.as_ptr(), 32);
         wr32(rb.add(at + 33), m.version);
         // the version of the runtime the module needs, then four reserved zero bytes
-        wr32(rb.add(at + 37), (*addr_of!(crate::DKRT_MODULE_RUNTIME))[i]);
+        wr32(rb.add(at + 37), (*addr_of!(crate::state::DKRT_MODULE_RUNTIME))[i]);
         wr32(rb.add(at + 41), 0);
         wr32(rb.add(at + 45), m.base);
         wr32(rb.add(at + 49), m.size);
@@ -186,14 +186,14 @@ pub(crate) fn svc() -> &'static mut [Svc; SVC_MAX] {
 
 /// Commands of each module record (owner - 1) whose handler runs now, on the MIDI task. A reload waits until the count is 0 before it frees the module's code
 /// (`reload`); the one writer is the MIDI task, which counts the command before the handler can be released.
-static mut IN_FLIGHT: [u8; crate::MAX_MODULES] = [0; crate::MAX_MODULES];
+static mut IN_FLIGHT: [u8; dkrt_abi::MAX_MODULES] = [0; dkrt_abi::MAX_MODULES];
 /// Bit `owner - 1`: the module is being reloaded; its commands are refused with `E_BUSY` while the ones in flight finish.
 static mut DRAINING: u16 = 0;
-const _: () = assert!(crate::MAX_MODULES <= 16);
+const _: () = assert!(dkrt_abi::MAX_MODULES <= 16);
 
 /// Refuse (`on`) or accept again the commands of the module whose source index is `owner`.
 pub(crate) unsafe fn set_draining(owner: u8, on: bool) {
-    if owner == 0 || owner as usize > crate::MAX_MODULES {
+    if owner == 0 || owner as usize > dkrt_abi::MAX_MODULES {
         return;
     }
     let sr = crate::platform::irq_mask();
@@ -243,7 +243,7 @@ pub(crate) unsafe fn test_set_in_flight(owner: u8, n: u8) {
 
 /// Commands of the module whose source index is `owner` that are in flight.
 pub(crate) unsafe fn in_flight(owner: u8) -> u8 {
-    if owner == 0 || owner as usize > crate::MAX_MODULES {
+    if owner == 0 || owner as usize > dkrt_abi::MAX_MODULES {
         return 0;
     }
     core::ptr::read_volatile(addr_of!(IN_FLIGHT[owner as usize - 1]))
@@ -342,7 +342,7 @@ mod tests {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             // the runtime is initialised (the hook's `init_once` would set up the arena)
-            crate::st().magic = crate::state::STATE_MAGIC;
+            crate::platform::st().magic = crate::state::STATE_MAGIC;
             let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
             assert_eq!(host_register(0x38, 1, Some(answers_ok)), OK);
             dlog::leave_module(prev);
@@ -364,10 +364,10 @@ mod tests {
     fn modules_pages_by_start_index_and_the_total_stays_the_loaded_count() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
-            crate::st().magic = crate::state::STATE_MAGIC;
-            let used: Vec<u32> = (0..crate::MAX_MODULES).map(|i| crate::st().modules[i].used).collect();
-            for i in 0..crate::MAX_MODULES {
-                crate::st().modules[i].used = u32::from(i < 3);
+            crate::platform::st().magic = crate::state::STATE_MAGIC;
+            let used: Vec<u32> = (0..dkrt_abi::MAX_MODULES).map(|i| crate::platform::st().modules[i].used).collect();
+            for i in 0..dkrt_abi::MAX_MODULES {
+                crate::platform::st().modules[i].used = u32::from(i < 3);
             }
             let page = |start: u8| {
                 let mut msg = [0xf0, 0x7d, 0x64, 0x6b, VERSION, CMD_MODULES as u8, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -381,7 +381,7 @@ mod tests {
             assert_eq!(page(1), (3, 2, 1), "from record 1: the two after it");
             assert_eq!((page(9).0, page(9).1), (3, 0), "past the end: no record, the total stays");
             for (i, u) in used.into_iter().enumerate() {
-                crate::st().modules[i].used = u;
+                crate::platform::st().modules[i].used = u;
             }
         }
     }
@@ -396,7 +396,7 @@ mod tests {
     fn a_range_that_is_empty_unreserved_or_taken_is_refused_and_the_handlers_status_is_the_reply() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
-            crate::st().magic = crate::state::STATE_MAGIC;
+            crate::platform::st().magic = crate::state::STATE_MAGIC;
             let prev = dlog::enter_module(0, dlog::PHASE_CALLBACK);
             let range = E_CMD_RANGE as i32;
             assert_eq!(host_register(0x38, 0, Some(answers_ok)), range, "empty");

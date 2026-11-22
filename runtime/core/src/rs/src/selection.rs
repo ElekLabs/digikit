@@ -4,7 +4,7 @@
 use crate::dlog;
 use crate::block_write_with;
 use crate::card;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{self, Record};

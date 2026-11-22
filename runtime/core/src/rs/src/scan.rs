@@ -2,7 +2,8 @@
 //! (accepted by this runtime and device, the needs, loaded), `dkrt_fit` judges a ticked set against the device's limits. The rules are the menu's
 //! of before (docs/plans/what-fits.md); the fit rule and its texts are `dkrt-fit`, the needs are `dkneeds`.
 
-use crate::{DKRT_PATHS, MAX_MODULES, PLATFORM, device, init_once, st, store};
+use crate::{state::DKRT_PATHS, platform::PLATFORM, platform::device, state::init_once, platform::st, store};
+use dkrt_abi::MAX_MODULES;
 use dkrt_abi::platform::Tasking;
 use core::ptr::{addr_of, addr_of_mut, write_volatile};
 use dkneeds::{Bytes, needs_of};
@@ -67,7 +68,7 @@ unsafe fn compatible(first: u32, device: u32) -> bool {
         Some(DKM_MAGIC) => {}
         _ => return true,
     }
-    if !file_word(first, dkneeds::H_RUNTIME).is_none_or(crate::runtime_accepts) {
+    if !file_word(first, dkneeds::H_RUNTIME).is_none_or(crate::state::runtime_accepts) {
         return false;
     }
     let (Some(off), Some(size)) = (file_word(first, dkneeds::H_DSP_OFF), file_word(first, dkneeds::H_DSP_SIZE)) else {
@@ -277,7 +278,7 @@ pub unsafe extern "C" fn dkrt_fit(
         used: 0,
         largest: 0,
     }; CAP_MAX];
-    let k = crate::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+    let k = crate::report::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
     let (e, t): (&[DkrtScan], &[u8]) = if n == 0 {
         (&[], &[])
     } else {

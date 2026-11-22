@@ -7,9 +7,10 @@
 //! (`dk_settings_open`, `dk_files_open`, `dk_sample_pool_open`) and each call takes the handle. The handle is the client number the existing code
 //! (`settings.rs`, `files.rs`, `tracks.rs`) keeps, as a pointer. The imports that need no handle point at the functions of `imports.rs`.
 
-use crate::{dlog, files, settings, state::REC_MAX, store, store_writer, MAX_MODULES};
+use crate::{dlog, files, settings, state::REC_MAX, store, store_writer};
+use dkrt_abi::MAX_MODULES;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::storage::Storage;
 use dkrt_sdk::*;
@@ -136,7 +137,7 @@ pub unsafe fn tick_all() {
             if let Some(t) = t0 {
                 dlog::span_end(rec as u32, t);
             }
-            let s = crate::st();
+            let s = crate::platform::st();
             s.tick_calls = s.tick_calls.wrapping_add(1);
         }
         rec += 1;
@@ -165,7 +166,7 @@ pub(crate) unsafe fn give(out: *mut *mut u8, client: i32) -> i32 {
 
 pub unsafe extern "C" fn dk_module_ctx_device(ctx: *mut u8) -> u32 {
     if ctx_rec(ctx).is_some() {
-        crate::device()
+        crate::platform::device()
     } else {
         0
     }
@@ -296,7 +297,7 @@ mod tests {
             let rec = MAX_MODULES - 1;
             unbind(rec);
             let ctx = bind(rec) as usize as *mut u8;
-            assert_eq!(dk_module_ctx_device(ctx), crate::device());
+            assert_eq!(dk_module_ctx_device(ctx), crate::platform::device());
             assert_eq!(dk_module_ctx_runtime_version(ctx), RUNTIME_VERSION);
             unbind(rec);
             assert_eq!((dk_module_ctx_device(ctx), dk_module_ctx_runtime_version(ctx)), (0, 0));

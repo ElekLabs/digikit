@@ -79,7 +79,7 @@ fn settle(keys: &[u32]) {
 }
 
 fn clear() {
-    for owner in 1..=crate::MAX_MODULES as u8 {
+    for owner in 1..=dkrt_abi::MAX_MODULES as u8 {
         unsafe { registry::remove(owner) };
     }
 }

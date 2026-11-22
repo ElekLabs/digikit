@@ -56,9 +56,9 @@ static mut SCHED_ERROR: i32 = 0;
 unsafe fn locked<T>(
     f: impl FnOnce(&mut Broker<OWNERS, Request, FileEntry>) -> T,
 ) -> T {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let result = f(&mut *addr_of_mut!(JOBS));
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     result
 }
 pub unsafe fn init_begin(owner: usize) {
@@ -139,7 +139,7 @@ pub unsafe fn list(
     notify: Option<FilesEventFn>,
     context: *mut u8,
 ) -> i32 {
-    list_with(&crate::PLATFORM, client, root, path, notify, context)
+    list_with(&crate::platform::PLATFORM, client, root, path, notify, context)
 }
 
 /// Most listings at once, across all modules.
@@ -306,7 +306,7 @@ pub unsafe fn list_with<P: Platform + Storage>(
     })
 }
 pub unsafe fn poll(client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
-    poll_with(&crate::PLATFORM, client, ticket, out, capacity)
+    poll_with(&crate::platform::PLATFORM, client, ticket, out, capacity)
 }
 pub(crate) unsafe fn poll_with<P: Platform>(p: &P, client: u32, ticket: u32, out: *mut u8, capacity: u32) -> i32 {
     // Validate before consuming even if no row is currently available.
@@ -454,7 +454,7 @@ const FALLBACK_STEPS: u32 = 8;
 
 /// Several provider steps, each with its deferred callback, per UI pass within a time budget, independent of slot0.
 pub unsafe fn tick() {
-    tick_with(&crate::PLATFORM)
+    tick_with(&crate::platform::PLATFORM)
 }
 
 pub(crate) unsafe fn tick_with<P: Platform + Storage>(p: &P) {
@@ -703,7 +703,7 @@ mod tests {
         unsafe {
             reset();
             let f = fixture(profiles::DN2);
-            let rec = crate::MAX_MODULES + 1;
+            let rec = dkrt_abi::MAX_MODULES + 1;
             let ctx = crate::entry::bind(rec) as *mut u8;
             crate::dlog::set_source_for_test(rec as u8 + 1);
             let mut out: *mut u8 = null_mut();

@@ -5,7 +5,7 @@ use crate::boot::{info, INFO_MAGIC};
 use crate::dlog;
 use crate::card;
 use crate::selection::{current_with, update_with, Choice};
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use core::ptr::addr_of;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
@@ -29,7 +29,7 @@ const DEAD_CLOCK_PASSES: u32 = 1800;
 /// Is the safe-mode key down? Reads the stock key state byte. REC is key 0x13, panel channel 2 bit 2. Returns 0 before the first
 /// channel-2 report. Hardware timing not yet proved **[O]**.
 pub(crate) unsafe fn key_held() -> bool {
-    key_held_with(&crate::PLATFORM)
+    key_held_with(&crate::platform::PLATFORM)
 }
 
 /// `key_held` over a platform (the host tests drive it with `FakePlatform`).
@@ -53,7 +53,7 @@ pub unsafe fn ui_pass() {
         b.stable = 1;
         return; // the boot hook did not run (an image patched without the boot site)
     }
-    let now = crate::fw_blocks().unwrap_or(0);
+    let now = crate::platform::fw_blocks().unwrap_or(0);
     if b.ui_reached == 0 {
         b.ui_reached = 1;
         DKRT_UI_START.0 = now;

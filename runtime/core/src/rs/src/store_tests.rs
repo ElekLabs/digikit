@@ -23,7 +23,7 @@ use crate::storage::sdk_files as sf;
 use crate::store_writer::{self as sw};
 use crate::test_lock::LOCK;
 use crate::transport::{buffer, BODY_AT, DKRT_UPLOAD_LAST, RBODY};
-use crate::{card as card_gate, PLATFORM};
+use crate::{card as card_gate, platform::PLATFORM};
 use core::ptr::{addr_of, addr_of_mut, null, read_volatile, write_volatile};
 use dkrt_abi::platform::DeviceProfile;
 use dkrt_abi::profiles;

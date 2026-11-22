@@ -378,7 +378,7 @@ pub(crate) mod fake {
             if self.busy {
                 return dkrt_sdk::E_BUSY;
             }
-            let n = crate::cstr_len(prefix, 64);
+            let n = dkrt_abi::mem::cstr_len(prefix, 64);
             let prefix = core::slice::from_raw_parts(prefix, n);
             let mut k = 0;
             for (name, bytes) in &self.files {
@@ -393,7 +393,7 @@ pub(crate) mod fake {
             k as i32
         }
         unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
-            let n = crate::cstr_len(path, 64);
+            let n = dkrt_abi::mem::cstr_len(path, 64);
             let key = core::slice::from_raw_parts(path, n);
             match self.files.iter().find(|(name, _)| name == key) {
                 Some((_, bytes)) => {
@@ -707,7 +707,7 @@ mod tests {
             self.inner.list(prefix, out, max)
         }
         unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
-            let key = core::slice::from_raw_parts(path, crate::cstr_len(path, 64));
+            let key = core::slice::from_raw_parts(path, dkrt_abi::mem::cstr_len(path, 64));
             if self.unreadable.iter().any(|p| p == key) {
                 return Err(dkrt_sdk::E_NOT_FOUND);
             }

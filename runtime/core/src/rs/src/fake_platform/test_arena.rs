@@ -30,7 +30,7 @@ impl ArenaMap {
 impl Drop for ArenaMap {
     fn drop(&mut self) {
         unsafe {
-            let s = crate::st();
+            let s = crate::platform::st();
             s.arena_lo = 0;
             s.arena_hi = 0;
             s.free_head = 0;

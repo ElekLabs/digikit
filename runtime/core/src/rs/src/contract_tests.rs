@@ -105,7 +105,7 @@ struct MachinesBack(bool);
 impl Drop for MachinesBack {
     fn drop(&mut self) {
         if self.0 {
-            unsafe { crate::svc_rows::add(crate::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None) };
+            unsafe { crate::svc_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::handlers::exports::machines_row(), None) };
         }
     }
 }
@@ -116,7 +116,7 @@ fn check_with(f: &[u8], device: u32, fx: bool, machines: bool) -> (i32, Job) {
     let _ = crate::handlers::services(); // the first call adds the machines row of the host tests
     let _back = MachinesBack(!machines);
     if !machines {
-        unsafe { crate::svc_rows::remove(crate::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1) };
+        unsafe { crate::svc_rows::remove(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1) };
     }
     // an effect module's DSP section is checked by the fx service, a file of the card
     let _fx = fx.then(crate::handlers::fx_fixture::LoadedFx::new);
@@ -425,7 +425,7 @@ mod service_fixtures {
                 dkneeds::keys::write_table(&t, &mut b).unwrap();
                 b
             };
-            let (u, s, p) = (PackageId(0), PackageId(crate::MAX_MODULES as u8), PackageId(crate::MAX_MODULES as u8 + 1));
+            let (u, s, p) = (PackageId(0), PackageId(dkrt_abi::MAX_MODULES as u8), PackageId(dkrt_abi::MAX_MODULES as u8 + 1));
             let core = crate::lifecycle::CoreApis::new();
             let g = PackageGraph::from_tables(&[(u, table(&user)), (s, table(&svc)), (p, port.as_slice())], core.as_slice()).unwrap();
             // the port file comes first, then the service that needs it, then the user

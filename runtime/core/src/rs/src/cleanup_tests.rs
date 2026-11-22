@@ -2,6 +2,7 @@
 //! No device ACK/block-tail/callback quiescence claim. All shared runtime state is
 //! serialized; the module and its image buffer are blocks of the test arena (`fake_platform::test_arena`).
 use super::*;
+use crate::platform::st;
 use dkrt_abi::dev_addr::DevAddr;
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::link::{Owner, Sequence};
@@ -830,13 +831,13 @@ fn unload_of_a_module_tells_the_observers_before_its_memory_is_freed() {
     unsafe {
         seed(Completion::Ack, false, true, true);
         (*core::ptr::addr_of_mut!(OBSERVED)).clear();
-        assert_eq!(crate::dkrt_unload_observer_add(test_observer as *const () as usize), OK);
+        assert_eq!(crate::api::dkrt_unload_observer_add(test_observer as *const () as usize), OK);
         let removed: usize = 0x1234;
-        assert_eq!(crate::dkrt_unload_observer_add(removed), OK);
-        crate::dkrt_unload_observer_remove(removed);
+        assert_eq!(crate::api::dkrt_unload_observer_add(removed), OK);
+        crate::api::dkrt_unload_observer_remove(removed);
         pass();
         assert_eq!(st().modules[0].used, 0);
-        crate::dkrt_unload_observer_remove(test_observer as *const () as usize);
+        crate::api::dkrt_unload_observer_remove(test_observer as *const () as usize);
         assert_eq!(*core::ptr::addr_of!(OBSERVED), [(0, 1)], "once, for owner 0, while the record was in use");
         assert!(LINK.events.contains(&Event::Fini));
     }

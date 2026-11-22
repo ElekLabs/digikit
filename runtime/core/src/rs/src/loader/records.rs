@@ -3,7 +3,8 @@
 //! Only the loader writes them. Provider records have no menu and no runtime-version cell: those tables stay `MAX_MODULES` long.
 
 use crate::state::{DKRT_MENUS, DKRT_MENU_OBJS, DKRT_MODULE_RUNTIME, DKRT_PATHS};
-use crate::{st, Module, MAX_MODULES};
+use dkrt_abi::MAX_MODULES;
+use crate::{platform::st, state::Module};
 pub use crate::state::REC_MAX;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::PROVIDER_MAX;
