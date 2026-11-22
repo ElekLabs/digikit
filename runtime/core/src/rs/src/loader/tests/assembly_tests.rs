@@ -300,7 +300,7 @@ pub(super) unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
             } else {
                 (kind, 0, 0, 0)
             };
-            let v = crate::report::kind_value(p, &table, k, base);
+            let v = crate::package::capacity::kind_value(p, &table, k, base);
             DkrtCap { kind: kind as u32, limit: v.1, used: v.2, largest: v.3 }
         })
         .collect()

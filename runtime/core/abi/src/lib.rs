@@ -9,6 +9,7 @@
 //! - `fw`: `Fw`, the firmware's parameter page as a service sees it (the runtime implements it; tests fake it).
 //! - `keys`: the copy of a module's header table that the commit reads (`KeysCopy`).
 //! - `dev_addr`: `DevAddr`, a device address as its own type (the host maps it through an installed `AddressSpace`).
+//! - `module`: `Module`, `Ctx` and the names of the log (`LOG_NAME`, `PROVIDER_IDX`); `boot_path`: the selection index a file takes; `fw_id`: the image's firmware identity; `store_path`: string rules of store paths.
 //! - `dsp`, `registry`, `mem`: types, constants and helpers with no state. The core owns the objects (`DKRT_DSP`, `DKRT_REG`) and hands them out through `CoreApi`.
 //!
 //! This crate never depends on the runtime crate: a function that needs the core's state belongs to `CoreApi`, so the dependency arrows between the core and the
@@ -16,15 +17,18 @@
 #![no_std]
 #![deny(improper_ctypes, improper_ctypes_definitions)]
 
+pub mod boot_path;
 pub mod core_api;
 pub mod core_imports;
 pub mod dev_addr;
 pub mod dsp;
 pub mod fw;
+pub mod fw_id;
 pub mod gen_svc_abi;
 pub mod keys;
 pub mod link;
 pub mod mem;
+pub mod module;
 pub mod package;
 pub mod plan;
 pub mod platform;
@@ -34,6 +38,7 @@ pub mod regcheck;
 pub mod registry;
 pub mod service;
 pub mod state;
+pub mod store_path;
 pub mod storage;
 pub mod version;
 

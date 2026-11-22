@@ -21,6 +21,8 @@
 //! module's range behind the image, bss and voice states (`state_bytes` of its `dk_fx_desc`).
 //!
 //! Nothing here runs unless the file has a DSP section; the link to `core/dsp-link`, `core/dyndsp` and `core/dynfx` is optional.
+#[cfg(not(test))]
+use dkrt_abi::dev_addr::fn_addr;
 use crate::handlers::{services, Claim, ServiceTable};
 use dkrt_abi::mem::cstr_eq;
 use dkrt_abi::mem::cstr_len;
@@ -63,10 +65,6 @@ pub static mut DKRT_DSP: DspState = unsafe { core::mem::zeroed() };
 
 pub fn ds() -> &'static mut DspState {
     unsafe { &mut *addr_of_mut!(DKRT_DSP) }
-}
-
-pub(crate) fn fn_addr(f: unsafe extern "C" fn()) -> usize {
-    core::hint::black_box(f as usize)
 }
 
 /// The info table of `core/dyndsp`, or null.

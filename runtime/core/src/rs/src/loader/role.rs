@@ -134,22 +134,10 @@ unsafe fn fw_check<P: Platform>(p: &P, keys: &Keys) -> Result<(), i32> {
     let Some(id) = keys.fw(0) else {
         return Err(E_HOOK_STOCK);
     };
-    if image_fw_id(p) != Some(id) {
+    if dkrt_abi::fw_id::image_fw_id(p) != Some(id) {
         return Err(E_HOOK_STOCK);
     }
     Ok(())
-}
-
-/// The `fw_id` entry of the image's info table: the first 8 bytes of the SHA-256 of the stock firmware (two words, kept big endian); `None` for an image that has none.
-pub unsafe fn image_fw_id<P: Platform>(p: &P) -> Option<[u8; 8]> {
-    let at = p.info(dkneeds::keys::name_hash("fw_id"));
-    if at.is_null() {
-        return None;
-    }
-    let mut id = [0u8; 8];
-    id[..4].copy_from_slice(&core::ptr::read_volatile(at).to_be_bytes());
-    id[4..].copy_from_slice(&core::ptr::read_volatile(at.add(1)).to_be_bytes());
-    Some(id)
 }
 
 unsafe fn service_check<P: Platform, M: Images, R: Registry>(l: &mut Loader<P, M, R>, file: *const u8, head: &Head) -> i32 {

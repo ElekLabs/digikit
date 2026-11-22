@@ -22,7 +22,6 @@ use dkrt_sdk::{logk, E_BUSY, OK};
 use crate::module_cmds::{service, service_of};
 use crate::store_cmds::*;
 use crate::admin_cmds::*;
-use crate::module_cmds::*;
 
 
 // The protocol numbers (commands, the `E_*` statuses, `VERSION`, the INFO capability bits) are `dkrt_sdk::proto`, written by `patchkit gen`
@@ -277,18 +276,15 @@ pub(crate) const BIG: u8 = 2;
 pub(crate) const STORE: u8 = 4;
 
 pub(crate) struct Cmd {
-    cmd: u8,
-    flags: u8,
-    h: Handler,
+    pub(crate) cmd: u8,
+    pub(crate) flags: u8,
+    pub(crate) h: Handler,
 }
 
-/// The built-in commands, looked up one after the other (a jump table is not ColdFire code).
-pub(crate) static CMDS: [Cmd; 23] = [
+/// The commands of the resident core, looked up one after the other (a jump table is not ColdFire code); the others are the system package's (`package::commands`).
+pub(crate) static CMDS: [Cmd; 16] = [
     Cmd { cmd: CMD_INFO, flags: NOLOG | STORE, h: h_info },
     Cmd { cmd: CMD_LIST, flags: STORE, h: h_list },
-    Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },
-    Cmd { cmd: CMD_CAPACITY, flags: NOLOG, h: h_capacity },
-    Cmd { cmd: CMD_LOADS, flags: NOLOG, h: h_loads },
     Cmd { cmd: CMD_BEGIN, flags: STORE, h: h_begin },
     Cmd { cmd: CMD_DATA, flags: BIG | STORE, h: h_data },
     Cmd { cmd: CMD_END, flags: STORE, h: h_end },
@@ -303,10 +299,6 @@ pub(crate) static CMDS: [Cmd; 23] = [
     Cmd { cmd: CMD_FAULT, flags: 0, h: h_fault },
     Cmd { cmd: CMD_SELECT, flags: BIG, h: h_select },
     Cmd { cmd: CMD_RESTART, flags: 0, h: h_restart },
-    Cmd { cmd: CMD_RELOAD, flags: 0, h: h_reload },
-    Cmd { cmd: CMD_RELOAD_STATE, flags: NOLOG, h: h_reload_state },
-    Cmd { cmd: CMD_LOAD, flags: 0, h: h_load },
-    Cmd { cmd: CMD_UNLOAD, flags: 0, h: h_unload },
 ];
 
 pub(crate) fn find(cmd: u8) -> Option<&'static Cmd> {
@@ -317,7 +309,7 @@ pub(crate) fn find(cmd: u8) -> Option<&'static Cmd> {
         }
         i += 1;
     }
-    None
+    crate::package::commands::find(cmd)
 }
 
 /// Is the reply to `cmd` with `status` logged as an UPLOAD event? Not a read-only built-in (flag), and a service command only when it failed

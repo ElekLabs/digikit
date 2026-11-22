@@ -1,10 +1,10 @@
-//! The upload commands that read or change the store: LIST, BEGIN, DATA, END, DELETE, MKDIR, RENAME, READ, VERIFY, CLEAR and ABORT.
+//! The upload commands that read or change the store: LIST, BEGIN, DATA, END, DELETE, MKDIR, RENAME, READ, VERIFY, CLEAR, ABORT and SELECT.
 //! Each handler decodes a request, calls the store steps of `store_writer.rs` and replies.
 
 use crate::hash32::{self, Hash32};
 use crate::store_writer::{self as sw, Bufs, IN_AT, SCRATCH_AT, TBL_CAP};
 use crate::platform::{block_read, rd32, wr32};
-use crate::card;
+use crate::{boot, card};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::store::{self, Edit, Entry, Hdr, Table, KIND_DIR, KIND_FILE};
 use dkrt_sdk::proto::*;
@@ -431,4 +431,56 @@ pub(crate) unsafe fn h_clear(seq: u32, buf: *mut u8, body: *const u8, blen: usiz
 pub(crate) unsafe fn h_abort(seq: u32, _buf: *mut u8, _body: *const u8, _blen: usize) -> i32 {
     sw::abort_sysex();
     reply(CMD_ABORT, seq, OK, 0)
+}
+
+/// SELECT (runtime 4): save the selection record, the same `boot::selection_set` the menu's APPLY & RESTART calls (so the card range check and
+/// the "blank or ours" rule apply). Body: `u8 n`, then `n` store paths, each NUL terminated. Status: 0, `E_MSG` (malformed), `E_INUSE` (card
+/// not writable), or the selection code (`E_SEL_COUNT`, `E_SEL_PATH`, `E_SEL_WRITE`, `E_CARD_RO`). Takes effect at the next boot.
+pub(crate) unsafe fn cmd_select(seq: u32, body: *const u8, blen: usize) -> i32 {
+    if blen < 1 {
+        return reply(CMD_SELECT, seq, E_MSG, 0);
+    }
+    if !card::writable() {
+        return reply(CMD_SELECT, seq, E_INUSE, 0);
+    }
+    let n = *body as usize;
+    if n > dkrt_sdk::SEL_MAX {
+        return reply(CMD_SELECT, seq, dkrt_sdk::E_SEL_COUNT, 0);
+    }
+    // static, not on the MIDI task's stack (the record is about 450 bytes)
+    let sel = &mut *addr_of_mut!(SELBUF);
+    *sel = core::mem::zeroed();
+    let mut at = 1usize;
+    let mut k = 0usize;
+    while k < n {
+        let mut len = 0usize;
+        while at + len < blen && *body.add(at + len) != 0 {
+            len += 1;
+        }
+        if at + len >= blen {
+            return reply(CMD_SELECT, seq, E_MSG, 0); // no NUL
+        }
+        if len >= dkrt_sdk::SEL_PATH {
+            return reply(CMD_SELECT, seq, dkrt_sdk::E_SEL_PATH, 0);
+        }
+        let mut i = 0;
+        while i < len {
+            sel.paths[k][i] = *body.add(at + i);
+            i += 1;
+        }
+        at += len + 1;
+        k += 1;
+    }
+    if at != blen {
+        return reply(CMD_SELECT, seq, E_MSG, 0);
+    }
+    sel.count = n as u32;
+    let r = boot::selection_set(sel);
+    reply(CMD_SELECT, seq, r, 0)
+}
+
+pub(crate) static mut SELBUF: dkrt_sdk::DkrtSelection = dkrt_sdk::DkrtSelection { count: 0, flags: 0, paths: [[0; dkrt_sdk::SEL_PATH]; dkrt_sdk::SEL_MAX] };
+
+pub(crate) unsafe fn h_select(seq: u32, _buf: *mut u8, body: *const u8, blen: usize) -> i32 {
+    cmd_select(seq, body, blen)
 }

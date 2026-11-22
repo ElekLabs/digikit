@@ -204,3 +204,9 @@ mod host {
 
 #[cfg(not(target_pointer_width = "32"))]
 pub use host::{install, with_space, AddressSpace, SpaceGuard};
+
+/// The address of a function, kept as a runtime value (`black_box`): the compiler may not assume which function a stored pointer names.
+#[inline(always)]
+pub fn fn_addr(f: unsafe extern "C" fn()) -> usize {
+    core::hint::black_box(f as usize)
+}

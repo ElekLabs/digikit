@@ -12,7 +12,7 @@
 //! code set it. A second owner gets `E_BUSY`. The channel is cleared after its owner's `fini` (`release_sinks`). With no sink set a producer pays one test.
 //!
 //! Appends mask interrupts for a few instructions: the UI task, the MIDI task and the crash handler all append.
-use crate::entry::Ctx;
+use dkrt_abi::module::Ctx;
 use crate::{platform::fw_blocks, platform::irq_mask, platform::irq_restore};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;

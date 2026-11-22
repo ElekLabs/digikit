@@ -1,7 +1,7 @@
 //! What the loader needs from outside, as two traits (docs/plans/runtime-and-services.md section 13.2, R12-3a). The real types call the store, the arena, the
 //! module entry and the registry; the fakes of the host tests log the calls. Each trait has one real implementation, so there is no `dyn`.
 
-use crate::entry::Ctx;
+use dkrt_abi::module::Ctx;
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::service::{ModuleCommitCtx, ServiceRow};
 

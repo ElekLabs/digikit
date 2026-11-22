@@ -1,7 +1,7 @@
 //! `CheckedImages`: the images of the loader static in host tests. It is `RealImages` and checks one thing, the order of a take-down: the module block of a cleanup test goes back
 //! to the arena only after the DSP side let go of it (`mod_len` is cleared first). The cleanup tests name the block with `watch`.
 
-use crate::entry::Ctx;
+use dkrt_abi::module::Ctx;
 use crate::loader::{Block, Images, RealImages, Staged};
 use dkrt_abi::dev_addr::DevAddr;
 use std::cell::Cell;

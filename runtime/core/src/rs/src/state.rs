@@ -3,6 +3,7 @@
 
 use crate::platform::st;
 use crate::{arena, dlog};
+use dkrt_abi::module::Module;
 use dkrt_sdk::*;
 
 /// Arena bytes. A sub-region of `cf.expansion` that is part of this object's bss: patchkit places it with the object, so no
@@ -25,17 +26,6 @@ pub struct Stage(pub [u8; STAGE_BYTES]);
 pub static mut DKRT_ARENA: Arena = Arena([0; ARENA_BYTES]);
 #[no_mangle]
 pub static mut DKRT_STAGE: Stage = Stage([0; STAGE_BYTES]);
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Module {
-    pub used: u32,
-    pub name: [u8; 32],
-    pub version: u32,
-    pub base: u32,
-    pub size: u32,
-    pub fini: u32,
-}
 
 #[repr(C)]
 #[derive(Clone, Copy)]

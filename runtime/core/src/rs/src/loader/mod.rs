@@ -6,7 +6,7 @@ use dkrt_abi::mem::cstr_eq;
 use dkrt_abi::mem::cstr_len;
 use dkrt_abi::mem::rd32;
 use dkrt_abi::mem::wr32;
-use crate::entry::Ctx;
+use dkrt_abi::module::Ctx;
 use crate::admission::Admission;
 use discover::Found;
 use dkrt_abi::plan::Verdict;
@@ -17,7 +17,8 @@ use role::{PlaceArgs, RoleSteps};
 use exports::Exports;
 use crate::platform::RealPlatform;
 use crate::selection::BOOT_IDX;
-use crate::{platform::st, state::Module};
+use crate::platform::st;
+use dkrt_abi::module::{Module, LOG_NAME, PROVIDER_IDX};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::Owner;
@@ -37,9 +38,6 @@ const NONE: u32 = dkneeds::NONE;
 // header field offsets (big endian): `[format]` of sdk/sdk.toml; the parse in `image.rs` reads the rest
 const H_VERSION: usize = dkneeds::H_VERSION as usize;
 const H_NAME: usize = dkneeds::H_NAME as usize;
-/// Bytes of a module's name in a log event (three words).
-pub const LOG_NAME: usize = 12;
-
 /// The name part of the module id in `head` (the NAME_LEN bytes of the header's name): after the last `/`, cut to `LOG_NAME`, NUL padded.
 fn name_part(head: &[u8]) -> [u8; LOG_NAME] {
     let n = head.iter().position(|b| *b == 0).unwrap_or(head.len());
@@ -94,9 +92,6 @@ pub(crate) use plan::test_accept;
 pub(crate) use unload::retire_sdk;
 pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
 pub(crate) use seams::{DeviceImages, DEVICE_IMAGES};
-
-/// The index the log shows for a provider file (`MOD_LOAD` and the events of its load): not a selection index, and not `u32::MAX` (no load running).
-pub const PROVIDER_IDX: u32 = 0xffff_fffe;
 
 /// What a provider record keeps after its load started: the copy of its header table (HOOKS, EXPORTS and SLOTS; for the port file the whole table; the staged file is gone once `init` reads
 /// from the store) and the size of its image.
@@ -262,7 +257,7 @@ pub unsafe fn set_safe() {
 
 /// The capacity of the platform: `dkrt_capacity` into `caps`; its count.
 pub(crate) fn dkrt_capacity_into(caps: &mut [DkrtCap; CAP_MAX]) -> usize {
-    unsafe { crate::report::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize }
+    unsafe { crate::package::capacity::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize }
 }
 
 /// The module record loaded from the store path `path` (NUL terminated), and its selection index: what a live job names its module by.

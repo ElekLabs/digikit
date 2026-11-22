@@ -1,7 +1,8 @@
 use super::{RtColdFire, RtHost, RtInstallers, RtLinker, RtPlacer, RtSharc};
 use crate::loader::discover::PATH_CAP;
 use crate::loader::package::{Entries, Flight};
-use crate::loader::{Images, Loader, Registry, LOG_NAME};
+use crate::loader::{Images, Loader, Registry};
+use dkrt_abi::module::LOG_NAME;
 use crate::admission::Admission;
 use core::ptr::addr_of_mut;
 use dkrt_abi::package::PackageId;

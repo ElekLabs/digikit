@@ -2,10 +2,9 @@
 //! lifecycle of the device. `RealBootEnv` is the device's; a host test gives the same steps over a fake card and its own loader (`loader/tests/host_boot_env.rs`).
 
 use crate::platform::RealPlatform;
-use crate::{fault, loader, store};
+use crate::{fault, loader};
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
-use dkrt_sdk::OK;
 
 /// The steps of the boot that depend on where it runs. The order and the decisions between them are `boot::run`'s.
 pub(crate) trait BootEnv {
@@ -51,24 +50,13 @@ impl BootEnv for RealBootEnv {
     unsafe fn set_safe(&self) {
         loader::set_safe()
     }
-    /// A file that is missing, torn or not a `.dkm` has no table (its load reports the error).
     unsafe fn read_tables(&self, rec: &Record) {
-        loader::reset_plan();
-        let mut k = 0;
-        while k < rec.count as usize {
-            if let Ok(found) = store::find(rec.paths[k].as_ptr()) {
-                if store::load_to_stage(&found) == OK {
-                    let file = core::slice::from_raw_parts(store::stage() as *const u8, found.size as usize);
-                    loader::capture(k, file);
-                }
-            }
-            k += 1;
-        }
+        crate::package::boot::read_tables(rec)
     }
     unsafe fn find_providers(&self, count: usize) {
-        loader::find_providers(count)
+        crate::package::boot::find_providers(count)
     }
     unsafe fn load(&self, rec: &Record) {
-        crate::lifecycle::boot(rec)
+        crate::package::boot::load(rec)
     }
 }

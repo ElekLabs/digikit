@@ -4,7 +4,8 @@
 
 use crate::state::{DKRT_MENUS, DKRT_MENU_OBJS, DKRT_MODULE_RUNTIME, DKRT_PATHS};
 use dkrt_abi::MAX_MODULES;
-use crate::{platform::st, state::Module};
+use crate::platform::st;
+use dkrt_abi::module::Module;
 pub use crate::state::REC_MAX;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::PROVIDER_MAX;

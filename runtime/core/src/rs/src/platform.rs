@@ -313,13 +313,13 @@ impl Platform for RealPlatform {
         if let Some(t) = crate::cleanup_tests::test_info(name_hash) {
             return t;
         }
-        dkrt_abi::platform::info_find(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
+        dkrt_abi::platform::info_find(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash)
     }
     unsafe fn info_slot(&self, name_hash: u32) -> dkrt_abi::dev_addr::DevAddr {
-        dkrt_abi::dev_addr::DevAddr::of_ptr(dkrt_abi::platform::info_find_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash))
+        dkrt_abi::dev_addr::DevAddr::of_ptr(dkrt_abi::platform::info_find_slot(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash))
     }
     unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32> {
-        dkrt_abi::platform::info_find_dsp_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
+        dkrt_abi::platform::info_find_dsp_slot(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash)
     }
 
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32 {

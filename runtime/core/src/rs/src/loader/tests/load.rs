@@ -665,7 +665,7 @@ fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_l
         f
     };
     let want = |s: &[u8]| {
-        let mut n = [0u8; super::LOG_NAME];
+        let mut n = [0u8; dkrt_abi::module::LOG_NAME];
         n[..s.len()].copy_from_slice(s);
         n
     };

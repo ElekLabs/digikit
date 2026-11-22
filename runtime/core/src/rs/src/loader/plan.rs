@@ -52,7 +52,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let mut want = [0u32; WANT_MAX];
         let nw = unmet_needs(&mods[..n], &mut want);
         if nw != 0 {
-            discover::find(&mut self.m, &services(), &want[..nw], role::image_fw_id(&self.p), &mut self.found);
+            discover::find(&mut self.m, &services(), &want[..nw], dkrt_abi::fw_id::image_fw_id(&self.p), &mut self.found);
             // a limit of the search was passed: a need may be unmet for that reason, not for a missing file; each cause has its own name word (`(tab`, `(fil`, `(nee`) and its `TRUNC_*` bit as the hash word, which `loadFailureText` of runtime-log.ts turns into text
             let t = self.found.truncated;
             if t & discover::TRUNC_TABLE != 0 {
@@ -125,7 +125,7 @@ pub unsafe fn reset_plan() {
 /// The capacity as the boot's admission starts with it (`dkrt_capacity`, into `caps`; its count). The report counts the selection's paths as used from the start of the boot
 /// (`boot::selected`), and the admission counts them one by one as it takes the modules; and the admission starts with no DSP load (the report counts its own result from its end).
 pub(crate) unsafe fn boot_caps(caps: &mut [DkrtCap; CAP_MAX]) -> usize {
-    let k = crate::report::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+    let k = crate::package::capacity::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
     let mut c = 0;
     while c < k {
         if caps[c].kind == dkrt_sdk::proto::CAPK_SELECTION as u32 {

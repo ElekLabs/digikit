@@ -3,7 +3,8 @@
 //! tests share the lock of `cleanup_tests`.
 use crate::fake_platform::test_arena::TestArena;
 use crate::dlog::{self, Span, SINK_SPAN};
-use crate::entry::{self, Ctx};
+use crate::entry;
+use dkrt_abi::module::Ctx;
 use crate::state::{DKRT_POLLS, POLLS};
 use crate::tick::{phase, poll_all};
 use core::ptr::addr_of_mut;

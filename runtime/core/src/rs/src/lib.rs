@@ -38,6 +38,7 @@ pub mod entry;
 mod gen_abi_check;
 mod resident_query;
 mod loader;
+mod package;
 pub mod registry;
 pub mod scan;
 pub mod settings;

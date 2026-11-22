@@ -15,9 +15,11 @@ use crate::platform::st;
 use crate::boot_env::{BootEnv, RealBootEnv};
 use crate::safe_mode::{key_held_with, DKRT_STABLE_BLOCKS, LATE_FLOOR};
 use crate::selection::{current_with, update_with, Choice, REC, REC_COPY, REC_VALID};
-use crate::{card, fault, dlog, loader, store};
+use crate::{card, fault, dlog, store};
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_sdk::sel::{self, Record};
+use dkrt_abi::boot_path::{path_hash, pick_index};
+use dkrt_abi::module::{shown_name, LOG_NAME};
 use dkrt_sdk::*;
 
 pub use crate::safe_mode::*;
@@ -218,47 +220,10 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
 /// load loop (`note_boot_path`); a live load never writes it, so an index stays the index its path had at the boot, whichever module used it in between.
 static mut BOOT_PATH: [u32; SEL_MAX] = [0; SEL_MAX];
 
-/// The hash of a store path (the bytes up to the NUL): FNV-1a, never 0.
-pub unsafe fn path_hash(path: *const u8) -> u32 {
-    let n = dkrt_abi::mem::cstr_len(path, 64);
-    let h = dkneeds::keys::name_hash_bytes(core::slice::from_raw_parts(path, n));
-    if h == 0 {
-        1
-    } else {
-        h
-    }
-}
-
 /// The boot's load loop reads selection entry `k` with path `path`: its index belongs to that path from now on.
 pub unsafe fn note_boot_path(k: usize, path: *const u8) {
     if k < SEL_MAX {
         BOOT_PATH[k] = path_hash(path);
-    }
-}
-
-/// The selection index a run-time load of the file with path hash `hash` takes (docs/plans/extension-model.md E5c): the index that path had at this boot, when no module lives
-/// there now (`live`); else the first index below `count` that no module lives at and no boot path owns (an index an earlier live load added); else a new index (`count`).
-/// `E_SEL_COUNT` when all `SEL_MAX` are taken. An unloaded boot module keeps its index for itself.
-pub fn pick_index(hash: u32, boot: &[u32; SEL_MAX], count: usize, live: &[bool; SEL_MAX]) -> Result<usize, i32> {
-    let count = count.min(SEL_MAX);
-    let mut k = 0;
-    while k < count {
-        if !live[k] && hash != 0 && boot[k] == hash {
-            return Ok(k);
-        }
-        k += 1;
-    }
-    k = 0;
-    while k < count {
-        if !live[k] && boot[k] == 0 {
-            return Ok(k);
-        }
-        k += 1;
-    }
-    if count < SEL_MAX {
-        Ok(count)
-    } else {
-        Err(E_SEL_COUNT)
     }
 }
 
@@ -325,20 +290,8 @@ pub unsafe fn unloaded(k: usize) {
     b.results[k] = OK;
 }
 
-/// The name a module event shows (`LOG_NAME` bytes): the name part of the module id when the loader read the header (`name`, not empty), else the file leaf without its `.dkm`.
-pub fn shown_name(leaf: &[u8], name: &[u8; crate::loader::LOG_NAME]) -> [u8; crate::loader::LOG_NAME] {
-    if name[0] != 0 {
-        return *name;
-    }
-    let leaf = leaf.strip_suffix(b".dkm").unwrap_or(leaf);
-    let mut out = [0u8; crate::loader::LOG_NAME];
-    let n = leaf.len().min(crate::loader::LOG_NAME);
-    out[..n].copy_from_slice(&leaf[..n]);
-    out
-}
-
 /// The result `res` of the load of selection entry `k` (the file at `path`): the boot record, the log events and the name the LOADS report shows.
-pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; NEEDS_LEN], name: &[u8; crate::loader::LOG_NAME]) {
+pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; NEEDS_LEN], name: &[u8; LOG_NAME]) {
     let b = info();
     st().last_result = res;
     b.results[k] = res;
@@ -360,7 +313,7 @@ pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; 
         leaf_len += 1;
     }
     let shown = shown_name(core::slice::from_raw_parts(p.add(at), leaf_len), name);
-    let w = crate::loader::LOG_NAME;
+    let w = LOG_NAME;
     dlog::ev(
         logk::MOD_LOAD,
         bad,
@@ -383,14 +336,14 @@ pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; 
 }
 
 /// The boot record's account of a finished load of selection index `k` (`Ops::load`): its state and its row.
-pub(crate) unsafe fn account_load(k: usize, path: *const u8, r: i32, missing: [u8; dkrt_sdk::NEEDS_LEN], name: &[u8; crate::loader::LOG_NAME]) {
+pub(crate) unsafe fn account_load(k: usize, path: *const u8, r: i32, missing: [u8; dkrt_sdk::NEEDS_LEN], name: &[u8; LOG_NAME]) {
     let missing = if r == E_IMPORT { missing } else { [0u8; dkrt_sdk::NEEDS_LEN] };
     states().finished(k, r);
     report_module(k, path, r, &missing, name);
 }
 
 /// The result `res` of the load of the provider file at the store path `path` (`services/<name>.dks`) that provides the service `hash`, loaded at `base` (0 when
-/// it did not load): log only. The event is `MOD_LOAD` with the provider index (`loader::PROVIDER_IDX`, not a selection index), the result, the first four
+/// it did not load): log only. The event is `MOD_LOAD` with the provider index (`dkrt_abi::module::PROVIDER_IDX`, not a selection index), the result, the first four
 /// characters of the file name, the service hash and the base; the boot record and `LOADS` do not change.
 pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
     let mut at = 0;
@@ -411,7 +364,7 @@ pub unsafe fn report_provider(path: &[u8], res: i32, hash: u32, base: u32) {
     dlog::ev(
         logk::MOD_LOAD,
         bad,
-        [loader::PROVIDER_IDX, res as u32, dlog::word_of(name.as_ptr(), 0, 4), hash, base],
+        [dkrt_abi::module::PROVIDER_IDX, res as u32, dlog::word_of(name.as_ptr(), 0, 4), hash, base],
     );
 }
 
@@ -534,28 +487,13 @@ mod tests {
     }
 
     #[test]
-    fn a_module_event_shows_the_module_name_when_the_header_was_read_else_the_leaf_without_dkm() {
-        let id = |s: &[u8]| {
-            let mut n = [0u8; crate::loader::LOG_NAME];
-            n[..s.len()].copy_from_slice(s);
-            n
-        };
-        // the header was read: the name part of the id, whatever the file is called
-        assert_eq!(shown_name(b"digikit-usb-fast.dkm", &id(b"usb-fast")), id(b"usb-fast"));
-        // no header (file missing, unreadable): the leaf without `.dkm`, cut to the log's width
-        assert_eq!(shown_name(b"digikit-usb-fast.dkm", &[0; crate::loader::LOG_NAME]), id(b"digikit-usb-"));
-        assert_eq!(shown_name(b"gone.dkm", &[0; crate::loader::LOG_NAME]), id(b"gone"));
-        assert_eq!(shown_name(b"noext", &[0; crate::loader::LOG_NAME]), id(b"noext"));
-    }
-
-    #[test]
     fn a_module_report_keeps_the_file_leaf_and_names_the_missing_service_on_an_import_error() {
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             fresh_boot_record();
             let mut missing = [0u8; NEEDS_LEN];
             missing[..8].copy_from_slice(b"usb-bulk");
-            report_module(1, sel_path(b"mods/deep/a.dkm").as_ptr(), E_IMPORT, &missing, &[0; crate::loader::LOG_NAME]);
+            report_module(1, sel_path(b"mods/deep/a.dkm").as_ptr(), E_IMPORT, &missing, &[0; LOG_NAME]);
             assert_eq!(info().results[1], E_IMPORT);
             assert_eq!(st().last_result, E_IMPORT);
             assert_eq!(info().loaded, 0, "only OK counts as loaded");
@@ -565,20 +503,20 @@ mod tests {
 
             // another error with a name set keeps no needs; an import error with no name keeps none either
             fresh_boot_record();
-            report_module(0, sel_path(b"a.dkm").as_ptr(), E_INIT, &missing, &[0; crate::loader::LOG_NAME]);
-            report_module(1, sel_path(b"b.dkm").as_ptr(), E_IMPORT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(0, sel_path(b"a.dkm").as_ptr(), E_INIT, &missing, &[0; LOG_NAME]);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_IMPORT, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             assert_eq!(info().needs, [[0; NEEDS_LEN]; SEL_MAX]);
             assert_eq!(info().results[..2], [E_INIT, E_IMPORT]);
 
             // OK counts, LOADING does not (the DSP part reports later), and a leaf over the name field is cut with its NUL kept
             fresh_boot_record();
-            report_module(0, sel_path(b"x/ok.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
-            report_module(1, sel_path(b"x/dsp.dkm").as_ptr(), LOADING, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(0, sel_path(b"x/ok.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
+            report_module(1, sel_path(b"x/dsp.dkm").as_ptr(), LOADING, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             assert_eq!(info().loaded, 1);
             let mut long = b"mods/".to_vec();
             long.extend_from_slice(&[b'n'; 40]);
             long.extend_from_slice(b".dkm");
-            report_module(2, sel_path(&long).as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(2, sel_path(&long).as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             assert_eq!(name_of(2)[..NAME_LEN - 1], [b'n'; NAME_LEN - 1]);
             assert_eq!(name_of(2)[NAME_LEN - 1], 0);
         }
@@ -625,9 +563,9 @@ mod tests {
             }
             // module 0 is active (no DSP part); module 1 failed in its init
             states().finished(0, OK);
-            report_module(0, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(0, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             states().finished(1, E_INIT);
-            report_module(1, sel_path(b"b.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(1, sel_path(b"b.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             let before = (info().results, info().states, info().loaded);
             report_dsp(0, E_INIT);
             report_dsp(1, OK);
@@ -639,59 +577,6 @@ mod tests {
         let mut v = p.as_bytes().to_vec();
         v.push(0);
         unsafe { path_hash(v.as_ptr()) }
-    }
-
-    fn boot_of(list: &[&str]) -> [u32; SEL_MAX] {
-        let mut out = [0u32; SEL_MAX];
-        for (k, p) in list.iter().enumerate() {
-            out[k] = h(p);
-        }
-        out
-    }
-
-    #[test]
-    fn a_live_load_takes_the_index_its_path_had_at_the_boot_else_a_free_one_no_boot_path_owns_else_a_new_one() {
-        let boot = boot_of(&["modules/a.dkm", "modules/b.dkm", "modules/c.dkm"]);
-        let mut live = [false; SEL_MAX];
-        // the path was in the boot's selection and no module lives there
-        assert_eq!(pick_index(h("modules/b.dkm"), &boot, 3, &live), Ok(1));
-        // a module lives at that index (it cannot be another file, a boot index belongs to its path): the file takes a new index, not another boot path's
-        live[1] = true;
-        assert_eq!(pick_index(h("modules/b.dkm"), &boot, 3, &live), Ok(3), "the other boot indices belong to their paths");
-        assert_eq!(pick_index(h("modules/new.dkm"), &boot, 3, &[false; SEL_MAX]), Ok(3), "an unknown file does not take the index of an unloaded boot module");
-        // an index an earlier live load added is free for any file once its module is gone
-        let mut count4 = boot;
-        count4[3] = 0;
-        assert_eq!(pick_index(h("modules/new.dkm"), &count4, 4, &[false; SEL_MAX]), Ok(3));
-        assert_eq!(pick_index(h("modules/new.dkm"), &count4, 4, &{
-            let mut l = [false; SEL_MAX];
-            l[3] = true;
-            l
-        }), Ok(4));
-        // the table is full
-        let full = [true; SEL_MAX];
-        assert_eq!(pick_index(h("modules/new.dkm"), &boot_of(&[]), SEL_MAX, &full), Err(E_SEL_COUNT));
-        assert_eq!(pick_index(h("modules/new.dkm"), &[1; SEL_MAX], SEL_MAX + 3, &[false; SEL_MAX]), Err(E_SEL_COUNT), "a count past the table is cut to it; every index belongs to a boot path");
-        // an empty boot selection: the first index
-        assert_eq!(pick_index(h("modules/x.dkm"), &boot_of(&[]), 0, &[false; SEL_MAX]), Ok(0));
-    }
-
-    #[test]
-    fn a_module_keeps_its_boot_index_after_another_used_it_and_long_leaves_with_one_prefix_do_not_collide() {
-        // A at 0 and B at 1 at the boot. A is unloaded, C loads (a new index, 2, since 0 belongs to A), C is unloaded: A loads again at 0
-        let boot = boot_of(&["modules/a.dkm", "modules/b.dkm"]);
-        let mut live = [false, true, false, false, false, false, false, false];
-        let c = pick_index(h("modules/c.dkm"), &boot, 2, &live).unwrap();
-        assert_eq!(c, 2);
-        live[c] = true;
-        live[c] = false;
-        assert_eq!(pick_index(h("modules/a.dkm"), &boot, 3, &live), Ok(0), "A is back at the index it had");
-        // taxonomy leaves of 35 characters that differ in the last characters only (the old name match cut them at 27)
-        let (x, y) = ("modules/machines/digikit-long-machine-name-1.dkm", "modules/machines/digikit-long-machine-name-2.dkm");
-        let boot = boot_of(&[x, y]);
-        assert_eq!(pick_index(h(y), &boot, 2, &[false; SEL_MAX]), Ok(1));
-        assert_eq!(pick_index(h(x), &boot, 2, &[false; SEL_MAX]), Ok(0));
-        assert_ne!(h(x), h(y));
     }
 
     #[test]
@@ -706,7 +591,7 @@ mod tests {
             note_boot_path(SEL_MAX, b"x\0".as_ptr());
             // a live load of another file into index 1 (it was unloaded) overwrites the display name and nothing else
             begin_live(1);
-            report_module(1, sel_path(b"modules/c.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(1, sel_path(b"modules/c.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             assert_eq!(&name_of(1)[..5], b"c.dkm");
             assert_eq!(BOOT_PATH[..2], [h("modules/a.dkm"), h("modules/b.dkm")]);
             let mut live = [false; SEL_MAX];
@@ -727,19 +612,19 @@ mod tests {
             states().planned(0, Verdict::Accepted);
             states().init(0);
             states().finished(0, OK);
-            report_module(0, sel_path(b"modules/a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(0, sel_path(b"modules/a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             unloaded(0);
             let before = (info().count, info().states[0], info().results[0], info().loaded, name_of(0));
             begin_live(0);
             states().finished(0, E_INIT);
-            report_module(0, sel_path(b"modules/other.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(0, sel_path(b"modules/other.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             restore_live(0);
             assert_eq!((info().count, info().states[0], info().results[0], info().loaded, name_of(0)), before);
             // an index that was never used leaves no FAILED row, no name and no count
             begin_live(1);
             assert_eq!(info().count, 2);
             states().finished(1, E_INIT);
-            report_module(1, sel_path(b"modules/new.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(1, sel_path(b"modules/new.dkm").as_ptr(), E_INIT, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             restore_live(1);
             assert_eq!((info().count, info().states[1], info().results[1], name_of(1)), (1, STATE_SELECTED, OK, [0; NAME_LEN]));
         }
@@ -755,7 +640,7 @@ mod tests {
                 states().planned(k, Verdict::Accepted);
                 states().init(k);
                 states().finished(k, OK);
-                report_module(k, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+                report_module(k, sel_path(b"a.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             }
             assert_eq!((info().loaded, info().states[..2].to_vec()), (2, vec![STATE_ACTIVE, STATE_ACTIVE]));
             // an unload: UNLOADED, the loaded count drops once, the other module is untouched; a second one does not drop it again
@@ -772,7 +657,7 @@ mod tests {
             begin_live(2);
             assert_eq!((info().states[2], info().count), (STATE_INIT, 3));
             assert!(states().finished(2, OK) && states().finished(0, LOADING));
-            report_module(2, sel_path(b"new.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; crate::loader::LOG_NAME]);
+            report_module(2, sel_path(b"new.dkm").as_ptr(), OK, &[0; NEEDS_LEN], &[0; LOG_NAME]);
             assert_eq!((info().loaded, info().states[..3].to_vec()), (2, vec![STATE_DSP_LOADING, STATE_ACTIVE, STATE_ACTIVE]));
             assert_eq!(name_of(2)[..8], *b"new.dkm\0");
             // the load half of a reload takes an active module to INIT and drops the count

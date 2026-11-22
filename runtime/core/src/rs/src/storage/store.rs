@@ -403,7 +403,7 @@ unsafe fn find_name_unlocked(prefix: *const u8, name: &[u8], out: *mut [u8; 64])
                 path[k] = *e.add(k);
                 k += 1;
             }
-            if !crate::scan::last_part_is(&path, name) {
+            if !dkrt_abi::store_path::last_part_is(&path, name) {
                 return true;
             }
             *out = path;

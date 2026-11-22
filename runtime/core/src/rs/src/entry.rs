@@ -13,18 +13,8 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use crate::platform::PLATFORM;
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::storage::Storage;
+use dkrt_abi::module::{Ctx, CTX_MAGIC};
 use dkrt_sdk::*;
-
-/// "DKCX": the first word of a live context.
-pub const CTX_MAGIC: u32 = 0x444b_4358;
-
-/// What a `dk_module_ctx *` points to: the record of the module that `init`, `fini`, `tick` and `menu` belong to.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Ctx {
-    pub magic: u32,
-    pub rec: u32,
-}
 
 const NO_CTX: Ctx = Ctx { magic: 0, rec: 0 };
 

@@ -699,7 +699,7 @@ at = "health"
 name = "dkrt_capacity"
 sig = "u32 dkrt_capacity(DkrtCap *out, u32 max)"
 doc = "The CAPACITY command's entries (limit, used, largest per resource); how many were written, at most max."
-at = "report"
+at = "package::capacity"
 
 [[fn]]
 name = "dkrt_blocks"

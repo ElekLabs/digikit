@@ -20,7 +20,7 @@ fn a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none
 
 #[test]
 fn the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body() {
-    use crate::admin_cmds::{cmd_load, cmd_reload, cmd_reload_state, cmd_unload};
+    use crate::package::module_admin::{cmd_load, cmd_reload, cmd_reload_state, cmd_unload};
     use crate::transport::{DKRT_UPLOAD_LAST, RBODY};
     let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let status = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(DKRT_UPLOAD_LAST)) };

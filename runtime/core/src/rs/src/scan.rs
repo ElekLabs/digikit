@@ -227,19 +227,6 @@ pub unsafe fn module_path(owner: u8) -> *const u8 {
     (*addr_of!(DKRT_PATHS))[rec - 1].as_ptr()
 }
 
-/// Is `name` the last part of `path` (the whole of it, or after a `/`)?
-pub(crate) fn last_part_is(path: &[u8; 64], name: &[u8]) -> bool {
-    let mut l = 0;
-    while l < 63 && path[l] != 0 {
-        l += 1;
-    }
-    if name.is_empty() || name.len() > l {
-        return false;
-    }
-    let from = l - name.len();
-    (from == 0 || path[from - 1] == b'/') && &path[from..l] == name
-}
-
 /// `CoreApi::store_find`: the first file under `dir` (at most 62 bytes, ending in `/`) whose last path part is `name`, in the table's order. The length of its path,
 /// with the path NUL padded in `out`; `E_NOT_FOUND` after the whole store was read and holds none (and without a store), the error of the read otherwise (`E_BUSY`
 /// while an upload holds the store). UI task.
@@ -278,7 +265,7 @@ pub unsafe extern "C" fn dkrt_fit(
         used: 0,
         largest: 0,
     }; CAP_MAX];
-    let k = crate::report::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
+    let k = crate::package::capacity::dkrt_capacity(caps.as_mut_ptr(), CAP_MAX as u32) as usize;
     let (e, t): (&[DkrtScan], &[u8]) = if n == 0 {
         (&[], &[])
     } else {
@@ -294,12 +281,6 @@ pub unsafe extern "C" fn dkrt_fit(
 #[cfg(test)]
 mod find_tests {
     use super::*;
-
-    fn path(s: &[u8]) -> [u8; 64] {
-        let mut p = [0u8; 64];
-        p[..s.len()].copy_from_slice(s);
-        p
-    }
 
     #[test]
     fn only_a_module_record_that_is_in_use_has_a_path() {
@@ -322,14 +303,4 @@ mod find_tests {
         }
     }
 
-    #[test]
-    fn a_file_name_matches_the_last_part_of_a_path_and_nothing_shorter() {
-        let p = path(b"modules/machine/fadedlimes-analog.dkm");
-        assert!(last_part_is(&p, b"fadedlimes-analog.dkm"));
-        assert!(!last_part_is(&p, b"analog.dkm"), "the part after a dash is not a part of the path");
-        assert!(!last_part_is(&p, b"machine"));
-        assert!(!last_part_is(&p, b""));
-        assert!(last_part_is(&path(b"a.dkm"), b"a.dkm"));
-        assert!(!last_part_is(&path(b"a.dkm"), b"xa.dkm"));
-    }
 }

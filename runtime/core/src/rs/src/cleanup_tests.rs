@@ -7,7 +7,7 @@ use dkrt_abi::dev_addr::DevAddr;
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::link::{Owner, Sequence};
 use crate::fake_platform::test_arena::{ScriptedArena, TestArena};
-use crate::entry::Ctx;
+use dkrt_abi::module::Ctx;
 use crate::handlers::fx_fixture::{frows, reset_rows};
 use crate::handlers::machines_fixture::vrows;
 use std::vec::Vec;
