@@ -163,11 +163,16 @@ static mut LISTINGS: [*mut Listing; MAX_LISTINGS] = [null_mut(); MAX_LISTINGS];
 
 #[cfg(not(test))]
 unsafe fn take(bytes: usize) -> *mut u8 {
-    crate::arena::alloc(bytes as u32)
+    let a = crate::arena::alloc(bytes as u32);
+    if a.is_null() {
+        null_mut()
+    } else {
+        a.ptr()
+    }
 }
 #[cfg(not(test))]
 unsafe fn give(p: *mut u8) {
-    crate::arena::free(p);
+    crate::arena::free(dkrt_abi::dev_addr::DevAddr::of_ptr(p));
 }
 // The arena runs on 32-bit addresses; host tests take the blocks from the host heap and count them.
 #[cfg(test)]

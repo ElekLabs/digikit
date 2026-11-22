@@ -1,10 +1,10 @@
 //! The span producers (`entry::tick_all`, `tick::phase`, `tick::poll_all`) over a fake clock and a fake emit: nothing is read or emitted without a span sink
 //! and a clock. A span carries its producer's owner, the first clock reading and the elapsed cycles across a wrap. The sink channel is global state. The
 //! tests share the lock of `cleanup_tests`.
+use crate::fake_platform::test_arena::TestArena;
 use crate::dlog::{self, Span, SINK_SPAN};
 use crate::entry::{self, Ctx};
 use crate::state::{DKRT_POLLS, POLLS};
-use crate::test_lock::LOCK;
 use crate::tick::{phase, poll_all};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::{E_CONTRACT, E_NOMEM, OK};
@@ -76,7 +76,7 @@ fn emits() -> Vec<(u32, u32, u32)> {
 
 #[test]
 fn no_sink_means_no_clock_read_and_no_span() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         (*addr_of_mut!(DKRT_POLLS))[0] = fake_poll as *const () as usize;
@@ -91,7 +91,7 @@ fn no_sink_means_no_clock_read_and_no_span() {
 
 #[test]
 fn an_emit_without_a_clock_measures_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_sink_set(SINK_SPAN, p(fake_emit as *const () as usize))), OK);
@@ -110,7 +110,7 @@ fn an_emit_without_a_clock_measures_nothing() {
 /// difference, a wrap of the counter included. The 32-bit `DKRT_TICKS` table cannot hold a fake's address on a 64-bit host, so `tick_all` itself is not run here.
 #[test]
 fn spanned_emits_one_record_per_call_with_its_owner_and_start() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -138,7 +138,7 @@ fn spanned_emits_one_record_per_call_with_its_owner_and_start() {
 
 #[test]
 fn a_phase_and_each_poll_carry_their_own_owner() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -158,7 +158,7 @@ fn a_phase_and_each_poll_carry_their_own_owner() {
 
 #[test]
 fn releasing_the_sinks_clears_the_clock() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -176,7 +176,7 @@ fn releasing_the_sinks_clears_the_clock() {
 
 #[test]
 fn dk_sink_set_on_the_span_channel_clears_the_clock() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -200,7 +200,7 @@ fn dk_sink_set_on_the_span_channel_clears_the_clock() {
 /// `dkrt_poll_add` records the owner of a slot: the module record whose loaded range holds the function, the runtime marker for any other address.
 #[test]
 fn a_poll_slot_records_the_module_that_registered_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         let s = crate::st();
@@ -251,7 +251,7 @@ unsafe extern "C" fn observer_b(owner: u32) {
 /// others are called in table order with the owner.
 #[test]
 fn unload_observers_are_called_with_the_owner_and_an_own_observer_is_dropped() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         (*core::ptr::addr_of_mut!(CALLED)).clear();
@@ -290,7 +290,7 @@ fn unload_observers_are_called_with_the_owner_and_an_own_observer_is_dropped() {
 /// `dkrt_ctx_owner` gives the record of a live module context and refuses any other pointer.
 #[test]
 fn a_module_context_names_its_owner() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         crate::entry::bind(2);
@@ -312,7 +312,7 @@ fn a_module_context_names_its_owner() {
 /// `dkrt_menu_built` counts a menu for the module record that holds the fill function, else the descriptor; an address in no module counts for none.
 #[test]
 fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         let s = crate::st();
@@ -338,7 +338,7 @@ fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
 #[test]
 fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
     use crate::reload::{Ops, RealOps};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         let s = crate::st();
@@ -377,7 +377,7 @@ fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
 #[test]
 fn the_job_reads_the_menu_count_of_its_own_record() {
     use crate::reload::{Ops, RealOps};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         let s = crate::st();
@@ -403,7 +403,7 @@ fn the_job_reads_the_menu_count_of_its_own_record() {
 /// `dkrt_phase` says what the running module code is.
 #[test]
 fn the_phase_is_that_of_the_running_module_code() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(crate::dkrt_phase(), 0);

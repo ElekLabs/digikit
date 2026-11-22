@@ -2,6 +2,8 @@
 //! modules (`optional`), the lookups `import_addr` and `import_needs`, and the imports that are plain functions.
 
 use crate::platform::cstr_eq;
+use core::ptr::null_mut;
+use dkrt_abi::dev_addr::DevAddr;
 use crate::state::log_at;
 use crate::{arena, aux, collect, dlog, entry, hash32, intro, io, worker};
 use crate::{debug_selected_params, selected_track};
@@ -270,10 +272,15 @@ unsafe fn cstr_eq_str(a: *const u8, b: &str) -> bool {
 // ---- the imports that are plain functions ----------------------------------------------------------------------------------
 
 unsafe extern "C" fn imp_alloc(size: u32) -> *mut u8 {
-    arena::alloc(size)
+    let a = arena::alloc(size);
+    if a.is_null() {
+        null_mut()
+    } else {
+        a.ptr()
+    }
 }
 unsafe extern "C" fn imp_free(p: *mut u8) {
-    arena::free(p);
+    arena::free(DevAddr::of_ptr(p));
 }
 unsafe extern "C" fn imp_log(level: u32, msg: *const u8, value: u32) {
     log_at(level, msg, value);

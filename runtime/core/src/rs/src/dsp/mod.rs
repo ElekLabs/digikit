@@ -24,6 +24,7 @@
 use crate::handlers::{services, Claim, ServiceTable};
 use crate::{arena, cstr_eq, cstr_len, rd32};
 use core::ptr::{addr_of_mut, read_volatile};
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::link::{LinkResult, Owner, Sequence, Stream, Ticket, SEQ_MAX};
 use dkrt_sdk::*;
 
@@ -374,10 +375,11 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         Some(o) => o,
         None => return E_DSP_NOSPACE,
     };
-    let buf = arena::alloc(job.image_size);
-    if buf.is_null() {
+    let block = arena::alloc(job.image_size);
+    if block.is_null() {
         return E_NOMEM;
     }
+    let buf: *mut u8 = block.ptr();
     let base = iw(I_AREA) + off;
     // copy, then relocate: abs24 / abs32 fields of 48-bit instructions, shifted by where the object sits in L2
     let mut i = 0;
@@ -402,7 +404,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
         if kind == 0 {
             let v = (((*p.add(2)) as u32) << 16 | le16(p.add(4))).wrapping_add(add);
             if v >= 1 << 24 {
-                arena::free(buf);
+                arena::free(block);
                 return E_DSP_FORMAT;
             }
             *p.add(2) = (v >> 16) as u8;
@@ -421,7 +423,7 @@ pub unsafe fn reserve(rec: usize, job: &Job) -> i32 {
     d.mod_len[rec] = len;
     d.send_base = base;
     d.send_len = job.image_size;
-    d.send_buf = buf as u32;
+    d.send_buf = block.get();
     OK
 }
 
@@ -456,7 +458,7 @@ pub(crate) unsafe fn dequeue(rec: usize) -> bool {
     while i < d.nwait as usize {
         if d.waiting[i].rec as usize == rec {
             if d.waiting[i].send_buf != 0 {
-                arena::free(d.waiting[i].send_buf as *mut u8);
+                arena::free(DevAddr::new(d.waiting[i].send_buf));
             }
             let mut k = i + 1;
             while k < d.nwait as usize {
@@ -476,7 +478,7 @@ pub unsafe fn cancel(rec: usize) {
     if retained() { return; }
     let d = ds();
     if d.send_buf != 0 {
-        arena::free(d.send_buf as *mut u8);
+        arena::free(DevAddr::new(d.send_buf));
         d.send_buf = 0;
     }
     unreserve(rec);
@@ -575,7 +577,7 @@ pub(crate) unsafe fn fail_done(reclaimed: bool, code: i32) {
         return;
     }
     if d.pending.send_buf != 0 {
-        arena::free(d.pending.send_buf as *mut u8);
+        arena::free(DevAddr::new(d.pending.send_buf));
         d.pending.send_buf = 0;
     }
     next_job();
@@ -631,7 +633,7 @@ pub(crate) unsafe fn step_with(l: ServiceTable, slots: &mut dyn FnMut(usize) -> 
                     LinkResult::Pending => return Advance::Pending,
                     LinkResult::Done => {
                         d.ticket = 0;
-                        arena::free(d.pending.send_buf as *mut u8);
+                        arena::free(DevAddr::new(d.pending.send_buf));
                         d.pending.send_buf = 0;
                         d.phase = PH_ROWS;
                         d.step = 0;

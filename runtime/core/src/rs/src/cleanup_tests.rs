@@ -1,16 +1,79 @@
 //! Actual loader/DSP cleanup under host-only transport and pointer side effects.
 //! No device ACK/block-tail/callback quiescence claim. All shared runtime state is
-//! serialized; fake CF addresses are logged at free/fini, never host-dereferenced.
+//! serialized; the module and its image buffer are blocks of the test arena (`fake_platform::test_arena`).
 use super::*;
+use dkrt_abi::dev_addr::DevAddr;
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::link::{Owner, Sequence};
-use crate::test_lock::LOCK;
+use crate::fake_platform::test_arena::TestArena;
+use crate::loader::{Block, Images, RealImages, Staged};
+use crate::entry::Ctx;
 use crate::handlers::fx_fixture::{frows, reset_rows};
 use crate::handlers::machines_fixture::vrows;
 use std::vec::Vec;
 
-const CF: u32 = 0x8000;
-const IMAGE: u32 = 0xd000;
+/// The module block and the image buffer that `seed` allocated from the arena (device addresses).
+static mut BLOCKS: (u32, u32) = (0, 0);
+fn cf() -> u32 {
+    unsafe { BLOCKS.0 }
+}
+fn image() -> u32 {
+    unsafe { BLOCKS.1 }
+}
+/// The test lock with the test arena (`seed` initialises it); dropping it forgets the blocks, takes the arena down and releases the lock.
+struct Hold {
+    _arena: TestArena,
+}
+impl Hold {
+    fn new() -> Hold {
+        Hold { _arena: TestArena::lock() }
+    }
+}
+impl Drop for Hold {
+    fn drop(&mut self) {
+        unsafe { BLOCKS = (0, 0) }
+    }
+}
+
+/// The images of the loader static in host tests: the device's, and a free of the module block checks that the DSP side let go of it first (`mod_len` is cleared before the
+/// block goes back to the arena).
+pub struct CheckedImages;
+impl Images for CheckedImages {
+    unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
+        RealImages.stage(path)
+    }
+    unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
+        RealImages.alloc(n)
+    }
+    unsafe fn free(&mut self, addr: u32) {
+        if BLOCKS.0 != 0 && addr == BLOCKS.0 {
+            assert_eq!(dsp::ds().mod_len[0], 0, "the module block is freed after its DSP length is cleared");
+        }
+        RealImages.free(addr)
+    }
+    unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
+        RealImages.import_addr(name)
+    }
+    unsafe fn svc_import_addr(&mut self, name: *const u8) -> u32 {
+        RealImages.svc_import_addr(name)
+    }
+    unsafe fn import_needs(&mut self, name: *const u8) -> Option<&'static str> {
+        RealImages.import_needs(name)
+    }
+    unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32 {
+        RealImages.list(prefix, out, max)
+    }
+    unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
+        RealImages.enter_init(rec, init, ctx)
+    }
+    unsafe fn enter_fini(&mut self, rec: usize, fini: u32, ctx: *const Ctx) {
+        RealImages.enter_fini(rec, fini, ctx)
+    }
+}
+/// Whether the arena still holds the block at device address `a`.
+fn live(a: u32) -> bool {
+    unsafe { crate::arena::is_live(DevAddr::new(a)) }
+}
 const PUB_PC: u32 = 0xc000;
 static VOICE_INFO: [u32; 12] = [0x4444_5350, 0, 1, 0x20000000, 4096, 0, 4, 8, 0, 0, 0, 0];
 static FX_INFO: [u32; 8] = [0x4446_5849, 0, 1, 0, 0, 4, 0, 24];
@@ -27,7 +90,6 @@ enum Event {
     Word(u32, u32, u32),
     Fini,
     Registry,
-    Free(u32),
 }
 struct Link {
     completion: Completion,
@@ -142,7 +204,7 @@ pub unsafe fn send_image(dst: u32, buf: *const u8, len: u32) -> i32 {
         // the host tests of a service file's DSP part: an area send (the image) or a slot word (window 0) is accepted and logged as (destination, first word)
         LINK.tries += 1;
         LINK.accepted += 1;
-        // an image buffer is an arena address of the device (32 bits, not a host pointer): only a slot word (4 bytes, the link's own buffer) is read
+        // only a slot word (4 bytes, the link's own buffer) is read; an area image is logged by its destination
         IMAGE_SENDS.push((dst, if len == 4 { core::ptr::read_unaligned(buf as *const u32) } else { 0 }));
         return 0;
     }
@@ -151,21 +213,12 @@ pub unsafe fn send_image(dst: u32, buf: *const u8, len: u32) -> i32 {
 
 static mut IMAGE_OK: bool = false;
 
-/// With the script: `arena::alloc` gives host memory (leaked: a test is short).
-pub(crate) fn host_arena() -> bool {
-    unsafe { IMAGE_OK }
-}
-pub(crate) unsafe fn host_alloc(n: u32) -> *mut u8 {
-    let v: Vec<u128> = std::vec![0u128; (n as usize + 15) / 16];
-    let p = v.as_ptr() as *mut u8;
-    core::mem::forget(v);
-    p
-}
 static mut IMAGE_SENDS: Vec<(u32, u32)> = Vec::new();
 
 /// Script the link for a host test of a service file's DSP part: area and slot sends are accepted, and the transfer is taken (`ack`) or fails (a link error after the first
 /// accepted send, the image). Hold the test lock; `script_end` undoes it.
 pub(crate) unsafe fn script_link(ack: bool) {
+    crate::fake_platform::test_arena::script_up();
     *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
     crate::link::lk().spin = 20_000;
     LINK = Link {
@@ -183,6 +236,7 @@ pub(crate) unsafe fn script_link(ack: bool) {
 }
 
 pub(crate) unsafe fn script_end() {
+    crate::fake_platform::test_arena::script_down();
     IMAGE_OK = false;
 }
 
@@ -218,13 +272,6 @@ pub unsafe fn registry_remove(owner: u8) {
     assert_eq!(dsp::ds().mod_len[0], 256);
     LINK.events.push(Event::Registry);
 }
-pub unsafe fn arena_free(p: *mut u8) -> bool {
-    if p as u32 == CF {
-        assert_eq!(dsp::ds().mod_len[0], 0);
-    }
-    LINK.events.push(Event::Free(p as u32));
-    true
-}
 
 /// One UI pass: the link settles and starts, then the loader steps (the order of `dkrt_tick`).
 unsafe fn pass() {
@@ -241,6 +288,8 @@ unsafe fn idle_link() {
 
 unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) {
     *st() = core::mem::zeroed();
+    crate::arena::init();
+    BLOCKS = (crate::arena::alloc(240).get(), crate::arena::alloc(496).get());
     *dsp::ds() = core::mem::zeroed();
     reset_rows();
     *boot::info() = core::mem::zeroed();
@@ -259,7 +308,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     };
     let s = st();
     s.modules[0].used = 1;
-    s.modules[0].base = CF;
+    s.modules[0].base = cf();
     s.modules[0].size = 256;
     s.modules[0].fini = 1;
     entry::publish_tick(0, 0x9000);
@@ -275,7 +324,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     d.ticket = crate::link::lk().test_in_flight(Owner::Loader).id as u32;
     d.pending.rec = 0;
     d.pending.boot_idx = 0;
-    d.pending.send_buf = if published { 0 } else { IMAGE };
+    d.pending.send_buf = if published { 0 } else { image() };
     d.row_steps = 0x11223344;
     d.mod_len[0] = 256;
     d.transfers = 1;
@@ -309,7 +358,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
 
 #[test]
 fn voice_latch_mask_is_published_before_the_type() {
-    let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
         LINK.original_failure = false;
@@ -345,7 +394,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert_eq!(st().last_result, E_DSP_XFER);
     assert_eq!(boot::info().results[0], E_DSP_XFER);
     assert_eq!(st().modules[0].used, 1);
-    assert_eq!(st().modules[0].base, CF);
+    assert_eq!(st().modules[0].base, cf());
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(512));
     if fx {
         assert_eq!((frows().fx_owner[0], frows().fx_pub[0]), (1, 1));
@@ -355,7 +404,7 @@ unsafe fn assert_retained(fx: bool, pending_buf: u32) {
     assert!(!LINK
         .events
         .iter()
-        .any(|e| matches!(e, Event::Fini | Event::Registry | Event::Free(_))));
+        .any(|e| matches!(e, Event::Fini | Event::Registry)));
     let frozen = (
         d.row_steps,
         d.ticks,
@@ -405,7 +454,7 @@ unsafe fn failure_case(completion: Completion) {
 }
 #[test]
 fn dsp_step_reports_a_failure_without_acting_on_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, true);
         let d = dsp::ds();
@@ -421,7 +470,7 @@ fn dsp_step_reports_a_failure_without_acting_on_it() {
 }
 #[test]
 fn invalidation_refusal_retains_and_stops() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         failure_case(Completion::Refuse);
         assert_eq!(LINK.accepted, 0);
@@ -429,7 +478,7 @@ fn invalidation_refusal_retains_and_stops() {
 }
 #[test]
 fn invalidation_error_retains_and_stops() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         failure_case(Completion::ErrorAt(1));
         assert_eq!(LINK.accepted, 1);
@@ -437,7 +486,7 @@ fn invalidation_error_retains_and_stops() {
 }
 #[test]
 fn invalidation_missing_ack_retains_and_stops() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         failure_case(Completion::Missing);
         assert_eq!(LINK.accepted, 1);
@@ -445,7 +494,7 @@ fn invalidation_missing_ack_retains_and_stops() {
 }
 #[test]
 fn fx_partial_cleanup_does_not_discard_publication() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     let _fx = crate::handlers::fx_fixture::LoadedFx::new();
     unsafe {
         seed(Completion::ErrorAt(3), true, true, true);
@@ -456,7 +505,7 @@ fn fx_partial_cleanup_does_not_discard_publication() {
 }
 #[test]
 fn missing_fx_info_retains_published_row() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     let _fx = crate::handlers::fx_fixture::LoadedFx::new();
     unsafe {
         seed(Completion::Ack, true, true, true);
@@ -478,9 +527,9 @@ unsafe fn successful_case(fx: bool, published: bool) {
     assert_eq!(dsp::cleanup_test_first_fit(256, 64), Some(0));
     assert!(LINK.events.contains(&Event::Fini));
     assert!(LINK.events.contains(&Event::Registry));
-    assert!(LINK.events.contains(&Event::Free(CF)));
+    assert!(!live(cf()));
     assert_eq!(if fx { frows().fx_pc[0] } else { vrows().row_pc[0] }, 0);
-    assert_eq!(LINK.events.contains(&Event::Free(IMAGE)), !published);
+    assert_eq!(live(image()), published);
     assert_eq!(dsp::ds().phase, dsp::PH_SEND);
     assert_eq!(dsp::ds().pending.rec, 1);
     assert_eq!(dsp::ds().nwait, 0);
@@ -489,7 +538,7 @@ unsafe fn successful_case(fx: bool, published: bool) {
 }
 #[test]
 fn acknowledged_voice_cleanup_reclaims_and_advances_queue() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         successful_case(false, true);
         assert_eq!(LINK.accepted, 1);
@@ -499,7 +548,7 @@ fn acknowledged_voice_cleanup_reclaims_and_advances_queue() {
 /// queue goes on, and the boot record says the module failed with the code.
 #[test]
 fn a_cancelled_dsp_part_ends_like_a_failed_one() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, true);
         assert!(crate::lifecycle::get().unwrap().cancel_dsp(0, E_DSP_XFER));
@@ -516,7 +565,7 @@ fn a_cancelled_dsp_part_ends_like_a_failed_one() {
 /// The load that waits in the queue is given up: it is removed and its record taken down, the load in flight goes on, and the DSP is not retained.
 #[test]
 fn a_cancelled_queued_dsp_part_is_removed_and_the_load_in_flight_goes_on() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, true);
         // the seed's module 0 is the one the test stubs know: let it be the queued one, and module 1 the load in flight
@@ -532,7 +581,7 @@ fn a_cancelled_queued_dsp_part_is_removed_and_the_load_in_flight_goes_on() {
 }
 #[test]
 fn acknowledged_fx_cleanup_reclaims_after_all_words() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     let _fx = crate::handlers::fx_fixture::LoadedFx::new();
     unsafe {
         successful_case(true, true);
@@ -541,7 +590,7 @@ fn acknowledged_fx_cleanup_reclaims_after_all_words() {
 }
 #[test]
 fn before_publication_failure_is_reclaimable() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         successful_case(false, false);
         assert_eq!(LINK.accepted, 0);
@@ -549,21 +598,21 @@ fn before_publication_failure_is_reclaimable() {
 }
 #[test]
 fn never_started_cancel_is_reclaimable() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, false, false);
-        dsp::ds().send_buf = IMAGE;
+        dsp::ds().send_buf = image();
         dsp::cancel(0);
         assert_eq!(dsp::ds().mod_len[0], 0);
-        assert!(LINK.events.contains(&Event::Free(IMAGE)));
-        assert!(!LINK.events.contains(&Event::Free(CF)));
+        assert!(!live(image()));
+        assert!(live(cf()));
     }
 }
 
 #[test]
 fn on_loaded_runs_once_per_load_and_after_the_last_row() {
     use crate::handlers::tests::{log, Call, TWO};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
         idle_link();
@@ -587,7 +636,7 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
 fn attribution_names_the_module_of_every_site_the_watch_reports() {
     use crate::handlers::services;
     use dkrt_sdk::fault::{SITE_FX_MASTER, SITE_FX_SEND, SITE_NONE, SITE_VOICE};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     let _fx = crate::handlers::fx_fixture::LoadedFx::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
@@ -724,7 +773,7 @@ pub static dkrt_store_sectors: u32 = 0;
 pub extern "C" fn dl_tick_cb_drop(start: u32, end: u32) {
     unsafe {
         if LINK.strict_tick_drop {
-            assert_eq!((start, end), (CF, CF + 256));
+            assert_eq!((start, end), (cf(), cf() + 256));
             assert!(LINK.events.contains(&Event::Fini));
         }
     }
@@ -771,7 +820,7 @@ unsafe extern "C" fn test_sink(_: *const crate::dlog::Ev) {}
 /// A module without `fini` that set a sink: the unload releases the channel (it would point into freed memory).
 #[test]
 fn unload_of_a_module_without_fini_releases_its_sink() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, true);
         crate::dlog::test_reset_sinks(); // a test before may have left channel 0 to another owner (E_BUSY)
@@ -798,7 +847,7 @@ unsafe extern "C" fn test_observer(owner: u32) {
 /// observer is not called.
 #[test]
 fn unload_of_a_module_tells_the_observers_before_its_memory_is_freed() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, true);
         (*core::ptr::addr_of_mut!(OBSERVED)).clear();
@@ -825,7 +874,7 @@ unsafe fn dsp_loading() {
 
 #[test]
 fn a_failed_dsp_part_makes_its_module_failed_with_the_dsp_code() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Refuse, false, true, true);
         dsp_loading();
@@ -838,7 +887,7 @@ fn a_failed_dsp_part_makes_its_module_failed_with_the_dsp_code() {
 #[test]
 fn a_loaded_dsp_part_makes_its_module_active() {
     use crate::handlers::tests::TWO;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
         idle_link();

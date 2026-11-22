@@ -87,6 +87,7 @@ pub(crate) use plan::{boot_caps, live_settle_ctx};
 pub(crate) use plan::test_accept;
 pub(crate) use unload::retire_sdk;
 pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
+pub(crate) use seams::{DeviceImages, DEVICE_IMAGES};
 
 /// The index the log shows for a provider file (`MOD_LOAD` and the events of its load): not a selection index, and not `u32::MAX` (no load running).
 pub const PROVIDER_IDX: u32 = 0xffff_fffe;
@@ -215,9 +216,9 @@ const TORN_UNDO: u8 = 4;
 const TORN_DRAIN: u8 = 8;
 
 /// The loader of the device.
-pub(crate) type Real = Loader<RealPlatform, RealImages, RealRegistry>;
+pub(crate) type Real = Loader<RealPlatform, DeviceImages, RealRegistry>;
 
-static mut LOADER: Real = Loader::new(RealPlatform, RealImages, RealRegistry);
+static mut LOADER: Real = Loader::new(RealPlatform, DEVICE_IMAGES, RealRegistry);
 
 fn loader() -> &'static mut Real {
     unsafe { &mut *addr_of_mut!(LOADER) }

@@ -210,6 +210,8 @@ mod tests {
 
     #[test]
     fn without_a_dsp_there_is_no_dsp_area_no_machine_rows_and_no_block_clock() {
+        // the health report walks the arena of the runtime state, which a test of the test lock may have up
+        let _g = crate::fake_platform::test_arena::TestArena::lock();
         // (the fixture has no store area, so its health runs without the store: `store_total` would be the area's size)
         with_profile(device(|p| {
             p.has_dsp = false;
@@ -235,6 +237,8 @@ mod tests {
 
     #[test]
     fn without_a_store_every_store_call_answers_not_found_and_nothing_is_written() {
+        // the health report walks the arena of the runtime state, which a test of the test lock may have up
+        let _g = crate::fake_platform::test_arena::TestArena::lock();
         with_profile(device(|p| p.has_store = false), || unsafe {
             assert_eq!(crate::card::state(), CARD_TOO_SMALL);
             assert!(matches!(crate::store::open(), Err(E_NOT_FOUND)));

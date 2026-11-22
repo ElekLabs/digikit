@@ -58,6 +58,16 @@ pub trait Registry {
 /// The store, the arena and the module entry of the device.
 pub struct RealImages;
 
+/// The images of the loader static: the device's, and in host tests the cleanup tests' wrapper that checks the order of the take-down.
+#[cfg(not(test))]
+pub(crate) type DeviceImages = RealImages;
+#[cfg(not(test))]
+pub(crate) const DEVICE_IMAGES: DeviceImages = RealImages;
+#[cfg(test)]
+pub(crate) type DeviceImages = crate::cleanup_tests::CheckedImages;
+#[cfg(test)]
+pub(crate) const DEVICE_IMAGES: DeviceImages = crate::cleanup_tests::CheckedImages;
+
 impl Images for RealImages {
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
         let found = crate::store::find(path)?;
@@ -71,15 +81,15 @@ impl Images for RealImages {
         crate::store::list(prefix, out, max)
     }
     unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
-        let p = crate::arena::alloc(n);
-        if p.is_null() {
+        let a = crate::arena::alloc(n);
+        if a.is_null() {
             None
         } else {
-            Some(Block { ptr: p, addr: p as u32 })
+            Some(Block { ptr: a.ptr(), addr: a.get() })
         }
     }
     unsafe fn free(&mut self, addr: u32) {
-        crate::arena::free(addr as *mut u8);
+        crate::arena::free(dkrt_abi::dev_addr::DevAddr::new(addr));
     }
     // host tests link no device imports (as `platform.rs`): the real loader of the cleanup tests resolves none
     unsafe fn import_addr(&mut self, name: *const u8) -> u32 {

@@ -450,12 +450,12 @@ pub(crate) fn verdict_of(why: &LifecycleError, admission: Option<Reason>, servic
 /// The lifecycle of the device.
 mod device {
     use super::*;
-    use crate::loader::{RealImages, RealRegistry};
+    use crate::loader::{DeviceImages, RealRegistry};
     use crate::platform::RealPlatform;
     use core::mem::MaybeUninit;
     use core::ptr::addr_of_mut;
 
-    pub type Real = Rt<RealPlatform, RealImages, RealRegistry>;
+    pub type Real = Rt<RealPlatform, DeviceImages, RealRegistry>;
 
     /// Zero bytes until the boot starts it (a `MaybeUninit`, so the static stays out of `.data`).
     static mut RT: MaybeUninit<Real> = MaybeUninit::uninit();

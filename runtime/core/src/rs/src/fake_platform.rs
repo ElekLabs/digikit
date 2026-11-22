@@ -6,6 +6,7 @@
 //! The contract table `tests/platform/contract.toml` names a host test for each check; `every_contract_row_names_a_host_test` keeps the names real.
 
 pub mod address_map;
+pub(crate) mod test_arena;
 
 use crate::card;
 use crate::fake_storage::FakeStorage;
@@ -92,6 +93,8 @@ impl FakePlatform {
     pub fn new(profile: DeviceProfile) -> Self {
         let storage = FakeStorage::new();
         storage.samples_path_max.set(profile.sample_path_max);
+        let addresses = address_map::AddressMap::new();
+        addresses.map_arena();
         FakePlatform {
             profile,
             card: RefCell::new(BTreeMap::new()),
@@ -126,7 +129,7 @@ impl FakePlatform {
 info_dsp: RefCell::new(Vec::new()),
             calls: RefCell::new(Vec::new()),
             storage,
-            addresses: address_map::AddressMap::new(),
+            addresses,
         }
     }
     /// Run `body` with `addresses` as the address space of `DevAddr`; the previous space returns afterwards, also on unwind.

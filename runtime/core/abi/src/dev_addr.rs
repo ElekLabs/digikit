@@ -65,6 +65,7 @@ mod host {
     extern crate std;
     use super::DevAddr;
     use core::cell::Cell;
+    use core::marker::PhantomData;
 
     /// The host's map between device addresses and host memory and code.
     pub trait AddressSpace {
@@ -83,22 +84,34 @@ mod host {
         static SPACE: Cell<Option<*const dyn AddressSpace>> = const { Cell::new(None) };
     }
 
-    /// Restores the previous space when dropped, also on unwind. Private: no caller can forget it or drop it out of order.
-    struct Restore(Option<*const dyn AddressSpace>);
+    /// The installed space of this thread until dropped; then the previous space returns, also on unwind. It borrows the space, so it cannot outlive it and, as a local, drops in
+    /// the reverse order of its installs.
+    pub struct SpaceGuard<'a> {
+        previous: Option<*const dyn AddressSpace>,
+        _space: PhantomData<&'a dyn AddressSpace>,
+    }
 
-    impl Drop for Restore {
+    impl Drop for SpaceGuard<'_> {
         fn drop(&mut self) {
-            SPACE.with(|c| c.set(self.0));
+            SPACE.with(|c| c.set(self.previous));
+        }
+    }
+
+    /// Make `space` this thread's address space until the guard drops; installs nest.
+    pub fn install(space: &dyn AddressSpace) -> SpaceGuard<'_> {
+        // SAFETY: the transmute only erases the borrow's lifetime. The guard carries the borrow (`'a`), so `space` outlives it, and the guard puts the previous pointer back when it
+        // drops, so the stored pointer never outlives `space`. Guards drop in the reverse order of their installs, so a restored pointer is the one of a still live space.
+        let erased: *const dyn AddressSpace =
+            unsafe { core::mem::transmute::<&dyn AddressSpace, &'static dyn AddressSpace>(space) };
+        SpaceGuard {
+            previous: SPACE.with(|c| c.replace(Some(erased))),
+            _space: PhantomData,
         }
     }
 
     /// Run `body` with `space` as this thread's address space, then restore the previous one (also when `body` unwinds); calls nest.
     pub fn with_space<R>(space: &dyn AddressSpace, body: impl FnOnce() -> R) -> R {
-        // SAFETY: the transmute only erases the borrow's lifetime. The borrow outlives `body`, and `Restore` puts the previous pointer back before this function returns or
-        // unwinds, so the stored pointer never outlives `space`. Scopes are strictly nested, so a restored pointer is the one of the enclosing (still live) scope.
-        let erased: *const dyn AddressSpace =
-            unsafe { core::mem::transmute::<&dyn AddressSpace, &'static dyn AddressSpace>(space) };
-        let _restore = Restore(SPACE.with(|c| c.replace(Some(erased))));
+        let _guard = install(space);
         body()
     }
 
@@ -112,6 +125,9 @@ mod host {
         /// The device address of the object `p` points to.
         #[inline(always)]
         pub fn of_ptr<T>(p: *const T) -> DevAddr {
+            if p.is_null() {
+                return DevAddr::NULL;
+            }
             match current(|s| s.of_host(p as *const u8)) {
                 Some(Some(a)) => DevAddr(a),
                 Some(None) => panic!("host pointer {:#x} is in no mapped range", p as usize),
@@ -130,9 +146,12 @@ mod host {
             }
         }
 
-        /// The pointer to the object at this address. It is `*mut T` for reads too: the caller keeps its own access kind (plain or volatile). An unmapped address panics.
+        /// The pointer to the object at this address. It is `*mut T` for reads too: the caller keeps its own access kind (plain or volatile). The address 0 is the null pointer. An unmapped address panics.
         #[inline(always)]
         pub fn ptr<T>(self) -> *mut T {
+            if self.0 == 0 {
+                return core::ptr::null_mut();
+            }
             match current(|s| s.to_host(self.0)) {
                 Some(Some(p)) => p as *mut T,
                 Some(None) => panic!("device address {:#010x} is not mapped", self.0),
@@ -158,4 +177,4 @@ mod host {
 }
 
 #[cfg(not(target_pointer_width = "32"))]
-pub use host::{with_space, AddressSpace};
+pub use host::{install, with_space, AddressSpace, SpaceGuard};

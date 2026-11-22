@@ -4,13 +4,17 @@
 //! mapping covers. An address that nothing covers is an error of the test, not of the code under test: every lookup answers `None` and `DevAddr` panics with the address.
 
 use core::cell::RefCell;
+use crate::{ARENA_BYTES, DKRT_ARENA};
 use core::ops::Range;
-use dkrt_abi::dev_addr::{with_space, AddressSpace};
+use core::ptr::addr_of_mut;
+use dkrt_abi::dev_addr::{install, with_space, AddressSpace, SpaceGuard};
 use std::vec::Vec;
 
 /// The first device address that `intern_fn` hands out; one function takes `FN_STEP` addresses.
 const FN_BASE: u32 = 0xF000_0000;
 const FN_STEP: u32 = 4;
+/// The device address where `map_arena` puts the module arena.
+const ARENA_DEV_BASE: u32 = 0x2000_0000;
 
 struct Mapping {
     range: Range<u32>,
@@ -42,6 +46,14 @@ impl AddressMap {
         maps.push(Mapping { range, host });
     }
 
+    /// The module arena (`DKRT_ARENA`) at the device addresses from `ARENA_DEV_BASE`. The device address has the host address's alignment modulo 16, so the 16-byte aligned
+    /// blocks of the arena sit on 16-byte aligned host words.
+    pub fn map_arena(&self) {
+        let host = addr_of_mut!(DKRT_ARENA) as *mut u8;
+        let start = ARENA_DEV_BASE + (host as usize & 15) as u32;
+        self.map(start..start + ARENA_BYTES as u32, host);
+    }
+
     /// The device address of the host function at `f`: the same address for the same function.
     pub fn intern_fn(&self, f: usize) -> u32 {
         let mut fns = self.fns.borrow_mut();
@@ -53,6 +65,11 @@ impl AddressMap {
             }
         };
         FN_BASE + i as u32 * FN_STEP
+    }
+
+    /// Make this map the address space of `DevAddr` on this thread until the guard drops.
+    pub fn install(&self) -> SpaceGuard<'_> {
+        install(self)
     }
 
     /// Run `body` with this map as the address space of `DevAddr` on this thread; the previous space returns afterwards, also on unwind.
