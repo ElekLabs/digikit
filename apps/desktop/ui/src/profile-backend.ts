@@ -93,6 +93,9 @@ export interface DeviceDsp {
   maxPct: number;
 }
 
+export const DSP_BLOCKS_NOT_ARMED =
+  'To measure DSP costs, stop recording, select Include DSP block costs, and record again.';
+
 /** One reading. `noDebug`: the target runs no debug module (or an older one without PROFILE_STATE): the pane offers to add it. */
 export type ProfileReading =
   | { noDebug: true; port: string; emulator: boolean }
@@ -508,10 +511,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       if (!all.running) r.dspBlocks = dspBlocks.capture();
       r.dspBlockNote = !hasDsp()
         ? 'This target has no SHARC DSP.'
-        : dspBlocks.note() ||
-          (all.running && !dspBlocks.armed()
-            ? 'To measure DSP costs, stop recording, select Include DSP block costs, and record again.'
-            : '');
+        : dspBlocks.note() || (all.running && !dspBlocks.armed() ? DSP_BLOCKS_NOT_ARMED : '');
       if (all.running && liveDsp && dspBlocks.armed()) {
         try {
           r.dspBlocks = await dspBlocks.live(s, !!deps.rpc);

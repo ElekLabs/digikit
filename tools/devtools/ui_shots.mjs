@@ -163,6 +163,54 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'performance-emulator',
+    q: '',
+    size: WIDE,
+    steps: async (p) => {
+      await p.click(/^Transfer$/);
+      await p.until(
+        "document.querySelector('button[title^=RESTART]')?.disabled === false",
+        'Emulator card unavailable',
+      );
+      await p.click(/^Emulator$/, '.side');
+      await p.click(/^Performance$/);
+      const cf = "document.querySelector('.performance-cf dd')?.textContent";
+      const dsp = "document.querySelector('.performance-dsp dd')?.textContent";
+      await p.until(`${cf}?.endsWith('%') && ${dsp}?.endsWith('%')`, 'Missing emulator load');
+      const first = await p.eval(cf);
+      await p.until(`${cf}?.endsWith('%') && ${cf} !== ${JSON.stringify(first)}`, 'Load did not advance');
+      await p.eval("document.querySelector('button[aria-label=Pause]').click()");
+      await p.until(`${cf} === '—' && ${dsp} === '—'`, 'Paused emulator still reporting load');
+      await p.eval("document.querySelector('button[aria-label=Resume]').click()");
+      await p.until(`${cf}?.endsWith('%') && ${dsp}?.endsWith('%')`, 'Load did not resume');
+      await p.click(/^DSP blocks$/);
+      await p.until("document.querySelector('.span-actions input')?.disabled === false", 'DSP recording unavailable');
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.until(
+        "document.querySelector('.performance-panel')?.textContent.includes('To measure DSP costs, stop recording')",
+        'Missing instructions for recording DSP costs',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.until("document.querySelector('.span-actions input')?.disabled === false", 'DSP option stayed locked');
+      await p.eval("document.querySelector('.span-actions input').click()");
+      await p.click(/^Start recording$/, '.span-actions button');
+      await p.until("document.querySelector('.dsp-blocks canvas')", 'Missing live emulator DSP blocks');
+      await p.click(/^Spans$/);
+      await p.until(
+        "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
+        'Missing recorded spans',
+      );
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^Timeline$/);
+      await p.until(
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-panel')?.textContent.includes('test/saw')",
+        'Missing frozen timeline',
+      );
+      await p.click(/^DSP blocks$/);
+      await p.until("document.querySelector('.dsp-blocks canvas')", 'Missing frozen DSP blocks');
+    },
+  },
+  {
     name: 'performance-dsp-blocks',
     q: 'page=run&runtimeOnly&history&prof=stopped',
     size: WIDE,
@@ -498,7 +546,7 @@ const SCENES = [
   },
   {
     name: 'workbench-card-roundtrip',
-    q: '',
+    q: 'boot=empty',
     size: WIDE,
     steps: async (p) => {
       await p.until(

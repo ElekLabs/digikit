@@ -1,8 +1,18 @@
 // A controller snapshot for the real native runtime and the live faceplate.
 import { deviceProfiles } from '@digi/workbench-core/data/device-profiles.ts';
-import type { RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
+import type { ControllerStatus, RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
 import { previewBootFile, previewEmulatorDevice } from './card-mock';
 import { createPreviewScreen } from './preview-screen';
+
+function previewLoad(seconds: number, dspEnabled: boolean): NonNullable<ControllerStatus['load']> {
+  const cf = 32 + 6 * Math.sin(seconds / 4);
+  const dsp = 48 + 9 * Math.sin(seconds / 7);
+  return {
+    window_s: 1,
+    cf: { model_pct: cf, real_pct: cf, real_high_pct: cf + 4 },
+    dsp: dspEnabled ? { busy_per_block: 18_000, model_pct: dsp, real_pct: dsp, real_high_pct: dsp + 6 } : null,
+  };
+}
 
 export function previewEmulator(query: URLSearchParams) {
   const bootFile = previewBootFile(query);
@@ -11,7 +21,8 @@ export function previewEmulator(query: URLSearchParams) {
   const name = query.has('boot') ? bootFile : (release?.filename ?? device);
   const pending = query.get('page') === 'run' || query.get('boot') === 'loading';
   const failed = query.get('boot') === 'failed';
-  let loaded = query.size > 0 && !pending && !failed;
+  let loaded = !pending && !failed && query.get('boot') !== 'empty';
+  let startedAt = performance.now();
   let patched = true;
   let dsp = true;
   const screen = createPreviewScreen(device);
@@ -49,6 +60,7 @@ export function previewEmulator(query: URLSearchParams) {
     status: () => ({
       firmware: loaded ? { runtime: patched ? { patched: true, set: 'core/dynreg' } : null } : null,
       dsp_enabled: dsp,
+      load: loaded ? previewLoad((performance.now() - startedAt) / 1000, dsp) : null,
     }),
     launch: pending || failed ? { syx: name } : { loaded },
     startup() {
@@ -59,6 +71,7 @@ export function previewEmulator(query: URLSearchParams) {
     async load(runtime: boolean, enableDsp: boolean) {
       if (failed) throw new Error('the emulator did not answer within 120 s');
       if (pending) await new Promise<void>(() => {});
+      startedAt = performance.now();
       loaded = true;
       patched = runtime;
       dsp = enableDsp;
