@@ -76,6 +76,7 @@ import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
 import { DefaultModuleError } from '@digi/workbench-core/firmware/default-modules-core.ts';
 import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
+import { targetOps } from '@digi/workbench-core/target-ops/session-store.ts';
 import FilesPage from '@digi/workbench-core/ui/files/FilesPage.tsx';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@digi/workbench-core/runtime/cards.ts';
 import { reloadError, reloadLine } from '@digi/workbench-core/runtime/reload.ts';
@@ -590,12 +591,12 @@ export default function Console(props: { host: Host }) {
     runtime()?.dispose();
   });
 
-  const togglePause = () => {
+  const setEmulatorPaused = (pause: boolean) => {
     const r = runtime();
     if (!r) return;
-    if (paused()) r.resume();
-    else r.pause();
-    setPaused(!paused());
+    if (pause) r.pause();
+    else r.resume();
+    setPaused(pause);
     logEvent('emulator', 'info', paused() ? 'paused' : 'resumed');
   };
   const restart = async () => {
@@ -616,6 +617,20 @@ export default function Console(props: { host: Host }) {
     } catch (e) {
       setError(message(e));
       logInput(failureEntry('reset', 'reset', message(e)));
+    }
+  };
+  const selectedOps = createMemo(() =>
+    targetOps(app.target, {
+      pause: async () => setEmulatorPaused(true),
+      resume: async () => setEmulatorPaused(false),
+      reset: restart,
+    }),
+  );
+  const runControl = async (op: 'pause' | 'resume' | 'reset') => {
+    try {
+      await selectedOps().run[op]?.();
+    } catch (error) {
+      setError(message(error));
     }
   };
   const saveDiagnostics = async () => {
@@ -1078,20 +1093,20 @@ export default function Console(props: { host: Host }) {
                 <button
                   type="button"
                   class="tb icon"
-                  disabled={!status()}
+                  disabled={!status() || app.target.switching() || !selectedOps().run.pause}
                   aria-label={paused() ? 'Resume' : 'Pause'}
                   title={paused() ? 'Resume the emulator' : 'Pause the emulator'}
-                  onClick={togglePause}
+                  onClick={() => void runControl(paused() ? 'resume' : 'pause')}
                 >
                   <Icon d={paused() ? PLAY : PAUSE} />
                 </button>
                 <button
                   type="button"
                   class="tb icon"
-                  disabled={!status()}
+                  disabled={!status() || app.target.switching() || !selectedOps().run.reset}
                   aria-label="Reset (emulator)"
                   title="Reset the running firmware to its ready state (the emulator's reset; not the device's RESTART command)"
-                  onClick={() => void restart()}
+                  onClick={() => void runControl('reset')}
                 >
                   <Icon d={RESTART} />
                 </button>
@@ -1135,19 +1150,24 @@ export default function Console(props: { host: Host }) {
           <Show when={page() === 'transfer'}>
             <TransferPage onFlash={() => setPage('firmware')} />
           </Show>
-          <Show when={page() === 'files'}>
-            <FilesPage
-              refresh={cardRefresh}
-              halted={() =>
-                target().kind === 'emulator' && paused() ? 'The emulator is paused. Resume it to read its card.' : null
-              }
-              save={(name, bytes) => props.host.fs.saveLog(bytes, name, 'file')}
-              extra={
-                <Show when={target().kind === 'emulator'}>
-                  <CardPanel host={props.host} reload={restart} />
-                </Show>
-              }
-            />
+          <Show when={page() === 'files' && !app.target.switching() && selectedOps()} keyed>
+            {(ops) => (
+              <FilesPage
+                store={ops.store}
+                refresh={cardRefresh}
+                halted={() =>
+                  target().kind === 'emulator' && paused()
+                    ? 'The emulator is paused. Resume it to read its card.'
+                    : null
+                }
+                save={(name, bytes) => props.host.fs.saveLog(bytes, name, 'file')}
+                extra={
+                  <Show when={target().kind === 'emulator'}>
+                    <CardPanel host={props.host} reload={restart} />
+                  </Show>
+                }
+              />
+            )}
           </Show>
           <Show when={page() === 'remote'}>
             <RemotePage fallbackDevice={device()} emulatorLoaded={!!status()} host={props.host} />

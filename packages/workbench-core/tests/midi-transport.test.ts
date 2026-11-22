@@ -36,3 +36,28 @@ test('close closes the port', async () => {
   await transport.close();
   assert.deepEqual(host.commands(), ['ports.midi.open', 'ports.midi.close']);
 });
+
+test('a released transport cannot send, receive or close the replacement port', async () => {
+  const host = createFakeHost();
+  const a = await MidiPortTransport.open(host.ports.midi, 'A');
+  await a.close();
+  await MidiPortTransport.open(host.ports.midi, 'B');
+  await assert.rejects(a.send(Uint8Array.of(1)), /closed/);
+  assert.equal(await a.recv(5), null);
+  await a.close();
+  assert.deepEqual(host.commands(), ['ports.midi.open', 'ports.midi.close', 'ports.midi.open']);
+});
+
+test('close drains an outstanding native port recovery before releasing the MIDI slot', async () => {
+  const host = createFakeHost();
+  const a = await MidiPortTransport.open(host.ports.midi, 'A');
+  let finish!: () => void;
+  host.replies['ports.midi.open'] = () => new Promise<void>((resolve) => (finish = resolve));
+  const recovery = a.recover();
+  const closing = a.close();
+  await Promise.resolve();
+  assert.equal(host.argsOf('ports.midi.close').length, 0);
+  finish();
+  await Promise.all([recovery, closing]);
+  assert.equal(host.argsOf('ports.midi.close').length, 1);
+});

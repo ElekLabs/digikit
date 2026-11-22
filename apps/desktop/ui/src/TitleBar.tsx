@@ -14,7 +14,7 @@ export default function TitleBar(props: { onError?: (message: string) => void })
   const { target, rescanTargets } = app.target;
   const transferBusy = app.state.busy;
   const jobBusy = app.jobs.busy;
-  const locked = () => jobBusy('target');
+  const locked = () => jobBusy('target') || app.target.switching();
   let lastFocus: number | undefined;
   const free = () => canAutoRefresh(document.visibilityState === 'visible', transferBusy()) && !jobBusy('target');
   const back = () => {

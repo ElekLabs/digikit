@@ -1,6 +1,4 @@
-// TargetOps is the one facade the workbench uses for a target (the emulator or a device). `store` works on both targets over DkSession, so they
-// share one code path. `run` is a stub to fill when pause, reset and restart move here (the emulator through EmulatorRuntime; the device only
-// restart, through the protocol).
+// Operations on one selection of a workbench target.
 import { fmtVersion, type DkEntry, type DkInfoFull, type DkModule, type ModuleState } from '@digi/dk-session';
 import type { Target } from '../transfer/target';
 import type { DkmHeader, StoreUsage } from './store';
@@ -63,8 +61,4 @@ export interface TargetOps {
   readonly target: Target;
   readonly store: StoreOps;
   readonly run: RunOps;
-}
-
-export function unwiredRunOps(): RunOps {
-  return { why: () => 'Run control does not go through the target layer yet: use the Emulator page.' };
 }

@@ -131,7 +131,7 @@ Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls`
 
 `packages/workbench-core/src/target-ops/` has `TargetOps { target; store: StoreOps; run: RunOps }`: what the UI asks of the selected target, the emulator or a device. `Host` stays the catalogue of platform services (files, dialogs, ports, firmware, `emu.*`); it does not describe a target.
 
-`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). `run` is a stub for now: `unwiredRunOps` makes every operation say why it is not wired. It is filled later, when pause, resume, reset and restart move behind this layer (emulator through `EmulatorRuntime`, device only restart through the protocol).
+`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). The desktop binds Files and the native pause, resume and reset controls through `targetOps`. A binding belongs to one selection, including when the user leaves and comes back to the same port. It checks that selection around store requests. A target only exposes the run operations its adapter supplies.
 
 Tests and the preview use fakes: `fakeStoreOps` and `demoStore` (`target/fake-store.ts`). The first user is the Files page (`packages/workbench-core/ui/files/FilesPage.tsx`), which shows the store read-only; open it in the desktop UI preview with `?page=files`.
 
