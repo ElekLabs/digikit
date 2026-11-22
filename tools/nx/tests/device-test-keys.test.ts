@@ -205,6 +205,11 @@ for (const f of [
   'runtime/core/tests/other.device.test.ts',
   'runtime/core/src/x/tests/unit.ts',
   'runtime/core/notes.txt',
+  'runtime/core/tests/capacity/project.json',
+  'runtime/core/tests/lfo/project.json',
+  'runtime/core/tests/lfo/lfo.device.test.ts',
+  'runtime/core/tests/reload.device.test.ts',
+  'runtime/core/tests/setup.ts',
 ]) {
   mkdirSync(join(temp, f, '..'), { recursive: true });
   writeFileSync(join(temp, f), '');
@@ -239,6 +244,34 @@ it('the own test file and setup of a test project inside its subject stay in the
   expect(holds(flat, 'runtime/core/tests/other.device.test.ts')).toBe(false);
   expect(holds(flat, 'runtime/core/src/x/tests/unit.ts')).toBe(false);
   expect(holds(flat, 'runtime/core/notes.txt')).toBe(true);
+});
+
+it('a test project that holds nested test projects leaves their files out of its key and keeps its own', () => {
+  const root = 'runtime/core/tests';
+  const test = `${root}/reload.device.test.ts`;
+  const inputs = deviceInputs(
+    root,
+    ['reload.device.test.ts'],
+    [],
+    undefined,
+    () => [`{workspaceRoot}/${test}`],
+    () => [],
+    false,
+    {
+      narrow: true,
+      subjects: ['core/runtime'],
+      subjectRoots: { 'core/runtime': { root: 'runtime/core', devices: [], pack: true } },
+      base: temp,
+    },
+  ).inputs;
+  const flat = [
+    ...inputs.filter((i) => typeof i === 'string'),
+    ...forDevice(inputs, null).filter((i) => typeof i === 'string'),
+  ];
+  expect(holds(flat, test)).toBe(true);
+  expect(holds(flat, `${root}/setup.ts`)).toBe(true);
+  for (const f of ['capacity/commit.device.test.ts', 'capacity/helpers.ts', 'lfo/lfo.device.test.ts'])
+    expect(holds(flat, `${root}/${f}`)).toBe(false);
 });
 
 it('subjectInputs without a test project inside leaves every tests directory out', () => {
