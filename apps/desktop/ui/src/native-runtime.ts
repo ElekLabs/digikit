@@ -2,13 +2,12 @@
 // the inputs, all through the Host. The browser app has its own, `browserRuntime`, over workers; Console.tsx picks the one of its app.
 import type { CardStatus } from '@digi/workbench-core/runtime/cards.ts';
 import type { ReloadReport } from '@digi/workbench-core/runtime/reload.ts';
-import type { ControllerJob } from '@digi/workbench-core/jobs/jobs-core.ts';
 import type {
   EmulatorRuntime,
   FirmwareInfo,
   NativeAudioStatus,
   RuntimeDiagnostics,
-  RuntimeHealth,
+  ControllerStatus,
   RuntimePatch,
   RuntimeSnapshot,
   RuntimeUpdate,
@@ -246,8 +245,13 @@ export async function createNativeRuntime(
       return info;
     },
     async controllerStatus() {
-      const status = await call<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>('status');
-      return { heartbeat: status.heartbeat, job: status.job ?? null };
+      const run = epoch;
+      const status = await call<ControllerStatus>('status');
+      return {
+        heartbeat: status.heartbeat,
+        job: status.job ?? null,
+        load: loaded && !paused && run === epoch ? status.load : null,
+      };
     },
     cancelJob: async () => {
       await call('job.cancel');

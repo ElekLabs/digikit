@@ -161,6 +161,58 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'performance-history',
+    q: 'page=run&runtimeOnly&history',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      const measured =
+        "document.querySelector('.performance-panel canvas') && document.querySelector('.performance-cf dd')?.textContent.endsWith('%') && document.querySelector('.performance-dsp dd')?.textContent.endsWith('%')";
+      await waitForAnalyzer(p, measured, 'Missing hardware utilization');
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-source')?.textContent === 'Estimated utilization' && document.querySelector('.performance-cf dd')?.textContent === '—'",
+        'Hardware reading survived target switch',
+      );
+      await p.click(/^Analyzer$/);
+      if (await p.eval("!!document.querySelector('.performance-panel')"))
+        throw new Error('Performance drawer stayed open');
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await waitForAnalyzer(p, measured, 'Performance drawer failed to reopen');
+      for (let i = 0; i < 2; i++) {
+        const previous = await p.eval("document.querySelector('.performance-cf dd').textContent");
+        await waitForAnalyzer(
+          p,
+          `document.querySelector('.performance-cf dd')?.textContent !== ${JSON.stringify(previous)} && (${measured})`,
+          'Utilization history did not advance',
+        );
+      }
+      const move = (fraction) =>
+        p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const bounds = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: bounds.left + bounds.width * ${fraction} }));
+      })()`);
+      await move(0.01);
+      if (!(await p.eval("document.querySelector('.performance-tooltip')?.textContent.includes('No sample')")))
+        throw new Error('Inspecting empty history showed a reading');
+      await move(0.91);
+      if (
+        !(await p.eval(
+          "document.querySelectorAll('.performance-marker').length === 2 && /CF .*%DSP .*%/.test(document.querySelector('.performance-tooltip')?.textContent)",
+        ))
+      )
+        throw new Error('Hover did not show both processor readings');
+      await p.eval("document.querySelector('.performance-plot').dispatchEvent(new PointerEvent('pointerleave'))");
+      if (await p.eval("!!document.querySelector('.performance-guide')"))
+        throw new Error('Guide remained after leaving plot');
+      await move(0.91);
+    },
+  },
+  {
     name: 'firmware-symbols',
     q: 'page=run&symbols',
     size: MIN,

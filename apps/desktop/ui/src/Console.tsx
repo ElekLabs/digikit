@@ -38,6 +38,7 @@ import CardPanel from './CardPanel';
 import { connectionView } from '@digi/workbench-core/transfer/connection-core.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
+import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
 import { pageFor, type Page } from './page-core';
 import {
@@ -131,6 +132,7 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
   );
 }
 
+const PerformancePanel = lazy(() => import('./PerformancePanel'));
 const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
 
 export default function Console(props: { host: Host; analyzerWorkers: WorkerFactory<'analyzer'> }) {
@@ -168,6 +170,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
   const [watching, setWatching] = createSignal(true);
   const [reloadNote, setReloadNote] = createSignal('');
   const [now, setNow] = createSignal(Date.now());
+  const [load_, setLoad] = createSignal<NativeAudioStatus['load']>();
   const [audio, setAudio] = createSignal<NativeAudioStatus>();
   const [buildInfo, setBuildInfo] = createSignal<BuildInfo>();
   const [rate, setRate] = createSignal<number>();
@@ -214,6 +217,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     selected,
     () => !app.target.switching() && !busy('target') && app.connection.connection().state === 'connected',
   );
+  const utilization = createUtilizationHistory(selected, remoteHealth);
   // While an image boots, only its own device counts: an unknown image has none (no stale device, no faceplate).
   const knownDevice = createMemo(
     () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice())),
@@ -521,20 +525,29 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
       if (lastAudio && wall > lastAudio.wall) setRate((produced - lastAudio.produced) / (wall - lastAudio.wall));
       lastAudio = { produced, wall };
     } catch {
-      /* a replaced session has no status */
+      /* a replaced session has no audio status */
     }
   };
 
   /** The heartbeat, once a second: a stalled main loop shows nowhere else. */
+  let readingHealth = false;
   const pollHealth = async () => {
     setNow(Date.now());
+    if (readingHealth) return;
+    readingHealth = true;
+    const history = utilization();
     try {
       const s = await runtime()?.controllerStatus?.();
+      setLoad(s?.load);
+      history.emulator(s?.load);
       if (s?.heartbeat) watchHealth({ stalled: s.heartbeat.stalled, stallMs: s.heartbeat.stall_ms });
       setControllerJob(s?.job ?? null);
       syncControllerJob(s?.job, () => void runtime()?.cancelJob?.());
     } catch {
-      /* a replaced session has no status */
+      setLoad(undefined);
+      history.emulator(null);
+    } finally {
+      readingHealth = false;
     }
   };
 
@@ -546,20 +559,22 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     onCleanup(() => window.clearTimeout(timer));
   });
 
-  const [analyzerOpen, setAnalyzerOpen] = createSignal(false);
+  const [toolDrawer, setToolDrawer] = createSignal<'Analyzer' | 'Performance'>();
   createEffect(() => {
-    if (logOpen()) setAnalyzerOpen(false);
+    if (logOpen()) setToolDrawer(undefined);
   });
-  const drawerOpen = () => analyzerOpen() || logOpen();
+  const analyzerOpen = () => toolDrawer() === 'Analyzer';
+  const drawerName = () => (logOpen() ? 'Log' : toolDrawer());
+  const drawerOpen = () => !!drawerName();
   const toggleLog = () =>
     batch(() => {
       setLogOpen(!logOpen());
-      setAnalyzerOpen(false);
+      setToolDrawer(undefined);
     });
-  const toggleAnalyzer = () =>
+  const toggleTool = (tool: 'Analyzer' | 'Performance') =>
     batch(() => {
       setLogOpen(false);
-      setAnalyzerOpen((open) => !open);
+      setToolDrawer((open) => (open === tool ? undefined : tool));
     });
   const showMetrics = () => {
     setPage('run');
@@ -779,7 +794,6 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
     if (s.frame_revision === 0) return 'booting';
     return s.frame_source === 'intro' ? 'startup display' : s.phase;
   };
-  const load_ = () => audio()?.load ?? undefined;
   const sink = () => audio()?.sink ?? undefined;
 
   /** The Metrics tab of the right-hand column: what the emulator measures, polled once a second, and two test actions. */
@@ -1259,7 +1273,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
         <section
           class="workbench-drawer"
           classList={{ 'log-drawer': logOpen() }}
-          aria-label={analyzerOpen() ? 'Analyzer' : 'Log'}
+          aria-label={drawerName()}
           ref={dockEl}
           style={{ height: `${dockPx()}px` }}
         >
@@ -1267,7 +1281,7 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
             class="dock-handle"
             role="separator"
             aria-orientation="horizontal"
-            aria-label={analyzerOpen() ? 'Resize the Analyzer' : 'Resize the Log'}
+            aria-label={`Resize the ${drawerName()}`}
             aria-valuemin={DOCK_MIN_PX}
             aria-valuemax={dockMax(windowPx())}
             aria-valuenow={dockPx()}
@@ -1297,12 +1311,21 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
           <Show
             when={logOpen()}
             fallback={
-              <Show when={props.host.analyzer}>
-                {(host) => (
-                  <Suspense fallback={<p role="status">Opening analyzer…</p>}>
-                    <AnalyzerPanel host={host()} target={selected().target} workers={props.analyzerWorkers} />
-                  </Suspense>
-                )}
+              <Show
+                when={toolDrawer() === 'Performance'}
+                fallback={
+                  <Show when={props.host.analyzer}>
+                    {(host) => (
+                      <Suspense fallback={<p role="status">Opening analyzer…</p>}>
+                        <AnalyzerPanel host={host()} target={selected().target} workers={props.analyzerWorkers} />
+                      </Suspense>
+                    )}
+                  </Show>
+                }
+              >
+                <Suspense fallback={<p role="status">Opening performance history…</p>}>
+                  <PerformancePanel points={utilization().points()} now={now()} estimated={isEmulator()} />
+                </Suspense>
               </Show>
             }
           >
@@ -1419,11 +1442,20 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
             class="sb"
             aria-expanded={analyzerOpen()}
             title="Show the selected target’s audio analyzer"
-            onClick={toggleAnalyzer}
+            onClick={() => toggleTool('Analyzer')}
           >
             Analyzer <Icon d={analyzerOpen() ? DOWN : UP} />
           </button>
         </Show>
+        <button
+          type="button"
+          class="sb"
+          aria-expanded={toolDrawer() === 'Performance'}
+          title="Show CF and DSP utilization history"
+          onClick={() => toggleTool('Performance')}
+        >
+          Performance <Icon d={toolDrawer() === 'Performance' ? DOWN : UP} />
+        </button>
         <button type="button" class="sb" aria-expanded={logOpen()} title={`Log (${logKey})`} onClick={toggleLog}>
           Log
           <Show when={badge() > 0}>

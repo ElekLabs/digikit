@@ -3,6 +3,12 @@
 Diagnostics are off by default and cost nothing when off. Tuning switches
 (which tier runs what) are separate and listed at the end.
 
+## Workbench utilization history
+
+Open **Performance** in the desktop status bar to see the last minute of ColdFire and DSP utilization for the selected Target. The emulator reports estimated chip load, sampled by Workbench approximately once per second. On hardware, the firmware emits HEALTH roughly every ten seconds. Workbench checks for a new reading on its existing five-second poll. The horizontal axis is local observation time. A spike between observations can be missed.
+
+Hover over the graph to inspect a sample’s age and its CF and DSP readings. History accumulates while other panes are open. Switching targets starts a new history. Gaps indicate unavailable readings, and a processor without a reported value has no trace. The audio Analyzer and Performance drawer can be opened independently of USB audio capture.
+
 ## Where output goes
 
 Every run tool writes one directory per run:
