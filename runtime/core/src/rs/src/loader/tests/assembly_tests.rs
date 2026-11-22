@@ -524,13 +524,13 @@ impl Drop for Clean {
 /// Where a fixture's source module is built (`<project id>:pack`) and its file name.
 pub(super) struct Fixture {
     pub(super) leaf: &'static str,
-    nx: &'static str,
+    pub(super) nx: &'static str,
 }
 
 pub(super) const SINE: Fixture = Fixture { leaf: "sine", nx: "test/sine" };
 const DYN_DN2: Fixture = Fixture { leaf: "dyn-dn2", nx: "test/dyn-dn2" };
 const FX_GAIN: Fixture = Fixture { leaf: "dyn-fx-gain", nx: "test/dyn-fx-gain" };
-const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
+pub(super) const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo-shape" };
 pub(super) const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
 /// The test service with ColdFire hooks in the port file of the test image, and its user.
 pub(super) const SVC_TEST: Fixture = Fixture { leaf: "svc-test", nx: "test/svc-test" };

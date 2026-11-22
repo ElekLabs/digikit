@@ -362,3 +362,75 @@ fn a_live_load_refused_before_anything_is_placed_logs_its_own_detail_and_not_tha
         clean_state();
     }
 }
+
+#[test]
+fn a_selected_file_that_is_not_on_the_card_is_reported_and_the_rest_of_the_selection_loads() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        for gone_first in [false, true] {
+            unsafe {
+                let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+                let leaves: [&str; 2] = if gone_first { ["gone", LOCAL_PING_USER.leaf] } else { [LOCAL_PING_USER.leaf, "gone"] };
+                let (live_k, gone_k) = if gone_first { (1, 0) } else { (0, 1) };
+                if gone_first {
+                    // the captured table of the module is at index 0: move it to its place
+                    let t = (l.tables[0], l.table_len[0]);
+                    l.tables[1] = t.0;
+                    l.table_len[1] = t.1;
+                    l.tables[0] = [0; TABLE_MAX];
+                    l.table_len[0] = 0;
+                }
+                let rec = boot_record(&leaves);
+                let mut rt = Box::new(Rt::new(&mut l as *mut _));
+                rt.boot_with(&rec, &capacity(&l.p));
+                let b = crate::boot::info();
+                assert_eq!(b.results[gone_k], dkrt_sdk::E_NOT_FOUND, "{} gone_first={gone_first}: the missing file is reported", dev.name);
+                assert_eq!(b.states[gone_k], 6u8, "{}: and has a state", dev.name);
+                assert_eq!(b.results[live_k], dkrt_sdk::OK, "{} gone_first={gone_first}: the other module loads", dev.name);
+            }
+            clean_state();
+        }
+    }
+}
+
+/// The debug module with nothing else on the card (what a CLI delete of the last module leaves: no service, no port file) still loads: it needs no service and names no firmware item.
+#[test]
+fn the_debug_module_loads_from_a_card_with_no_service_and_no_port_file() {
+    let _g = clean();
+    const DEBUG: Fixture = Fixture { leaf: "debug", nx: "digikit/debug" };
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&DEBUG], &[]);
+            l.m.files.retain(|(n, _)| !n.ends_with(b".dkport"));
+            l.reset_plan();
+            l.capture(0, &packed(dev, DEBUG.leaf, "dkm", DEBUG.nx));
+            l.find_providers(1);
+            let rec = boot_record(&[DEBUG.leaf]);
+            let mut rt = Box::new(Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().results[0], dkrt_sdk::OK, "{}: {:x?}", dev.name, crate::boot::info().detail[0]);
+        }
+        clean_state();
+    }
+}
+
+/// Two lfo shapes with one record key, through the runtime's boot (`Rt`, the boot record and the log as the device writes them): the first loads, the second is refused with
+/// the plan's key status.
+#[test]
+fn of_two_lfo_shapes_with_one_key_the_first_loads_and_the_second_is_refused_by_the_boot() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LFO_SHAPE, &LFO_SHAPE], &SERVICES);
+            let rec = boot_record(&[LFO_SHAPE.leaf, LFO_SHAPE.leaf]);
+            let mut rt = Box::new(Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            let b = crate::boot::info();
+            assert_eq!([b.results[0], b.results[1]], [dkrt_sdk::OK, dkrt_sdk::E_PLAN_KEY], "{}: detail {:x?}", dev.name, [b.detail[0], b.detail[1]]);
+        }
+        clean_state();
+    }
+}

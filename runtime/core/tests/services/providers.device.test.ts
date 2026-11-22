@@ -180,11 +180,13 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
       selection: [debug.name, user.name],
     });
     const log = await h.usb(rt, (dk) => dk.readLog());
-    // the port file is refused before anything is placed; the service has no port file to take its site from
-    expect(providerOf(log, nameHash('port')).map((p) => [p.result, p.base]), 'the port file is refused before it is placed').toEqual([[E_HOOK_STOCK, 0]]);
-    // changed with the new boot (RC2b): the service needs the port file, so the manager refuses it for the refused need without placing it (E_MISSING, its own hash); before,
-    // the loader placed it and its hook import failed (E_IMPORT, naming the hook). The user's refusal below is the same.
-    expect(providerOf(log, nameHash('svc-test')).map((p) => [p.result, p.base]), 'the service is refused for the port file it needs, and not placed').toEqual([[E_MISSING, 0]]);
+    // the port file is refused before anything is placed; the service needs it, so the manager refuses the service for the failed need without placing it (RC2b). Before, the
+    // loader placed it and its hook import failed (E_IMPORT, naming the hook). The log line of a refused service names the need that failed (the root cause: the port file's hash,
+    // `lifecycle/rt.rs` report_boot), so both lines are under the port file's hash: its own refusal first, then the service's E_MISSING. The user's refusal below is the same.
+    expect(providerOf(log, nameHash('port')).map((p) => [p.result, p.base]), 'the port file is refused before it is placed, and the service that needs it is refused for it, not placed').toEqual([
+      [E_HOOK_STOCK, 0],
+      [E_MISSING, 0],
+    ]);
     expect(await siteBytes(rt, bound.site), 'the site was never written').toEqual(STOCK_SITE);
     const states = await h.usb(rt, (dk) => dk.loadStates());
     expect([states[1]!.state, states[1]!.result, states[1]!.detail], 'the user is REFUSED, with the hash of its service').toEqual([

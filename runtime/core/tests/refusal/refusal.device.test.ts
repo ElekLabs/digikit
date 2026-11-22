@@ -113,7 +113,7 @@ cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROO
   });
 
   test('a changed sha256 is E_SHA', async () => {
-    expectModule(await patchedSeen(), 2, 'FAILED', loadCode('E_SHA'));
+    expectModule(await patchedSeen(), 1, 'FAILED', loadCode('E_SHA'));
   });
 
   test('a selected file the card does not have is E_NOT_FOUND', async () => {
