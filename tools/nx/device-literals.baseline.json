@@ -830,7 +830,7 @@
   "tests/regression/runtime/card-kit.ts": 2,
   "tests/regression/runtime/card-rig.ts": 1,
   "tests/regression/runtime/device-data.ts": 6,
-  "tests/regression/runtime/devices.ts": 12,
+  "tests/regression/runtime/devices.ts": 10,
   "tests/regression/runtime/dsp-cache-registers.test.ts": 5,
   "tests/regression/runtime/dsp-ddr-monitor.test.ts": 3,
   "tests/regression/runtime/dsp-stereo-proof.test.ts": 6,

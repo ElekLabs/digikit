@@ -7,7 +7,7 @@ import { DkError, fileHashHex } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
 import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
-import { rpc, word } from './fx-live.ts';
+import { rpc, word } from './guest-access.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
@@ -138,6 +138,8 @@ export interface CardOptions extends Partial<Omit<SelRecord, 'paths'>> {
   modules?: { name: string; file: string }[];
   /** Files of the DT2 +Drive path filesystem (`name` is the path below the root, e.g. `Samples/a.bin`; `file` the bytes). */
   drive?: { name: string; file: string }[];
+  /** A plus_drive folder that `plusdrive build` scans as it is (the daemon's `card.load` scans a folder the same way); not with `modules` or `drive`. */
+  folder?: string;
   /** Verified DT2 firmware (.syx) that seeds the boot project; omit for none. */
   syx?: string;
   /** Selected store paths, written to both copies. Undefined or null: no record. */
@@ -155,10 +157,12 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
   const dir = path.join(o.dir, o.name ?? 'card');
   const out = path.join(dir, 'card.img');
   fs.rmSync(dir, { recursive: true, force: true });
+  if (o.folder && (o.modules?.length || o.drive?.length))
+    throw new Error('buildCard: `folder` excludes `modules` and `drive`');
   if (!o.base) {
     const seed = path.join(o.dir, `seed-${o.name ?? 'card'}`);
     fs.rmSync(seed, { recursive: true, force: true });
-    fs.mkdirSync(path.join(seed, 'digikit'), { recursive: true });
+    if (!o.folder) fs.mkdirSync(path.join(seed, 'digikit'), { recursive: true });
     fs.mkdirSync(dir, { recursive: true });
     for (const m of o.modules ?? []) {
       fs.mkdirSync(path.dirname(path.join(seed, 'digikit', m.name)), { recursive: true });
@@ -170,7 +174,7 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
     }
     await exec(
       plusdriveBinary(),
-      ['build', seed, '-o', out, '--device', device, ...(o.syx ? ['--syx', o.syx] : ['--no-project'])],
+      ['build', o.folder ?? seed, '-o', out, '--device', device, ...(o.syx ? ['--syx', o.syx] : ['--no-project'])],
       {
         cwd: repoRoot(),
         timeout: 60_000,

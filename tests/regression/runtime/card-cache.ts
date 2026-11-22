@@ -18,6 +18,25 @@ const FORMAT = 'card-cache-2';
 
 const shaCache = new Map<string, { sig: string; sha: string }>();
 
+/**
+ * The files and directories of a plus_drive folder, sorted by `/` path, files with their sha256 and directories with `dir`: the walk of
+ * `folder_files` (packages/emulator/plusdrive/src/folder.rs), which leaves out symbolic links and `.DS_Store` and keeps empty directories,
+ * so a card key changes with exactly what `plusdrive build` reads.
+ */
+export function folderSha(root: string): { name: string; sha: string }[] {
+  return fs
+    .readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((e) => (e.isFile() && e.name !== '.DS_Store') || e.isDirectory())
+    .map((e) => {
+      const file = path.join((e as { parentPath?: string }).parentPath ?? (e as { path: string }).path, e.name);
+      return {
+        name: path.relative(root, file).split(path.sep).join('/'),
+        sha: e.isDirectory() ? 'dir' : fileSha(file),
+      };
+    })
+    .sort((a, b) => (a.name < b.name ? -1 : 1));
+}
+
 /** The sha256 (hex) of a file, read once per path, size and mtime. */
 export function fileSha(file: string): string {
   const stat = fs.statSync(file);
@@ -68,6 +87,7 @@ function toolIdentity(): { plusdrive: string; profiles: Record<string, string> }
 const BUILDER_SOURCES = [
   'card-cache.ts',
   'card-kit.ts',
+  'live-card.ts',
   'card-rig.ts',
   'fx-session.ts',
   'fx-live.ts',

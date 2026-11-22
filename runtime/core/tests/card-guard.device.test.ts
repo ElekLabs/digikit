@@ -125,5 +125,5 @@ runtimeTests(
     expect(await statusOf(() => dk.put('modules/t.dkm', blob(3_000, 5))), 'the runtime still writes the store (its class is not its sector)').toBe(0);
     expect((await guard()).refused_writes + (await guard()).refused_erases, 'that write was not refused').toBe(1);
   },
-  { devices: ['st'], dsp: 'cold', patchSet: 'emulator' },
+  { devices: ['st'], dsp: 'cold', patchSet: 'emulator', blankCard: true },
 );

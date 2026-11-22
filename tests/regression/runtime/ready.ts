@@ -3,7 +3,8 @@ import { describe, expect, test } from 'vitest';
 import { expectRuntimeBoot, withPatchedSession, type TestRuntime } from '../support.ts';
 import { timePhase, timingContext } from '../timing.ts';
 import { liveArtifacts, record } from './artifacts.ts';
-import { FIRMWARE, FULL_TIER, liveOptions, selectDevices, skipEmptyHalf } from './devices.ts';
+import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
+import { liveOptions } from './live-options.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 import { pollEmulated } from './waits.ts';
 
@@ -15,6 +16,10 @@ export function runtimeTests(
     patchSet?: string;
     dsp?: SessionOptions['dsp'];
     mirror?: boolean;
+    /** Leave the card to the daemon (the stock initialisation of a blank card), instead of the cached card of `liveCard`. */
+    blankCard?: boolean;
+    /** The stable period of the card in DSP blocks (default `LIVE_STABLE_BLOCKS`; 0 is the runtime's 30 s). */
+    stableBlocks?: number;
     devices?: readonly Device[];
     full?: boolean;
     skip?: string;
