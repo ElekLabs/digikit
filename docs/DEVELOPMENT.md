@@ -76,7 +76,7 @@ mise run workbench -- --no-dsp    # start with the "DSP" tick off: ColdFire only
 ```
 
 With the ready inputs present, a firmware loaded in `mise run workbench` plays audio. Without them it
-starts the ColdFire-only emulator. The DSP needs about 1.6 CPU seconds per audio second
+starts the ColdFire-only emulator. If the default firmware file is missing, the desktop window still opens and you can choose a firmware file there. The DSP needs about 1.6 CPU seconds per audio second
 ([finding 18](findings/18-dsp-performance.md)), so real time is not reached yet.
 The +Drive comes from `plus_drive/dt2/` or `plus_drive/dn2/` (git ignores both) when it exists, or from `--plus-drive DIR` (`--samples DIR` is the same option): the launcher builds a card image from the folder and caches it by content ([docs/SAMPLES.md](SAMPLES.md)).
 Track N of the DT2 plays file N (sorted by name; more than 16 files wrap around).
