@@ -5,6 +5,8 @@
 //!
 //! The contract table `tests/platform/contract.toml` names a host test for each check; `every_contract_row_names_a_host_test` keeps the names real.
 
+pub mod address_map;
+
 use crate::card;
 use crate::fake_storage::FakeStorage;
 use crate::files::path_too_big;
@@ -72,6 +74,8 @@ pub info_dsp: RefCell<Vec<(u32, u32)>>,
     pub calls: RefCell<Vec<Call>>,
     /// The files of the two roots (`Storage`).
     pub storage: FakeStorage,
+    /// The device addresses of host memory and code; `with_addresses` makes it the space of `DevAddr`.
+    pub addresses: address_map::AddressMap,
 }
 
 /// One logged platform call of the installer path: the mask, the code and slot writes, the flushes and the restore.
@@ -122,7 +126,12 @@ impl FakePlatform {
 info_dsp: RefCell::new(Vec::new()),
             calls: RefCell::new(Vec::new()),
             storage,
+            addresses: address_map::AddressMap::new(),
         }
+    }
+    /// Run `body` with `addresses` as the address space of `DevAddr`; the previous space returns afterwards, also on unwind.
+    pub fn with_addresses<R>(&self, body: impl FnOnce() -> R) -> R {
+        self.addresses.with_addresses(body)
     }
     /// Set code bytes without a log entry (a test's stock image).
     pub fn put_code(&self, addr: u32, bytes: &[u8]) {

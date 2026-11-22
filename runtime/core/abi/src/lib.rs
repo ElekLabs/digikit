@@ -8,6 +8,7 @@
 //! - `state`: the state of each module of the boot selection (R11: `BootStates`, `classify`) and the `LOADS` v2 reply bytes.
 //! - `fw`: `Fw`, the firmware's parameter page as a service sees it (the runtime implements it; tests fake it).
 //! - `keys`: the copy of a module's header table that the commit reads (`KeysCopy`).
+//! - `dev_addr`: `DevAddr`, a device address as its own type (the host maps it through an installed `AddressSpace`).
 //! - `dsp`, `registry`, `mem`: types, constants and helpers with no state. The core owns the objects (`DKRT_DSP`, `DKRT_REG`) and hands them out through `CoreApi`.
 //!
 //! This crate never depends on the runtime crate: a function that needs the core's state belongs to `CoreApi`, so the dependency arrows between the core and the
@@ -17,6 +18,7 @@
 
 pub mod core_api;
 pub mod core_imports;
+pub mod dev_addr;
 pub mod dsp;
 pub mod fw;
 pub mod gen_svc_abi;
