@@ -63,10 +63,6 @@ export const remoteStateWanted = (
   !loaded ||
   (loaded.some((m) => m.name === REMOTE_MODULE) && (key === undefined || key !== unavailableKey));
 
-/** Held keys are released on leaving when the module is there: it answered the state, or MODULES lists it (it may lack the state request). */
-export const remoteReleaseDue = (state: RemoteState | undefined, listed: boolean | undefined): boolean =>
-  !!state || listed === true;
-
 /** Does MODULES list digikit/remote? `undefined` when the list could not be read. */
 export const remoteListed = (loaded: readonly { name: string }[] | undefined): boolean | undefined =>
   loaded ? loaded.some((m) => m.name === REMOTE_MODULE) : undefined;
@@ -85,10 +81,14 @@ export interface KeyReport {
 }
 
 /** What the faceplate calls to press, release and turn: each becomes one request of the remote module. A failure is reported, then thrown as before. */
-export function remoteRuntime(get: () => Promise<DkSession>, report?: KeyReport) {
+export function remoteRuntime(get: () => Promise<DkSession>, report?: KeyReport, check?: () => void) {
+  let heldSession: DkSession | undefined;
+  const held = new Map<number, object>();
   const run = async (request: (s: DkSession) => Promise<unknown>) => {
     try {
-      await request(await get());
+      const session = await get();
+      check?.();
+      await request(session);
     } catch (e) {
       report?.failed(e);
       throw e;
@@ -96,8 +96,24 @@ export function remoteRuntime(get: () => Promise<DkSession>, report?: KeyReport)
     report?.ok();
   };
   return {
-    press: (code: number) => run((s) => s.remoteKey(code, true)),
-    release: (code: number) => run((s) => s.remoteKey(code, false)),
+    press: (code: number) =>
+      run((s) => {
+        heldSession = s;
+        held.set(code, {});
+        return s.remoteKey(code, true);
+      }),
+    release: (code: number) =>
+      run(async (s) => {
+        const press = held.get(code);
+        await s.remoteKey(code, false);
+        if (held.get(code) === press) held.delete(code);
+      }),
+    async releaseHeld() {
+      if (!held.size || !heldSession) return;
+      // Use the session which received KEY, before the host closes its MIDI slot.
+      await heldSession.remoteRelease();
+      held.clear();
+    },
     turn: (encoder: number, detents: number) => run((s) => s.remoteTurn(encoder, detents)),
   };
 }

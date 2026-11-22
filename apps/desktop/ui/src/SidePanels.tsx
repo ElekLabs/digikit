@@ -1,9 +1,6 @@
-// The right-hand column of the Emulator page and the Remote page: tabs over one panel at a time. The Emulator page offers Memory, Metrics,
-// Profile and Calibration; the Remote page Memory, Profile and Calibration. The column folds to a narrow rail so the faceplate takes the width
-// back; the rail lists the tabs vertically, and a click on one opens the column on it. The chosen tab and the fold are kept (panel-open.ts).
-// Memory and Profile read through the one session of their target (target.ts), and only while their tab is shown.
+// The selected target’s inspector. Each binding owns its panel reads and calibration run.
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
-import type { DkSession } from '@digi/dk-session';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
 import ProfilePanel from './ProfilePanel';
@@ -14,20 +11,13 @@ import { TAB_LABEL, shownTab, type InspectorTab } from './inspector-core';
 import { inspectorOpen, inspectorTab, setInspectorOpen, setInspectorTab } from './panel-open';
 import './card-panel.css';
 
-/**
- * `visible`: the column is on screen (the page is shown). `active`: the emulator runs, so Memory can read (default true).
- * `metrics`: offer the Metrics tab with this content. `session`, `where`, `track`: the
- * Memory panel's (memory-panel props).
- */
 export default function SidePanels(props: {
   /** The host of the Profile panel (the emulator's `cf.profile` and `sharc.profile`, the save dialog). */
   host?: Host;
   visible: boolean;
   active?: boolean;
   metrics?: JSX.Element;
-  session: () => Promise<DkSession>;
-  where: () => string;
-  track?: () => unknown;
+  source: TargetBinding;
 }): JSX.Element {
   // shared by the Profile and Calibration tabs: a run in progress, and the calibration kept per device
   const hub = createCalibrationHub(useTransferApp().storage);
@@ -158,18 +148,10 @@ export default function SidePanels(props: {
       <Show when={props.visible && inspectorOpen() && !(props.active ?? true) && tab() !== 'metrics'}>
         <p class="side-empty">The emulator is not running.</p>
       </Show>
-      <MemoryPanel
-        visible={reads('memory')}
-        session={props.session}
-        where={props.where}
-        track={props.track}
-        tabpanel={tabpanel('memory')}
-      />
+      <MemoryPanel visible={reads('memory')} source={props.source} tabpanel={tabpanel('memory')} />
       <ProfilePanel
         visible={reads('profile')}
-        session={props.session}
-        where={props.where}
-        track={props.track}
+        source={props.source}
         host={props.host}
         hub={hub}
         tabpanel={tabpanel('profile')}
@@ -177,9 +159,7 @@ export default function SidePanels(props: {
       <Show when={props.host}>
         <CalibrationPanel
           visible={reads('calibration')}
-          session={props.session}
-          where={props.where}
-          track={props.track}
+          source={props.source}
           host={props.host}
           hub={hub}
           tabpanel={tabpanel('calibration')}

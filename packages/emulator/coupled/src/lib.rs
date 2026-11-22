@@ -21,6 +21,7 @@ pub mod audio_out;
 pub mod companion;
 #[cfg(feature = "sharc")]
 pub mod gates;
+pub mod pcm_observer;
 pub mod peer_companion;
 pub mod scenario;
 #[cfg(feature = "sharc")]
@@ -205,6 +206,7 @@ impl CoupledRuntime {
     /// state, as after a coupled restore).
     pub fn restore_state(&mut self, data: &[u8]) -> Result<(), String> {
         self.emulator.load_state(data)?;
+        self.out.reset_windows();
         self.input_base = self.emulator.icount();
         Ok(())
     }
@@ -593,6 +595,12 @@ impl CoupledRuntime {
         let ops = patch.ops.len();
         let frame = sharc.handle.frames_sent();
         let dsp_icount = sharc.handle.apply_patch(patch)?;
+        if self.out.observes_windows() {
+            // The patch followed every frame in flight. Drain those samples
+            // before resetting the observer so its next window starts here.
+            self.sync_audio();
+            self.out.reset_windows();
+        }
         Ok(json!({"ops": ops, "at_frame": frame, "dsp_icount": dsp_icount}))
     }
     /// DSP memory bytes (`None` where the engine does not know the byte), read

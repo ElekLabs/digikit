@@ -12,6 +12,7 @@ export default defineConfig({
   root: here('.'),
   base: './',
   plugins: [solid()],
+  optimizeDeps: { include: ['fft.js', 'pixi.js', 'pixi.js/unsafe-eval'] },
   resolve: {
     alias: [
       { find: '@tauri-apps/api/core', replacement: here('./tauri-mock.ts') },

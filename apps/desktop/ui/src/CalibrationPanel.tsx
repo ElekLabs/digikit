@@ -2,12 +2,11 @@
 // a dk.calibration/1 file kept per device that the Profile tab estimates DSP cycles with. The pane owns the run state (calibration-state.ts), so
 // switching tabs never aborts a run; the Profile tab only learns through the hub (calibration-hub.ts) that a run is playing. The pane reads nothing
 // itself: it asks the target's INFO once (when shown or when the target changes) for the device the active calibration belongs to.
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { Show, createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import type { Host } from '@digi/workbench-core/host/host.ts';
-import type { DkSession } from '@digi/dk-session';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { sameTarget, type Target } from '@digi/workbench-core/transfer/target.ts';
 import { cardRefresh } from './card-state';
 import { createDkProfLoader } from './dkprof-env';
 import { deviceOfPort } from './remote-core';
@@ -23,18 +22,14 @@ const asText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export default function CalibrationPanel(props: {
   visible: boolean;
-  session: () => Promise<DkSession>;
-  where: () => string;
-  track?: () => unknown;
+  source: TargetBinding;
   host?: Host;
   hub: CalibrationHub;
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
   const app = useTransferApp();
-  const { emulatorRuntime, target } = app.target;
-  const readsEmulator = () => props.where() === 'the emulator';
-  const readsTarget = () => !readsEmulator() || target().kind === 'emulator';
-  const onEmulator = () => readsEmulator() || target().kind === 'emulator';
+  const { emulatorRuntime } = app.target;
+  const onEmulator = () => props.source.target.kind === 'emulator';
   const prof = props.host ? createDkProfLoader(props.host) : undefined;
 
   // the device of the target, from its INFO port (`<id>-<version>`)
@@ -42,13 +37,13 @@ export default function CalibrationPanel(props: {
   let latest: object | undefined;
   createEffect(() => {
     cardRefresh();
-    props.track?.();
-    emulatorRuntime();
+
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
     if (!props.visible) return;
     untrack(() => {
       const mine = {};
       latest = mine;
-      void props
+      void props.source
         .session()
         .then((s) => s.info())
         .then((i) => latest === mine && setPort(i.port))
@@ -63,13 +58,8 @@ export default function CalibrationPanel(props: {
   };
 
   // the run fails when the selected target changes under it
-  let runTarget: Target | undefined;
-  const sameRunTarget = () => {
-    if (readsTarget() && runTarget && !sameTarget(runTarget, target()))
-      throw new Error('the target changed during the run: it was stopped');
-  };
   const calibrator = createCalibrator({
-    session: async () => props.session(),
+    session: async () => props.source.session(),
     get rpc() {
       return onEmulator() ? props.host?.rpc : undefined;
     },
@@ -78,7 +68,7 @@ export default function CalibrationPanel(props: {
       return sink
         ? {
             send: async (bytes: Uint8Array) => {
-              sameRunTarget();
+              props.source.check();
               await sink.send(bytes);
             },
           }
@@ -86,23 +76,22 @@ export default function CalibrationPanel(props: {
     },
     loadLibrary: app.loadLibrary,
     // Transfer installs on the selected target: only when this pane reads it, and only while it is still the target the run began on
-    get install() {
-      return readsTarget()
-        ? async (ids: string[]) => {
-            sameRunTarget();
-            await app.backend.install(ids, () => {});
-          }
-        : undefined;
+    install: async (ids) => {
+      props.source.check();
+      await app.backend.install(ids, () => {});
     },
     prof: prof ?? (async () => Promise.reject(new Error('dkprof.wasm needs the desktop host'))),
     texts: calibrationTexts,
   });
   const calibration = createCalibrationState({
-    calibrator,
+    calibrator: {
+      ...calibrator,
+      run: (opts) => app.jobs.runJob('Calibration', { group: 'target' }, () => calibrator.run(opts)),
+    },
     emulator: onEmulator,
-    blocked: () => false,
+    visible: () => props.visible,
+    blocked: () => app.jobs.busy('target'),
     onRunning: (r) => {
-      runTarget = r ? target() : undefined;
       props.hub.setCalibrating(r);
     },
   });

@@ -13,6 +13,8 @@ export type Reply = unknown | ((...args: any[]) => unknown);
 
 /** Commands that answer nothing: no reply needed. */
 const ANSWERS_NOTHING = new Set([
+  'ports.audio.stop',
+  'analyzer.close',
   'ports.midi.open',
   'ports.midi.close',
   'ports.midi.send',
@@ -63,6 +65,7 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
     commands: () => calls.map((c) => c.command),
     argsOf: (command) => calls.filter((c) => c.command === command).map((c) => c.args),
     rpc: { call: leaf('rpc.call') },
+    analyzer: { open: leaf('analyzer.open'), read: leaf('analyzer.read'), close: leaf('analyzer.close') },
     fs: {
       pickFolder: leaf('fs.pickFolder'),
       list: leaf('fs.list'),
@@ -76,6 +79,12 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
       readMaps: leaf('library.readMaps'),
     },
     ports: {
+      audio: {
+        inputs: leaf('ports.audio.inputs'),
+        start: leaf('ports.audio.start'),
+        stop: leaf('ports.audio.stop'),
+        status: leaf('ports.audio.status'),
+      },
       midi: {
         ports: leaf('ports.midi.ports'),
         open: leaf('ports.midi.open'),

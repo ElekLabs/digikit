@@ -229,6 +229,8 @@ export function createFirmwareState({
           };
           setRun(failed);
           return failed;
+        } finally {
+          transfer.target.finishRawTransport();
         }
       });
     } catch (e) {

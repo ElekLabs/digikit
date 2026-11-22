@@ -2,12 +2,14 @@
 //! whichever core produces it (the SHARC session today, a peer ColdFire's
 //! `Emulator::take_pcm()` later) and does the player push, the tap, the capture
 //! and the pacing query the controller uses. It knows no DSP types.
+use crate::pcm_observer::{PcmConnection, PcmSource, PcmWriter};
 use elektron_native_boot::wav::WavWriter;
 use serde_json::{Map, Value, json};
 use std::{
     fs::File,
     io::{self, Write},
     path::PathBuf,
+    sync::Arc,
     time::Instant,
 };
 
@@ -121,6 +123,7 @@ pub fn pace_seconds(buffer_seconds: f64) -> f64 {
 
 /// Output of one session: player, tap, capture, counters and the pace target.
 pub struct AudioOut {
+    pcm_windows: Option<(PcmWriter, PcmConnection)>,
     sink: Option<Box<dyn PcmSink>>,
     device_error: Option<String>,
     playback_requested: bool,
@@ -152,6 +155,7 @@ impl AudioOut {
             (None, None)
         };
         Self {
+            pcm_windows: None,
             sink,
             device_error,
             playback_requested: playback,
@@ -168,6 +172,9 @@ impl AudioOut {
         self.samples += pcm.len() as u64;
         if let Some(capture) = &mut self.pcm_capture {
             capture.write(pcm);
+        }
+        if let Some((writer, _)) = &mut self.pcm_windows {
+            writer.push(pcm);
         }
         if let Some(sink) = &self.sink {
             sink.push(pcm);
@@ -216,6 +223,21 @@ impl AudioOut {
         self.sink
             .as_ref()
             .map(|sink| sink.queue_state().underrun_events)
+    }
+
+    pub(crate) fn observe_windows(&mut self, source: &Arc<PcmSource>) {
+        self.pcm_windows = Some(source.connect(SOURCE_RATE));
+    }
+
+    #[cfg(feature = "sharc")]
+    pub(crate) fn observes_windows(&self) -> bool {
+        self.pcm_windows.is_some()
+    }
+
+    pub(crate) fn reset_windows(&mut self) {
+        if let Some((writer, _)) = &mut self.pcm_windows {
+            writer.reset();
+        }
     }
 
     /// Replace the tap; `keep` retains every sample.

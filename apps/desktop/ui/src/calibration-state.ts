@@ -29,6 +29,7 @@ export interface CalibrationStateDeps {
   emulator: () => boolean;
   /** Something else of the pane is under way (a read in flight, another action): Run refuses. */
   blocked: () => boolean;
+  visible?: () => boolean;
   /** The run starts or ends (the pane stops reading while it runs and locks its other actions). */
   onRunning?: (running: boolean) => void;
 }
@@ -46,7 +47,7 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
   const profile = () => choices().list.find((p) => p.name === chosen()) ?? choices().list[0];
   // the tracks the chosen profile uses on the target, for the note before Run (a target that cannot say shows no note)
   const [tracks] = createResource(
-    () => profile()?.name,
+    () => (deps.visible?.() ?? true) && profile()?.name,
     async (name) => (await calibrator.tracks?.(name).catch(() => [] as number[])) ?? [],
   );
   const note = () => trackNote(tracks() ?? []);

@@ -108,7 +108,7 @@
           },
           {
             "name": "Worker",
-            "message": "Take a WorkerFactory (packages/workbench-core/src/workers.ts); only apps/web/src/browser-workers.ts calls new Worker."
+            "message": "Take a WorkerFactory (packages/workbench-core/src/workers.ts); only the platform worker factories construct workers."
           }
         ]
       }
@@ -117,7 +117,8 @@
       "files": [
         "packages/workbench-core/src/storage.ts",
         "packages/workbench-core/src/blob-store.ts",
-        "apps/web/src/browser-workers.ts"
+        "apps/web/src/browser-workers.ts",
+        "apps/desktop/ui/src/workers.ts"
       ],
       "rules": {
         "eslint/no-restricted-globals": "off"

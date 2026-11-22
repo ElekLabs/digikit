@@ -40,7 +40,7 @@ export function bootOnEmulatorPage(
   running: boolean,
   starting: boolean,
 ): boolean {
-  return pending && page === 'emulator' && targetKind === 'emulator' && !running && !starting;
+  return pending && page === 'run' && targetKind === 'emulator' && !running && !starting;
 }
 
 /**
@@ -49,11 +49,6 @@ export function bootOnEmulatorPage(
  */
 export function keepDeferredBoot(running: boolean, starting: boolean): boolean {
   return !running && !starting;
-}
-
-/** The status bar text of the emulator: labelled when the target is another one, so it is not read as the state of the device. */
-export function emulatorStatus(text: string, targetKind: TargetKind): string {
-  return targetKind === 'emulator' ? text : `Emulator: ${text}`;
 }
 
 /** The Log entry when a boot starts. */

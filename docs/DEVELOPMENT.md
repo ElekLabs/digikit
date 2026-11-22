@@ -76,10 +76,20 @@ mise run workbench -- --no-dsp    # start with the "DSP" tick off: ColdFire only
 ```
 
 With the ready inputs present, a firmware loaded in `mise run workbench` plays audio. Without them it
-starts the ColdFire-only emulator. The DSP needs about 1.6 CPU seconds per audio second
+starts the ColdFire-only emulator. If the default firmware file is missing, the desktop window still opens and you can choose a firmware file there. The DSP needs about 1.6 CPU seconds per audio second
 ([finding 18](findings/18-dsp-performance.md)), so real time is not reached yet.
 The +Drive comes from `plus_drive/dt2/` or `plus_drive/dn2/` (git ignores both) when it exists, or from `--plus-drive DIR` (`--samples DIR` is the same option): the launcher builds a card image from the folder and caches it by content ([docs/SAMPLES.md](SAMPLES.md)).
 Track N of the DT2 plays file N (sorted by name; more than 16 files wrap around).
+
+**Monitor a USB audio device.** Set the instrument's USB configuration to USB AUDIO/MIDI, choose your headphones or speakers as the computer's default output, and select its MIDI port under Target. In the desktop footer, USB audio defaults to Auto. It opens the stereo input when the MIDI port and audio endpoint uniquely match the same model. For an ambiguous or renamed port, choose the intended input in that menu. Off stops monitoring. Switching to Emulator releases the remote streams. After plugging in an interface or changing the system output, choose Rescan inputs to reopen the route. On macOS, grant microphone access when prompted and choose Rescan inputs. Windows uses the system’s WASAPI input and output devices.
+
+To check the physical audio route, play a pattern and set the two names to the exact input and default output shown by your OS. The opt-in test opens the route twice, checks that both channels carry signal, prints the negotiated rates and peaks, and releases the streams after each pass.
+
+```sh
+DIGI_REMOTE_AUDIO_INPUT='Elektron Digitone II' DIGI_REMOTE_AUDIO_OUTPUT='WH-1000XM6' \
+  DIGI_REMOTE_AUDIO_REQUIRE_SIGNAL=1 DIGI_REMOTE_AUDIO_SECONDS=10 \
+  node tools/nx/rust-env.mjs -- cargo test -p digiemu-desktop hardware_audio_monitor -- --ignored --nocapture
+```
 
 **Choose samples (desktop app, Digitakt II).** With the DT2 running, the toolbar's "Choose
 samples" button picks a folder. The app sends its top-level `.wav` files to the controller,
@@ -102,6 +112,8 @@ disabled ("desktop only for now"). Headless: the control socket's `card.load {di
 `card.status`; `uv run python -m tools.emulator.card_check` checks that trigs 1-3 play a 220 Hz sine, an
 880 Hz sine and noise from three generated files.
 
+**Audio analyzer (desktop app).** Select a Target and click **Analyzer** beside **Log** in the status bar. Both panels share the same resizable bottom drawer. The analyzer reads stereo PCM from the emulator or the selected remote USB audio input, at the source sample rate before headphone resampling. Scope shows the waveform with an optional rising trigger. Spectrum shows channel levels by frequency and offers peak hold. Click the plot or use the cursor slider’s arrow keys for a reading. Freeze holds the plot and pitch estimate while the peak and RMS meters continue updating. A dash in the F₀ column means the analyzer has no reliable pitch estimate. Switching targets clears the previous trace. Close the drawer to release the observer.
+
 **Log panel (desktop app).** The "Log" button in the status bar, or ⌘J (Ctrl+J on other systems), opens a panel with the events of this window: module reloads and builds, firmware loads, card changes, Transfer runs, emulator resets, and guest faults, stalls and DSP halts. Each entry has a time, a source, one line, and for long output (a compiler log) a ▸ button that shows it in full. The panel has a source filter, "Errors only", "Copy" (the entries shown, with details) and "Clear". It keeps the last 500 entries in memory. It opens by itself for a failed reload or build and for a guest fault, stall or DSP halt; other errors add to the badge on the Log button. The Log is a panel docked along the bottom of the window, full width: the page above it gets smaller, nothing is covered. Drag its top edge to change the height (double click resets it; the height is remembered). Metrics stays a small popover above the status bar. The app polls the controller for stalls and halts once a second, so they can show up to a second late.
 
 ### workbench-core, the two apps and the command line
@@ -121,7 +133,7 @@ disabled ("desktop only for now"). Headless: the control socket's `card.load {di
 
 ### Host and EmuRpc (desktop UI)
 
-The desktop UI never calls Tauri's `invoke`. `packages/workbench-core/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `createDesktopApps(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The Host types and the fake live in workbench-core; `TauriHost` is the desktop's, and `NodeHost` (above) is the command line's.
+The desktop UI never calls Tauri's `invoke`. `packages/workbench-core/src/host/host.ts` types every Tauri command the UI uses, in groups (`fs`, `library`, `ports.midi`, `ports.bulk`, `ports.audio`, `firmware`, `emu`, `shell`), and `rpc` is `EmuRpc`: `call(method, params)` over `emu_call`. `host/tauri-host.ts` is the only module that imports `invoke` (oxlint `no-restricted-imports` fails any other file). `main.tsx` makes the host and passes it to `createDesktopApps(host)` and `<Console host={host}>`; modules take the host (or one group of it) as an argument. The Host types and the fake live in workbench-core; `TauriHost` is the desktop's, and `NodeHost` (above) is the command line's.
 
 Add a command: write the Rust command, then add a method to the group in `host.ts`, its `invoke` line in `tauri-host.ts` and its `leaf(...)` line in `fake-host.ts`. `library.readMaps(device)` returns the address maps (docs/ADDRMAP.md): the ship maps `firmware_prepare` kept for the device's images and the maps `lib_build` writes beside each `.dkm`; `firmware.dkprofWasm()` returns `dkprof.wasm` (`mise run wasm:dkprof`; loader `ui/src/dkprof-env.ts`), which the Log pane uses to name addresses (the emulator's ship map and symbol addresses come from the controller call `runtime.maps`; the load table is read with PEEK of the debug module through `DkSession.peek`, for the emulator and a device). The emulator session commands (`emu_startup`, `emu_step`, `emu_tap`, `emu_stop`, `emu_audio_status`, `emu_stage_syx`, `emu_save_diagnostics`, `emu_card_*`) are in `host.emu` for `createNativeRuntime`.
 
@@ -131,7 +143,9 @@ Tests use `createFakeHost(replies)` from `host/fake-host.ts`: it records `calls`
 
 `packages/workbench-core/src/target-ops/` has `TargetOps { target; store: StoreOps; run: RunOps }`: what the UI asks of the selected target, the emulator or a device. `Host` stays the catalogue of platform services (files, dialogs, ports, firmware, `emu.*`); it does not describe a target.
 
-`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). `run` is a stub for now: `unwiredRunOps` makes every operation say why it is not wired. It is filled later, when pause, resume, reset and restart move behind this layer (emulator through `EmulatorRuntime`, device only restart through the protocol).
+`store` works the same on both targets. `sessionStoreOps(session)` reads the card store over `DkSession` (INFO, LIST, CAPACITY, MODULES, LOADS, READ, VERIFY). The desktop binds Files and the native pause, resume and reset controls through `targetOps`. A binding belongs to one selection, including when the user leaves and comes back to the same port. It checks that selection around store requests. A target only exposes the run operations its adapter supplies. Run shows the native emulator or the selected MIDI device. The inspector and footer share the selected binding. Hardware CF and DSP readings come from the runtime log’s HEALTH event. When switching ports the Remote panel releases its held keys on the original session first.
+
+To check the desktop target switch with fake devices, start the UI preview and run `node tools/devtools/ui_shots.mjs run-target-switch`. The scene opens Remote during an emulator boot, visits Files, and opens the selected device’s Metrics from the footer. It checks the readings and writes a screenshot under `out/runs/ui-shots/`.
 
 Tests and the preview use fakes: `fakeStoreOps` and `demoStore` (`target/fake-store.ts`). The first user is the Files page (`packages/workbench-core/ui/files/FilesPage.tsx`), which shows the store read-only; open it in the desktop UI preview with `?page=files`.
 

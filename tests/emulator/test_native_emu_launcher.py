@@ -354,6 +354,17 @@ def test_a_device_that_is_not_a_runtime_target_refuses_runtime(monkeypatch, tmp_
         scope["main"]([str(syx), "--runtime"])
 
 
+def test_workbench_opens_with_a_missing_default_firmware(monkeypatch, tmp_path):
+    scope, calls, _ = _launch_setup(monkeypatch, tmp_path, None)
+    missing = tmp_path / "missing.syx"
+    monkeypatch.setenv("DIGI_EMU_SYX", str(missing))
+    scope["main"]([])
+    assert Path(calls[-1][0]).name == "digiemu-desktop"
+    assert str(missing) not in calls[-1]
+    with pytest.raises(SystemExit, match="cannot tell which device"):
+        scope["main"](["--daemon"])
+
+
 def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_path):
     scope, calls, syx = _launch_setup(monkeypatch, tmp_path, None)
     with pytest.raises(SystemExit, match="cannot tell which device"):

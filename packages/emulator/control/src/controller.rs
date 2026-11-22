@@ -24,6 +24,7 @@ use std::{
 
 use digi_coupled::{
     AudioOptions, CoupledRuntime as Runtime, STEP_CHUNK,
+    pcm_observer::PcmSource,
     scenario::{self, Action, Scenario},
 };
 use elektron_native_boot::Snapshot;
@@ -391,6 +392,8 @@ pub fn load_scenario(spec: &str) -> Result<Scenario, String> {
 
 pub struct Config {
     pub audio: Option<AudioOptions>,
+    /// The desktop analyzer source, when the host supplies one.
+    pub pcm_source: Option<Arc<PcmSource>>,
     /// The ready inputs (DSP image, DSP state, ColdFire snapshot) of other devices than `audio`'s, for a build with
     /// the second generated core: a firmware loaded for one of them boots coupled (audio, DSP, restart) instead of
     /// ColdFire only. Matched by the firmware the inputs were made for (`SOURCE.json`, else `expected_syx`).
@@ -444,6 +447,7 @@ impl Config {
     pub fn new(audio: Option<AudioOptions>) -> Self {
         Self {
             audio,
+            pcm_source: None,
             audio_alt: Vec::new(),
             scenario: None,
             mode: Mode::Ui,
@@ -703,6 +707,7 @@ struct Actor {
     events: Events,
     on_quit: Option<Box<dyn Fn() + Send>>,
     runtime: Option<Runtime>,
+    pcm_source: Option<Arc<PcmSource>>,
     /// DSP blocks, instructions and idle-skipped instructions the worker had counted when `sharc.profile` started counting.
     sharc_profile_base: (u64, u64, u64),
     /// `cf.profile` and `sharc.profile` were switched on and not off since: a new runtime (firmware load, restart) starts them again.
@@ -849,6 +854,7 @@ impl Actor {
             events: config.events,
             on_quit: config.on_quit,
             runtime: None,
+            pcm_source: config.pcm_source,
             sharc_profile_base: (0, 0, 0),
             cf_profile_wanted: false,
             sharc_profile_wanted: false,
@@ -1327,6 +1333,9 @@ impl Actor {
         #[cfg(feature = "sharc-profile")]
         if self.sharc_profile_wanted && runtime.set_sharc_profile(true) {
             self.sharc_profile_restarts += 1;
+        }
+        if let Some(source) = &self.pcm_source {
+            runtime.observe_pcm_windows(source);
         }
         self.runtime = Some(runtime);
         self.overlay_set_aside = false;

@@ -56,6 +56,19 @@ export interface DeviceIdentity {
 const RPC_MS = 1500;
 const kindOf = (e: unknown): string | undefined => (e as { kind?: string } | null)?.kind;
 
+async function probeRuntime(s: Pick<DkSession, 'info'>): Promise<DkInfoFull | null> {
+  try {
+    return await s.info({ timeoutMs: INFO_PROBE_TIMEOUT_MS, retries: 1 });
+  } catch (e) {
+    if (kindOf(e) !== 'timeout') throw e;
+    return null;
+  }
+}
+
+function runtimeDevice(info: DkInfoFull | null, registry: IdentityRegistry) {
+  return registry.devices.find((d) => info?.port === d.id || info?.port.startsWith(d.id + '-'));
+}
+
 /**
  * Identify the device on `s`: Ping names the model (an exact match with a registry name), SoftwareVersion gives the OS, and one INFO tells whether
  * the runtime is there. INFO retries E_BUSY like any INFO and has one retry after a lost reply; only a lost reply means no runtime. Any other INFO
@@ -65,7 +78,13 @@ const kindOf = (e: unknown): string | undefined => (e as { kind?: string } | nul
 export async function identifyDevice(
   s: Pick<DkSession, 'rpc' | 'info'>,
   registry: IdentityRegistry,
+  options: { preferRuntimeInfo?: boolean } = {},
 ): Promise<DeviceIdentity> {
+  // A runtime panel only needs the model and runtime. INFO alone supplies both.
+  const probed = options.preferRuntimeInfo ? await probeRuntime(s) : undefined;
+  const known = probed && runtimeDevice(probed, registry);
+  if (known && probed)
+    return { id: known.id, name: known.name, info: probed, runtime: fmtVersion(probed.runtime), os: undefined };
   let name: string | undefined;
   let pingSilent = false;
   try {
@@ -74,12 +93,7 @@ export async function identifyDevice(
     if (kindOf(e) !== 'timeout') throw e;
     pingSilent = true;
   }
-  let info: DkInfoFull | null = null;
-  try {
-    info = await s.info({ timeoutMs: INFO_PROBE_TIMEOUT_MS, retries: 1 });
-  } catch (e) {
-    if (kindOf(e) !== 'timeout') throw e;
-  }
+  const info = probed === undefined ? await probeRuntime(s) : probed;
   if (pingSilent && !info) throw new Error('the device does not answer Ping, so it cannot be identified');
   const os = pingSilent
     ? undefined
@@ -87,9 +101,7 @@ export async function identifyDevice(
         if (kindOf(e) === 'cancelled') throw e;
         return undefined;
       });
-  const device = pingSilent
-    ? registry.devices.find((d) => d.id === info?.port)
-    : registry.devices.find((d) => d.name === name);
+  const device = pingSilent ? runtimeDevice(info, registry) : registry.devices.find((d) => d.name === name);
   if (!device) {
     const known = registry.devices.map((d) => d.name).join(', ');
     const what = pingSilent

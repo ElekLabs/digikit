@@ -1,6 +1,7 @@
 // The Remote page and the Emulator page's faceplate in the preview (`?page=remote`, `?page=emulator`): the device screen is a test
 // pattern, so a screenshot shows where and how large the 128 x 64 image is drawn. The Remote page is the app's own code; only the
 // DkSession methods that ask the device are replaced.
+import { CAP, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { DkSession } from '@digi/dk-session';
 import { queryFrame } from './frame-from-png';
 
@@ -36,8 +37,25 @@ export function installRemoteMock(): void {
   const proto = DkSession.prototype as unknown as Record<string, unknown>;
   const fallback = testPattern();
   const loaded = queryFrame();
+  const unidentified = new URLSearchParams(location.search).has('unidentified');
+  proto.rpc = async (type: number) => {
+    if (unidentified || new URLSearchParams(location.search).has('runtimeOnly'))
+      throw new Error('Unknown MIDI endpoint');
+    return type === 1
+      ? Uint8Array.of(0, ...new TextEncoder().encode('Digitone II'), 0)
+      : new TextEncoder().encode('1.12');
+  };
   proto.screen = async () => ((await loaded) ?? fallback).slice();
-  proto.info = async () => ({ port: 'dn2-1.12' });
+  proto.info = async () => {
+    if (unidentified || new URLSearchParams(location.search).has('stock'))
+      throw Object.assign(new Error('No runtime'), { kind: 'timeout' });
+    return { port: 'dn2-1.12', caps: 1 << CAP.LOG, runtime: 11 << 8 };
+  };
+  proto.logPage = async () => [
+    1,
+    1,
+    [{ seq: 1, time: 15000, kind: LOG_KIND.HEALTH, flags: 0, args: [(6 << 16) | 213, 345, 420, 0, 0] }],
+  ];
   proto.remoteState = async () => ({ enabled: true, format: 1, turnLimit: 10 });
   proto.remoteKey = async () => {};
   proto.remoteTurn = async () => {};

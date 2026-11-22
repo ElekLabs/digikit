@@ -6,7 +6,6 @@ import {
   bootingScreen,
   bootingStatus,
   bootOnEmulatorPage,
-  emulatorStatus,
   keepDeferredBoot,
   loadFailure,
   shouldBootOnStart,
@@ -45,20 +44,16 @@ describe('loading state', () => {
     expect(shouldBootOnStart(undefined, false, 'emulator')).toBe(false);
   });
   it('boots a deferred start on the Emulator page with the emulator as target, once nothing runs', () => {
-    expect(bootOnEmulatorPage(true, 'emulator', 'emulator', false, false)).toBe(true);
-    expect(bootOnEmulatorPage(false, 'emulator', 'emulator', false, false)).toBe(false);
+    expect(bootOnEmulatorPage(true, 'run', 'emulator', false, false)).toBe(true);
+    expect(bootOnEmulatorPage(false, 'run', 'emulator', false, false)).toBe(false);
     expect(bootOnEmulatorPage(true, 'files', 'emulator', false, false)).toBe(false);
-    expect(bootOnEmulatorPage(true, 'emulator', 'midi', false, false)).toBe(false);
-    expect(bootOnEmulatorPage(true, 'emulator', 'emulator', true, false)).toBe(false);
-    expect(bootOnEmulatorPage(true, 'emulator', 'emulator', false, true)).toBe(false);
+    expect(bootOnEmulatorPage(true, 'run', 'midi', false, false)).toBe(false);
+    expect(bootOnEmulatorPage(true, 'run', 'emulator', true, false)).toBe(false);
+    expect(bootOnEmulatorPage(true, 'run', 'emulator', false, true)).toBe(false);
   });
   it('drops a deferred start once a firmware runs or starts', () => {
     expect(keepDeferredBoot(false, false)).toBe(true);
     expect(keepDeferredBoot(true, false)).toBe(false);
     expect(keepDeferredBoot(false, true)).toBe(false);
-  });
-  it('labels the emulator status when the target is another one', () => {
-    expect(emulatorStatus('no firmware', 'emulator')).toBe('no firmware');
-    expect(emulatorStatus('Booting X…', 'midi')).toBe('Emulator: Booting X…');
   });
 });

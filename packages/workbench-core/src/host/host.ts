@@ -117,7 +117,23 @@ export interface BulkHost {
   closeOutOnly(): Promise<void>;
 }
 
+/** A host stereo capture endpoint. The opaque ID identifies the device even when display names coincide. */
+export interface AudioInput {
+  id: string;
+  name: string;
+}
+
+/** The native monitor routes one stereo input to the current system output. */
+export interface RemoteAudioHost {
+  inputs(): Promise<AudioInput[]>;
+  start(input: string): Promise<string>;
+  stop(): Promise<void>;
+  /** A running stream's failure, if any. */
+  status(): Promise<string | null>;
+}
+
 export interface PortsHost {
+  audio?: RemoteAudioHost;
   midi: MidiHost;
   bulk: BulkHost;
 }
@@ -172,7 +188,23 @@ export interface ShellHost {
   openCardFolder(): Promise<void>;
 }
 
+/** A consecutive window of stereo source samples, before monitor resampling. */
+export interface AnalyzerPcm {
+  /** Changes when the source stream restarts, including a change of USB input. */
+  generation: number;
+  rate: number;
+  left: number[];
+  right: number[];
+}
+
+export interface AnalyzerHost {
+  open(source: 'emulator' | 'remote'): Promise<number>;
+  read(id: number): Promise<AnalyzerPcm | null>;
+  close(id: number): Promise<void>;
+}
+
 export interface Host {
+  analyzer?: AnalyzerHost;
   fs: FsHost;
   library: LibraryHost;
   ports: PortsHost;

@@ -1,7 +1,18 @@
 // The desktop developer console: the file the app runs, the live panel, and the audio and CPU meters.
 // `mise run workbench -- FILE` starts it on FILE; with "watching" on, a change to FILE on disk reloads it, so a
 // module can be patched from the command line and heard here a second later.
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import {
+  Show,
+  batch,
+  lazy,
+  Suspense,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
 import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
@@ -18,13 +29,16 @@ import {
   bootingStatus,
   bootOnEmulatorPage,
   keepDeferredBoot,
-  emulatorStatus,
   loadFailure,
   shouldBootOnStart,
   type Booting,
 } from './boot-core';
 import { bumpCardRefresh, cardRefresh } from './card-state';
 import CardPanel from './CardPanel';
+import { connectionView } from '@digi/workbench-core/transfer/connection-core.ts';
+import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
+import { createTargetHealth } from './target-health';
+import { percent } from './device-health';
 import { pageFor, type Page } from './page-core';
 import {
   CHART,
@@ -42,7 +56,7 @@ import {
   UP,
   WARNING,
 } from './icons';
-import { DOCK_KEY_STEP, clampDock, dockAt, parseDock, startDock } from './dock-core';
+import { DOCK_KEY_STEP, DOCK_MIN_PX, clampDock, dockAt, dockMax, parseDock, startDock } from './dock-core';
 import {
   duration,
   failureEntry,
@@ -67,6 +81,8 @@ import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
 import RemotePage from './RemotePage';
+import RemoteAudio from './RemoteAudio';
+import type { WorkerFactory } from '@digi/workbench-core/workers.ts';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { EMULATOR_NO_RUNTIME } from '@digi/workbench-core/transfer/target.ts';
 import { setReloadWithRuntime } from './emulator-actions';
@@ -76,6 +92,7 @@ import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
 import { DefaultModuleError } from '@digi/workbench-core/firmware/default-modules-core.ts';
 import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
+import { targetOps } from '@digi/workbench-core/target-ops/session-store.ts';
 import FilesPage from '@digi/workbench-core/ui/files/FilesPage.tsx';
 import { cardLine, folderFiles, startCard, type CardStatus } from '@digi/workbench-core/runtime/cards.ts';
 import { reloadError, reloadLine } from '@digi/workbench-core/runtime/reload.ts';
@@ -112,7 +129,9 @@ function Meter(props: { value: number; worst?: number; tone?: 'teal' | 'amber' }
   );
 }
 
-export default function Console(props: { host: Host }) {
+const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
+
+export default function Console(props: { host: Host; analyzerWorkers: WorkerFactory<'analyzer'> }) {
   const app = useTransferApp();
   const fw = useFirmwareApp();
   const { readPref, writePref } = createPrefs(app.storage);
@@ -156,7 +175,7 @@ export default function Console(props: { host: Host }) {
   const [dockSaved, setDockSaved] = createSignal(readDockPref());
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
-  const [page, setPage] = createSignal<Page>('emulator');
+  const [page, setPage] = createSignal<Page>('run');
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
@@ -172,8 +191,23 @@ export default function Console(props: { host: Host }) {
   const timers: number[] = [];
 
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
-  const sidePanelsShown = createMemo(() => page() === 'emulator');
-  const panelsActive = createMemo(() => !!status());
+  const sidePanelsShown = createMemo(() => page() === 'run');
+  const selected = createMemo(() =>
+    targetOps(app.target, {
+      pause: async () => setEmulatorPaused(true),
+      resume: async () => setEmulatorPaused(false),
+      reset: () => restart(),
+    }),
+  );
+  const isEmulator = () => selected().target.kind === 'emulator';
+  createEffect(() => {
+    if (!isEmulator()) untrack(() => live?.releaseAll());
+  });
+  const connection = () => connectionView(app.connection.connection(), targetLabel(target()));
+  const remoteHealth = createTargetHealth(
+    selected,
+    () => !app.target.switching() && !busy('target') && app.connection.connection().state === 'connected',
+  );
   // While an image boots, only its own device counts: an unknown image has none (no stale device, no faceplate).
   const knownDevice = createMemo(
     () => status()?.device ?? (booting() ? booting()!.device : (failed()?.device ?? lastDevice())),
@@ -196,7 +230,7 @@ export default function Console(props: { host: Host }) {
   const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
   createEffect(() => {
-    setPage(pageFor(page(), target(), runtimeHere()));
+    setPage(pageFor(page(), target(), !!status() && runtimeHere()));
   });
   // The "Load on start" boot that the start deferred because the target was a device.
   const [deferredBoot, setDeferredBoot] = createSignal<string>();
@@ -506,9 +540,23 @@ export default function Console(props: { host: Host }) {
     onCleanup(() => window.clearTimeout(timer));
   });
 
-  const toggleLog = () => setLogOpen(!logOpen());
+  const [analyzerOpen, setAnalyzerOpen] = createSignal(false);
+  createEffect(() => {
+    if (logOpen()) setAnalyzerOpen(false);
+  });
+  const drawerOpen = () => analyzerOpen() || logOpen();
+  const toggleLog = () =>
+    batch(() => {
+      setLogOpen(!logOpen());
+      setAnalyzerOpen(false);
+    });
+  const toggleAnalyzer = () =>
+    batch(() => {
+      setLogOpen(false);
+      setAnalyzerOpen((open) => !open);
+    });
   const showMetrics = () => {
-    setPage('emulator');
+    setPage('run');
     setInspectorTab('metrics');
     setInspectorOpen(true);
     requestAnimationFrame(() => document.getElementById('side-tab-metrics')?.focus());
@@ -533,7 +581,7 @@ export default function Console(props: { host: Host }) {
     // ⌘R / Ctrl+R reloads the firmware file, not the page; with Shift it reloads the modules into the running session.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'r') {
       e.preventDefault();
-      if (busy('emulator')) return;
+      if (!isEmulator() || app.target.switching() || busy('emulator')) return;
       if (e.shiftKey) void reloadModules();
       else void reload('Reloaded at');
     }
@@ -590,12 +638,12 @@ export default function Console(props: { host: Host }) {
     runtime()?.dispose();
   });
 
-  const togglePause = () => {
+  const setEmulatorPaused = (pause: boolean) => {
     const r = runtime();
     if (!r) return;
-    if (paused()) r.resume();
-    else r.pause();
-    setPaused(!paused());
+    if (pause) r.pause();
+    else r.resume();
+    setPaused(pause);
     logEvent('emulator', 'info', paused() ? 'paused' : 'resumed');
   };
   const restart = async () => {
@@ -616,6 +664,13 @@ export default function Console(props: { host: Host }) {
     } catch (e) {
       setError(message(e));
       logInput(failureEntry('reset', 'reset', message(e)));
+    }
+  };
+  const runControl = async (op: 'pause' | 'resume' | 'reset') => {
+    try {
+      await selected().run[op]?.();
+    } catch (error) {
+      setError(message(error));
     }
   };
   const saveDiagnostics = async () => {
@@ -805,7 +860,7 @@ export default function Console(props: { host: Host }) {
       style={{
         '--accent': panel().accent,
         '--func-legend': panel().func_legend,
-        '--dock-h': logOpen() ? `${dockPx()}px` : '0px',
+        '--dock-h': drawerOpen() ? `${dockPx()}px` : '0px',
       }}
     >
       <TitleBar onError={(m) => setError(m)} />
@@ -842,13 +897,13 @@ export default function Console(props: { host: Host }) {
           <button
             type="button"
             class="side"
-            classList={{ on: page() === 'emulator' }}
-            aria-current={page() === 'emulator' ? 'page' : undefined}
-            title="The emulator"
-            onClick={() => setPage('emulator')}
+            classList={{ on: page() === 'run' }}
+            aria-current={page() === 'run' ? 'page' : undefined}
+            title={isEmulator() ? 'The emulator' : 'Control the selected device'}
+            onClick={() => setPage('run')}
           >
-            <Icon d={PLAY} />
-            <span>Emulator</span>
+            <Icon d={isEmulator() ? PLAY : REMOTE} />
+            <span>{isEmulator() ? 'Emulator' : 'Remote'}</span>
           </button>
           <span class="side-group">Device</span>
           <button
@@ -881,22 +936,6 @@ export default function Console(props: { host: Host }) {
           <button
             type="button"
             class="side"
-            classList={{ on: page() === 'remote' }}
-            aria-current={page() === 'remote' ? 'page' : undefined}
-            disabled={target().kind === 'emulator' && !runtimeHere()}
-            title={
-              target().kind === 'emulator' && !runtimeHere()
-                ? noRuntimeTitle()
-                : 'Press the keys and turn the encoders of the target, and see its screen'
-            }
-            onClick={() => setPage('remote')}
-          >
-            <Icon d={REMOTE} />
-            <span>Remote</span>
-          </button>
-          <button
-            type="button"
-            class="side"
             classList={{ on: page() === 'firmware' }}
             aria-current={page() === 'firmware' ? 'page' : undefined}
             title="Patch the stock firmware and flash it to a device over MIDI, or go back to stock"
@@ -908,8 +947,8 @@ export default function Console(props: { host: Host }) {
         </nav>
         <div class="content">
           {/* The faceplate stays mounted behind the Transfer and Remote pages: the emulator, its audio and the snapshot pump run on. */}
-          <div class="emu-page" hidden={page() !== 'emulator'}>
-            <header class="page-head emu-head">
+          <div class="emu-page" hidden={page() !== 'run'}>
+            <header class="page-head emu-head" hidden={!isEmulator()}>
               <h2>Emulator</h2>
               <span class="file-chip" title={fileLabel()}>
                 <button
@@ -1078,20 +1117,20 @@ export default function Console(props: { host: Host }) {
                 <button
                   type="button"
                   class="tb icon"
-                  disabled={!status()}
+                  disabled={!status() || app.target.switching() || !selected().run.pause}
                   aria-label={paused() ? 'Resume' : 'Pause'}
                   title={paused() ? 'Resume the emulator' : 'Pause the emulator'}
-                  onClick={togglePause}
+                  onClick={() => void runControl(paused() ? 'resume' : 'pause')}
                 >
                   <Icon d={paused() ? PLAY : PAUSE} />
                 </button>
                 <button
                   type="button"
                   class="tb icon"
-                  disabled={!status()}
+                  disabled={!status() || app.target.switching() || !selected().run.reset}
                   aria-label="Reset (emulator)"
                   title="Reset the running firmware to its ready state (the emulator's reset; not the device's RESTART command)"
-                  onClick={() => void restart()}
+                  onClick={() => void runControl('reset')}
                 >
                   <Icon d={RESTART} />
                 </button>
@@ -1109,6 +1148,7 @@ export default function Console(props: { host: Host }) {
             </header>
             <div class="emu-row">
               <main
+                hidden={!isEmulator()}
                 class="stage"
                 aria-label={`${panel().name} front panel`}
                 style={{ visibility: booting() && !knownDevice() ? 'hidden' : undefined }}
@@ -1122,35 +1162,60 @@ export default function Console(props: { host: Host }) {
                   />
                 </div>
               </main>
-              <SidePanels
-                host={props.host}
-                visible={sidePanelsShown()}
-                active={panelsActive()}
-                metrics={metrics}
-                session={emulatorSession}
-                where={() => 'the emulator'}
-              />
+              <Show when={sidePanelsShown() && !isEmulator() && !app.target.switching() && selected()} keyed>
+                {(source) => <RemotePage source={source} />}
+              </Show>
+              <Show when={!app.target.switching() && selected()} keyed>
+                {(source) => (
+                  <SidePanels
+                    host={props.host}
+                    visible={sidePanelsShown()}
+                    active={!isEmulator() || !!status()}
+                    source={source}
+                    metrics={
+                      isEmulator() ? (
+                        metrics
+                      ) : (
+                        <div class="card-body metrics">
+                          <dl>
+                            <dt>CF load</dt>
+                            <dd>{percent(remoteHealth()?.cpu)}</dd>
+                            <dt>DSP load</dt>
+                            <dd>{percent(remoteHealth()?.dsp)}</dd>
+                            <dt>DSP peak</dt>
+                            <dd>{percent(remoteHealth()?.peak)}</dd>
+                            <dt>Last sample received</dt>
+                            <dd>{remoteHealth() ? new Date(remoteHealth()!.received).toLocaleTimeString() : '—'}</dd>
+                          </dl>
+                        </div>
+                      )
+                    }
+                  />
+                )}
+              </Show>
             </div>
           </div>
           <Show when={page() === 'transfer'}>
             <TransferPage onFlash={() => setPage('firmware')} />
           </Show>
-          <Show when={page() === 'files'}>
-            <FilesPage
-              refresh={cardRefresh}
-              halted={() =>
-                target().kind === 'emulator' && paused() ? 'The emulator is paused. Resume it to read its card.' : null
-              }
-              save={(name, bytes) => props.host.fs.saveLog(bytes, name, 'file')}
-              extra={
-                <Show when={target().kind === 'emulator'}>
-                  <CardPanel host={props.host} reload={restart} />
-                </Show>
-              }
-            />
-          </Show>
-          <Show when={page() === 'remote'}>
-            <RemotePage fallbackDevice={device()} emulatorLoaded={!!status()} host={props.host} />
+          <Show when={page() === 'files' && !app.target.switching() && selected()} keyed>
+            {(ops) => (
+              <FilesPage
+                store={ops.store}
+                refresh={cardRefresh}
+                halted={() =>
+                  target().kind === 'emulator' && paused()
+                    ? 'The emulator is paused. Resume it to read its card.'
+                    : null
+                }
+                save={(name, bytes) => props.host.fs.saveLog(bytes, name, 'file')}
+                extra={
+                  <Show when={target().kind === 'emulator'}>
+                    <CardPanel host={props.host} reload={restart} />
+                  </Show>
+                }
+              />
+            )}
           </Show>
           <Show when={page() === 'firmware'}>
             <FirmwarePage />
@@ -1158,14 +1223,21 @@ export default function Console(props: { host: Host }) {
         </div>
       </div>
 
-      <Show when={logOpen()}>
-        <section class="log-drawer" aria-label="Log" ref={dockEl} style={{ height: `${dockPx()}px` }}>
+      <Show when={drawerOpen()}>
+        <section
+          class="workbench-drawer"
+          classList={{ 'log-drawer': logOpen() }}
+          aria-label={analyzerOpen() ? 'Analyzer' : 'Log'}
+          ref={dockEl}
+          style={{ height: `${dockPx()}px` }}
+        >
           <div
             class="dock-handle"
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Resize the Log"
-            aria-valuemin={0}
+            aria-label={analyzerOpen() ? 'Resize the Analyzer' : 'Resize the Log'}
+            aria-valuemin={DOCK_MIN_PX}
+            aria-valuemax={dockMax(windowPx())}
             aria-valuenow={dockPx()}
             tabIndex={0}
             onPointerDown={(e) => {
@@ -1190,98 +1262,135 @@ export default function Console(props: { host: Host }) {
               e.preventDefault();
             }}
           />
-          <LogPanel
-            host={props.host}
-            follow={logFollow}
-            emulatorRunning={() => !!status()}
-            devicePort={lastMidiPort}
-            toggleKey={logKey}
-          />
+          <Show
+            when={logOpen()}
+            fallback={
+              <Show when={props.host.analyzer}>
+                {(host) => (
+                  <Suspense fallback={<p role="status">Opening analyzer…</p>}>
+                    <AnalyzerPanel host={host()} target={selected().target} workers={props.analyzerWorkers} />
+                  </Suspense>
+                )}
+              </Show>
+            }
+          >
+            <LogPanel
+              host={props.host}
+              follow={logFollow}
+              emulatorRunning={() => !!status()}
+              devicePort={lastMidiPort}
+              toggleKey={logKey}
+            />
+          </Show>
         </section>
       </Show>
 
       <footer class="statusbar">
-        <span>
-          <i class="dot" classList={{ paused: paused() || !status() || !!booting() }} />
-          {emulatorStatus(
-            booting()
-              ? bootingStatus(booting()!)
-              : !status()
-                ? 'no firmware'
-                : paused()
-                  ? 'paused'
-                  : phase() || 'running',
-            target().kind,
-          )}
-        </span>
-        <Show when={audio()?.output_device}>
+        <div class="status-readings">
           <span>
-            <Icon d={SPEAKER} />
-            {audio()!.output_device}
+            <i
+              class="dot"
+              classList={{
+                paused: isEmulator() ? paused() || !status() || !!booting() : connection().state !== 'connected',
+              }}
+            />
+            {isEmulator()
+              ? booting()
+                ? bootingStatus(booting()!)
+                : !status()
+                  ? 'no firmware'
+                  : paused()
+                    ? 'paused'
+                    : phase() || 'running'
+              : connection().label}
           </span>
-        </Show>
-        <Show when={rate() !== undefined}>
-          <span title="Emulated audio seconds per wall second">
-            {rate()!.toFixed(2)}× RT
-            <Meter value={rate()! * 100} tone="amber" />
-          </span>
-        </Show>
-        <Show when={pgoWarning(buildInfo())}>
-          {(w) => (
-            <span class="warn pgo" title={w().title}>
-              <Icon d={WARNING} />
-              {w().label}
-            </span>
-          )}
-        </Show>
-        <Show when={sink()}>
-          <span classList={{ warn: (sink()?.underrun_events ?? 0) > 0 }}>underruns {sink()!.underrun_events}</span>
-        </Show>
-        <Show when={load_()}>
-          <span title="Estimated load of the real chips, from the manuals' cycle tables">
-            CF {Math.round(load_()!.cf.real_pct)}%
-            <Meter value={load_()!.cf.real_pct} />
-          </span>
-          <Show when={load_()!.dsp}>
-            <span title="Estimated DSP load of the real chip. Model figure (as the HEALTH page shows in the emulator) and window peak are in the Metrics tab">
-              DSP est. {Math.round(load_()!.dsp!.real_pct)}%
-              <Meter value={load_()!.dsp!.real_pct} worst={load_()!.dsp!.real_high_pct} />
+          <Show when={props.host.ports.audio}>{(host) => <RemoteAudio host={host()} source={selected} />}</Show>
+          <Show when={isEmulator() && audio()?.output_device}>
+            <span>
+              <Icon d={SPEAKER} />
+              {audio()!.output_device}
             </span>
           </Show>
-        </Show>
-        <span class="sp" />
-        <Show
-          when={currentJob()}
-          fallback={
-            <Show when={reloadNote()}>
-              <span class="muted" title={reloadNote()}>
-                {reloadNote()}
+          <Show when={isEmulator() && rate() !== undefined}>
+            <span title="Emulated audio seconds per wall second">
+              {rate()!.toFixed(2)}× RT
+              <Meter value={rate()! * 100} tone="amber" />
+            </span>
+          </Show>
+          <Show when={isEmulator() && pgoWarning(buildInfo())}>
+            {(w) => (
+              <span class="warn pgo" title={w().title}>
+                <Icon d={WARNING} />
+                {w().label}
+              </span>
+            )}
+          </Show>
+          <Show when={isEmulator() && sink()}>
+            <span classList={{ warn: (sink()?.underrun_events ?? 0) > 0 }}>underruns {sink()!.underrun_events}</span>
+          </Show>
+          <Show when={isEmulator() && load_()}>
+            <span title="Estimated load of the real chips, from the manuals' cycle tables">
+              CF {Math.round(load_()!.cf.real_pct)}%
+              <Meter value={load_()!.cf.real_pct} />
+            </span>
+            <Show when={load_()!.dsp}>
+              <span title="Estimated DSP load of the real chip. Model figure (as the HEALTH page shows in the emulator) and window peak are in the Metrics tab">
+                DSP est. {Math.round(load_()!.dsp!.real_pct)}%
+                <Meter value={load_()!.dsp!.real_pct} worst={load_()!.dsp!.real_high_pct} />
               </span>
             </Show>
-          }
-        >
-          {(job) => (
-            <span class="job" title={job().detail ? `${job().label}: ${job().detail}` : job().label}>
-              <Icon d={RELOAD} />
-              <span class="label">{job().label}</span>
-              <Show when={job().detail}>
-                <span class="detail">{job().detail}</span>
+          </Show>
+          <Show when={!isEmulator()}>
+            <span>CF {percent(remoteHealth()?.cpu)}</span>
+            <span>DSP {percent(remoteHealth()?.dsp)}</span>
+          </Show>
+          <span class="sp" />
+          <Show
+            when={currentJob()}
+            fallback={
+              <Show when={isEmulator() && reloadNote()}>
+                <span class="muted" title={reloadNote()}>
+                  {reloadNote()}
+                </span>
               </Show>
-              <span>{Math.max(0, Math.round((now() - job().started) / 1000))} s</span>
-              <Show when={job().progress !== undefined}>
-                <Meter value={job().progress! * 100} tone="amber" />
-                <span>~{Math.round(job().progress! * 100)}%</span>
-              </Show>
-              <Show when={jobs().list.length > 1}>
-                <span class="more">+{jobs().list.length - 1}</span>
-              </Show>
-              <Show when={job().cancel}>
-                <button type="button" class="cancel" onClick={() => job().cancel?.()}>
-                  Cancel
-                </button>
-              </Show>
-            </span>
-          )}
+            }
+          >
+            {(job) => (
+              <span class="job" title={job().detail ? `${job().label}: ${job().detail}` : job().label}>
+                <Icon d={RELOAD} />
+                <span class="label">
+                  {job().group === 'emulator' ? 'Emulator' : targetLabel(target())} · {job().label}
+                </span>
+                <Show when={job().detail}>
+                  <span class="detail">{job().detail}</span>
+                </Show>
+                <span>{Math.max(0, Math.round((now() - job().started) / 1000))} s</span>
+                <Show when={job().progress !== undefined}>
+                  <Meter value={job().progress! * 100} tone="amber" />
+                  <span>~{Math.round(job().progress! * 100)}%</span>
+                </Show>
+                <Show when={jobs().list.length > 1}>
+                  <span class="more">+{jobs().list.length - 1}</span>
+                </Show>
+                <Show when={job().cancel}>
+                  <button type="button" class="cancel" onClick={() => job().cancel?.()}>
+                    Cancel
+                  </button>
+                </Show>
+              </span>
+            )}
+          </Show>
+        </div>
+        <Show when={props.host.analyzer}>
+          <button
+            type="button"
+            class="sb"
+            aria-expanded={analyzerOpen()}
+            title="Show the selected target’s audio analyzer"
+            onClick={toggleAnalyzer}
+          >
+            Analyzer <Icon d={analyzerOpen() ? DOWN : UP} />
+          </button>
         </Show>
         <button type="button" class="sb" aria-expanded={logOpen()} title={`Log (${logKey})`} onClick={toggleLog}>
           Log
@@ -1292,7 +1401,7 @@ export default function Console(props: { host: Host }) {
           </Show>
           <Icon d={logOpen() ? DOWN : UP} />
         </button>
-        <button type="button" class="sb" title="Show the Metrics tab of the Emulator page" onClick={showMetrics}>
+        <button type="button" class="sb" title="Show Metrics for the selected target" onClick={showMetrics}>
           Metrics
         </button>
       </footer>

@@ -5,16 +5,35 @@ import * as firmware from './firmware-mock';
 import { sim } from './sim';
 
 /** The preview is a plain browser, outside the app: the native runtime is not offered. */
-export const isTauri = (): boolean => false;
+export const isTauri = (): boolean => new URLSearchParams(location.search).get('page') === 'run';
+
+const remotePort = 'Elektron Digitone II';
 
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
+    case 'emu_launch':
+      return { syx: 'Digitakt_II_OS1.17.syx' } as T;
+    case 'emu_set_source':
+    case 'emu_source_info':
+      return { name: 'Digitakt_II_OS1.17.syx', path: 'Digitakt_II_OS1.17.syx', device: 'dt2' } as T;
+    case 'emu_build_info':
+      return {} as T;
     case 'local_pick_folder':
       return (await pickFolder()) as T;
     case 'card_open_folder':
       return undefined as T;
+    case 'remote_audio_inputs':
+      return [{ id: 'audio-input', name: remotePort }] as T;
+    case 'remote_audio_start':
+      return 'Preview headphones' as T;
+    case 'remote_audio_status':
+      return null as T;
+    case 'remote_audio_stop':
+      return undefined as T;
     case 'midi_ports':
-      return (firmware.page ? firmware.ports() : ['Elektron Digitakt II', 'IAC Driver Bus 1']) as T;
+      return (
+        firmware.page ? firmware.ports() : isTauri() ? [remotePort] : ['Elektron Digitakt II', 'IAC Driver Bus 1']
+      ) as T;
     case 'midi_open':
       return undefined as T;
     case 'midi_close':
@@ -53,6 +72,7 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
     }
     case 'emu_call': {
       const method = String(args?.method);
+      if (method === 'firmware.load' && isTauri()) return new Promise<T>(() => {});
       if (method === 'status') return { mode: sim.paused ? 'paused' : 'running' } as T;
       if (method.startsWith('card.'))
         return (await cardCall(method, (args?.params as Record<string, unknown>) ?? {})) as T;
