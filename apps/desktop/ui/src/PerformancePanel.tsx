@@ -1,9 +1,18 @@
-import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
 import { percent } from './device-health';
-import { UTILIZATION_WINDOW_MS as WINDOW_MS, utilizationIsFresh, type UtilizationPoint } from './utilization-history';
+import {
+  UTILIZATION_WINDOW_MS as WINDOW_MS,
+  utilizationAt,
+  utilizationIsFresh,
+  type UtilizationPoint,
+} from './utilization-history';
+import SpanBreakdown from './SpanBreakdown';
+import type { SpanRecording } from './span-recording';
 import './performance-panel.css';
+
+const hoverPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(1)}%`);
 
 function hasValue(value: number | null): value is number {
   return value !== null && Number.isFinite(value);
@@ -13,6 +22,10 @@ export default function PerformancePanel(props: {
   points: readonly UtilizationPoint[];
   now: number;
   estimated: boolean;
+  view: 'Utilization' | 'Spans';
+  setView(view: 'Utilization' | 'Spans'): void;
+  recording?: SpanRecording;
+  activeTarget: boolean;
 }) {
   let surface!: HTMLDivElement;
   let paint: (() => void) | undefined;
@@ -24,21 +37,37 @@ export default function PerformancePanel(props: {
     props.points.filter(({ at }) => at >= props.now - WINDOW_MS && at <= props.now),
   );
   const [cursor, setCursor] = createSignal<number>();
+  const showingSpans = () => props.view === 'Spans';
+  const intervals = createMemo(() =>
+    showingSpans()
+      ? (props.recording?.intervals().filter((i) => i.end > props.now - WINDOW_MS && i.start <= props.now) ?? [])
+      : [],
+  );
+  const [held, setHeld] = createSignal<number>();
+  const hoveredInterval = createMemo(() => {
+    const x = cursor();
+    if (x === undefined || !showingSpans()) return;
+    const at = props.now - (1 - x) * WINDOW_MS;
+    return intervals().findLast((i) => i.start <= at && at <= i.end);
+  });
+  const heldInterval = () => intervals().find((i) => i.end === held());
+  const selectedInterval = () => (cursor() !== undefined ? hoveredInterval() : (heldInterval() ?? intervals().at(-1)));
+  function leavePlot() {
+    if (showingSpans() && cursor() !== undefined) setHeld(hoveredInterval()?.end);
+    setCursor(undefined);
+  }
+  createEffect(
+    on([() => props.recording, showingSpans], () => {
+      setHeld(undefined);
+      setCursor(undefined);
+    }),
+  );
   const inspected = createMemo(() => {
     const x = cursor();
-    if (x === undefined) return;
-    const at = props.now - (1 - x) * WINDOW_MS;
-    let closest: UtilizationPoint | undefined;
-    for (const point of windowPoints()) {
-      if (!closest || Math.abs(at - point.at) < Math.abs(at - closest.at)) closest = point;
-    }
-    // Snap inside a normal sampling interval. Keep the guide under the pointer in long gaps.
-    return closest && utilizationIsFresh(2 * Math.abs(at - closest.at), props.estimated) ? closest : undefined;
+    if (x === undefined || showingSpans()) return;
+    return utilizationAt(windowPoints(), Math.round(props.now - (1 - x) * WINDOW_MS), props.estimated);
   });
-  const cursorX = () => {
-    const point = inspected();
-    return point ? 1 - (props.now - point.at) / WINDOW_MS : (cursor() ?? 0);
-  };
+  const cursorX = () => cursor() ?? 0;
   function inspect(event: PointerEvent) {
     const bounds = surface.getBoundingClientRect();
     setCursor(Math.max(0, Math.min(1, (event.clientX - bounds.left - 3) / Math.max(1, bounds.width - 6))));
@@ -134,6 +163,13 @@ export default function PerformancePanel(props: {
         finish();
       }
 
+      for (const interval of intervals()) {
+        const left = xAt(Math.max(0, (interval.start - start) / WINDOW_MS));
+        const right = xAt(Math.min(1, (interval.end - start) / WINDOW_MS));
+        const width = Math.max(1, right - left - 1);
+        if (interval === selectedInterval()) graphic.rect(left, 0, width, height).fill({ color: amber, alpha: 0.12 });
+        graphic.rect(left, height - 4, width, 4).fill({ color: amber, alpha: 0.65 });
+      }
       trace('cf', amber);
       trace('dsp', teal);
       app.render();
@@ -185,7 +221,7 @@ export default function PerformancePanel(props: {
     paint();
   });
 
-  createEffect(on(windowPoints, () => paint?.()));
+  createEffect(on([windowPoints, intervals, selectedInterval], () => paint?.()));
 
   onCleanup(() => {
     disposed = true;
@@ -201,6 +237,23 @@ export default function PerformancePanel(props: {
   return (
     <section class="performance-panel" aria-label="CF and DSP utilization">
       <header class="performance-header">
+        <div class="performance-modes" role="group" aria-label="Performance view">
+          {(['Utilization', 'Spans'] as const).map((view) => (
+            <button type="button" aria-pressed={props.view === view} onClick={() => props.setView(view)}>
+              {view}
+            </button>
+          ))}
+        </div>
+        <Show when={showingSpans()}>
+          <div class="span-actions">
+            <Show when={props.activeTarget && props.recording?.available()}>
+              <button type="button" disabled={props.recording?.disabled()} onClick={() => props.recording?.toggle()}>
+                {props.recording?.running() ? 'Stop recording' : 'Start recording'}
+              </button>
+            </Show>
+            <span role="status">{props.activeTarget ? props.recording?.status() : 'Target unavailable'}</span>
+          </div>
+        </Show>
         <dl class="performance-legend" aria-label="Latest utilization">
           <div class="performance-cf">
             <dt>CF</dt>
@@ -213,64 +266,95 @@ export default function PerformancePanel(props: {
         </dl>
         <span class="performance-source">{props.estimated ? 'Estimated utilization' : 'Measured utilization'}</span>
       </header>
-      <div class="performance-chart" role="group" aria-label="Utilization over the last 60 seconds">
-        <div class="performance-axis-y">
-          <span>{ceiling()}%</span>
-          <span>{ceiling() / 2}%</span>
-          <span>0%</span>
-        </div>
-        <div
-          class="performance-plot"
-          onPointerMove={inspect}
-          onPointerLeave={() => setCursor(undefined)}
-          onPointerCancel={() => setCursor(undefined)}
-        >
-          <div ref={surface} class="performance-canvas" aria-hidden="true" />
-          <Show when={cursor() !== undefined && hasSamples() && !renderError()}>
-            <div class="performance-overlay">
-              <div class="performance-guide" style={{ left: `${cursorX() * 100}%` }}>
-                <Show when={inspected()}>
-                  {(point) => (
-                    <>
-                      {(['cf', 'dsp'] as const).map((series) => {
-                        const value = () => point()[series];
-                        return (
-                          <Show when={value() != null}>
-                            <i
-                              class={`performance-marker performance-${series}`}
-                              style={{ bottom: `${(100 * value()!) / ceiling()}%` }}
-                            />
-                          </Show>
-                        );
-                      })}
-                    </>
-                  )}
-                </Show>
-                <div class="performance-tooltip" classList={{ 'align-left': cursorX() > 0.5 }}>
-                  <span>{(((1 - cursorX()) * WINDOW_MS) / 1000).toFixed(1)} s ago</span>
-                  <Show when={inspected()} fallback={<span>No sample</span>}>
+      <div class="performance-body" classList={{ 'with-spans': showingSpans() }}>
+        <div class="performance-chart" role="group" aria-label="Utilization over the last 60 seconds">
+          <div class="performance-axis-y">
+            <span>{ceiling()}%</span>
+            <span>{ceiling() / 2}%</span>
+            <span>0%</span>
+          </div>
+          <div class="performance-plot" onPointerMove={inspect} onPointerLeave={leavePlot} onPointerCancel={leavePlot}>
+            <div ref={surface} class="performance-canvas" aria-hidden="true" />
+            <Show when={cursor() !== undefined && (hasSamples() || intervals().length > 0) && !renderError()}>
+              <div class="performance-overlay">
+                <div class="performance-guide" style={{ left: `${cursorX() * 100}%` }}>
+                  <Show when={!showingSpans() && inspected()}>
                     {(point) => (
                       <>
-                        <span class="performance-cf">CF {percent(point().cf)}</span>
-                        <span class="performance-dsp">DSP {percent(point().dsp)}</span>
+                        {(['cf', 'dsp'] as const).map((series) => {
+                          const value = () => point()[series];
+                          return (
+                            <Show when={value() != null}>
+                              <i
+                                class={`performance-marker performance-${series}`}
+                                style={{ bottom: `${(100 * value()!) / ceiling()}%` }}
+                              />
+                            </Show>
+                          );
+                        })}
                       </>
                     )}
                   </Show>
+                  <div class="performance-tooltip" classList={{ 'align-left': cursorX() > 0.5 }}>
+                    <span>{(((1 - cursorX()) * WINDOW_MS) / 1000).toFixed(1)} s ago</span>
+                    <Show
+                      when={!showingSpans()}
+                      fallback={<span>{hoveredInterval() ? 'Recorded interval' : 'No recorded interval'}</span>}
+                    >
+                      <Show when={inspected()} fallback={<span>No sample</span>}>
+                        {(point) => (
+                          <>
+                            <Show when={point().interpolated}>
+                              <span>Interpolated</span>
+                            </Show>
+                            <span class="performance-cf">CF {hoverPercent(point().cf)}</span>
+                            <span class="performance-dsp">DSP {hoverPercent(point().dsp)}</span>
+                          </>
+                        )}
+                      </Show>
+                    </Show>
+                  </div>
                 </div>
               </div>
-            </div>
-          </Show>
-          <Show when={renderError() || !hasSamples()}>
-            <div class="performance-plot-status" role="status">
-              {renderError() ? `Plot unavailable · ${renderError()}` : 'No utilization samples'}
-            </div>
-          </Show>
+            </Show>
+            <Show when={renderError() || (!hasSamples() && !intervals().length)}>
+              <div class="performance-plot-status" role="status">
+                {renderError()
+                  ? `Plot unavailable · ${renderError()}`
+                  : showingSpans()
+                    ? 'No recorded intervals'
+                    : 'No utilization samples'}
+              </div>
+            </Show>
+          </div>
+          <div class="performance-axis-x">
+            <span>−60 s</span>
+            <span>−30 s</span>
+            <span>Now</span>
+          </div>
         </div>
-        <div class="performance-axis-x">
-          <span>−60 s</span>
-          <span>−30 s</span>
-          <span>Now</span>
-        </div>
+        <Show when={showingSpans()}>
+          <div class="span-details">
+            <label>
+              ColdFire interval
+              <select
+                aria-label="ColdFire interval"
+                value={(cursor() !== undefined ? hoveredInterval() : heldInterval())?.end ?? ''}
+                onChange={(e) => setHeld(e.currentTarget.value ? Number(e.currentTarget.value) : undefined)}
+              >
+                <option value="">Latest interval</option>
+                <For each={intervals()}>
+                  {(i) => (
+                    <option value={i.end}>
+                      {new Date(i.start).toLocaleTimeString()} · {((i.end - i.start) / 1000).toFixed(1)} s
+                    </option>
+                  )}
+                </For>
+              </select>
+            </label>
+            <SpanBreakdown interval={selectedInterval()} />
+          </div>
+        </Show>
       </div>
     </section>
   );

@@ -161,6 +161,64 @@ const analyzerScenes = ['Scope', 'Spectrum'].map((mode) => ({
 const SCENES = [
   ...analyzerScenes,
   {
+    name: 'performance-spans',
+    q: 'page=run&runtimeOnly&history&prof=stopped',
+    size: WIDE,
+    steps: async (p) => {
+      await pickTarget(p, remoteModel);
+      await p.click(/^Performance$/);
+      await p.click(/^Spans$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
+        'Recorder unavailable',
+      );
+      await p.click(/^Start recording$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'",
+        'Interval has no ranked owners',
+      );
+      await showTab(p, 'Profile');
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Recording')",
+        'Profile did not see the shared recording',
+      );
+      await p.click(/^Stop recording$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden]) .state-line')?.textContent.includes('Stopped')",
+        'Profile did not see Stop from Spans',
+      );
+      await pickTarget(p, 'Emulator');
+      await waitForAnalyzer(p, "!document.querySelector('.span-breakdown-table')", 'Intervals leaked across targets');
+      await pickTarget(p, remoteModel);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.span-actions button')?.textContent === 'Start recording'",
+        'New target did not bind its recorder',
+      );
+      await p.click(/^Start recording$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelectorAll('.span-details option').length >= 4",
+        'Expected consecutive recorded intervals',
+      );
+      await p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const rect = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.right - (rect.width / 60) * 2 }));
+      })()`);
+      if (
+        !(await p.eval(
+          "document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw' && document.querySelector('.performance-tooltip')?.innerText.includes('Recorded interval')",
+        ))
+      )
+        throw new Error('Hover did not select an observed interval');
+    },
+  },
+  {
     name: 'performance-history',
     q: 'page=run&runtimeOnly&history',
     size: WIDE,
@@ -206,6 +264,14 @@ const SCENES = [
         ))
       )
         throw new Error('Hover did not show both processor readings');
+      const guideX = () => p.eval("document.querySelector('.performance-guide').getBoundingClientRect().x");
+      const before = await guideX();
+      await move(0.915);
+      if (
+        (await guideX()) <= before ||
+        !(await p.eval("document.querySelector('.performance-tooltip').textContent.includes('Interpolated')"))
+      )
+        throw new Error('Crosshair did not sweep between samples');
       await p.eval("document.querySelector('.performance-plot').dispatchEvent(new PointerEvent('pointerleave'))");
       if (await p.eval("!!document.querySelector('.performance-guide')"))
         throw new Error('Guide remained after leaving plot');
@@ -781,6 +847,22 @@ const SCENES = [
     steps: async (p) => {
       await p.dnd(null, 'pane', { drop: false, files: ['from_finder_a.wav', 'from_finder_b.wav'] });
       await p.wait(300);
+      const first = await p.eval("document.querySelector('.span-details option:nth-child(2)').value");
+      await p.click(/^Transfer$/);
+      await waitForAnalyzer(
+        p,
+        `[...document.querySelectorAll('.span-details option')].some(o => o.value === ${JSON.stringify(first)}) && document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'`,
+        'Transfer refresh cleared the current recording',
+      );
+      await p.click(/^Remote$/);
+      await p.eval(`(() => {
+        const plot = document.querySelector('.performance-plot');
+        const rect = plot.getBoundingClientRect();
+        plot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + 1 }));
+        plot.dispatchEvent(new PointerEvent('pointerleave'));
+      })()`);
+      if (!(await p.eval("document.querySelector('.span-breakdown-table tbody th')?.textContent === 'test/saw'")))
+        throw new Error('Leaving a timeline gap failed to restore the latest interval');
       await p.eval(
         "document.querySelectorAll('section.col')[1].dispatchEvent(new Event('dragleave', { bubbles: true }))",
       );

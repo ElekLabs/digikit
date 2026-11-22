@@ -3,6 +3,7 @@ import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
+import type { SpanRecording } from './span-recording';
 import ProfilePanel from './ProfilePanel';
 import CalibrationPanel from './CalibrationPanel';
 import { createCalibrationHub } from './calibration-hub';
@@ -16,6 +17,8 @@ export default function SidePanels(props: {
   host?: Host;
   visible: boolean;
   active?: boolean;
+  collectSpans?: boolean;
+  onSpanRecording?(recording?: SpanRecording): void;
   metrics?: JSX.Element;
   source: TargetBinding;
 }): JSX.Element {
@@ -151,6 +154,8 @@ export default function SidePanels(props: {
       <MemoryPanel visible={reads('memory')} source={props.source} tabpanel={tabpanel('memory')} />
       <ProfilePanel
         visible={reads('profile')}
+        collectSpans={props.collectSpans && (props.active ?? true)}
+        onSpanRecording={props.onSpanRecording}
         source={props.source}
         host={props.host}
         hub={hub}

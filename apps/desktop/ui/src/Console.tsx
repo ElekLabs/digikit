@@ -38,6 +38,7 @@ import CardPanel from './CardPanel';
 import { connectionView } from '@digi/workbench-core/transfer/connection-core.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
+import type { SpanRecording } from './span-recording';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
 import { pageFor, type Page } from './page-core';
@@ -563,6 +564,8 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
   createEffect(() => {
     if (logOpen()) setToolDrawer(undefined);
   });
+  const [performanceView, setPerformanceView] = createSignal<'Utilization' | 'Spans'>('Utilization');
+  const [spanRecording, setSpanRecording] = createSignal<SpanRecording>();
   const analyzerOpen = () => toolDrawer() === 'Analyzer';
   const drawerName = () => (logOpen() ? 'Log' : toolDrawer());
   const drawerOpen = () => !!drawerName();
@@ -1204,6 +1207,10 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
                   <SidePanels
                     host={props.host}
                     visible={sidePanelsShown()}
+                    collectSpans={
+                      toolDrawer() === 'Performance' && performanceView() === 'Spans' && source.target.kind !== 'none'
+                    }
+                    onSpanRecording={setSpanRecording}
                     active={!isEmulator() || !!status()}
                     source={source}
                     metrics={
@@ -1324,7 +1331,15 @@ export default function Console(props: { host: Host; analyzerWorkers: WorkerFact
                 }
               >
                 <Suspense fallback={<p role="status">Opening performance history…</p>}>
-                  <PerformancePanel points={utilization().points()} now={now()} estimated={isEmulator()} />
+                  <PerformancePanel
+                    points={utilization().points()}
+                    now={now()}
+                    estimated={isEmulator()}
+                    view={performanceView()}
+                    setView={setPerformanceView}
+                    recording={spanRecording()}
+                    activeTarget={selected().target.kind !== 'none' && (!isEmulator() || !!status())}
+                  />
                 </Suspense>
               </Show>
             }

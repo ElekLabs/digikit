@@ -117,6 +117,28 @@ const state = (over: Partial<FakeState> = {}): FakeState => ({
 });
 
 describe('read', () => {
+  test('timestamps span counters before owner enrichment and skips the separate HEALTH read for the drawer', async () => {
+    const session = fakeSession(state({ running: true }));
+    let clock = 1000;
+    const recorder = createRecorder({
+      session: async () => session,
+      now: () => new Date(clock),
+      loadLibrary: async () => {
+        clock += 6500;
+        return [];
+      },
+    });
+    let healthReads = 0;
+    session.logPage = async () => {
+      healthReads++;
+      throw new Error('Unexpected HEALTH read');
+    };
+    const r = await recorder.read('spans');
+    assert.ok(!r.noDebug);
+    assert.equal(r.observedAt, 1000);
+    assert.equal(clock, 7500);
+    assert.equal(healthReads, 0);
+  });
   test('a device without the PEEK capability, or one that refuses PROFILE_STATE, has no debug module', async () => {
     for (const st of [state({ caps: 0 }), state({ missing: true })]) {
       const r = await createRecorder({

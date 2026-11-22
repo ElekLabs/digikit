@@ -7,14 +7,13 @@ import { dspView } from '@digi/workbench-core/profile/profile-core.ts';
 import type { ModuleRef, Snapshot, SpanIn } from '@digi/workbench-core/profile/profile-core.ts';
 import { cfView } from '../src/profile-backend';
 import type { Part } from '@digi/workbench-core/profile/profile-artifact.ts';
-import type { ProfileReading, Recorder } from '../src/profile-backend';
+import type { ProfileDeps, ProfileReading, Recorder } from '../src/profile-backend';
 
 export { isDebugMissing } from '../src/profile-backend';
 
 const query = new URLSearchParams(location.search);
 const state = query.get('prof') ?? 'rec';
 const dev = query.get('card') === 'dt2' ? 'dt2' : 'dn2';
-const emulator = query.get('page') !== 'remote';
 const HZ = 132_000_000;
 /** A made-up `cf.profile` part: four paths and ten heavy PCs (the numbers show layout only). */
 const CF_PART: Part = {
@@ -78,7 +77,8 @@ const MODULES = (t: number): ModuleRef[] => [
   { index: 2, name: 'test/mon', kind: 'tool' },
 ];
 
-export function createRecorder(): Recorder {
+export function createRecorder(deps: ProfileDeps): Recorder {
+  const emulator = !!deps.rpc;
   let running = state === 'rec';
   let t = 0; // seconds recorded
   let last = Date.now();
@@ -122,7 +122,7 @@ export function createRecorder(): Recorder {
       if (state === 'nodebug') return { noDebug: true, port: 'dt2-1.17', emulator };
       advance();
       const modules = MODULES(t);
-      const r: ProfileReading = { noDebug: false, port, emulator, snap: snap(), modules };
+      const r: ProfileReading = { noDebug: false, port, emulator, observedAt: Date.now(), snap: snap(), modules };
       if (emulator && elapsed > 0n) {
         r.cf = cfView(CF_PART, (a) => CF_NAMES.get(a));
         r.dsp = dspView(

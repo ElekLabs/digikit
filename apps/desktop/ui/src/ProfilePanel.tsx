@@ -40,6 +40,8 @@ import {
   type Hotspot,
   type SavedProfile,
 } from './profile-hotspots';
+import { createSpanIntervals } from './span-intervals';
+import type { SpanRecording } from './span-recording';
 import { createReadGate } from './read-gate-core';
 import {
   calibrationChip,
@@ -87,6 +89,8 @@ function HotspotTable(props: { title: string; rows: Hotspot[] }): JSX.Element {
 
 export default function ProfilePanel(props: {
   visible: boolean;
+  collectSpans?: boolean;
+  onSpanRecording?(recording?: SpanRecording): void;
   source: TargetBinding;
   host?: Host;
   /** What the Profile and Calibration tabs share (a run in progress, the active calibration). */
@@ -107,6 +111,12 @@ export default function ProfilePanel(props: {
   const [referencePcs, setReferencePcs] = createSignal<SavedProfile['pcs']>();
   let opening = 0;
   const history = createHistory();
+  const spans = createSpanIntervals();
+  const [intervals, setIntervals] = createSignal(spans.intervals());
+  function clearSpans() {
+    spans.clear();
+    setIntervals(spans.intervals());
+  }
   const [version, setVersion] = createSignal(0); // the history changed
 
   const onEmulator = () => props.source.target.kind === 'emulator';
@@ -137,13 +147,18 @@ export default function ProfilePanel(props: {
 
       try {
         checkRuntime(props.source.target);
-        const r = await recorder.read();
+        const r = await recorder.read(props.visible ? 'full' : 'spans');
         if (current()) {
           if (!r.noDebug) {
+            const previous = reading();
+            if (previous && !previous.noDebug && previous.imageId !== r.imageId) clearSpans();
+            spans.push(r.observedAt, r.snap, r.modules);
+            setIntervals(spans.intervals());
             history.push(r.snap, r.modules);
             setVersion((v) => v + 1);
             if (r.dsp) setDsp(r.dsp);
           }
+          if (r.noDebug) spans.break();
           setReading(r);
           setError('');
           setNoRuntime(false);
@@ -152,6 +167,7 @@ export default function ProfilePanel(props: {
         return true;
       } catch (e) {
         if (!current()) return true;
+        spans.break();
         if (isCancelled(e)) return true;
         if (isNoRuntime(e)) {
           setError(failureLine(e, targetLabel(props.source.target)));
@@ -166,7 +182,13 @@ export default function ProfilePanel(props: {
     },
   });
 
-  const active = createMemo(() => props.visible && !calibrating());
+  const detail = createMemo(() =>
+    calibrating() ? undefined : props.visible ? 'full' : props.collectSpans ? 'spans' : undefined,
+  );
+  createEffect(() => {
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
+    untrack(clearSpans);
+  });
   // read when the tab is shown, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
@@ -183,24 +205,27 @@ export default function ProfilePanel(props: {
     cardRefresh();
 
     if (props.source.target.kind === 'emulator') emulatorRuntime();
-    if (active()) untrack(() => gate.request());
-    else untrack(() => gate.stop());
+    if (detail() && !acting()) untrack(() => gate.request());
+    else {
+      gate.stop();
+      if (!detail()) spans.break();
+    }
   });
   // while the target records and the tab is shown: once a second
   createEffect(() => {
-    if (!active() || !running()) return;
+    if (!detail() || acting() || !running()) return;
     const id = setInterval(() => gate.request(), 1000);
     onCleanup(() => clearInterval(id));
   });
   onCleanup(() => gate.dispose());
 
   const act = async (what: string, f: () => Promise<void>) => {
-    if (calibrating()) return;
+    if (locked()) return;
+    gate.stop();
     setActing(what);
     try {
       await f();
       setError('');
-      gate.request();
     } catch (e) {
       setError(failureLine(e, targetLabel(props.source.target)));
     } finally {
@@ -209,6 +234,7 @@ export default function ProfilePanel(props: {
   };
   const start = () =>
     act('start', async () => {
+      clearSpans();
       history.clear();
       setDsp(undefined);
       await recorder.start();
@@ -216,6 +242,7 @@ export default function ProfilePanel(props: {
   const stop = () => act('stop', () => recorder.stop());
   const reset = () =>
     act('reset', async () => {
+      clearSpans();
       history.clear();
       setDsp(undefined);
       await recorder.reset();
@@ -236,6 +263,27 @@ export default function ProfilePanel(props: {
         await app.backend.restart(() => {});
       }),
     );
+  props.onSpanRecording?.({
+    intervals,
+    running,
+    available: () => !!reading() && !reading()?.noDebug && !noRuntime(),
+    disabled: () => locked() || !!error() || (busy() && !reading()),
+    status: () =>
+      calibrating()
+        ? 'Calibration in progress'
+        : error() ||
+          (reading()?.noDebug
+            ? 'Profiling needs the debug module'
+            : !reading()
+              ? 'Reading profile state…'
+              : running()
+                ? 'Recording'
+                : 'Stopped'),
+    toggle: () => {
+      void (running() ? stop() : start());
+    },
+  });
+  onCleanup(() => props.onSpanRecording?.(undefined));
   const openReference = async (file: File | undefined) => {
     if (!file) return;
     const request = ++opening;

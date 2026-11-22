@@ -2,7 +2,7 @@ import { createRoot, createSignal } from 'solid-js';
 import { expect, test } from 'vitest';
 import type { TargetBinding, Target } from '@digi/workbench-core/transfer/target.ts';
 import type { ReceivedHealth } from '../src/target-health';
-import { createUtilizationHistory, utilizationIsFresh } from '../src/utilization-history';
+import { createUtilizationHistory, utilizationAt, utilizationIsFresh } from '../src/utilization-history';
 
 function binding(target: Target): TargetBinding {
   return {
@@ -74,4 +74,16 @@ test('hardware HEALTH intervals tolerate poll latency and emulator samples expir
   expect(utilizationIsFresh(25_000, false)).toBe(false);
   expect(utilizationIsFresh(1800, true)).toBe(true);
   expect(utilizationIsFresh(5100, true)).toBe(false);
+});
+
+test('cursor follows each drawn segment, preserving endpoints and gaps independently per processor', () => {
+  const points = [
+    { at: 1000, cf: 0, dsp: null },
+    { at: 11000, cf: 80, dsp: 65 },
+  ];
+  expect(utilizationAt(points, 3500, false)).toEqual({ at: 3500, cf: 20, dsp: null, interpolated: true });
+  expect(utilizationAt(points, 11000, false)).toEqual({ ...points[1], interpolated: false });
+  expect(utilizationAt(points, 3500, true)).toBeUndefined();
+  expect(utilizationAt(points, 500, false)).toBeUndefined();
+  expect(utilizationAt(points, 11500, false)).toBeUndefined();
 });

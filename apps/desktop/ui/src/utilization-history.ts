@@ -16,6 +16,22 @@ export interface UtilizationPoint {
   dsp: number | null;
 }
 
+/** Read the same straight segments the plot draws, leaving gaps and missing channels empty. */
+export function utilizationAt(points: readonly UtilizationPoint[], at: number, estimated: boolean) {
+  const index = points.findIndex((point) => point.at >= at);
+  const right = points[index];
+  if (!right) return;
+  if (right.at === at) return right.cf === null && right.dsp === null ? undefined : { ...right, interpolated: false };
+  const left = points[index - 1];
+  if (!left || !utilizationIsFresh(right.at - left.at, estimated)) return;
+  const fraction = (at - left.at) / (right.at - left.at);
+  const interpolate = (a: number | null, b: number | null) =>
+    a === null || b === null ? null : a + (b - a) * fraction;
+  const cf = interpolate(left.cf, right.cf);
+  const dsp = interpolate(left.dsp, right.dsp);
+  if (cf !== null || dsp !== null) return { at, cf, dsp, interpolated: true };
+}
+
 const valid = (value?: number | null) => (value != null && Number.isFinite(value) && value >= 0 ? value : null);
 
 /** One minute of readings from the current binding. A missing reading breaks each trace. */

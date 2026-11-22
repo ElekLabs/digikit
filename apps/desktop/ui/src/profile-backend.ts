@@ -99,6 +99,8 @@ export type ProfileReading =
       port: string;
       /** The target is the emulator (the controller's instruction profiles go with the spans). */
       emulator: boolean;
+      observedAt: number;
+      imageId?: string | null;
       snap: Snapshot;
       modules: ModuleRef[];
       /** Emulator: the modules' DSP per block (undefined when `sharc.profile` is off or the daemon lacks it). */
@@ -184,7 +186,7 @@ interface Source<T> {
 
 export interface Recorder {
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
-  read(): Promise<ProfileReading>;
+  read(detail?: 'full' | 'spans'): Promise<ProfileReading>;
   /** Reset the counters and start the spans; on the emulator also `cf.profile` and `sharc.profile` count from now. */
   start(): Promise<void>;
   /** Stop the spans; on the emulator, keep the instruction profiles of the recording for Export. */
@@ -446,7 +448,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   }
 
   return {
-    async read() {
+    async read(detail = 'full') {
       const s = await deps.session();
       const info = await s.info();
       if (info.caps === null || ((info.caps >>> CAP.PEEK) & 1) === 0)
@@ -460,6 +462,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         if (isDebugMissing(e)) return { noDebug: true, port, emulator: !!deps.rpc };
         throw e;
       }
+      const observedAt = now().getTime();
       if (deps.names && (!namesImage || !sameImage(info, namesImage) || deps.names.needsRefresh?.()))
         await refreshNames(s, info);
       const modules = await moduleRefs(s, port);
@@ -470,7 +473,16 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         spans: all.spans,
         polls: await pollInfos(all.polls, info),
       };
-      const r: ProfileReading = { noDebug: false, port, emulator: !!deps.rpc, snap, modules };
+      const r: ProfileReading = {
+        noDebug: false,
+        port,
+        emulator: !!deps.rpc,
+        observedAt,
+        imageId: info.image_id,
+        snap,
+        modules,
+      };
+      if (detail === 'spans') return r;
       if (deps.rpc) {
         if (counting() && all.running) {
           const parts = await instructionParts();

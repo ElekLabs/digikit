@@ -7,7 +7,9 @@ Diagnostics are off by default and cost nothing when off. Tuning switches
 
 Open **Performance** in the desktop status bar to see the last minute of ColdFire and DSP utilization for the selected Target. The emulator reports estimated chip load, sampled by Workbench approximately once per second. On hardware, the firmware emits HEALTH roughly every ten seconds. Workbench checks for a new reading on its existing five-second poll. The horizontal axis is local observation time. A spike between observations can be missed.
 
-Hover over the graph to inspect a sample’s age and its CF and DSP readings. History accumulates while other panes are open. Switching targets starts a new history. Gaps indicate unavailable readings, and a processor without a reported value has no trace. The audio Analyzer and Performance drawer can be opened independently of USB audio capture.
+Move the pointer across the graph to inspect CF and DSP utilization at that time. Between samples the tooltip shows linearly interpolated values. Gaps remain empty. History accumulates while other panes are open. Switching targets starts a new history. Gaps indicate unavailable readings, and a processor without a reported value has no trace. The audio Analyzer and Performance drawer can be opened independently of USB audio capture.
+
+Choose **Performance → Spans** and **Start recording** to see which instrumented ColdFire owners ran during a utilization spike. The drawer and the Profile tab share the same recording, including Start and Stop. Each marked interval compares two consecutive counter readings. Hover over an interval or choose it from the list to rank modules, runtime phases and polls by their share of elapsed target ticks and see their call counts. The DSP line shows whole-processor utilization. A gap in observations or a change in owner identity starts a new interval baseline. The view covers the last minute of local observation time.
 
 ## Where output goes
 
