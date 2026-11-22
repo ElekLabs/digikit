@@ -1,8 +1,10 @@
 //! The resident table as the package sees it: its header, its views, the compatibility check, a table of fake functions and the parity of the thunks with the
 //! owners.
 
+mod append;
 mod check;
 mod fake;
+mod groups;
 mod parity;
 
 use super::TABLE;
