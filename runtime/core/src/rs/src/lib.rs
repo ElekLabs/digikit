@@ -30,6 +30,7 @@ mod gen_abi_check;
 mod image;
 mod resident_query;
 mod hooks;
+mod menu_exports;
 mod package;
 // `dkrt_sdk::optional_imports!` (expanded in imports.rs) names `crate::loader::stub_missing`; the resident table replaces that macro in RC2s-1 S7.
 use package::loader;

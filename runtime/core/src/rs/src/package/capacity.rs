@@ -28,7 +28,6 @@ pub(crate) unsafe fn kind_value<P: Platform>(p: &P, table: &dkrt_abi::service::S
 
 /// `dkrt_capacity(out, max)`: the entries of the CAPACITY command (one `DkrtCap` per resource, kinds in sdk/sdk.toml `[capacity.kinds]`), at most
 /// `max` of them; returns how many it wrote. The SysEx command and the DIGIKIT menu's MEMORY page read the same figures.
-#[no_mangle]
 pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
     init_once();
     use dkrt_sdk::proto::*;

@@ -25,6 +25,9 @@ shared = [
   "dkrt::mailbox",
   "dkrt::package::handlers",
   "dkrt::resident_query",
+  "dkrt::hooks",       # the resident core's calls into the package, and the package's table of them
+  "dkrt::package::hooks",
+  "dkrt::menu_exports",
   "dkrt::package::gen_services",
   "dkrt::package::imports",
   "dkrt::package::svc_imports", # the `dkc_*` shims of a service file: one function per CoreApi method

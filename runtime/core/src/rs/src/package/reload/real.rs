@@ -31,7 +31,6 @@ pub fn state() -> State {
 }
 
 /// `dkrt_live(op, path)`: queue a live job from the DIGIKIT menu (the UI task). The same refusals as the SysEx commands: an open upload or a store write in flight is `E_STATE`.
-#[no_mangle]
 pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
     crate::state::init_once();
     if crate::store_writer::is_open() || crate::store_writer::is_locked() {
@@ -41,7 +40,6 @@ pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
 }
 
 /// `dkrt_live_state(out)`: the phase, result, step and teardown flag of the live job.
-#[no_mangle]
 pub unsafe extern "C" fn dkrt_live_state(out: *mut DkrtLive) {
     let s = state();
     *out = DkrtLive { phase: s.phase as u32, result: s.result, step: s.step as u32, unloaded: s.torn as u32, op: s.op as u32 };

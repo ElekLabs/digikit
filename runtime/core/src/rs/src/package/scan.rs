@@ -158,7 +158,6 @@ fn same_path(a: &[u8; 64], b: &[u8; 64]) -> bool {
 /// `dkrt_scan(out, max)`: the `.dkm` files under `modules/` in path order, at most `max` (and `SCAN_MAX`) into `out`; the count, or a negative code
 /// (`E_NOT_FOUND`: no store). A commit of an upload that ran during the list makes it start again inside the store (finding 43, "the menu's reader and
 /// a commit"); the header words read after belong to the same table or fail the load check. UI task.
-#[no_mangle]
 pub unsafe extern "C" fn dkrt_scan(out: *mut DkrtScan, max: u32) -> i32 {
     init_once();
     let list = addr_of_mut!(LIST) as *mut DkrtStoreEntry;
@@ -240,13 +239,11 @@ pub unsafe fn store_find(dir: &[u8], name: &[u8], out: &mut [u8; 64]) -> i32 {
 }
 
 /// `dkrt_scan_reads()`: the sector reads the last `dkrt_scan` made to read the needs.
-#[no_mangle]
 pub unsafe extern "C" fn dkrt_scan_reads() -> u32 {
     core::ptr::read_volatile(addr_of!(READS))
 }
 
 /// `dkrt_fit(entries, n, ticked, out)`: the verdict per entry and the load line of the ticked set (`dkrt_fit::fit_set`). 0.
-#[no_mangle]
 pub unsafe extern "C" fn dkrt_fit(
     entries: *const DkrtScan,
     n: u32,
