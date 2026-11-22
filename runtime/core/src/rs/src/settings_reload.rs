@@ -1,5 +1,5 @@
 //! The reload of modules whose settings changed behind their back. A service that changes what a module's settings return (the settings overlay, `settings_overlay.rs`)
-//! names the module with `dkc_settings_changed(owner)`; the module re-reads its settings in `init`, so the runtime reloads it (the live job of `reload.rs`).
+//! names the module with `dkc_settings_changed(owner)`; the module re-reads its settings in `init`, so the runtime reloads it (the live job of `reload/`).
 //!
 //! `ReloadQueue` keeps one `ModuleReload` per module record and runs one reload at a time, once per UI pass (`poll`). Only a loaded module that opened its settings
 //! (`dk_settings_open` in `init`) is reloaded; one that did not, or that is not loaded, reads nothing it could re-read. All calls run in the UI task.
@@ -182,7 +182,7 @@ fn queue() -> &'static mut ReloadQueue {
     unsafe { &mut *addr_of_mut!(QUEUE) }
 }
 
-/// The system as the runtime is: the live job (`reload.rs`) and the module records.
+/// The system as the runtime is: the live job (`reload/`) and the module records.
 struct Real;
 
 impl System for Real {

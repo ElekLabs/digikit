@@ -39,7 +39,10 @@ const CONTRACT = 'runtime/core/src/rs/src/contract_tests.rs';
 const LFO_DEVICE = 'runtime/core/tests/lfo/lfo.device.test.ts';
 const SAMPLES_RS = 'runtime/core/sdk/src/sample_tracks/tests.rs';
 
-const RELOAD_RS = 'runtime/core/src/rs/src/reload.rs';
+const RELOAD_TESTS = 'runtime/core/src/rs/src/reload/tests';
+const RELOAD_REFUSALS = `${RELOAD_TESTS}/refusals.rs`;
+const RELOAD_UNLOAD = `${RELOAD_TESTS}/unload.rs`;
+const RELOAD_RELOAD = `${RELOAD_TESTS}/reload.rs`;
 const PROVIDERS = 'runtime/core/tests/services/providers.device.test.ts';
 const prov = (test: string): Proof => ({ file: PROVIDERS, test });
 const mine = (test: string): Proof => ({ file: REFUSAL, test });
@@ -109,9 +112,9 @@ export const ROWS: Record<string, Row> = {
   E_TABLE: { kind: 'open', reason: 'the runtime tables fail their check: needs a corrupted table' },
   E_MISSING: { fail: { file: ASSEMBLY, test: 'a_card_without_the_service_file_refuses_its_user_naming_the_service' }, pass: loads },
   E_SVC_ABI: { fail: { file: LFO_DEVICE, test: 'another ABI' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
-  E_RELOAD_PLAYING: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it; `reload.device.test.ts` drives it on both devices (the transport plays)', covered: [{ file: RELOAD_RS, test: 'playing_paused_mixed_or_unreadable' }] },
-  E_RELOAD_MENUS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'the_refusals_come_in_the_documented_order' }] },
-  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_RS, test: 'an_unload_that_is_refused_changes_nothing_and_one_of_a_module_that_is_gone_is_not_found' }] },
-  E_RELOAD_RETAINED: { kind: 'host', reason: 'only a DSP loader that could not clear rows causes it', covered: [{ file: RELOAD_RS, test: 'a_retained_dsp_refuses_at_the_queue' }] },
+  E_RELOAD_PLAYING: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it; `reload.device.test.ts` drives it on both devices (the transport plays)', covered: [{ file: RELOAD_REFUSALS, test: 'playing_paused_mixed_or_unreadable' }] },
+  E_RELOAD_MENUS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_REFUSALS, test: 'the_refusals_come_in_the_documented_order' }] },
+  E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_UNLOAD, test: 'an_unload_that_is_refused_changes_nothing_and_one_of_a_module_that_is_gone_is_not_found' }] },
+  E_RELOAD_RETAINED: { kind: 'host', reason: 'only a DSP loader that could not clear rows causes it', covered: [{ file: RELOAD_RELOAD, test: 'a_retained_dsp_refuses_at_the_queue' }] },
   E_RELOAD_KEYS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: 'packages/dkneeds/src/keys.rs', test: 'a_reload_may_add_keys_but_not_drop_one' }] },
 };

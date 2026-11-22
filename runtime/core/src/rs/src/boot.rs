@@ -382,6 +382,13 @@ pub unsafe fn report_module(k: usize, path: *const u8, res: i32, missing: &[u8; 
     }
 }
 
+/// The boot record's account of a finished load of selection index `k` (`Ops::load`): its state and its row.
+pub(crate) unsafe fn account_load(k: usize, path: *const u8, r: i32, missing: [u8; dkrt_sdk::NEEDS_LEN], name: &[u8; crate::loader::LOG_NAME]) {
+    let missing = if r == E_IMPORT { missing } else { [0u8; dkrt_sdk::NEEDS_LEN] };
+    states().finished(k, r);
+    report_module(k, path, r, &missing, name);
+}
+
 /// The result `res` of the load of the provider file at the store path `path` (`services/<name>.dks`) that provides the service `hash`, loaded at `base` (0 when
 /// it did not load): log only. The event is `MOD_LOAD` with the provider index (`loader::PROVIDER_IDX`, not a selection index), the result, the first four
 /// characters of the file name, the service hash and the base; the boot record and `LOADS` do not change.

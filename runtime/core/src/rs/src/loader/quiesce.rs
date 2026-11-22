@@ -1,6 +1,17 @@
 //! The teardown of a reload before the old code goes: close every way into the module, then wait until nothing is inside (`Loader::reload_quiesce`), or give the module back
 //! its tick and commands (`Loader::reload_abort`).
 use super::*;
+use dkrt_abi::platform::blocks_since;
+
+/// DSP blocks the reload waits after it closed every way into the module's code (its tick, its commands, its sinks): the tasks that were inside have
+/// returned and a DSP block that read its rows has ended. The block clock runs about 1500 times a second.
+const DRAIN_BLOCKS: u32 = 2;
+
+/// Have `DRAIN_BLOCKS` blocks passed since `start` (the block count when the entries were closed)? A platform with no block clock (a device without a DSP,
+/// the host tests) has nothing to wait for: always true.
+fn drained<P: Platform>(p: &P, start: Option<u32>) -> bool {
+    blocks_since(p, start).is_none_or(|n| n >= DRAIN_BLOCKS)
+}
 
 impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
     /// The first step of a reload's teardown, called once per pass until it returns `OK`: close every way into the module's code, then wait until nothing is inside.
@@ -23,7 +34,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
             self.drain_at[rec] = self.p.blocks();
             self.torn[rec] |= TORN_DRAIN;
         }
-        if crate::module_cmds::in_flight(owner) != 0 || !crate::reload::drained(&self.p, self.drain_at[rec]) {
+        if crate::module_cmds::in_flight(owner) != 0 || !drained(&self.p, self.drain_at[rec]) {
             return E_BUSY;
         }
         OK

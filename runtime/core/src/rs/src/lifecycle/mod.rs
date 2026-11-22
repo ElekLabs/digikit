@@ -1,6 +1,6 @@
 //! The package manager of the runtime (docs/plans/runtime-contract-and-lifecycle.md, RC2), over the package graph of `dkrt-lifecycle`: the runtime's real
 //! implementations of its seams. One file per seam; each is a thin adapter over the loader's own steps (`loader/package.rs`), which are the functions the old boot loops ran.
-//! The boot (`boot.rs`) and the live job (`reload.rs`) run through the manager (`rt`).
+//! The boot (`boot.rs`) and the live job (`reload/`) run through the manager (`rt`).
 //!
 //! - `session`: [`Session`], the state the seams of one manager share (the loader, the checked file between place and activate, the entries of the package that just started).
 //! - `placer`: [`RtPlacer`], place and free the image of a package.

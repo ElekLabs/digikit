@@ -4,7 +4,8 @@
 use super::assembly_tests::{live_cap, live_cap_with, Boot, Card, DeviceRegistry};
 use crate::fake_platform::FakePlatform;
 use crate::lifecycle::Rt;
-use crate::reload::{account_load, refusal_for, Ops, RealOps};
+use crate::boot::account_load;
+use crate::reload::{refusal_for, Ops, RealOps};
 use dkrt_sdk::*;
 
 pub(super) struct HostOps<'a> {

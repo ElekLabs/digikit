@@ -74,6 +74,12 @@ pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
 /// reloaded. Cleared when a module loads into the record.
 #[no_mangle]
 pub static mut DKRT_MENU_OBJS: [u8; MAX_MODULES] = [0; MAX_MODULES];
+
+/// Was a menu object built for module record `rec` (`dkrt_menu_built`)?
+pub(crate) unsafe fn menus_held(rec: usize) -> bool {
+    rec < crate::MAX_MODULES && core::ptr::read_volatile(core::ptr::addr_of!(DKRT_MENU_OBJS[rec])) != 0
+}
+
 /// Bit 31 of the `.dkm` header word at 0x30: the module was built with `DK_TRACE`; the other bits are the runtime version it needs.
 pub const FLAG_TRACE: u32 = 1 << 31;
 /// Whether this runtime loads a module that needs runtime version `needs` (the header word at 0x30, packed major << 16 | minor << 8 | patch,
