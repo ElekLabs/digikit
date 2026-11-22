@@ -16,7 +16,7 @@ import { rpc } from '@digi/regression/runtime/fx-live.ts';
 /**
  * What a card with real bytes shows the booted image, both devices. The decisions are host tests: `store_tests.rs` (a flipped byte: E_SHA and VERIFY; a
  * version 3 store is empty and the first upload makes version 4), the loader's tests (E_SHA ends a module's load), `dktransfer.test.ts` (Transfer installs
- * services), `default-modules.test.ts` (`installDefaults`); `patchkit store dump` is in the settings device test.
+ * services), `default-modules.test.ts` (`installDefaults`); `patchkit store dump` decoding is the unit tests of `storedump.rs`.
  *  - A flipped byte on the card: VERIFY says another hash, the module with that byte is not loaded.
  *  - The flash scenario: a card with a real version 3 store, a module and a selection. The new runtime boots, the first upload makes a version 4 store, a
  *    restart loads the module from the kept selection.
