@@ -183,13 +183,67 @@ def only_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.setattr(layercheck, name, lambda *a, **k: [])
 
 
-def test_the_rules_are_off_in_check_until_enforced(
+def test_check_runs_the_rules_by_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     only_boundary(monkeypatch)
-    assert layercheck.BOUNDARY_ENFORCED is False
+    assert layercheck.BOUNDARY_ENFORCED is True
     root = tree(tmp_path, {"dlog.rs": "", "package/files.rs": "use crate::dlog;\n"})
-    assert not [v for v in layercheck.check(root) if v.rule.startswith("boundary")]
+    assert [
+        v.rule for v in layercheck.check(root) if v.rule.startswith("boundary")
+    ] == ["boundary-table"]
+    assert not [
+        v
+        for v in layercheck.check(root, boundary_enforced=False)
+        if v.rule.startswith("boundary")
+    ]
+
+
+def test_items_behind_cfg_test_are_not_read_on_one_line_or_several(
+    tmp_path: Path,
+) -> None:
+    root = tree(
+        tmp_path,
+        {
+            "dlog.rs": "",
+            "package/a.rs": "#[cfg(test)] mod t { use crate::dlog; }\n#[cfg(test)]\nuse crate::dlog;\n"
+            "#[cfg(test)]\npub(crate) use crate::dlog as d;\n"
+            "#[cfg(test)]\n#[allow(dead_code)]\nfn f() {\n    crate::dlog::w();\n}\n"
+            "#[cfg(all(test, unix))] fn g() { crate::dlog::w(); }\n",
+            "package/b.rs": "#[cfg(not(test))]\nfn f() { crate::dlog::w(); }\n",
+        },
+    )
+    assert rules(root) == [("boundary-table", "package/b.rs")]
+
+
+def test_a_method_is_no_module_item(tmp_path: Path) -> None:
+    root = tree(
+        tmp_path,
+        {
+            "lib.rs": "mod package;\nmod api;\n",
+            # `reset` and `Plan` are declared inside an impl block and an inline module: they are no module items of the resident side
+            "api.rs": "pub struct Box;\nimpl Box { pub fn reset() {} }\nmod inner { pub struct Plan; }\n",
+            "package/a.rs": "fn f() { crate::api::Box::reset(); }\nfn g() { crate::api::reset(); }\n",
+        },
+    )
+    # `Box::reset` names a type's function (an abi crossing); `api::reset` is a function nobody declared at the top level, so it is a plain table crossing
+    assert sorted(rules(root)) == [
+        ("boundary-abi", "package/a.rs"),
+        ("boundary-table", "package/a.rs"),
+    ]
+
+
+def test_lib_rs_alias_of_the_package_and_path_modules(tmp_path: Path) -> None:
+    root = tree(
+        tmp_path,
+        {
+            "lib.rs": '#[path = "aux_task.rs"]\npub mod aux;\nuse package::loader;\nmod package;\n',
+            "aux_task.rs": "pub fn run() {}\n",
+            "package/files.rs": "fn f() { crate::aux::run(); }\n",
+            "package/loader.rs": "",
+        },
+    )
+    assert rules(root) == [("boundary-table", "package/files.rs")]
 
 
 def test_check_reports_crossings_as_failures_when_enforced(

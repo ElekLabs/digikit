@@ -45,9 +45,12 @@ Rules:
             module patches the firmware only with the machine page hooks (finding 128: runtime-owned, with slots); the UI loop, main-OS task and MIDI
             receive hooks and the exception hook install are in the adapter `core/platform`.
   boundary-hook, boundary-table, boundary-abi
-            The resident core (the runtime crate outside `package/`) reaches package code only through `hooks.rs`; package code reaches resident code only through `package/resident.rs`
-            (the resident table rows); a type that crosses is in the abi crate (docs/plans/resident-core-and-system-package.md, section 4). Not enforced until RC2s-1 S7 adds both files:
-            `BOUNDARY_ENFORCED` switches `check()` on, `--boundary-report` lists the crossings at any time.
+            The resident core (the runtime crate outside `package/`) reaches package code only through `hooks.rs`; package code reaches resident code only through the facade
+            `package/resident.rs` and its folder, which call the resident table (`dkrt_abi::resident`) and name no resident module; a type that crosses is in the abi crate
+            (docs/plans/resident-core-and-system-package.md, section 4). What the rule does not see: a `use package::...;` alias line of `lib.rs` (the crate-root name of the
+            package's loader that `optional_imports!` expands to; RC2s-2 drops it with the package crate), items inside inline `mod name { }` blocks and impls (only the
+            declarations at the top level of a file count as module items), a module named by `#[path]` outside `lib.rs` (its file name is read as its module name), and a path built
+            by a macro. Host-test files and every item behind `#[cfg(test)]` are not read. `BOUNDARY_ENFORCED` switches `check()` on, `--boundary-report` lists the crossings at any time.
   imports   Every function of <dk/platform/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -745,8 +748,8 @@ def check_runtime_arrows(root: Path) -> list[Violation]:
 # The resident/package boundary (docs/plans/resident-core-and-system-package.md, section 4; RC2s-1 S8). Resident code is the runtime crate outside `package/`; package code is `package/`.
 # Resident code reaches package code only through the hooks module `hooks.rs` (the struct the package fills at entry); package code reaches resident code only through
 # `package/resident.rs` (the rows of the resident table) and the abi crate. Types that cross the boundary live in dkrt-abi.
-# The rules are not enforced until S7 has added `hooks.rs` and `package/resident.rs`: `check()` runs them when BOUNDARY_ENFORCED is True, `--boundary-report` lists the crossings any time.
-BOUNDARY_ENFORCED = False
+# `check()` runs the rules when BOUNDARY_ENFORCED is True; `--boundary-report` lists the crossings any time.
+BOUNDARY_ENFORCED = True
 BOUNDARY_HOOKS_FILE = "hooks.rs"
 BOUNDARY_TABLE_FILE = "package/resident.rs"
 BOUNDARY_HOOK_HINT = "call the package through a hook of `hooks.rs` (a function pointer the package fills at entry; null keeps the stock behaviour)"
@@ -791,6 +794,13 @@ BOUNDARY_DECL = re.compile(
 )
 BOUNDARY_MOD_LINE = re.compile(
     r"^[ \t]*(?:pub(?:\([^)]*\))?[ \t]+)?mod[ \t]+\w+[ \t]*;", re.M
+)
+# `use package::loader;` in lib.rs: the crate-root name `optional_imports!` expands to, not a call.
+BOUNDARY_ALIAS_LINE = re.compile(
+    r"^[ \t]*(?:pub(?:\([^)]*\))?[ \t]+)?use[ \t]+package::\w+[ \t]*;", re.M
+)
+BOUNDARY_PATH_MOD = re.compile(
+    r"#\[path[ \t]*=[ \t]*\"[^\"]+\"\]\s*(?:pub(?:\([^)]*\))?[ \t]+)?mod[ \t]+(\w+)[ \t]*;"
 )
 
 
@@ -848,15 +858,75 @@ def crate_paths(text: str, mod: list[str] | None = None) -> list[tuple[int, list
     return found
 
 
+BOUNDARY_CFG_TEST = re.compile(r"^\s*#\[cfg\((?:all\()?test[,)]")
+BOUNDARY_STRING = re.compile(r'"(?:\\.|[^"\\])*"')
+BOUNDARY_CHAR = re.compile(r"'(?:\\.|[^'\\])'")
+BOUNDARY_ATTR_LINE = re.compile(r"^\s*#\[")
+
+
+def braces_of(line: str) -> tuple[int, int]:
+    """The `{` and `}` of a line outside string and char literals."""
+    line = BOUNDARY_CHAR.sub("''", BOUNDARY_STRING.sub('""', line))
+    return line.count("{"), line.count("}")
+
+
+def without_test_items(lines: list[str]) -> list[str]:
+    """The lines with every item behind `#[cfg(test)]` or `#[cfg(all(test, ..))]` blanked: an inline module, a function, an impl, a `use`, a static, also when the attribute
+    and the item share a line (line numbers kept)."""
+    out = list(lines)
+    i = 0
+    while i < len(lines):
+        if not BOUNDARY_CFG_TEST.match(lines[i]):
+            i += 1
+            continue
+        start = i
+        # the item starts after the attribute on this line, or on a following line that is no attribute
+        first = lines[i].split("]", 1)[1] if "]" in lines[i] else ""
+        j = i
+        text = first
+        while not text.strip() or BOUNDARY_ATTR_LINE.match(text):
+            j += 1
+            if j >= len(lines):
+                break
+            text = lines[j]
+        depth, seen = 0, False
+        end = j
+        while end < len(lines):
+            opens, closes = braces_of(lines[end] if end != start else first)
+            depth += opens - closes
+            seen = seen or opens > 0
+            body = lines[end] if end != start else first
+            if (seen and depth <= 0) or (
+                not seen and depth == 0 and body.rstrip().endswith(";")
+            ):
+                break
+            end += 1
+        for k in range(start, min(end, len(lines) - 1) + 1):
+            out[k] = ""
+        i = end + 1
+    return out
+
+
+def module_level(text: str) -> str:
+    """The text with the lines blanked that lie inside braces (the declarations at the top level of a file stay; line numbers are kept)."""
+    out, depth = [], 0
+    for line in text.split("\n"):
+        out.append(line if depth == 0 else "")
+        opens, closes = braces_of(line)
+        depth += opens - closes
+    return "\n".join(out)
+
+
 def declared_items(src: Path) -> dict[tuple[str, ...], str]:
-    """The items declared in the runtime crate's sources (test files and test modules left out): module path plus name -> struct, enum, type, trait, union, fn, const or static."""
+    """The items declared at the top level of the runtime crate's files (test files and every item behind `#[cfg(test)]` left out; a method, an inline module's item and an item of an
+    `extern` block are not module items): module path plus name -> struct, enum, type, trait, union, fn, const or static."""
     items: dict[tuple[str, ...], str] = {}
     for f in sorted(src.rglob("*.rs")):
         r = f.relative_to(src)
         if is_runtime_test_file(r):
             continue
         lines = f.read_text(encoding="utf-8").split("\n")
-        text = rust_without_comments("\n".join(without_test_modules(lines)))
+        text = module_level(rust_without_comments("\n".join(without_test_items(lines))))
         mod = module_path(r)
         for m in BOUNDARY_DECL.finditer(text):
             items.setdefault((*mod, m.group(2)), m.group(1))
@@ -880,6 +950,26 @@ def names_a_type(segs: list[str], items: dict[tuple[str, ...], str]) -> bool:
     return False
 
 
+def reexported_names(lib: Path) -> set[str]:
+    """The names `lib.rs` brings into the crate root with `use` (`pub use storage::{card, store}` makes `crate::card` and `crate::store`): resident names too. A `use package::...` alias names package code and is left out."""
+    if not lib.is_file():
+        return set()
+    text = rust_without_comments(lib.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for m in BOUNDARY_USE.finditer(text):
+        for path in expand_use_tree(m.group(1)):
+            if (
+                path
+                and path[0] not in ("package", "crate", "self", "super")
+                and not path[0].startswith("dkrt")
+                and path[0] not in ("core", "std", "alloc")
+            ):
+                last = path[-1]
+                if last not in ("*", "self"):
+                    names.add(last)
+    return names
+
+
 def check_resident_boundary(root: Path) -> list[Violation]:
     """The resident/package boundary: hooks one way, the resident table the other, shared types in the abi crate. Host-test files and inline test modules are not read.
     Exemptions: `hooks.rs` may call package functions and `package/resident.rs` may name resident functions, but neither may name a type of the other side (resident types in the table's signatures come from the abi crate); `lib.rs` is read except its `mod` lines."""
@@ -891,6 +981,10 @@ def check_resident_boundary(root: Path) -> list[Violation]:
         p.stem for p in src.glob("*.rs") if p.stem not in ("lib", "package")
     } | {p.name for p in src.iterdir() if p.is_dir() and p.name != "package"}
     resident |= {k[0] for k in items if len(k) == 1}
+    resident |= reexported_names(src / "lib.rs")
+    lib = src / "lib.rs"
+    if lib.is_file():
+        resident |= set(BOUNDARY_PATH_MOD.findall(lib.read_text(encoding="utf-8")))
     out: list[Violation] = []
     for f in sorted(src.rglob("*.rs")):
         r = f.relative_to(src)
@@ -899,11 +993,10 @@ def check_resident_boundary(root: Path) -> list[Violation]:
         rp = r.as_posix()
         in_package = r.parts[0] == "package"
         lines = f.read_text(encoding="utf-8").split("\n")
-        text = rust_without_comments("\n".join(without_test_modules(lines)))
+        text = rust_without_comments("\n".join(without_test_items(lines)))
         if rp == "lib.rs":
-            text = BOUNDARY_MOD_LINE.sub(
-                lambda m: re.sub(r"[^\n]", " ", m.group(0)), text
-            )
+            for line_re in (BOUNDARY_MOD_LINE, BOUNDARY_ALIAS_LINE):
+                text = line_re.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
         seen: set[tuple[int, str]] = set()
         for line, segs in crate_paths(text, module_path(r)):
             first = segs[0]
