@@ -293,6 +293,10 @@ fn a_module_context_names_its_owner() {
     let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
+        // other tests leave contexts bound
+        for rec in 0..crate::state::REC_MAX {
+            crate::entry::unbind(rec);
+        }
         crate::entry::bind(2);
         // the host's addresses are 64 bits wide: take the address of the context itself, not `ctx_addr`'s u32
         let ctx = core::ptr::addr_of!(entry::DKRT_CTXS[2]) as usize;

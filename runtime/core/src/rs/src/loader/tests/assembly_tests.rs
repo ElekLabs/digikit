@@ -807,21 +807,17 @@ fn dsp_info_of(dev: Dev, l: &Boot, plan: &Plan) -> Option<Vec<u32>> {
 
 /// The DSP of a provider's load for a host test (see `dsp_info_of`): the table is in place and the link acknowledges while this lives.
 pub(super) struct DspEnv {
-    _info: Vec<u32>,
+    // fields drop in this order: the script ends first, the table it reads goes last
+    _script: crate::cleanup_tests::LinkScript,
     _guard: crate::cleanup_tests::VoiceInfoGuard,
-}
-
-impl Drop for DspEnv {
-    fn drop(&mut self) {
-        unsafe { crate::cleanup_tests::script_end() }
-    }
+    _info: Vec<u32>,
 }
 
 pub(super) unsafe fn dsp_env(dev: Dev, l: &Boot, plan: &Plan) -> Option<DspEnv> {
     let info = dsp_info_of(dev, l, plan)?;
     let guard = crate::cleanup_tests::VoiceInfoGuard::set(info.as_ptr());
-    crate::cleanup_tests::script_link(true);
-    Some(DspEnv { _info: info, _guard: guard })
+    let script = crate::cleanup_tests::LinkScript::new(true);
+    Some(DspEnv { _script: script, _guard: guard, _info: info })
 }
 
 /// The seam of a fixture with its provider: the graph and the rules of the core accept the module and the search finds `want` on the card, the package manager brings the providers up (the

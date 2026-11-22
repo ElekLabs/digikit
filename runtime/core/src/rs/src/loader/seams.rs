@@ -64,9 +64,9 @@ pub(crate) type DeviceImages = RealImages;
 #[cfg(not(test))]
 pub(crate) const DEVICE_IMAGES: DeviceImages = RealImages;
 #[cfg(test)]
-pub(crate) type DeviceImages = crate::cleanup_tests::CheckedImages;
+pub(crate) type DeviceImages = crate::fake_checked_images::CheckedImages;
 #[cfg(test)]
-pub(crate) const DEVICE_IMAGES: DeviceImages = crate::cleanup_tests::CheckedImages;
+pub(crate) const DEVICE_IMAGES: DeviceImages = crate::fake_checked_images::CheckedImages;
 
 impl Images for RealImages {
     unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {

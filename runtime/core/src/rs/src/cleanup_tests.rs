@@ -5,8 +5,7 @@ use super::*;
 use dkrt_abi::dev_addr::DevAddr;
 use crate::core_api::{CoreApi, REAL_CORE};
 use dkrt_abi::link::{Owner, Sequence};
-use crate::fake_platform::test_arena::TestArena;
-use crate::loader::{Block, Images, RealImages, Staged};
+use crate::fake_platform::test_arena::{ScriptedArena, TestArena};
 use crate::entry::Ctx;
 use crate::handlers::fx_fixture::{frows, reset_rows};
 use crate::handlers::machines_fixture::vrows;
@@ -32,44 +31,10 @@ impl Hold {
 impl Drop for Hold {
     fn drop(&mut self) {
         unsafe { BLOCKS = (0, 0) }
+        crate::fake_checked_images::watch(0);
     }
 }
 
-/// The images of the loader static in host tests: the device's, and a free of the module block checks that the DSP side let go of it first (`mod_len` is cleared before the
-/// block goes back to the arena).
-pub struct CheckedImages;
-impl Images for CheckedImages {
-    unsafe fn stage(&mut self, path: *const u8) -> Result<Staged, i32> {
-        RealImages.stage(path)
-    }
-    unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
-        RealImages.alloc(n)
-    }
-    unsafe fn free(&mut self, addr: u32) {
-        if BLOCKS.0 != 0 && addr == BLOCKS.0 {
-            assert_eq!(dsp::ds().mod_len[0], 0, "the module block is freed after its DSP length is cleared");
-        }
-        RealImages.free(addr)
-    }
-    unsafe fn import_addr(&mut self, name: *const u8) -> u32 {
-        RealImages.import_addr(name)
-    }
-    unsafe fn svc_import_addr(&mut self, name: *const u8) -> u32 {
-        RealImages.svc_import_addr(name)
-    }
-    unsafe fn import_needs(&mut self, name: *const u8) -> Option<&'static str> {
-        RealImages.import_needs(name)
-    }
-    unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32 {
-        RealImages.list(prefix, out, max)
-    }
-    unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
-        RealImages.enter_init(rec, init, ctx)
-    }
-    unsafe fn enter_fini(&mut self, rec: usize, fini: u32, ctx: *const Ctx) {
-        RealImages.enter_fini(rec, fini, ctx)
-    }
-}
 /// Whether the arena still holds the block at device address `a`.
 fn live(a: u32) -> bool {
     unsafe { crate::arena::is_live(DevAddr::new(a)) }
@@ -215,29 +180,42 @@ static mut IMAGE_OK: bool = false;
 
 static mut IMAGE_SENDS: Vec<(u32, u32)> = Vec::new();
 
-/// Script the link for a host test of a service file's DSP part: area and slot sends are accepted, and the transfer is taken (`ack`) or fails (a link error after the first
-/// accepted send, the image). Hold the test lock; `script_end` undoes it.
-pub(crate) unsafe fn script_link(ack: bool) {
-    crate::fake_platform::test_arena::script_up();
-    *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
-    crate::link::lk().spin = 20_000;
-    LINK = Link {
-        completion: if ack { Completion::Ack } else { Completion::ErrorAt(1) },
-        original_failure: false,
-        tries: 0,
-        accepted: 0,
-        polls: 0,
-        no_fx_info: false,
-        strict_tick_drop: false,
-        events: Vec::new(),
-    };
-    IMAGE_SENDS = Vec::new();
-    IMAGE_OK = true;
+/// The scripted link of a host test of a service file's DSP part (`new`): area and slot sends are accepted and logged, and the transfer is taken (`ack`) or fails (a link error
+/// after the first accepted send, the image). It brings up the arena too. Hold the test lock and declare it after the lock guard; dropping it ends the script and takes the arena down.
+pub(crate) struct LinkScript {
+    _arena: ScriptedArena,
 }
 
-pub(crate) unsafe fn script_end() {
-    crate::fake_platform::test_arena::script_down();
-    IMAGE_OK = false;
+impl LinkScript {
+    pub(crate) unsafe fn new(ack: bool) -> LinkScript {
+        let script = LinkScript { _arena: ScriptedArena::up() };
+        script.set(ack);
+        script
+    }
+
+    /// Start the script over: the link is idle again and answers as `ack` says, the log of sends is empty.
+    pub(crate) unsafe fn set(&self, ack: bool) {
+        *crate::link::lk() = crate::link::Link::new(crate::link::DspTransport);
+        crate::link::lk().spin = 20_000;
+        LINK = Link {
+            completion: if ack { Completion::Ack } else { Completion::ErrorAt(1) },
+            original_failure: false,
+            tries: 0,
+            accepted: 0,
+            polls: 0,
+            no_fx_info: false,
+            strict_tick_drop: false,
+            events: Vec::new(),
+        };
+        IMAGE_SENDS = Vec::new();
+        IMAGE_OK = true;
+    }
+}
+
+impl Drop for LinkScript {
+    fn drop(&mut self) {
+        unsafe { IMAGE_OK = false }
+    }
 }
 
 /// The area and slot sends of the script so far: (destination byte address, first word).
@@ -290,6 +268,7 @@ unsafe fn seed(completion: Completion, fx: bool, published: bool, queued: bool) 
     *st() = core::mem::zeroed();
     crate::arena::init();
     BLOCKS = (crate::arena::alloc(240).get(), crate::arena::alloc(496).get());
+    crate::fake_checked_images::watch(BLOCKS.0);
     *dsp::ds() = core::mem::zeroed();
     reset_rows();
     *boot::info() = core::mem::zeroed();

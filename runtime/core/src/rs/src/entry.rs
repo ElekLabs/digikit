@@ -261,6 +261,7 @@ mod tests {
 
     #[test]
     fn a_context_is_one_live_entry_of_the_table() {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe {
             let rec = MAX_MODULES - 1;
             unbind(rec);

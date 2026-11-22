@@ -1,6 +1,6 @@
 //! A service file with a DSP part over fakes (docs/plans/r12-8-sharc-stubs.md 2.5 and 2.6). The ColdFire half is live from the boot hook; the DSP code and then the slots of
 //! the file follow over the UI-loop passes; a failure of the DSP part takes the service and its dependents down again through the package manager. The
-//! DSP link is scripted (`cleanup_tests::script_link`): the area image and the slot words arrive as sends that the script logs.
+//! DSP link is scripted (`cleanup_tests::LinkScript`): the area image and the slot words arrive as sends that the script logs.
 use super::*;
 use crate::cleanup_tests as link_script;
 use crate::fake_platform::Call;
@@ -59,16 +59,16 @@ fn dsp_provider_file() -> Vec<u8> {
 
 /// A loader whose store holds that provider and the consumer module `consumer` (a hard need of `SVC`), the image has the DSP slot, the link is scripted and the search found the
 /// provider.
-unsafe fn boot_with_dsp_provider(ack: bool) -> Fake {
+unsafe fn boot_with_dsp_provider(ack: bool) -> (Fake, link_script::LinkScript) {
     let mut l = staged_boot(dsp_provider_file(), consumer_file(&user_table()));
     l.p.info_dsp.borrow_mut().push((name_hash(SLOT_NAME), 1));
     // the DSP of the test: the link is idle and answers as scripted
     *dsp::ds() = core::mem::zeroed();
     dsp::init_once();
-    link_script::script_link(ack);
+    let script = link_script::LinkScript::new(ack);
     l.find_providers(1);
     assert_eq!(l.found.n, 1, "the search found the provider");
-    l
+    (l, script)
 }
 
 /// UI-loop passes until the DSP loader is idle again (at most 200), through the lifecycle as the device does.
@@ -89,7 +89,7 @@ unsafe fn run_passes(rt: &mut crate::lifecycle::Rt<FakePlatform, FakeImages, Fak
 fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_sequence() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let mut l = boot_with_dsp_provider(true);
+        let (mut l, script) = boot_with_dsp_provider(true);
         let mut rt = boot_selection(&mut l, &[PATH]);
         let rec = MAX_MODULES;
         // the ColdFire half is live from the boot hook, the DSP half is under way: the file is `LOADING`, its hooks are in, its slot is claimed and not written
@@ -105,7 +105,7 @@ fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_s
         // the slot write: one send to the word of the slot (index 1 of the block, below the area), with the pc of the entry in the placed image
         assert_eq!(sends[1], (area - 64 + 4, dkrt_abi::dsp::L2_SW_BASE), "slot 1 holds the pc of the DSP entry");
         assert_eq!(dsp::ds().failures, 0);
-        link_script::script_end();
+        drop(script);
     }
 }
 
@@ -113,7 +113,7 @@ fn a_services_dsp_code_is_acknowledged_first_then_its_slots_are_written_in_one_s
 fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_the_manager() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let mut l = boot_with_dsp_provider(false);
+        let (mut l, script) = boot_with_dsp_provider(false);
         let mut rt = boot_selection(&mut l, &[PATH]);
         let rec = MAX_MODULES;
         // the dependent loaded against the provider's export, and its own DSP load is queued behind the provider's
@@ -141,7 +141,7 @@ fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_the_
         assert_eq!(link_script::image_sends().len(), 1, "only the image was sent");
         assert!(l.p.calls.borrow().contains(&Call::Mask));
         assert!(!dsp::retained());
-        link_script::script_end();
+        drop(script);
     }
 }
 
@@ -149,7 +149,7 @@ fn a_services_dsp_failure_takes_the_service_and_its_dependents_down_through_the_
 fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_keeps_the_memory_until_a_retry() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let mut l = boot_with_dsp_provider(true);
+        let (mut l, script) = boot_with_dsp_provider(true);
         let mut rt = boot_selection(&mut l, &[PATH]);
         run_passes(&mut rt);
         let rec = MAX_MODULES;
@@ -163,14 +163,14 @@ fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_
         let free = l.m.log.iter().position(|e| *e == Ev::Free(base)).unwrap();
         assert!(free > l.m.log.iter().position(|e| matches!(e, Ev::Fini(..))).unwrap());
         assert_eq!(site_bytes(&l, 6), STOCK);
-        link_script::script_end();
+        drop(script);
         // a link that does not take the zeros: the take-down stops at the restore, nothing is freed, and a retry with a link that answers finishes it
-        let mut l = boot_with_dsp_provider(true);
+        let (mut l, script) = boot_with_dsp_provider(true);
         let mut rt = boot_selection(&mut l, &[PATH]);
         run_passes(&mut rt);
         let rec = MAX_MODULES;
         let service = PackageId(rec as u8);
-        link_script::script_link(false);
+        script.set(false);
         crate::files::ready(rec);
         let busy = rt.manager().unwrap().unload(service);
         assert!(matches!(busy, Err(dkrt_lifecycle::LifecycleError::Busy { package }) if package == service), "{busy:?}");
@@ -178,10 +178,10 @@ fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_
         assert_eq!(crate::files::ready_state(rec), 2, "the file client is not retired");
         assert_eq!(records::module(rec).used, 1, "the record and its memory are kept");
         assert!(!l.m.log.iter().any(|e| matches!(e, Ev::Fini(..)) && *e != Ev::Fini(0, records::module(0).base + 4)), "no fini of the service before the slots are known to be zero");
-        link_script::script_link(true);
+        script.set(true);
         rt.manager().unwrap().retry_pending().unwrap();
         assert_eq!(records::module(rec).used, 0, "the retry took the service down");
-        link_script::script_end();
+        drop(script);
     }
 }
 
@@ -190,12 +190,12 @@ fn a_dsp_slot_fill_needs_a_dsp_slot_of_the_image_and_an_entry_inside_the_dsp_ima
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         // the image has no such slot: the file is refused as a whole, nothing is installed
-        let mut l = boot_with_dsp_provider(true);
+        let (mut l, script) = boot_with_dsp_provider(true);
         l.p.info_dsp.borrow_mut().clear();
         let _rt = boot_selection(&mut l, &[PATH]);
         assert_eq!(records::module(MAX_MODULES).used, 0);
         assert_eq!((l.installer.count(), l.dsp_install.claimed(MAX_MODULES as u8)), (0, false));
         assert_eq!(site_bytes(&l, 6), STOCK);
-        link_script::script_end();
+        drop(script);
     }
 }

@@ -134,6 +134,8 @@ mod lifecycle;
 #[cfg(test)]
 mod cleanup_tests;
 #[cfg(test)]
+mod fake_checked_images;
+#[cfg(test)]
 mod test_lock;
 #[cfg(test)]
 mod fake_platform;
