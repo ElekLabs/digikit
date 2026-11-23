@@ -21,6 +21,7 @@ import {
 } from './TransferParts';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
+import type { ModuleFileClient } from '../../src/module-ui/module-files';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { createPaneSelect } from '../../src/transfer/pane-select';
 import SplitPane from './SplitPane';
@@ -230,6 +231,15 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     const id = r.id ?? (r.known ? r.name : undefined);
     return id && env.moduleFiles?.(id) ? id : undefined;
   };
+
+  function moduleFiles(id: string): ModuleFileClient {
+    return {
+      list: () => app.backend.listModuleFiles(id),
+      read: (name) => app.backend.readModuleFile(id, name),
+      send: (name, bytes, progress) => app.backend.putModuleFile(id, name, bytes, progress),
+      remove: (name) => app.backend.removeModuleFile(id, name),
+    };
+  }
 
   const browseOptions = (): SegmentedOption<string>[] =>
     (env.libraryDevices ?? []).map((d) => ({ id: d, label: deviceNameOf(d) }));
@@ -514,10 +524,23 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
   return (
     <>
       {lists}
-      <Show when={!localOnly() && selectedId()}>
+      <Show when={!localOnly() && selectedId()} keyed>
         {(id) => (
-          <Show when={env.moduleFiles?.(id())}>
-            {(spec) => <ModuleFilesArea ctx={props.ctx} id={id()} spec={spec()} />}
+          <Show when={env.moduleFiles?.(id)}>
+            {(spec) => (
+              <ModuleFilesArea
+                ctx={props.ctx}
+                id={id}
+                spec={spec()}
+                files={moduleFiles(id)}
+                refresh={lastView}
+                prepareSend={async () => {
+                  if (lastView()?.modules.find((row) => row.id === id)?.on_card === 'no') {
+                    await app.backend.install([id], () => {});
+                  }
+                }}
+              />
+            )}
           </Show>
         )}
       </Show>

@@ -16,7 +16,7 @@ export interface SettingsClient {
 // to the lifetime of the mount and the selected connection.
 export interface ModulePage {
   descriptor: ModuleDescriptor;
-  open(current: () => boolean): { settings: SettingsClient; Panel?: Component };
+  open(current: () => boolean): { settings?: SettingsClient; Panel?: Component };
 }
 
 export interface ModulePageSource {

@@ -696,9 +696,11 @@ export async function putModuleFile(
   name: string,
   bytes: Uint8Array,
   progress: (sent: number, total: number) => void = () => {},
+  beforeWrite?: () => void,
 ): Promise<void> {
   const path = moduleFilePath(moduleId, name);
   requireRuntime(await s.info());
+  beforeWrite?.();
   await s.put(path, bytes, progress);
   if (!(await s.verifyFile(path, bytes)))
     throw new DkError({
@@ -708,9 +710,15 @@ export async function putModuleFile(
 }
 
 /** DELETE one file of a module. */
-export async function removeModuleFile(s: DkSession, moduleId: string, name: string): Promise<void> {
+export async function removeModuleFile(
+  s: DkSession,
+  moduleId: string,
+  name: string,
+  beforeWrite?: () => void,
+): Promise<void> {
   const path = moduleFilePath(moduleId, name);
   requireRuntime(await s.info());
+  beforeWrite?.();
   await s.delete(path);
 }
 

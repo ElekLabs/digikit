@@ -17,6 +17,7 @@ import { headerInfo, modulePath, portPath, servicePath } from '@digi/workbench-c
 import { fakeDkm } from '@digi/workbench-core/target-ops/fake-store.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import type { PreviewLibrary } from './module-library';
+import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
 import { deviceRevision, sim } from './sim';
 import { parseDkmHeader } from '@digi/workbench-core/target-ops/store.ts';
 import { packedVersion, previewRuntimeVersion } from './runtime-version';
@@ -105,7 +106,8 @@ async function seedStore(library: PreviewLibrary, profile: DeviceProfile, pages:
   const selected = new Map<string, Uint8Array | undefined>();
   if (sim.dev !== 'empty') {
     const [outdated, installed] = library.modules(device);
-    for (const { id, pack } of [installed, outdated].filter((m) => m !== undefined)) {
+    const withFiles = library.modules(device).filter(({ id }) => Object.hasOwn(MODULE_FILES, id));
+    for (const { id, pack } of [installed, outdated, ...withFiles].filter((m) => m !== undefined)) {
       const bytes = new Uint8Array(await library.library.read(device, pack.file));
       const header = headerInfo(bytes);
       if (!header) continue;

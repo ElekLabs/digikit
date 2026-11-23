@@ -15,6 +15,7 @@ import {
   untrack,
 } from 'solid-js';
 import ModulePageView from '@digi/workbench-core/ui/module-ui/ModulePageView.tsx';
+import { moduleFilePages } from './module-file-pages';
 import type { ModulePageSource } from '@digi/workbench-core/module-ui/module-page.ts';
 import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
@@ -203,12 +204,13 @@ export default function Console(
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
   const [moduleId, setModuleId] = createSignal('');
+  const filePages = moduleFilePages(app);
   const modulePages = createMemo(() => {
     const source = props.modulePages;
-    if (!source || app.target.switching() || app.target.libraryOnly()) return [];
+    if (app.target.switching() || app.target.libraryOnly()) return [];
     const key = targetKey(target());
     return app.inventory.modules().flatMap(({ name }) => {
-      const view = source.lookup(key, name);
+      const view = source?.lookup(key, name) ?? filePages.get(name);
       return view ? [{ id: name, view }] : [];
     });
   });

@@ -77,12 +77,14 @@ export default function ModulePageView(props: { page: ModulePage; current: () =>
   return (
     <main class="module-page">
       <h2>{props.page.descriptor.name}</h2>
-      <Show when={props.page.descriptor.settings.length}>
-        <section class="module-settings" aria-label="Settings">
-          <For each={props.page.descriptor.settings}>
-            {(field) => <TextField field={field} settings={client.settings} />}
-          </For>
-        </section>
+      <Show when={props.page.descriptor.settings.length > 0 && client.settings}>
+        {(settings) => (
+          <section class="module-settings" aria-label="Settings">
+            <For each={props.page.descriptor.settings}>
+              {(field) => <TextField field={field} settings={settings()} />}
+            </For>
+          </section>
+        )}
       </Show>
       <Show when={client.Panel}>{(panel) => <Dynamic component={panel()} />}</Show>
     </main>

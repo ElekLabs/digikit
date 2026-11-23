@@ -43,6 +43,8 @@ export interface TransferSource {
 
 /** The `[files]` table of a module.toml: the files the module owns under `data/<module id>/` and how the page shows them. */
 export interface ModuleFilesSpec {
+  /** The module name in its manifest, used for its Workbench page. */
+  name: string;
   /** The title of the files area. */
   label: string;
   /** The extensions of the files, without the dot. */

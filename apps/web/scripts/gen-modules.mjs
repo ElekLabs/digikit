@@ -329,7 +329,7 @@ export function moduleFilesSource(root = repoRoot) {
   for (const file of manifests) {
     const d = parse(readFileSync(file, 'utf8'));
     if (!d.files) continue;
-    const spec = { label: d.files.label, ext: d.files.ext, preview: d.files.preview };
+    const spec = { name: d.module.name, label: d.files.label, ext: d.files.ext, preview: d.files.preview };
     entries.push(`  ${JSON.stringify(d.module.id)}: ${JSON.stringify(spec)},`);
   }
   return [

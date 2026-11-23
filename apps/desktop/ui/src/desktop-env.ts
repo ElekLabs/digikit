@@ -6,7 +6,6 @@ import { listingChanged } from '@digi/workbench-core/transfer/refresh-core.ts';
 import { deviceNameOf, runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { SamplesSlot, TransferEnv } from '@digi/workbench-core/transfer/env.ts';
-import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
 import { targetLabel, type Target } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import { bumpCardRefresh } from './card-state';
@@ -128,7 +127,6 @@ export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEn
       },
       read: async (device, path) => new Uint8Array(await host.library.read(device, path)),
     },
-    moduleFiles: (id) => MODULE_FILES[id],
     wasm: hostWasmSource(host),
     deviceName: async (device) => deviceNameOf(device),
     // the Emulator target has its own bulk link (the daemon's usb.bulk.in/out), so the pill and the transfers there follow the same path as a device

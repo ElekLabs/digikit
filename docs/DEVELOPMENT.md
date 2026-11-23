@@ -355,7 +355,7 @@ A boot screen is a script `x.mjs` that exports `ticks` and `draw(ctx, t)` and dr
 1. `mise run bootscreen -- dev x.mjs`: packs the script and opens a browser preview that reloads when the file changes.
 2. `mise run bootscreen -- sheet x.mjs`: writes a contact sheet PNG of up to 24 ticks to `out/bootscreens/` (a way to see the result without a browser).
 3. `mise run bootscreen -- put x.mjs [--port Digitakt]`: packs the script and uploads it to `data/tools/bootscreen/x.dkbs` on the device (`wb store put`, verified after the upload).
-4. Or open Workbench, Transfer, Modules, tick `bootscreen`: the "Boot screens" area chooses or takes `.dkbs` files, previews them without a device, and sends them (the module too, when it is not on the device).
+4. Install the Boot screen module in Transfer and restart the target to load it. Open **Modules → Boot screen** in the Workbench sidebar to choose or drop `.dkbs` files, preview them, then send or delete them on the selected target. The preview starts with Boot screen loaded on its simulated card.
 
 The device applies a file only after you choose it in the module's settings on the device and restart.
 

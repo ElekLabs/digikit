@@ -62,3 +62,10 @@
 .module-field [role='alert'] {
   flex-basis: 100%;
 }
+
+.module-page .module-file-controls {
+  margin-top: 1.5rem;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
