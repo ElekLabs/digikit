@@ -4,7 +4,9 @@
 //!
 //! - `list` (the SETTINGS row): one row for each effect with a page, `NAME: SEND` or `NAME: MASTER`;
 //! - `pick_effect` (a row of the list): the routes the effect may take now (`fxsend::effect`);
-//! - `pick_route` (a route): on a change, queue the reload of the effect's module and save `fx/route/<module id>`; the reload registers the effect again and reads the key.
+//! - `pick_route` (a route): on a change, save `fx/route/<module id>` first, then queue the reload of the effect's module; the reload registers the effect again and reads the key.
+//!
+//! A callback of the UI reaches the steps as an `Event` through the owner's `Reentry` queue (`Routing::run`), so a pick that arrives while a call of the service runs is queued, never lost.
 //!
 //! The steps keep what the next step needs (the rows listed, the effect chosen) in `Routing`, a field of the owner.
 use crate::fxsend::{self, Effect, Route};
@@ -19,47 +21,86 @@ pub enum Step {
     Route,
 }
 
-/// The UI the steps use (a choice popup and a toast); the text has no terminator and is already cut to what the popup shows.
+/// What a UI callback asks of the steps; the owner's `Reentry` queue carries it to `Routing::run`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Event {
+    /// The SETTINGS row was opened.
+    List,
+    /// Row `n` of the effect list was chosen.
+    Effect(u8),
+    /// Route `n` of the route popup was chosen.
+    Route(u8),
+}
+
+/// The UI the steps use (a choice popup and a toast). A `Line` is NUL terminated and cut to what the popup shows, so the adapter takes its bytes as they are.
 pub trait Ui {
     /// Show a choice of `items`; `step` is the step its answer runs. False when it could not be shown.
-    fn choice(&mut self, title: &str, items: &[&str], step: Step) -> bool;
-    fn toast(&mut self, text: &str);
+    fn choice(&mut self, title: &Line, items: &[Line], step: Step) -> bool;
+    fn toast(&mut self, text: &Line);
 }
 
 /// Rows the list can have: one for each effect row of the image.
 pub const LIST_MAX: usize = MAX_FX;
 /// Characters of an effect's name in the list and in toasts.
 pub const NAME_MAX: usize = 12;
-/// The longest line: a name, `: MASTER`.
-const LINE_MAX: usize = 32;
+/// Bytes of a line, the NUL included (`DK_UI_ROW` and `DK_UI_TOAST` of <dk/platform/ui.h> are not longer).
+pub const LINE_MAX: usize = 32;
 
-/// A line of text on the stack: upper case, cut to its size.
-struct Line {
+/// The route texts, indexed by `Route::byte` (0 master, 1 send): the one copy of each.
+const ROUTE_TEXT: [&[u8]; 2] = [b"MASTER", b"SEND"];
+
+/// A line of text on the stack: upper case ASCII, NUL terminated, cut to its size.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Line {
     buf: [u8; LINE_MAX],
     len: usize,
 }
 
 impl Line {
-    fn new() -> Line {
+    pub fn new() -> Line {
         Line {
             buf: [0; LINE_MAX],
             len: 0,
         }
     }
 
-    fn put(&mut self, text: &[u8]) -> &mut Line {
+    /// A line of `text`.
+    pub fn of(text: &str) -> Line {
+        let mut line = Line::new();
+        line.put(text.as_bytes());
+        line
+    }
+
+    /// Add `text`; a byte that is not ASCII shows as `?`, so the line always is valid text.
+    pub fn put(&mut self, text: &[u8]) -> &mut Line {
         for b in text {
-            if self.len < LINE_MAX {
-                self.buf[self.len] = b.to_ascii_uppercase();
+            if self.len < LINE_MAX - 1 {
+                self.buf[self.len] = if b.is_ascii() {
+                    b.to_ascii_uppercase()
+                } else {
+                    b'?'
+                };
                 self.len += 1;
             }
         }
         self
     }
 
-    fn str(&self) -> &str {
-        // only ASCII bytes of module ids and literals go in; anything else shows as a failure of this line, never a panic
-        core::str::from_utf8(&self.buf[..self.len]).unwrap_or("")
+    /// The bytes with their terminator, for the C side.
+    pub fn as_ptr(&self) -> *const u8 {
+        self.buf.as_ptr()
+    }
+
+    pub fn as_str(&self) -> &str {
+        // SAFETY: `put` stores ASCII only
+        unsafe { core::str::from_utf8_unchecked(&self.buf[..self.len]) }
+    }
+}
+
+impl Default for Line {
+    fn default() -> Line {
+        Line::new()
     }
 }
 
@@ -70,10 +111,7 @@ fn name_of(id: &[u8]) -> &[u8] {
 }
 
 fn route_text(route: Route) -> &'static [u8] {
-    match route {
-        Route::Send => b"SEND",
-        Route::Master => b"MASTER",
-    }
+    ROUTE_TEXT[route.byte() as usize]
 }
 
 /// What the steps keep between two popups.
@@ -98,13 +136,24 @@ impl Routing {
         }
     }
 
+    /// Run the step a UI callback asked for.
+    pub fn run<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U, event: Event) {
+        match event {
+            Event::List => self.list(core, ui),
+            Event::Effect(i) => self.pick_effect(core, ui, i as usize),
+            Event::Route(i) => self.pick_route(core, ui, i as usize),
+        }
+    }
+
     /// The SETTINGS row was opened: the list of the effects. A toast when no effect has a page.
     pub fn list<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U) {
-        let mut lines: [Line; MAX_FX] = core::array::from_fn(|_| Line::new());
+        let mut lines = [Line::new(); MAX_FX];
         self.listed = 0;
+        // SAFETY: the UI task runs the callbacks of the service
+        let sends = unsafe { fxsend::saved_sends(core) };
         for k in 0..MAX_FX {
-            // SAFETY: the UI task runs the callbacks of the service
-            let Some(effect) = (unsafe { fxsend::effect(core, k) }) else {
+            // SAFETY: as above
+            let Some(effect) = (unsafe { fxsend::effect_in(core, k, sends) }) else {
                 continue;
             };
             lines[self.listed]
@@ -115,17 +164,16 @@ impl Routing {
             self.listed += 1;
         }
         if self.listed == 0 {
-            ui.toast("NO EFFECTS LOADED");
+            ui.toast(&Line::of("NO EFFECTS LOADED"));
             return;
         }
-        let items: [&str; MAX_FX] = core::array::from_fn(|i| lines[i].str());
-        ui.choice("FX ROUTING", &items[..self.listed], Step::Effect);
+        ui.choice(&Line::of("FX ROUTING"), &lines[..self.listed], Step::Effect);
     }
 
     /// Row `index` of the list was chosen: the routes the effect may take now.
     pub fn pick_effect<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U, index: usize) {
         let Some((k, effect)) = self.chosen(core, index) else {
-            ui.toast("NO EFFECTS LOADED");
+            ui.toast(&Line::of("NO EFFECTS LOADED"));
             return;
         };
         self.row = k;
@@ -140,25 +188,23 @@ impl Routing {
         }
         let name = name_of(effect.id());
         if self.offered_len == 0 {
-            ui.toast(Line::new().put(name).put(b": NO ROUTE FREE").str());
+            ui.toast(Line::new().put(name).put(b": NO ROUTE FREE"));
             return;
         }
-        let mut items = [""; 2];
+        let mut items = [Line::new(); 2];
         for (item, route) in items.iter_mut().zip(&self.offered[..self.offered_len]) {
-            *item = match route {
-                Route::Send => "SEND",
-                Route::Master => "MASTER",
-            };
+            item.put(route_text(*route));
         }
         ui.choice(
-            Line::new().put(name).put(b" ROUTE").str(),
+            Line::new().put(name).put(b" ROUTE"),
             &items[..self.offered_len],
             Step::Route,
         );
     }
 
-    /// Route `index` of the second popup was chosen. A change queues the reload of the effect's module first (a busy job refuses it, and then nothing is saved, so the same pick
-    /// can be made again), then saves the route; the job runs later from the UI loop and reads it. A reload the runtime refuses leaves the saved route for the next boot.
+    /// Route `index` of the second popup was chosen. A change saves the route first (a failed save queues nothing), then queues the reload of the effect's module; the job runs
+    /// later from the UI loop and reads the key. A busy job refuses the reload: the old route is written back, so the same pick can be made again. A reload the runtime refuses
+    /// leaves the saved route for the next boot.
     pub fn pick_route<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U, index: usize) {
         if index >= self.offered_len {
             return;
@@ -166,30 +212,31 @@ impl Routing {
         let route = self.offered[index];
         // SAFETY: the UI task runs the callbacks of the service
         let Some(effect) = (unsafe { fxsend::effect(core, self.row) }) else {
-            ui.toast("NO EFFECTS LOADED");
+            ui.toast(&Line::of("NO EFFECTS LOADED"));
             return;
         };
-        let name = name_of(effect.id());
         let mut line = Line::new();
-        line.put(name).put(b": ");
+        line.put(name_of(effect.id())).put(b": ");
         if route != effect.saved {
+            // SAFETY: as above
+            if unsafe { fxsend::save_route(core, self.row, route) } != 0 {
+                ui.toast(line.put(b"NOT SAVED"));
+                return;
+            }
             // SAFETY: as above; the path is NUL terminated and lives in the runtime's module table
             let queued = unsafe { core.live(LIVE_RELOAD, core.module_path(effect.owner)) };
             if queued == E_BUSY {
-                ui.toast("BUSY: TRY AGAIN");
-                return;
-            }
-            // SAFETY: as above
-            if unsafe { fxsend::save_route(core, self.row, route) } != 0 {
-                ui.toast(line.put(b"NOT SAVED").str());
+                // SAFETY: as above; the old value was readable, so this put is the one that could fail only the same way
+                unsafe { fxsend::save_route(core, self.row, effect.saved) };
+                ui.toast(&Line::of("BUSY: TRY AGAIN"));
                 return;
             }
             if queued != 0 {
-                ui.toast(line.put(b"RESTART TO APPLY").str());
+                ui.toast(line.put(b"RESTART TO APPLY"));
                 return;
             }
         }
-        ui.toast(line.put(route_text(route)).str());
+        ui.toast(line.put(route_text(route)));
     }
 
     /// The effect of list row `index`, when it still is the one that was listed.
@@ -198,6 +245,41 @@ impl Routing {
         // SAFETY: the UI task runs the callbacks of the service
         let effect = unsafe { fxsend::effect(core, k as usize) }?;
         (effect.owner == owner).then_some((k as usize, effect))
+    }
+}
+
+/// Run `event` with the UI of `handle` (the `ui` of the owner): nothing for no UI. A host build has none.
+pub(crate) fn apply<C: CoreApi>(routing: &mut Routing, core: &C, handle: usize, event: Event) {
+    #[cfg(target_arch = "m68k")]
+    {
+        extern "C" {
+            fn dk_fx_ui_choice(
+                ui: usize,
+                title: *const Line,
+                items: *const Line,
+                n: usize,
+                step: u32,
+            ) -> bool;
+            fn dk_fx_ui_toast(ui: usize, text: *const Line);
+        }
+        struct HandleUi(usize);
+        impl Ui for HandleUi {
+            fn choice(&mut self, title: &Line, items: &[Line], step: Step) -> bool {
+                // SAFETY: functions of the service file (`dks/src/ui.rs`), linked with this crate; the pointers are live for the call
+                unsafe { dk_fx_ui_choice(self.0, title, items.as_ptr(), items.len(), step as u32) }
+            }
+            fn toast(&mut self, text: &Line) {
+                // SAFETY: as above
+                unsafe { dk_fx_ui_toast(self.0, text) }
+            }
+        }
+        if handle != 0 {
+            routing.run(core, &mut HandleUi(handle), event);
+        }
+    }
+    #[cfg(not(target_arch = "m68k"))]
+    {
+        let _ = (routing, core, handle, event);
     }
 }
 

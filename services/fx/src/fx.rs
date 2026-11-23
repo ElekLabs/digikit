@@ -1,13 +1,13 @@
 //! The owner object of the `fx` service. It holds the collection of one module's builder calls (`Builder`) and what the effect guard has logged (`FxGuard`); the effect pages, the
 //! send cells and the effect rows are tables the service keeps by name (`fxpage::DKRT_FXP*`, `fxsend::DKRT_FXS`, `rows::DKRT_FROWS`: see README.md for the reader of each).
-//! `Provider` (`start`, `detach`), `Ticker` and `Describe` are here, in one block each; `records.rs`, `dsp/part.rs` and `queries.rs` hold the other parts.
+//! `Provider` (`start`, `detach`), `Ticker`, `Reentry` and `Describe` are here, in one block each; `records.rs`, `dsp/part.rs` and `queries.rs` hold the other parts.
 use crate::builder::Builder;
 use crate::dsp::FxGuard;
 use crate::fxpage;
 use crate::fxsend;
 use crate::routing::{self, Routing};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::provider::{ConsumerId, Describe, Provider, Status, Ticker};
+use dkrt_abi::provider::{ConsumerId, Describe, Provider, Reentry, Status, Ticker};
 use dkrt_abi::service::{tick_phase, TableFault};
 use dkrt_sdk::proto::{CAPK_FX_SLOTS, CAPK_SEND_SLOTS};
 
@@ -83,6 +83,17 @@ impl<C: CoreApi> Ticker<C> for Fx {
             // SAFETY: the UI task runs the tick; the pages and the send cells are this crate's tables
             unsafe { fxpage::tick(core) };
         }
+    }
+}
+
+impl<C: CoreApi> Reentry<C> for Fx {
+    type Event = routing::Event;
+    /// A pick and a list asked for while a call of the service runs: the UI task makes one at a time, so a few wait at most.
+    const QUEUE: usize = 4;
+
+    /// A UI callback's step, run with the owner free (a pick that arrived inside another call of the service waited for it).
+    fn apply(&mut self, core: &C, event: routing::Event) {
+        routing::apply(&mut self.routing, core, self.ui, event);
     }
 }
 

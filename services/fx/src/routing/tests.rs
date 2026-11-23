@@ -108,16 +108,16 @@ struct FakeUi {
 }
 
 impl Ui for FakeUi {
-    fn choice(&mut self, title: &str, items: &[&str], step: Step) -> bool {
+    fn choice(&mut self, title: &Line, items: &[Line], step: Step) -> bool {
         self.choices.push((
-            title.to_string(),
-            items.iter().map(|s| s.to_string()).collect(),
+            title.as_str().to_string(),
+            items.iter().map(|l| l.as_str().to_string()).collect(),
             step,
         ));
         true
     }
-    fn toast(&mut self, text: &str) {
-        self.toasts.push(text.to_string());
+    fn toast(&mut self, text: &Line) {
+        self.toasts.push(text.as_str().to_string());
     }
 }
 
@@ -294,4 +294,33 @@ fn an_effect_replaced_meanwhile_is_not_picked() {
     routing.pick_effect(&a.core, &mut ui, 0);
     assert_eq!(ui.choices.len(), 1);
     assert_eq!(ui.toasts, ["NO EFFECTS LOADED"]);
+}
+
+#[test]
+fn a_failed_save_queues_no_reload() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(0));
+    a.core.put_result.set(-1);
+    let mut ui = FakeUi::default();
+    pick(&a, &mut ui, 0, 0);
+    assert!(a.core.live_calls.borrow().is_empty());
+}
+
+#[test]
+fn the_events_of_the_ui_callbacks_run_the_steps() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(0));
+    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
+    routing.run(&a.core, &mut ui, Event::List);
+    routing.run(&a.core, &mut ui, Event::Effect(0));
+    routing.run(&a.core, &mut ui, Event::Route(0));
+    assert_eq!(ui.choices.len(), 2);
+    assert_eq!(ui.toasts, ["FREQSHIFT: SEND"]);
+}
+
+#[test]
+fn a_name_that_is_not_ascii_shows_as_question_marks() {
+    let mut line = Line::new();
+    line.put("caf\u{e9}".as_bytes());
+    assert_eq!(line.as_str(), "CAF??");
 }

@@ -102,3 +102,25 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
         &|| DK_SVC_OWNER.refused(),
     );
 }
+
+#[test]
+fn a_pick_that_arrives_while_the_owner_is_busy_is_queued_and_a_full_queue_says_busy() {
+    use dkrt_svc_fx::routing::Event;
+    use dkrt_svc_rt::Post;
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _started = Started::new();
+    DK_SVC_OWNER
+        .with(|_| {
+            // the queue holds the picks of one call, none is lost
+            for _ in 0..4 {
+                assert_eq!(file::ui::submit(Event::Route(0)), Post::Queued);
+            }
+            assert_eq!(file::ui::submit(Event::Route(0)), Post::Full);
+        })
+        .expect("owner");
+    assert_eq!(file::ui::refusal(Post::Full), Some("BUSY: TRY AGAIN"));
+    assert_eq!(file::ui::refusal(Post::Queued), None);
+    assert_eq!(file::ui::refusal(Post::Ran), None);
+    // idle: the event runs at once
+    assert_eq!(file::ui::submit(Event::List), Post::Ran);
+}

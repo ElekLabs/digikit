@@ -20,14 +20,6 @@ impl Route {
             Route::Master => 0,
         }
     }
-
-    fn of(bits: u8) -> Route {
-        if bits == ROUTE_SEND {
-            Route::Send
-        } else {
-            Route::Master
-        }
-    }
 }
 
 /// An effect row that has a page: its module record + 1, its module id, the route in the settings and the routes it may be given now.
@@ -47,25 +39,39 @@ impl Effect {
     }
 }
 
+/// The rows whose saved route is SEND, as bits (the rows that have a page). UI task.
+pub unsafe fn saved_sends<C: CoreApi>(core: &C) -> u32 {
+    let mut sends = 0u32;
+    for j in 0..dsp::MAX_FX {
+        if fxpage::page_owner(j) != 0 && saved_route(core, j) == ROUTE_SEND {
+            sends |= 1 << j;
+        }
+    }
+    sends
+}
+
 /// Effect row `k`, or `None` when it has no page. The routes allowed are the effect's own (`allowed_choices`): SEND is absent when every send cell is taken by another effect
 /// (the saved sends of the other rows count, the row's own does not). UI task.
 pub unsafe fn effect<C: CoreApi>(core: &C, k: usize) -> Option<Effect> {
+    effect_in(core, k, saved_sends(core))
+}
+
+/// `effect` with the saved sends read once (`saved_sends`): a list of all rows reads each setting once.
+pub unsafe fn effect_in<C: CoreApi>(core: &C, k: usize, saved_sends: u32) -> Option<Effect> {
     if k >= dsp::MAX_FX || fxpage::page_owner(k) == 0 {
         return None;
     }
     let s = ss();
-    let mut saved_sends = 0u32;
-    for j in 0..dsp::MAX_FX {
-        if fxpage::page_owner(j) != 0 && saved_route(core, j) == ROUTE_SEND {
-            saved_sends |= 1 << j;
-        }
-    }
     let allowed = allowed_choices(s.allow[k], k as u32, saved_sends, slots(core)) as u8;
     Some(Effect {
         owner: fxpage::page_owner(k),
         id: s.id[k],
         id_len: s.idlen[k] as usize,
-        saved: Route::of(saved_route(core, k)),
+        saved: if saved_sends & (1 << k) != 0 {
+            Route::Send
+        } else {
+            Route::Master
+        },
         send_allowed: allowed & ROUTE_SEND != 0,
         master_allowed: allowed & ROUTE_MASTER != 0,
     })
