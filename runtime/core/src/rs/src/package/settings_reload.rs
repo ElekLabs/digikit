@@ -121,6 +121,10 @@ impl ReloadQueue {
     /// It waits like a module whose settings changed: the same retries, load on stop, one job at a time.
     pub fn reload_when_possible<S: System>(&mut self, sys: &S, id: &[u8]) {
         let Some(rec) = sys.rec_of(id) else { return };
+        if self.queued.map(|q| q.0) == Some(rec) {
+            // its own reload is queued or running and carries what the caller saved before this call
+            return;
+        }
         let m = &mut self.mods[rec];
         m.pending = true;
         m.tries = 0;
@@ -507,5 +511,35 @@ mod tests {
         f.names[0] = None;
         unsafe { q.poll(&mut f) };
         assert!(!q.mods[0].pending && f.queued.is_empty());
+    }
+
+    #[test]
+    fn a_module_marked_when_possible_while_its_own_reload_runs_is_not_reloaded_again() {
+        // marked before its job starts: one reload
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.reload_when_possible(&f, b"test/a");
+        unsafe {
+            q.poll(&mut f);
+            f.phase = 2;
+            q.poll(&mut f);
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending);
+        assert_eq!(f.queued, [0]);
+        // marked while its job runs (the key is saved before the mark, so the running job carries it): still one reload
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.note_opened(0);
+        q.changed(&f, b"test/a");
+        unsafe {
+            q.poll(&mut f);
+            q.reload_when_possible(&f, b"test/a");
+            f.phase = 2;
+            q.poll(&mut f);
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending, "the end of the running job clears the wait");
+        assert_eq!(f.queued, [0], "no second reload");
     }
 }

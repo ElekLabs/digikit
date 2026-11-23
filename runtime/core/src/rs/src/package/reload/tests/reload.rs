@@ -251,3 +251,30 @@ fn the_checks_of_a_reload_run_with_its_phase_on_and_those_of_a_load_and_an_unloa
         assert_eq!(s.log.contains(&"phase on"), phase, "op {op}");
     }
 }
+
+#[test]
+fn a_job_has_a_serial_and_the_end_of_the_last_finished_job_outlives_the_next_job() {
+    let mut s = Script::new();
+    let mut j = Job::new();
+    let finish = |j: &mut Job, s: &mut Script| unsafe {
+        while j.phase == 1 {
+            j.poll(s);
+        }
+    };
+    unsafe {
+        assert_eq!((j.serial, j.done_serial), (0, 0));
+        assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), OK);
+        assert_eq!(j.serial, 1);
+        // a refused queueing is no job
+        assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/a.dkm\0".as_ptr()), E_BUSY);
+        assert_eq!(j.serial, 1);
+        s.load = E_RELOAD_PLAYING;
+        finish(&mut j, &mut s);
+        assert_eq!((j.phase, j.result), (2, E_RELOAD_PLAYING));
+        // the next job starts: its state replaces the result, the last end is kept by serial
+        s.load = OK;
+        assert_eq!(j.queue(&mut s, LIVE_RELOAD, b"mods/b.dkm\0".as_ptr()), OK);
+        assert_eq!((j.serial, j.phase, j.result), (2, 1, OK));
+        assert_eq!((j.done_serial, j.done_result), (1, E_RELOAD_PLAYING));
+    }
+}

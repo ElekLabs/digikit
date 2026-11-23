@@ -390,6 +390,117 @@ fn a_reload_the_job_refuses_for_another_reason_is_no_success() {
     }
 }
 
+/// Another live job is queued after the job of `queued_pick` ended: the state describes the new job, the end of ours stays in `done_*`.
+fn another_job_starts(a: &Arena) {
+    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
+    // SAFETY: a fake
+    assert_eq!(
+        unsafe { a.core.live(LIVE_RELOAD, b"modules/other.dkm\0".as_ptr()) },
+        0
+    );
+}
+
+#[test]
+fn the_end_of_our_job_is_found_by_serial_when_another_job_started_before_the_tick() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    another_job_starts(&a);
+    assert_eq!(a.core.live_job.get()[0], 1, "the other job is running");
+    routing.poll_job(&a.core, &mut ui);
+    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
+}
+
+#[test]
+fn the_result_of_a_job_that_is_not_ours_is_no_toast() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    // a job of another serial ends with a refusal, and ours is not the one before it
+    a.core.live_serial.set(7);
+    a.core.live_done.set((6, OK));
+    a.core
+        .live_job
+        .set([2, dkrt_sdk::E_RELOAD_MENUS as u32, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    routing.poll_job(&a.core, &mut ui);
+    assert!(ui.toasts.is_empty());
+    assert!(a.core.reload_when_possible.borrow().is_empty());
+}
+
+#[test]
+fn the_teardown_of_our_own_running_job_is_not_the_end_of_the_wait() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    routing.effect_gone(&a.core, 1);
+    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
+}
+
+#[test]
+fn another_modules_teardown_leaves_the_wait_alone() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    routing.effect_gone(&a.core, 2);
+    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
+}
+
+#[test]
+fn an_effect_unloaded_while_the_reload_waits_ends_the_wait_without_a_toast() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    // our job ended; another job unloads the effect before the tick
+    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
+    // SAFETY: a fake
+    unsafe {
+        a.core.live(
+            dkrt_sdk::LIVE_UNLOAD,
+            b"modules/fx/freqshift.dkm\0".as_ptr(),
+        )
+    };
+    routing.effect_gone(&a.core, 1);
+    a.core.live_job.set([2, 0, 6, 0, dkrt_sdk::LIVE_UNLOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    assert!(ui.toasts.is_empty());
+    assert!(a.core.reload_when_possible.borrow().is_empty());
+}
+
+#[test]
+fn the_saved_route_picked_again_while_its_reload_waits_says_it_is_pending() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    // the job is queued: the saved route is not applied yet
+    routing.pick_effect(&a.core, &mut ui, 0);
+    routing.pick_route(&a.core, &mut ui, 1);
+    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER PENDING");
+    // the transport plays: the reload waits for the stop
+    a.core
+        .live_job
+        .set([2, E_PLAYING as u32, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    routing.pick_effect(&a.core, &mut ui, 0);
+    routing.pick_route(&a.core, &mut ui, 1);
+    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER ON STOP");
+    // the deferred reload ran (the effect is torn down): the saved route is the applied one
+    routing.effect_gone(&a.core, 1);
+    routing.pick_effect(&a.core, &mut ui, 0);
+    routing.pick_route(&a.core, &mut ui, 1);
+    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER");
+}
+
 #[test]
 fn the_longest_toast_fits_the_line() {
     // a 12 character name, the longest route, the deferred text

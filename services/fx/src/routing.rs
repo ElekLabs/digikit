@@ -46,8 +46,9 @@ pub const NAME_MAX: usize = 12;
 /// Bytes of a line, the NUL included (`DK_UI_ROW` and `DK_UI_TOAST` of <dk/platform/ui.h> are not longer).
 pub const LINE_MAX: usize = 32;
 
-/// What follows the route in the toast of a reload that waits for the transport to stop.
+/// What follows the route in the toast of a reload that waits for the transport to stop, and of one that is queued or running.
 const ON_STOP: &[u8] = b" ON STOP";
+const PENDING: &[u8] = b" PENDING";
 
 /// The route texts, indexed by `Route::byte` (0 master, 1 send): the one copy of each.
 const ROUTE_TEXT: [&[u8]; 2] = [b"MASTER", b"SEND"];
@@ -130,12 +131,24 @@ pub struct Routing {
     waiting: Option<Waiting>,
 }
 
-/// The pick whose reload job the service waits for.
+/// The pick whose reload the service waits for: the job it queued (by serial), or, once that job refused for the transport, the reload the runtime does at stop.
 #[derive(Clone, Copy)]
 struct Waiting {
     id: [u8; 32],
     id_len: usize,
+    /// The module record + 1 the effect had when the pick was made.
+    owner: u8,
     route: Route,
+    /// The serial of the live job the pick queued (`DkrtLive::serial`).
+    serial: u32,
+    /// The job was refused for the playing transport: the runtime reloads the module at stop.
+    deferred: bool,
+}
+
+impl Waiting {
+    fn id(&self) -> &[u8] {
+        &self.id[..self.id_len]
+    }
 }
 
 impl Routing {
@@ -250,39 +263,87 @@ impl Routing {
                 return;
             }
             // the job may still refuse (the transport plays, a menu is open): its end decides the toast (`poll_job`)
+            // SAFETY: as above; the job just queued is the one the state describes
+            let serial = unsafe { core.live_state() }.serial;
             self.waiting = Some(Waiting {
                 id: effect.id,
                 id_len: effect.id_len,
+                owner: effect.owner,
                 route,
+                serial,
+                deferred: false,
             });
             return;
         }
-        ui.toast(line.put(route_text(route)));
+        // the saved route is not the applied one while its reload waits
+        match self.waiting {
+            Some(w) if w.owner == effect.owner && w.id() == effect.id() => {
+                line.put(route_text(w.route))
+                    .put(if w.deferred { ON_STOP } else { PENDING });
+            }
+            _ => {
+                line.put(route_text(route));
+            }
+        }
+        ui.toast(&line);
     }
 
-    /// Once per UI pass: the end of the reload a pick queued. Success is the route's toast; a transport that plays defers the reload to its stop (`reload_when_possible`: the runtime
-    /// retries until then) and says so; any other refusal leaves the saved route for the next boot.
+    /// Once per UI pass: the end of the reload a pick queued, found by the job's serial (the live state holds the last job only: a job that started after ours leaves our end in
+    /// `done_*`). Success is the route's toast; a transport that plays defers the reload to its stop (`reload_when_possible`: the runtime retries until then) and says so; any other
+    /// refusal leaves the saved route for the next boot.
     pub fn poll_job<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U) {
         let Some(w) = self.waiting else { return };
-        // SAFETY: the UI task runs the tick
-        let job = unsafe { core.live_state() };
-        if job.phase != 2 || job.op != LIVE_RELOAD as u32 {
+        if w.deferred {
             return;
         }
-        self.waiting = None;
-        let id = &w.id[..w.id_len];
+        // SAFETY: the UI task runs the tick
+        let job = unsafe { core.live_state() };
+        let result = if job.serial == w.serial {
+            if job.phase != 2 {
+                return;
+            }
+            job.result
+        } else if job.done_serial == w.serial {
+            job.done_result
+        } else {
+            // the job's end is gone (the state moved on by more than one job): nothing to say
+            self.waiting = None;
+            return;
+        };
+        let id = w.id();
         let mut line = Line::new();
         line.put(name_of(id)).put(b": ");
-        if job.result == OK {
+        if result == OK {
+            self.waiting = None;
             line.put(route_text(w.route));
-        } else if job.result == E_RELOAD_PLAYING {
+        } else if result == E_RELOAD_PLAYING {
             // SAFETY: as above
             unsafe { core.reload_when_possible(id) };
+            self.waiting = Some(Waiting {
+                deferred: true,
+                ..w
+            });
             line.put(route_text(w.route)).put(ON_STOP);
         } else {
+            self.waiting = None;
             line.put(b"RESTART TO APPLY");
         }
         ui.toast(&line);
+    }
+
+    /// The effect of module record `owner` (+ 1) is torn down (`Provider::detach`). The teardown of the reload this service queued is not its end: the job is running and the wait
+    /// stays. Any other teardown (an unload, another reload, the deferred reload at stop) answers the wait: nothing is due.
+    pub fn effect_gone<C: CoreApi>(&mut self, core: &C, owner: u8) {
+        let Some(w) = self.waiting else { return };
+        if w.owner != owner {
+            return;
+        }
+        // SAFETY: the UI task runs `detach`
+        let job = unsafe { core.live_state() };
+        if !w.deferred && job.phase == 1 && job.serial == w.serial {
+            return;
+        }
+        self.waiting = None;
     }
 
     /// The effect of list row `index`, when it still is the one that was listed.

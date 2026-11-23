@@ -418,6 +418,9 @@ typedef struct DkrtLive {
     uint32_t step;                               /* 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done */
     uint32_t unloaded;                           /* 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0 */
     uint32_t op;                                 /* LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet) */
+    uint32_t serial;                             /* counts the jobs queued (the first is 1, 0: none yet): the job these words describe */
+    uint32_t done_serial;                        /* the serial of the last job that finished (0: none), so a caller whose job ended and another started still finds its end */
+    int32_t done_result;                         /* the result of that job */
 } DkrtLive;
 
 /* dkrt_module result: one loaded module. */
@@ -624,12 +627,15 @@ _Static_assert(sizeof(DkrtStoreFile) == 40, "DkrtStoreFile size");
 _Static_assert(offsetof(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
 _Static_assert(offsetof(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
 _Static_assert(offsetof(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
-_Static_assert(sizeof(DkrtLive) == 20, "DkrtLive size");
+_Static_assert(sizeof(DkrtLive) == 32, "DkrtLive size");
 _Static_assert(offsetof(DkrtLive, phase) == 0, "DkrtLive.phase");
 _Static_assert(offsetof(DkrtLive, result) == 4, "DkrtLive.result");
 _Static_assert(offsetof(DkrtLive, step) == 8, "DkrtLive.step");
 _Static_assert(offsetof(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
 _Static_assert(offsetof(DkrtLive, op) == 16, "DkrtLive.op");
+_Static_assert(offsetof(DkrtLive, serial) == 20, "DkrtLive.serial");
+_Static_assert(offsetof(DkrtLive, done_serial) == 24, "DkrtLive.done_serial");
+_Static_assert(offsetof(DkrtLive, done_result) == 28, "DkrtLive.done_result");
 _Static_assert(sizeof(DkrtModule) == 124, "DkrtModule size");
 _Static_assert(offsetof(DkrtModule, name) == 0, "DkrtModule.name");
 _Static_assert(offsetof(DkrtModule, version) == 32, "DkrtModule.version");

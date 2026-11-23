@@ -483,13 +483,22 @@ pub struct DkrtLive {
     pub unloaded: u32,
     /// LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet)
     pub op: u32,
+    /// counts the jobs queued (the first is 1, 0: none yet): the job these words describe
+    pub serial: u32,
+    /// the serial of the last job that finished (0: none), so a caller whose job ended and another started still finds its end
+    pub done_serial: u32,
+    /// the result of that job
+    pub done_result: i32,
 }
-const _: () = assert!(size_of::<DkrtLive>() == 20, "DkrtLive size");
+const _: () = assert!(size_of::<DkrtLive>() == 32, "DkrtLive size");
 const _: () = assert!(offset_of!(DkrtLive, phase) == 0, "DkrtLive.phase");
 const _: () = assert!(offset_of!(DkrtLive, result) == 4, "DkrtLive.result");
 const _: () = assert!(offset_of!(DkrtLive, step) == 8, "DkrtLive.step");
 const _: () = assert!(offset_of!(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
 const _: () = assert!(offset_of!(DkrtLive, op) == 16, "DkrtLive.op");
+const _: () = assert!(offset_of!(DkrtLive, serial) == 20, "DkrtLive.serial");
+const _: () = assert!(offset_of!(DkrtLive, done_serial) == 24, "DkrtLive.done_serial");
+const _: () = assert!(offset_of!(DkrtLive, done_result) == 28, "DkrtLive.done_result");
 
 /// dkrt_module result: one loaded module.
 #[repr(C)]

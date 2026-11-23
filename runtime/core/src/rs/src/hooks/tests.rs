@@ -84,9 +84,10 @@ fn with_no_package_every_hook_has_its_default() {
         assert_eq!(fit(core::ptr::null(), 0, core::ptr::null(), core::ptr::null_mut()), E_NOT_FOUND);
         assert_eq!(capacity(core::ptr::null_mut(), 8), 0);
         assert_eq!(live(1, core::ptr::null()), E_STATE);
-        let mut state = DkrtLive { phase: 9, result: 9, step: 9, unloaded: 9, op: 9 };
+        let mut state = DkrtLive { phase: 9, result: 9, step: 9, unloaded: 9, op: 9, serial: 9, done_serial: 9, done_result: 9 };
         live_state(&mut state);
         assert_eq!((state.phase, state.result, state.step, state.unloaded, state.op), (0, OK, 0, 0, 0));
+        assert_eq!((state.serial, state.done_serial, state.done_result), (0, 0, OK));
         // diagnostics
         watch_diag(&[0; DIAG_WORDS]);
         assert_eq!(watch_attribute(1, 2), None);

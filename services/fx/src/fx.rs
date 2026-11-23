@@ -72,6 +72,8 @@ impl<C: CoreApi> Provider<C> for Fx {
     // the send amounts are settings keyed by the module id, so the next load of the module gets them back; the knob values stay in the kit's array (`fxpage::apply`).
     fn detach(&mut self, core: &C, consumer: ConsumerId) {
         self.builder.end();
+        // the wait of a reload that tore this effect down some other way is over
+        self.routing.effect_gone(core, consumer.get());
         // SAFETY: the pages and send cells are this crate's tables; `consumer` is a module record + 1
         unsafe { fxpage::remove(core, consumer.get()) };
     }

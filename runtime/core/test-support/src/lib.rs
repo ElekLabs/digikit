@@ -185,6 +185,9 @@ pub struct FakeCore {
     pub live_result: Cell<i32>,
     /// The words `CoreApi::live_state` reports: phase, result, step, unloaded, op.
     pub live_job: Cell<[u32; 5]>,
+    /// The serial of the job `live_job` describes (`CoreApi::live` counts one for each queued job), and the serial and result of the last job that finished.
+    pub live_serial: Cell<u32>,
+    pub live_done: Cell<(u32, i32)>,
     /// The paths `CoreApi::selection_add` was given, in order, and what it answers.
     pub selection_adds: RefCell<Vec<Vec<u8>>>,
     pub selection_result: Cell<i32>,
@@ -273,6 +276,8 @@ impl FakeCore {
             live_calls: RefCell::new(Vec::new()),
             live_result: Cell::new(0),
             live_job: Cell::new([0; 5]),
+            live_serial: Cell::new(0),
+            live_done: Cell::new((0, 0)),
             selection_adds: RefCell::new(Vec::new()),
             selection_result: Cell::new(0),
             loaded: RefCell::new(Vec::new()),
@@ -491,6 +496,11 @@ impl CoreApi for FakeCore {
             .push((op, core::slice::from_raw_parts(path, n).to_vec()));
         let r = self.live_result.get();
         if r == 0 {
+            let [phase, result, ..] = self.live_job.get();
+            if phase == 2 {
+                self.live_done.set((self.live_serial.get(), result as i32));
+            }
+            self.live_serial.set(self.live_serial.get() + 1);
             self.live_job.set([1, 0, 1, 0, op]);
         }
         r
@@ -507,6 +517,17 @@ impl CoreApi for FakeCore {
             step,
             unloaded,
             op,
+            serial: self.live_serial.get(),
+            done_serial: if phase == 2 {
+                self.live_serial.get()
+            } else {
+                self.live_done.get().0
+            },
+            done_result: if phase == 2 {
+                result as i32
+            } else {
+                self.live_done.get().1
+            },
         }
     }
     unsafe fn log(&self, kind: u16, flags: u16, args: [u32; 5]) {

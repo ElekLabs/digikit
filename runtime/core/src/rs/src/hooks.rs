@@ -201,7 +201,7 @@ pub(crate) unsafe fn live(op: u32, path: *const u8) -> i32 {
 
 /// `dkrt_live_state`. Default: an idle job (all words 0).
 pub(crate) unsafe fn live_state(out: *mut DkrtLive) {
-    call!(menu.live_state(out), *out = DkrtLive { phase: 0, result: OK, step: 0, unloaded: 0, op: 0 })
+    call!(menu.live_state(out), *out = DkrtLive { phase: 0, result: OK, step: 0, unloaded: 0, op: 0, serial: 0, done_serial: 0, done_result: OK })
 }
 
 // ---- diagnostics ---------------------------------------------------------------------------------------------------------
