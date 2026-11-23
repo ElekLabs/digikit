@@ -108,7 +108,7 @@ pub(crate) unsafe fn notify_unload(owner: usize, base: u32, size: u32) {
     let t = &mut *addr_of_mut!(DKRT_UNLOAD_OBSERVERS);
     let mut i = 0;
     while i < OBSERVERS {
-        if t[i] != 0 && in_range(t[i] as usize, base, size) {
+        if t[i] != 0 && in_range(t[i] as u32, base, size) {
             t[i] = 0;
         }
         i += 1;
@@ -156,8 +156,8 @@ unsafe fn menu_owner(code: usize, data: usize) -> Option<usize> {
 /// Is `f` in `[base, base + size)`? In the width of an address: the 64-bit difference of two 32-bit addresses gave the wrong answer on the device for an address below `base`
 /// (the system package in its own block counted as inside the first module's range, so its menus were counted for that module and its polls dropped with it).
 #[inline(always)]
-fn in_range(f: usize, base: u32, size: u32) -> bool {
-    f.wrapping_sub(base as usize) < size as usize
+pub(crate) fn in_range(f: u32, base: u32, size: u32) -> bool {
+    f.wrapping_sub(base) < size
 }
 
 /// The module record whose loaded range holds `f`, or `POLL_OWNER_RUNTIME`.
@@ -166,7 +166,7 @@ unsafe fn poll_owner(f: usize) -> u8 {
     let mut rec = 0;
     while rec < MAX_MODULES {
         let m = &s.modules[rec];
-        if m.used != 0 && in_range(f, m.base, m.size) {
+        if m.used != 0 && in_range(f as u32, m.base, m.size) {
             return rec as u8;
         }
         rec += 1;
@@ -179,7 +179,7 @@ pub(crate) unsafe extern "C" fn poll_drop_range(base: u32, size: u32) {
     let t = &mut *addr_of_mut!(DKRT_POLLS);
     let mut i = 0;
     while i < POLLS {
-        if t[i] != 0 && in_range(t[i] as usize, base, size) {
+        if t[i] != 0 && in_range(t[i] as u32, base, size) {
             t[i] = 0;
             (*addr_of_mut!(DKRT_POLL_OWNER))[i] = POLL_OWNER_RUNTIME;
         }

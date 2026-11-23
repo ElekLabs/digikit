@@ -423,3 +423,19 @@ fn the_phase_is_that_of_the_running_module_code() {
         assert_eq!(crate::api::dkrt_phase(), 0);
     }
 }
+
+/// `in_range` works on u32 addresses, the device's width: below base, at base, inside, at the exclusive end, above, and near the top of the address space.
+#[test]
+fn in_range_is_a_half_open_u32_interval() {
+    use crate::api::in_range;
+    assert!(!in_range(0x0FFF, 0x1000, 0x100), "below base");
+    assert!(in_range(0x1000, 0x1000, 0x100), "at base");
+    assert!(in_range(0x1080, 0x1000, 0x100), "inside");
+    assert!(in_range(0x10FF, 0x1000, 0x100), "last byte");
+    assert!(!in_range(0x1100, 0x1000, 0x100), "at end");
+    assert!(!in_range(0x2000, 0x1000, 0x100), "above");
+    assert!(!in_range(0x1000, 0xFFFF_FF00, 0x100), "below a base near the top");
+    assert!(in_range(0xFFFF_FFFF, 0xFFFF_FF00, 0x100), "last address");
+    assert!(in_range(0xFFFF_FF00, 0xFFFF_FF00, 0x100), "base near the top");
+    assert!(!in_range(0xFFFF_FEFF, 0xFFFF_FF00, 0x100), "just below a base near the top");
+}
