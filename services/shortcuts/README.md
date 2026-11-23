@@ -3,15 +3,60 @@
 A service of the digikit runtime that lets a module bind a key combination to a function. A combination is two logical keys: the first held, then the second pressed
 (`dk_shortcut_add`, `sdk/include/dk/platform/shortcuts.h`). Key names are the SDK's (`DK_KEY_*`, `DK_KEY_TRIG(n)`), not panel codes.
 
+This crate is the template for the other services: one owner object, its parts beside it, no statics. A new service copies the layout and replaces the concept files.
+
 ```text
-src/records.rs    the Service handlers: declare, validate, check, apply_record, remove, tick
-src/shortcuts.rs  the state machine: one key event in, the verdict (pass or swallow) out
+src/shortcuts.rs  the owner `Shortcuts`: private state, the state machine (key event in, verdict out), `Provider` (start_in, detach) and `Ticker` in one block each
+src/records.rs    the `Records` part of the owner (begin, commit, check, apply) and the free `validate`, the entry that `patchkit records --check` calls (it picks the kind and
+                  hands the records to `rule::check_set`)
+src/builder.rs    the builder call `dk_shortcut_add`: `Builder` holds the collection of one module's `init` and writes the records at the commit; the owner gives it out
+                  with `Shortcuts::builder()`
 src/bindings.rs   the binding table and the callbacks
 src/keys.rs       which keys are held
-src/slots.rs      what the service fills in the firmware
-dks/              the service file: the key-dispatch hook (tail mode) and its assembler
-tests/            host tests over FakeCore (state, records, contract); device test in tests/device
+src/rule.rs       the record layout (`at`, `BODY_LEN`) and the rule for the records (`check_set`), shared by `Records::check`, the commit and `validate`
+src/lib.rs        docs, `mod` and `pub use` only
+dks/              the service file: `lib.rs` (the `service!` call), `hooks.rs` and `hooks.s` (the key hook), `builder.rs` (the builder call, which reaches the owner),
+                  `gen_exports.rs` (generated: never edit)
+tests/            host tests over `FakeCore`: `state.rs` (owner logic), `records.rs` (commit, check, apply, detach), `contract.rs` (the shared suite on every profile), `file.rs` (the
+                  service file's own code: the builder export and the key hook over the cell), `stubs/` (the `dkc_*` imports as host functions); device test in `tests/device`.
+                  `contract.rs` and `file.rs` compile `dks/src/lib.rs` into the test by path (the file has its own cargo workspace, so it cannot be a dependency)
 ```
+
+What goes where (copy this split):
+
+- The owner holds all state as private fields: no `static mut`, no lock. The file's cell (`DK_SVC_OWNER`, made by `service!`) holds the one instance: `Provider::start` makes it in
+  the file's `init`, `Provider::stop` ends it in `fini`. The cell is `.bss` (zeroed bytes plus a live flag), and the state is made and dropped where it lives: a service with
+  a large state overrides `Provider::start_in` to write it into the slot (here one zero fill; a copy of the value `start` returns would pass through the stack), and `stop`
+  takes `&mut self` and the cell drops the value in place. A hook or a builder call in `dks/` reaches it with `DK_SVC_OWNER.with(|s| ...)`; a call before `start` or after
+  `stop` gets `None` and answers as "no service" (the hook passes the key, the builder call returns `E_CONTEXT`).
+- `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], ...)` lists the parts the owner adopts, in one place: the contract recipe reads them from the row
+  (`file::dk_svc_row()`), it does not list them again. `Provider` is always there. A part is a trait the owner
+  implements (`Records`, `Ticker`); `attach` has no work here, so the default stays, and `detach` is what the old `remove` did.
+- No device facts in the crate: the key codes and flag bits come from the device profile (`DeviceProfile`) that `core.device_id()` names.
+- A builder call that is a thin wrapper over a free function is generated; one that must reach the owner is hand-written in `dks/src/builder.rs` and named with
+  `wrapper = "builder"` in `sdk/sdk.toml`.
+- A service marks its own SDK calls: a `wrapper = "builder"` entry in `sdk/sdk.toml` is allowed in the service's own section (the service writes its export in `dks/src/builder.rs`); no
+  other service or the runtime names it.
+- An owner that needs device-only SDK functions (calls that exist only on the ColdFire) is `Owner<H: Host>` in the service crate: `Host` is a trait of the crate that names those
+  calls, the file in `dks/` implements it with the real calls and the crate's tests implement it with a fake. The trait impl for a foreign type has to sit where the type or the trait
+  is local (Rust orphan rule), so the real host lives in `dks/` and the fake in `tests/`; `services/project` is the example (`Project<H>`, `DkHost` in `dks/src/glue/host.rs`).
+- A provider with no record kinds has no `src/records.rs` and no `pub mod records`/`slots` (`patchkit service-check` accepts it when the manifest gives it no kind and `service!` uses
+  `parts = [...]`): its parts (`Dsp`, `Tick`, ...) sit beside the owner, and `service!` takes `&[]` for the kinds. A provider with kinds keeps `records.rs`, `pub mod records` and
+  `&KINDS_<NAME>`. A provider with no `provided` imports leaves out `exports`: `service!(Owner, "name", &[], parts = [...], hooks = [...], fills = [...])`.
+- Tests: the file's wrapper code in `file.rs` (with no owner it answers `E_CONTEXT` and passes the key); logic in `state.rs` over `Shortcuts::new()` or `Provider::start`; the loader's walk (commit, check, apply, detach) in `records.rs` over one owner per test; the shared
+  suite in `contract.rs` through `provider_contract` (its fixture functions reach the started owner with `dkrt_test_support::subject`).
+
+- A failed start leaves nothing to drop: write the state fully before returning `Ok`, or return `Err` without partial state (the cell stays empty and `stop` never runs on it).
+
+Steps for a new service:
+
+1. The owner file `src/<name>.rs`: private state, `Provider` (`start_in`, `detach`) and the other parts in one `impl` block each.
+2. The parts the owner adopts (`Records`, `Ticker`, ...), listed once in the `service!` call.
+3. `src/records.rs` (and `src/rule.rs`) when the service owns record kinds: begin, commit, check, apply, and the free `validate` for `patchkit records --check`.
+4. `src/builder.rs` when modules call a builder function that must reach the owner: `wrapper = "builder"` in `sdk/sdk.toml` and a hand-written export in `dks/src/builder.rs`.
+5. The service file in `dks/`: `service!`, hooks and exports reach the owner through `DK_SVC_OWNER.with(...)`; answer "no service" on `None`.
+6. The contract test through `provider_contract`, with fixture functions reaching the owner via `dkrt_test_support::subject`; state and records tests beside it.
+7. `patchkit service-check` on the file, then `patchkit objdiff` against the old object (explain every differing function; compare section sizes).
 
 How it works:
 
@@ -20,7 +65,8 @@ How it works:
 - A binding whose key the device has no panel code for is kept but inactive (`SHORTCUT_INACTIVE` is logged); it works on a device that has the key.
 - The hook sees every key event before the stock firmware. The first key is never swallowed (the firmware needs it). When the second key completes a binding, that press,
   its repeats and its release are swallowed, so the stock screen never sees them; every other event passes, so [TRK]+[TRIG] still selects a track.
-- The hook does not call modules. It queues `on` (when the binding completes) and `off` (when either key is released); the service's tick runs the queue in the UI task.
-- When a module unloads, its bindings and its queued calls are removed (a held binding gets its `off` first).
+- The hook does not call modules. It queues `on` (when the binding completes) and `off` (when either key is released); the service's tick runs the queue in the UI task,
+  in the early phase only.
+- When a module unloads (`detach`), its bindings and its queued calls are removed; an active binding of it ends without `off` (its code is going away).
 
-The neutral crate exports only `dk_module` and `DKRT_*` state symbols, names no firmware, and has no assembler; the hook and the site come from `ports/fw/input.toml` and the port files.
+The neutral crate exports only `dk_module` and names no firmware; the hook and the site come from `ports/fw/input.toml` and the port files.

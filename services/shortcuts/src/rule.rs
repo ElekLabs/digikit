@@ -1,4 +1,4 @@
-//! The rule every module's shortcut records must meet, in one place: `ShortcutsService::validate_records` runs it. The service's `check` calls it at load, and
+//! The rule every module's shortcut records must meet, in one place: `records::validate` (the `Records::validate` of the owner `Shortcuts`, and the entry `patchkit records --check` calls) runs it. The service's `check` calls it at load, and
 //! `patchkit records --check` calls it on a built module, so the two cannot differ.
 //!
 //! A record is the body of `[records.kinds]` SHORTCUT: `id[16]`, `label[24]`, two logical keys, the offsets of `on` and `off` in the module image (0: none) and `arg`, all

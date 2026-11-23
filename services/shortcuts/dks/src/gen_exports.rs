@@ -4,20 +4,13 @@
 //! (`exports = gen_exports::exports()`). A function that is not a thin wrapper is written by hand in the module `wrapper` of its `[[import]]`.
 
 use dkrt_sdk::api;
-use dkrt_svc_shortcuts::build;
-use dkrt_svc_rt::ImportCore;
-
-#[cfg_attr(target_arch = "m68k", no_mangle)]
-pub unsafe extern "C" fn dk_shortcut_add(ctx: *mut u8, def: *const u8) -> i32 {
-    build::shortcut_add(&ImportCore, ctx, def)
-}
 
 // the entries have the types sdk/sdk.toml gives the imports
-const _: api::DkShortcutAddFn = dk_shortcut_add;
+const _: api::DkShortcutAddFn = crate::builder::dk_shortcut_add;
 
 /// The entries `service!` declares, by name hash, in the order of `sdk/sdk.toml`.
 pub fn exports() -> [(u32, *const u8); 1] {
     [
-        (dkrt_svc_rt::name_hash("dk_shortcut_add"), dk_shortcut_add as *const u8),
+        (dkrt_svc_rt::name_hash("dk_shortcut_add"), crate::builder::dk_shortcut_add as *const u8),
     ]
 }
