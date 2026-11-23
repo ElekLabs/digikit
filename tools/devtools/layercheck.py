@@ -30,7 +30,7 @@ Rules:
             host tests (`tests.rs` or a `tests/` folder in the service) may name core modules: they drive the walkers and the planner over the service.
   service-crates
             A service crate (services/NAME, linked into the runtime object) depends only on dkrt-abi, dkrt-sdk and dkneeds, and on
-            dkrt-test-support as a dev-dependency; it names no firmware crate and no device id (only its `dks/` service file may name `dkfw`, in `dks/src/fw.rs`), and has no path into the runtime crate. The runtime
+            dkrt-test-support and dkrt-svc-rt (the glue of its own service file, which the tests of the file compile) as dev-dependencies; it names no firmware crate and no device id (only its `dks/` service file may name `dkfw`, in `dks/src/fw.rs`), and has no path into the runtime crate. The runtime
             names a service crate (`dkrt_svc_*`) only in `package/gen_services.rs`, `package/handlers.rs` and the host-test files under `package/handlers/`. Final state (R12-1): no service is a folder of the
             runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
   kind-free The runtime's own code (the runtime crate's and the abi crate's sources without their host tests, inline `#[cfg(test)] mod x { }` blocks included, `package/handlers.rs`, the host-test files in `package/handlers/` and the generated `package/gen_services.rs`) names no machine or effect: no builder
@@ -1108,7 +1108,7 @@ def check_runtime_platform(root: Path) -> list[Violation]:
 SERVICE_CRATES = "services"
 # dkrt-svc-params is the parameter row writers that machines and fx share (no service names the other); dkrt-svc-bitmap the firmware tile objects of lfo
 SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-params", "dkrt-svc-bitmap"}
-SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support"}
+SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support", "dkrt-svc-rt"}
 # `dkrt_svc_rt` is the support crate of a service file (runtime/core/svc-rt), not a service
 SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")
 SERVICE_RUNTIME_FILES = ("package/handlers.rs", "package/gen_services.rs")
