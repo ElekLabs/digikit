@@ -503,6 +503,36 @@ mod tests {
     }
 
     #[test]
+    fn a_module_marked_again_after_its_reload_was_dropped_is_pending_and_reloads() {
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.reload_when_possible(&f, b"test/a");
+        f.queue_answer = dkrt_sdk::E_RELOAD_MENUS;
+        unsafe {
+            for _ in 0..3 {
+                q.poll(&mut f);
+                wait_out(&mut q, &mut f);
+            }
+        }
+        assert!(!q.mods[0].pending, "dropped after three tries");
+        assert_eq!(f.queued.len(), 3);
+        // a later change marks it again, and the refusal is gone
+        q.reload_when_possible(&f, b"test/a");
+        assert!(q.mods[0].pending);
+        assert_eq!(q.mods[0].tries, 0);
+        f.queue_answer = OK;
+        unsafe {
+            wait_out(&mut q, &mut f);
+            q.poll(&mut f);
+            f.phase = 2;
+            q.poll(&mut f);
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending);
+        assert_eq!(f.queued.len(), 4);
+    }
+
+    #[test]
     fn a_module_that_is_gone_is_not_waited_for() {
         let mut f = Fake::new().with(0, b"test/a");
         let mut q = ReloadQueue::new();
