@@ -153,6 +153,20 @@ kind is appended, never renumbered. `used` and `largest` come from the same tabl
 `Uploader.capacity()` returns `{name: {limit, used, largest}}`; `mise run dk:store -- --emu info` prints one line per kind (and says "not reported" for a runtime without the bit). The Rust client (`packages/dkupload`) has no MODULES
 or CAPACITY request yet; it gets the generated numbers only (P5).
 
+## Workbench settings
+
+Runtime 0.11.4 advertises the `MODULE_UI` capability in INFO. Each enrolled module has a nonzero `ui_instance` in MODULES. Command `0x00` addresses its public settings by `u8 verb, u8 slot, u32 instance`. Numbers are big-endian.
+
+| Verb | Additional request bytes | Reply body on success |
+| --- | --- | --- |
+| 0 Describe | None | The versioned descriptor |
+| 1 Get, 2 Put, 3 Reset | `u32 ticket, u8 field, u32 revision`, with value bytes for Put | Empty when queued |
+| 4 Poll | `u32 ticket` | `u8 1` while pending. When done, `u8 0, i32 status, u32 revision, u8 present`, then the value when present. |
+
+The descriptor starts with `u8 version=1`, a length-prefixed UTF-8 module name and `u8 field count`. Each field has a length-prefixed key and label, `u8 max_bytes, u8 kind, u8 apply`. Apply is 0 for immediate and 1 for next restart. Text is kind 0. File-name is kind 1 followed by a length-prefixed extension and reset label, and its value must name an existing nonempty file in the module's data directory. String lengths are one byte. The descriptor is limited to 512 bytes and a value to 64 bytes.
+
+The MIDI task queues work for the UI task, which uses the enrolled module's settings namespace. A repeated ticket replays its original result while retained. A stale module or an unknown ticket returns `E_NOT_FOUND`. A stale edit returns `E_MODULE_UI_CONFLICT`. When a settings overlay is installed, Get reads the effective value and mutations return `E_MODULE_UI_SCOPE`. Reset removes the setting. The card stores changes through the usual settings flush.
+
 ## MODULES
 
 A read-only command like INFO and LIST: it works in every state (an open upload, safe mode, a read-only card), reads no card sector and is not logged as an UPLOAD event. INFO's `caps` bit 5
@@ -165,7 +179,8 @@ the DSP loader). A record, big endian:
   0   1  u8 index            module record index
   1  32  name               the module's name field, NUL padded
  33   4  u32 version        the module's packed version (major << 16 | minor << 8 | patch)
- 37   8  contracts          api, machine, fx, service as (major, minor) bytes, as the file declared them (0 = not declared)
+ 37   4  u32 runtime_required the packed runtime version required by the file
+ 41   4  u32 ui_instance     MODULE_UI capability only. Zero means no public settings
  45   4  u32 cf_base        the module's ColdFire block in the arena (image + bss)
  49   4  u32 cf_size
  53   4  u32 dsp_off        its range in the DSP area (byte offset into the area; 0 and 0 without DSP code)

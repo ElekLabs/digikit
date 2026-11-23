@@ -28,7 +28,7 @@ pub(crate) fn machine_type_loaded(ty: u32) -> bool {
 
 /// MODULES: the loaded modules and what they hold. Body: `u8 start` (a module record index). Reply: `u32 arena_free, arena_largest, dsp_free,
 /// dsp_largest`, `u8 total` (loaded modules), `u8 n` (records in this reply), then per record `u8 index`, `name[32]`, `u32 version`, 8 bytes (`u32` the runtime
-/// version the module needs, then four zero bytes), `u32 cf_base, cf_size, dsp_off, dsp_len, rows` (voice rows as a mask), `u8 n_types` and that many machine
+/// version the module needs, then its Workbench instance token, 0 if it has no descriptor), `u32 cf_base, cf_size, dsp_off, dsp_len, rows` (voice rows as a mask), `u8 n_types` and that many machine
 /// type bytes (at most 8: the machine rows of the module, then its voice rows' types), `u32 faults` (the guard's count for those types), `u8 flags` (bit 0:
 /// the guard switched one of them off). A reply holds the records from `start` on that fit; the host asks again from the last index + 1 until it has `total`.
 pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 {
@@ -72,9 +72,9 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         *rb.add(at) = i as u8;
         copy(rb.add(at + 1), m.name.as_ptr(), 32);
         wr32(rb.add(at + 33), m.version);
-        // the version of the runtime the module needs, then four reserved zero bytes
+        // the version of the runtime the module needs, then its Workbench instance token
         wr32(rb.add(at + 37), (*addr_of!(crate::DKRT_MODULE_RUNTIME))[i]);
-        wr32(rb.add(at + 41), 0);
+        wr32(rb.add(at + 41), crate::module_ui::instance(i));
         wr32(rb.add(at + 45), m.base);
         wr32(rb.add(at + 49), m.size);
         wr32(rb.add(at + 53), d.mod_off[i]);
@@ -201,6 +201,10 @@ pub(crate) unsafe fn set_draining(owner: u8, on: bool) {
     let d = &mut *addr_of_mut!(DRAINING);
     *d = if on { *d | bit } else { *d & !bit };
     crate::platform::irq_restore(sr);
+}
+
+pub(crate) unsafe fn is_draining(rec: usize) -> bool {
+    core::ptr::read_volatile(addr_of!(DRAINING)) & (1u16 << rec) != 0
 }
 
 /// The handler of command `cmd` and its owner, with the command counted as in flight for that owner: the lookup and the count are one step under the interrupt mask,

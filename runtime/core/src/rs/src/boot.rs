@@ -194,6 +194,7 @@ pub unsafe extern "C" fn dkrt_boot() {
     // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
     // (ABOUT says so).
     r = crate::safe_mode::count_boot_with(&crate::PLATFORM, r, copy, valid, card::writable());
+    crate::module_ui::set_boot_sequence(r.seq);
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them

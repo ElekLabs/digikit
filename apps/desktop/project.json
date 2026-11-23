@@ -13,6 +13,7 @@
         },
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/*/module.toml",
+        "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/calibration/**/*",
@@ -57,6 +58,7 @@
         },
         "jsToolchain",
         "{workspaceRoot}/modules/*/*/*/module.toml",
+        "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/calibration/**/*",
@@ -101,6 +103,7 @@
         "{workspaceRoot}/devices/calibration/**/*",
         "{workspaceRoot}/modules/*/*/*/calibration.toml",
         "{workspaceRoot}/modules/*/*/*/module.toml",
+        "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],

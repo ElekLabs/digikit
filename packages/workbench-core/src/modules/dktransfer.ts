@@ -37,7 +37,7 @@ import {
   type ServiceRef,
   type ServiceRefusal,
 } from './services.ts';
-import type { DkEntry, DkInfoFull } from '@digi/dk-session';
+import type { DkEntry, DkInfoFull, DkModule } from '@digi/dk-session';
 
 export type Group = 'Machines' | 'Effects' | 'Filters' | 'LFO shapes' | 'Tools' | 'Services';
 
@@ -783,8 +783,11 @@ async function cardFacts(
   return { needs, provides, portFw, unread };
 }
 
-export async function readLoadedModules(s: DkSession, info: DkInfoFull) {
-  return hasCap(info, 'MODULES') ? s.modules() : [];
+export async function readLoadedModules(s: DkSession, info: DkInfoFull): Promise<DkModule[]> {
+  if (!hasCap(info, 'MODULES')) return [];
+  const modules = await s.modules();
+  if (hasCap(info, 'MODULE_UI')) return modules;
+  return modules.map(({ uiInstance: _reserved, ...module }) => module);
 }
 
 /** The merged view for the device behind `s`. READ supplies installed dependency data. With `deps` the library rows list the services they need and any install refusal. */

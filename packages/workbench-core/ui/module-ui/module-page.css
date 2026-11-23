@@ -69,3 +69,28 @@
   overflow: visible;
   background: transparent;
 }
+
+.module-file-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.module-file-choice label {
+  display: grid;
+  flex: 0 1 19rem;
+  gap: 0.35rem;
+}
+.module-file-choice select {
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  padding: 0.5rem;
+}
+.module-file-choice p {
+  flex-basis: 100%;
+}

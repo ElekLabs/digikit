@@ -24,6 +24,7 @@ export default function ModuleFilesArea(props: {
   files: ModuleFileClient;
   refresh: () => unknown;
   prepareSend?: () => Promise<void>;
+  settings?: (files: () => { name: string; size: number }[]) => JSX.Element;
 }): JSX.Element {
   const { busy, run, setError } = props.ctx;
   let input: HTMLInputElement | undefined;
@@ -132,6 +133,7 @@ export default function ModuleFilesArea(props: {
 
   return (
     <div class="group">
+      {props.settings?.(device)}
       <h4>{props.spec.label}</h4>
       <SplitPane id="transfer-files">
         <LocalPane

@@ -95,6 +95,7 @@ import_table! {
     ("dk_host_register", imp_host_register),
     ("dk_module_ctx_device", entry::dk_module_ctx_device),
     ("dk_module_ctx_runtime_version", entry::dk_module_ctx_runtime_version),
+    ("dk_workbench_register", crate::module_ui::dk_workbench_register),
     ("dk_settings_open", entry::dk_settings_open),
     ("dk_settings_get", entry::dk_settings_get),
     ("dk_settings_put", entry::dk_settings_put),
@@ -159,6 +160,7 @@ const _: dkrt_sdk::api::DkFilesReadFn = entry::dk_files_read;
 const _: dkrt_sdk::api::DkHostRegisterFn = imp_host_register;
 const _: dkrt_sdk::api::DkModuleCtxDeviceFn = entry::dk_module_ctx_device;
 const _: dkrt_sdk::api::DkModuleCtxRuntimeVersionFn = entry::dk_module_ctx_runtime_version;
+const _: dkrt_sdk::api::DkWorkbenchRegisterFn = crate::module_ui::dk_workbench_register;
 const _: dkrt_sdk::api::DkSettingsOpenFn = entry::dk_settings_open;
 const _: dkrt_sdk::api::DkSettingsGetFn = entry::dk_settings_get;
 const _: dkrt_sdk::api::DkSettingsPutFn = entry::dk_settings_put;

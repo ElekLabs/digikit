@@ -15,7 +15,8 @@ import {
   untrack,
 } from 'solid-js';
 import ModulePageView from '@digi/workbench-core/ui/module-ui/ModulePageView.tsx';
-import { moduleFilePages } from './module-file-pages';
+import { moduleFilePage, moduleFilePages } from './module-file-pages';
+import { runtimeModulePages } from './runtime-module-pages';
 import type { ModulePageSource } from '@digi/workbench-core/module-ui/module-page.ts';
 import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
@@ -205,12 +206,14 @@ export default function Console(
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
   const [moduleId, setModuleId] = createSignal('');
   const filePages = moduleFilePages(app);
+  const runtimePage = runtimeModulePages(app, (id, schema, open) => moduleFilePage(app, id, schema, open));
   const modulePages = createMemo(() => {
     const source = props.modulePages;
     if (app.target.switching() || app.target.libraryOnly()) return [];
     const key = targetKey(target());
-    return app.inventory.modules().flatMap(({ name }) => {
-      const view = source?.lookup(key, name) ?? filePages.get(name);
+    return app.inventory.modules().flatMap((module) => {
+      const { name } = module;
+      const view = source?.lookup(key, name) ?? runtimePage(module) ?? filePages.get(name);
       return view ? [{ id: name, view }] : [];
     });
   });
@@ -540,6 +543,7 @@ export default function Console(
       await runJob('Reloading modules', { group: 'emulator' }, async () => {
         setError('');
         setReloadNote('Reloading modules…');
+        if (isEmulator()) app.inventory.clear();
         try {
           const report = await r.reloadModules!();
           setReloadNote(reloadLine(report));
@@ -556,6 +560,8 @@ export default function Console(
           const failure = reloadError(e);
           setReloadNote(failure.status);
           logInput(reloadFailureEntry(failure));
+        } finally {
+          bumpCardRefresh();
         }
       });
     } catch (e) {

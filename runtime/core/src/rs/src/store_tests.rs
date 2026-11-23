@@ -45,13 +45,13 @@ const OWNER: u8 = 3;
 // ---- the fixture ----------------------------------------------------------------------------------------------------------------------
 
 /// A blank card of the layout `L`, the card gate unchecked, the writer's statics at rest. Holds the test lock.
-struct Fixture {
+pub(crate) struct Fixture {
     _card: CardGuard,
     _lock: MutexGuard<'static, ()>,
 }
 
 impl Fixture {
-    fn new() -> Fixture {
+    pub(crate) fn new() -> Fixture {
         let lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         unsafe { rest() };
         *card_gate::info() = card_gate::CardInfo {
@@ -188,7 +188,7 @@ fn abort() -> i32 {
 }
 
 /// BEGIN, DATA in chunks of 4096, END: the first status that is not OK.
-fn upload(path: &str, bytes: &[u8]) -> i32 {
+pub(crate) fn upload(path: &str, bytes: &[u8]) -> i32 {
     let r = begin(path, bytes.len(), slot(bytes));
     if r != OK {
         return r;

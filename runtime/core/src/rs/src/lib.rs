@@ -72,6 +72,7 @@ mod transport;
 mod store_cmds;
 mod admin_cmds;
 mod module_cmds;
+mod module_ui;
 
 // The items that moved out of this file are still reachable as `crate::name`.
 pub use api::*;

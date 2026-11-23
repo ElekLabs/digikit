@@ -58,6 +58,7 @@ export const RESOURCE = {
 } as const;
 
 export const CMD = {
+  MODULE_UI: 0x00,
   INFO: 0x01,
   LIST: 0x02,
   MODULES: 0x03,
@@ -127,6 +128,8 @@ export const STATUS: [number, string, string][] = [
   [-70, 'E_SET_OFF', 'settings store off: an older store reaches its area, or no store'],
   [-71, 'E_FILE_IN_USE', 'a sample is still loading from that file: wait and try again'],
   [-72, 'E_AGAIN', 'usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry'],
+  [-88, 'E_MODULE_UI_CONFLICT', 'the module setting revision changed'],
+  [-89, 'E_MODULE_UI_SCOPE', 'project settings are active; change this setting on the device'],
 ];
 
 /** [code, name, text] */
@@ -251,6 +254,7 @@ export const CAP = {
   RELOAD: 17,
   FW_ID: 18,
   LIVE: 19,
+  MODULE_UI: 20,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */

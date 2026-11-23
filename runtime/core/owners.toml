@@ -40,7 +40,7 @@ shared = [
 
 "S:lfo" = ["dkrt_svc_lfo"]
 
-"C:state" = ["dkrt::settings", "dkrt::settings_overlay", "dkrt::selection"]
+"C:state" = ["dkrt::module_ui", "dkrt::settings", "dkrt::settings_overlay", "dkrt::selection"]
 "C:boot" = ["dkrt::boot", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
 "C:loading" = [
   "dkrt::loader",

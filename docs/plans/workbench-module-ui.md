@@ -1,6 +1,6 @@
 # Workbench module pages
 
-The host preview now exercises the settings sample with a generated text form and a colocated Solid companion. Run it from the [development guide](../DEVELOPMENT.md). Device discovery, wire messages and the Bootscreen and Project Manager APIs below remain proposals.
+The host preview now exercises the settings sample with a generated text form and a colocated Solid companion. Run it from the [development guide](../DEVELOPMENT.md). Boot screen uses the shared runtime settings transport for its active animation. Project Manager operations and independent custom panel installation remain future work.
 
 ## Discovery and ownership
 
@@ -12,36 +12,23 @@ The loaded instance advertises its canonical author/name ID, descriptor format v
 
 ## Bootscreen
 
-The author edits `modules/tool/tools/bootscreen/workbench.toml` and the module's C source only where validation needs module behavior. Move the existing file presentation metadata into the new declaration and generate the file panel from it. Keep one source of labels, limits and preview choice.
+Boot screen declares the animation setting beside its module manifest. Patchkit compiles it into the DKM. The device registers the descriptor when the module loads. Workbench lists choices through the module's existing files client.
 
 ```toml
 [workbench]
 version = 1
 
-[[panel]]
-kind = "files"
-id = "animations"
-label = "Boot screens"
-extensions = ["dkbs"]
-preview = "oled-1bit"
-
 [[setting]]
 id = "active"
-label = "Boot screen"
+label = "Animation"
 type = "file-name"
-files = "animations"
-max_bytes = 47
-binding = "active"
+extension = "dkbs"
 reset_label = "Stock"
+max_bytes = 47
 apply = "next-restart"
 ```
 
-The host generates the form and the file controls. The settings client exposes `list()`, `get(key)`, `put(key, value, revision)`, and `reset(key, revision)` for resettable fields. The files client offers list, read, put with progress, and remove inside the loaded module's data directory. Send uses the existing file transport. It leaves the selection up to the user. The active chooser lists uploaded files and Stock. Selecting Stock removes the key. An absent key and a stored empty value remain distinguishable.
-
-1. Discover the loaded instance and read its descriptor in pages. Read `active` with its revision and enumerate the module's files.
-2. Upload the chosen DKBS through the existing file API. Keep the 64 KiB file limit and existing host preview validation. Refresh the file list after completion.
-3. Send a typed write with the instance, field ID, observed revision and file name. The UI task checks the binding, length, leaf name and membership in the module's folder, then uses the module's settings handle. Reuse the device chooser's validation path. File contents still pass the module's full DKBS validation at boot.
-4. Return the effective value, new revision and next-restart status. Reset follows the same ownership checks. A file deleted after selection follows the existing stock-intro fallback.
+Uploading an animation leaves the saved choice alone. Save selects a file present in the module's data directory, or removes the setting when Stock is chosen. The runtime uses the same settings namespace as the device menu. With a project settings overlay installed, Workbench can display the effective choice and the device menu handles edits. File contents still pass DKBS validation at boot. If a selected file goes missing, boot falls back to the stock intro.
 
 ## Project Manager
 

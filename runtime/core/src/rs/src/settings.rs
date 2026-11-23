@@ -470,7 +470,11 @@ pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32
             return r;
         }
     }
-    put(&k[..n], v)
+    let r = put(&k[..n], v);
+    if r == OK {
+        crate::module_ui::setting_changed(client as usize - 1, key_of(key));
+    }
+    r
 }
 
 /// `settings_remove`: 0 (also when the key was not there), or `E_SET_KEY` (bad handle or key), `E_SET_OFF`. UI task. The order is: the record is asked whether it can take the
@@ -492,7 +496,11 @@ pub unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
             return r;
         }
     }
-    remove(&k[..n])
+    let r = remove(&k[..n]);
+    if r == OK {
+        crate::module_ui::setting_changed(client as usize - 1, key_of(key));
+    }
+    r
 }
 
 /// Write the record now when it has changes the card does not hold: 0 (also when nothing was changed), or `E_WRITE`, `E_RANGE`, `E_CARD_RO`, `E_SET_OFF`. UI task.
@@ -551,7 +559,7 @@ pub unsafe fn mailbox(cmd: u32, arg: *mut u8) -> i32 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -633,7 +641,7 @@ mod tests {
     static SCOPE: SettingsOverlay = SettingsOverlay { version: SETTINGS_OVERLAY_VERSION, get: p_get, put: p_put, remove: p_remove };
 
     /// An empty settings record in RAM and a loaded module `test/m` at record 0 (handle 1); an overlay is set when `service`.
-    unsafe fn setup(service: bool) {
+    pub(crate) unsafe fn setup(service: bool) {
         let s = state();
         s.loaded = 1;
         s.off = 0;
@@ -651,9 +659,12 @@ mod tests {
             crate::dlog::set_source_for_test(0);
         }
     }
-    unsafe fn teardown() {
+    pub(crate) unsafe fn teardown() {
         settings_overlay::withdraw(0);
         crate::st().modules[0].used = 0;
+    }
+    pub(crate) fn overlay_value(key: &[u8]) -> Option<Vec<u8>> {
+        ENTRIES.lock().unwrap().get(key).cloned()
     }
     unsafe fn rd(key: &[u8]) -> i32 {
         let mut out = [0u8; 8];

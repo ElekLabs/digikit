@@ -43,6 +43,7 @@ pub unsafe fn bind(rec: usize) -> *const Ctx {
 
 /// Record `rec` goes away: no tick, no context.
 pub unsafe fn unbind(rec: usize) {
+    crate::module_ui::withdraw(rec);
     write_volatile(addr_of_mut!(DKRT_TICKS[rec]), 0);
     (*addr_of_mut!(DKRT_CTXS))[rec] = NO_CTX;
 }

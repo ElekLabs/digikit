@@ -283,7 +283,8 @@ pub(crate) struct Cmd {
 }
 
 /// The built-in commands, looked up one after the other (a jump table is not ColdFire code).
-pub(crate) static CMDS: [Cmd; 23] = [
+pub(crate) static CMDS: [Cmd; 24] = [
+    Cmd { cmd: CMD_MODULE_UI, flags: NOLOG, h: crate::module_ui::command },
     Cmd { cmd: CMD_INFO, flags: NOLOG | STORE, h: h_info },
     Cmd { cmd: CMD_LIST, flags: STORE, h: h_list },
     Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },

@@ -937,6 +937,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         if module {
             s.loads = s.loads.wrapping_add(1);
             crate::intro::commit(rec);
+            crate::module_ui::publish(rec);
         }
     }
 
@@ -945,6 +946,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         let module = rec < MAX_MODULES;
         if module {
             crate::intro::discard(rec);
+            crate::module_ui::withdraw(rec);
         }
         let held = !crate::files::retire(rec) | !retire_sdk(rec);
         crate::module_cmds::release_cmds(rec as u8 + 1);
@@ -1172,6 +1174,7 @@ impl<P: Platform, M: Images, R: Registry> Loader<P, M, R> {
         }
         // DSP rows must be invalidated before fini can mutate/release module state.
         if !dsp::quiesce(rec) { return E_BUSY; }
+        crate::module_ui::withdraw(rec);
         // 2. fini, 3. free
         if m.fini != 0 && self.torn[rec] & TORN_FINI == 0 {
             // from here the old code is gone for good: a reload cannot give the tick back
