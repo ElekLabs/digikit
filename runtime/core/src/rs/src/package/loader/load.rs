@@ -246,10 +246,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
-    /// `fail` for a record whose `init` returned `OK`: its `fini` runs first, so what `init` made (a provider's owner object, `Owner::stop`) is given back, as the unload does.
+    /// `fail` for a record whose `init` returned `OK` and whose commit or entry derivation then refused: a provider file's `fini` runs first, so what `init` made (its owner
+    /// object, `Owner::stop`) is given back, as the unload does. A content module's `fini` does not run (it never did on this path).
+    ///
+    /// The other steps of `unload_body` are not needed here: the record never ticked (`go_live` publishes the tick), has no DSP part claimed (`dsp::quiesce` is for a module's
+    /// rows) and is not attached, so no tick, no intro, no unload observer and no resident entry point at it. The listing client, the SDK jobs, the commands and sinks, and the
+    /// role's undo are `fail`'s own, the same ones `unload_body` runs.
     pub(super) unsafe fn fail_started(&mut self, rec: usize, r: i32) -> i32 {
         let fini = records::module(rec).fini;
-        if fini != 0 {
+        if self.roles[rec] == 1 && fini != 0 {
             let ctx = crate::package::entry::ctx_ptr(rec);
             self.m.enter_fini(rec, fini, ctx);
         }

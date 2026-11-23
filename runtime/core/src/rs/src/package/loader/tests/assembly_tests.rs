@@ -2292,13 +2292,19 @@ fn an_effect_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leave
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
             assert_eq!(dkneeds::keys::Keys::parse(&table_of(&packed(*dev, FX_GAIN.leaf, "dkm", FX_GAIN.nx))).unwrap().keys_of(dkneeds::KIND_EFFECT).count(), 1, "the fixture has one effect id");
-            swap_module(&mut l, 0, FX_GAIN.leaf, without_dsp(*dev, &FX_GAIN));
+            let mut f = without_dsp(*dev, &FX_GAIN);
+            // the module has a `fini` (the host runs no code: the entry is the `init` offset)
+            let init = be(&f, dkneeds::H_INIT);
+            put(&mut f, dkneeds::H_FINI, init);
+            swap_module(&mut l, 0, FX_GAIN.leaf, f);
             l.m.init_calls = std::vec![Builder::Fx(1)];
             l.m.real_rows = true;
             let _dsp = dsp_env(*dev, &l, &plan);
             let run = boot_run(&mut l, &plan, &[&FX_GAIN], false);
             assert_eq!(run.code(0), E_DECL_ID, "{}: {:?}", dev.name, run.refusal(0));
             nothing_left(&l, dev.name);
+            // `init` returned OK and the commit refused: a content module's `fini` does not run (only a provider file's does)
+            assert!(!l.m.hooks.iter().any(|(fini, _)| *fini), "{}: no fini of a content module", dev.name);
         }
         let _ = clean_state();
     }
