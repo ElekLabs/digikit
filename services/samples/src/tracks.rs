@@ -6,275 +6,442 @@
 //! `sample_pool_add` returns E_CONTRACT.
 //!
 //! The track table of a module travels in its .dkm DSP section (version 5, record kind 2: the byte offsets of the 16 `dk_sample_pool_entry`
-//! records and the 16 control sets in the module's DSP data). `dsp::reserve` calls `reserve` with their L2 byte addresses and
-//! `ready` when the DSP image is in; before that no DSP write is made.
+//! records and the 16 control sets in the module's DSP data). `dsp::claim` calls `reserve` with their L2 byte addresses and
+//! `ready` (`DspPart::loaded`) when the DSP image is in; before that no DSP write is made.
 //!
-//! The DSP link is write-only, so close, drain and publish are queued writes, one in flight at a time (`pump`): each write is a request of the owner `Tracks` on the
-//! core's link queue (its bytes are copied there), and a start needs an idle loader.
-//!   close:   control CLOSED = 1, then record `ready` = 0. The DSP holds a track only between ACQUIRE and RELEASE inside one `render`
-//!            call, so a render that was inside when CLOSED landed ends within that block. The second write lands in a later block than
-//!            the first (one transfer at a time, each acknowledged), so its acknowledgement drains the track: no COUNT read-back
-//!            exists.
-//!   publish: record words 1..7 (token, frames, rate, channels, fmt, base_l, base_r), control CLOSED = 0, then `ready` = 1 last.
-//! A write the link refuses is retried; after `TRIES` failures the op stays failed (a close then never drains and the generic drain
-//! guard of `sample_tracks` ends the request; a publish stays unpublished, `ready` = 0, the track plays silence).
-//! A sticky DSP FAULT (poisoned COUNT, CLOSED = 1) is never cleared by the runtime: that track stays silent until the module reloads.
+//! The table writes over the DSP link (close, drain, publish) are queued by [`crate::writes::Writes`].
 //!
 //! The pool list is not kept here: the module keeps it in its settings (the picker, sdk/src/sample/picker.c), and the settings are per project
 //! while the `project` service is loaded.
 //!
 //! TODO (not wired yet): a request mailbox so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
-use core::ptr::{addr_of, addr_of_mut, read_volatile};
+use crate::files::{files_in_store, probe, root_of, rooted_path};
+use crate::pool::Pool;
+use crate::writes::Writes;
+use core::mem::MaybeUninit;
+use core::ptr::{addr_of_mut, write_volatile};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
-use dkrt_abi::dsp::PH_IDLE;
-use dkrt_abi::link::{LinkResult, Owner, Stream, Ticket};
-use dkrt_abi::storage::EntryKind;
-use dkrt_sdk::files::SAMPLES;
 use dkrt_sdk::sample_tracks::{
-    rooted, store_inspect, unrooted, Core, Env, FileId, Handle, Inspect, Load, Note, Strack,
-    ID_HASH_VALID, ROOT_DN2, ROOT_DT2, TRACKS,
+    store_inspect, unrooted, Core, Env, FileId, Handle, Inspect, Load, Note, Strack, PATH,
 };
-use dkrt_sdk::{logk, E_CONTRACT, E_DSP_XFER, E_NOT_FOUND, E_SEL_PATH};
+use dkrt_sdk::{logk, E_CONTRACT, E_NOT_FOUND, E_SEL_PATH};
 
 pub(crate) const CLIENTS: usize = 2;
 const ENTRIES: usize = 16;
 
-/// Zero-initialised (a `.bss` of the service file: 35 KB of initial bytes would be in the file); `core_` starts it on first use.
-static mut CORE: Core<CLIENTS, ENTRIES> = Core::zeroed();
-static mut CORE_STARTED: bool = false;
-/// Module record of the owner of each client slot (`usize::MAX` = free), its local id, the L2 byte addresses of its 16 records and 16
-/// control sets, and whether its DSP image is in (table writes may start).
-static mut OWNER: [usize; CLIENTS] = [usize::MAX; CLIENTS];
-static mut LOCAL: [u32; CLIENTS] = [0; CLIENTS];
+/// The state machine of the tracks of all clients (`dkrt_sdk::sample_tracks`).
+pub(crate) type TrackCore = Core<CLIENTS, ENTRIES>;
+
+// The two tables a device test reads by symbol: the L2 byte addresses of the 16 records and 16 control sets of each client (D7 of docs/plans/rc3-briefs.md). `Tracks::reserve` is the
+// only writer; the logic reads the copies in `Writes`.
 #[no_mangle]
 pub static mut DKRT_SMP_RECORDS: [u32; CLIENTS] = [0; CLIENTS];
 #[no_mangle]
 pub static mut DKRT_SMP_CONTROL: [u32; CLIENTS] = [0; CLIENTS];
-static mut LIVE: [bool; CLIENTS] = [false; CLIENTS];
-/// The client slot of a module that is taken down (`usize::MAX`: none): nothing reads its tracks any more, so close drains at once and
-/// writes are dropped. Other clients are stepped normally meanwhile.
-static mut FORCE: usize = usize::MAX;
 
-pub(crate) unsafe fn core_() -> &'static mut Core<CLIENTS, ENTRIES> {
-    if !read_volatile(addr_of!(CORE_STARTED)) {
-        (*addr_of_mut!(CORE)).start();
-        *addr_of_mut!(CORE_STARTED) = true;
+/// The tracks of the clients: each module that has a track table in its DSP section owns one client slot.
+///
+/// All-zero bytes are the initial state after `start` of the core (`init`): `owner` holds the module record + 1 of each slot (0: free), so the owner object can make it
+/// where it lives (a 35 kB state is never copied through the stack).
+pub(crate) struct Tracks {
+    core: TrackCore,
+    /// Module record + 1 of the owner of each client slot (0: free), and its local id.
+    owner: [usize; CLIENTS],
+    local: [u32; CLIENTS],
+    writes: Writes,
+    /// Pool losses since the start (wrapping).
+    lost: u32,
+}
+
+impl Tracks {
+    pub(crate) fn new() -> Tracks {
+        let mut core = TrackCore::zeroed();
+        core.start();
+        Tracks {
+            core,
+            owner: [0; CLIENTS],
+            local: [0; CLIENTS],
+            writes: Writes::new(),
+            lost: 0,
+        }
     }
-    &mut *addr_of_mut!(CORE)
-}
 
-/// Is a backing adapter of the right version installed? (`pool::set`, from the adapter's `sample_pool_info`.)
-unsafe fn pool_ok<C: CoreApi>(_core: &C) -> bool {
-    crate::pool::present()
-}
-
-// ---- table writes over the DSP link -------------------------------------------------------------------------------------------
-
-const OP_NONE: u8 = 0;
-const OP_CLOSE: u8 = 1;
-const OP_PUBLISH: u8 = 2;
-const OP_FAILED: u8 = 3;
-/// Refusals of one write before the op is given up.
-const TRIES: u8 = 8;
-const NO_FLIGHT: usize = usize::MAX;
-
-#[derive(Clone, Copy)]
-struct Op {
-    kind: u8,
-    step: u8,
-    tries: u8,
-    /// The record to publish (`Strack` words in order).
-    rec: [u32; 8],
-}
-const OP0: Op = Op {
-    kind: OP_NONE,
-    step: 0,
-    tries: 0,
-    rec: [0; 8],
-};
-static mut OPS: [[Op; TRACKS]; CLIENTS] = [[OP0; TRACKS]; CLIENTS];
-/// The write in flight: the id of its request and its track, client * TRACKS + track.
-static mut FLIGHT: usize = NO_FLIGHT;
-static mut FLIGHT_ID: u16 = 0;
-
-/// Has the op written everything?
-fn complete(op: &Op) -> bool {
-    (op.kind == OP_CLOSE && op.step >= 2) || (op.kind == OP_PUBLISH && op.step >= 3)
-}
-
-/// The next write of an op: (destination L2 byte address, the words, their count). None when the op is complete.
-/// If chains, not a `match`: dense arms become a PC-relative jump table, which is not ColdFire code.
-unsafe fn next_write(c: usize, k: usize, op: &Op) -> Option<(u32, [u32; 7], usize)> {
-    let rec = DKRT_SMP_RECORDS[c] + 32 * k as u32;
-    let ctl = DKRT_SMP_CONTROL[c] + 16 * k as u32;
-    let mut w = [0u32; 7];
-    if op.kind == OP_CLOSE {
-        if op.step == 0 {
-            w[0] = 1;
-            return Some((ctl, w, 1));
+    /// Make the state in `slot`: zero bytes plus the few non-zero starting values of the core.
+    pub(crate) fn init(slot: &mut MaybeUninit<Tracks>) {
+        let p = slot.as_mut_ptr();
+        // SAFETY: every field of `Tracks` is valid as zero bytes (`TrackCore::zeroed` is all-zero by its contract, the rest are integers, bools and arrays of them).
+        unsafe {
+            p.write_bytes(0, 1);
+            (*addr_of_mut!((*p).core)).start();
         }
-        if op.step == 1 {
-            return Some((rec, w, 1));
+    }
+
+    pub(crate) fn core(&self) -> &TrackCore {
+        &self.core
+    }
+
+    /// The client slot of the calling module, if it has a track table.
+    pub(crate) fn client(&self, handle: u32) -> Result<usize, i32> {
+        let h = handle as usize;
+        if h == 0 || h > CLIENTS || !self.core.is_open(h - 1) {
+            return Err(E_NOT_FOUND);
         }
-    } else if op.kind == OP_PUBLISH {
-        if op.step == 0 {
-            let mut i = 0;
-            while i < 7 {
-                w[i] = op.rec[1 + i];
-                i += 1;
+        Ok(h - 1)
+    }
+
+    /// Is a client slot free (checked by `dsp::admit` before it takes anything)?
+    pub(crate) fn can_reserve(&self) -> bool {
+        self.owner.iter().any(|o| *o == 0)
+    }
+
+    /// A module's track table was found in its DSP section: `records` and `control` are the L2 byte addresses of its 16 records and 16
+    /// control sets. Nothing is written to the DSP before `ready`.
+    pub(crate) fn reserve(
+        &mut self,
+        rec: usize,
+        local_id: u32,
+        records: u32,
+        control: u32,
+    ) -> bool {
+        let mut i = 0;
+        while i < CLIENTS {
+            if self.owner[i] == 0 && self.core.open(i) {
+                self.owner[i] = rec + 1;
+                self.local[i] = local_id;
+                self.writes.reserve(i, records, control);
+                // SAFETY: the named tables are written only here (a device test reads them by symbol)
+                unsafe {
+                    write_volatile(addr_of_mut!(DKRT_SMP_RECORDS[i]), records);
+                    write_volatile(addr_of_mut!(DKRT_SMP_CONTROL[i]), control);
+                }
+                return true;
             }
-            return Some((rec + 4, w, 7));
+            i += 1;
         }
-        if op.step == 1 {
-            return Some((ctl, w, 1));
-        }
-        if op.step == 2 {
-            w[0] = op.rec[0];
-            return Some((rec, w, 1));
+        false
+    }
+
+    /// The module's DSP image is in, so its table words exist: queued writes may go out.
+    pub(crate) fn ready(&mut self, rec: usize) {
+        let mut i = 0;
+        while i < CLIENTS {
+            if self.owner[i] == rec + 1 {
+                self.writes.ready(i);
+            }
+            i += 1;
         }
     }
-    None
-}
 
-/// Finish the write in flight, then start the next one. Called twice per UI-loop pass.
-unsafe fn pump<C: CoreApi>(api: &C) {
-    if FLIGHT != NO_FLIGHT {
-        let done = api.link_result(Ticket {
-            owner: Owner::Tracks,
-            id: FLIGHT_ID,
-        });
-        if done == LinkResult::Pending {
+    /// A module's record went away (its machine rows are already cleared, so no voice runs): unbind its tracks without closing them in
+    /// the DSP, release the pool references and free the client slot. A write already in flight ends by itself (its bytes are copied into the request, and
+    /// the link is serialized, so a later load of the range lands after it). The mask has bit `i` set for each client slot that was freed (the caller resets what it keeps per client).
+    pub(crate) fn release<C: CoreApi>(&mut self, core: &C, pool: &Pool, rec: usize) -> u32 {
+        let mut freed = 0;
+        let mut i = 0;
+        while i < CLIENTS {
+            if self.owner[i] == rec + 1 {
+                self.writes.begin_teardown(i);
+                let mut n = 0;
+                while n < 4
+                    && !self.core.teardown(
+                        i,
+                        &mut Device {
+                            core,
+                            pool,
+                            writes: &mut self.writes,
+                        },
+                    )
+                {
+                    n += 1;
+                }
+                self.writes.end_teardown();
+                self.writes.release(i);
+                self.owner[i] = 0;
+                freed |= 1 << i;
+            }
+            i += 1;
+        }
+        freed
+    }
+
+    /// Does module record `rec` hold a track table?
+    pub(crate) fn has(&self, rec: usize) -> bool {
+        self.owner.iter().any(|o| *o == rec + 1)
+    }
+
+    /// Is the table of module record `rec` live (its DSP image is in)?
+    pub(crate) fn is_live(&self, rec: usize) -> bool {
+        (0..CLIENTS).any(|i| self.owner[i] == rec + 1 && self.writes.is_live(i))
+    }
+
+    /// The handle of the calling module's table with local id `local_id`, or E_NOT_FOUND.
+    pub(crate) fn tracks<C: CoreApi>(&self, core: &C, local_id: u32) -> i32 {
+        let owner = core.current_source();
+        if owner == 0 {
+            return E_NOT_FOUND;
+        }
+        let rec = owner as usize - 1;
+        let mut i = 0;
+        while i < CLIENTS {
+            if self.owner[i] == rec + 1 && self.local[i] == local_id {
+                return i as i32 + 1;
+            }
+            i += 1;
+        }
+        E_NOT_FOUND
+    }
+
+    /// `dk_sample_pool_open`: the handle of the module's pool table with the lowest local id (the one table a module declares), as `tracks` gives it for
+    /// that id; E_NOT_FOUND without a table.
+    pub(crate) fn open_first<C: CoreApi>(&self, core: &C) -> i32 {
+        let owner = core.current_source();
+        if owner == 0 {
+            return E_NOT_FOUND;
+        }
+        let rec = owner as usize - 1;
+        let mut best = usize::MAX;
+        let mut i = 0;
+        while i < CLIENTS {
+            if self.owner[i] == rec + 1 && (best == usize::MAX || self.local[i] < self.local[best])
+            {
+                best = i;
+            }
+            i += 1;
+        }
+        if best == usize::MAX {
+            return E_NOT_FOUND;
+        }
+        self.tracks(core, self.local[best])
+    }
+
+    /// `sample_pool_add`: the pool index of the file (a new entry, or the one that already holds the path), or a negative error.
+    ///
+    /// # Safety
+    /// `path` is null or a NUL-terminated string.
+    pub(crate) unsafe fn pool_add<C: CoreApi>(
+        &mut self,
+        core: &C,
+        pool: &Pool,
+        handle: u32,
+        path: *const u8,
+    ) -> i32 {
+        if path.is_null() {
+            return E_SEL_PATH;
+        }
+        if !pool.present() {
+            return E_CONTRACT;
+        }
+        let c = match self.client(handle) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        let mut full = [0u8; PATH];
+        let n = match rooted_path(core, path, &mut full) {
+            Ok(n) => n,
+            Err(e) => return e,
+        };
+        let sr = core.irq_mask();
+        let r = self.core.pool_add(c, &full[..n]);
+        core.irq_restore(sr);
+        r
+    }
+
+    /// `sample_pool_set`: load the file into entry `index` (replacing what was there); 0 or a negative error.
+    ///
+    /// # Safety
+    /// `path` is null or a NUL-terminated string.
+    pub(crate) unsafe fn pool_set<C: CoreApi>(
+        &mut self,
+        core: &C,
+        pool: &Pool,
+        handle: u32,
+        index: u32,
+        path: *const u8,
+    ) -> i32 {
+        if path.is_null() {
+            return E_SEL_PATH;
+        }
+        if !pool.present() {
+            return E_CONTRACT;
+        }
+        let c = match self.client(handle) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        let mut full = [0u8; PATH];
+        let n = match rooted_path(core, path, &mut full) {
+            Ok(n) => n,
+            Err(e) => return e,
+        };
+        let sr = core.irq_mask();
+        let r = self.core.pool_set(c, index as usize, &full[..n]);
+        core.irq_restore(sr);
+        r
+    }
+
+    /// `sample_pool_clear`: the entry becomes UNUSED (a hole); the other indexes stay.
+    pub(crate) fn pool_clear<C: CoreApi>(&mut self, core: &C, handle: u32, track: u32) -> i32 {
+        match self.client(handle) {
+            Ok(c) => {
+                let sr = core.irq_mask();
+                let r = self.core.unbind(c, track as usize);
+                core.irq_restore(sr);
+                r
+            }
+            Err(e) => e,
+        }
+    }
+
+    pub(crate) fn status(&self, handle: u32, track: u32) -> i32 {
+        match self.client(handle) {
+            Ok(c) => self.core.status(c, track as usize),
+            Err(e) => e,
+        }
+    }
+
+    /// `sample_pool_path`: the entry's current selection, root-relative, NUL-terminated, into `buf`; the length without the NUL.
+    ///
+    /// # Safety
+    /// `buf` is null or writable for `cap` bytes.
+    pub(crate) unsafe fn path<C: CoreApi>(
+        &self,
+        core: &C,
+        handle: u32,
+        track: u32,
+        buf: *mut u8,
+        cap: u32,
+    ) -> i32 {
+        let c = match self.client(handle) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        if buf.is_null() {
+            return E_SEL_PATH;
+        }
+        match self.core.path(c, track as usize) {
+            Ok(stored) => {
+                let p = unrooted(root_of(core), stored);
+                if p.len() + 1 > cap as usize {
+                    return E_SEL_PATH;
+                }
+                core::ptr::copy_nonoverlapping(p.as_ptr(), buf, p.len());
+                *buf.add(p.len()) = 0;
+                p.len() as i32
+            }
+            Err(e) => e,
+        }
+    }
+
+    /// Copies a 16-byte `dk_sample_info` (big-endian words, as the module sees them) when the track is READY.
+    ///
+    /// # Safety
+    /// `out` is null or writable for 16 bytes.
+    pub(crate) unsafe fn info(&self, handle: u32, track: u32, out: *mut u8) -> i32 {
+        let c = match self.client(handle) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        if out.is_null() {
+            return E_NOT_FOUND;
+        }
+        match self.core.info(c, track as usize) {
+            Ok(i) => {
+                let w = [i.frames, i.rate, i.channels, i.token];
+                let mut k = 0;
+                while k < 4 {
+                    core::ptr::copy_nonoverlapping(w[k].to_be_bytes().as_ptr(), out.add(k * 4), 4);
+                    k += 1;
+                }
+                0
+            }
+            Err(e) => e,
+        }
+    }
+
+    /// Bounded overview copy; no file or PCM access in the UI task.
+    ///
+    /// # Safety
+    /// `out` is null or writable for `capacity` bytes.
+    pub(crate) unsafe fn peaks(
+        &self,
+        pool: &Pool,
+        handle: u32,
+        track: u32,
+        token: u32,
+        out: *mut u8,
+        capacity: u32,
+    ) -> i32 {
+        let c = match self.client(handle) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        if out.is_null() || (out as usize & 1) != 0 || capacity < 2048 || !pool.peaks_present() {
+            return E_CONTRACT;
+        }
+        match self.core.peak_handle(c, track as usize, token) {
+            Ok(h) => pool.peaks(&h, out, capacity),
+            Err(e) => e,
+        }
+    }
+
+    /// One step of every track, in the UI loop. Without a backing adapter nothing runs.
+    pub(crate) fn tick<C: CoreApi>(&mut self, core: &C, pool: &Pool) {
+        if !pool.present() {
             return;
         }
-        let (c, k) = (FLIGHT / TRACKS, FLIGHT % TRACKS);
-        FLIGHT = NO_FLIGHT;
-        let op = &mut (*addr_of_mut!(OPS))[c][k];
-        if done == LinkResult::Done {
-            op.step += 1;
-            op.tries = 0;
-        } else {
-            op.tries += 1;
-        }
+        // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
+        // SAFETY: the adapter's call (`dkpool_tick`); it may call `pool_done` and `pool_lost` of this owner, so nothing of the state is read across it.
+        unsafe { pool.tick() };
+        // SAFETY: the core's link calls
+        unsafe { self.writes.pump(core) };
+        self.core.tick(&mut Device {
+            core,
+            pool,
+            writes: &mut self.writes,
+        });
+        // SAFETY: as above
+        unsafe { self.writes.pump(core) };
     }
-    let mut c = 0;
-    while c < CLIENTS {
-        let mut k = 0;
-        while k < TRACKS {
-            let op = &mut (*addr_of_mut!(OPS))[c][k];
-            if op.kind == OP_CLOSE || op.kind == OP_PUBLISH {
-                if op.tries >= TRIES {
-                    op.kind = OP_FAILED;
-                } else if complete(op) {
-                    op.kind = OP_NONE;
-                }
-            }
-            k += 1;
-        }
-        c += 1;
-    }
-    // a table write waits for the loader: the rows of a module that loads are not in the DSP yet
-    let d = api.dsp();
-    if d.phase != PH_IDLE || d.nwait != 0 {
-        return;
-    }
-    c = 0;
-    while c < CLIENTS {
-        let mut k = 0;
-        while k < TRACKS {
-            let op = (*addr_of!(OPS))[c][k];
-            if (op.kind == OP_CLOSE || op.kind == OP_PUBLISH) && LIVE[c] {
-                if let Some((dst, words, n)) = next_write(c, k, &op) {
-                    if let Some(stream) = Stream::owned(0, dst, &words[..n]) {
-                        if let Some(t) = api.link_submit(Owner::Tracks, &stream) {
-                            FLIGHT = c * TRACKS + k;
-                            FLIGHT_ID = t.id;
-                        }
-                    }
-                    return;
-                }
-            }
-            k += 1;
-        }
-        c += 1;
-    }
-}
 
-// ---- file header and identity ---------------------------------------------------------------------------------------------
+    /// Adapter to runtime: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT). The slot `pool_done` of the service file calls it.
+    pub(crate) fn pool_done(&mut self, req: u32, result: i32) {
+        self.core.done(req, result);
+    }
 
-/// The device's sample root (`select` paths are root-relative; the runtime keeps the rooted form).
-/// Are the samples files of the store (a device with `samples_in_store` in its profile), not of the firmware's file system? The profile is found by the device id.
-fn files_in_store<C: CoreApi>(core: &C) -> bool {
-    let id = core.device_id();
-    dkrt_abi::profiles::ALL
-        .iter()
-        .any(|p| p.id == id && p.samples_in_store)
-}
-fn root<C: CoreApi>(core: &C) -> &'static [u8] {
-    root_of(core)
-}
-fn root_of<C: CoreApi>(core: &C) -> &'static [u8] {
-    if files_in_store(core) {
-        ROOT_DN2
-    } else {
-        ROOT_DT2
+    /// Adapter to runtime: the backing was lost, all handles are invalid. The slot `pool_lost` of the service file calls it.
+    pub(crate) fn pool_lost<C: CoreApi>(&mut self, core: &C, pool: &Pool) {
+        self.lost = self.lost.wrapping_add(1);
+        // SAFETY: the core's log call
+        unsafe {
+            core.log(
+                logk::POOL_LOST,
+                logk::L_WARN << logk::LEVEL_SHIFT,
+                [self.lost, 0, 0, 0, 0],
+            )
+        };
+        self.core.lost(&mut Device {
+            core,
+            pool,
+            writes: &mut self.writes,
+        });
     }
-}
-
-/// The identity of the sample file `path` (device-rooted, not NUL-terminated) from `Storage::stat`: its size and, when the storage gives one, the
-/// file hash of its table entry (the listing row's). No mtime exists on either device (`mtime` 0): without a hash the identity is size and path. When
-/// `head` is given, the first 64 bytes of the file. The storage routes (store, firmware file system) are the platform's.
-unsafe fn probe_with<C: CoreApi>(
-    core: &C,
-    path: &[u8],
-    head: Option<&mut [u8; 64]>,
-) -> Result<FileId, i32> {
-    if path.is_empty() || path.len() >= dkrt_sdk::sample_tracks::PATH {
-        return Err(E_SEL_PATH);
-    }
-    let rel = unrooted(root_of(core), path);
-    if rel.is_empty() {
-        return Err(E_SEL_PATH);
-    }
-    let st = match head {
-        Some(head) => core.storage_stat_head(SAMPLES, rel, head)?.0,
-        None => core.storage_stat(SAMPLES, rel)?,
-    };
-    if st.kind != EntryKind::File {
-        return Err(E_SEL_PATH);
-    }
-    let mut id = FileId {
-        root: SAMPLES,
-        size: st.size,
-        mtime: 0,
-        flags: 0,
-        hash_kind: 0,
-        hash: [0; 32],
-    };
-    if st.hash_valid {
-        id.flags = ID_HASH_VALID;
-        id.hash_kind = st.hash_kind as u32;
-        id.hash = st.hash;
-    }
-    Ok(id)
-}
-
-unsafe fn probe<C: CoreApi>(
-    core: &C,
-    path: &[u8],
-    head: Option<&mut [u8; 64]>,
-) -> Result<FileId, i32> {
-    probe_with(core, path, head)
 }
 
 /// The environment the track state machine runs in: the pool adapter's `dkpool_*` calls, the table writes, and the core for the platform facts and the log.
-struct Device<'a, C: CoreApi>(&'a C);
+struct Device<'a, C: CoreApi> {
+    core: &'a C,
+    pool: &'a Pool,
+    writes: &'a mut Writes,
+}
+
 impl<C: CoreApi> Env for Device<'_, C> {
     fn inspect(&mut self, path: &[u8]) -> Result<Inspect, i32> {
         let mut head = [0u8; 64];
-        let id = unsafe { probe(self.0, path, Some(&mut head))? };
+        // SAFETY: the core's storage calls
+        let id = unsafe { probe(self.core, path, Some(&mut head))? };
         // Size and format only: no PCM is read here (it can be megabytes), the pool adapter reads it.
         // This branch is a format choice (the store identity and header check, or the native header alone), not a storage route: `probe` reads both the same way.
-        if files_in_store(self.0) {
+        if files_in_store(self.core) {
             return store_inspect(id.size, &id.hash, &head);
         }
         let (frames, channels) = dkrt_sdk::sample::native_header(&head, id.size)?;
@@ -286,88 +453,74 @@ impl<C: CoreApi> Env for Device<'_, C> {
         })
     }
     fn stat(&mut self, path: &[u8]) -> Result<FileId, i32> {
-        unsafe { probe(self.0, path, None) }
+        // SAFETY: as `inspect`
+        unsafe { probe(self.core, path, None) }
     }
     fn load(&mut self, req: u32, id: &FileId, path: &[u8], out: &mut Handle) -> Load {
         // The adapter gets a NUL-terminated copy: the runtime's path buffers are not.
-        let mut z = [0u8; dkrt_sdk::sample_tracks::PATH + 1];
+        let mut z = [0u8; PATH + 1];
         z[..path.len()].copy_from_slice(path);
-        match unsafe { crate::pool::load(req, id, z.as_ptr(), out) } {
+        match unsafe { self.pool.load(req, id, z.as_ptr(), out) } {
             0 => Load::Done,
             1 => Load::Queued,
             e => Load::Err(e),
         }
     }
     fn release(&mut self, h: &Handle) {
-        unsafe { crate::pool::release(h) }
+        unsafe { self.pool.release(h) }
     }
     fn cancel(&mut self, req: u32) {
-        unsafe { crate::pool::cancel(req) }
+        unsafe { self.pool.cancel(req) }
     }
     fn check(&mut self, h: &Handle) -> i32 {
-        unsafe { crate::pool::check(h) }
+        unsafe { self.pool.check(h) }
     }
     fn free_frames(&mut self) -> u32 {
-        unsafe { crate::pool::free_frames() }
+        unsafe { self.pool.free_frames() }
     }
     fn close(&mut self, client: usize, track: usize) {
-        unsafe {
-            let op = &mut (*addr_of_mut!(OPS))[client][track];
-            // A publish still queued is dropped: the close writes CLOSED and `ready` = 0 anyway. Before the DSP image is in there is
-            // nothing to close.
-            *op = OP0;
-            if LIVE[client] && FORCE != client {
-                op.kind = OP_CLOSE;
-            }
-        }
+        self.writes.close(client, track);
     }
     fn drained(&mut self, client: usize, track: usize) -> bool {
-        unsafe { FORCE == client || (*addr_of!(OPS))[client][track].kind == OP_NONE }
+        self.writes.drained(client, track)
     }
     fn published(&mut self, client: usize, track: usize) -> i32 {
-        unsafe {
-            let kind = (*addr_of!(OPS))[client][track].kind;
-            if kind == OP_FAILED {
-                return E_DSP_XFER;
-            }
-            if kind == OP_NONE {
-                1
-            } else {
-                0
-            }
-        }
+        self.writes.published(client, track)
     }
     fn note(&mut self, n: Note) {
-        unsafe {
-            match n {
-                Note::Loaded {
-                    client,
-                    entry,
-                    frames,
-                    base_l,
-                    token,
-                } => self.0.log(
+        match n {
+            Note::Loaded {
+                client,
+                entry,
+                frames,
+                base_l,
+                token,
+            } => unsafe {
+                self.core.log(
                     logk::POOL_LOAD,
                     LOG_INFO,
                     [client << 8 | entry, 0, frames, base_l, token],
-                ),
-                Note::Invalid {
-                    client,
-                    entry,
-                    reason,
-                    token,
-                    count,
-                } => self.0.log(
+                )
+            },
+            Note::Invalid {
+                client,
+                entry,
+                reason,
+                token,
+                count,
+            } => unsafe {
+                self.core.log(
                     logk::POOL_INVALID,
                     LOG_INFO,
                     [client << 8 | entry, reason, token, count, 0],
-                ),
-            }
+                )
+            },
         }
     }
     fn publish(&mut self, client: usize, track: usize, rec: &Strack) {
+        // SAFETY: the core's log call
         unsafe {
-            self.0.log(
+            self.core.log(
                 logk::POOL_PUBLISH,
                 LOG_INFO,
                 [
@@ -377,566 +530,11 @@ impl<C: CoreApi> Env for Device<'_, C> {
                     rec.base_l,
                     rec.base_r,
                 ],
-            );
-            if FORCE == client {
-                return;
-            }
-            let op = &mut (*addr_of_mut!(OPS))[client][track];
-            *op = OP0;
-            op.kind = OP_PUBLISH;
-            op.rec = [
-                rec.ready,
-                rec.token,
-                rec.frames,
-                rec.rate,
-                rec.channels,
-                rec.fmt,
-                rec.base_l,
-                rec.base_r,
-            ];
-        }
-    }
-}
-
-/// The client slot of the calling module, if it has a track table.
-pub(crate) unsafe fn client(handle: u32) -> Result<usize, i32> {
-    let h = handle as usize;
-    if h == 0 || h > CLIENTS || !core_().is_open(h - 1) {
-        return Err(E_NOT_FOUND);
-    }
-    Ok(h - 1)
-}
-
-/// Is a client slot free (checked by `dsp::reserve` before it takes anything)?
-pub unsafe fn can_reserve() -> bool {
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == usize::MAX {
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
-
-/// A module's track table was found in its DSP section: `records` and `control` are the L2 byte addresses of its 16 records and 16
-/// control sets. Nothing is written to the DSP before `ready`.
-pub unsafe fn reserve(rec: usize, local_id: u32, records: u32, control: u32) -> bool {
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == usize::MAX && core_().open(i) {
-            OWNER[i] = rec;
-            LOCAL[i] = local_id;
-            DKRT_SMP_RECORDS[i] = records;
-            DKRT_SMP_CONTROL[i] = control;
-            LIVE[i] = false;
-            (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
-
-/// The module's DSP image is in, so its table words exist: queued writes may go out.
-pub unsafe fn ready(rec: usize) {
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == rec {
-            LIVE[i] = true;
-        }
-        i += 1;
-    }
-}
-
-/// A module's record went away (its machine rows are already cleared, so no voice runs): unbind its tracks without closing them in
-/// the DSP, release the pool references and free the client slot. A write already in flight ends by itself (its bytes are static, and
-/// the link is serialized, so a later load of the range lands after it).
-pub unsafe fn remove<C: CoreApi>(core: &C, rec: usize) {
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == rec {
-            FORCE = i;
-            let mut n = 0;
-            while n < 4 && !core_().teardown(i, &mut Device(core)) {
-                n += 1;
-            }
-            FORCE = usize::MAX;
-            (*addr_of_mut!(OPS))[i] = [OP0; TRACKS];
-            crate::peakwin::reset(core, i);
-            LIVE[i] = false;
-            OWNER[i] = usize::MAX;
-        }
-        i += 1;
-    }
-}
-
-/// Does module record `rec` hold a track table?
-pub unsafe fn has(rec: usize) -> bool {
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == rec {
-            return true;
-        }
-        i += 1;
-    }
-    false
-}
-
-pub unsafe fn tracks<C: CoreApi>(core: &C, local_id: u32) -> i32 {
-    let owner = core.current_source();
-    if owner == 0 {
-        return E_NOT_FOUND;
-    }
-    let rec = owner as usize - 1;
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == rec && LOCAL[i] == local_id {
-            return i as i32 + 1;
-        }
-        i += 1;
-    }
-    E_NOT_FOUND
-}
-
-/// `dk_sample_pool_open`: the handle of the module's pool table with the lowest local id (the one table a module declares), as `tracks` gives it for
-/// that id; E_NOT_FOUND without a table.
-pub unsafe fn open_first<C: CoreApi>(core: &C) -> i32 {
-    let owner = core.current_source();
-    if owner == 0 {
-        return E_NOT_FOUND;
-    }
-    let rec = owner as usize - 1;
-    let mut best = usize::MAX;
-    let mut i = 0;
-    while i < CLIENTS {
-        if OWNER[i] == rec && (best == usize::MAX || LOCAL[i] < LOCAL[best]) {
-            best = i;
-        }
-        i += 1;
-    }
-    if best == usize::MAX {
-        return E_NOT_FOUND;
-    }
-    tracks(core, LOCAL[best])
-}
-
-/// The device-rooted copy of a module's root-relative path (a listing row) in `full`, and its length; or a negative error.
-unsafe fn rooted_path<C: CoreApi>(
-    core: &C,
-    path: *const u8,
-    full: &mut [u8; dkrt_sdk::sample_tracks::PATH],
-) -> Result<usize, i32> {
-    if path.is_null() {
-        return Err(E_SEL_PATH);
-    }
-    let mut copy = [0u8; dkrt_sdk::sample_tracks::PATH];
-    let mut n = 0;
-    while n < copy.len() {
-        let v = *path.add(n);
-        if v == 0 {
-            break;
-        }
-        copy[n] = v;
-        n += 1;
-    }
-    if n == copy.len() {
-        return Err(E_SEL_PATH);
-    }
-    // The path is root-relative (a listing row); the runtime keeps and checks the device-rooted form. A DT2 path that starts with '/' stays.
-    rooted(root(core), &copy[..n], full)
-}
-
-/// `sample_pool_add`: the pool index of the file (a new entry, or the one that already holds the path), or a negative error.
-pub unsafe fn pool_add<C: CoreApi>(core: &C, handle: u32, path: *const u8) -> i32 {
-    if path.is_null() {
-        return E_SEL_PATH;
-    }
-    if !pool_ok(core) {
-        return E_CONTRACT;
-    }
-    let c = match client(handle) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    let mut full = [0u8; dkrt_sdk::sample_tracks::PATH];
-    let n = match rooted_path(core, path, &mut full) {
-        Ok(n) => n,
-        Err(e) => return e,
-    };
-    let sr = core.irq_mask();
-    let r = core_().pool_add(c, &full[..n]);
-    core.irq_restore(sr);
-    r
-}
-
-/// `sample_pool_set`: load the file into entry `index` (replacing what was there); 0 or a negative error.
-pub unsafe fn pool_set<C: CoreApi>(core: &C, handle: u32, index: u32, path: *const u8) -> i32 {
-    if path.is_null() {
-        return E_SEL_PATH;
-    }
-    if !pool_ok(core) {
-        return E_CONTRACT;
-    }
-    let c = match client(handle) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    let mut full = [0u8; dkrt_sdk::sample_tracks::PATH];
-    let n = match rooted_path(core, path, &mut full) {
-        Ok(n) => n,
-        Err(e) => return e,
-    };
-    let sr = core.irq_mask();
-    let r = core_().pool_set(c, index as usize, &full[..n]);
-    core.irq_restore(sr);
-    r
-}
-
-/// `sample_pool_clear`: the entry becomes UNUSED (a hole); the other indexes stay.
-pub unsafe fn pool_clear<C: CoreApi>(core: &C, handle: u32, track: u32) -> i32 {
-    match client(handle) {
-        Ok(c) => {
-            let sr = core.irq_mask();
-            let r = core_().unbind(c, track as usize);
-            core.irq_restore(sr);
-            r
-        }
-        Err(e) => e,
-    }
-}
-
-pub unsafe fn status(handle: u32, track: u32) -> i32 {
-    match client(handle) {
-        Ok(c) => core_().status(c, track as usize),
-        Err(e) => e,
-    }
-}
-
-/// `sample_pool_path`: the entry's current selection, root-relative, NUL-terminated, into `buf`; the length without the NUL.
-pub unsafe fn path<C: CoreApi>(core: &C, handle: u32, track: u32, buf: *mut u8, cap: u32) -> i32 {
-    let c = match client(handle) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    if buf.is_null() {
-        return E_SEL_PATH;
-    }
-    match core_().path(c, track as usize) {
-        Ok(stored) => {
-            let p = unrooted(root(core), stored);
-            if p.len() + 1 > cap as usize {
-                return E_SEL_PATH;
-            }
-            core::ptr::copy_nonoverlapping(p.as_ptr(), buf, p.len());
-            *buf.add(p.len()) = 0;
-            p.len() as i32
-        }
-        Err(e) => e,
-    }
-}
-
-/// Copies a 16-byte `dk_sample_info` (big-endian words, as the module sees them) when the track is READY.
-pub unsafe fn info(handle: u32, track: u32, out: *mut u8) -> i32 {
-    let c = match client(handle) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    if out.is_null() {
-        return E_NOT_FOUND;
-    }
-    match core_().info(c, track as usize) {
-        Ok(i) => {
-            let w = [i.frames, i.rate, i.channels, i.token];
-            let mut k = 0;
-            while k < 4 {
-                core::ptr::copy_nonoverlapping(w[k].to_be_bytes().as_ptr(), out.add(k * 4), 4);
-                k += 1;
-            }
-            0
-        }
-        Err(e) => e,
-    }
-}
-
-/// One step of every track, in the UI loop. Without a backing adapter nothing runs.
-pub unsafe fn tick<C: CoreApi>(core: &C) {
-    if !pool_ok(core) {
-        return;
-    }
-    // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
-    crate::pool::tick();
-    pump(core);
-    core_().tick(&mut Device(core));
-    pump(core);
-}
-
-/// Adapter to runtime: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT). The slot `pool_done` of the service file calls it.
-pub unsafe fn pool_done(req: u32, result: i32) {
-    core_().done(req, result);
-}
-/// Adapter to runtime: the backing was lost, all handles are invalid. The slot `pool_lost` of the service file calls it.
-pub unsafe fn pool_lost<C: CoreApi>(core: &C) {
-    static mut LOST: u32 = 0;
-    let n = read_volatile(addr_of!(LOST)).wrapping_add(1);
-    *addr_of_mut!(LOST) = n;
-    core.log(
-        logk::POOL_LOST,
-        logk::L_WARN << logk::LEVEL_SHIFT,
-        [n, 0, 0, 0, 0],
-    );
-    core_().lost(&mut Device(core));
-}
-/// Is the optional `dkpool_window_step` hook in the image?
-pub(crate) unsafe fn window_hook() -> bool {
-    crate::pool::window_present()
-}
-
-/// One step of a peak window (worker task); see `dkpool_window_step` in dkrt_pool.h.
-pub(crate) unsafe fn window_step(
-    h: *const Handle,
-    path: *const u8,
-    first: u32,
-    frames: u32,
-    columns: u32,
-    out: *mut i16,
-    cursor: *mut u32,
-) -> i32 {
-    crate::pool::window_step(h, path, first, frames, columns, out, cursor)
-}
-
-/// Bounded overview copy; no file or PCM access in the UI task.
-pub unsafe fn peaks(handle: u32, track: u32, token: u32, out: *mut u8, capacity: u32) -> i32 {
-    let c = match client(handle) {
-        Ok(c) => c,
-        Err(e) => return e,
-    };
-    if out.is_null() || (out as usize & 1) != 0 || capacity < 2048 || !crate::pool::peaks_present()
-    {
-        return E_CONTRACT;
-    }
-    match core_().peak_handle(c, track as usize, token) {
-        Ok(h) => crate::pool::peaks(&h, out, capacity),
-        Err(e) => e,
+            )
+        };
+        self.writes.publish(client, track, rec);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::TEST_LOCK as LOCK;
-    use dkrt_abi::core_api::CoreApi;
-    use dkrt_test_support::{FakeCore, FakeHost};
-
-    /// Client 0, track 1 has an op `kind`; its records and control sets are at fixed L2 addresses.
-    unsafe fn seed(kind: u8, rec: [u32; 8]) {
-        *addr_of_mut!(OPS) = [[OP0; TRACKS]; CLIENTS];
-        FLIGHT = NO_FLIGHT;
-        LIVE = [false; CLIENTS];
-        LIVE[0] = true;
-        DKRT_SMP_RECORDS[0] = 0x1000;
-        DKRT_SMP_CONTROL[0] = 0x2000;
-        (*addr_of_mut!(OPS))[0][1] = Op {
-            kind,
-            step: 0,
-            tries: 0,
-            rec,
-        };
-    }
-
-    /// The writer's pass and the link's pass, `n` times (the model's time passes with each call).
-    unsafe fn passes(fake: &FakeCore, n: usize) {
-        for _ in 0..n {
-            pump(fake);
-            fake.link.borrow_mut().pump();
-        }
-    }
-
-    #[test]
-    fn a_publish_op_submits_its_three_writes_in_order() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        unsafe {
-            seed(OP_PUBLISH, [1, 2, 3, 4, 5, 6, 7, 8]);
-            let fake = FakeCore::new();
-            passes(&fake, 60);
-            let words = |w: &[u32]| {
-                w.iter()
-                    .flat_map(|v| v.to_le_bytes())
-                    .collect::<std::vec::Vec<u8>>()
-            };
-            let wire: std::vec::Vec<(u32, u32, std::vec::Vec<u8>)> = fake
-                .link
-                .borrow()
-                .t
-                .wire
-                .iter()
-                .map(|w| (w.win, w.dst, w.bytes.clone()))
-                .collect();
-            assert_eq!(
-                wire,
-                [
-                    (0, 0x1000 + 32 + 4, words(&[2, 3, 4, 5, 6, 7, 8])),
-                    (0, 0x2000 + 16, words(&[0])),
-                    (0, 0x1000 + 32, words(&[1])),
-                ]
-            );
-            assert_eq!((*addr_of!(OPS))[0][1].kind, OP_NONE);
-        }
-    }
-
-    #[test]
-    fn a_load_in_progress_holds_the_table_writes() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        unsafe {
-            seed(OP_CLOSE, [0; 8]);
-            let fake = FakeCore::new();
-            fake.dsp().phase = dkrt_abi::dsp::PH_SEND;
-            passes(&fake, 20);
-            assert!(fake.link.borrow().t.wire.is_empty());
-            fake.dsp().phase = PH_IDLE;
-            passes(&fake, 40);
-            assert_eq!(fake.link.borrow().t.wire.len(), 2);
-        }
-    }
-
-    #[test]
-    fn a_write_that_fails_is_tried_again_and_a_stuck_op_ends_failed() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        unsafe {
-            seed(OP_CLOSE, [0; 8]);
-            let fake = FakeCore::new();
-            fake.link.borrow_mut().t.script.push_back(Some(92));
-            passes(&fake, 80);
-            // the first write failed once and was sent again; both writes of the close then went out
-            assert_eq!(fake.link.borrow().t.wire.len(), 3);
-            assert_eq!((*addr_of!(OPS))[0][1].kind, OP_NONE);
-            seed(OP_CLOSE, [0; 8]);
-            fake.link
-                .borrow_mut()
-                .t
-                .script
-                .extend(std::iter::repeat(Some(92)).take(TRIES as usize));
-            passes(&fake, 400);
-            assert_eq!((*addr_of!(OPS))[0][1].kind, OP_FAILED);
-        }
-    }
-
-    const H: [u8; 32] = [7; 32];
-
-    fn sample_files(f: &FakeHost) {
-        f.storage.add_file(
-            SAMPLES,
-            b"KICKS/K1",
-            &[3u8; 100],
-            dkrt_abi::storage::HASH_ELEKTRON32,
-            H,
-        );
-        f.storage.add_file(
-            SAMPLES,
-            b"KICKS/K2",
-            &[4u8; 100],
-            dkrt_abi::storage::HASH_NONE,
-            [0; 32],
-        );
-        f.storage.add_dir(SAMPLES, b"KICKS/SUB");
-    }
-
-    #[test]
-    fn a_store_route_device_gives_the_hash_of_the_table_entry() {
-        let mut f = FakeCore::new();
-        f.device = dkrt_abi::profiles::DN2.id;
-        sample_files(&f.host);
-        let mut head = [0u8; 64];
-        unsafe {
-            let id = probe_with(&f, b"samples/KICKS/K1", Some(&mut head)).unwrap();
-            assert_eq!(
-                id,
-                FileId {
-                    root: SAMPLES,
-                    size: 100,
-                    mtime: 0,
-                    flags: ID_HASH_VALID,
-                    hash_kind: 2,
-                    hash: H
-                }
-            );
-            assert_eq!(&head[..4], [3, 3, 3, 3]);
-            assert_eq!(
-                probe_with(&f, b"samples/KICKS/none", None),
-                Err(E_NOT_FOUND)
-            );
-            assert_eq!(probe_with(&f, b"samples/", None), Err(E_SEL_PATH));
-            assert_eq!(
-                probe_with(&f, b"samples/KICKS/SUB", None),
-                Err(E_NOT_FOUND),
-                "a folder is no sample (it does not open as a file)"
-            );
-        }
-    }
-
-    #[test]
-    fn a_firmware_fs_device_has_a_hash_only_when_the_storage_gives_one() {
-        let mut f = FakeCore::new();
-        f.device = dkrt_abi::profiles::DT2.id;
-        sample_files(&f.host);
-        unsafe {
-            let hashed = probe_with(&f, b"/KICKS/K1", None).unwrap();
-            assert_eq!(
-                hashed,
-                FileId {
-                    root: SAMPLES,
-                    size: 100,
-                    mtime: 0,
-                    flags: ID_HASH_VALID,
-                    hash_kind: 2,
-                    hash: H
-                }
-            );
-            let plain = probe_with(&f, b"/KICKS/K2", None).unwrap();
-            assert_eq!(
-                plain,
-                FileId {
-                    root: SAMPLES,
-                    size: 100,
-                    mtime: 0,
-                    flags: 0,
-                    hash_kind: 0,
-                    hash: [0; 32]
-                }
-            );
-            assert!(!plain.same(&FileId {
-                hash_kind: 2,
-                flags: ID_HASH_VALID,
-                hash: H,
-                ..plain
-            }));
-            assert_eq!(probe_with(&f, b"/", None), Err(E_SEL_PATH));
-        }
-    }
-
-    /// The route table (`dkrt_test_support::routes`) is the one answer to "who serves the samples root on this device"; the service's root and the key it
-    /// builds must agree with it for every read row of the samples root.
-    #[test]
-    fn the_sample_root_agrees_with_the_route_table() {
-        use dkrt_test_support::routes::{Backend, Op, ROUTES};
-        let mut rows = 0;
-        for r in ROUTES
-            .iter()
-            .filter(|r| r.op == Op::Read && r.root == dkrt_abi::storage::ROOT_SAMPLES)
-        {
-            rows += 1;
-            let mut host = FakeCore::new();
-            host.device = r.profile.id;
-            let root = root_of(&host);
-            let mut out = [0u8; dkrt_sdk::sample_tracks::PATH];
-            let n = dkrt_sdk::sample_tracks::rooted(root, r.path.as_bytes(), &mut out).unwrap();
-            let backend = if root == ROOT_DN2 {
-                Backend::Store
-            } else {
-                Backend::Fs
-            };
-            assert_eq!((backend, &out[..n]), (r.backend, r.key.as_bytes()), "{r:?}");
-        }
-        assert!(rows >= 4);
-    }
-}
+mod tests;
