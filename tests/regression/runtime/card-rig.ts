@@ -26,7 +26,7 @@ import {
   type CardOptions,
   type SelRecord,
 } from './card-kit.ts';
-import { cachedCard, cachedCardId, cardKey, fileSha } from './card-cache.ts';
+import { cachedCard, cachedCardId, cardSpecKey, fileSha } from './card-cache.ts';
 import { uploadStore } from './device-data.ts';
 import { bounded, options, rpc, SETTLE } from './fx-live.ts';
 import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
@@ -283,12 +283,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     };
     const base = options.base ? cachedCardId(options.base) : undefined;
     if (options.base && !base) return buildCard(device, { ...options, dir: freshDir(session, tag) });
-    const key = cardKey(device, {
-      ...options,
-      syx: options.syx ? fileSha(options.syx) : undefined,
-      modules: options.modules.map((m) => ({ name: m.name, sha: fileSha(m.file) })),
-      base,
-    });
+    const key = cardSpecKey(device, { ...options, base });
     return cachedCard(key, (work) => buildCard(device, { ...options, dir: work, name: 'card' }));
   };
 

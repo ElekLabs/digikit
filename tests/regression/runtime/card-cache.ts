@@ -125,6 +125,31 @@ export function cardKey(device: Device, spec: unknown): string {
 }
 
 /**
+ * The key of a card of a rig spec. The files that the spec names count by content (`syx`, the module, drive and folder files), never by
+ * path: a test that writes its drive files into a per-run temp dir still gets the same key in every run. `base` is the content id of
+ * the base card (`cachedCardId`).
+ */
+export function cardSpecKey(
+  device: Device,
+  options: {
+    syx?: string;
+    modules: { name: string; file: string }[];
+    drive?: { name: string; file: string }[];
+    folder?: string;
+    base?: unknown;
+    [other: string]: unknown;
+  },
+): string {
+  return cardKey(device, {
+    ...options,
+    syx: options.syx ? fileSha(options.syx) : undefined,
+    modules: options.modules.map((m) => ({ name: m.name, sha: fileSha(m.file) })),
+    drive: options.drive?.map((f) => ({ name: f.name, sha: fileSha(f.file) })),
+    folder: options.folder ? folderSha(options.folder) : undefined,
+  });
+}
+
+/**
  * Write the read-only `card.key` of a card dir. The text goes to a unique temp file that is renamed onto the target, so two workers never
  * write the same file. If the rename fails because another writer won, the existing text must equal ours.
  */
