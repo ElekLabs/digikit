@@ -4,9 +4,28 @@ use core::mem::MaybeUninit;
 use dkrt_abi::provider::Status;
 use dkrt_sdk::E_LOADED;
 
-/// An event type with no value: the `E` of an owner that takes no events ([`Owner::post`] cannot be called).
+/// An event type with no value: the event of an owner that takes no events ([`Owner::post`] cannot be called).
 #[derive(Clone, Copy)]
 pub enum NoEvent {}
+
+/// What an owner does with an event: the way the object takes one. A zero-size type (the `A` of [`Owner`]), so the cell holds no function pointer and stays all-zero
+/// (`.bss`); `service!` makes it from the service's `Reentry` part.
+pub trait Events<T> {
+    /// One event: plain data, copied into the queue.
+    type Event: Copy;
+    /// Run `event` on the object, with the owner busy and no other reference to it.
+    fn apply(owner: &mut T, event: Self::Event);
+}
+
+/// The events of an owner that takes none.
+pub struct NoEvents;
+
+impl<T> Events<T> for NoEvents {
+    type Event = NoEvent;
+    fn apply(_: &mut T, event: NoEvent) {
+        match event {}
+    }
+}
 
 /// What [`Owner::post`] did with an event.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -26,10 +45,10 @@ pub enum Post {
 /// concurrently; the I/O task and interrupts never go through the owner.
 ///
 /// Re-entry: every call into the object (`with`, `run`, `post`) marks the owner busy until it returns. A call that arrives meanwhile (a callback of the same service,
-/// fired by a call the object made) never forms a second `&mut T`: `with` and `run` refuse it, and [`Owner::post`] queues a typed event (`E`, at most `N` waiting,
-/// no heap) that runs through the owner's `apply` right after the outer call returns, in the same task, before the owner is idle. A refused call or a full queue is
+/// fired by a call the object made) never forms a second `&mut T`: `with` and `run` refuse it, and [`Owner::post`] queues a typed event (`A::Event`, at most `N`
+/// waiting, no heap) that runs through `A::apply` right after the outer call returns, in the same task, before the owner is idle. A refused call or a full queue is
 /// counted in [`Owner::refused`], never dropped silently.
-pub struct Owner<T, E: Copy = NoEvent, const N: usize = 0> {
+pub struct Owner<T, A: Events<T> = NoEvents, const N: usize = 0> {
     /// The state, uninitialised until `start`: all-zero bytes, so the cell is `.bss` and costs no file bytes.
     cell: UnsafeCell<MaybeUninit<T>>,
     /// Whether `cell` holds a live `T`.
@@ -38,10 +57,8 @@ pub struct Owner<T, E: Copy = NoEvent, const N: usize = 0> {
     busy: Cell<bool>,
     /// Set for the whole of `start`'s `init` and of `stop`'s `f` and drop: `start`, `stop` and `with` refuse meanwhile, and `live` changes only when the transition ends well.
     transition: Cell<bool>,
-    /// How an event of the queue reaches the object (`Reentry::apply`); none for an owner without events.
-    apply: Option<fn(&mut T, E)>,
-    /// The events that arrived while busy, oldest at `head`.
-    queue: [Cell<Option<E>>; N],
+    /// The events that arrived while busy, oldest at `head`; all-zero bytes at the start.
+    queue: UnsafeCell<[MaybeUninit<A::Event>; N]>,
     head: Cell<usize>,
     len: Cell<usize>,
     /// Calls and events refused: a nested `with` or `run`, an event that found the queue full.
@@ -49,29 +66,16 @@ pub struct Owner<T, E: Copy = NoEvent, const N: usize = 0> {
 }
 
 // One task owns the cell at a time (see above).
-unsafe impl<T, E: Copy, const N: usize> Sync for Owner<T, E, N> {}
+unsafe impl<T, A: Events<T>, const N: usize> Sync for Owner<T, A, N> {}
 
-impl<T> Owner<T> {
-    /// An owner without events.
-    pub const fn new() -> Owner<T> {
-        Owner::build(None)
-    }
-}
-
-impl<T, E: Copy, const N: usize> Owner<T, E, N> {
-    /// An owner that takes events: `apply` runs each one on the object (`Reentry::apply`).
-    pub const fn with_events(apply: fn(&mut T, E)) -> Owner<T, E, N> {
-        Owner::build(Some(apply))
-    }
-
-    const fn build(apply: Option<fn(&mut T, E)>) -> Owner<T, E, N> {
+impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
+    pub const fn new() -> Owner<T, A, N> {
         Owner {
             cell: UnsafeCell::new(MaybeUninit::zeroed()),
             live: Cell::new(false),
             busy: Cell::new(false),
             transition: Cell::new(false),
-            apply,
-            queue: [const { Cell::new(None) }; N],
+            queue: UnsafeCell::new([const { MaybeUninit::zeroed() }; N]),
             head: Cell::new(0),
             len: Cell::new(0),
             refused: Cell::new(0),
@@ -124,7 +128,7 @@ impl<T, E: Copy, const N: usize> Owner<T, E, N> {
     }
 
     /// Hand `event` to the object. When the owner is idle it runs at once; inside a call it is queued, to run right after that call returns (see the type).
-    pub fn post(&self, event: E) -> Post {
+    pub fn post(&self, event: A::Event) -> Post {
         if !self.live.get() || self.transition.get() {
             return Post::NoOwner;
         }
@@ -134,15 +138,14 @@ impl<T, E: Copy, const N: usize> Owner<T, E, N> {
                 self.refused.set(self.refused.get() + 1);
                 return Post::Full;
             }
-            self.queue[(self.head.get() + len) % N].set(Some(event));
+            // SAFETY: the slot is free (`len < N`) and only this task touches the queue.
+            unsafe { (*self.queue.get())[(self.head.get() + len) % N].write(event) };
             self.len.set(len + 1);
             return Post::Queued;
         }
         self.busy.set(true);
-        if let Some(apply) = self.apply {
-            // SAFETY: as in `run`.
-            apply(unsafe { &mut *(self.cell.get() as *mut T) }, event);
-        }
+        // SAFETY: as in `run`.
+        A::apply(unsafe { &mut *(self.cell.get() as *mut T) }, event);
         self.leave();
         Post::Ran
     }
@@ -151,13 +154,12 @@ impl<T, E: Copy, const N: usize> Owner<T, E, N> {
     fn leave(&self) {
         while self.len.get() > 0 {
             let at = self.head.get();
-            let event = self.queue[at].take();
+            // SAFETY: the slot at `head` was written by `post` (`len > 0`).
+            let event = unsafe { (*self.queue.get())[at].assume_init_read() };
             self.head.set((at + 1) % N);
             self.len.set(self.len.get() - 1);
-            if let (Some(apply), Some(event)) = (self.apply, event) {
-                // SAFETY: as in `run`: still busy, so no other reference exists.
-                apply(unsafe { &mut *(self.cell.get() as *mut T) }, event);
-            }
+            // SAFETY: as in `run`: still busy, so no other reference exists.
+            A::apply(unsafe { &mut *(self.cell.get() as *mut T) }, event);
         }
         self.busy.set(false);
     }
@@ -189,7 +191,7 @@ impl<T, E: Copy, const N: usize> Owner<T, E, N> {
     }
 }
 
-impl<T> Default for Owner<T> {
+impl<T, A: Events<T>, const N: usize> Default for Owner<T, A, N> {
     fn default() -> Self {
         Owner::new()
     }

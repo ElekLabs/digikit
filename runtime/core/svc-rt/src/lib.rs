@@ -27,4 +27,4 @@ pub use dkrt_abi::provider::Reentry;
 pub use dkrt_sdk;
 pub use import_core::{sys, ImportCore};
 pub use module_def::{ModuleDef, TickFn};
-pub use owner::{NoEvent, Owner, Post};
+pub use owner::{Events, NoEvent, NoEvents, Owner, Post};

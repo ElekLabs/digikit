@@ -149,6 +149,8 @@ macro_rules! service {
         static DK_SVC_ROW: $crate::dkrt_abi::provider::ProviderRow =
             $crate::dkrt_abi::provider::ProviderRow::new($crate::name_hash($name), DK_SVC_PARTS);
 
+        $crate::service!(@owner_events $svc; [$($part),*]);
+
         /// The owner object: made by `start` in `init`, taken by `stop` in `fini`. The file's hooks reach it with `DK_SVC_OWNER.with(|s| ...)`; every call into it,
         /// the part functions of the tables too, runs under its busy state (`Owner`), and with the `Reentry` part a call that arrives meanwhile is queued with
         /// `DK_SVC_OWNER.post(event)`.
@@ -254,13 +256,24 @@ macro_rules! service {
     // the type of the owner cell and its constructor: `Reentry` among the parts gives it the event queue of the service
     (@owner_ty $svc:ty; []) => { $crate::Owner<$svc> };
     (@owner_ty $svc:ty; [Reentry $(, $rest:ident)*]) => {
-        $crate::Owner<$svc, <$svc as $crate::Reentry<$crate::ImportCore>>::Event, { <$svc as $crate::Reentry<$crate::ImportCore>>::QUEUE }>
+        $crate::Owner<$svc, DkSvcEvents, { <$svc as $crate::Reentry<$crate::ImportCore>>::QUEUE }>
     };
     (@owner_ty $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_ty $svc; [$($rest),*]) };
     (@owner_new $svc:ty; []) => { $crate::Owner::new() };
-    (@owner_new $svc:ty; [Reentry $(, $rest:ident)*]) => {
-        $crate::Owner::with_events(|svc, event| <$svc as $crate::Reentry<$crate::ImportCore>>::apply(svc, &$crate::ImportCore, event))
+    (@owner_new $svc:ty; [Reentry $(, $rest:ident)*]) => { $crate::Owner::new() };
+    // the events of the owner: only with `Reentry`, a zero-size type that gives the owner the part's `apply`
+    (@owner_events $svc:ty; []) => {};
+    (@owner_events $svc:ty; [Reentry $(, $rest:ident)*]) => {
+        /// The events of this file's owner: the `Reentry` part of the service.
+        pub struct DkSvcEvents;
+        impl $crate::Events<$svc> for DkSvcEvents {
+            type Event = <$svc as $crate::Reentry<$crate::ImportCore>>::Event;
+            fn apply(svc: &mut $svc, event: Self::Event) {
+                <$svc as $crate::Reentry<$crate::ImportCore>>::apply(svc, &$crate::ImportCore, event)
+            }
+        }
     };
+    (@owner_events $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_events $svc; [$($rest),*]); };
     (@owner_new $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_new $svc; [$($rest),*]) };
     // the table of one adopted part (an item) and its entry in the part list (an expression)
     (@part_table Reentry, $svc:ty, $kinds:expr) => {};

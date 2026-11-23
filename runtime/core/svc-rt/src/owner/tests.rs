@@ -184,10 +184,19 @@ impl Reentry<ImportCore> for Fake {
     }
 }
 
-type FakeOwner = Owner<Fake, u32, 2>;
+struct FakeEvents;
+
+impl Events<Fake> for FakeEvents {
+    type Event = u32;
+    fn apply(f: &mut Fake, event: u32) {
+        f.apply(&ImportCore, event)
+    }
+}
+
+type FakeOwner = Owner<Fake, FakeEvents, 2>;
 
 fn fake() -> FakeOwner {
-    let o = FakeOwner::with_events(|f, e| f.apply(&ImportCore, e));
+    let o = FakeOwner::new();
     o.start(put(Fake::new())).unwrap();
     o
 }
@@ -256,6 +265,19 @@ fn a_full_queue_refuses_and_counts() {
 }
 
 #[test]
+fn an_owner_is_all_zero_bytes_before_start() {
+    // an owner with a queue and no function pointer stays `.bss`: no file bytes
+    let o = FakeOwner::new();
+    let bytes = unsafe {
+        core::slice::from_raw_parts(
+            &o as *const FakeOwner as *const u8,
+            core::mem::size_of::<FakeOwner>(),
+        )
+    };
+    assert!(bytes.iter().all(|b| *b == 0));
+}
+
+#[test]
 fn a_normal_call_is_unchanged() {
     let o = fake();
     // idle: `post` runs the event at once, `run` and `with` return what the closure returns
@@ -264,7 +286,7 @@ fn a_normal_call_is_unchanged() {
     assert_eq!(o.with(|f| f.ran[0]), Some(4));
     assert_eq!(o.refused(), 0);
     // not live: refused answer, no event
-    let dead = FakeOwner::with_events(|f, e| f.apply(&ImportCore, e));
+    let dead = FakeOwner::new();
     assert_eq!(dead.run(9, |_| 1), 9);
     assert_eq!(dead.post(1), Post::NoOwner);
     assert_eq!(dead.refused(), 0);
