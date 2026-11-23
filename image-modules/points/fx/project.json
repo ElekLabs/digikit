@@ -23,7 +23,6 @@
           "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
         },
         "sources": [
-          "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py"
         ],

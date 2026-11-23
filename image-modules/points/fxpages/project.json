@@ -24,7 +24,6 @@
         "tags": ["A:core/fxpages", "C:state"],
         "modules": ["test/dyn-fx-gain", "test/dyn-fx-gain-b", "test/sine", "core/services/fx", "core/services/machines"],
         "sources": [
-          "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py"
         ],
@@ -37,7 +36,6 @@
         "tags": ["A:core/fxpages"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
         "sources": [
-          "tools/patchkit/hook_ab.py",
           "tools/patchkit/pk_digikit_fxroute.py",
           "tools/patchkit/pk_digikit_fxroutes.py"
         ],

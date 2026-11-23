@@ -19,6 +19,7 @@ import {
 import { expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type TestRuntime } from '../support.ts';
 import { record } from './artifacts.ts';
+import { comparePcmAligned } from './pcm-compare.ts';
 import { bounded, rpc, word } from './guest-access.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
@@ -308,7 +309,7 @@ export interface PcmMetrics {
   rms_base: number;
   shift: number | null;
 }
-/** The `hook_ab compare` metrics of a render against the reference scaled by `gain`, from the onset on. The CLI exits 1 on a failed verdict; its JSON on stdout is still read. */
+/** The metrics of a render against the reference scaled by `gain`, from the onset on (see `comparePcmAligned`). */
 export async function pcmMetrics(
   base: string,
   sample: string,
@@ -317,29 +318,15 @@ export async function pcmMetrics(
   tag: string,
   relBound?: number,
 ): Promise<PcmMetrics> {
-  const args = ['run', '--no-sync', 'python', '-m', 'tools.patchkit.hook_ab', 'compare', base, sample];
-  args.push('--gain', String(gain), '--align-onset', '--json');
-  if (relBound !== undefined) args.push('--rel-bound', String(relBound));
-  let stdout: string;
-  try {
-    stdout = (await exec('uv', args, { cwd: root, timeout: 30_000 })).stdout;
-  } catch (error) {
-    const output = error as { stdout?: string; stderr?: string };
-    if (!output.stdout) {
-      record(artifacts, `pcm-${tag}`, { error: String(error), stderr: output.stderr });
-      throw error;
-    }
-    stdout = output.stdout;
-  }
-  const metrics = JSON.parse(stdout) as PcmMetrics;
+  const metrics = comparePcmAligned(readFloatWav(base), readFloatWav(sample), gain, relBound) as unknown as PcmMetrics;
   record(artifacts, `pcm-${tag}`, metrics);
   return metrics;
 }
 
 /**
- * Asserts that a render equals the reference scaled by `gain`. The CLI verdict (`ok`: the largest error within
+ * Asserts that a render equals the reference scaled by `gain`. The verdict (`ok` of `comparePcmAligned`: the largest error within
  * `relBound` of the scaled reference peak, 2**-20 when unset) is the only error rule; this adds audibility, the gain
- * in dB and the onset shift (hook_ab counts interleaved samples; the tolerance is 128 audio frames).
+ * in dB and the onset shift (shifts count interleaved samples; the tolerance is 128 audio frames).
  */
 export async function compare(
   base: string,
