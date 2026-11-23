@@ -2,7 +2,8 @@
 //! the UI task (`shape`, `name_of`, `highest`, ...), the interpolation and `eval`, the lookup the interrupt site of the LFO tick calls. The table is a named static: the tick
 //! reads it in an interrupt and the hooks of the file reach it by symbol (docs/plans/rc3-briefs.md D7); the service writes it under the interrupt mask.
 use crate::records::{MAX_SHAPES, NAME_LEN, RANGE, SAMPLES};
-use core::ptr::addr_of;
+use core::ptr::{addr_of, addr_of_mut};
+use dkrt_abi::core_api::CoreApi;
 
 /// One cell of a shape, as the tick reads it: the sample as Q31 and the step to the next sample (the next of sample 31 is sample 0). The step needs 17 bits, so it is an `i32`.
 /// 4-byte aligned on purpose: the ColdFire GCC gives an `i32` an alignment of 2, which would put the cells of a shape at an offset of 6 and make the tick read them misaligned.
@@ -222,4 +223,40 @@ pub fn eval(number: u32, phase: u32) -> i32 {
         return tri(phase);
     }
     interp_cells(&sh.cells, phase)
+}
+
+/// The owner (module record index + 1) of table slot `i`; 0 when it is free. `i < MAX_SHAPES`.
+pub(crate) fn owner_at(i: usize) -> u8 {
+    let t = unsafe { &*addr_of!(SHAPES) };
+    t[i].owner
+}
+
+/// Write slot `i`: the shape of module `owner` with `name` and `samples`. The tick reads the entry in an interrupt, so the whole entry changes under the interrupt mask.
+/// `i < MAX_SHAPES`.
+pub(crate) fn store<C: CoreApi>(
+    core: &C,
+    i: usize,
+    owner: u8,
+    unipolar: bool,
+    name: [u8; NAME_LEN],
+    samples: &[i16; SAMPLES],
+) {
+    let sh = Shape {
+        owner,
+        unipolar,
+        name,
+        cells: cells_of(samples),
+    };
+    let t = unsafe { &mut *addr_of_mut!(SHAPES) };
+    let sr = core.irq_mask();
+    t[i] = sh;
+    core.irq_restore(sr);
+}
+
+/// Free slot `i` (clear its owner; every reader tests it first). `i < MAX_SHAPES`.
+pub(crate) fn free<C: CoreApi>(core: &C, i: usize) {
+    let t = unsafe { &mut *addr_of_mut!(SHAPES) };
+    let sr = core.irq_mask();
+    t[i].owner = 0;
+    core.irq_restore(sr);
 }

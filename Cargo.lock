@@ -1292,6 +1292,7 @@ dependencies = [
  "dkrt-sdk",
  "dkrt-svc-bitmap",
  "dkrt-svc-params",
+ "dkrt-svc-rt",
  "dkrt-test-support",
 ]
 

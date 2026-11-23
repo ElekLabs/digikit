@@ -12,26 +12,6 @@ global_asm!(include_str!("hooks-dn2.s"));
 #[cfg(target_arch = "m68k")]
 global_asm!(include_str!("hooks-ui.s"));
 
-#[cfg(target_arch = "m68k")]
-extern "C" {
-    /// Four words of the asm of `hooks-ui.s`: the stock parameter table and the rows of the three WAVE parameters (`dk_fw_` words, resolved by the port file).
-    static DKRT_LFO_FW: [u32; 4];
-}
-
-/// The first step of `init`: give the service the firmware addresses of the WAVE rows (the hooks are named by `hooks`). A host build has no firmware: nothing is set and no row is written.
-pub unsafe fn setup(_core: &dkrt_svc_rt::ImportCore) -> i32 {
-    #[cfg(target_arch = "m68k")]
-    dkrt_svc_lfo::wave::set_firmware(
-        core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[0])),
-        [
-            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[1])),
-            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[2])),
-            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[3])),
-        ],
-    );
-    0
-}
-
 macro_rules! entries {
     ($($name:ident,)*) => {
         $(

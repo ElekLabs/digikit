@@ -17,3 +17,5 @@ dkneeds = { path = "../../packages/dkneeds" }
 
 [dev-dependencies]
 dkrt-test-support = { path = "../../runtime/core/test-support" }
+# the service file's own source is compiled into a test by path (tests/contract.rs): it has its own cargo workspace, so it cannot be a dependency
+dkrt-svc-rt = { path = "../../runtime/core/svc-rt" }

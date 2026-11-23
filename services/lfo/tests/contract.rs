@@ -5,12 +5,51 @@ use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::{KINDS_LFO, KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_svc_lfo::graph;
-use dkrt_svc_lfo::records::{number_of, Lfo, SAMPLES};
+use dkrt_svc_lfo::lfo::Lfo;
+use dkrt_svc_lfo::records::SAMPLES;
 use dkrt_svc_lfo::shapes::{name_of, owner_of, shape, used};
 use dkrt_svc_lfo::wave::set_firmware;
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
-use dkrt_test_support::FakeCore;
+use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
+use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
 use std::sync::Mutex;
+
+// the core imports of the file's code (no runtime is linked)
+mod stubs;
+
+// the service file's source: its `service!` call is the one place that lists the parts
+#[path = "../dks/src/lib.rs"]
+pub mod file;
+pub use file::DK_SVC_OWNER;
+
+/// The parts the file adopts, read from the row its `service!` call declares.
+struct LfoRecipe;
+
+impl Recipe for LfoRecipe {
+    type P = Lfo;
+    const NAME: &'static str = "lfo";
+    fn parts(b: RowBuilder<Lfo>) -> RowBuilder<Lfo> {
+        use dkrt_abi::provider::{
+            check, PartLookup, DESCRIBE_NEWEST, DSP_NEWEST, PART_DESCRIBE, PART_DSP, PART_QUERY,
+            PART_RECORDS, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
+        };
+        // SAFETY: the row is a static of this binary
+        let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+        let has = |tag, newest| matches!(row.part(tag, newest), PartLookup::Found { .. });
+        // a part this recipe cannot build (the service does not implement it) must not be in the row
+        assert!(
+            !has(PART_DSP, DSP_NEWEST)
+                && !has(PART_QUERY, QUERY_NEWEST)
+                && !has(PART_DESCRIBE, DESCRIBE_NEWEST)
+                && !has(PART_TICK, TICK_NEWEST),
+            "the recipe has no mapping for a part of the row"
+        );
+        if has(PART_RECORDS, RECORDS_NEWEST) {
+            b.records(&KINDS_LFO)
+        } else {
+            b
+        }
+    }
+}
 
 /// The shape table and the graph slots are statics of the crate: the two profile tests (and the other test files, each its own process) run one at a time here.
 static LOCK: Mutex<()> = Mutex::new(());
@@ -73,7 +112,7 @@ fn state(core: &FakeCore) -> Vec<u32> {
     let mut v = vec![used() as u32];
     for key in [SHAPE_A, SHAPE_B] {
         // modules `a` and `b` are at selection indexes 0 and 1
-        let num = number_of(if key == SHAPE_A { 0 } else { 1 }, key);
+        let num = subject::<Lfo, _>(|l| l.number_of(if key == SHAPE_A { 0 } else { 1 }, key));
         v.push(num);
         v.push(owner_of(num) as u32);
         v.push(name_of(num).map_or(0, |n| u32::from_be_bytes(n)));
@@ -137,6 +176,18 @@ fn fixture(device: u32) -> Fixture {
     }
 }
 
+/// The file adopts the records part (the shapes reach the table only through it), and no other.
+#[test]
+fn the_file_adopts_the_records_part() {
+    use dkrt_abi::provider::{check, PartLookup, PART_RECORDS, RECORDS_NEWEST};
+    // SAFETY: the row is a static of this binary
+    let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+    assert!(matches!(
+        row.part(PART_RECORDS, RECORDS_NEWEST),
+        PartLookup::Found { .. }
+    ));
+}
+
 #[test]
 fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -149,6 +200,6 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
     }
     let _reset = Reset;
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
-        contract::<Lfo>(&fixture(p.id));
+        provider_contract::<LfoRecipe>(&fixture(p.id));
     }
 }

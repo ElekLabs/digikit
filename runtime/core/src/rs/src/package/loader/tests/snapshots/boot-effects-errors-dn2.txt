@@ -9,8 +9,8 @@ installer calls
   flush freed:blk1+0 214
   flush freed:blk1+0 214
   flush freed:blk1+4 210
-  flush freed:blk4+0 21860
-  flush freed:blk4+0 21860
+  flush freed:blk4+0 22614
+  flush freed:blk4+0 22614
   mask
   write 0x40137cc6 6
   write 0x4000766c 6
@@ -60,6 +60,7 @@ card state 1 claims 0 writes 2 refused 0
 init and fini calls
   init 8
   init 2
+  fini 8
 events
   kind 2 flags 0x0004 args [2, ffffffff, 0, 0, 100000]
   kind 1 flags 0x0004 args [b03, 1, 0, 1, 0]
