@@ -6,7 +6,7 @@ import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
 import { moduleRingEvents } from '@digi/regression/runtime/runtime-menu.ts';
-import { packageSymbol, planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED } from '@digi/regression/runtime/synth.ts';
 import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from './capacity-helpers.ts';
 

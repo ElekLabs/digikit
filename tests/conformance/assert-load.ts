@@ -1,7 +1,7 @@
 import { emulatorClock, moduleStorePathOf, waitClock, type Device } from '@digi/test-support';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DkLogEvent } from '@digi/dk-session';
+import { fileHashHex, type DkLogEvent } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
