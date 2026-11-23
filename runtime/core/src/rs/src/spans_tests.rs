@@ -333,6 +333,8 @@ fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
         assert_eq!((n(1), n(3)), (1, 1), "no module holds the fill function: the descriptor does");
         crate::api::dkrt_menu_built(0x9000, 0x9100);
         assert_eq!((n(1), n(3)), (1, 1), "a menu of the firmware image counts for no module");
+        crate::api::dkrt_menu_built(0x0800, 0x0810);
+        assert_eq!((n(1), n(3)), (1, 1), "a menu below every module (the system package block) counts for no module");
         reset(0, 5);
     }
 }
