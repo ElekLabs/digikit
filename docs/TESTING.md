@@ -501,6 +501,8 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `dyn-fx-gain-send` | Routes: master and send allowed, default send; the FX ROUTES panel; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
 | `dyn-fx-gain-sendonly` | Routes: send only; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
 | `commit-demo` | A multi-feature commit: a machine with three parameters (latched, click action) and an effect with routes; the golden lowered records; refusals | device, rig |
+| `local-ping` | The provider fixture: a `.dks` of the service `local-ping` (export `local_ping_value`, resident query `dk_service_query_v1`) over an owner object with the lifecycle, tick and query parts; it counts the consumers that attach and detach, the ticks, and answers the counters | host (`provider_contract`), assembly, device |
+| `local-ping-user`, `local-ping-user-b`, `local-ping-old-user` | Consumers of `local-ping` (the NEED path; the old user has a minimum version the service does not meet) | assembly, device |
 | `svc-test` | The service fixture: a `.dks` of the test-only service `svc-test` with exports `dk_svctest_ping` and `dk_svctest_hits` and one hook | host, assembly, device |
 | `svc-test-user` | A module with a hard NEED on `svc-test` (the provider and NEED path of the loader) | host, assembly, device |
 | `lfo-shape` | A service-type module that emits one `lfo_shape` record (key from `DK_KEY_SHAPE`); a test makes a second file with the same key by renaming a copy | assembly, device |

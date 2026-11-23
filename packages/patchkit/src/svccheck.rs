@@ -600,10 +600,26 @@ fn check_dks(
         if !only_service_call(lib) {
             out.push("dks/src/lib.rs is not the `service!(...)` call alone (attributes, `use` and `mod` lines are allowed)".into());
         }
-        let query = Regex::new(r"\bquery\s*=\s*(?:[A-Za-z_]\w*\s*::\s*)*([A-Za-z_]\w*)")
+        // the provider form (`parts = [...]`): the resident query is the `Query` part, not a `query =` entry, and `setup =` is the owner's `start`
+        let parts = Regex::new(r"\bparts\s*=\s*\[([^\]]*)\]")
+            .unwrap()
+            .captures(lib)
+            .map(|c| c[1].to_string());
+        let named_query = Regex::new(r"\bquery\s*=\s*(?:[A-Za-z_]\w*\s*::\s*)*([A-Za-z_]\w*)")
             .unwrap()
             .captures(lib)
             .and_then(|c| c.get(1).map(|name| name.as_str()));
+        let query = match &parts {
+            Some(list) => {
+                if named_query.is_some() || Regex::new(r"\bsetup\s*=").unwrap().is_match(lib) {
+                    out.push("dks/src/lib.rs: service! with `parts = [...]` takes no `query =` (the Query part) and no `setup =` (the owner's `start`)".into());
+                }
+                list.split(',')
+                    .any(|p| p.trim() == "Query")
+                    .then_some(dkrt_sdk::RESIDENT_QUERY_ENTRY)
+            }
+            None => named_query,
+        };
         if query != has_query.then_some(dkrt_sdk::RESIDENT_QUERY_ENTRY) {
             out.push("dks/src/lib.rs: service! query must match the dk_service_query_v1 export in dks/module.toml".into());
         }

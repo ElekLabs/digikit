@@ -841,3 +841,37 @@ fn a_row_anchor_has_one_service_in_its_users() {
     // a missing folder is no problem
     assert!(patchkit::svccheck::row_anchor_problems("lfo", &fw.join("none")).is_empty());
 }
+
+#[test]
+fn the_provider_form_takes_its_resident_query_from_the_query_part() {
+    let call = |parts: &str, extra: &str| {
+        format!(
+            "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [{parts}]{extra}, hooks = [], fills = []);\n"
+        )
+    };
+    let (dir, sdk) = service("provider-query", &[]);
+    let entry = dir.join("dks/src/lib.rs");
+    // no Query part and no export of the query: the call is accepted
+    fs::write(&entry, call("Tick", "")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // a Query part with no export in the manifest is refused
+    fs::write(&entry, call("Tick, Query", "")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "service! query must match the dk_service_query_v1 export"
+    ));
+    // with the export it is accepted, and the export without the part is refused
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[export]]\nname = \"dk_service_query_v1\"\n",
+    );
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::write(&entry, call("Tick", "")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "service! query must match the dk_service_query_v1 export"
+    ));
+    // `query =` and `setup =` belong to the old form
+    fs::write(&entry, call("Query", ", query = rt::dk_service_query_v1")).unwrap();
+    assert!(mentions(&problems(&dir, &sdk), "takes no `query =`"));
+}
