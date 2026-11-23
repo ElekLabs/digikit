@@ -20,8 +20,9 @@ import type { Host } from '@digi/workbench-core/host/host.ts';
  * commands in the app and a FakeHost in a test. Resolves with undefined when the page is not inside the app (a plain browser).
  */
 export async function createNativeRuntime(
-  host: Host,
+  host: Pick<Host, 'emu' | 'rpc'>,
   onUpdate: (update: RuntimeUpdate) => void,
+  startupSignal?: AbortSignal,
 ): Promise<EmulatorRuntime | undefined> {
   if (!host.emu.inApp()) return undefined;
   const metrics = hostMetrics('native_ipc');
@@ -36,6 +37,7 @@ export async function createNativeRuntime(
     timer: ReturnType<typeof setTimeout> | undefined,
     input = Promise.resolve(),
     lifecycle = Promise.resolve();
+  let stopping: { token: number; work: Promise<void> } | undefined;
   const clearPump = () => {
     paused = true;
     epoch += 1;
@@ -160,18 +162,40 @@ export async function createNativeRuntime(
       throw error;
     });
   };
+  const stop = () => {
+    if (stopping?.token === generation) return stopping.work;
+    const token = ++generation;
+    clearPump();
+    loaded = false;
+    activeSession = undefined;
+    accepted = undefined;
+    // A pending load can install the firmware after an early stop. Wait for the lifecycle queue before stopping the controller.
+    const work = lifecycle
+      .catch(() => {})
+      .then(() => host.emu.stop(token))
+      .catch((error) => {
+        if (!disposed && stopping?.token === token) stopping = undefined;
+        throw error;
+      });
+    lifecycle = work;
+    stopping = { token, work };
+    return work;
+  };
   try {
     metrics.reset();
     const startup = await host.emu.startup<RuntimeSnapshot>();
-    metrics.loaded();
     generation = 1;
-    activeSession = 1;
-    loaded = true;
-    accepted = { session: 1, snapshot: startup, paused: false };
-    onUpdate({ type: 'snapshot', snapshot: startup });
-    start(1);
+    if (!startupSignal?.aborted) {
+      metrics.loaded();
+      activeSession = 1;
+      loaded = true;
+      accepted = { session: 1, snapshot: startup, paused: false };
+      onUpdate({ type: 'snapshot', snapshot: startup });
+      if (!startupSignal?.aborted) start(1);
+    }
   } catch (error) {
-    if (!String(error).includes('No startup firmware selected')) onUpdate({ type: 'error', error: String(error) });
+    if (!startupSignal?.aborted && !String(error).includes('No startup firmware selected'))
+      onUpdate({ type: 'error', error: String(error) });
   }
   return {
     saveDiagnostics: (name: string, json: string) => host.emu.saveDiagnostics(name, json),
@@ -307,22 +331,11 @@ export async function createNativeRuntime(
         if (!disposed && token === generation && activeSession === session) onUpdate({ type: 'snapshot', snapshot });
       });
     },
-    async stop() {
-      const token = ++generation;
-      clearPump();
-      loaded = false;
-      activeSession = undefined;
-      accepted = undefined;
-      await (lifecycle = lifecycle.catch(() => {}).then(() => host.emu.stop(token)));
-    },
+    stop,
     dispose() {
+      if (disposed) return;
       disposed = true;
-      const token = ++generation;
-      clearPump();
-      loaded = false;
-      activeSession = undefined;
-      accepted = undefined;
-      void host.emu.stop(token);
+      void stop().catch(() => {});
     },
   };
 }

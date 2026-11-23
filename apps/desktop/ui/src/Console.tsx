@@ -21,12 +21,11 @@ import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
 import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
-import {
-  type EmulatorRuntime,
-  type FirmwareInfo,
-  type NativeAudioStatus,
-  type RuntimeSnapshot,
-  type RuntimeUpdate,
+import type {
+  FirmwareInfo,
+  NativeAudioStatus,
+  RuntimeSnapshot,
+  RuntimeUpdate,
 } from '@digi/workbench-core/runtime/runtime.ts';
 import {
   booting as startBoot,
@@ -74,10 +73,10 @@ import {
   reloadEntry,
   reloadFailureEntry,
 } from './log-core';
-import { createNativeRuntime } from './native-runtime';
+import { createEmulatorSession, type SessionRuntime } from './emulator/session';
 import { themes, type createTheme } from './theme';
 import { createPrefs } from './prefs';
-import { pgoWarning, type BuildInfo } from './pgo-warning';
+import { pgoWarning } from './pgo-warning';
 import { createLogFollow, followSession, type FollowEnv } from './log-follow';
 import { createDkProfLoader } from './dkprof-env';
 import { createDeviceNames, createEmulatorNames, selectedSymbolImage } from './log-names-backend';
@@ -86,7 +85,7 @@ import type { DesktopApps } from './desktop-app';
 import WorkbenchDrawer from './WorkbenchDrawer';
 import LogPanel from './LogPanel';
 import FirmwareSymbols from './FirmwareSymbols';
-import type { EmuSource as Source, Host } from '@digi/workbench-core/host/host.ts';
+import type { EmuLaunch, EmuSource as Source, Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
@@ -177,9 +176,7 @@ export default function Console(
   const { setBrowseDevice } = app.state;
   const { tickedFor } = fw.defaults;
   const flashRun = fw.state.run;
-  const [runtime, setRuntime] = createSignal<EmulatorRuntime>();
   const [controllerJob, setControllerJob] = createSignal<ControllerJob | null>(null);
-  const [outsideApp, setOutsideApp] = createSignal(false);
   const [status, setStatus] = createSignal<Status>();
   const [error, setError] = createSignal('');
   const [paused, setPaused] = createSignal(false);
@@ -195,7 +192,6 @@ export default function Console(
   const [now, setNow] = createSignal(Date.now());
   const [load_, setLoad] = createSignal<NativeAudioStatus['load']>();
   const [audio, setAudio] = createSignal<NativeAudioStatus>();
-  const [buildInfo, setBuildInfo] = createSignal<BuildInfo>();
   const [rate, setRate] = createSignal<number>();
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
@@ -227,7 +223,6 @@ export default function Console(
   let lastAudio: { produced: number; wall: number } | undefined;
   let lastModified: number | undefined;
   let health = healthStart();
-  const timers: number[] = [];
 
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
   const sidePanelsShown = createMemo(() => page() === 'run');
@@ -356,10 +351,12 @@ export default function Console(
   };
   /** What the running image got from the runtime patch, for the header. */
   const refreshInfo = async () => {
+    if (signal.aborted) return;
     try {
-      setInfo(await runtime()?.firmwareInfo?.());
+      const next = await runtime()?.firmwareInfo?.();
+      if (!signal.aborted) setInfo(next);
     } catch {
-      setInfo(undefined);
+      if (!signal.aborted) setInfo(undefined);
     }
   };
   /**
@@ -416,13 +413,13 @@ export default function Console(
   };
   /** Start a new firmware session with `start` (every load goes through the controller's `firmware.load`). */
   const boot = async (
-    start: (r: EmulatorRuntime) => Promise<RuntimeSnapshot>,
+    start: (r: SessionRuntime) => Promise<RuntimeSnapshot>,
     name: string,
     withRuntime = bootRuntime(),
     imageDevice?: DeviceId,
   ) => {
     const r = runtime();
-    if (!r) return;
+    if (!r || signal.aborted) return;
     live?.releaseAll();
     setEmulatorGeneration((n) => n + 1);
     setError('');
@@ -437,9 +434,12 @@ export default function Console(
     health = healthStart();
     const began = performance.now();
     try {
-      update({ type: 'snapshot', snapshot: await start(r) });
+      const snapshot = await start(r);
+      if (signal.aborted) return false;
+      update({ type: 'snapshot', snapshot });
       setPaused(false);
       await refreshInfo();
+      if (signal.aborted) return false;
       if (target().kind === 'emulator' && emulatorRuntime() === 'no')
         noteConnection({ type: 'noruntime', reason: EMULATOR_NO_RUNTIME });
       const s = status();
@@ -456,9 +456,12 @@ export default function Console(
         );
       // another firmware may be another device: its card folder and its memory (the runtime needs a moment to load its modules)
       bumpCardRefresh();
-      window.setTimeout(bumpCardRefresh, 2500);
+      window.setTimeout(() => {
+        if (!signal.aborted) bumpCardRefresh();
+      }, 2500);
       return true;
     } catch (e) {
+      if (signal.aborted) return false;
       if (isCancelled(e) || isCancelled((e as { cause?: unknown })?.cause)) {
         setReloadNote(`Load cancelled: ${name}`);
         logInput({ source: 'firmware', level: 'info', text: `loading ${name} cancelled` });
@@ -469,7 +472,7 @@ export default function Console(
       if (status()) await refreshInfo(); // A refused load can restore the previous live session.
       return false;
     } finally {
-      setBooting(undefined);
+      if (!signal.aborted) setBooting(undefined);
     }
   };
   const failLoad = (name: string, imageDevice: DeviceId | undefined, e: unknown) => {
@@ -480,6 +483,7 @@ export default function Console(
   };
   /** Make `path` the console's firmware file and boot it; the controller reads it from its path. */
   const bootPath = async (path: string, why: string, options: { runtime?: boolean; card?: string } = {}) => {
+    if (signal.aborted) return;
     const withRuntime = options.runtime ?? bootRuntime();
     const base = path.split(/[\\/]/).pop() || path;
     try {
@@ -487,7 +491,9 @@ export default function Console(
         `Loading ${base}`,
         { group: 'emulator', cancel: () => void runtime()?.cancelJob?.() },
         async () => {
+          if (signal.aborted) return false;
           const file = await props.host.emu.setSource(path);
+          if (signal.aborted) return false;
           setSource(file ?? undefined);
           lastModified = file?.modified_ms;
           const ok = await boot(
@@ -502,7 +508,7 @@ export default function Console(
             withRuntime,
             file?.device ?? undefined,
           );
-          if (ok) {
+          if (ok && !signal.aborted) {
             writePref(LAST_FIRMWARE_KEY, path);
             setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
           }
@@ -511,9 +517,9 @@ export default function Console(
       );
       // the install is its own job in the same group: it starts after the load job ended
       const s = status();
-      if (loaded && s && withRuntime) void installDefaultModules(s.device);
+      if (loaded && s && withRuntime && !signal.aborted) void installDefaultModules(s.device);
     } catch (e) {
-      if (e instanceof JobBusyError) return;
+      if (signal.aborted || e instanceof JobBusyError) return;
       setError(message(e));
     }
   };
@@ -571,6 +577,7 @@ export default function Console(
   const pollSource = async () => {
     try {
       const file = await props.host.emu.sourceInfo();
+      if (signal.aborted) return;
       setSource(file ?? undefined);
       if (!file) return;
       const changed = lastModified !== undefined && file.modified_ms !== lastModified;
@@ -583,6 +590,7 @@ export default function Console(
   const pollAudio = async () => {
     try {
       const a = await runtime()?.nativeAudio?.();
+      if (signal.aborted) return;
       setAudio(a);
       watchHealth({ halted: a?.halted ?? null });
       const produced = a?.source_audio_seconds,
@@ -609,14 +617,17 @@ export default function Console(
     const history = utilization();
     try {
       const s = await runtime()?.controllerStatus?.();
+      if (signal.aborted) return;
       setLoad(s?.load);
       history.emulator(s?.load);
       if (s?.heartbeat) watchHealth({ stalled: s.heartbeat.stalled, stallMs: s.heartbeat.stall_ms });
       setControllerJob(s?.job ?? null);
       syncControllerJob(s?.job, () => void runtime()?.cancelJob?.());
     } catch {
-      setLoad(undefined);
-      history.emulator(null);
+      if (!signal.aborted) {
+        setLoad(undefined);
+        history.emulator(null);
+      }
     } finally {
       readingHealth = false;
     }
@@ -654,55 +665,42 @@ export default function Console(
       else void reload('Reloaded at');
     }
   };
-  onMount(() => {
-    void createNativeRuntime(props.host, update).then((r) => {
-      if (!r) {
-        setOutsideApp(true);
-        return;
-      }
-      setRuntime(r);
-      void props.host.emu
-        .buildInfo<BuildInfo>()
-        .then(setBuildInfo)
-        .catch(() => setBuildInfo(undefined));
-      void (async () => {
-        const launch = await props.host.emu.launch();
-        if (launch.loaded) await pollSource();
-        // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice for this session, also for the first load below; only a
-        // click on the tick saves a choice. The controller reports the flag before any firmware is loaded.
-        await refreshInfo();
-        const dsp = startupDsp(bootDsp(), info()?.dsp);
-        if (dsp !== bootDsp()) setBootDsp(dsp);
-        if (launch.loaded) {
-          if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
-          return;
-        }
-        // The app opens empty; a command-line file, else the last opened file when "Load on start" is ticked and the target is the emulator,
-        // boots now. With a device as target the last file waits for the first visit of the Emulator page (the effect below).
-        const last = readPref(LAST_FIRMWARE_KEY);
-        if (shouldBootOnStart(launch.syx, loadOnStart(), target().kind)) {
-          const path = launch.syx ?? last;
-          if (path)
-            await bootPath(path, 'Loaded at', {
-              runtime: launch.runtime ?? undefined,
-              card: launch.card ?? undefined,
-            });
-        } else if (loadOnStart() && last) {
-          setDeferredBoot(last);
-        }
-      })();
-      timers.push(window.setInterval(() => void pollSource(), 1000));
-      timers.push(window.setInterval(() => void pollAudio(), 1000));
-      timers.push(window.setInterval(() => void pollHealth(), 1000));
-    });
-    window.addEventListener('keydown', onKey);
+  const applyLaunch = async (launch: EmuLaunch) => {
+    if (launch.loaded) await pollSource();
+    // The launcher's `--no-dsp` / `--dsp-on` wins over the saved choice for this session, also for the first load below; only a
+    // click on the tick saves a choice. The controller reports the flag before any firmware is loaded.
+    await refreshInfo();
+    if (signal.aborted) return;
+    const dsp = startupDsp(bootDsp(), info()?.dsp);
+    if (dsp !== bootDsp()) setBootDsp(dsp);
+    if (launch.loaded) {
+      if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
+      return;
+    }
+    // A command-line file, else the last opened file when "Load on start" is ticked and the target is the emulator, boots now.
+    // With a device as target the last file waits for the first visit of the Emulator page.
+    const last = readPref(LAST_FIRMWARE_KEY);
+    if (shouldBootOnStart(launch.syx, loadOnStart(), target().kind)) {
+      const path = launch.syx ?? last;
+      if (path)
+        await bootPath(path, 'Loaded at', {
+          runtime: launch.runtime ?? undefined,
+          card: launch.card ?? undefined,
+        });
+    } else if (loadOnStart() && last) {
+      setDeferredBoot(last);
+    }
+  };
+  const { runtime, outsideApp, buildInfo, signal } = createEmulatorSession({
+    host: untrack(() => props.host),
+    update,
+    applyLaunch,
+    pollSource,
+    pollAudio,
+    pollHealth,
   });
-  onCleanup(() => {
-    timers.forEach((t) => window.clearInterval(t));
-    window.removeEventListener('keydown', onKey);
-    void runtime()?.stop();
-    runtime()?.dispose();
-  });
+  onMount(() => window.addEventListener('keydown', onKey));
+  onCleanup(() => window.removeEventListener('keydown', onKey));
 
   const setEmulatorPaused = (pause: boolean) => {
     const r = runtime();

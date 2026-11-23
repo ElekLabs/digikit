@@ -2,6 +2,15 @@
 
 Make the desktop Workbench easier to navigate and safer to change. Each feature should have an identifiable owner for its state and asynchronous work, an API that callers can understand from its types, and a host test seam for its behavior. Preserve how the Workbench operates across navigation, target switches, and reopen. This work starts with Log and tool drawers on `work/workbench-log-drawer`, based on the local `origin/main` at `85e056bf9`.
 
+## Progress
+
+| Slice | State | Evidence |
+| --- | --- | --- |
+| Log and tool drawers | Committed as `056dd95ec` | Desktop host and type checks, simulated drawer and save checks, independent review. Review caught a live fixture behavior change that was corrected before the commit. |
+| Emulator lifetime | Verified and reviewed | The window owner discards late startup results and clears its polls. A single controller stop waits for pending firmware work. The final desktop host and type checks, both simulated scenarios, and an independent re-review passed. |
+| Firmware operations and shell | Planned | Starts after the lifetime boundary is verified and reviewed. |
+| Inspector, Samples, and adapter | Planned | Separate edit surfaces once the shell-facing interfaces are stable. |
+
 ## Ownership and dependencies
 
 | Lifetime | Owner | Examples |
@@ -42,14 +51,22 @@ The desktop host suite and both desktop type checks passed. The simulated previe
 
 ## 2. Emulator session and shell
 
-The emulator session is the next slice. Start it only after reviewing the first slice and settling the shell-facing interfaces. Keep one coder on this slice because it crosses the shell, emulator runtime, and target bindings.
+### 2a. Own the emulator lifetime
 
-1. First test disposal during startup. Hold the runtime creation promise pending, dispose the owner, resolve startup, and assert that the late runtime is released and no polling is scheduled. Use a fake runtime and scheduling or timers at the narrowest seam that observes the race.
-2. Extract the window-owned emulator session from `Console.tsx`. Put boot and reload commands, file watch, and native-engine reads under that owner. Keep the existing `native-runtime.ts` protocol and its session-generation protections as the lower-level adapter. Decide whether polling deserves a separate file after inspecting which reads share the same lifecycle.
-3. Keep the faceplate and emulator alive across navigation. Preserve launch arguments and saved DSP choices, the deferred load when a hardware target starts selected, release of held controls on target switch, and refused-load recovery. Preserve the upstream module-page and inventory behavior while slimming the shell.
-4. When the remaining component primarily composes navigation, page content, and drawers, rename `Console.tsx` to `WorkbenchShell.tsx`. Extract the navigation and status bar around their actual JSX and inputs. Keep selectors stable until preview coverage confirms the move.
+Keep one session owner mounted for the Workbench window. It starts the native runtime, hands off launch arguments, schedules the source, audio, and health polls, and releases the runtime at disposal. Keep the existing `native-runtime.ts` protocol and its generation protections. The shell can supply the existing launch decisions and poll policies while this boundary settles.
 
-Prove boot/reload and disposal through the existing desktop host suite plus the new lifecycle case. Run the `run-target-switch` preview scene and navigate away during a running emulation in the preview. Treat real emulator and Tauri checks as separate evidence when a change crosses those boundaries.
+- First test disposal during startup. Hold `Host.emu.startup` pending under a Solid root. Dispose the root, resolve startup, and verify that the adapter is released, it publishes no late snapshot, and the Workbench schedules no polling.
+- Test cleanup after a successful start and during an in-flight launch or poll. Reads or launch results that finish after cleanup must leave the shell untouched.
+- Preserve the one-second polling cadence, native launch arguments, saved DSP choice, and the user-visible boot state. Keep the faceplate and emulator alive across page navigation.
+- Run the desktop host suite and both type checks. In the simulated preview, run `run-target-switch` and `performance-emulator` to cover switching targets during a boot, navigating away and back, and load readings while running, paused, and resumed.
+
+### 2b. Move firmware operations and narrow the shell
+
+1. Put boot, firmware reload, module reload, and file-watch policy under the emulator feature. Give the operations access to the narrow target, job, firmware default, inventory, and log capabilities they use. Preserve job grouping, held-key release, success and failure logging, and card refresh.
+2. Preserve the deferred last-file boot when a hardware target starts selected, refused-load recovery, and upstream module-page and inventory behavior. Prove boot decisions and runtime behavior in their existing host tests.
+3. Rename `Console.tsx` to `WorkbenchShell.tsx` once its remaining responsibility is composing navigation, page content, and drawers. Pull the navigation and status bar into components with direct inputs. Use Solid `<Switch>` and `<Match>` for the three drawer choices. Keep selectors stable through the preview checks.
+
+Use the real emulator or Tauri checks when verifying behavior that depends on those boundaries.
 
 ## 3. Inspector, Samples, and adapter
 
@@ -64,6 +81,12 @@ These edit surfaces can proceed in separate worktrees once shell-facing interfac
 ## Navigation and naming
 
 Organize folders by feature as each slice changes. Start with shell and log, then emulator, inspector, samples, remote, and analyzer where the feature has enough files to justify a directory. Colocate a feature's components, styles, and supporting logic. Prefer names such as `drawer-sizing.ts`, `inspector-tabs.ts`, and `recorder.ts`. Keep production and preview imports direct. If a later move changes a path named by an Oxlint exception, a Vite alias, or a Vitest glob, update and verify that reference in the same slice.
+
+## Review and commit
+
+A coder implements one slice. Run its focused checks, then have an independent reviewer examine the complete diff, including new tests, before committing code. Resolve findings and rerun the checks affected by the fixes. Ask a fresh reviewer to check any behavior changes made in response to review.
+
+Update the progress table after verification or when a review changes the direction. Record what passed, any open issue, and the commit hash when referencing an earlier commit.
 
 ## Verification
 
