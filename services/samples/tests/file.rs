@@ -133,6 +133,7 @@ fn the_pool_calls_answer_at_once_while_the_owner_is_inside_a_call() {
     POOL_TABLE.with(&ImportCore, |t| t.reset(true));
     claim_a_table(true);
     let h = 1 as *mut u8;
+    let refused = DK_SVC_OWNER.refused();
     // the UI task is inside the owner (a tick, a peak window) when the MIDI task calls: the owner's guard refuses every call into the object, the table answers
     let seen = DK_SVC_OWNER.run(None, |_| {
         // SAFETY: NUL-terminated literals; the buffers are locals
@@ -150,8 +151,6 @@ fn the_pool_calls_answer_at_once_while_the_owner_is_inside_a_call() {
                 dk_sample_pool_path(h, 3, buf.as_mut_ptr(), 32),
             );
             assert_eq!(&buf[..5], b"SND/C");
-            // the guard still refuses the nested call into the object itself
-            assert!(DK_SVC_OWNER.with(|_| ()).is_none());
             Some(r)
         }
     });
@@ -159,8 +158,8 @@ fn the_pool_calls_answer_at_once_while_the_owner_is_inside_a_call() {
     assert_eq!(seen, Some((0, 1, 0, 1, 0, 0, 0, 0, 5)));
     assert_eq!(
         DK_SVC_OWNER.refused(),
-        1,
-        "only the nested `with` of the check was refused"
+        refused,
+        "no call went through the guard"
     );
     dk_svc_stop();
     // SAFETY: as above

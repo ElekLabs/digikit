@@ -3,7 +3,7 @@ use super::Owner;
 use crate::DK_SVC_OWNER;
 use dkrt_svc_rt::{ImportCore, Shared};
 
-/// The state bits (`ST_*`) as of the end of the last tick or scope change: a copy that the owner publishes (`publish`) and `dk_project_status` reads in a masked section. The export
+/// The state bits as of the end of the last tick or scope change: a copy that the owner publishes (`publish`) and `dk_project_status` reads in a masked section. The export
 /// answers from any task, also while the owner is inside a call (the UI task in a tick, with the MIDI task calling), where the owner's guard would refuse it. Not owner state: the
 /// owner never holds a reference to it across a call.
 pub static DK_STATUS: Shared<u32> = Shared::new(0);
