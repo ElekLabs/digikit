@@ -44,6 +44,43 @@ const fold = (p) =>
   p.eval(
     "(() => { const f = document.querySelector('.side-fold'); if (f && f.getAttribute('aria-expanded') === 'true') f.click(); })()",
   );
+async function checkInspectorFold(p) {
+  const inspector = '.side-col:not([hidden])';
+  await p.until(`document.querySelector('${inspector} .side-fold')`, 'Inspector did not appear');
+  await p.eval(`document.querySelector('${inspector} .side-fold[aria-expanded="false"]')?.click()`);
+  for (const tab of ['Memory', 'Metrics', 'Profile', 'Calibration']) {
+    const waitForState = (expanded) =>
+      p.until(
+        `(() => {
+          const column = document.querySelector('${inspector}');
+          const selected = column?.querySelector('${expanded ? '.side-tab[aria-selected="true"]' : '.side-rail-tab.on'}');
+          return column?.querySelector('.side-fold')?.getAttribute('aria-expanded') === '${expanded}'
+            && selected?.textContent.trim() === ${JSON.stringify(tab)}
+            && !column.getAnimations().some(animation => animation.playState === 'running');
+        })()`,
+        `${tab}: inspector did not settle ${expanded ? 'open' : 'collapsed'} with the tab selected`,
+      );
+    await p.click(tab, `${inspector} .side-tab`);
+    for (const expanded of [true, false]) {
+      await waitForState(expanded);
+      const point = await p.eval(`(() => {
+        const head = document.querySelector('${inspector} .side-head');
+        const button = head.querySelector('.side-fold');
+        const header = head.getBoundingClientRect();
+        const box = button.getBoundingClientRect();
+        const x = box.left + box.width / 2;
+        const y = box.top + box.height / 2;
+        return box.left >= header.left && box.right <= header.right
+          && box.top >= header.top && box.bottom <= header.bottom
+          && button.contains(document.elementFromPoint(x, y)) ? [x, y] : null;
+      })()`);
+      if (!point) throw new Error(`${tab}: ${expanded ? 'fold' : 'reopen'} button is clipped or cannot be clicked`);
+      await p.mouse('mousePressed', ...point);
+      await p.mouse('mouseReleased', ...point);
+    }
+    await waitForState(true);
+  }
+}
 /** Three files uploaded in a row (the fallback scenes switch the link at the second). */
 const upload3 = async (p) => {
   for (const n of ['kick', 'snare', 'hat']) await p.tick(`^Upload ${n}`);
@@ -1660,6 +1697,8 @@ const SCENES = [
       await p.wait(400);
     },
   },
+  { name: 'inspector-fold', q: 'page=emulator', size: [1120, 800], steps: checkInspectorFold },
+  { name: 'inspector-fold-narrow', q: 'page=emulator', size: MIN, steps: checkInspectorFold },
   // ---- the Log drawer over fake runtime logs (apps/desktop/ui/preview/runtime-log-mock.ts); logspeed makes the script run faster than real time ----
   ...[
     ['log-both-wide', 'page=log&log=both&logspeed=3&logh=640', WIDE, 5500],

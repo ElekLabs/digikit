@@ -10,8 +10,10 @@ Make the desktop Workbench easier to navigate and safer to change. Each feature 
 | Emulator lifetime | Committed as `ae185d45c` | The window owner discards late startup results and clears its polls. A single controller stop waits for pending firmware work. The final desktop host and type checks, both simulated scenarios, and an independent re-review passed. |
 | Firmware operations and shell | Committed as `c6b4bde53` | Firmware and default-module jobs have separate owners. `WorkbenchShell` composes Navigation, FirmwareToolbar, StatusBar, and the drawers. The desktop host suite, type checks, production UI build, and simulated preview checks passed. |
 | Profile and Calibration | Committed as `646d164c1` | The target-bound owner governs reads, recording, and DSP release. History and saved comparison have separate views. The desktop suite, type checks, production UI build, and simulated Profile, Calibration, and Performance checks passed. |
-| Samples | Complete | Window-owned source, target-bound destination, and separate panes. Desktop and Workbench Core host and type checks, production UI build, and rendered preview passed. |
-| Tauri adapter | Planned | Analyzer IPC ordering and recovery at the native adapter boundary. |
+| Samples | Committed as `9e6e6e1b7` | Window-owned source, target-bound destination, and separate panes. Desktop and Workbench Core host and type checks, production UI build, and rendered preview passed. |
+| Tauri adapter | Host coverage complete | IPC ordering, rejection recovery, drawer remount, PCM responses, and Log save payloads are covered. Native webview verification remains open. |
+| Inspector collapse | Fixed | The compact inspector reserves space for the collapse button on Memory and Metrics. Preview scenes exercise all four tabs in expanded and collapsed states. |
+| Remote and Analyzer organization | Layout reviewed | Plan separate folder moves around the existing stream and target lifetimes. |
 
 ## Ownership and dependencies
 
@@ -107,9 +109,20 @@ These edit surfaces can proceed in separate worktrees once shell-facing interfac
 - The [Samples host tests](../../apps/desktop/ui/tests/samples-backend.test.ts) check window isolation, delayed listing success and failure after A → B → A, stale upload planning, failed-switch deletion, new-target readback with and without a queued read, and late USB claim cleanup. The upload workflow uses the real Samples and Transfer owners over fake folder and session I/O and checks progress, verification, and the refreshed listing.
 - The browser preview covers rendered keyboard and marquee selection, local and target navigation, folder upload and cancellation, drag and drop, delete confirmation and progress, SysEx fallback, local polling, and narrow scrolling. Rendered checks also verify that switching targets preserves local selection, reopening Transfer behind a delayed outgoing read refreshes the replacement target, and the local pane remains browsable while the target waits, fails, or disconnects. The `samples-failed-target-first-read` and `samples-failed-target-remount` scenes each verify exactly one recovery read and a visible local listing. The `samples-timeout-first-read-after-remount` scene verifies that an ordinary read makes one request and preserves its timeout after remount. Host tests cover the owner timing races deterministically. Real device and emulator transports remain outside this proof.
 
+### Tauri Analyzer adapter acceptance
+
+The drawer builds an Analyzer stream owner for each mount. The Tauri Host instance survives those mounts and queues Analyzer IPC in issue order. Rust owns the current session ID and the emulator and remote PCM sources. Opening a session replaces the previous one. Reading or closing a stale ID leaves the current capture alone.
+
+- Add `apps/desktop/ui/tests/tauri-analyzer.test.ts` in the desktop host suite. Mock Tauri `invoke` at the import boundary and exercise the production `createTauriHost().analyzer`. Hold an IPC promise pending, queue a close and reopen, and check that each command starts only when the preceding call settles. Assert the source and session ID sent to Rust.
+- Reject one queued call and check that its caller sees the rejection and the next command still runs. Check both a representative Analyzer PCM response (`generation`, `rate`, `left`, `right`) and the empty response. A separate raw-body adapter case can use Log save to check bytes and the encoded filename header against the Rust contract.
+- Exercise one close-and-reopen workflow with two production stream owners using the same Host over mocked IPC. Hold the old read pending, dispose the old stream, and start the new one. Check that old PCM is discarded, the old ID is released, and the new stream receives PCM. A close submitted after the new open can reach Rust in that order. The existing native test covers stale close preserving the current capture.
+- The host suite covers the TypeScript boundary without opening a webview. All four cases are in `apps/desktop/ui/tests/tauri-analyzer.test.ts`. The simulated Scope and Spectrum scenes passed. A native drawer smoke check remains open for real IPC and PCM serialization.
+
 ## Navigation and naming
 
 Organize folders by feature as each slice changes. Start with shell and log, then emulator, inspector, samples, remote, and analyzer where the feature has enough files to justify a directory. Colocate a feature's components, styles, and supporting logic. Prefer names such as `drawer-sizing.ts`, `inspector-tabs.ts`, and `recorder.ts`. Keep production and preview imports direct. If a later move changes a path named by an Oxlint exception, a Vite alias, or a Vitest glob, update and verify that reference in the same slice.
+
+After the adapter slice, inspect `src/remote/` and `src/analyzer/` as separate cleanup steps. Remote's page, audio controls, held-key behavior, and audio owner belong near each other. Give the INFO-port device lookup a shared home so Memory, Profile, Calibration, and log naming can use it directly. Its inputs are firmware INFO values such as a device ID with a version suffix. Keep that contract distinct from MIDI port display-name matching. Preserve held-key release on target leave and the audio owner's lifetime. Analyzer's panel, plot, stream, measurement, frame types, and worker belong near each other. Retain the stream cleanup and stale-frame checks across drawer lifetimes. Keep the shared Host adapter and worker factory at their existing boundaries, and update the worker entry URL when moving the Analyzer worker. Use the existing host suites and Remote and Analyzer preview scenes as the proof for each move.
 
 ## Review and commit
 
