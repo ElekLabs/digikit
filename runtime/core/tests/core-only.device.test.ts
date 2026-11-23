@@ -22,7 +22,7 @@ const CORE_MISSING = 2;
 const CORE_ONLY_AFTER = 4;
 const PACKAGE = SYSTEM_PACKAGE_STORE_PATH;
 
-cardRigs('core-only boots and recovery', { roots: RT, symbols: CARD_SYMBOLS }, (h) => {
+cardRigs('core-only boots and recovery', { uploads: true, roots: RT, symbols: CARD_SYMBOLS }, (h) => {
   const package_ = () => fs.readFileSync(systemPackageFile());
 
   /** The core-only boot of `card`: its boot info and the core-only frame. */
