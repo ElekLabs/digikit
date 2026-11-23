@@ -204,14 +204,10 @@ impl<C: CoreApi> DspPart<C> for Samples {
 
     /// Give back the client slots of the module: its tracks are unbound, the pool references released and its peak window stopped.
     fn release(&mut self, core: &C, module: usize) {
-        let freed = self.tracks.release(core, &self.pool, module);
-        let mut client = 0;
-        while client < crate::tracks::CLIENTS {
-            if freed >> client & 1 != 0 {
-                self.peaks.reset(core, client);
-            }
-            client += 1;
-        }
+        // the window of each client is stopped in the walk of its teardown, before its slot is free (as the old `remove` did)
+        let peaks = &mut self.peaks;
+        self.tracks
+            .release(core, &self.pool, module, |client| peaks.reset(core, client));
     }
 
     /// Every row of the module is in the DSP: queued table writes may go out.

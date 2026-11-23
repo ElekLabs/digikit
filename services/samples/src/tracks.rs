@@ -134,8 +134,14 @@ impl Tracks {
 
     /// A module's record went away (its machine rows are already cleared, so no voice runs): unbind its tracks without closing them in
     /// the DSP, release the pool references and free the client slot. A write already in flight ends by itself (its bytes are copied into the request, and
-    /// the link is serialized, so a later load of the range lands after it). The mask has bit `i` set for each client slot that was freed (the caller resets what it keeps per client).
-    pub(crate) fn release<C: CoreApi>(&mut self, core: &C, pool: &Pool, rec: usize) -> u32 {
+    /// the link is serialized, so a later load of the range lands after it). `per_client(i)` runs for each client slot of the module after its teardown and before its slot is freed (the old walk's place for the peak-window reset). The mask has bit `i` set for each client slot that was freed.
+    pub(crate) fn release<C: CoreApi>(
+        &mut self,
+        core: &C,
+        pool: &Pool,
+        rec: usize,
+        mut per_client: impl FnMut(usize),
+    ) -> u32 {
         let mut freed = 0;
         let mut i = 0;
         while i < CLIENTS {
@@ -155,6 +161,7 @@ impl Tracks {
                     n += 1;
                 }
                 self.writes.end_teardown();
+                per_client(i);
                 self.writes.release(i);
                 self.owner[i] = 0;
                 freed |= 1 << i;

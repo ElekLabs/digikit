@@ -45,17 +45,30 @@ fn a_release_frees_the_slot_of_the_module_and_leaves_the_other() {
     t.reserve(4, 1, 0x1000, 0x2000);
     t.reserve(5, 1, 0x3000, 0x4000);
     t.ready(4);
-    assert_eq!(t.release(&core, &pool, 4), 0b01);
+    assert_eq!(t.release(&core, &pool, 4, |_| {}), 0b01);
     assert!(!t.has(4) && t.has(5) && !t.is_live(4));
     assert!(t.can_reserve());
     assert_eq!(
-        t.release(&core, &pool, 4),
+        t.release(&core, &pool, 4, |_| {}),
         0,
         "a module that holds none is left alone"
     );
     // the freed slot is the next one a table takes, and it starts closed
     assert!(t.reserve(6, 2, 0x5000, 0x6000));
     assert!(t.has(6) && !t.is_live(6));
+}
+
+#[test]
+fn a_release_calls_the_client_hook_for_each_slot_of_the_module_in_the_walk() {
+    let core = FakeCore::new();
+    let pool = Pool::none();
+    let mut t = tracks();
+    t.reserve(4, 1, 0x1000, 0x2000);
+    t.reserve(4, 2, 0x3000, 0x4000);
+    let mut seen = std::vec::Vec::new();
+    let freed = t.release(&core, &pool, 4, |c| seen.push(c));
+    assert_eq!(seen, [0, 1]);
+    assert_eq!(freed, 0b11);
 }
 
 #[test]
