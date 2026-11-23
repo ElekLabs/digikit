@@ -354,13 +354,10 @@ impl ProjectService {
 
     // ---- the I/O task ----------------------------------------------------------------------------------------------------------------
 
-    /// The write job's step (I/O task): the ops of the job in order; a busy store is `IO_MORE`, up to `BUSY_RERUNS` times, then `E_BUSY`.
-    pub fn io_step<F: Files + ?Sized>(&mut self, files: &mut F) -> i32 {
-        self.writer.io_step(files, &self.buffer)
-    }
-
-    /// The write job's step through a raw pointer to the service: it forms references to the writer and the file buffer only, the two parts the UI task leaves alone while a
-    /// job runs. The I/O task uses it while the UI task may hold `&mut` to the rest of the service (inside `tick`), so no `&mut ProjectService` exists in the I/O task.
+    /// The write job's step (I/O task) through a raw pointer to the service: the ops of the job in order; a busy store is `IO_MORE`, up to `BUSY_RERUNS` times, then `E_BUSY`.
+    /// It forms references to the writer and the file buffer only, and no `&mut ProjectService`. This narrows the overlap with the UI task but does not remove it: while the
+    /// UI task is inside `tick` it holds `&mut` to the whole service, so these field references overlap that borrow in the abstract model. What keeps it sound in practice is the
+    /// discipline below (the UI task leaves both fields alone while a job runs), which no type or test enforces.
     ///
     /// # Safety
     /// `this` points to a live service; the UI task does not touch `writer` or `buffer` until the job's `io_done`.

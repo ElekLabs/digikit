@@ -87,19 +87,6 @@ fn the_tick_and_the_exports_reach_the_one_instance_that_start_made() {
 }
 
 #[test]
-fn the_write_job_step_runs_without_the_owner_being_free() {
-    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
-    dk_svc_start().expect("start");
-    // the UI task is inside the owner (`tick`): the I/O task's step must still reach it, through the pointer, and with no job posted it has nothing to do
-    let inside = DK_SVC_OWNER.with(|_| {
-        // SAFETY: the entry takes no pointer the test does not give
-        unsafe { file::glue::io_step(core::ptr::null_mut()) }
-    });
-    assert_eq!(inside, Some(0));
-    dk_svc_stop();
-}
-
-#[test]
 fn an_export_called_inside_the_owner_answers_neutrally_and_changes_nothing() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
     dk_svc_start().expect("start");

@@ -31,5 +31,6 @@ Differences from the shortcuts template:
   `with` for long, and nothing in it calls `dk_project_status`, `dk_project_current` or the overlay table synchronously: a module's settings change only queues a reload
   (`dkc_settings_changed`), which the runtime runs outside the tick. `tests/file.rs` pins the refusal.
 - The I/O step forms references to the engine's writer and file buffer and to the host's file client only (`Project::io_step`, `ProjectService::io_step_at`, `Host::files` take
-  raw pointers), so it never aliases the `&mut` the UI task holds in `tick` over the other fields.
+  raw pointers), so the I/O task forms no `&mut` to the whole owner. It still overlaps, in the abstract aliasing model, the `&mut` the UI task holds in `tick`; soundness
+  rests on the UI task leaving the writer and the buffer alone while a job runs, which nothing enforces. Every host write test drives this path with a real posted job.
 - `service-check` still reports `src/records.rs` missing: the service has no record kind, and the check requires the file.

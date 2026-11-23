@@ -60,7 +60,8 @@ impl Rig {
             self.f.posted = false;
             let mut n = 0;
             let st = loop {
-                let r = self.p.io_step(&mut self.f);
+                // SAFETY: the box is live and `tick` is not running: the pointer path of the I/O task, with a real posted job
+                let r = unsafe { ProjectService::io_step_at(&mut *self.p, &mut self.f) };
                 if r != IO_MORE {
                     break r;
                 }

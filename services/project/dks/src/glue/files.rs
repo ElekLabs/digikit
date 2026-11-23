@@ -48,7 +48,7 @@ impl Files for DkFiles {
 }
 
 /// The write job's step, in the I/O task (`dk_io_post`). It reaches the owner by its pointer, not through `with`: the UI task may be inside the owner (`tick`) while the I/O
-/// task runs the step. The step forms references to the writer, the file buffer and the file client only (`Project::io_step`), never to the whole owner; the UI task leaves
+/// task runs the step. The step forms references to the writer, the file buffer and the file client only (`Project::io_step`), no `&mut` to the whole owner; the UI task must leave
 /// those alone while a job runs.
 pub unsafe extern "C" fn io_step(_arg: *mut u8) -> i32 {
     let project = crate::DK_SVC_OWNER.instance();
