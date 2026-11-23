@@ -5,9 +5,9 @@ use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::{KINDS_LFO, KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_svc_lfo::graph;
-use dkrt_svc_lfo::records::{
-    name_of, number_of, owner_of, set_firmware, shape, used, Lfo, SAMPLES,
-};
+use dkrt_svc_lfo::records::{number_of, Lfo, SAMPLES};
+use dkrt_svc_lfo::shapes::{name_of, owner_of, shape, used};
+use dkrt_svc_lfo::wave::set_firmware;
 use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::FakeCore;
 use std::sync::Mutex;

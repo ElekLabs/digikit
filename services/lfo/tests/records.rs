@@ -7,10 +7,11 @@ use dkrt_abi::service::{check_step, ApplyCtx, CheckCtx, Declare, Service, Settle
 use dkrt_sdk::records::{KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
 use dkrt_svc_lfo::graph;
-use dkrt_svc_lfo::records::{
-    eval, highest, interp, name_into, name_of, number_of, owner_of, set_firmware, shape, tri,
-    unipolar_of, used, wave_max, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING,
+use dkrt_svc_lfo::records::{number_of, Lfo, MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING};
+use dkrt_svc_lfo::shapes::{
+    eval, highest, interp, name_into, name_of, owner_of, shape, tri, unipolar_of, used,
 };
+use dkrt_svc_lfo::wave::{set_firmware, wave_max};
 use dkrt_test_support::FakeCore;
 use std::sync::{Mutex, MutexGuard};
 use std::vec::Vec;

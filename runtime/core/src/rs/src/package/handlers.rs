@@ -98,7 +98,9 @@ pub mod exports {
     }
     /// The shapes of the lfo service, for the runtime's own tests of the record path.
     #[cfg(test)]
-    pub(crate) use dkrt_svc_lfo::records::{number_of, owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
+    pub(crate) use dkrt_svc_lfo::records::{number_of, Lfo, MAX_SHAPES, SAMPLES};
+    #[cfg(test)]
+    pub(crate) use dkrt_svc_lfo::shapes::{owner_of, shape, used};
 }
 
 /// The length of a record of `kind`; `E_FORMAT`-worthy kinds are `None`. For the builder lowering (`collect`).
