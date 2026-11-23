@@ -188,10 +188,10 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
         [r.seq, copy, r.boot_counter, r.count, r.flags],
     );
     // a boot that the counter or crashes caused counts itself, and the one-shot flag is consumed, before any package code runs: a fault or a hang in the package's
-    // entry then counts toward safe mode and core-only (`Level::counts_boot`); the stable period clears the counter
+    // entry then counts toward safe mode and core-only (`Level::counts_boot`); no core-only boot clears the counter, only a system.dksp write or RETRY
     if level == Level::Safe(SafeReason::Flag) || (is_core_only(level) && r.flags & sel::FLAG_SAFE_ONCE != 0) {
         // honoured once, or overruled by core-only (which comes first): clear the flag, so that RETRY or a new package is not followed by a surprise safe boot
-        // (the counter is left as it is; the stable period clears it)
+        // (the counter is left as it is: no core-only boot clears it)
         r.flags &= !sel::FLAG_SAFE_ONCE;
         update_with(env.platform(), r, copy, valid);
     }

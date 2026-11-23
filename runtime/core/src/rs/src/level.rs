@@ -101,7 +101,11 @@ impl Level {
     /// Does the stable period leave the counter as it is? Every core-only boot, whatever its cause: it runs no package code, so a quiet period proves
     /// nothing. Only writing the system package file or RETRY clears the counter such a boot found.
     pub fn keeps_counter(self) -> bool {
-        matches!(self, Level::CoreOnly(_))
+        if let Level::CoreOnly(_) = self {
+            true
+        } else {
+            false
+        }
     }
 }
 

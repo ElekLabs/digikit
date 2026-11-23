@@ -614,12 +614,43 @@ fn a_start_failure_counts_its_boot_and_only_the_package_file_or_retry_clears_the
         let (b, started) = failing(&f, End::Stable);
         assert_eq!((b.core_only, b.cause, started), (true, CORE_CRASHES, false), "from the fourth count the package is not tried");
         assert_eq!(counter(&f), CORE_ONLY_AFTER, "core-only by crashes keeps the counter, stable period or not");
-        // the package file written (or RETRY, `package_counter_tests`) clears it: the next boot runs the package, normal and counted from zero
+        // the package file written (`package_counter_tests` clears with the same call; RETRY over the real boot is `retry_after_start_failures_gives_a_normal_boot_that_tries_the_package`) clears it: the next boot runs the package, normal and counted from zero
         new_boot();
         package_written_with(&f);
         assert_eq!(counter(&f), 0);
         let b = boot(&f, End::Stable);
         assert_eq!((b.safe, b.loaded), (false, true));
+        assert_eq!(counter(&f), 0);
+    }
+}
+
+/// RETRY through the real command body and the real boot: start failures climb to core-only by crashes, RETRY clears the counter, and the next boot is normal and
+/// tries the package (starts it, no longer core-only).
+#[test]
+fn retry_after_start_failures_gives_a_normal_boot_that_tries_the_package() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        for want in 1..=CORE_ONLY_AFTER {
+            let (b, started) = hooks::without_package(|| {
+                let env = FakeBootEnv::new(&f);
+                env.start_fails.set(true);
+                let b = boot_with(&f, &env, End::Stable);
+                let started = env.steps.borrow().contains(&"package");
+                (b, started)
+            });
+            assert_eq!((b.core_only, started), (true, true), "boot {want}");
+        }
+        let b = hooks::without_package(|| boot(&f, End::Stable));
+        assert_eq!((b.core_only, b.cause), (true, CORE_CRASHES));
+        assert_eq!(counter(&f), CORE_ONLY_AFTER);
+        new_boot();
+        assert_eq!(crate::admin_cmds::retry_with(&f, true), OK);
+        assert_eq!(counter(&f), 0, "RETRY cleared it");
+        let env = FakeBootEnv::new(&f);
+        let b = boot_with(&f, &env, End::Stable);
+        assert_eq!((b.safe, b.core_only, b.loaded), (false, false, true));
+        assert!(env.steps.borrow().contains(&"package"), "the package is tried again");
         assert_eq!(counter(&f), 0);
     }
 }

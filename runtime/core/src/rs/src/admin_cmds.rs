@@ -132,14 +132,19 @@ pub(crate) unsafe fn cmd_fault(seq: u32, body: *const u8, blen: usize) -> i32 {
 /// (`safe_mode::package_written_with`, the call that writing `digikit/system.dksp` makes too). No body. Status: 0, `E_STATE` while an upload is open or a store
 /// operation is in flight, `E_INUSE` when the card is not writable (a counter that cannot be written is not cleared either).
 pub(crate) unsafe fn cmd_retry(seq: u32) -> i32 {
+    reply(CMD_RETRY, seq, retry_with(&crate::platform::PLATFORM, card::writable()), 0)
+}
+
+/// RETRY's work on the platform `p`: the status `cmd_retry` replies with.
+pub(crate) unsafe fn retry_with<P: Platform>(p: &P, writable: bool) -> i32 {
     if sw::is_open() || sw::is_locked() {
-        return reply(CMD_RETRY, seq, E_STATE, 0);
+        return E_STATE;
     }
-    if !card::writable() {
-        return reply(CMD_RETRY, seq, E_INUSE, 0);
+    if !writable {
+        return E_INUSE;
     }
-    crate::safe_mode::package_written_with(&crate::platform::PLATFORM);
-    reply(CMD_RETRY, seq, OK, 0)
+    crate::safe_mode::package_written_with(p);
+    OK
 }
 
 /// Ticks to wait for the reply to leave the TX ring, at most, before the restart goes anyway.
