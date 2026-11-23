@@ -28,6 +28,8 @@ use std::path::{Path, PathBuf};
 use std::string::String;
 use std::vec::Vec;
 
+mod workbench;
+
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..")
 }
@@ -332,11 +334,12 @@ pub(super) struct Card {
     pub(super) skew_kind_handler: bool,
 }
 
-/// A builder call of a module's `init`, made on the real machines or effects service with the index of the module's keys table.
+/// A call replayed during module `init`. Machines and effects use a key index, and Workbench uses descriptor bytes from the staged file.
 #[derive(Clone, Copy)]
 pub(super) enum Builder {
     Machine(u32),
     Fx(u32),
+    Workbench { offset: usize, len: usize },
 }
 
 impl Card {
@@ -428,6 +431,14 @@ impl Images for Card {
                 match *call {
                     Builder::Machine(i) => crate::handlers::machines_fixture::add_machine(ctx, i),
                     Builder::Fx(i) => crate::handlers::fx_fixture::add_fx(ctx, i),
+                    Builder::Workbench { offset, len } => {
+                        let bytes = &f[offset..offset + len];
+                        let status = crate::module_ui::dk_workbench_register(ctx, bytes.as_ptr(), len as u32);
+                        if status != OK {
+                            crate::dlog::leave_module(prev);
+                            return status;
+                        }
+                    }
                 }
             }
             crate::dlog::leave_module(prev);

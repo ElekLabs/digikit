@@ -75,6 +75,7 @@
         "test/local-ping-user-b:pack",
         "test/local-ping-old-user:pack",
         "test/project-user:pack",
+        "test/settings-a:pack",
         "core/services/fx:pack",
         "core/services/machines:pack",
         "core/services/lfo:pack",
