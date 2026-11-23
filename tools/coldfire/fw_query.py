@@ -432,16 +432,20 @@ def cmd_class(img: CF, name: str) -> list[str]:
 def cmd_port(a: CF, b: CF, name: str) -> list[str]:
     entry = a.resolve(name)
     out = ["%s  (%s) -> %s" % (a.label(entry), a.image, b.image)]
-    rows = b.db.execute(
-        "SELECT dst_entry, method FROM matches WHERE src_image=? AND src_entry=?",
-        (a.db_name, entry),
-    ).fetchall()
+    rows = (
+        b.db.execute(
+            "SELECT dst_entry, method FROM matches WHERE src_image=? AND src_entry=?",
+            (a.db_name, entry),
+        ).fetchall()
+        if _has(b.db, "matches")
+        else []
+    )
     for dst_entry, method in rows:
         out.append("  %s  [%s]" % (b.label(dst_entry), method))
-    if not rows:
-        rev = b.db.execute(
+    if not rows and _has(a.db, "matches"):
+        rev = a.db.execute(
             "SELECT src_entry, method FROM matches WHERE src_image=? AND dst_entry=?",
-            (a.db_name, entry),
+            (b.db_name, entry),
         ).fetchall()
         for e, method in rev:
             out.append("  (reverse) %s [%s]" % (b.label(e), method))
@@ -645,7 +649,10 @@ def anchors_for(
             continue
         spots = [int(s["addr"], 16) for s in e.get("at", {}).get(image, [])]
         inside = [a for a in spots if entry <= a < end]
-        if inside or "0x%x" % entry in (e.get("doc") or ""):
+        doc_match = not image.endswith("-peer") and "0x%x" % entry in (
+            e.get("doc") or ""
+        )
+        if inside or doc_match:
             where = "+0x%x" % (inside[0] - entry) if inside else " (doc)"
             out.append("%s [%s]%s" % (e["name"], e.get("mark", "?"), where))
     return out
@@ -898,16 +905,19 @@ def cmd_dossier(
     return out
 
 
-def build_images(image: str, other: str) -> None:
+def build_images(image: str, other: str | None = None, *, peer: bool = False) -> None:
     from tools.coldfire import atlas, cfdb
 
     for short in (image, other):
+        if short is None:
+            continue
         name = short + "-emac"
         dump = os.path.join(ROOT, "out", "ghidra", name)
         if not os.path.isfile(os.path.join(dump, "manifest.json")):
             raise FwError(f"no Ghidra dump for {short}: expected {dump}")
         db_path = os.path.join(CF_DIR, name + ".sqlite")
         cfdb.build_database(dump, db_path, name=name)
-        atlas.build(short)
+        if not peer:
+            atlas.build(short)
     if atlas.catalog(image, other):
         raise FwError("ColdFire catalog build failed")

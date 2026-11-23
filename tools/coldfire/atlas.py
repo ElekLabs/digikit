@@ -1123,14 +1123,14 @@ def _anchor_functions(
     return out
 
 
-def collect_catalog(image: str) -> CatImg:
+def collect_catalog(image: str, *, peer: bool = False) -> CatImg:
     """Read cfdb and atlas of `image` and tag the candidate functions."""
     import collections
 
     old = CATALOG_OLD.get(image)
     im = image + "-emac"
     db = fw.open_ro(os.path.join(fw.CF_DIR, im + ".sqlite"))
-    at = fw.open_ro(fw_query.atlas_path(image))
+    at = None if peer else fw.open_ro(fw_query.atlas_path(image))
     d = CatImg()
     d.fn = {
         e: (n, sz, end)
@@ -1152,7 +1152,11 @@ def collect_catalog(image: str) -> CatImg:
     d.groups = dict(groups)
     # stability against the old version
     old_path = os.path.join(fw.CF_DIR, "%s-emac.sqlite" % old) if old else ""
-    if old and os.path.exists(old_path):
+    if (
+        old
+        and os.path.exists(old_path)
+        and db.execute("SELECT 1 FROM sqlite_schema WHERE name='matches'").fetchone()
+    ):
         olddb = fw.open_ro(old_path)
         ohs = dict(
             olddb.execute(
@@ -1165,7 +1169,9 @@ def collect_catalog(image: str) -> CatImg:
         ):
             if dst in d.hs and src in ohs:
                 d.stable[dst] = int(ohs[src] == d.hs[dst])
-    classes = dict(at.execute("SELECT name, role FROM classes").fetchall())
+    classes = (
+        dict(at.execute("SELECT name, role FROM classes")) if at is not None else {}
+    )
     ui_cls = {n for n, r in classes.items() if r in VIEW_ROLES}
     for cls, tgt, owner in db.execute(
         "SELECT class, target, owner FROM vtables WHERE image=?", (im,)
@@ -1217,23 +1223,34 @@ def collect_catalog(image: str) -> CatImg:
         for nm in names:
             prefix = ".".join(nm.split(".")[:2])
             near[prefix] |= {f} | callees[f] | callers[f]
-    d.ui_text = {
-        a: t
-        for a, t in reversed(at.execute("SELECT addr, text FROM ui_strings").fetchall())
-    }
-    for f, a in db.execute("SELECT func, to_addr FROM datarefs WHERE image=?", (im,)):
-        if a in d.ui_text and f in fn:
-            d.strf.setdefault(f, set()).add(a)
     term_funcs: dict[str, set[int]] = collections.defaultdict(set)
-    for term, ref in at.execute("SELECT term, ref FROM glossary WHERE kind='function'"):
-        addr = fw.parse_addr(ref)
-        if addr is not None and addr in fn:
-            term_funcs[term.lower().replace(" ", "_")].add(addr)
+    if at is not None:
+        d.ui_text = {
+            a: t
+            for a, t in reversed(
+                at.execute("SELECT addr, text FROM ui_strings").fetchall()
+            )
+        }
+        for f, a in db.execute(
+            "SELECT func, to_addr FROM datarefs WHERE image=?", (im,)
+        ):
+            if a in d.ui_text and f in fn:
+                d.strf.setdefault(f, set()).add(a)
+        for term, ref in at.execute(
+            "SELECT term, ref FROM glossary WHERE kind='function'"
+        ):
+            addr = fw.parse_addr(ref)
+            if addr is not None and addr in fn:
+                term_funcs[term.lower().replace(" ", "_")].add(addr)
+        at.close()
+    db.close()
 
     def add(tag: str, funcs: Iterable[int]) -> None:
         for f in funcs:
             d.tags.setdefault(f, []).append(tag)
 
+    if peer:
+        add("peer_function", fn)
     add("ui_own_vfunc", ui_own)
     add("ui_vfunc", ui_vf)
     add("ui_helper", [t for t, c in cnt.items() if c >= HELPER_MIN_CALLERS])
@@ -1357,11 +1374,19 @@ def write_catalog_groups(
     )
 
 
-def catalog(image: str, other_image: str, out_dir: str = fw.ATLAS_DIR) -> int:
+def catalog(
+    image: str, other_image: str | None = None, out_dir: str = fw.ATLAS_DIR
+) -> int:
     from tools.coldfire import cfmatch
 
-    names = [fw.short_image(image), fw.short_image(other_image)]
-    for n in names:
+    first = fw.short_image(image)
+    second = fw.short_image(other_image) if other_image else None
+    peer = first.endswith("-peer")
+    if second is not None and peer != second.endswith("-peer"):
+        raise ValueError("catalog pairing requires two main images or two DSP images")
+    for n in (first, second):
+        if n is None or peer:
+            continue
         path = fw_query.atlas_path(n)
         if not os.path.isfile(path):
             print("run atlas build %s first" % n)
@@ -1376,24 +1401,34 @@ def catalog(image: str, other_image: str, out_dir: str = fw.ATLAS_DIR) -> int:
                 print("run atlas build %s first" % n)
                 return 2
     os.makedirs(out_dir, exist_ok=True)
-    mt = cfmatch.load_pair(names[0] + "-emac", names[1] + "-emac")
-    fwd = {s: (t, mt.method[s]) for s, t in mt.m.items()}
-    rev = {t: (s, mt.method[s]) for s, t in mt.m.items()}
-    a, b = collect_catalog(names[0]), collect_catalog(names[1])
-    for n, d, o, pair in ((names[0], a, b, fwd), (names[1], b, a, rev)):
+    a = collect_catalog(first, peer=peer)
+    if second is None:
+        jobs: list[
+            tuple[str, str | None, CatImg, CatImg, dict[int, tuple[int, str]]]
+        ] = [(first, None, a, a, {})]
+    else:
+        b = collect_catalog(second, peer=peer)
+        mt = cfmatch.load_pair(first + "-emac", second + "-emac")
+        fwd = {s: (t, mt.method[s]) for s, t in mt.m.items()}
+        rev = {t: (s, mt.method[s]) for s, t in mt.m.items()}
+        jobs = [(first, second, a, b, fwd), (second, first, b, a, rev)]
+    for n, other, d, o, pair in jobs:
         rows = catalog_rows(d, o, pair)
         with (
             closing(sqlite3.connect(os.path.join(fw.CF_DIR, n + "-emac.sqlite"))) as db,
             db,
         ):
             db.execute("BEGIN IMMEDIATE")
-            peer = names[1] if n == names[0] else names[0]
-            cfmatch.save_matches(
-                db,
-                n + "-emac",
-                peer + "-emac",
-                ((target, source, method) for source, (target, method) in pair.items()),
-            )
+            if other is not None:
+                cfmatch.save_matches(
+                    db,
+                    n + "-emac",
+                    other + "-emac",
+                    (
+                        (target, source, method)
+                        for source, (target, method) in pair.items()
+                    ),
+                )
             write_catalog(n, rows, out_dir, db)
             n_groups = write_catalog_groups(
                 n, rows, group_edges([r["addr"] for r in rows], d.callee_n), out_dir, db
@@ -1428,7 +1463,7 @@ def main(argv: list[str] | None = None) -> int:
         "catalog", help="candidate anchor functions of IMAGE, paired with OTHER"
     )
     c.add_argument("image")
-    c.add_argument("other")
+    c.add_argument("other", nargs="?", help="optional image for pairing")
     c.add_argument("--out-dir", default=fw.ATLAS_DIR)
     args = ap.parse_args(argv)
     if args.cmd == "catalog":

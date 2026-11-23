@@ -37,6 +37,27 @@ own catalog and query tables. To browse the files in SQLiteStudio, select
 and paste the full path to the database. See [Analysis tools](../../../docs/DEVELOPMENT.md#analysis-tools)
 for the input preparation commands.
 
+## Select a device and program
+
+Use `--device NAME --firmware VERSION` in place of `-i IMAGE`. Short names and
+product names both work. The version defaults to the device's acceptance
+release or its sole registered release. `--core main` selects the main OS.
+`--core dsp` selects the DSP program recorded for that release. Use `--cpu`
+to select or check the instruction set. The two Syntakt programs both use
+ColdFire and can have identical numeric addresses. Specify the core when
+querying the DSP.
+
+With the main and DSP Ghidra exports in place:
+
+    uv run python -m tools.coldfire.fw build --device syntakt --firmware 1.42
+    uv run python -m tools.coldfire.fw fn 0x4000290e --device syntakt --firmware 1.42 --core dsp
+    uv run python -m tools.firmware.catalog_page --device syntakt --firmware 1.42 --core dsp --all
+
+The Syntakt main OS is `out/cfdb/st-1.42-emac.sqlite`. The DSP is
+`out/cfdb/st-1.42-peer-emac.sqlite` and its review page lands at
+`out/atlas/st-1.42-peer-review.html`. The legacy image key `-i st-1.42-peer`
+also selects the DSP. A paired SHARC catalog needs `--other IMAGE`.
+
 ## SHARC queries
 
 Run these in the same batch, with the image set on the batch:

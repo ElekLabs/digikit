@@ -284,6 +284,38 @@ exports under `out/atlas/`. For the full recovered DSP inventory, open the
 `function_index` table in sharcdb. DSP decoding uses the public manuals in
 [SHARC sources](sharc/SOURCES.md).
 
+### Syntakt main OS and DSP
+
+The firmware query CLI distinguishes the program role from its instruction
+set. `--device` and `--firmware` select the release. `--core main|dsp` selects
+the program. Syntakt's `[container].cf2` identifies a separate ColdFire
+program, while the DT2 and DN2 release profiles identify a SHARC DSP.
+
+Prepare the Syntakt 1.42 main and peer Ghidra dumps following
+[the analysis database workflow](findings/70-syntakt-1-42.md#analysis-databases).
+From the repository root:
+
+```sh
+uv run python -m tools.firmware.extract firmware/Syntakt_OS1.42.syx -o out/sections/st-1.42
+uv run python -m tools.coldfire.fw build --device syntakt --firmware 1.42
+uv run python -m tools.coldfire.fw fn 0x4000290e --device syntakt --firmware 1.42 --core dsp
+uv run python -m tools.firmware.catalog_page --device syntakt --firmware 1.42 --core main --all
+uv run python -m tools.firmware.catalog_page --device syntakt --firmware 1.42 --core dsp --all
+```
+
+The build reports separate catalog counts. Inspect the database and HTML
+for the core you selected:
+
+| Program | Database | Review page |
+| --- | --- | --- |
+| Main OS | `out/cfdb/st-1.42-emac.sqlite` | `out/atlas/st-1.42-review.html` |
+| DSP | `out/cfdb/st-1.42-peer-emac.sqlite` | `out/atlas/st-1.42-peer-review.html` |
+
+The main OS has the semantic atlas. The DSP catalog includes all recovered
+peer functions and uses the peer call graph. Workbench's current ColdFire
+symbol import resolves main OS addresses. Use the query CLI or SQLiteStudio
+to inspect the peer address space.
+
 Register local firmware databases and symbol maps from [desktop Settings](ADDRMAP.md#firmware-symbols-in-desktop-settings).
 
 Usage of the address map (`patchkit pack --addrmap`, `patchkit addr`, `wb addrmap lookup`, DSP names, load table snapshots): [ADDRMAP.md](ADDRMAP.md#usage).

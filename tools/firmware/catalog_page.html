@@ -518,6 +518,7 @@
 <script>
   const DATA = __DATA__;
   const isDsp = DATA.cpu === "sharc";
+  const isPeer = DATA.image.endsWith("-peer");
   const state = { group: null, decisions: {}, db: null, local: false, canWrite: false, pending: {}, drafts: {} };
   const $ = (id) => document.getElementById(id);
   const rowsByGroup = new Map();
@@ -532,7 +533,7 @@
   const docId = (a) => reviewId + '-' + a;
   const localKey = 'digikit-catalog-decisions-' + reviewId;
   const sameReview = (d) => d?.image === DATA.image && (d.cpu || 'cf') === (DATA.cpu || 'cf');
-  if (isDsp) {
+  if (isDsp || isPeer) {
     $('cf-discovery').hidden = true;
     $('q').setAttribute('placeholder', 'Search name, anchor, role, or DSP hint');
   }
@@ -795,7 +796,7 @@
         r.ck ? [el('dt', { text: 'Calls' }), el('dd', { class: 'mono', text: r.ck })] : null,
         r.hint ? [el('dt', { text: isDsp ? 'DSP hints' : 'UI string' }), el('dd', { text: isDsp ? r.hint : '“' + r.hint + '”' })] : null,
         el('dt', { text: 'Rule' }),
-        el('dd', { class: 'mono', text: isDsp ? r.rule : r.rule + ' · ' + r.size + ' bytes · ' + r.uic + ' UI callers' }),
+        el('dd', { class: 'mono', text: isDsp ? r.rule : r.rule + ' · ' + r.size + ' bytes' + (isPeer ? '' : ' · ' + r.uic + ' UI callers') }),
         isDsp ? [
           el('dt', { text: 'Instructions' }),
           el('dd', { text: r.size + ' instructions' + (r.dsp.bytes ? ' · ' + r.dsp.bytes + ' bytes' : '') }),
@@ -824,8 +825,8 @@
             ' · stable across versions: ' +
             evidenceFlag(r.stable),
         }),
-        el('dt', { text: isDsp ? 'Tags' : 'UI strings / tags' }),
-        el('dd', { text: isDsp ? r.tags : (r.ui_strings || '0') + ' strings · ' + r.tags }),
+        el('dt', { text: isDsp || isPeer ? 'Tags' : 'UI strings / tags' }),
+        el('dd', { text: isDsp || isPeer ? r.tags : (r.ui_strings || '0') + ' strings · ' + r.tags }),
         r.anchors ? [el('dt', { text: 'Existing anchors' }), el('dd', { class: 'mono', text: r.anchors })] : null,
       ),
       el('div', { class: 'edit' }, anchorIn, decide),

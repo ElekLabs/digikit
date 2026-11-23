@@ -515,3 +515,70 @@ def test_sharc_batch_routes_semantic_names_and_keeps_the_db_read_only(
     assert row == (name,)
     assert path.read_bytes() == published
     assert not list(path.parent.glob("*.notes.sqlite"))
+
+
+def test_device_core_selects_distinct_coldfire_address_spaces(tmp_path, monkeypatch):
+    import io
+    from contextlib import closing
+
+    from tools.coldfire import cfdb, fw_query
+
+    monkeypatch.setattr(fw_query, "CF_DIR", str(tmp_path))
+    for image, function in (
+        ("st-1.42", "main_function"),
+        ("st-1.42-peer", "dsp_function"),
+    ):
+        name = image + "-emac"
+        with closing(cfdb.open_db(tmp_path / (name + ".sqlite"))) as db, db:
+            db.execute(
+                "INSERT INTO functions (image,entry,end,name) VALUES (?,0x40000400,0x40000410,?)",
+                (name, function),
+            )
+    session = fw.Session()
+    flags = ["--device", "syntakt", "--firmware", "1.42"]
+    query = ["sql", "SELECT name FROM functions WHERE entry=0x40000400"]
+    assert fw.run_line(session, [*query, *flags], None, 60).endswith("main_function")
+    assert fw.run_line(session, [*query, *flags, "--core", "dsp"], None, 60).endswith(
+        "dsp_function"
+    )
+    assert fw.run_line(session, [*query, "-i", "st-1.42-peer"], None, 60).endswith(
+        "dsp_function"
+    )
+    error = fw.run_line(
+        session, [*query, *flags, "--core", "dsp", "--cpu", "sharc"], None, 60
+    )
+    assert "uses cf" in error
+
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            'sql "SELECT name FROM functions"\nsql "SELECT name FROM functions" --core main\n'
+        ),
+    )
+    args = fw.build_parser().parse_args(["batch", "-", *flags, "--core", "dsp"])
+    output = fw.cmd_batch(session, args)
+    assert output.splitlines()[2::3] == ["dsp_function", "main_function"]
+
+
+def test_build_uses_the_profile_programs_and_legacy_pair(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        fw.coldfire, "build_images", lambda *args, **kw: calls.append((args, kw))
+    )
+    monkeypatch.setattr(
+        fw.sharc, "build_images", lambda *args: calls.append((args, {}))
+    )
+    assert run("build", "--device", "syntakt", "--firmware", "1.42").startswith(
+        "Firmware databases"
+    )
+    assert calls == [
+        (("st-1.42", None), {"peer": False}),
+        (("st-1.42-peer", None), {"peer": True}),
+    ]
+    calls.clear()
+    assert run("build", "--other", "dn2-1.12").startswith("Firmware databases")
+    assert calls == [
+        (("dt2-1.17", "dn2-1.12"), {"peer": False}),
+        (("dt2-1.17", "dn2-1.12"), {}),
+    ]

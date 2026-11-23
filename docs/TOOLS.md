@@ -492,6 +492,9 @@ name, which the fix deliberately does not claim bounded (see the proof).
 `tools/coldfire/fw.py` is the entry point for firmware questions. Set the image with
 `-i` or `FW_IMAGE`. A short-word PC or a `dsp.*` declaration name routes the query to
 SHARC. Use `--cpu sharc` for DSP text searches and raw SQL. A batch can mix both CPUs.
+`--device NAME --firmware VERSION` also selects a release. Use `--core main`
+or `--core dsp` to select a program. Syntakt uses separate ColdFire databases
+for these roles. See [Syntakt main OS and DSP](DEVELOPMENT.md#syntakt-main-os-and-dsp).
 Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 
 | Command | ColdFire | SHARC |

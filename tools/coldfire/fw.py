@@ -4,9 +4,10 @@
     uv run python -m tools.coldfire.fw fn 0x401be1be -i dt2-1.17
     uv run python -m tools.coldfire.fw batch queries.txt -i dt2-1.17      # or '-' for stdin
 
-IMAGE is dt2-1.17, dn2-1.12, ... : ColdFire (out/cfdb/IMAGE-emac.sqlite) and
-SHARC (out/sharcdb/IMAGE.sqlite) are both opened from it. The CPU is chosen
-from the address, a DSP declaration name or --cpu. Set FW_IMAGE to skip
+Select a release with --device and --firmware, or use an image name such as
+dt2-1.17. --core selects the main or DSP program from the device profile.
+Without a core selector, the address, declaration name or --cpu selects the
+instruction set. Set FW_IMAGE to skip
 -i. Text output is capped at --max lines (default 60; 0 = no cap) with a
 "... N more" tail. The stores command instead returns uncapped JSON.
 
@@ -85,6 +86,7 @@ from tools.firmware.query_db import (
 from tools.firmware.query_db import (
     short_image as short_image,
 )
+from tools.firmware.query_target import Program, dsp_program, select_core, select_image
 from tools.sharc_dev import fw_query as sharc
 from tools.sharc_dev.fw_query import Sharc as Sharc
 from tools.sharc_dev.fw_query import cmd_stores as cmd_stores
@@ -118,16 +120,28 @@ class Session:
         self.imgs: dict[tuple[str, str], Image] = {}
 
     def get(
-        self, image: str | None, token: str | None = None, cpu: str | None = None
+        self,
+        image: str | None,
+        token: str | None = None,
+        cpu: str | None = None,
+        *,
+        core: str | None = None,
     ) -> Image:
         image = image or os.environ.get("FW_IMAGE")
         if not image:
-            raise FwError("no image: pass -i dt2-1.17 or set FW_IMAGE")
-        kind = "sharc" if want_sharc(token, cpu) else "cf"
-        key = (short_image(image), kind)
-        if key not in self.imgs:
-            self.imgs[key] = Sharc(image) if kind == "sharc" else CF(image)
-        return self.imgs[key]
+            raise FwError("select --device, pass --image, or set FW_IMAGE")
+        program = (
+            select_core(image, core, cpu)
+            if core
+            else Program(
+                short_image(image), "sharc" if want_sharc(token, cpu) else "cf"
+            )
+        )
+        if program not in self.imgs:
+            self.imgs[program] = (
+                Sharc(program.image) if program.cpu == "sharc" else CF(program.image)
+            )
+        return self.imgs[program]
 
 
 def cmd_callers(img: Image, token: str) -> list[str]:
@@ -203,8 +217,7 @@ def cmd_catalog(
         path = os.path.join(SHARC_DIR, short + ".sqlite")
         build = "uv run python -m tools.sharc_dev.sharc_catalog %s OTHER" % short
     else:
-        path = os.path.join(CF_DIR, short + "-emac.sqlite")
-        build = "uv run python -m tools.coldfire.atlas catalog %s OTHER" % short
+        build = "uv run python -m tools.coldfire.atlas catalog %s" % short
         path = coldfire.atlas_path(short, "catalog")
     con = open_ro(path)
     if not _has(con, "catalog"):
@@ -337,6 +350,13 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument(
             "-i", "--image", help="e.g. dt2-1.17, dn2-1.12 (default $FW_IMAGE)"
         )
+        sp.add_argument("--device", help="device short name or product name")
+        sp.add_argument(
+            "--firmware", metavar="VERSION", help="firmware version for --device"
+        )
+        sp.add_argument(
+            "--core", choices=("main", "dsp"), help="main OS or DSP program"
+        )
         sp.add_argument(
             "--cpu",
             choices=("cf", "sharc"),
@@ -455,14 +475,17 @@ def build_parser() -> argparse.ArgumentParser:
             "build", help="build both images' canonical databases and catalogs"
         )
     )
-    sp.add_argument("--other", required=True, help="peer image to build and pair")
+    sp.add_argument("--other", help="second device image to build and pair")
     sp = common(sub.add_parser("batch", help="run many queries from FILE or - (stdin)"))
     sp.add_argument("file")
     return p
 
 
 def run(
-    sess: Session, args: argparse.Namespace, default_image: str | None = None
+    sess: Session,
+    args: argparse.Namespace,
+    default_image: str | None = None,
+    default_core: str | None = None,
 ) -> str:
     c = args.cmd
     cap = (
@@ -470,23 +493,26 @@ def run(
         if args.max is None
         else args.max
     )
-    image = args.image or default_image
+    image = select_image(args.image, args.device, args.firmware) or default_image
+    core = args.core or default_core
+
+    def program(token: str | None = None, cpu: str | None = None) -> Image:
+        return sess.get(image, token, cpu or args.cpu, core=core)
+
     if c == "build":
-        image = image or os.environ.get("FW_IMAGE")
-        if not image:
-            raise FwError("no image: pass -i or set FW_IMAGE")
-        if short_image(image) == short_image(args.other):
-            raise FwError("--other must be a different image")
-        if args.cpu != "sharc":
-            coldfire.build_images(short_image(image), short_image(args.other))
-        if args.cpu != "cf":
-            sharc.build_images(short_image(image), short_image(args.other))
+        build_images(image or os.environ.get("FW_IMAGE"), args.other, core, args.cpu)
         return "Firmware databases and catalogs built."
     if c == "batch":
         raise FwError("batch cannot be nested")
     if c == "dossier":
-        img = sess.get(image, args.target, args.cpu)
-        other = sess.get(args.other, cpu=img.cpu) if args.other else None
+        img = program(args.target)
+        other = (
+            sess.get(args.other, cpu=None if core else img.cpu, core=core)
+            if args.other
+            else None
+        )
+        if other is not None and other.cpu != img.cpu:
+            raise FwError("dossier pairing requires the same instruction set")
         if isinstance(img, Sharc):
             assert other is None or isinstance(other, Sharc)
             lines = sharc.cmd_dossier(
@@ -501,7 +527,7 @@ def run(
     if c == "stores":
         if args.cpu not in (None, "sharc"):
             raise FwError("stores supports SHARC databases only")
-        img = sess.get(image, None, "sharc")
+        img = program(cpu="sharc")
         assert isinstance(img, Sharc)
         return json.dumps(
             cmd_stores(img, args.roots, args.expected_image_sha256, args.image_blob),
@@ -509,22 +535,14 @@ def run(
             indent=2,
         )
     if c == "sql":
-        if args.atlas:
-            image = image or os.environ.get("FW_IMAGE")
-            if not image:
-                raise FwError("no image: pass -i or set FW_IMAGE")
-            short = short_image(image)
-            path = (
-                os.path.join(SHARC_DIR, short + ".sqlite")
-                if args.cpu == "sharc"
-                else coldfire.atlas_path(short)
-            )
-            with closing(open_ro(path)) as db:
+        img = program()
+        if args.atlas and isinstance(img, CF):
+            with closing(open_ro(coldfire.atlas_path(img.image))) as db:
                 return capped(cmd_sql(db, args.query), cap)
-        return capped(cmd_sql(sess.get(image, cpu=args.cpu).db, args.query), cap)
+        return capped(cmd_sql(img.db, args.query), cap)
     if c == "search":
         term = " ".join(args.term)
-        img = sess.get(image, term if term.startswith("dsp.") else None, args.cpu)
+        img = program(term if term.startswith("dsp.") else None)
         where = args.where
         sources = where.split(",") if where else None
         search_lines: list[str] = []
@@ -546,57 +564,51 @@ def run(
             )
         return capped(search_lines, cap)
     if c == "atlas":
-        image = image or os.environ.get("FW_IMAGE")
-        if not image:
-            raise FwError("no image: pass -i dt2-1.17 or set FW_IMAGE")
+        img = program()
         term = " ".join(args.term)
-        if args.cpu == "sharc":
-            img = sess.get(image, cpu="sharc")
-            assert isinstance(img, Sharc)
+        if isinstance(img, Sharc):
             return capped(sharc.cmd_atlas(img, term), cap)
-        return capped(coldfire.cmd_atlas(image, term), cap)
+        if img.image.endswith("-peer"):
+            return capped(cmd_catalog(img.image, term, None, 15, False), cap)
+        return capped(coldfire.cmd_atlas(img.image, term), cap)
     if c == "catalog":
-        image = image or os.environ.get("FW_IMAGE")
-        if not image:
-            raise FwError("no image: pass -i dt2-1.17 or set FW_IMAGE")
+        img = program()
         return capped(
             cmd_catalog(
-                image,
+                img.image,
                 " ".join(args.term),
                 args.tag,
                 args.top,
                 args.grade,
                 args.group,
                 args.groups,
-                args.cpu or "cf",
+                img.cpu,
             ),
             cap,
         )
     if c == "port":
-        src = sess.get(args.src, args.name, args.cpu)
-        dst = sess.get(args.dst, cpu=src.cpu)
+        src = sess.get(args.src, args.name, args.cpu, core=core)
+        dst = sess.get(args.dst, cpu=None if core else src.cpu, core=core)
         if isinstance(src, Sharc) and isinstance(dst, Sharc):
             return capped(sharc.cmd_port(src, dst, args.name), cap)
-        assert isinstance(src, CF) and isinstance(dst, CF)
-        return capped(coldfire.cmd_port(src, dst, args.name), cap)
+        if isinstance(src, CF) and isinstance(dst, CF):
+            return capped(coldfire.cmd_port(src, dst, args.name), cap)
+        raise FwError("port requires the same instruction set on both images")
     if c == "str":
-        img = sess.get(image, cpu=args.cpu)
+        img = program()
         term = " ".join(args.text)
         if isinstance(img, Sharc):
             return capped(sharc.cmd_str(img, term), cap)
         return capped(coldfire.cmd_str(img, term), cap)
     if c == "class":
-        if args.cpu == "sharc":
-            raise FwError(
-                "class queries ColdFire RTTI; use atlas --cpu sharc for DSP roles"
-            )
-        img = sess.get(image, cpu="cf")
-        assert isinstance(img, CF)
+        img = program()
+        if not isinstance(img, CF):
+            raise FwError("class queries ColdFire RTTI; use atlas for SHARC roles")
         return capped(coldfire.cmd_class(img, args.name), cap)
     if c == "path":
-        return capped(cmd_path(sess.get(image, args.a, args.cpu), args.a, args.b), cap)
+        return capped(cmd_path(program(args.a), args.a, args.b), cap)
     if c == "cost":
-        img = sess.get(image, args.target, args.cpu)
+        img = program(args.target)
         if not isinstance(img, Sharc):
             return "error: cost is SHARC only"
         return capped(
@@ -605,7 +617,7 @@ def run(
             ),
             cap,
         )
-    img = sess.get(image, args.target, args.cpu)
+    img = program(args.target)
     if c == "callers":
         return capped(cmd_callers(img, args.target), cap)
     if c == "callees":
@@ -627,8 +639,57 @@ def run(
     return capped(cf_command(img, args.target), cap)
 
 
+def build_images(
+    image: str | None, other: str | None, core: str | None, cpu: str | None
+) -> None:
+    if image is None:
+        raise FwError("select --device and --firmware, or pass --image")
+    if other and short_image(image) == short_image(other):
+        raise FwError("--other must be a different image")
+    if core or cpu == "sharc":
+        roles = [core or "dsp"]
+    elif short_image(image).endswith("-peer"):
+        roles = ["dsp"]
+    else:
+        dsp = dsp_program(image)
+        roles = ["main"]
+        if dsp and (cpu is None or cpu == dsp.cpu):
+            roles.append("dsp")
+
+    plans: list[tuple[str, Program, Program | None]] = []
+    for role in roles:
+        selected = select_core(image, role, cpu)
+        counterpart = None
+        if other:
+            counterpart = (
+                select_core(other, role) if role == "main" else dsp_program(other)
+            )
+        if counterpart is not None and counterpart.cpu != selected.cpu:
+            if core == "dsp":
+                raise FwError("DSP catalog pairing requires matching instruction sets")
+            counterpart = None
+        if selected.cpu == "sharc" and counterpart is None:
+            raise FwError("SHARC catalog generation needs --other with a SHARC image")
+        plans.append((role, selected, counterpart))
+    for role, selected, counterpart in plans:
+        if selected.cpu == "sharc":
+            assert counterpart is not None
+            sharc.build_images(selected.image, counterpart.image)
+        else:
+            coldfire.build_images(
+                selected.image,
+                counterpart.image if counterpart else None,
+                peer=role == "dsp",
+            )
+
+
 def run_line(
-    sess: Session, argv: list[str], default_image: str | None, default_max: int | None
+    sess: Session,
+    argv: list[str],
+    default_image: str | None,
+    default_max: int | None,
+    default_core: str | None = None,
+    default_cpu: str | None = None,
 ) -> str:
     parser = build_parser()
     try:
@@ -637,8 +698,9 @@ def run_line(
         return "error: bad arguments: " + " ".join(argv)
     if args.max is None and args.cmd != "dossier":
         args.max = default_max
+    args.cpu = args.cpu or default_cpu
     try:
-        return run(sess, args, default_image)
+        return run(sess, args, default_image, default_core)
     except FwError as e:
         return "error: %s" % e
     except sqlite3.Error as e:
@@ -651,6 +713,7 @@ def cmd_batch(sess: Session, args: argparse.Namespace) -> str:
     else:
         with open(args.file) as fh:
             text = fh.read()
+    image = select_image(args.image, args.device, args.firmware)
     blocks = []
     cap = args.max if args.max is not None else 40
     for raw in text.splitlines():
@@ -664,7 +727,9 @@ def cmd_batch(sess: Session, args: argparse.Namespace) -> str:
             continue
         if argv and argv[0] in ("fw.py", "fw"):
             argv = argv[1:]
-        blocks.append("## %s\n%s" % (line, run_line(sess, argv, args.image, cap)))
+        blocks.append(
+            "## %s\n%s" % (line, run_line(sess, argv, image, cap, args.core, args.cpu))
+        )
     return "\n".join(blocks)
 
 

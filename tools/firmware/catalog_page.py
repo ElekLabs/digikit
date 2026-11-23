@@ -23,6 +23,7 @@ from urllib.parse import quote
 from tools.coldfire import fw
 from tools.firmware import config, device
 from tools.firmware.catalog import group_edges, parse_counts
+from tools.firmware.query_target import select_core, select_image
 
 Row = dict[str, str]
 
@@ -497,8 +498,9 @@ def write_review_tsv(
 
 def device_title(image: str) -> str:
     """'dt2-1.17' -> 'Digitakt II OS 1.17'."""
-    prefix, _, version = image.partition("-")
-    return "%s OS %s" % (DEVICE_NAMES.get(prefix, prefix), version)
+    prefix, _, version = image.removesuffix("-peer").partition("-")
+    core = " DSP" if image.endswith("-peer") else ""
+    return "%s OS %s%s" % (DEVICE_NAMES.get(prefix, prefix), version, core)
 
 
 def subtitle(image: str, other: str) -> str:
@@ -517,8 +519,13 @@ def render(template: str, payload: Mapping[str, Any], sub: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("image")
-    ap.add_argument("--cpu", choices=("cf", "sharc"), default="cf")
+    ap.add_argument("image", nargs="?")
+    ap.add_argument("--device", help="device short name or product name")
+    ap.add_argument(
+        "--firmware", metavar="VERSION", help="firmware version for --device"
+    )
+    ap.add_argument("--core", choices=("main", "dsp"), help="main OS or DSP program")
+    ap.add_argument("--cpu", choices=("cf", "sharc"))
     ap.add_argument("--other", help="image of the paired device")
     ap.add_argument(
         "--labels",
@@ -541,8 +548,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", help="override the output HTML path under out/atlas")
     args = ap.parse_args(argv)
 
-    image = args.image
-    other = args.other or OTHER_IMAGE.get(image, "")
+    try:
+        image = select_image(args.image, args.device, args.firmware)
+        if image is None:
+            raise fw.FwError("select an image or pass --device")
+        other = args.other or OTHER_IMAGE.get(image, "")
+        if args.core:
+            program = select_core(image, args.core, args.cpu)
+            image, args.cpu = program
+            if other:
+                other = select_core(other, args.core, args.cpu).image
+    except fw.FwError as exc:
+        ap.error(str(exc))
+    args.cpu = args.cpu or "cf"
     base = os.path.join(fw.ATLAS_DIR, image)
     paths = [
         base + s for s in ("-catalog.tsv", "-catalog-groups.tsv", "-catalog-graph.json")
