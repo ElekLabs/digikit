@@ -120,6 +120,31 @@ def abbreviates_forbidden(word: str) -> bool:
     return any(opt.startswith(name) for opt in FORBIDDEN_LONG)
 
 
+def unquoted_expansion(command: str) -> str | None:
+    """The first character the shell would expand: `$` or a backquote outside single quotes; a glob, brace or tilde
+    character outside any quotes. The word checks run on shlex words, so text the shell rewrites must not pass."""
+    single = double = False
+    escaped = False
+    for ch in command:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and not single:
+            escaped = True
+            continue
+        if ch == "'" and not double:
+            single = not single
+            continue
+        if ch == '"' and not single:
+            double = not double
+            continue
+        if ch in "$`" and not single:
+            return ch
+        if ch in "{}*?[]~" and not single and not double:
+            return ch
+    return None
+
+
 def check_grep(args: list[str]) -> None:
     index = 0
     while index < len(args):
@@ -201,6 +226,10 @@ def main() -> None:
 
     if re.search(r"[\n;&|<>`]", command) or "$(" in command:
         deny("shell operators, substitutions, and redirections are not allowed")
+
+    expanded = unquoted_expansion(command)
+    if expanded is not None:
+        deny(f"unquoted {expanded!r}: shell expansion is not allowed (quote patterns)")
 
     try:
         words = shlex.split(command, posix=True)
