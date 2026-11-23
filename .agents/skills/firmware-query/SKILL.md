@@ -121,7 +121,7 @@ Full UI candidate review (after cataloguing both devices):
     uv run python -m tools.firmware.catalog_page dt2-1.17 --all
     uv run python -m tools.firmware.catalog_page dn2-1.12 --all
 
-Open `out/atlas/<image>-review.html`; keep both standard filenames together for paired-device links. `--all` includes every catalogue row/group, including small groups, anchored functions and ungrouped rows. Without it the visible set stays curated; omitted records remain lookup data so address/paired links can reveal them. Only the active group's filtered results render. Labels come from `out/atlas/labels/<image>/*.jsonl`, or `--labels FILE ...`.
+Open `out/atlas/<image>-review.html`; keep both standard filenames together for paired-device links. `--all` includes every catalogue row/group, including small groups, anchored functions and ungrouped rows. Without it the visible set stays curated; omitted records remain lookup data so address/paired links can reveal them. Only the active group's filtered results render. Labels come from `out/atlas/labels/<image>/*.jsonl`, or `--labels FILE ...`. Pass the previous review TSV with `--label-catalog FILE` when reusing labels after reclustering. The exporter matches group labels by exact member addresses.
 
 Each run also writes `out/atlas/<image>-review.tsv`: the complete catalogue with original evidence, flattened row/group labels and links to both pages, even when HTML is curated. Row links use `#r-0x...`. A pair outside the other candidate catalogue retains its address/match evidence without a dead link. SDK-use labels, hashes, stability, pair/rule agreement, UI-string counts and tags are visible on the page.
 

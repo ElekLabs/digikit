@@ -134,6 +134,59 @@ def payload(full=True, cpu="cf"):
     )
 
 
+@pytest.mark.parametrize("stamped", [False, True])
+def test_group_labels_follow_members_when_groups_are_renumbered(tmp_path, stamped):
+    src = tmp_path / "review-labels.jsonl"
+    exact: dict[str, object] = {"group": 1, "label": "Exact"}
+    changed: dict[str, object] = {"group": 2, "label": "Old membership"}
+    if stamped:
+        exact["members"] = ["0x10", "0x20"]
+        changed["members"] = ["0x30", "0x50"]
+    src.write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in (exact, changed, {"addr": "0x30", "role": "Address label"})
+        )
+    )
+    rows = [
+        {"group": "2", "addr": "0x10"},
+        {"group": "2", "addr": "0x20"},
+        {"group": "1", "addr": "0x30"},
+        {"group": "1", "addr": "0x40"},
+    ]
+    previous = [
+        {"group": "1", "addr": "0x10"},
+        {"group": "1", "addr": "0x20"},
+        {"group": "2", "addr": "0x30"},
+        {"group": "2", "addr": "0x50"},
+    ]
+    groups, functions = catalog_page.read_labels(
+        [str(src)],
+        rows,
+        None if stamped else previous,
+    )
+    assert {gid: labels[0]["label"] for gid, labels in groups.items()} == {2: "Exact"}
+    assert functions[0x30][0]["role"] == "Address label"
+
+
+def test_titles_show_observed_roles_and_class_names():
+    group = {
+        "id": "9",
+        "size": "6",
+        "top_classes": "voice:6",
+        "top_strings": "unclassified/mixed | envelope or gain",
+        "top_tags": "",
+    }
+    title, source = catalog_page.suggest_group_title(group, "sharc", [])
+    assert title == "Voice · Envelope or gain"
+    assert source == "Dominant DSP role and common decoder hint"
+    group["top_classes"] = "ListView:4,KitManager:2"
+    assert catalog_page.suggest_group_title(group, "cf", []) == (
+        "ListView · KitManager",
+        "Common classes",
+    )
+
+
 def test_full_inventory_keeps_small_anchored_and_ungrouped_rows():
     full = payload()
     assert {r["a"] for r in full["rows"]} == {"0x10", "0x20", "0x30"}
@@ -337,6 +390,12 @@ function boot(claude) {
     roots.q.events.input();
   }
   assert(all(article).some(n=>n.href==='#r-0x30'));
+  assert(all(roots.detail).some(n=>n.textContent==='Ungrouped functions'));
+  roots.q.value = 'views';
+  roots.q.events.input();
+  assert.equal(vm.runInContext('state.group',context),1);
+  roots.q.value = '';
+  roots.q.events.input();
   vm.runInContext("$('f-rel').value='UI'; jump('0x30')",context);
   assert.equal(vm.runInContext('state.group',context),-1);
   assert.equal(roots['f-rel'].value,'');

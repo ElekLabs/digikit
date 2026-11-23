@@ -316,6 +316,16 @@ Open `out/atlas/dt2-1.17-review.html` or `out/atlas/dn2-1.12-review.html` in a b
 
 Each command also writes `out/atlas/<image>-review.tsv`, containing the **complete** catalogue, original evidence columns, flattened row/group labels and links to both review pages. This TSV is complete even without `--all`; omitting that option retains the curated visible selection. Curated pages keep omitted rows as lookup data so TSV and paired-device deep links can reveal any catalogue row on demand. `--labels FILE ...` replaces the discovered labels. Labels remain guesses [O] until checked against image bytes; stability, hash uniqueness, pair matches and rule agreement are shown separately.
 
+Groups with review labels use those titles. Otherwise the page shows common
+classes for ColdFire and recorded roles, decoder hints, or anchors for SHARC.
+The detail panel gives the source of the title. You can search group titles
+alongside function names and anchors. Group IDs can change after a catalog build.
+To reuse review JSONL after reclustering, pass the previous catalog or review TSV
+for the same image and CPU with `--label-catalog FILE`, and the original JSONL
+with `--labels FILE ...`. The exporter attaches a group label when the member
+addresses match exactly. A label can also carry those addresses as a `members`
+array of hex strings in the JSONL. Function labels follow their addresses.
+
 Without Claude's database, Keep/Later/Skip uses local browser storage per firmware image. **Export decisions (JSONL)** saves `dt2-1.17-decisions.jsonl` or `dn2-1.12-decisions.jsonl`; **Import local decisions** merges a previous export for that image. Export before closing if browser storage is unavailable, and before moving or regenerating review files: storage for local files varies by browser. On a published Claude page, the existing database path remains in use; local imports are disabled there.
 
 The **Bitmap candidates** and **Parameter candidates** shortcuts search the existing function names, callees and anchor tags. The catalogue does not contain glyph IDs, glyph previews or bitmap asset metadata, so these are entry points for investigation rather than an asset gallery.

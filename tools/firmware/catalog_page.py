@@ -22,7 +22,7 @@ from urllib.parse import quote
 
 from tools.coldfire import fw
 from tools.firmware import config, device
-from tools.firmware.catalog import group_edges
+from tools.firmware.catalog import group_edges, parse_counts
 
 Row = dict[str, str]
 
@@ -93,10 +93,27 @@ def review_filename(image: str, cpu: str) -> str:
     return image + ("-dsp" if cpu == "sharc" else "") + "-review.html"
 
 
+def group_members(rows: Iterable[Row]) -> dict[int, set[int]]:
+    members: dict[int, set[int]] = defaultdict(set)
+    for row in rows:
+        members[int(row["group"])].add(int(row["addr"], 16))
+    return members
+
+
 def read_labels(
     paths: Iterable[str],
+    rows: Iterable[Row] = (),
+    source_rows: Iterable[Row] | None = None,
 ) -> tuple[dict[int, list[dict[str, Any]]], dict[int, list[dict[str, Any]]]]:
-    """Group labels by group id and row labels by address, from JSONL files."""
+    """Read labels, aligning old group IDs by exact membership when supplied."""
+    current = group_members(rows)
+    groups = {frozenset(members): gid for gid, members in current.items() if gid >= 0}
+    previous = group_members(source_rows) if source_rows is not None else None
+    shared_addresses = (
+        set().union(*current.values()) & set().union(*previous.values())
+        if previous is not None
+        else None
+    )
     group_labels: dict[int, list[dict[str, Any]]] = defaultdict(list)
     row_labels: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for path in paths:
@@ -104,11 +121,22 @@ def read_labels(
             for line in f:
                 if not line.strip():
                     continue
-                x = json.loads(line)
-                if "addr" in x:
-                    row_labels[int(x["addr"], 16)].append(x)
-                else:
-                    group_labels[int(x["group"])].append(x)
+                label = json.loads(line)
+                if "addr" in label:
+                    addr = int(label["addr"], 16)
+                    if shared_addresses is None or addr in shared_addresses:
+                        row_labels[addr].append(label)
+                    continue
+                source_gid = int(label["group"])
+                gid: int | None = source_gid
+                if "members" in label:
+                    gid = groups.get(
+                        frozenset(int(addr, 16) for addr in label["members"])
+                    )
+                elif previous is not None:
+                    gid = groups.get(frozenset(previous.get(source_gid, ())))
+                if gid is not None:
+                    group_labels[gid].append(label)
     return group_labels, row_labels
 
 
@@ -171,6 +199,66 @@ def label_fields(labels: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
         }
         for x in labels
     ]
+
+
+DSP_ROLES = {
+    "voice": "Voice",
+    "master/fx": "Master / effects",
+    "frame": "Frame",
+    "io": "I/O",
+    "util": "Utility",
+}
+
+
+def suggest_group_title(group: Row, cpu: str, rows: Sequence[Row]) -> tuple[str, str]:
+    """Summarize the recorded class or role distribution and decoder hints."""
+    gid = int(group["id"])
+    if gid < 0:
+        return "Ungrouped functions", ""
+    classes = parse_counts(group["top_classes"])
+    if cpu == "cf":
+        if classes:
+            return " · ".join(name for name, _ in classes[:2]), "Common classes"
+        working_names = {r.get("work_name", "") for r in rows}
+        if len(working_names) == 1:
+            name = next(iter(working_names))
+            if name.startswith("calls:"):
+                return "Calls " + name.removeprefix("calls:"), "Common callee"
+    if cpu == "sharc":
+        role = ""
+        if classes:
+            name, count = classes[0]
+            if 2 * count >= int(group["size"]):
+                role = DSP_ROLES.get(name, "")
+        hint = next(
+            (
+                text
+                for text in group["top_strings"].split(" | ")
+                if text not in ("", "unclassified/mixed")
+            ),
+            "",
+        )
+        title = " · ".join(part for part in (role, hint[:1].upper() + hint[1:]) if part)
+        if title:
+            if role and hint:
+                return title, "Dominant DSP role and common decoder hint"
+            return title, "Dominant DSP role" if role else "Common decoder hint"
+        subsystems = {
+            match.split(".")[1]
+            for row in rows
+            for anchor in row["anchors"].split(",")
+            if (match := anchor.strip()).startswith("dsp.") and match.count(".") >= 2
+        }
+        if len(subsystems) == 1:
+            return next(
+                iter(subsystems)
+            ).capitalize() + " anchor", "Declared anchor in this group"
+        if any(
+            tag == "helper" and count == int(group["size"])
+            for tag, count in parse_counts(group["top_tags"])
+        ):
+            return "Shared helpers", "Call graph marks each function as a helper"
+    return f"Group {gid}", ""
 
 
 def build_payload(
@@ -274,9 +362,12 @@ def build_payload(
     out_groups: list[dict[str, Any]] = []
     for g in keep_groups:
         gid = int(g["id"])
+        title, basis = suggest_group_title(g, cpu, members[gid])
         out_groups.append(
             {
                 "id": gid,
+                "title": title,
+                "title_basis": basis,
                 "size": int(g["size"]),
                 "grade": int(g["grade"]),
                 "anch": int(g["anchored"]),
@@ -435,6 +526,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FILE",
         help="JSONL label files; replaces <atlas>/labels/<image>/*.jsonl",
     )
+    ap.add_argument(
+        "--label-catalog",
+        metavar="TSV",
+        help="catalog or review TSV the labels were written against, for the same image and CPU",
+    )
     ap.add_argument("--min-group", type=int, default=10)
     ap.add_argument("--per-group", type=int, default=20)
     ap.add_argument(
@@ -490,7 +586,18 @@ def main(argv: list[str] | None = None) -> int:
     label_files = args.labels or sorted(
         glob.glob(os.path.join(label_dir, image, "*.jsonl"))
     )
-    group_labels, row_labels = read_labels(label_files)
+    source_rows = read_tsv(args.label_catalog) if args.label_catalog else None
+    if source_rows is not None:
+        hash_field = "reloc_hash" if args.cpu == "sharc" else "h_strict"
+        if not source_rows or any(
+            not {"addr", "group", hash_field} <= r.keys()
+            or r.get("image", image) != image
+            for r in source_rows
+        ):
+            ap.error(
+                "--label-catalog must contain the old catalog for this image and CPU"
+            )
+    group_labels, row_labels = read_labels(label_files, rows, source_rows)
     payload = build_payload(
         image,
         other,

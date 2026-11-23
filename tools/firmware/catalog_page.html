@@ -521,6 +521,7 @@
   const state = { group: null, decisions: {}, db: null, local: false, canWrite: false, pending: {}, drafts: {} };
   const $ = (id) => document.getElementById(id);
   const rowsByGroup = new Map();
+  const groupById = new Map(DATA.groups.map((g) => [g.id, g]));
   for (const r of DATA.rows) {
     if (!rowsByGroup.has(r.g)) rowsByGroup.set(r.g, []);
     rowsByGroup.get(r.g).push(r);
@@ -535,7 +536,7 @@
     $('cf-discovery').hidden = true;
     $('q').setAttribute('placeholder', 'Search name, anchor, role, or DSP hint');
   }
-  if (DATA.full_inventory) $('f-lab').checked = false;
+  if (DATA.full_inventory || !DATA.rows.some((r) => r.lab.length)) $('f-lab').checked = false;
 
   function el(tag, attrs, ...kids) {
     const e = document.createElement(tag);
@@ -577,6 +578,7 @@
         r.tags,
         r.hash,
         r.anchors,
+        groupTitle(groupById.get(r.g)),
         ...r.lab.flatMap((l) => [l.role, l.anchor, l.sig, l.ev, l.use]),
       ]
         .join(' ')
@@ -596,7 +598,7 @@
   }
 
   function groupTitle(g) {
-    return g.labels[0]?.label || 'Group ' + g.id + ' (no label)';
+    return g?.labels.find((l) => l.label)?.label || g?.title || '';
   }
 
   function renderProgress() {
@@ -650,7 +652,7 @@
 
   function renderDetail() {
     const d = $('detail');
-    const g = DATA.groups.find((x) => x.id === state.group);
+    const g = groupById.get(state.group);
     if (!g) {
       d.replaceChildren(el('div', { class: 'empty', text: 'Pick a group on the left.' }));
       return;
@@ -659,6 +661,7 @@
       'div',
       { class: 'ghead' },
       el('h2', { text: groupTitle(g) }),
+      g.title_basis && !g.labels.some((l) => l.label) ? el('div', { class: 'muted', text: g.title_basis }) : null,
       ...g.labels.map((l, i) =>
         el(
           'div',
@@ -778,7 +781,7 @@
       ),
       lab.role
         ? el('div', { class: 'role', text: lab.role })
-        : el('div', { class: 'muted', text: 'Not labelled yet.' }),
+        : null,
       el(
         'dl',
         { class: 'kv' },
@@ -844,11 +847,15 @@
       DATA.rows.push(r);
       if (!rowsByGroup.has(r.g)) rowsByGroup.set(r.g, []);
       rowsByGroup.get(r.g).push(r);
-      if (!DATA.groups.some((g) => g.id === r.g)) DATA.groups.push(DATA.linked_groups.find((g) => g.id === r.g));
+      if (!groupById.has(r.g)) {
+        const group = DATA.linked_groups.find((g) => g.id === r.g);
+        DATA.groups.push(group);
+        groupById.set(group.id, group);
+      }
     }
     state.group = r.g;
     // A deep link must reveal its row even when another filter hid the group.
-    if (!rowVisible(r) || !groupVisible(DATA.groups.find((g) => g.id === r.g))) {
+    if (!rowVisible(r) || !groupVisible(groupById.get(r.g))) {
       $('q').value = '';
       $('f-lab').checked = false;
       $('f-open').checked = false;
