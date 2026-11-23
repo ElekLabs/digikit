@@ -140,7 +140,8 @@ dk_ui_view *dk_ui_view_open(dk_ui *ui, const dk_ui_view_desc *desc);
 /* ---- A row in SETTINGS ----
    `dk_ui_settings_row(ui, text, open, arg)`, in `init` only: adds a row `text` (up to DK_UI_ROW - 1 characters) at the end of the SETTINGS list.
    `open(arg)` runs on YES, in the UI task. Rows are in load order, after the rows of the DIGIKIT menu. Room for DK_UI_SETTINGS_ROWS rows in the image.
-   The row goes away when the module unloads. Returns 0, DK_E_CONTRACT (no `text` or `open`) or DK_E_NOMEM (no room). */
+   The row goes away when the module or service unloads. The owner is a module or a service file: its record name keys the row. Returns 0, DK_E_CONTRACT (no `text` or `open`, or a `ui` that is
+   not an owner's handle: the core handle of dk_ui_core_handle has no record, so no row) or DK_E_NOMEM (no room). */
 #define DK_UI_SETTINGS_ROWS 4
 
 /* ---- The stock naming screen ----

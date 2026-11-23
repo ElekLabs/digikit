@@ -1036,8 +1036,8 @@ int32_t dk_ui_tick(dk_ui *ui, dk_ui_tick_fn *fn, void *arg, uint32_t period_ms)
 /* ---- module views, SETTINGS rows, text input ---------------------------------------------------------------------------
    The logic is in settings_rows.c, view_pool.c, canvas_map.c and text_input.c (host-tested). This section is the glue to the firmware. */
 
-/* Called by the runtime (dkrt_unload_observer_add) with the owner id of a module that is unloaded, after its fini and before its memory is freed: the
-   module's views, SETTINGS rows and timers go. The owner key is the handle value (owner id + 1). */
+/* Called by the runtime (dkrt_unload_observer_add) with the owner id of a module or service file that is unloaded, after its fini and before its memory is freed: the
+   record's views, SETTINGS rows and timers go. The owner key is the handle value (owner id + 1). */
 static void ui_owner_gone(uint32_t owner)
 {
     uintptr_t key = (uintptr_t)owner + 1;
@@ -1077,23 +1077,10 @@ void ui_settings_rows_tail(uint8_t *settings_menu)
                         (void *)g_rows.row[i].key);
 }
 
-/* The name of the record (a module or a service file) whose owner handle this is (its record index + 1): what a SETTINGS row is keyed by, which a reload of the
-   file gives again. Empty when the record is not loaded: ui_rows_add refuses a row with no name. */
-static void owner_name_of(uintptr_t handle, char out[DK_UI_MODULE_NAME])
-{
-    uint8_t name[DK_UI_MODULE_NAME];
-    out[0] = 0;
-    if (handle == 0 || dkrt_record_name((uint32_t)(handle - 1), name) != 0)
-        return;
-    for (uint32_t k = 0; k < DK_UI_MODULE_NAME; k++)
-        out[k] = (char)name[k];
-    out[DK_UI_MODULE_NAME - 1] = 0;
-}
-
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
     char name[DK_UI_MODULE_NAME];
-    owner_name_of(owner_of(ui), name);
+    ui_owner_name(owner_of(ui), dkrt_record_name, name);
     return ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text, open,
                        arg);
 }

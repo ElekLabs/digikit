@@ -56,3 +56,22 @@ int sr_calls(int tag)
 {
     return calls[tag];
 }
+
+/* A stand-in for the runtime's dkrt_record_name: record 2 is "svc.two", record 3 has 31 characters, record 4 fills all 32 bytes, every other record is not loaded. */
+static int32_t fake_record_name(uint32_t record, uint8_t name[DK_UI_MODULE_NAME])
+{
+    memset(name, 0, DK_UI_MODULE_NAME);
+    if (record == 2)
+        memcpy(name, "svc.two", 8);
+    else if (record == 3)
+        memset(name, 'a', 31);
+    else if (record == 4)
+        memset(name, 'b', 32);
+    else
+        return -1;
+    return 0;
+}
+int sr_owner_name(uintptr_t handle, char *out)
+{
+    return ui_owner_name(handle, fake_record_name, out);
+}

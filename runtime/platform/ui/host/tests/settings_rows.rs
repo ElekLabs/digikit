@@ -13,6 +13,7 @@ extern "C" {
     fn sr_key(i: u32) -> usize;
     fn sr_run(key: usize) -> c_int;
     fn sr_calls(tag: c_int) -> c_int;
+    fn sr_owner_name(handle: usize, out: *mut c_char) -> c_int;
 }
 
 const E_CONTRACT: c_int = -48;
@@ -212,4 +213,41 @@ fn an_owner_without_a_name_gets_no_row() {
         E_CONTRACT
     );
     assert_eq!(unsafe { sr_count() }, 0);
+}
+
+/// The row name of an owner handle (record index + 1): the record behind it, a name of 31 characters whole, no row for the core handle, an unloaded record or a name of 32 bytes.
+#[test]
+fn owner_name_follows_the_handle_to_its_record() {
+    let _g = session();
+    let name_of = |handle: usize| {
+        let mut out = [0x7f as c_char; 32];
+        let ok = unsafe { sr_owner_name(handle, out.as_mut_ptr()) };
+        (
+            ok,
+            unsafe { CStr::from_ptr(out.as_ptr()) }
+                .to_string_lossy()
+                .into_owned(),
+        )
+    };
+    assert_eq!(
+        name_of(3),
+        (1, "svc.two".to_string()),
+        "handle 3 is record 2"
+    );
+    assert_eq!(
+        name_of(4),
+        (1, "a".repeat(31)),
+        "31 characters are kept whole"
+    );
+    assert_eq!(name_of(2), (0, String::new()), "record 1 is not loaded");
+    assert_eq!(
+        name_of(0),
+        (0, String::new()),
+        "the core handle has no record"
+    );
+    assert_eq!(
+        name_of(5),
+        (0, String::new()),
+        "a name of 32 bytes could share a key"
+    );
 }

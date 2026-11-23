@@ -39,6 +39,13 @@ typedef struct ui_settings_rows {
 int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *name, int in_init,
                     const char *text, dk_ui_settings_open_fn *open, void *arg);
 
+/* The name of the record behind an owner handle (record index + 1; 0 is the core handle, which has no record), asked from `record_name` (the runtime's
+   `dkrt_record_name`: 0 when it filled the 32 bytes). Returns 1 with `out` the NUL-terminated name, or 0 with `out` empty: handle 0, an unloaded record, or a
+   name that fills all 32 bytes (a packed name has 31 at most; one of 32 would be cut and could share a row key with another record, whose name the loader
+   compares in full). */
+typedef int32_t ui_record_name_fn(uint32_t record, uint8_t name[DK_UI_MODULE_NAME]);
+int ui_owner_name(uintptr_t handle, ui_record_name_fn *record_name, char out[DK_UI_MODULE_NAME]);
+
 /* Remove every row of `owner`; the rows after them keep their order. Returns how many were removed. */
 uint32_t ui_rows_remove_owner(ui_settings_rows *s, uintptr_t owner);
 

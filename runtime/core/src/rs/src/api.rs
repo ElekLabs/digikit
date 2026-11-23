@@ -90,7 +90,7 @@ pub unsafe extern "C" fn dkrt_unload_observer_remove(f: usize) {
     }
 }
 
-/// The owner id of a module context: its record index; `E_CONTRACT` for a pointer that is not the live context of a content module (a service has none given out).
+/// The owner id of a module context: its record index; `E_CONTRACT` for a pointer that is not the live context of a loaded module or service file.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_ctx_owner(ctx: usize) -> i32 {
     hooks::ctx_owner(ctx)
@@ -102,7 +102,7 @@ pub unsafe extern "C" fn dkrt_phase() -> u32 {
     crate::dlog::current_phase() as u32
 }
 
-/// Tell every observer that the content module record `owner` is unloaded: after its `fini` and the drop of its polls, before its code is freed. An observer that lies in the unloaded
+/// Tell every observer that the record `owner` (a content module or a service file) is unloaded: after its `fini` and the drop of its polls, before its code is freed. An observer that lies in the unloaded
 /// module `[base, base + size)` is dropped first (it would call into freed code).
 pub(crate) unsafe fn notify_unload(owner: usize, base: u32, size: u32) {
     let t = &mut *addr_of_mut!(DKRT_UNLOAD_OBSERVERS);
