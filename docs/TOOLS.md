@@ -487,34 +487,50 @@ stores the stack pointer's circular MODIFY was blocking for target
 needs an offset at or beyond one buffer length, or an unrecognised symbol
 name, which the fix deliberately does not claim bounded (see the proof).
 
-## Agent query CLI and the atlas
+## Firmware query CLI and the atlas
 
-`tools/coldfire/fw.py` is the first stop for firmware questions (the `firmware-query` skill says the same). One process,
-compact text, a 60-line cap with a "... N more" tail, ColdFire and SHARC from one image name
-(`-i dt2-1.17`, or `FW_IMAGE`). It uses only the standard library; the call graph is cached in `out/cache/fw/`
-(keyed by the database hash).
+`tools/coldfire/fw.py` is the entry point for firmware questions. Set the image with
+`-i` or `FW_IMAGE`. A short-word PC or a `dsp.*` declaration name routes the query to
+SHARC. Use `--cpu sharc` for DSP text searches and raw SQL. A batch can mix both CPUs.
+`--device NAME --firmware VERSION` also selects a release. Use `--core main`
+or `--core dsp` to select a program. Syntakt uses separate ColdFire databases
+for these roles. See [Syntakt main OS and DSP](DEVELOPMENT.md#syntakt-main-os-and-dsp).
+Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 
-| Command | Answers |
-| --- | --- |
-| `fn X`, `decomp X`, `disasm X` | Summary (size, callers, callees, strings, a few decompiled lines), full C, listing. X is an address, a Ghidra name or a `cf_names` name. |
-| `callers X`, `callees X`, `xref ADDR`, `path A B` | Call sites, callees, every reference to an address (data, code, vtable slots), shortest call path. |
-| `str TEXT`, `class NAME` | Strings and the functions using them; an RTTI class with bases, derived classes and vtable. |
-| `port X --from dt2-1.16 --to dt2-1.17` | The same function on another version (`cfmatch` matches in the database). |
-| `search TERM` | FTS5 over function and class names, strings, decompiled C and the atlas. |
-| `atlas TERM` | Machines, parameters, classes, UI strings, structs and manual pages for a manual term. |
-| `sql "SELECT ..."` | Read-only SQL on the same database. |
-| `batch FILE\|-` | One command per line, one `## command` result block each, one process. |
+| Command | ColdFire | SHARC |
+| --- | --- | --- |
+| `fn`, `disasm` | Function summary and Ghidra listing | Function summary and annotated DSP listing |
+| `dossier X --other IMAGE` | Signature, anchors, call setup, decompilation and paired function | Anchors, roots, callers, memory references, loops, listing and paired function |
+| `callers`, `callees`, `xref`, `path` | Call graph, code and data references, vtable slots | Call graph, code references, resolved and inferred memory references, literals |
+| `search TERM --in SOURCES` | `names,strings,decomp,atlas,catalog` | `names,notes,atlas,disasm,strings,catalog`. Defaults to names, notes and atlas |
+| `atlas TERM`, `catalog` | Firmware glossary and anchor candidates | Search recovered functions and declarations, or list anchor candidates |
+| `port X --from IMAGE --to IMAGE` | Recorded cross-image matches | Declared counterparts and function hash matches |
+| `str TERM` | Strings and their recorded users | Candidate printable runs from loaded sections |
+| `decomp`, `class` | Decompiled C and RTTI | Use `disasm` for listings and `atlas` for inferred DSP roles |
+| `cost`, `stores` | | Static instruction cost and call-reachable store operands |
+| `sql`, `batch` | Read-only SQL and mixed query batches | Read-only SQL and mixed query batches |
 
-Full-text indexes are sidecars, `out/cfdb/<image>-emac.fts.sqlite` (`tools/coldfire/cfdb.py fts IMAGE`, 2 s, built on
-first use): trigram tables for names and strings, a token index for decompiled C. SHARC `search` uses LIKE over
-function names, labels and notes (there is no SHARC decompilation).
+Build both CPU databases with `fw.py build -i IMAGE --other IMAGE`. See the
+[firmware guide](FIRMWARE.md) for the required inputs.
 
-`tools/coldfire/atlas.py build IMAGE...` writes `out/atlas/<image>.sqlite` from the rules in the repository: the
-machine/page descriptor table (found by its 44-byte stride, any version), the parameter table
-(`paramtable.py`), RTTI classes and vtable slots, UI strings grouped by the view class that uses them, storage
-structs, manual pages (`out/refs/`, Digitakt II 1.03A and Digitone II 1.12 text via `tools/devtools/refstext.py`) and a
-glossary of manual terms (`TERMS` in the file). Every row has `provenance` and `confidence`. The data is derived
-from firmware and stays uncommitted. Add a term by adding a `TERMS` entry; rebuild takes about 12 s per image.
+- The ColdFire `firmware.sqlite` holds the Ghidra facts, decompiled C and
+  disassembly in `function_text`, full-text indexes, glossary, and catalog.
+  `tools/coldfire/cfdb.py fts IMAGE-emac` embeds texts and search tables in
+  an existing cfdb from its matching dump.
+- `out/firmware/<image>/dsp/firmware.sqlite` holds the decoded DSP, printable runs,
+  `function_index` for the full inventory, `function_anchors` and
+  `function_notes` for annotations, and `catalog` and `catalog_groups`
+  for anchor candidates. `fw.py sql --cpu sharc` opens these tables
+  directly. Some printable runs come from coincidental instruction bytes.
+
+Each catalog generator publishes to its core's database and writes TSV and graph
+files in that core's `exports/` folder. Use `fw review` for a browsable HTML catalog. Workbench loads function names from either database
+through [Firmware symbols](ADDRMAP.md#firmware-symbols-in-desktop-settings).
+
+The ColdFire atlas contains machine/page descriptors, parameters, RTTI classes
+and vtable slots, UI strings, storage structs, and snippets from any matching
+manual text available under `out/refs/`. Every glossary row carries provenance
+and confidence. Add new terms in `tools/coldfire/atlas.py`.
 
 Measured (Apple M-series): `fw.py fn` 0.05 s, `path` 0.10 s with a cold graph cache and 0.06 s warm, a
 12-query `batch` 0.27 s.

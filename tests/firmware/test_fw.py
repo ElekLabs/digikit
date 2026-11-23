@@ -15,6 +15,10 @@ from tools.coldfire import (  # noqa: E402
     atlas,  # noqa: E402
     fw,  # noqa: E402
 )
+from tools.sharc_dev import (  # noqa: E402
+    fw_query as dsp_query,
+)
+from tools.sharc_dev import sharc_catalog  # noqa: E402
 
 CF_DB = os.path.join(ROOT, "out", "cfdb", "dt2-1.17-emac.sqlite")
 SHARC_DB = os.path.join(ROOT, "out", "sharcdb", "dt2-1.17.sqlite")
@@ -97,6 +101,38 @@ def test_dossier_call_setup_and_anchors():
 
 def run(*argv: str) -> str:
     return fw.run_line(fw.Session(), list(argv), "dt2-1.17", 60)
+
+
+def test_coldfire_embeds_text_and_search_in_the_registered_database(
+    tmp_path, monkeypatch
+):
+    from contextlib import closing
+
+    from tools.coldfire import cfdb, fw_query
+
+    image = "fixture"
+    name = image + "-emac"
+    path = tmp_path / (name + ".sqlite")
+    dump = tmp_path / "dump"
+    dump.mkdir()
+    c_file = dump / "function.c"
+    c_file.write_text("void fixture(void) { unique_symbol(); }\n")
+    with closing(cfdb.open_db(path)) as db, db:
+        db.execute("INSERT INTO meta VALUES (?, 'image', ?)", (name, name))
+        db.execute(
+            "INSERT INTO functions(image,entry,end,name,decomp_path) VALUES (?,?,?,?,?)",
+            (name, 0x40000000, 0x40000010, "fixture", c_file.name),
+        )
+    cfdb.build_fts(path, dump_dir=dump)
+    c_file.unlink()
+    monkeypatch.setattr(fw_query, "CF_DIR", str(tmp_path))
+    session = fw.Session()
+    assert "unique_symbol" in fw.run_line(session, ["decomp", "fixture"], image, 60)
+    output = fw.run_line(
+        session, ["search", "unique_symbol", "--in", "decomp"], image, 60
+    )
+    assert "decomp: 1 functions" in output and "unique_symbol" in output
+    assert not list(tmp_path.glob("*.fts.sqlite"))
 
 
 @need_cf
@@ -224,7 +260,7 @@ def store_db(tmp_path, monkeypatch):
         "INSERT INTO edges(image,from_sw,to_sw,kind,from_function,to_function) VALUES ('dn2-1.12',?,?,?,?,?)",
         edges,
     )
-    monkeypatch.setattr(fw, "SHARC_DIR", str(tmp_path))
+    monkeypatch.setattr(dsp_query, "SHARC_DIR", str(tmp_path))
 
     def store(sw, space="DM", base="I0", width="word", form="i,m-mod", owner=0x10):
         db.execute(
@@ -384,7 +420,7 @@ def test_stores_fails_closed_without_rebuilding(store_db, change, error):
 
 
 def test_stores_missing_database_does_not_create_it(tmp_path, monkeypatch):
-    monkeypatch.setattr(fw, "SHARC_DIR", str(tmp_path))
+    monkeypatch.setattr(dsp_query, "SHARC_DIR", str(tmp_path))
     with pytest.raises(fw.FwError, match="missing database"):
         fw.Sharc("dn2-1.12")
     assert list(tmp_path.iterdir()) == []
@@ -420,3 +456,129 @@ def test_stores_entry_identity_is_independent_of_edge_normalization(store_db):
     assert missing["target_is_recorded_entry"] is False
     assert missing["to_sw"] == missing["to_function"] == 0x99
     assert not known["followed_by_policy"] and not missing["followed_by_policy"]
+
+
+def test_sharc_batch_routes_semantic_names_and_keeps_the_db_read_only(
+    store_db, monkeypatch
+):
+    db, path, _, _, _ = store_db
+    image = path.stem
+    name = "dsp.master.fn.q31_converter"
+    monkeypatch.setattr(
+        dsp_query,
+        "port_anchors",
+        lambda _: [{"name": name, "pm": 0x10, "mark": "D"}],
+    )
+    db.execute("UPDATE functions SET n_insns=1, is_leaf=0")
+    db.execute(
+        "INSERT INTO strings VALUES (?,256,128,134,0,'SYNTHETIC MARKER')", (image,)
+    )
+    db.commit()
+    before = path.read_bytes()
+    session = fw.Session()
+
+    def query(*args: str) -> str:
+        return fw.run_line(session, list(args), image, 60)
+
+    assert name in query("search", "q31 converter", "--cpu", "sharc")
+    assert name in query("atlas", "q31 converter", "--cpu", "sharc")
+    dossier = query("dossier", name, "--listing", "0")
+    assert f"{name} [D]+0x0" in dossier
+    assert "callers (1):" in dossier
+    assert "memory:" in dossier
+    assert "listing " not in dossier
+    assert "SYNTHETIC MARKER" in query("str", "marker", "--cpu", "sharc")
+    assert path.read_bytes() == before
+    monkeypatch.setattr(
+        sharc_catalog,
+        "DSP_ROOTS",
+        {image: dict.fromkeys(("voice", "master", "frame"), 0x10)},
+    )
+    inventory = sharc_catalog.DspImg()
+    inventory.fn = {a: (a + 0x10, 1, f"fn_{a:x}", "") for a in (0x10, 0x20, 0x30)}
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        sharc_catalog.write_function_index(image, "peer", inventory, {}, db)
+    monkeypatch.setattr(dsp_query, "port_anchors", lambda _: [])
+    session = fw.Session()
+    published = path.read_bytes()
+    assert name in query("search", "q31 converter", "--cpu", "sharc")
+    assert (
+        query(
+            "sql", "select count(*) from function_index", "--cpu", "sharc"
+        ).splitlines()[1]
+        == "3"
+    )
+    row = db.execute(
+        "SELECT name FROM function_names WHERE entry=?", (0x10,)
+    ).fetchone()
+    assert row == (name,)
+    assert path.read_bytes() == published
+    assert not list(path.parent.glob("*.notes.sqlite"))
+
+
+def test_device_core_selects_distinct_coldfire_address_spaces(tmp_path, monkeypatch):
+    import io
+    from contextlib import closing
+
+    from tools.coldfire import cfdb, fw_query
+
+    monkeypatch.setattr(fw_query, "CF_DIR", str(tmp_path))
+    for image, function in (
+        ("st-1.42", "main_function"),
+        ("st-1.42-peer", "dsp_function"),
+    ):
+        name = image + "-emac"
+        with closing(cfdb.open_db(tmp_path / (name + ".sqlite"))) as db, db:
+            db.execute(
+                "INSERT INTO functions (image,entry,end,name) VALUES (?,0x40000400,0x40000410,?)",
+                (name, function),
+            )
+    session = fw.Session()
+    flags = ["--device", "syntakt", "--firmware", "1.42"]
+    query = ["sql", "SELECT name FROM functions WHERE entry=0x40000400"]
+    assert fw.run_line(session, [*query, *flags], None, 60).endswith("main_function")
+    assert fw.run_line(session, [*query, *flags, "--core", "dsp"], None, 60).endswith(
+        "dsp_function"
+    )
+    assert fw.run_line(session, [*query, "-i", "st-1.42-peer"], None, 60).endswith(
+        "dsp_function"
+    )
+    error = fw.run_line(
+        session, [*query, *flags, "--core", "dsp", "--cpu", "sharc"], None, 60
+    )
+    assert "uses cf" in error
+
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            'sql "SELECT name FROM functions"\nsql "SELECT name FROM functions" --core main\n'
+        ),
+    )
+    args = fw.build_parser().parse_args(["batch", "-", *flags, "--core", "dsp"])
+    output = fw.cmd_batch(session, args)
+    assert output.splitlines()[2::3] == ["dsp_function", "main_function"]
+
+
+def test_build_uses_the_profile_programs_and_legacy_pair(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        fw.coldfire, "build_images", lambda *args, **kw: calls.append((args, kw))
+    )
+    monkeypatch.setattr(
+        fw.sharc, "build_images", lambda *args: calls.append((args, {}))
+    )
+    assert run("build", "--device", "syntakt", "--firmware", "1.42").startswith(
+        "Firmware databases"
+    )
+    assert calls == [
+        (("st-1.42", None), {"peer": False}),
+        (("st-1.42-peer", None), {"peer": True}),
+    ]
+    calls.clear()
+    assert run("build", "--other", "dn2-1.12").startswith("Firmware databases")
+    assert calls == [
+        (("dt2-1.17", "dn2-1.12"), {"peer": False}),
+        (("dt2-1.17", "dn2-1.12"), {}),
+    ]
