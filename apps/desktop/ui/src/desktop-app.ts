@@ -7,11 +7,15 @@ import { createTransferApp, type TransferApp } from '@digi/workbench-core/transf
 import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
 import { createDesktopEnv } from './desktop-env';
 import { createDesktopFirmwareEnv } from './desktop-firmware';
+import { createLogDrawer, type DrawerSelection, type LogReader, type LogWriter } from './log-state';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 
 export interface DesktopApps {
   app: TransferApp;
   firmware: FirmwareApp;
+  drawer: DrawerSelection;
+  log: LogReader;
+  logWriter: LogWriter;
 }
 
 export function createDesktopApps(
@@ -19,11 +23,12 @@ export function createDesktopApps(
   storage: KeyValue = localStorageKeyValue(),
   sessions = createSessionHub((transport, opts) => new DkSession(transport, { timeoutMs: 6000, ...opts })),
 ): DesktopApps {
+  const tools = createLogDrawer(storage);
   let app!: TransferApp;
   const getApp = () => app;
-  app = createTransferApp(createDesktopEnv(host, getApp), {
+  app = createTransferApp(createDesktopEnv(host, getApp, tools.logWriter), {
     storage,
     sessions,
   });
-  return { app, firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp), app) };
+  return { ...tools, app, firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp, tools.logWriter), app) };
 }

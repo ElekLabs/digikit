@@ -261,7 +261,7 @@ export async function readLocal(): Promise<void> {
 }
 
 /** The same bag as the real `createSamplesBackend` (src/samples-backend.ts); the preview has no host to ask. */
-export const createSamplesBackend = (_host: unknown, _app?: unknown) => ({
+export const createSamplesBackend = (_host: unknown, _app: unknown, _writer: unknown) => ({
   openDeviceSamples,
   readSamples,
   pickFolder,

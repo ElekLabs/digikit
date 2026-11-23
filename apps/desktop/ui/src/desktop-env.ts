@@ -13,7 +13,7 @@ import { hostWasmSource } from './desktop-wasm';
 import { reloadWithRuntime } from './emulator-actions';
 import { TauriBulkLink } from '@digi/workbench-core/host/bulk-link.ts';
 import { EmuUsbTransport, emulatorMode } from '@digi/workbench-core/host/emu-transport.ts';
-import { logInput } from './log-state';
+import type { LogWriter } from './log-state';
 import { transferEntry } from './log-core';
 import type { Host, LibBuildReport } from '@digi/workbench-core/host/host.ts';
 import { MidiPortTransport } from '@digi/workbench-core/host/midi-transport.ts';
@@ -76,7 +76,7 @@ function samplesSlot(app: () => TransferApp, backend: () => SamplesBackendApi): 
 }
 
 /** One entry per module that did not build, one for what changed; nothing when all is unchanged. */
-function logBuild(device: string, report: LibBuildReport): void {
+function logBuild(device: string, report: LibBuildReport, logInput: LogWriter['logInput']): void {
   for (const f of report.failed)
     logInput({
       source: 'transfer',
@@ -100,9 +100,9 @@ function logBuild(device: string, report: LibBuildReport): void {
  * The Transfer environment of the desktop app over `host`. `app` is the app that will own it (the samples backend and the bulk link use its
  * target and page state); it is a function because the app is built from the environment.
  */
-export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEnv {
+export function createDesktopEnv(host: Host, app: () => TransferApp, writer: LogWriter): TransferEnv {
   let backend: SamplesBackendApi | undefined;
-  const samples = (): SamplesBackendApi => (backend ??= createSamplesBackend(host, app()));
+  const samples = (): SamplesBackendApi => (backend ??= createSamplesBackend(host, app(), writer));
   const emulatorBulk = EmuBulkLink.opener((method, params) => host.rpc.call(method, params));
   const builds = new Map<string, Promise<void>>();
   /** Build and pack the device's run-time modules (`lib_build`) before the library is read; callers that ask together share one build. */
@@ -111,7 +111,7 @@ export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEn
     if (!run) {
       run = host.library
         .build(device)
-        .then((report) => logBuild(device, report))
+        .then((report) => logBuild(device, report, writer.logInput))
         .finally(() => builds.delete(device));
       builds.set(device, run);
     }
@@ -156,7 +156,7 @@ export function createDesktopEnv(host: Host, app: () => TransferApp): TransferEn
         if (t.kind === 'emulator' && (await emulatorMode(host.rpc)) === 'paused') throw new Error(PAUSED);
       },
     },
-    logRun: (run) => logInput(transferEntry(run)),
+    logRun: (run) => writer.logInput(transferEntry(run)),
     extras: {
       samples: samplesSlot(app, samples),
       reloadWithRuntime,

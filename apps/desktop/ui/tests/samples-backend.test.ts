@@ -22,6 +22,8 @@ vi.mock('@digi/dk-session/dksample', async (original) => ({
   converterOf: () => undefined,
 }));
 
+const writer = { logEvent: () => {} };
+
 const WAV = new TextEncoder().encode('RIFF\0\0\0\0WAVEfmt ');
 const listing = [
   { name: 'kick.wav', kind: 'file' as const, size: 4000 },
@@ -42,7 +44,7 @@ test('reading the folder lists the open level, then labels the files from their 
     'fs.read': (_root: string, rel: string) => (rel === 'kick.wav' ? WAV.buffer : new Uint8Array(4).buffer),
   });
   setLocalFolder('/samples');
-  await createSamplesBackend(host, createFakeTransferApp()).readLocal();
+  await createSamplesBackend(host, createFakeTransferApp(), writer).readLocal();
   assert.deepEqual(localEntries(), listing);
   assert.deepEqual(host.argsOf('fs.list'), [['/samples', '']]);
   // folders are not labelled; each file is read with head 64
@@ -61,13 +63,13 @@ test('a folder that cannot be listed shows an empty list and reports the error',
     },
   });
   setLocalFolder('/samples');
-  await assert.rejects(createSamplesBackend(host, createFakeTransferApp()).readLocal(), /permission denied/);
+  await assert.rejects(createSamplesBackend(host, createFakeTransferApp(), writer).readLocal(), /permission denied/);
   assert.deepEqual(localEntries(), []);
 });
 
 test('no folder chosen: nothing is asked of the host', async () => {
   const host = createFakeHost();
-  const backend = createSamplesBackend(host, createFakeTransferApp());
+  const backend = createSamplesBackend(host, createFakeTransferApp(), writer);
   await backend.readLocal();
   assert.equal(localEntries(), undefined);
   assert.equal(await backend.listLocalNow(), undefined);
@@ -84,7 +86,7 @@ test('the light poll lists the open level and answers undefined when that fails'
   });
   setLocalFolder('/samples');
   setLocalPath('drums');
-  const backend = createSamplesBackend(host, createFakeTransferApp());
+  const backend = createSamplesBackend(host, createFakeTransferApp(), writer);
   assert.deepEqual(await backend.listLocalNow(), listing);
   assert.deepEqual(host.argsOf('fs.list'), [['/samples', 'drums']]);
   ok = false;
@@ -113,7 +115,7 @@ test('a stock device is identified by Ping: no runtime, SysEx link, and no runti
   };
   const host = createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) });
   const app = createFakeTransferApp({ sessions: createFakeSessions(() => session) });
-  const opened = await createSamplesBackend(host, app).openDeviceSamples();
+  const opened = await createSamplesBackend(host, app, writer).openDeviceSamples();
   assert.equal(opened.name, device.name);
   assert.equal(opened.hasRuntime, false);
   assert.equal(opened.runtime, null);
@@ -127,7 +129,7 @@ test('a stock device is identified by Ping: no runtime, SysEx link, and no runti
 
 test('the folder dialog starts at the given folder, or nowhere', async () => {
   const host = createFakeHost({ 'fs.pickFolder': '/picked' });
-  const backend = createSamplesBackend(host, createFakeTransferApp());
+  const backend = createSamplesBackend(host, createFakeTransferApp(), writer);
   assert.equal(await backend.pickFolder('/old'), '/picked');
   await backend.pickFolder('');
   assert.deepEqual(

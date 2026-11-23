@@ -24,7 +24,7 @@ export function mountWorkbench(host: Host, apps: DesktopApps, options: ConsoleOp
   render(
     () => (
       <AppProvider app={apps.app} firmware={apps.firmware}>
-        <Console {...options} theme={theme} host={host} analyzerWorkers={analyzerWorkers} />
+        <Console {...options} theme={theme} host={host} analyzerWorkers={analyzerWorkers} tools={apps} />
       </AppProvider>
     ),
     document.getElementById('app')!,

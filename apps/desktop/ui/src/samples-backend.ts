@@ -13,7 +13,7 @@ import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import { joinPath } from '@digi/workbench-core/transfer/sample-upload.ts';
 import type { LocalEntry } from '@digi/workbench-core/transfer/samples-core.ts';
 import type { LinkState } from '@digi/workbench-core/transfer/link-core.ts';
-import { logEvent } from './log-state';
+import type { LogWriter } from './log-state';
 import {
   localFolder,
   localPath,
@@ -65,7 +65,7 @@ export async function labelOf(read: () => Promise<Uint8Array>, size: number): Pr
 }
 
 /** The desktop Samples backend over `host` and the app's target, connection and page state. Each backend keeps its own caches (the converter, the session's samples backend). */
-export function createSamplesBackend(host: Host, app: TransferApp) {
+export function createSamplesBackend(host: Host, app: TransferApp, writer: Pick<LogWriter, 'logEvent'>) {
   const { asked, noteConnection } = app.connection;
   const { session: running, target } = app.target;
   const { setDeviceInfo, setSampleLink } = app.state;
@@ -108,7 +108,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
     console.info(`[samples] ${why}`);
     if (last && last.logged === why) return;
     if (last) last.logged = why;
-    logEvent('transfer', 'info', `samples: ${why}`);
+    writer.logEvent('transfer', 'info', `samples: ${why}`);
   };
 
   /**
@@ -194,7 +194,7 @@ export function createSamplesBackend(host: Host, app: TransferApp) {
         bulk: last.bulk?.session,
         note,
         onFallback: (reason) => {
-          logEvent('transfer', 'error', `samples: Fast USB stopped, the rest goes over SysEx: ${reason}`);
+          writer.logEvent('transfer', 'error', `samples: Fast USB stopped, the rest goes over SysEx: ${reason}`);
           setSampleLink({ state: 'fallback', reason });
         },
       }),

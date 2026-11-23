@@ -11,7 +11,7 @@ import { canUseDefault, folderNotice, shortFolder, statusText, type CardFolder }
 import { cardApi } from './card-api';
 import { cardRefresh } from './card-state';
 import { cardEntry, failureEntry, overlayResetEntry } from './log-core';
-import { logInput } from './log-state';
+import type { LogWriter } from './log-state';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import './card-panel.css';
 
@@ -21,7 +21,11 @@ const deviceName = (id: string | undefined) =>
   id && Object.hasOwn(panels, id) ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
 
 /** `reload`: start the loaded firmware again (the Restart button's path), which builds the card from the folder in use. */
-export default function CardPanel(props: { host: Host; reload?: () => Promise<void> }): JSX.Element {
+export default function CardPanel(props: {
+  host: Host;
+  logWriter: Pick<LogWriter, 'logInput'>;
+  reload?: () => Promise<void>;
+}): JSX.Element {
   const api = cardApi(props.host);
   const [card, setCard] = createSignal<CardFolder>();
   const [error, setError] = createSignal('');
@@ -59,10 +63,10 @@ export default function CardPanel(props: { host: Host; reload?: () => Promise<vo
       const next = await api.sync();
       setCard(next);
       setError('');
-      logInput(cardEntry('synced', next));
+      props.logWriter.logInput(cardEntry('synced', next));
     } catch (e) {
       setError(errorLine(e));
-      logInput(failureEntry('card', 'sync', errorLine(e)));
+      props.logWriter.logInput(failureEntry('card', 'sync', errorLine(e)));
     } finally {
       setBusy(false);
       setNow(Date.now());
@@ -75,12 +79,12 @@ export default function CardPanel(props: { host: Host; reload?: () => Promise<vo
       const next = await run();
       if (next) {
         setCard(next);
-        logInput(cardEntry(what, next));
+        props.logWriter.logInput(cardEntry(what, next));
       }
       setError('');
     } catch (e) {
       setError(errorLine(e));
-      logInput(failureEntry('card', what, errorLine(e)));
+      props.logWriter.logInput(failureEntry('card', what, errorLine(e)));
     } finally {
       setBusy(false);
       setNow(Date.now());
@@ -102,13 +106,13 @@ export default function CardPanel(props: { host: Host; reload?: () => Promise<vo
     setBusy(true);
     try {
       const r = await api.resetOverlay();
-      logInput(overlayResetEntry(r));
+      props.logWriter.logInput(overlayResetEntry(r));
       if (r.set_aside) await props.reload?.();
       setCard(await api.folder());
       setError('');
     } catch (e) {
       setError(errorLine(e));
-      logInput(failureEntry('card', 'reset card changes', errorLine(e)));
+      props.logWriter.logInput(failureEntry('card', 'reset card changes', errorLine(e)));
     } finally {
       setBusy(false);
       setNow(Date.now());

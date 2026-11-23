@@ -8,7 +8,7 @@ import { senderKit } from '@digi/workbench-core/patch/sender-kit.ts';
 import { createDesktopDefaultModules } from './default-modules';
 import { hostWasmSource } from './desktop-wasm';
 import { flashEntry } from './log-core';
-import { logInput } from './log-state';
+import type { LogWriter } from './log-state';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 
 /** The answer of `firmware_prepare`: 4 bytes of JSON length (big endian), the summary JSON, the image. */
@@ -24,7 +24,11 @@ export function unpack(buf: Uint8Array): { summary: FlashSummary; image: Uint8Ar
  * The Firmware page's environment over `host`; the patchkit wasm is loaded once (a failed load is tried again at the next use). `app` is the
  * Transfer app whose sessions the default modules install over (a function: the apps are built from the environments).
  */
-export function createDesktopFirmwareEnv(host: Host, app: () => TransferApp): FirmwareEnv {
+export function createDesktopFirmwareEnv(
+  host: Host,
+  app: () => TransferApp,
+  writer: Pick<LogWriter, 'logInput'>,
+): FirmwareEnv {
   /** The sender needs no firmware or modules: an empty bundle. */
   const kit = senderKit(hostWasmSource(host));
   return {
@@ -43,7 +47,7 @@ export function createDesktopFirmwareEnv(host: Host, app: () => TransferApp): Fi
     async saveImage(name, bytes) {
       return (await host.firmware.save(bytes, name)) ?? undefined;
     },
-    log: (run) => logInput(flashEntry(run)),
+    log: (run) => writer.logInput(flashEntry(run)),
     defaultModules: createDesktopDefaultModules(app),
   };
 }

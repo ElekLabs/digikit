@@ -7,7 +7,6 @@ import { createPreviewSymbols } from './symbols-mock';
 import { createDesktopApps } from '../src/desktop-app';
 import { createTauriHost } from '../src/host/tauri-host';
 import type { WorkbenchEnvironment } from '../src/workbench-environment';
-import { setLogOpen } from '../src/log-state';
 import { setLocalFolder } from '../src/samples-state';
 import { createPreviewAnalyzer } from './analyzer-mock';
 import { previewFirmware } from './default-modules-mock';
@@ -56,7 +55,7 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
   if (query.has('mode')) apps.app.state.setMode(sim.mode);
   setLocalFolder(sim.folder === 'none' ? '' : SAMPLES_ROOT);
   (window as unknown as { __sim: typeof control }).__sim = control;
-  if (page === 'log') setLogOpen(true);
+  if (page === 'log') apps.drawer.select('Log');
 
   return {
     host,

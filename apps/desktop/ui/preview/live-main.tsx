@@ -4,7 +4,7 @@
 // new object each time), so a panel that reads on every change of `status` is as busy here as in the app. The daemon is asked for the
 // status twice a second only: a real call per frame would load it more than the app's pump does.
 //   live.html?page=emulator|transfer|remote[&idle=1][&log=1]   window.__live: { page(name), frames() }
-// `log=1` adds the Log drawer, following the running emulator's own runtime log (the device side has no port here).
+// `log=1` keeps the Log drawer visible and follows the running emulator's runtime log for the duration of the preview.
 // `idle=1` leaves the panels out (the status ticks stay): the baseline a measurement of the panels is compared with.
 import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -76,6 +76,7 @@ function Shell() {
   const follow = withLog
     ? createLogFollow({
         follow: () => true,
+        push: apps.logWriter.logInputs,
         flashing: () => false,
         emulator: { running: () => !!status(), session: async () => followSession(await emulatorSession()) },
         device: {
@@ -124,6 +125,8 @@ function Shell() {
           <LogPanel
             host={host}
             follow={follow!}
+            log={apps.log}
+            close={() => {}}
             emulatorRunning={() => !!status()}
             devicePort={() => undefined}
             toggleKey="⌘J"

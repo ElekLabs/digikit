@@ -4,7 +4,6 @@
 import {
   For,
   Show,
-  batch,
   lazy,
   Suspense,
   createEffect,
@@ -66,7 +65,6 @@ import {
   UP,
   WARNING,
 } from './icons';
-import { DOCK_KEY_STEP, DOCK_MIN_PX, clampDock, dockAt, dockMax, parseDock, startDock } from './dock-core';
 import {
   duration,
   failureEntry,
@@ -75,7 +73,6 @@ import {
   healthStart,
   reloadEntry,
   reloadFailureEntry,
-  unseenErrors,
 } from './log-core';
 import { createNativeRuntime } from './native-runtime';
 import { themes, type createTheme } from './theme';
@@ -85,7 +82,8 @@ import { createLogFollow, followSession, type FollowEnv } from './log-follow';
 import { createDkProfLoader } from './dkprof-env';
 import { createDeviceNames, createEmulatorNames, selectedSymbolImage } from './log-names-backend';
 import { windowShown } from './log-follow-core';
-import { followOn, logEvent, logInput, logOpen, logState, setLogOpen } from './log-state';
+import type { DesktopApps } from './desktop-app';
+import WorkbenchDrawer from './WorkbenchDrawer';
 import LogPanel from './LogPanel';
 import FirmwareSymbols from './FirmwareSymbols';
 import type { EmuSource as Source, Host } from '@digi/workbench-core/host/host.ts';
@@ -123,9 +121,6 @@ const RUNTIME_KEY = 'digikit.bootRuntime';
 const LOAD_ON_START_KEY = 'digikit.loadOnStart';
 const LAST_FIRMWARE_KEY = 'digikit.lastFirmware';
 
-// The height of the Log dock in px; kept per browser profile of the app (none saved: a share of the window).
-const DOCK_KEY = 'digikit.logHeight';
-
 // The sidebar is open unless the user collapsed it; kept per browser profile of the app.
 const SIDEBAR_KEY = 'digikit.sidebar';
 
@@ -157,15 +152,20 @@ export default function Console(
     theme: ReturnType<typeof createTheme>;
     host: Host;
     analyzerWorkers: WorkerFactory<'analyzer'>;
+    tools: Pick<DesktopApps, 'drawer' | 'log' | 'logWriter'>;
   },
 ) {
   const app = useTransferApp();
   const fw = useFirmwareApp();
+  const { drawer, log, logWriter } = untrack(() => props.tools);
+  const { logEvent, logInput } = logWriter;
+  const logOpen = () => drawer.active() === 'Log';
+  const analyzerOpen = () => drawer.active() === 'Analyzer';
+  const performanceOpen = () => drawer.active() === 'Performance';
+  const toggleLog = () => drawer.toggle('Log');
   const { readPref, writePref } = createPrefs(app.storage);
   const readRuntimePref = () => readPref(RUNTIME_KEY) !== 'off';
   const writeRuntimePref = (on: boolean) => writePref(RUNTIME_KEY, on ? 'on' : 'off');
-  const readDockPref = () => parseDock(readPref(DOCK_KEY));
-  const writeDockPref = (px: number | undefined) => writePref(DOCK_KEY, px === undefined ? null : String(px));
   const readSidebarPref = () => readPref(SIDEBAR_KEY) !== 'closed';
   const writeSidebarPref = (open: boolean) => writePref(SIDEBAR_KEY, open ? 'open' : 'closed');
   // "DSP": on unless the user turned it off; kept like the runtime tick (dsp-core.ts).
@@ -197,11 +197,6 @@ export default function Console(
   const [audio, setAudio] = createSignal<NativeAudioStatus>();
   const [buildInfo, setBuildInfo] = createSignal<BuildInfo>();
   const [rate, setRate] = createSignal<number>();
-  // the Log drawer: the last entry seen (the badge counts the errors after it); the filter and the list are in LogPanel.tsx
-  const [seenId, setSeenId] = createSignal(0);
-  // the Log dock: its height (undefined: the default share of the window), the window height, and a drag in progress
-  const [dockSaved, setDockSaved] = createSignal(props.initialDockHeight ?? readDockPref());
-  const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
   const [moduleId, setModuleId] = createSignal('');
@@ -232,7 +227,6 @@ export default function Console(
   let lastAudio: { produced: number; wall: number } | undefined;
   let lastModified: number | undefined;
   let health = healthStart();
-  let dockEl: HTMLElement | undefined;
   const timers: number[] = [];
 
   // a memo: `status` is set once per display frame, and the panels must hear of a change of this value only
@@ -636,41 +630,14 @@ export default function Console(
     onCleanup(() => window.clearTimeout(timer));
   });
 
-  const [toolDrawer, setToolDrawer] = createSignal<'Analyzer' | 'Performance'>();
-  createEffect(() => {
-    if (logOpen()) setToolDrawer(undefined);
-  });
   const [performanceView, setPerformanceView] = createSignal<PerformanceView>('Utilization');
   const [spanRecording, setSpanRecording] = createSignal<SpanRecording>();
-  const analyzerOpen = () => toolDrawer() === 'Analyzer';
-  const drawerName = () => (logOpen() ? 'Log' : toolDrawer());
-  const drawerOpen = () => !!drawerName();
-  const toggleLog = () =>
-    batch(() => {
-      setLogOpen(!logOpen());
-      setToolDrawer(undefined);
-    });
-  const toggleTool = (tool: 'Analyzer' | 'Performance') =>
-    batch(() => {
-      setLogOpen(false);
-      setToolDrawer((open) => (open === tool ? undefined : tool));
-    });
   const showMetrics = () => {
     setPage('run');
     setInspectorTab('metrics');
     setInspectorOpen(true);
     requestAnimationFrame(() => document.getElementById('side-tab-metrics')?.focus());
   };
-  const dockPx = () => startDock(dockSaved(), windowPx());
-  const dockDragTo = (clientY: number) => {
-    if (!dockEl) return;
-    setDockSaved(dockAt(clientY, dockEl.getBoundingClientRect().bottom, windowPx()));
-  };
-  const dockNudge = (delta: number) => {
-    setDockSaved(clampDock(dockPx() + delta, windowPx()));
-    writeDockPref(dockSaved());
-  };
-  const onResize = () => setWindowPx(window.innerHeight);
   const onKey = (e: KeyboardEvent) => {
     // ⌘J / Ctrl+J opens and closes the Log.
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j') {
@@ -729,12 +696,10 @@ export default function Console(
       timers.push(window.setInterval(() => void pollHealth(), 1000));
     });
     window.addEventListener('keydown', onKey);
-    window.addEventListener('resize', onResize);
   });
   onCleanup(() => {
     timers.forEach((t) => window.clearInterval(t));
     window.removeEventListener('keydown', onKey);
-    window.removeEventListener('resize', onResize);
     void runtime()?.stop();
     runtime()?.dispose();
   });
@@ -832,21 +797,16 @@ export default function Console(
     }
   };
 
-  // the Log drawer
-  const badge = () => (logOpen() ? 0 : unseenErrors(logState().entries, seenId()));
+  const badge = log.unread;
   const mac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
   const logKey = mac ? '⌘J' : 'Ctrl+J';
   const reloadKey = mac ? '⌘R' : 'Ctrl+R';
   const modulesKey = mac ? '⇧⌘R' : 'Ctrl+Shift+R';
-  // an open drawer has seen everything logged so far
-  createEffect(() => {
-    const entries = logState().entries;
-    if (logOpen()) setSeenId(entries.at(-1)?.id ?? 0);
-  });
   // the runtime logs of the emulator and of the device on the MIDI port chosen last (nothing is read while the emulator is paused)
   const dkprof = createDkProfLoader(props.host);
   const logFollow = createLogFollow({
-    follow: followOn,
+    follow: log.followOn,
+    push: logWriter.logInputs,
     flashing: () => flashRunning(flashRun()),
     shown: windowShown,
     drawerOpen: logOpen,
@@ -961,7 +921,6 @@ export default function Console(
       style={{
         '--accent': panel().accent,
         '--func-legend': panel().func_legend,
-        '--dock-h': drawerOpen() ? `${dockPx()}px` : '0px',
       }}
     >
       <TitleBar onError={(m) => setError(m)} />
@@ -1299,11 +1258,9 @@ export default function Console(
                   <SidePanels
                     host={props.host}
                     visible={sidePanelsShown()}
-                    liveDsp={toolDrawer() === 'Performance' && performanceView() === 'DSP blocks'}
+                    liveDsp={performanceOpen() && performanceView() === 'DSP blocks'}
                     collectSpans={
-                      toolDrawer() === 'Performance' &&
-                      performanceView() !== 'Utilization' &&
-                      source.target.kind !== 'none'
+                      performanceOpen() && performanceView() !== 'Utilization' && source.target.kind !== 'none'
                     }
                     profileGeneration={isEmulator() ? emulatorGeneration() : 1}
                     onSpanRecording={setSpanRecording}
@@ -1351,7 +1308,7 @@ export default function Console(
                 save={(name, bytes) => props.host.fs.saveLog(bytes, name, 'file')}
                 extra={
                   <Show when={target().kind === 'emulator'}>
-                    <CardPanel host={props.host} reload={restart} />
+                    <CardPanel host={props.host} reload={restart} logWriter={logWriter} />
                   </Show>
                 }
               />
@@ -1390,84 +1347,52 @@ export default function Console(
         </div>
       </div>
 
-      <Show when={drawerOpen()}>
-        <section
-          class="workbench-drawer"
-          classList={{ 'log-drawer': logOpen() }}
-          aria-label={drawerName()}
-          ref={dockEl}
-          style={{ height: `${dockPx()}px` }}
+      <WorkbenchDrawer
+        active={drawer.active()}
+        storage={app.storage}
+        initialHeight={props.initialDockHeight}
+        onDragging={setDockDrag}
+      >
+        <Show
+          when={logOpen()}
+          fallback={
+            <Show
+              when={performanceOpen()}
+              fallback={
+                <Show when={props.host.analyzer}>
+                  {(host) => (
+                    <Suspense fallback={<p role="status">Opening analyzer…</p>}>
+                      <AnalyzerPanel host={host()} target={selected().target} workers={props.analyzerWorkers} />
+                    </Suspense>
+                  )}
+                </Show>
+              }
+            >
+              <Suspense fallback={<p role="status">Opening performance history…</p>}>
+                <PerformancePanel
+                  points={utilization().points()}
+                  now={now()}
+                  estimated={isEmulator()}
+                  view={performanceView()}
+                  setView={setPerformanceView}
+                  recording={spanRecording()}
+                  activeTarget={selected().target.kind !== 'none' && (!isEmulator() || !!status())}
+                />
+              </Suspense>
+            </Show>
+          }
         >
-          <div
-            class="dock-handle"
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label={`Resize the ${drawerName()}`}
-            aria-valuemin={DOCK_MIN_PX}
-            aria-valuemax={dockMax(windowPx())}
-            aria-valuenow={dockPx()}
-            tabIndex={0}
-            onPointerDown={(e) => {
-              if (e.button !== 0) return;
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setDockDrag(true);
-            }}
-            onPointerMove={(e) => dockDrag() && dockDragTo(e.clientY)}
-            onPointerUp={() => {
-              if (dockDrag()) writeDockPref(dockSaved());
-              setDockDrag(false);
-            }}
-            onPointerCancel={() => setDockDrag(false)}
-            onDblClick={() => {
-              setDockSaved(undefined);
-              writeDockPref(undefined);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowUp') dockNudge(DOCK_KEY_STEP);
-              else if (e.key === 'ArrowDown') dockNudge(-DOCK_KEY_STEP);
-              else return;
-              e.preventDefault();
-            }}
+          <LogPanel
+            host={props.host}
+            follow={logFollow}
+            log={log}
+            close={() => drawer.select(undefined)}
+            emulatorRunning={props.logSources?.emulator.running ?? (() => !!status())}
+            devicePort={props.logSources?.device.port ?? lastMidiPort}
+            toggleKey={logKey}
           />
-          <Show
-            when={logOpen()}
-            fallback={
-              <Show
-                when={toolDrawer() === 'Performance'}
-                fallback={
-                  <Show when={props.host.analyzer}>
-                    {(host) => (
-                      <Suspense fallback={<p role="status">Opening analyzer…</p>}>
-                        <AnalyzerPanel host={host()} target={selected().target} workers={props.analyzerWorkers} />
-                      </Suspense>
-                    )}
-                  </Show>
-                }
-              >
-                <Suspense fallback={<p role="status">Opening performance history…</p>}>
-                  <PerformancePanel
-                    points={utilization().points()}
-                    now={now()}
-                    estimated={isEmulator()}
-                    view={performanceView()}
-                    setView={setPerformanceView}
-                    recording={spanRecording()}
-                    activeTarget={selected().target.kind !== 'none' && (!isEmulator() || !!status())}
-                  />
-                </Suspense>
-              </Show>
-            }
-          >
-            <LogPanel
-              host={props.host}
-              follow={logFollow}
-              emulatorRunning={props.logSources?.emulator.running ?? (() => !!status())}
-              devicePort={props.logSources?.device.port ?? lastMidiPort}
-              toggleKey={logKey}
-            />
-          </Show>
-        </section>
-      </Show>
+        </Show>
+      </WorkbenchDrawer>
 
       <footer class="statusbar">
         <div class="status-readings">
@@ -1574,7 +1499,7 @@ export default function Console(
             class="sb"
             aria-expanded={analyzerOpen()}
             title="Show the selected target’s audio analyzer"
-            onClick={() => toggleTool('Analyzer')}
+            onClick={() => drawer.toggle('Analyzer')}
           >
             Analyzer <Icon d={analyzerOpen() ? DOWN : UP} />
           </button>
@@ -1582,11 +1507,11 @@ export default function Console(
         <button
           type="button"
           class="sb"
-          aria-expanded={toolDrawer() === 'Performance'}
+          aria-expanded={performanceOpen()}
           title="Show CF and DSP utilization history"
-          onClick={() => toggleTool('Performance')}
+          onClick={() => drawer.toggle('Performance')}
         >
-          Performance <Icon d={toolDrawer() === 'Performance' ? DOWN : UP} />
+          Performance <Icon d={performanceOpen() ? DOWN : UP} />
         </button>
         <button type="button" class="sb" aria-expanded={logOpen()} title={`Log (${logKey})`} onClick={toggleLog}>
           Log

@@ -1,42 +1,81 @@
-// The workbench log: one list for the window, written by every part of the app (`logEvent`) and shown by the Log drawer in Console.tsx.
-// In memory only; the rules are in log-core.ts.
-import { createSignal } from 'solid-js';
-import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
+// The in-memory workbench log and the selection shared by its tool drawers.
+import { batch, createSignal, untrack } from 'solid-js';
+import type { KeyValue } from '@digi/workbench-core/storage.ts';
 import {
   addEntries,
-  addEntry,
   autoOpens,
   clearEntries,
   emptyLog,
+  unseenErrors,
+  type LogEntry,
   type LogInput,
   type LogLevel,
   type LogSource,
 } from './log-core';
 
-export const [logState, setLogState] = createSignal(emptyLog());
-/** The drawer is open. An error that `autoOpens` sets it. */
-export const [logOpen, setLogOpen] = createSignal(false);
-
-export function logInput(input: LogInput): void {
-  setLogState((s) => addEntry(s, input, Date.now()));
-  if (autoOpens(input)) setLogOpen(true);
-}
-/** Several entries received together (a poll of a runtime log). */
-export function logInputs(inputs: LogInput[]): void {
-  setLogState((s) => addEntries(s, inputs, Date.now()));
-  if (inputs.some(autoOpens)) setLogOpen(true);
-}
-export const logEvent = (source: LogSource, level: LogLevel, text: string, detail?: string): void =>
-  logInput({ source, level, text, ...(detail ? { detail } : {}) });
-export const clearLog = (): void => {
-  setLogState(clearEntries);
-};
-
-// Follow: read the runtime log of the emulator and the device. On unless the user turned it off; kept per browser profile of the app.
 const FOLLOW_KEY = 'digikit.logFollow';
-const prefs = localStorageKeyValue();
-export const [followOn, setFollowSignal] = createSignal(prefs.get(FOLLOW_KEY) !== 'off');
-export function setFollowOn(on: boolean): void {
-  setFollowSignal(on);
-  prefs.set(FOLLOW_KEY, on ? 'on' : 'off');
+
+export type DrawerName = 'Log' | 'Analyzer' | 'Performance';
+
+export interface DrawerSelection {
+  active(): DrawerName | undefined;
+  select(name: DrawerName | undefined): void;
+  toggle(name: DrawerName): void;
+}
+
+export interface LogReader {
+  entries(): LogEntry[];
+  unread(): number;
+  followOn(): boolean;
+  setFollowOn(on: boolean): void;
+  clear(): void;
+}
+
+export interface LogWriter {
+  logInput(input: LogInput): void;
+  logInputs(inputs: LogInput[]): void;
+  logEvent(source: LogSource, level: LogLevel, text: string, detail?: string): void;
+}
+
+export function createLogDrawer(storage: KeyValue): { drawer: DrawerSelection; log: LogReader; logWriter: LogWriter } {
+  const [active, setActive] = createSignal<DrawerName>();
+  const [state, setState] = createSignal(emptyLog());
+  const [seenId, setSeenId] = createSignal(0);
+  const [followOn, setFollow] = createSignal(storage.get(FOLLOW_KEY) !== 'off');
+
+  const select = (name: DrawerName | undefined) =>
+    batch(() => {
+      setActive(name);
+      if (name === 'Log') setSeenId(untrack(state).nextId - 1);
+    });
+
+  const logInputs = (inputs: LogInput[]) =>
+    batch(() => {
+      setState((current) => addEntries(current, inputs, Date.now()));
+      if (untrack(active) === 'Log' || inputs.some(autoOpens)) select('Log');
+    });
+  const logInput = (input: LogInput) => logInputs([input]);
+
+  return {
+    drawer: {
+      active,
+      select,
+      toggle: (name) => select(untrack(active) === name ? undefined : name),
+    },
+    log: {
+      entries: () => state().entries,
+      unread: () => (active() === 'Log' ? 0 : unseenErrors(state().entries, seenId())),
+      followOn,
+      setFollowOn(on) {
+        setFollow(on);
+        storage.set(FOLLOW_KEY, on ? 'on' : 'off');
+      },
+      clear: () => void setState(clearEntries),
+    },
+    logWriter: {
+      logInput,
+      logInputs,
+      logEvent: (source, level, text, detail) => logInput({ source, level, text, ...(detail ? { detail } : {}) }),
+    },
+  };
 }
