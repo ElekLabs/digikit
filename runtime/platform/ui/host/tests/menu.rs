@@ -1110,3 +1110,20 @@ fn applying_releases_an_open_settings_page_before_the_jobs() {
     );
     poll_until_idle();
 }
+
+/// The BOOT lines of ABOUT (moved from the device test of a module that needs a missing core module): a selected module that the boot could not load for a missing module is
+/// listed with the name of that module, and the other BOOT lines count it as not loaded.
+#[test]
+fn the_about_page_names_the_missing_module_of_a_failed_boot_load() {
+    let _g = digikit();
+    add("modules/usb-fast.dkm", OK, 20, 0, 0);
+    select("modules/usb-fast.dkm");
+    let n = CString::new("usb-bulk").unwrap();
+    unsafe { fk_boot_needs(0, n.as_ptr()) };
+    open_digikit();
+    press_yes(0);
+    let rows = render();
+    assert!(rows.contains(&"- NEEDS USB-BULK".to_string()), "{rows:?}");
+    assert!(rows.contains(&"BOOT: 0 OF 1 OK".to_string()), "{rows:?}");
+    assert!(!rows.iter().any(|r| r.contains("NO IMPORT")), "{rows:?}");
+}

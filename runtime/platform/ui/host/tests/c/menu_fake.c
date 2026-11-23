@@ -47,6 +47,8 @@ static struct {
     int live_waits;               /* the wait a new job gets */
     uint32_t live_phase;
     int live_cur;
+    /* counters of the calls the menu makes into the table */
+    int stock_rows, health_calls, status_calls;
 } fk;
 static int settings_runs, settings_acts;
 
@@ -63,6 +65,7 @@ void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_action_fn *fn,
     (void)stock_menu;
     (void)text;
     (void)ctx;
+    fk.stock_rows++;
     stock_fn = fn;
 }
 
@@ -97,6 +100,7 @@ void dkrt_boot_info(DkrtBootInfo *out)
 
 void dkrt_status(DkrtStatus *out)
 {
+    fk.status_calls++;
     memset(out, 0, sizeof *out);
     out->runtime = 0x000501;
     out->arena_free = fk.arena_free;
@@ -104,6 +108,7 @@ void dkrt_status(DkrtStatus *out)
 
 void dkrt_health(DkrtHealth *out)
 {
+    fk.health_calls++;
     memset(out, 0, sizeof *out);
 }
 
@@ -409,6 +414,26 @@ void fk_select(const char *path)
 void fk_scan_result(int r)
 {
     fk.scan_result = r;
+}
+
+/* What dkrt_selection_get answers (0: the saved selection; negative: the read failed). */
+void fk_selection_get_result(int r)
+{
+    fk.get_result = r;
+}
+
+/* The calls the menu made into the table. */
+int fk_stock_rows(void)
+{
+    return fk.stock_rows;
+}
+int fk_health_calls(void)
+{
+    return fk.health_calls;
+}
+int fk_status_calls(void)
+{
+    return fk.status_calls;
 }
 
 /* A module the runtime has loaded (dkrt_module), and its effect (dkrt_fx): allowed routes 1 master, 2 send. */
