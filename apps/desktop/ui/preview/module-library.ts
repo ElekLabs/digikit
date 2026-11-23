@@ -2,13 +2,16 @@
 import indexText from '../../../../dist/workbench-preview/index.json?raw';
 import type { LibraryHost } from '@digi/workbench-core/host/host.ts';
 
+import { previewModule, type ModuleFixture } from './module-fixture';
+
 interface Pack {
+  fixture?: ModuleFixture;
   file: string;
   size: number;
 }
 
 interface SiteIndex {
-  modules: { id: string; devices: Record<string, Pack> }[];
+  modules: { id: string; version: string; devices: Record<string, Pack> }[];
   services?: Record<string, Pack[]>;
   ports?: Record<string, Pack[]>;
 }
@@ -26,6 +29,13 @@ export function createPreviewLibrary() {
     ...(index.services?.[device] ?? []),
     ...(index.ports?.[device] ?? []),
   ];
+  const fixtures = new Map(
+    index.modules.flatMap((module) =>
+      Object.values(module.devices).flatMap((pack) =>
+        pack.fixture ? [[pack.file, { module, pack, fixture: pack.fixture }] as const] : [],
+      ),
+    ),
+  );
   const bytes = new Map<string, Promise<ArrayBuffer>>();
 
   const library = {
@@ -36,6 +46,9 @@ export function createPreviewLibrary() {
       return packs(device).map((p) => ({ path: p.file, size: p.size }));
     },
     async read(device, path) {
+      const simulated = fixtures.get(path);
+      if (simulated && simulated.module.devices[device]?.file === path)
+        return previewModule(simulated.module, simulated.fixture, simulated.pack.size).buffer;
       const url = packUrls[`../../../../dist/workbench-preview/${path}`];
       if (!url || !packs(device).some((p) => p.file === path))
         throw new Error(`No preview pack for ${device}: ${path}`);

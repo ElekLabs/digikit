@@ -14,6 +14,11 @@ import {
   onMount,
   untrack,
 } from 'solid-js';
+import ModulePageView from '@digi/workbench-core/ui/module-ui/ModulePageView.tsx';
+import { moduleFilePage, moduleFilePages } from './module-file-pages';
+import { runtimeModulePages } from './runtime-module-pages';
+import type { ModulePageSource } from '@digi/workbench-core/module-ui/module-page.ts';
+import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
 import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
@@ -43,7 +48,7 @@ import type { SpanRecording } from './span-recording';
 import type { PerformanceView } from './PerformancePanel';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
-import { pageFor, type Page } from './page-core';
+import type { Page } from './page-core';
 import {
   CHART,
   DOWN,
@@ -140,6 +145,7 @@ const PerformancePanel = lazy(() => import('./PerformancePanel'));
 const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
 
 export interface ConsoleOptions {
+  modulePages?: ModulePageSource;
   initialPage?: Page;
   browserPreview?: boolean;
   logSources?: Pick<FollowEnv, 'emulator' | 'device'>;
@@ -198,6 +204,23 @@ export default function Console(
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
+  const [moduleId, setModuleId] = createSignal('');
+  const filePages = moduleFilePages(app);
+  const runtimePage = runtimeModulePages(app, (id, schema, open) => moduleFilePage(app, id, schema, open));
+  const modulePages = createMemo(() => {
+    const source = props.modulePages;
+    if (app.target.switching() || app.target.libraryOnly()) return [];
+    const key = targetKey(target());
+    return app.inventory.modules().flatMap((module) => {
+      const { name } = module;
+      const view = source?.lookup(key, name) ?? runtimePage(module) ?? filePages.get(name);
+      return view ? [{ id: name, view }] : [];
+    });
+  });
+  const modulePage = () => modulePages().find((item) => item.id === moduleId())?.view;
+  createEffect(() => {
+    if (page() === 'module' && !app.target.switching() && !modulePage()) setPage('transfer');
+  });
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
@@ -258,7 +281,35 @@ export default function Console(
   const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
   createEffect(() => {
-    setPage(pageFor(page(), target(), !!status() && runtimeHere()));
+    app.target.setEmulatorAvailable(emulatorLoaded() && runtimeHere());
+  });
+  const inventoryConnected = createMemo(() => connectionState() === 'connected');
+  // Keep loaded modules available to the shell while Transfer is closed. Transfer's own
+  // read publishes to the same inventory when it is open.
+  createEffect(() => {
+    const current = target();
+    cardRefresh();
+    inventoryConnected();
+    if (
+      page() === 'transfer' ||
+      busy('target') ||
+      app.target.libraryOnly() ||
+      app.target.switching() ||
+      current.kind === 'none' ||
+      (current.kind === 'emulator' && paused()) ||
+      untrack(connectionState) === 'noruntime'
+    )
+      return;
+    const binding = app.target.bindSession();
+    const read = app.inventory.reader();
+    void binding
+      .session()
+      .then(async (s) => {
+        const info = await s.info(true);
+        binding.check();
+        await read(s, info);
+      })
+      .catch(() => {});
   });
   // The "Load on start" boot that the start deferred because the target was a device.
   const [deferredBoot, setDeferredBoot] = createSignal<string>();
@@ -492,6 +543,7 @@ export default function Console(
       await runJob('Reloading modules', { group: 'emulator' }, async () => {
         setError('');
         setReloadNote('Reloading modules…');
+        if (isEmulator()) app.inventory.clear();
         try {
           const report = await r.reloadModules!();
           setReloadNote(reloadLine(report));
@@ -508,6 +560,8 @@ export default function Console(
           const failure = reloadError(e);
           setReloadNote(failure.status);
           logInput(reloadFailureEntry(failure));
+        } finally {
+          bumpCardRefresh();
         }
       });
     } catch (e) {
@@ -539,9 +593,13 @@ export default function Console(
       watchHealth({ halted: a?.halted ?? null });
       const produced = a?.source_audio_seconds,
         wall = a?.session_wall_seconds;
-      if (produced === undefined || wall === undefined) return;
-      if (lastAudio && produced < lastAudio.produced) lastAudio = undefined;
-      if (lastAudio && wall > lastAudio.wall) setRate((produced - lastAudio.produced) / (wall - lastAudio.wall));
+      if (produced === undefined || wall === undefined || wall <= 0) {
+        lastAudio = undefined;
+        setRate(undefined);
+        return;
+      }
+      if (!lastAudio || produced < lastAudio.produced || wall < lastAudio.wall) setRate(undefined);
+      else if (wall > lastAudio.wall) setRate((produced - lastAudio.produced) / (wall - lastAudio.wall));
       lastAudio = { produced, wall };
     } catch {
       /* a replaced session has no audio status */
@@ -954,12 +1012,7 @@ export default function Console(
             class="side"
             classList={{ on: page() === 'transfer' }}
             aria-current={page() === 'transfer' ? 'page' : undefined}
-            disabled={(!status() && target().kind === 'emulator') || (target().kind === 'emulator' && !runtimeHere())}
-            title={
-              target().kind === 'emulator' && !runtimeHere()
-                ? noRuntimeTitle()
-                : 'Choose the modules that run on the target (the emulator or a device on a MIDI port) and install them'
-            }
+            title="Browse local modules and transfer files to the selected target"
             onClick={() => setPage('transfer')}
           >
             <Icon d={MODULES} />
@@ -987,6 +1040,27 @@ export default function Console(
             <Icon d={FIRMWARE} />
             <span>Firmware</span>
           </button>
+          <Show when={modulePages().length}>
+            <span class="side-group">Modules</span>
+            <For each={modulePages()}>
+              {(item) => (
+                <button
+                  type="button"
+                  class="side"
+                  classList={{ on: page() === 'module' && moduleId() === item.id }}
+                  aria-current={page() === 'module' && moduleId() === item.id ? 'page' : undefined}
+                  title={item.view.descriptor.name}
+                  onClick={() => {
+                    setModuleId(item.id);
+                    setPage('module');
+                  }}
+                >
+                  <Icon d={MODULES} />
+                  <span>{item.view.descriptor.name}</span>
+                </button>
+              )}
+            </For>
+          </Show>
           <button
             type="button"
             class="side settings-link"
@@ -1258,6 +1332,9 @@ export default function Console(
               </Show>
             </div>
           </div>
+          <Show when={page() === 'module' && modulePage()} keyed>
+            {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
+          </Show>
           <Show when={page() === 'transfer'}>
             <TransferPage onFlash={() => setPage('firmware')} />
           </Show>
@@ -1417,6 +1494,9 @@ export default function Console(
               <Icon d={SPEAKER} />
               {audio()!.output_device}
             </span>
+          </Show>
+          <Show when={isEmulator() && status() && dspHere() && info()?.dsp?.enabled === false}>
+            <span title="Emulated audio speed is available when the DSP is running.">DSP off</span>
           </Show>
           <Show when={isEmulator() && rate() !== undefined}>
             <span title="Emulated audio seconds per wall second">

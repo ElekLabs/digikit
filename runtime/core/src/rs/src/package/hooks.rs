@@ -62,7 +62,9 @@ unsafe extern "C" fn boot_safe() {
 }
 
 unsafe extern "C" fn boot_read_tables(rec: *const u8) {
-    crate::package::boot_steps::read_tables(&*(rec as *const Record))
+    let record = &*(rec as *const Record);
+    super::module_ui::set_boot_sequence(record.seq);
+    crate::package::boot_steps::read_tables(record)
 }
 
 unsafe extern "C" fn boot_find_providers(count: u32) {
@@ -80,6 +82,7 @@ unsafe extern "C" fn tick(phase: u32) {
     if phase == tick_phase::POLL_JOB {
         reload::poll();
         settings_reload::poll();
+        super::module_ui::tick();
     } else if phase == tick_phase::POLL_DSP {
         link::pump();
         lifecycle::dsp_step();

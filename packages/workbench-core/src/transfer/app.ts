@@ -6,6 +6,7 @@ import { createJobs, type JobsApp } from '../jobs/jobs';
 import type { KeyValue } from '../storage';
 import { createConnection, type ConnectionApp } from './connection-state';
 import type { TransferEnv } from './env';
+import { createModuleInventory } from './module-inventory';
 import type { SessionHub } from './session-core';
 import { createTarget, type TargetApp } from './target';
 import { createTransferBackend, type BackendDeps, type TransferBackendApp } from './transfer-backend';
@@ -17,6 +18,7 @@ export interface TransferApp {
   /** The app's small stored choices (the target, the mode, the folders). */
   storage: KeyValue;
   connection: ConnectionApp;
+  inventory: ReturnType<typeof createModuleInventory>;
   jobs: JobsApp;
   target: TargetApp;
   /** The Transfer page's state. */
@@ -39,17 +41,33 @@ export function createTransferApp(
   },
 ): TransferApp {
   const { storage, sessions } = deps;
-  const connection = createConnection(env);
+  const inventory = createModuleInventory();
   const jobs = createJobs();
-  const target = createTarget({ env, storage, sessions, connection });
   const state = createTransferState({ env, storage, jobs });
+  const connection = createConnection(env, () => {
+    inventory.clear();
+    state.forgetDevice();
+  });
+  const target = createTarget({ env, storage, sessions, connection });
   const { transferBackend, loadLibrary, installDeps } = createTransferBackend({
     env,
     target,
+    inventory,
     connection,
     needs: deps.needs,
     runtimeIdentity: deps.runtimeIdentity,
     runtimeServices: deps.runtimeServices,
   });
-  return { env, storage, connection, jobs, target, state, backend: transferBackend, loadLibrary, installDeps };
+  return {
+    env,
+    storage,
+    inventory,
+    connection,
+    jobs,
+    target,
+    state,
+    backend: transferBackend,
+    loadLibrary,
+    installDeps,
+  };
 }

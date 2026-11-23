@@ -6,8 +6,9 @@ use dkrt_abi::command::{Cmd, NOLOG};
 use dkrt_sdk::proto::*;
 
 /// The package's commands, looked up one after the other like the resident ones.
-pub(crate) static CMDS: [Cmd; 7] = [
+pub(crate) static CMDS: [Cmd; 8] = [
     Cmd { cmd: CMD_MODULES, flags: NOLOG, h: h_modules },
+    Cmd { cmd: CMD_MODULE_UI, flags: NOLOG, h: super::module_ui::command },
     Cmd { cmd: CMD_CAPACITY, flags: NOLOG, h: h_capacity },
     Cmd { cmd: CMD_LOADS, flags: NOLOG, h: h_loads },
     Cmd { cmd: CMD_RELOAD, flags: 0, h: h_reload },

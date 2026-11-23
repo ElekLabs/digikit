@@ -242,6 +242,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if module {
             s.loads = s.loads.wrapping_add(1);
             crate::package::resident::intro::commit(rec);
+            crate::package::module_ui::publish(rec);
         }
     }
 
@@ -250,6 +251,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         let module = rec < MAX_MODULES;
         if module {
             crate::package::resident::intro::discard(rec);
+            crate::package::module_ui::withdraw(rec);
         }
         let held = !crate::package::files::retire(rec) | !retire_sdk(rec);
         crate::package::module_cmds::release_cmds(rec as u8 + 1);

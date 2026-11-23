@@ -21,6 +21,7 @@ import {
 } from './TransferParts';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
+import type { ModuleFileClient } from '../../src/module-ui/module-files';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { createPaneSelect } from '../../src/transfer/pane-select';
 import SplitPane from './SplitPane';
@@ -64,6 +65,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     delTicks,
     lastView,
     progress,
+    readingAfterJob,
     setBrowseDevice,
     setDelTicks,
     setLog,
@@ -231,13 +233,26 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     return id && env.moduleFiles?.(id) ? id : undefined;
   };
 
+  function moduleFiles(id: string): ModuleFileClient {
+    return {
+      list: () => app.backend.listModuleFiles(id),
+      read: (name) => app.backend.readModuleFile(id, name),
+      send: (name, bytes, progress) => app.backend.putModuleFile(id, name, bytes, progress),
+      remove: (name) => app.backend.removeModuleFile(id, name),
+    };
+  }
+
   const browseOptions = (): SegmentedOption<string>[] =>
     (env.libraryDevices ?? []).map((d) => ({ id: d, label: deviceNameOf(d) }));
 
+  const { libraryOnly } = app.target;
+  const localOnly = () => libraryOnly() || browsing() || !lastView();
   const lists = (
     <SplitPane id="transfer">
       <LocalPane
-        onDrop={(f) => void addFiles(f)}
+        onDrop={(f) => {
+          if (addToList() || !localOnly()) void addFiles(f);
+        }}
         select={lsel}
         selectAll={
           <SelectAll
@@ -277,7 +292,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
             <button
               type="button"
               class="act small"
-              disabled={!!busy()}
+              disabled={!!busy() || (!addToList() && localOnly())}
               title={
                 addToList()
                   ? 'Add module files from your computer to this list, then install them'
@@ -302,7 +317,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
             <button
               type="button"
               class="act primary"
-              disabled={!!busy() || ticked() === 0 || browsing()}
+              disabled={!!busy() || ticked() === 0 || localOnly()}
               title={
                 browsing()
                   ? `Connect a ${deviceNamesText('or')} running the digikit runtime to install`
@@ -411,107 +426,122 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
         </Show>
       </LocalPane>
 
-      <DevicePane
-        ctx={props.ctx}
-        select={dsel}
-        selectAll={
-          <SelectAll
-            label="Select all files to delete"
-            keys={deviceKeys()}
-            ticked={delTicks()}
-            disabled={!!busy()}
-            onChange={(next) => {
-              setDelTicks(next);
-              confirm.stop();
-            }}
-          />
-        }
-        actions={
-          <>
-            <DeleteButton
-              n={browsing() ? 0 : nDelete()}
-              busy={busy()}
-              confirming={confirm.confirming()}
-              title="Delete the ticked files from the device (a loaded module stays loaded until the next restart)"
-              onClick={() => confirm.click(() => void removeSelected())}
+      <Show when={!env.targets.inHeader || !localOnly()} fallback={<section class="col" aria-label="On device" />}>
+        <DevicePane
+          ctx={props.ctx}
+          select={dsel}
+          selectAll={
+            <SelectAll
+              label="Select all files to delete"
+              keys={deviceKeys()}
+              ticked={delTicks()}
+              disabled={!!busy()}
+              onChange={(next) => {
+                setDelTicks(next);
+                confirm.stop();
+              }}
             />
-            <button
-              type="button"
-              class="act"
-              disabled={!!busy() || !lastView() || browsing()}
-              title="RESTART the device (it loads what its MODULES menu has selected)"
-              onClick={() => void restart()}
+          }
+          actions={
+            <>
+              <DeleteButton
+                n={browsing() ? 0 : nDelete()}
+                busy={busy()}
+                confirming={confirm.confirming()}
+                title="Delete the ticked files from the device (a loaded module stays loaded until the next restart)"
+                onClick={() => confirm.click(() => void removeSelected())}
+              />
+              <button
+                type="button"
+                class="act"
+                disabled={!!busy() || !lastView() || browsing()}
+                title="RESTART the device (it loads what its MODULES menu has selected)"
+                onClick={() => void restart()}
+              >
+                {busy() === 'Restarting' ? 'Restarting…' : 'Restart'}
+              </button>
+            </>
+          }
+        >
+          <WaitNotice active={!!busy()} cancel={busy() !== 'Installing' && !readingAfterJob()} />
+          <Show when={lastView()}>
+            <Show
+              when={deviceRows().length}
+              fallback={
+                <p class="empty">
+                  {browsing()
+                    ? `Connect a ${deviceNamesText('or')} to see what is on it.`
+                    : 'The device holds no modules.'}
+                </p>
+              }
             >
-              {busy() === 'Restarting' ? 'Restarting…' : 'Restart'}
-            </button>
-          </>
-        }
-      >
-        <WaitNotice active={!!busy()} cancel={busy() !== 'Installing'} />
-        <Show when={lastView()}>
-          <Show
-            when={deviceRows().length}
-            fallback={
-              <p class="empty">
-                {browsing()
-                  ? `Connect a ${deviceNamesText('or')} to see what is on it.`
-                  : 'The device holds no modules.'}
-              </p>
-            }
-          >
-            <ul class="rows">
-              <For each={deviceRows()}>
-                {(r) => (
-                  <ListRow
-                    rowKey={r.on_card === 'no' ? undefined : r.path}
-                    selected={delTicks().has(r.path) || (!!filesId(r) && selectedId() === filesId(r))}
-                    onSelect={
-                      r.on_card === 'no'
-                        ? undefined
-                        : (e) => {
-                            const f = filesId(r);
-                            if (f) setSelectedId(f);
-                            else {
-                              setSelectedId(undefined);
-                              dsel.click(r.path, e);
+              <ul class="rows">
+                <For each={deviceRows()}>
+                  {(r) => (
+                    <ListRow
+                      rowKey={r.on_card === 'no' ? undefined : r.path}
+                      selected={delTicks().has(r.path) || (!!filesId(r) && selectedId() === filesId(r))}
+                      onSelect={
+                        r.on_card === 'no'
+                          ? undefined
+                          : (e) => {
+                              const f = filesId(r);
+                              if (f) setSelectedId(f);
+                              else {
+                                setSelectedId(undefined);
+                                dsel.click(r.path, e);
+                              }
                             }
-                          }
-                    }
-                    check={
-                      r.on_card === 'no'
-                        ? undefined
-                        : {
-                            label: `Delete ${label(r)}`,
-                            checked: delTicks().has(r.path),
-                            disabled: writing(busy()),
-                            onChange: () => dsel.tick(r.path),
-                          }
-                    }
-                    name={label(r)}
-                    title={r.path}
-                    tags={deviceTags(r)}
-                    dependencies={dependencyBadge(r.card_services)}
-                    version={r.version ?? ''}
-                    size={formatBytes(r.file_size)}
-                    status={status(r)}
-                    phase={phase(r)}
-                  />
-                )}
-              </For>
-            </ul>
+                      }
+                      check={
+                        r.on_card === 'no'
+                          ? undefined
+                          : {
+                              label: `Delete ${label(r)}`,
+                              checked: delTicks().has(r.path),
+                              disabled: writing(busy()),
+                              onChange: () => dsel.tick(r.path),
+                            }
+                      }
+                      name={label(r)}
+                      title={r.path}
+                      tags={deviceTags(r)}
+                      dependencies={dependencyBadge(r.card_services)}
+                      version={r.version ?? ''}
+                      size={formatBytes(r.file_size)}
+                      status={status(r)}
+                      phase={phase(r)}
+                    />
+                  )}
+                </For>
+              </ul>
+            </Show>
           </Show>
-        </Show>
-      </DevicePane>
+        </DevicePane>
+      </Show>
     </SplitPane>
   );
 
   return (
     <>
       {lists}
-      <Show when={selectedId()}>
+      <Show when={!localOnly() && selectedId()} keyed>
         {(id) => (
-          <Show when={env.moduleFiles?.(id())}>
-            {(spec) => <ModuleFilesArea ctx={props.ctx} id={id()} spec={spec()} />}
+          <Show when={env.moduleFiles?.(id)}>
+            {(spec) => (
+              <ModuleFilesArea
+                ctx={props.ctx}
+                id={id}
+                spec={spec()}
+                files={moduleFiles(id)}
+                refresh={lastView}
+                prepareSend={async () => {
+                  if (lastView()?.modules.find((row) => row.id === id)?.on_card === 'no') {
+                    await app.backend.install([id], () => {});
+                  }
+                }}
+              />
+            )}
           </Show>
         )}
       </Show>

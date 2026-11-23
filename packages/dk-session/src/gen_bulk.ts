@@ -51,6 +51,8 @@ export const BULK_STATUS = {
   E_SET_OFF: -70,
   E_FILE_IN_USE: -71,
   E_AGAIN: -72,
+  E_MODULE_UI_CONFLICT: -88,
+  E_MODULE_UI_SCOPE: -89,
   L_E_NOT_FOUND: -1,
   L_E_BAD_STORE: -2,
   L_E_READ: -3,

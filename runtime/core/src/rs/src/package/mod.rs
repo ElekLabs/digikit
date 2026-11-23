@@ -36,6 +36,7 @@ pub(crate) mod menu;
 mod menu_link;
 pub(crate) mod live_cmds;
 pub(crate) mod module_cmds;
+mod module_ui;
 pub mod registry;
 pub(crate) mod resident;
 pub mod reload;

@@ -37,7 +37,7 @@ import {
   type ServiceRef,
   type ServiceRefusal,
 } from './services.ts';
-import type { DkEntry, DkInfoFull } from '@digi/dk-session';
+import type { DkEntry, DkInfoFull, DkModule } from '@digi/dk-session';
 
 export type Group = 'Machines' | 'Effects' | 'Filters' | 'LFO shapes' | 'Tools' | 'Services';
 
@@ -696,9 +696,11 @@ export async function putModuleFile(
   name: string,
   bytes: Uint8Array,
   progress: (sent: number, total: number) => void = () => {},
+  beforeWrite?: () => void,
 ): Promise<void> {
   const path = moduleFilePath(moduleId, name);
   requireRuntime(await s.info());
+  beforeWrite?.();
   await s.put(path, bytes, progress);
   if (!(await s.verifyFile(path, bytes)))
     throw new DkError({
@@ -708,9 +710,15 @@ export async function putModuleFile(
 }
 
 /** DELETE one file of a module. */
-export async function removeModuleFile(s: DkSession, moduleId: string, name: string): Promise<void> {
+export async function removeModuleFile(
+  s: DkSession,
+  moduleId: string,
+  name: string,
+  beforeWrite?: () => void,
+): Promise<void> {
   const path = moduleFilePath(moduleId, name);
   requireRuntime(await s.info());
+  beforeWrite?.();
   await s.delete(path);
 }
 
@@ -775,12 +783,37 @@ async function cardFacts(
   return { needs, provides, portFw, unread };
 }
 
+export async function readLoadedModules(s: DkSession, info: DkInfoFull): Promise<DkModule[]> {
+  if (!hasCap(info, 'MODULES')) return [];
+  const modules = await s.modules();
+  if (hasCap(info, 'MODULE_UI')) return modules;
+  return modules.map(({ uiInstance: _reserved, ...module }) => module);
+}
+
 /** The merged view for the device behind `s`. READ supplies installed dependency data. With `deps` the library rows list the services they need and any install refusal. */
-export async function buildView(s: DkSession, library: LibraryModule[], deps?: InstallDeps): Promise<TransferView> {
-  const info = await s.info();
+export async function buildView(
+  s: DkSession,
+  library: LibraryModule[],
+  deps?: InstallDeps,
+  options: {
+    info?: DkInfoFull;
+    readLoaded?: typeof readLoadedModules;
+    showModules?: (view: TransferView) => void;
+  } = {},
+): Promise<TransferView> {
+  const info = options.info ?? (await s.info());
   requireRuntime(info);
-  const card = [...(await listModules(s, info)), ...(await listServices(s, info)), ...(await listPorts(s, info))];
-  const loaded = hasCap(info, 'MODULES') ? (await s.modules()).map((m) => m.name) : [];
+  const modules = await listModules(s, info);
+  const readLoaded = options.readLoaded ?? readLoadedModules;
+  const loaded = (await readLoaded(s, info)).map((m) => m.name);
+  const identity = { device: info.port, runtime: fmtVersion(info.runtime), loaded };
+  options.showModules?.({
+    ...identity,
+    free_bytes: storeFree(info, null).free,
+    capacity: null,
+    ...mergeView(library, modules, loaded, null, {}),
+  });
+  const card = [...modules, ...(await listServices(s, info)), ...(await listPorts(s, info))];
   const cap = hasCap(info, 'CAPACITY') ? await s.capacity() : null;
   const states = hasCap(info, 'LOADS') ? await s.loadStates() : [];
   const mine = new Set(library.map((m) => m.path));
@@ -830,10 +863,8 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
     if (row) row.service_refusal = r;
   }
   return {
-    device: info.port,
-    runtime: fmtVersion(info.runtime),
+    ...identity,
     free_bytes: storeFree(info, cap).free,
-    loaded,
     capacity: cap,
     ...merged,
     ...(incompleteCardNeeds ? { incomplete_card_needs: true } : {}),

@@ -37,6 +37,7 @@ pub unsafe fn bind(rec: usize) -> *const Ctx {
 
 /// Record `rec` goes away: no tick, no context.
 pub unsafe fn unbind(rec: usize) {
+    super::module_ui::withdraw(rec);
     write_volatile(addr_of_mut!(DKRT_TICKS[rec]), 0);
     (*addr_of_mut!(DKRT_CTXS))[rec] = NO_CTX;
 }
@@ -186,11 +187,27 @@ pub unsafe extern "C" fn dk_settings_get(s: *mut u8, key: *const u8, out: *mut u
 }
 
 pub unsafe extern "C" fn dk_settings_put(s: *mut u8, key: *const u8, value: *const u8, len: u32) -> i32 {
-    settings::module_put(client(s), key, value, len)
+    module_put(client(s), key, value, len)
 }
 
 pub unsafe extern "C" fn dk_settings_remove(s: *mut u8, key: *const u8) -> i32 {
-    settings::module_remove(client(s), key)
+    module_remove(client(s), key)
+}
+
+pub(super) unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 {
+    note_setting_change(settings::module_put(client, key, value, len), client, key)
+}
+
+pub(super) unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
+    note_setting_change(settings::module_remove(client, key), client, key)
+}
+
+unsafe fn note_setting_change(result: i32, client: u32, key: *const u8) -> i32 {
+    if result == OK && (1..=MAX_MODULES as u32).contains(&client) {
+        let len = dkrt_abi::mem::cstr_len(key, dkrt_sdk::settings::KEY_MAX);
+        super::module_ui::setting_changed(client as usize - 1, core::slice::from_raw_parts(key, len));
+    }
+    result
 }
 
 // ---- files (the read-only listing) -----------------------------------------------------------------------------------------

@@ -1,18 +1,73 @@
-import { describe, expect, it } from 'vitest';
-import { pageFor } from '../src/page-core';
+import { expect, it } from 'vitest';
+import { CAP } from '@digi/dk-session/gen_proto';
+import { runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
+import { createFakeSessions, createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
+import { readTransfer } from '@digi/workbench-core/transfer/read-transfer.ts';
 
-describe('page choice', () => {
-  it('sends Transfer back to Run when the emulator has no runtime', () => {
-    expect(pageFor('transfer', { kind: 'emulator' }, false)).toBe('run');
-    expect(pageFor('run', { kind: 'emulator' }, false)).toBe('run');
+it('browses the local library without opening a stopped emulator session', async () => {
+  const scanned: string[] = [];
+  const app = createFakeTransferApp({
+    env: {
+      library: {
+        scan: async (device) => {
+          scanned.push(device);
+          return [];
+        },
+        read: async () => new Uint8Array(),
+      },
+    },
   });
-  it('keeps the pages for a device on a MIDI port, whatever the emulator runs', () => {
-    expect(pageFor('transfer', { kind: 'midi' }, false)).toBe('transfer');
-    expect(pageFor('run', { kind: 'midi' }, false)).toBe('run');
+  app.target.setEmulatorAvailable(false);
+  await readTransfer(app);
+  expect(scanned).toEqual([app.state.browseDevice()]);
+  expect(app.sessions.made).toEqual([]);
+  expect(app.state.browsing()).toBe(true);
+  expect(app.state.lastView()?.card_only).toEqual([]);
+  expect(app.state.deviceInfo()).toBeUndefined();
+});
+
+it('shows the card modules while reading service details, even when the provisional library is still building', async () => {
+  const browseDevice = runtimeDeviceIds[0]!;
+  const targetDevice = runtimeDeviceIds[1]!;
+  let finishProvisional!: (files: []) => void;
+  const provisionalLibrary = new Promise<[]>((resolve) => {
+    finishProvisional = resolve;
   });
-  it('keeps every page when the emulator has a runtime, and the other pages always', () => {
-    expect(pageFor('transfer', { kind: 'emulator' }, true)).toBe('transfer');
-    expect(pageFor('firmware', { kind: 'emulator' }, false)).toBe('firmware');
-    expect(pageFor('run', { kind: 'midi' }, false)).toBe('run');
+  let infoRequests = 0;
+  let showedModulesBeforeServices = false;
+  const app = createFakeTransferApp({
+    sessions: createFakeSessions(() => ({
+      info: async () => {
+        infoRequests++;
+        return { port: targetDevice, runtime: 4, free_bytes: 1024, caps: (1 << CAP.FOLDERS) | (1 << CAP.MODULES) };
+      },
+      rpc: async () => new Uint8Array(),
+      list: async (prefix: string) => {
+        if (prefix === 'modules/') return [{ path: 'modules/example.dkm', size: 10, hash: '' }];
+        if (prefix === 'services/') {
+          showedModulesBeforeServices =
+            !app.state.browsing() &&
+            app.state.lastView()?.card_only[0]?.path === 'modules/example.dkm' &&
+            app.inventory.modules()[0]?.name === 'example';
+        }
+        return [];
+      },
+      modules: async () => [{ name: 'example' }],
+    })),
+    env: {
+      library: {
+        scan: async (device) => (device === browseDevice ? provisionalLibrary : []),
+        read: async () => new Uint8Array(),
+      },
+    },
   });
+  app.state.setBrowseDevice(browseDevice);
+  try {
+    await readTransfer(app);
+  } finally {
+    finishProvisional([]);
+  }
+  expect(showedModulesBeforeServices).toBe(true);
+  expect(app.state.deviceInfo()?.name).toBe(targetDevice);
+  expect(infoRequests).toBe(1);
 });

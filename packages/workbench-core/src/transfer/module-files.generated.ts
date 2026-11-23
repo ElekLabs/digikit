@@ -2,5 +2,5 @@
 import type { ModuleFilesSpec } from './env';
 
 export const MODULE_FILES: Record<string, ModuleFilesSpec> = {
-  "tools/bootscreen": {"label":"Boot screens","ext":["dkbs"],"preview":"oled-1bit"},
+  "tools/bootscreen": {"name":"Boot screen","label":"Boot screens","ext":["dkbs"],"preview":"oled-1bit"},
 };

@@ -19,6 +19,7 @@
 #include <dk/platform/settings.h>
 #include <dk/platform/ui.h>
 #include "dkbs.h"
+#include "workbench_descriptor.h"
 #include <dk/core/path.h>
 #include <dk/core/text.h>
 
@@ -70,6 +71,9 @@ static int32_t init(dk_module_ctx *ctx)
     int32_t n, size;
     if (dk_settings_open(ctx, &g_settings) != DK_OK || dk_files_open(ctx, &g_files) != DK_OK)
         return DK_OK;
+    n = dk_workbench_register(ctx, dk_workbench_descriptor, sizeof dk_workbench_descriptor);
+    if (n != DK_OK)
+        say("bootscreen: Workbench settings unavailable", (uint32_t)n);
     if (dk_ui_open(ctx, &g_ui) != DK_OK)
         g_ui = 0;
     n = dk_settings_get(g_settings, "active", name, NAME_MAX_BYTES - 1u);

@@ -109,8 +109,11 @@ fn provider() -> &'static mut Provider {
 
 /// `dkc_settings_overlay_set`: the service file that runs now gives its table (null: takes it away).
 pub unsafe fn set(table: *const SettingsOverlay) {
+    let was_loaded = provider().loaded();
     if provider().set(crate::package::resident::dlog::current_source(), table) {
         provider_gone();
+    } else if !was_loaded && provider().loaded() {
+        crate::package::module_ui::scope_changed();
     }
 }
 
@@ -124,6 +127,7 @@ pub unsafe fn withdraw(rec: usize) {
 /// No layer changes values any more: no module waits for a reload because of it.
 unsafe fn provider_gone() {
     crate::package::settings_reload::forget_all();
+    crate::package::module_ui::scope_changed();
 }
 
 /// Is a table set?

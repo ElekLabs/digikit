@@ -429,6 +429,45 @@ A run-time module keeps its own values with the settings imports of `<dk/platfor
 - The module owns the layout and the version of its values: write a version byte first and read older values or reset them. The runtime never interprets them.
 - The settings popup is the module's `menu` function with the `dk_ui_menu_add_*` rows: a row changes a value and its callback calls `dk_settings_put`; `init` reads it at the next boot.
 
+#### Public settings in Workbench
+
+Add `workbench.toml` beside `module.toml` to declare the settings Workbench can edit.
+
+```toml
+[workbench]
+version = 1
+
+[[setting]]
+id = "boot"
+label = "Boot value"
+type = "text"
+max_bytes = 16
+
+[[setting]]
+id = "active"
+label = "Boot screen"
+type = "file-name"
+max_bytes = 47
+apply = "next-restart"
+extension = "dkbs"
+reset_label = "Stock"
+```
+
+Each `id` is a unique key in the module's settings namespace. A `text` setting stores UTF-8 text up to `max_bytes` (1 to 64).
+A `file-name` setting stores a file's leaf name in the module's data directory. The `extension` uses 1 to 16 lowercase ASCII letters or digits
+without a leading dot. Choose a `max_bytes` that fits a stem, dot and extension, up to 47 bytes. The optional
+`reset_label` names the choice that removes the setting and defaults to `None`.
+Set `apply = "next-restart"` when the module reads the value at boot. The default is `"immediate"`.
+The descriptor uses `[module].name` and the field labels as UTF-8 display text. Each name or label uses 1 to 255 bytes, and the complete
+descriptor fits in 512 bytes.
+
+Include `<dk/gen/imports.h>` and `<workbench_descriptor.h>` in the ColdFire C source. Call
+`dk_workbench_register(ctx, dk_workbench_descriptor, sizeof dk_workbench_descriptor)` during `init` after setup. The import requires
+runtime 0.11.4. The runtime publishes the descriptor once the module is loaded.
+Read the stored bytes with `dk_settings_get` using the declared `id`.
+Patchkit provides the generated header during `module:build` and on demand during `module:pack`. An exported module carries `workbench.toml`
+and regenerates the header on build.
+
 ### 5.9 Module files and `dk_intro_take`
 
 A module's own files live under `data/<module id>/` in the store, not next to the `.dkm`: the `modules/` list holds at most 32 entries. `dk_data_path` (`<dk/platform/data.h>`)

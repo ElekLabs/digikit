@@ -5,6 +5,7 @@
 // Two clients live here. `DkClient` wraps the wasm codec (the web page). `DkSession`, at the end of the file, is pure TypeScript:
 // the same framing and every command of the protocol (INFO, LIST, upload, DELETE, CLEAR, ABORT, MODULES, CAPACITY, READ, VERIFY, SELECT,
 // RESTART, LOG), with the numbers generated from sdk/sdk.toml (`gen_proto.ts`). The desktop app uses it (no wasm, no Python).
+import { wireModuleSettings } from './module-settings.ts';
 import {
   CAP as GCAP,
   CAPACITY_KINDS,
@@ -773,6 +774,8 @@ export function parseCardLog(bytes: Uint8Array): CardLogFile {
 }
 
 export interface DkModule {
+  /** Present for a loaded instance that registered public settings. */
+  uiInstance?: number;
   index: number;
   name: string;
   version: number;
@@ -1262,7 +1265,6 @@ export class DkSession {
   private async needFileHash(): Promise<void> {
     if (this.fileHashOk) return;
     if (!hasCap(await this.info(), 'FILEHASH')) throw new DkError({ error: OLD_STORE, kind: 'request' });
-    this.fileHashOk = true;
   }
 
   /** `quick`: one INFO with a short timeout and no retries (a probe for a device that may not run the runtime). */
@@ -1321,7 +1323,7 @@ export class DkSession {
         }
       }
     }
-    return {
+    const info: DkInfoFull = {
       protocol,
       runtime_version: u16(b, 2),
       runtime,
@@ -1341,6 +1343,8 @@ export class DkSession {
       log_sink: (flags & 8) !== 0,
       fault_found: (flags & 16) !== 0,
     };
+    this.fileHashOk = hasCap(info, 'FILEHASH');
+    return info;
   }
 
   /**
@@ -1407,6 +1411,7 @@ export class DkSession {
           name,
           version: u32(b, at + 33),
           needs: u32(b, at + 37),
+          ...(u32(b, at + 41) ? { uiInstance: u32(b, at + 41) } : {}),
           cf_base: u32(b, at + 45),
           cf_size: u32(b, at + 49),
           dsp_off: u32(b, at + 53),
@@ -1421,6 +1426,10 @@ export class DkSession {
       }
       if (out.length >= total || n === 0) return out;
     }
+  }
+
+  moduleSettings(slot: number, instance: number, current: () => boolean) {
+    return wireModuleSettings(this, slot, instance, current);
   }
 
   /** CAPACITY (runtime 0.2.2): per resource `{limit, used, largest}`, keyed by the kind's name. */

@@ -179,7 +179,9 @@ The assembly layer sits between the unit tests of a component and the device tes
 
 `pnpm nx:pilot run core/runtime:test-assembly` runs `runtime/core/src/rs/src/package/loader/tests/assembly_tests.rs` (`cargo test --lib assembly_tests`, host build, seconds, cached). Its `dependsOn` build what it reads: `<id>:pack` of the fixtures (`test/sine`, `test/dyn-dn2`, `test/dyn-fx-gain`, `test/lfo-shape`, `test/svc-test`, `test/svc-test-user`) and of the services (`core/services/fx`, `machines`, `lfo`), `patchkit:ports-test` (`dist/ports-test/<device>-<version>.dkport`, the port file of the test image) and `patchkit:cli` (the test runs `patchkit port stock` to put the stock bytes of every hook site in the fake firmware), and `patchkit:device-images`, which also writes `dist/bytes/images/<device>/set-<set>.info`, the info table of the patched image: `name hash kind address words...` per entry, taken from the `info` list of the plan that `patchkit apply` writes. The committed `runtime.dko.json` and the service objects are read from the repository. A device without its firmware file is skipped with a `SKIP` line, as its device tests are.
 
-Every `test-device` and `test-conformance` target `dependsOn` `core/runtime:test-assembly`: no device run starts while it fails. Its inputs are the runtime sources and exactly the files above (`pnpm nx:pilot show target inputs core/runtime:test-assembly`). `rust-tests` skips `assembly_tests`.
+The Workbench settings case uses `test/settings-a:pack` on both profiles. It replays descriptor registration during init over `FakePlatform` and checks discovery for the loaded instance and refusal after unload. It can run without the stock firmware images.
+
+Every `test-device` and `test-conformance` target `dependsOn` `core/runtime:test-assembly`: no device run starts while it fails. Its inputs are the runtime sources and the packed artifacts above (`pnpm nx:pilot show target inputs core/runtime:test-assembly`). `rust-tests` skips `assembly_tests`.
 
 A new service or runtime mechanism adds an assembly case before its first device test. A failure of this target is a wiring defect (a stale object or ABI word, an unmet need, a limit that is not in the image), not a flaky test.
 
@@ -511,7 +513,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `files-proof` | The public read-only listing boundary of the files API (deferred notifications, no tick) | host, device |
 | `file-write` | Store file writes from an I/O job (create, write, close, abort, delete, hash) started by service commands; cut and PlusDrive cases | host, device |
 | `file-write-b` | A second copy of `file-write` under another name and command range (two modules writing) | device |
-| `settings-a` | The module settings API: put, get and remove through service commands, read in `init` | device |
+| `settings-a` | The module settings API: put, get and remove through service commands, read in `init`. Also the public Workbench settings descriptor. | assembly, device |
 | `settings-b` | The same code as `settings-a` under another module name and command range (two modules, one key) | device |
 | `dyn-crash` | The one fault injector, set by the store file `cfg/crash-after.bin` (delay, mode, place): a CPU exception, a reset or a hang a number of blocks into the UI loop (crash capture, safe mode), a reset in `init`, a fault in the boot animation callback (`bootscreen`); no file, no fault, so each test asserts the fault happened | assembly, device |
 | `dyn-dsp-hang` | A machine whose DSP routine never returns after a few blocks (fault trace) | device, rig |
@@ -1466,7 +1468,7 @@ node packages/sharc-rig-kit/src/pin-cli.ts write --wav CAPTURE.wav --pin PIN.jso
 
 ## Desktop UI preview
 
-`mise run wb:preview` prepares the preview assets and serves the desktop pages
+`mise run wb:preview` simulates the Transfer content packs without a ColdFire compiler. Use `mise run wb:preview:real` to exercise actual compiled packs. Both serve the desktop pages
 (`apps/desktop/ui`) at http://127.0.0.1:5199/ over a fake device (state in the address:
 `?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`).
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at

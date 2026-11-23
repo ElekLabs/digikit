@@ -1,0 +1,11 @@
+[workbench]
+version = 1
+
+[[setting]]
+id = "active"
+label = "Animation"
+type = "file-name"
+extension = "dkbs"
+reset_label = "Stock"
+max_bytes = 47
+apply = "next-restart"

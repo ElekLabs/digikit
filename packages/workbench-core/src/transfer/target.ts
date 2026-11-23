@@ -61,6 +61,21 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
 
   /** The digikit runtime of the emulator as the app knows it from the last boot (the desktop sets it; the site has no emulator): 'unknown' while booting. */
   const [emulatorRuntime, setEmulatorRuntime] = createSignal<'unknown' | 'yes' | 'no'>('unknown');
+  const [emulatorAvailable, setAvailable] = createSignal(true);
+  function setEmulatorAvailable(available: boolean) {
+    if (available === emulatorAvailable()) return;
+    setAvailable(available);
+    if (target().kind === 'emulator') {
+      noteSelected(target());
+    }
+  }
+  function noteSelected(t: Target) {
+    noteConnection({ type: 'target' });
+    if (t.kind === 'emulator' && !emulatorAvailable()) noteConnection({ type: 'closed', reason: 'Emulator offline.' });
+    else if (t.kind === 'emulator' && emulatorRuntime() === 'no')
+      noteConnection({ type: 'noruntime', reason: EMULATOR_NO_RUNTIME });
+  }
+  const libraryOnly = () => target().kind === 'emulator' && (!emulatorAvailable() || emulatorRuntime() === 'no');
   /** Throws NoRuntimeError for a target known to have no runtime (an emulator booted without it), before any request. */
   function checkRuntime(t: Target): void {
     if (t.kind === 'emulator' && emulatorRuntime() === 'no') throw new NoRuntimeError(EMULATOR_NO_RUNTIME);
@@ -77,7 +92,7 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
   function startOn(t: Target): void {
     if (sameTarget(t, target())) return;
     setTargetSignal({ ...t });
-    noteConnection({ type: 'target' });
+    noteSelected(t);
   }
 
   /** Let go of the MIDI link and forget its session (the next use opens the port again). Errors of the close are ignored. */
@@ -157,7 +172,7 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
           storage.set(MIDI_KEY, next.port);
         }
         setTargetSignal({ ...next });
-        noteConnection({ type: 'target' });
+        noteSelected(next);
         setSwitching(false);
       });
       storage.set(KEY, JSON.stringify(next));
@@ -295,6 +310,8 @@ export function createTarget({ env, storage, sessions, connection }: TargetDeps)
     rescanTargets,
     emulatorRuntime,
     setEmulatorRuntime,
+    setEmulatorAvailable,
+    libraryOnly,
     checkRuntime,
     startOn,
     cancelPending,

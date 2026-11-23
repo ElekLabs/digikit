@@ -8,7 +8,7 @@
 //! Where an object is written: a `core/*` module (`category = "core"`) keeps its objects in the module (`build/x.dko.json`, committed: the
 //! workbench and the browser patch without a toolchain). Every other module (content modules, test fixtures, imported modules) is
 //! build output: its objects go to the cache `out/cache/dko/<module id>/<src12>/<object path>`, where `<src12>` is the first 12 digits of the
-//! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file`] names the file.
+//! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file_at`] names the file.
 //!
 //! An object whose `source_sha256` equals the hash of its sources now, and, for a SHARC+ object, whose `selache_rev` is the pinned one,
 //! is not compiled ("unchanged"). `--check` rebuilds and
@@ -26,6 +26,7 @@ pub mod sharc_obj;
 pub mod show;
 pub mod test_source;
 pub mod toolchain;
+mod workbench;
 
 use crate::dko::Dko;
 use crate::error::*;
@@ -111,6 +112,7 @@ pub struct ModuleToml {
 struct ModuleHead {
     id: String,
     category: String,
+    name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -148,6 +150,10 @@ impl ObjectToml {
 impl ModuleToml {
     pub fn parse(text: &str) -> Result<ModuleToml> {
         toml::from_str(text).map_err(|e| err!("module.toml: {e}"))
+    }
+
+    fn workbench_header(&self, moddir: &Path) -> Result<Option<workbench::Header>> {
+        workbench::Header::read(moddir, self.id(), self.module.name.as_deref())
     }
 
     pub fn id(&self) -> &str {
@@ -213,13 +219,6 @@ fn object_file_at(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml, hash
     } else {
         moddir.join(&o.path)
     }
-}
-
-/// The stored file of the object for the sources now (see [`object_file_at`]); an error when the sources cannot be hashed (a missing
-/// source, or the SDK library does not compile).
-fn object_file(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<PathBuf> {
-    let hash = source_hash(env, moddir, o, m.is_content())?;
-    Ok(object_file_at(env, moddir, m, o, &hash))
 }
 
 /// Mark a cache entry as used now.
@@ -298,8 +297,26 @@ pub fn cf_include_dirs(root: &Path, moddir: &Path) -> Vec<PathBuf> {
     v
 }
 
+fn cf_module_include_dirs(
+    env: &Env,
+    moddir: &Path,
+    header: Option<&workbench::Header>,
+) -> Vec<PathBuf> {
+    let mut dirs = cf_include_dirs(&env.root, moddir);
+    if let Some(header) = header {
+        dirs.insert(0, header.dir().to_path_buf());
+    }
+    dirs
+}
+
 /// The `source_sha256` a build of the object would write, computed the same way as the builders do and without compiling.
-fn source_hash(env: &Env, moddir: &Path, o: &ObjectToml, sdk: bool) -> Result<String> {
+fn source_hash(
+    env: &Env,
+    moddir: &Path,
+    o: &ObjectToml,
+    sdk: bool,
+    header: Option<&workbench::Header>,
+) -> Result<String> {
     let sources = &o.sources;
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
@@ -308,7 +325,13 @@ fn source_hash(env: &Env, moddir: &Path, o: &ObjectToml, sdk: bool) -> Result<St
             Ok(sharc::source_hash(&text))
         }
         Kind::Rust => rust::source_sha256(&paths[0], &o.cargo_flags()),
-        Kind::Cf => cf::source_digest(env, &paths, &cf_include_dirs(&env.root, moddir), sdk),
+        Kind::Cf => cf::source_digest_with_workbench(
+            env,
+            &paths,
+            &cf_module_include_dirs(env, moddir, header),
+            sdk,
+            header,
+        ),
     }
 }
 
@@ -330,23 +353,29 @@ fn stored_current(path: &Path, want: &str) -> bool {
     }
 }
 
-fn object_unchanged(env: &Env, moddir: &Path, m: &ModuleToml, o: &ObjectToml) -> Result<bool> {
-    let want = source_hash(env, moddir, o, m.is_content())?;
-    let out = object_file_at(env, moddir, m, o, &want);
-    let same = stored_current(&out, &want);
-    if same && m.is_content() {
-        touch(&out);
+fn object_unchanged(out: &Path, hash: &str, content: bool) -> bool {
+    let same = stored_current(out, hash);
+    if same && content {
+        touch(out);
     }
-    Ok(same)
+    same
 }
 
 /// Is the stored object of every object with sources current with its sources? One entry per such object: (its path, unchanged).
 pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
+    let header = m.workbench_header(moddir)?;
     m.built()
         .filter(|o| !o.sources.is_empty())
-        .map(|o| Ok((o.path.clone(), object_unchanged(&env, moddir, &m, o)?)))
+        .map(|o| {
+            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+            let file = object_file_at(&env, moddir, &m, o, &hash);
+            Ok((
+                o.path.clone(),
+                object_unchanged(&file, &hash, m.is_content()),
+            ))
+        })
         .collect()
 }
 
@@ -354,9 +383,13 @@ pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> 
 pub fn object_files(root: &Path, moddir: &Path) -> Result<Vec<(String, PathBuf)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
+    let header = m.workbench_header(moddir)?;
     m.built()
         .filter(|o| !o.sources.is_empty())
-        .map(|o| Ok((o.path.clone(), object_file(&env, moddir, &m, o)?)))
+        .map(|o| {
+            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+            Ok((o.path.clone(), object_file_at(&env, moddir, &m, o, &hash)))
+        })
         .collect()
 }
 
@@ -388,9 +421,10 @@ fn build_object(
     moddir: &Path,
     o: &ObjectToml,
     defines: &[String],
-    sdk: bool,
-    module: &str,
+    m: &ModuleToml,
+    header: Option<&workbench::Header>,
 ) -> Result<Dko> {
+    let sdk = m.is_content();
     let paths: Vec<PathBuf> = o.sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(&o.sources) {
         Kind::Sharc => {
@@ -400,7 +434,7 @@ fn build_object(
             // (`sdk` is `is_content()`): a `core/*` module implements the contract (the adapters, the stock-code hooks), so it is not held to it.
             if sdk {
                 for p in sharc::rule_problems(&obj) {
-                    eprintln!("{}", sharc::rule_warning_line(module, &p));
+                    eprintln!("{}", sharc::rule_warning_line(m.id(), &p));
                 }
             }
             Ok(obj)
@@ -419,7 +453,13 @@ fn build_object(
                 let (proto, sha, toolchain) = rust::object_proto(env, &paths[0], &o.cargo_flags())?;
                 cf::dko_from_proto(&proto, sha, toolchain)
             } else {
-                cf::cf_object(env, &paths, &cf_include_dirs(&env.root, moddir), sdk)
+                cf::cf_object_with_workbench(
+                    env,
+                    &paths,
+                    &cf_module_include_dirs(env, moddir, header),
+                    sdk,
+                    header,
+                )
             }
         }
     }
@@ -474,7 +514,8 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
         .built()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    let want = source_hash(env, moddir, o, m.is_content())
+    let header = m.workbench_header(moddir)?;
+    let want = source_hash(env, moddir, o, m.is_content(), header.as_ref())
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     let file = object_file_at(env, moddir, m, o, &want);
     if stored_current(&file, &want)
@@ -491,7 +532,7 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     } else {
         vec![]
     };
-    let obj = build_object(env, moddir, o, &defines, m.is_content(), &m.module.id)
+    let obj = build_object(env, moddir, o, &defines, m, header.as_ref())
         .map_err(|e| err!("{}: {rel}: build failed: {e}", moddir.display()))?;
     let text = to_text(&obj)?;
     write_object(&file, &text)?;
@@ -511,14 +552,15 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     }
     let env = Env::new(&opts.root);
     let m = manifest(moddir)?;
+    let header = m.workbench_header(moddir)?;
     let mut report = BuildReport::default();
     for o in m.built().filter(|o| !o.sources.is_empty()) {
-        let hash = source_hash(&env, moddir, o, m.is_content())?;
+        let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
         let stored = |h: &str| object_file_at(&env, moddir, &m, o, h);
         if !opts.check
             && opts.defines.is_empty()
             && !opts.force
-            && object_unchanged(&env, moddir, &m, o)?
+            && object_unchanged(&stored(&hash), &hash, m.is_content())
         {
             report.objects.push(ObjectReport {
                 path: stored(&hash),
@@ -527,7 +569,7 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
             });
             continue;
         }
-        let obj = build_object(&env, moddir, o, &opts.defines, m.is_content(), &m.module.id)?;
+        let obj = build_object(&env, moddir, o, &opts.defines, &m, header.as_ref())?;
         let out = match &opts.out {
             Some(d) => d.join(&o.path),
             None => stored(&hash),

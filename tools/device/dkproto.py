@@ -55,6 +55,7 @@ RESOURCE: dict[str, int] = {
 }
 
 CMD: dict[str, int] = {
+    "MODULE_UI": 0x00,
     "INFO": 0x01,
     "LIST": 0x02,
     "MODULES": 0x03,
@@ -80,6 +81,7 @@ CMD: dict[str, int] = {
     "SELECT": 0x30,
     "RESTART": 0x31,
 }
+CMD_MODULE_UI = 0x00
 CMD_INFO = 0x01
 CMD_LIST = 0x02
 CMD_MODULES = 0x03
@@ -157,6 +159,11 @@ STATUS: dict[int, tuple[str, str]] = {
     -72: (
         "E_AGAIN",
         "usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry",
+    ),
+    -88: ("E_MODULE_UI_CONFLICT", "the module setting revision changed"),
+    -89: (
+        "E_MODULE_UI_SCOPE",
+        "project settings are active; change this setting on the device",
     ),
 }
 
@@ -301,6 +308,7 @@ CAP: dict[str, int] = {
     "RELOAD": 17,
     "FW_ID": 18,
     "LIVE": 19,
+    "MODULE_UI": 20,
 }
 
 RANGES: dict[str, tuple[int, int]] = {

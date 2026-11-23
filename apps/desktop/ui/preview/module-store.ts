@@ -1,3 +1,6 @@
+import type { PreviewModulePages } from './module-pages';
+import { createPreviewSettings, previewSettingsSchemas } from './module-settings';
+import type { createMemorySettings } from '@digi/workbench-core/module-ui/memory-client.ts';
 // The simulated card behind a preview target's DkSession. Its bytes survive a MIDI reopen and are shared by Transfer and Files.
 import {
   DkError,
@@ -16,6 +19,7 @@ import { headerInfo, modulePath, portPath, servicePath } from '@digi/workbench-c
 import { fakeDkm } from '@digi/workbench-core/target-ops/fake-store.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import type { PreviewLibrary } from './module-library';
+import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
 import { deviceRevision, sim } from './sim';
 import { parseDkmHeader } from '@digi/workbench-core/target-ops/store.ts';
 import { packedVersion, previewRuntimeVersion } from './runtime-version';
@@ -29,6 +33,7 @@ const caps = [
   CAP.READ,
   CAP.VERIFY,
   CAP.MODULES,
+  CAP.MODULE_UI,
   CAP.LOADS,
   CAP.CAPACITY,
   CAP.RESTART,
@@ -98,13 +103,14 @@ async function serviceAbi(library: PreviewLibrary, device: string) {
   return null;
 }
 
-async function seedStore(library: PreviewLibrary, profile: DeviceProfile) {
+async function seedStore(library: PreviewLibrary, profile: DeviceProfile, pages: PreviewModulePages) {
   const device = profile.short;
   const files = new Map<string, Uint8Array>();
   const selected = new Map<string, Uint8Array | undefined>();
   if (sim.dev !== 'empty') {
     const [outdated, installed] = library.modules(device);
-    for (const { id, pack } of [installed, outdated].filter((m) => m !== undefined)) {
+    const withFiles = library.modules(device).filter(({ id }) => Object.hasOwn(MODULE_FILES, id));
+    for (const { id, pack } of [installed, outdated, ...withFiles].filter((m) => m !== undefined)) {
       const bytes = new Uint8Array(await library.library.read(device, pack.file));
       const header = headerInfo(bytes);
       if (!header) continue;
@@ -132,22 +138,47 @@ async function seedStore(library: PreviewLibrary, profile: DeviceProfile) {
     files.set('modules/tool/old-experiment.dkm', fakeDkm({ name: 'old/experiment', size: 5 * KiB }));
     if (outdated) files.set(`data/${outdated.id}/settings.bin`, Uint8Array.of(0, 1, 0, 8));
     files.set('samples/new/', new Uint8Array());
+    pages.seed(files, selected);
   }
   const abi = await serviceAbi(library, device);
-  return { files, selected, abi, boot: bootModules(files, selected) };
+  const settings = new Map<string, ReturnType<typeof createMemorySettings>>();
+  return { files, selected, abi, settings, boot: bootModules(files, selected) };
 }
 
-export function createPreviewStores(library: PreviewLibrary) {
+export function createPreviewStores(library: PreviewLibrary, pages: PreviewModulePages) {
   const stores = new Map<string, { revision: number; store: ReturnType<typeof seedStore> }>();
+  const schemas = previewSettingsSchemas();
+  let generation = 0;
+  function publishBoot(key: string, modules: DkModule[]) {
+    for (const module of modules) {
+      if (schemas.has(module.name)) module.uiInstance = ++generation;
+    }
+    pages.boot(key, modules);
+  }
 
-  return function storeSession(session: DkSession, profile: DeviceProfile, key: string, noRuntime: boolean) {
+  async function restart(key: string) {
+    const entry = stores.get(key);
+    if (!entry) return; // Its first access will boot the card.
+    const card = await entry.store;
+    if (stores.get(key) !== entry) return;
+    for (const path of card.selected.keys()) {
+      if (!card.files.has(path)) card.selected.delete(path);
+    }
+    card.boot = bootModules(card.files, card.selected);
+    publishBoot(key, card.boot.modules);
+  }
+
+  function storeSession(session: DkSession, profile: DeviceProfile, key: string, noRuntime: boolean) {
     let pending = new AbortController();
     const cancel = session.cancelPending.bind(session);
     const limit = 82 * 1024;
     const store = () => {
       const current = stores.get(key);
       if (current?.revision === deviceRevision) return current.store;
-      const next = seedStore(library, profile);
+      const next = seedStore(library, profile, pages).then((card) => {
+        if (stores.get(key)?.store === next) publishBoot(key, card.boot.modules);
+        return card;
+      });
       stores.set(key, { revision: deviceRevision, store: next });
       void next.catch(() => {
         if (stores.get(key)?.store === next) stores.delete(key);
@@ -245,6 +276,9 @@ export function createPreviewStores(library: PreviewLibrary) {
         await wait(100, signal);
         files.delete(path);
       },
+      moduleSettings(slot, instance, current) {
+        return createPreviewSettings(schemas, store, slot, instance, current);
+      },
       async modules() {
         return (await store()).boot.modules;
       },
@@ -282,16 +316,14 @@ export function createPreviewStores(library: PreviewLibrary) {
       },
       async restart() {
         const signal = pending.signal;
-        const card = await store();
+        await store();
         await wait(1200, signal);
-        for (const path of card.selected.keys()) {
-          if (!card.files.has(path)) card.selected.delete(path);
-        }
-        card.boot = bootModules(card.files, card.selected);
+        await restart(key);
       },
       async waitForRestart() {
         return (await store()).boot.modules;
       },
     } satisfies Partial<DkSession>;
-  };
+  }
+  return { storeSession, restart };
 }

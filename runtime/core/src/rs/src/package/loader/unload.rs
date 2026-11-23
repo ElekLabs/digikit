@@ -55,6 +55,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
         // DSP rows must be invalidated before fini can mutate/release module state.
         if !dsp::quiesce(rec) { return E_BUSY; }
+        crate::package::module_ui::withdraw(rec);
         // 2. fini, 3. free
         if m.fini != 0 && self.torn[rec] & TORN_FINI == 0 {
             // from here the old code is gone for good: a reload cannot give the tick back

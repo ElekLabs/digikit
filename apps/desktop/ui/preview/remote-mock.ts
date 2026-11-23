@@ -4,13 +4,12 @@ import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts'
 import { deviceOfPort, deviceProfiles } from '@digi/workbench-core/data/device-profiles.ts';
 import { previewEmulatorDevice } from './card-mock';
 import { DkError, DkSession, RPC_SOFTWARE_VERSION, RPC_PING } from '@digi/dk-session';
-import type { PreviewLibrary } from './module-library';
-import { createPreviewStores } from './module-store';
+import type { createPreviewStores } from './module-store';
 import { sim } from './sim';
 import { createPreviewScreen } from './preview-screen';
 
-export function previewSessions(library: PreviewLibrary, emulatorReady: () => boolean) {
-  const storeSession = createPreviewStores(library);
+export function previewSessions(stores: ReturnType<typeof createPreviewStores>, emulatorReady: () => boolean) {
+  const { storeSession } = stores;
   const screens = new Map<string, ReturnType<typeof createPreviewScreen>>();
   const query = new URLSearchParams(location.search);
   const unidentified = query.has('unidentified');

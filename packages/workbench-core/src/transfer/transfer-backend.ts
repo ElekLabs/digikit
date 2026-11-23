@@ -36,6 +36,7 @@ import {
   type TransferView,
 } from '../modules/dktransfer';
 import { RPC_SOFTWARE_VERSION, parseSoftwareVersion } from './connection-core';
+import type { createModuleInventory } from './module-inventory';
 import type { ConnectionApp } from './connection-state';
 import type { ServiceRefusal } from '../modules/services';
 import type { WasmSource } from '../wasm-source';
@@ -52,6 +53,7 @@ export interface InstallResult {
 export interface BackendDeps {
   env: TransferEnv;
   target: Pick<TargetApp, 'target' | 'checkRuntime' | 'session'>;
+  inventory: ReturnType<typeof createModuleInventory>;
   connection: Pick<ConnectionApp, 'asked' | 'noteConnection'>;
   /** Makes the needs reader from the app's wasm (default: patchkit.wasm in `DkNeeds`); a test gives a stub. */
   needs?: (wasm: WasmSource) => Promise<NeedsLike>;
@@ -69,6 +71,7 @@ export interface BackendDeps {
 export function createTransferBackend({
   env,
   target: targetApp,
+  inventory,
   connection,
   needs: makeNeeds = async (wasm) => DkNeeds.create(await wasm.bytes('patchkit.wasm')),
   runtimeIdentity = (info) => ({ version: info.runtime, fingerprint: info.svc_abi, fw: info.fw_id }),
@@ -191,15 +194,18 @@ export function createTransferBackend({
 
   /** The session, and its INFO: the answer is what the connection indicator shows. */
   async function opened() {
-    await asked(async () => checkRuntime(target()));
+    const selected = target();
+    await asked(async () => checkRuntime(selected));
     const s = await asked(running);
     const info = await asked(() => probeInfo(s));
     const os = await osVersion(s);
+    const name = await env.deviceName(info.port);
+    if (target() !== selected) throw new Error('The selected target changed.');
     noteConnection({
       type: 'answered',
       device: {
         id: info.port,
-        name: await env.deviceName(info.port),
+        name,
         ...(os ? { os } : {}),
         runtime: fmtVersion(info.runtime),
       },
@@ -213,23 +219,38 @@ export function createTransferBackend({
 
   const transferBackend = {
     /** The merged list: the library folder and what the device holds (INFO, LIST, MODULES, CAPACITY, READ). */
-    async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
-      const [local, remote] = await Promise.allSettled([
-        env.library.scan(device).then(async (files) => {
-          const library = await loadLibrary(device, files);
-          showLibrary(libraryView(device, library));
-          return { files, library };
-        }),
-        opened(),
-      ]);
-      if (remote.status === 'rejected') throw remote.reason;
-      const { s, info } = remote.value;
-      if (local.status === 'rejected' && info.port === device) throw local.reason;
-      const same = local.status === 'fulfilled' && info.port === device ? local.value : undefined;
+    async list(
+      device: string,
+      showLibrary: (view: TransferView) => void,
+      showModules?: (view: TransferView) => void,
+    ): Promise<TransferView> {
+      const selected = target();
+      let actualDevice: string | undefined;
+      const local = env.library.scan(device).then(async (files) => {
+        const library = await loadLibrary(device, files);
+        if (!actualDevice || actualDevice === device) showLibrary(libraryView(device, library));
+        return { files, library };
+      });
+      // The provisional library can fail, or belong to a different device. Only the selected device's library is required.
+      void local.catch(() => {});
+      let remote: Awaited<ReturnType<typeof opened>>;
+      try {
+        remote = await opened();
+      } catch (error) {
+        await local.catch(() => {});
+        throw error;
+      }
+      const { s, info } = remote;
+      actualDevice = info.port;
+      if (target() !== selected) throw new Error('The selected target changed.');
+      const readLoaded = inventory.reader();
+      const same = info.port === device ? await local : undefined;
       const files = same?.files ?? (await env.library.scan(info.port));
       const library = same?.library ?? (await loadLibrary(info.port, files));
+      if (!same) showLibrary(libraryView(info.port, library));
       const deps = await installDeps(info.port, files);
-      return asked(() => buildView(s, library, deps));
+      if (target() !== selected) throw new Error('The selected target changed.');
+      return asked(() => buildView(s, library, deps, { info, readLoaded, showModules }));
     },
     /** The library alone, for a device id: nothing is read from a device. */
     async listLibrary(device: string): Promise<TransferView> {
@@ -268,7 +289,8 @@ export function createTransferBackend({
     },
     /** DELETE the files from the card (one request each, confirmed with LIST). The device's selection is not touched. */
     async remove(paths: string[], onEvent: (e: TransferEvent) => void): Promise<void> {
-      await asked(async () => checkRuntime(target()));
+      const selected = target();
+      await asked(async () => checkRuntime(selected));
       const s = await asked(running);
       await asked(() => deleteFiles(s, paths, onEvent));
     },

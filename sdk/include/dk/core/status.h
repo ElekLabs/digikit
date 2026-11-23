@@ -87,5 +87,7 @@
 #define DK_E_SET_OFF (-70) /* settings store off: an older store reaches its area, or no store */
 #define DK_E_FILE_IN_USE (-71) /* a sample is still loading from that file: wait and try again */
 #define DK_E_AGAIN (-72) /* usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry */
+#define DK_E_MODULE_UI_CONFLICT (-88) /* the module setting revision changed */
+#define DK_E_MODULE_UI_SCOPE (-89) /* project settings are active; change this setting on the device */
 
 #endif /* DK_CORE_STATUS_H */

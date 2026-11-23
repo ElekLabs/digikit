@@ -4,7 +4,8 @@ import { test } from 'vitest';
 import { createDefaultModules } from '../src/firmware/default-modules-state.ts';
 import type { FirmwareEnv } from '../src/firmware/env.ts';
 import { memoryKeyValue, remembered } from '../src/storage.ts';
-import { DkSession, type DkTransport } from '@digi/dk-session';
+import { CAP } from '@digi/dk-session/gen_proto';
+import { DkSession, type DkInfoFull, type DkTransport } from '@digi/dk-session';
 import {
   createFakeSessions,
   createFakeTransferApp,
@@ -251,4 +252,57 @@ test('the default modules keep the unticked entries per device in the storage', 
   assert.deepEqual(first.tickedFor('dt2'), []);
   assert.deepEqual(first.tickedFor('dn2'), ['digikit/remote']);
   assert.deepEqual(createDefaultModules(env, storage).tickedFor('dt2'), [], 'a new app reads the kept choice');
+});
+
+test('the shared inventory ignores a late reply after switching targets', async () => {
+  let finish!: (modules: { name: string }[]) => void;
+  const sessions = createFakeSessions((key) => ({
+    modules: () =>
+      key === 'emulator'
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve([{ name: 'on-midi' }]),
+  }));
+  const app = createFakeTransferApp({ sessions });
+  const info = { caps: 1 << CAP.MODULES } as DkInfoFull;
+  const oldRead = app.inventory.reader();
+  const old = oldRead(await app.target.session(), info);
+  await app.target.selectTarget({ kind: 'midi', port: 'Port B' });
+  const current = await app.inventory.reader()(await app.target.session(), info);
+  assert.deepEqual(
+    current.map((m) => m.name),
+    ['on-midi'],
+  );
+  finish([{ name: 'old' }]);
+  await old;
+  assert.deepEqual(app.inventory.modules(), current);
+  app.connection.noteConnection({ type: 'closed' });
+  assert.deepEqual(app.inventory.modules(), []);
+});
+
+test('returning to the stopped emulator restores its offline connection immediately', async () => {
+  const app = createFakeTransferApp();
+  app.target.setEmulatorAvailable(false);
+  await app.target.selectTarget({ kind: 'midi', port: 'Port A' });
+  assert.equal(app.target.libraryOnly(), false);
+  await app.target.selectTarget({ kind: 'emulator' });
+  assert.equal(app.target.libraryOnly(), true);
+  assert.equal(app.connection.connection().state, 'disconnected');
+});
+
+test('a request failure from the previous target cannot invalidate a new connection', async () => {
+  const app = createFakeTransferApp();
+  let fail!: (error: Error) => void;
+  const pending = app.connection.asked(
+    () =>
+      new Promise<void>((_, reject) => {
+        fail = reject;
+      }),
+  );
+  await app.target.selectTarget({ kind: 'midi', port: 'Port B' });
+  app.connection.noteConnection({ type: 'answered', device: { id: 'new', name: 'New' } });
+  fail(new Error('Old link closed'));
+  await assert.rejects(pending);
+  assert.equal(app.connection.connection().state, 'connected');
 });
