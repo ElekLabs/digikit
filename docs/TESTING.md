@@ -786,7 +786,7 @@ no whole free DSP granule.
 The quick TypeScript capacity tests in `runtime/core/tests/capacity/capacity.device.test.ts` fill runtime limits with
 synthetic modules (`patchkit synth-dkm`, built by `tests/regression/runtime/synth.ts`; limits in `[limits]` of `devices/*.toml`) and check refusal codes and
 the reference module's DSP bytes. The separate full-tier `runtime/core/tests/capacity/inferred/inferred-needs.device.test.ts` checks needs inferred
-by `patchkit needs` against real modules and fixtures. `runtime/apps/digikit-menu/tests/fits.device.test.ts` checks the MODULES page.
+by `patchkit needs` against real modules and fixtures. The MODULES page (rows, the fit refusal) is a host test of the menu with a fake runtime (`runtime/platform/ui/host/tests/menu.rs`, `menu_mechanism.rs`).
 `tests/patchkit/test_limits.py` keeps tools from repeating a limit as a number.
 
 ### Machine and FX conformance

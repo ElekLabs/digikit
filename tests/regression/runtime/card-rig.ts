@@ -68,7 +68,7 @@ import { systemPackageSectors } from './system-package.ts';
 
 /** The runtime image of the Python scenarios (`B.RT`). */
 export const RT = rootsOf('rt');
-/** Runtime variables the card scenarios read or poke (`DKRT_BOOT` is always planned). */
+/** Runtime variables the card scenarios read or poke (`DKRT_BOOT` and the host directory `DKRT_HOST_DIR`, which holds the addresses of the package's statics, are always planned). */
 export const CARD_SYMBOLS = ['DKRT_CARD', 'DKRT_CRASH', 'DKRT_MAILBOX', 'DKRT_STATE', ...RING_SYMBOLS];
 /** The test knob `DKRT_STORE_CAP` keeps every sector from here to header B out of the allocations (a DN2 store of 20 GiB then fits INFO's 32 bits). */
 export const CAP_SECTORS = 0x40000;
@@ -86,7 +86,7 @@ export interface CardRigOptions {
   roots?: string[];
   /** The image has no runtime (a patched-in module only): no `DKRT_BOOT`, no runtime readiness; the case is ready 300 emulated ms after the stock firmware's ready point. */
   plain?: boolean;
-  /** Plan symbols besides `DKRT_BOOT`. */
+  /** Plan symbols besides `DKRT_BOOT` and `DKRT_HOST_DIR`. */
   symbols?: string[];
   /** Daemon environment besides the write watch; it overrides the watch's variables. A function gets the prepared runtime plan when the daemon starts. */
   env?: Record<string, string> | ((prepared: PreparedRuntimePlan) => Record<string, string>);
@@ -227,7 +227,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const extra = new Set(o.storeExtra ?? []);
-  const symbols = [...(o.plain ? [] : ['DKRT_BOOT']), ...(o.symbols ?? [])];
+  const symbols = [...(o.plain ? [] : ['DKRT_BOOT', 'DKRT_HOST_DIR']), ...(o.symbols ?? [])];
 
   const baseline = (cardImage: string, deliverExceptions = o.deliverExceptions): RuntimeBaseline => {
     if (o.roots && !prepared.preparedImage)

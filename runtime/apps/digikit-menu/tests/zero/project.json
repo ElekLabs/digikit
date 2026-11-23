@@ -1,16 +1,28 @@
 {
   "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/digikit-menu-zero-tests",
-  "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime", "core/digikit-menu"],
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime",
+    "core/digikit-menu"
+  ],
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["menu.device.test.ts"],
-        "tags": ["A:core/digikit-menu"],
+        "files": [
+          "menu.device.test.ts"
+        ],
+        "firmwareOnly": "core/ui's hook at the end of the real SETTINGS rebuild reaches the package's menu on a normal boot and has nothing to add on a core-only boot",
+        "tags": [
+          "A:core/digikit-menu"
+        ],
         "modules": []
       }
     ],
-    "mergeTests": ["menu.device.test.ts"]
+    "mergeTests": [
+      "menu.device.test.ts"
+    ]
   }
 }

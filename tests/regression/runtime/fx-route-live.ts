@@ -20,7 +20,7 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
       modules: [
         ...RT,
         ...(config.image === 'track-base' ? [] : ['core/fxpages']),
-        ...(config.image === 'routes' ? ['core/digikit-menu'] : []),
+        ...(config.image === 'routes' ? ['core/ui'] : []),
       ],
       inventory: config.image === 'routes' ? [SINE, GAIN, SEND, SENDONLY, SEND3] : [SINE, FX, `${FX}-2`, `${FX}-3`],
       symbols: [
@@ -29,22 +29,7 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
         '_dl_area',
         ...(config.image === 'track' || config.image === 'track-base' ? ['dynreg_info'] : []),
         ...(config.image === 'track' ? ['fxpages_info'] : []),
-        ...(config.image === 'routes'
-          ? [
-              'DK_FXR_PEND',
-              'DK_FXR_SET',
-              'DK_FXR_FLUSH',
-              'DK_POPUP',
-              'DK_POPUP_TEXT',
-              'DK_POPUPS',
-              'DK_APPLIES',
-              'DK_PANEL',
-              'DK_PANEL_N',
-              'DK_ROUTE_N',
-              'DK_ROUTE_ITEM',
-              'fxpages_info',
-            ]
-          : []),
+        ...(config.image === 'routes' ? ['DKRT_HOST_DIR', 'fxpages_info'] : []),
       ],
       policy: 'fx-routes',
     },

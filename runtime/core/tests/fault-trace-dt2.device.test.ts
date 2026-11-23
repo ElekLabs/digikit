@@ -58,7 +58,7 @@ async function expectCpuCrashFault(runtime: PatchedSession): Promise<void> {
   const cfg = Uint8Array.of(0, 0, 0x0b, 0xb8, 0); // 3000 blocks (2 s) after the first tick, an illegal instruction
   await dk.put('cfg/crash-after.bin', cfg);
   const device = session.options.device;
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DK_ABOUT', 'DKRT_BOOT', ...RING_SYMBOLS]);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), ['DKRT_HOST_DIR', 'DKRT_BOOT', ...RING_SYMBOLS]);
   for (const id of [DEBUG_MODULE, 'test/dyn-crash']) {
     await dk.put(`modules/${id.split('/')[1]}.dkm`, fs.readFileSync(moduleArtifact(device, id)));
   }

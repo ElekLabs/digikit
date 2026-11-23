@@ -165,27 +165,13 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
           ? [...commonSymbols, 'dynreg_info']
           : image === 'track'
             ? [...commonSymbols, 'dynreg_info', 'fxpages_info']
-            : [
-                ...commonSymbols,
-                'DK_FXR_PEND',
-                'DK_FXR_SET',
-                'DK_FXR_FLUSH',
-                'DK_POPUP',
-                'DK_POPUP_TEXT',
-                'DK_POPUPS',
-                'DK_APPLIES',
-                'DK_PANEL',
-                'DK_PANEL_N',
-                'DK_ROUTE_N',
-                'DK_ROUTE_ITEM',
-                'fxpages_info',
-              ];
+            : [...commonSymbols, 'DKRT_HOST_DIR', 'fxpages_info'];
       expect(requestedSymbols).toEqual(expectedSymbols);
       expect(requestedRoots).toEqual([
         ...roots,
         ...(plain ? [] : ['core/dynfx']),
         ...(plain || image === 'track-base' ? [] : ['core/fxpages']),
-        ...(image === 'routes' ? ['core/digikit-menu'] : []),
+        ...(image === 'routes' ? ['core/ui'] : []),
       ]);
       expect(seeds[0]!.contents).toEqual(ids);
       await lifecycle.finishCase({ session });

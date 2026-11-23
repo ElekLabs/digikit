@@ -26,7 +26,6 @@ export type Row =
 const REFUSAL = 'runtime/core/tests/refusal/refusal.device.test.ts';
 const CAPACITY = 'runtime/core/tests/capacity/capacity.device.test.ts';
 const COMMIT = 'runtime/core/tests/capacity/commit.device.test.ts';
-const NEEDS = 'runtime/apps/digikit-menu/tests/needs.device.test.ts';
 const ASSEMBLY = 'runtime/core/src/rs/src/package/loader/tests/assembly_tests.rs';
 const IMAGE_RS = 'runtime/core/abi/src/image.rs';
 const SAFE = 'runtime/core/tests/safe-mode.device.test.ts';
@@ -56,7 +55,7 @@ export const ROWS: Record<string, Row> = {
   E_SHA: { fail: mine('a changed sha256 is E_SHA'), pass: loads },
   E_FORMAT: { fail: { file: IMAGE_RS, test: 'refuses_bad_magic_format_and_sizes' }, pass: loads },
   E_RUNTIME: { kind: 'reserved', reason: 'never returned: E_CONTRACT says a module needs another runtime' },
-  E_IMPORT: { fail: { file: NEEDS, test: 'usb-fast without core/usb-bulk' }, pass: { file: 'modules/tool/digikit/usb-fast/tests/usb-fast.device.test.ts', test: 'the speed switches' } },
+  E_IMPORT: { fail: { file: ASSEMBLY, test: 'an_adapter_import_resolves_only_in_an_image_with_the_adapter' }, pass: { file: ASSEMBLY, test: 'an_adapter_import_resolves_only_in_an_image_with_the_adapter' } },
   E_NOMEM: { fail: { file: CAPACITY, test: 'arena: filled to the last byte' }, pass: { file: CAPACITY, test: 'arena: filled to the last byte' } },
   E_INIT: { fail: { file: ASSEMBLY, test: 'an_init_that_returns_non_zero_is_refused_with_e_init_and_leaves_nothing' }, pass: loads },
   E_LOADED: { fail: { file: CAPACITY, test: 'files: a file of the staging buffer size' }, pass: { file: CAPACITY, test: 'files: a file of the staging buffer size' } },
