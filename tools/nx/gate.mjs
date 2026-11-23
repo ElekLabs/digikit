@@ -46,7 +46,7 @@ export const TIERS = {
     narrow: false,
   },
   // The merge tier selects device tests by area (tools/nx/test-subset.mjs `--gate`, docs/TESTING.md "Area-based device selection"):
-  // `affected` runs every target below except `test-device`; `--all-affected` puts `test-device` back (the old selection).
+  // `affected` runs every target below except `test-device` and `test-conformance`; `--all-affected` puts them back (the old selection).
   merge: { targets: MERGE_TARGETS, access: 'rw', narrow: false, pgo: true, areaDevice: true },
   full: {
     targets: [
@@ -145,7 +145,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     args = args.filter((arg) => arg !== '--all-affected');
     process.env.DIGI_GATE_BASE ||= 'main';
     const targets = deviceByArea(tier, allAffected)
-      ? tier.targets.filter((t) => t !== 'test-device').join(',')
+      ? tier.targets.filter((t) => t !== 'test-device' && t !== 'test-conformance').join(',')
       : tier.targets.join(',');
     args = tier.runMany ? ['-t', targets, ...args] : ['--base', process.env.DIGI_GATE_BASE, '-t', targets, ...args];
   }

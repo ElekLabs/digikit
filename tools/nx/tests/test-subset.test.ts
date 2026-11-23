@@ -13,6 +13,8 @@ import {
   DEVICE_SMOKE,
   affectedFixed,
   areaSelection,
+  conformanceSelection,
+  halvesOfDevices,
   baseProblem,
   changedFiles,
   deviceHalves,
@@ -220,7 +222,7 @@ it('says per selected file which given tags and which changed files selected it'
   expect(long).toBe('changed a, changed b, changed c, 2 more changed');
 });
 
-const [d1, d2] = DEVICES;
+const [d1, d2, d3] = DEVICES;
 // The area gate: changed paths name areas, the tests of those areas run, the smoke set is fixed, the rest is skipped.
 const areaGraph = [
   { ...project('core/runtime', [], []), root: 'runtime/core' },
@@ -246,10 +248,16 @@ const areaGraph = [
     root: 'modules/m',
   },
   { ...project('gate-device-smoke', ['device'], []), root: 'tools/gate/device-smoke' },
+  { ...project('patchkit', [], []), root: 'packages/patchkit' },
+  { ...project('core/m', ['test-conformance'], []), root: 'modules/m' },
+  { ...project('core/other', ['test-conformance'], []), root: 'modules/other' },
 ];
 const areaCtx = {
   owners: parseOwners('shared = ["dkrt::entry"]\n"C:boot" = ["dkrt::boot"]\n"C:storage" = ["dkrt::storage"]'),
   serviceTags: new Set<string>(),
+  recordTags: new Set(['S:lfo']),
+  portUsers: (file: string) => (file === 'ports/fw/lfo.toml' ? ['core/services/lfo'] : []),
+  deviceOf: (file: string) => (file === 'devices/x-device.toml' ? d3 : undefined),
   crateOf: (file: string) =>
     file.startsWith('runtime/core/src/rs/') ? { name: 'dkrt', dir: 'runtime/core/src/rs' } : undefined,
 };
@@ -271,10 +279,58 @@ it('selects the tests of the area of a runtime-only change, not of every record 
   ]);
 });
 
-it('selects the smoke set alone for a shared runtime module, and names the file', () => {
-  const { got, pairs } = selected(['runtime/core/src/rs/src/entry.rs']);
-  expect(got.noArea).toEqual(['runtime/core/src/rs/src/entry.rs']);
-  expect(pairs).toEqual(['gate-device-smoke:device']);
+it('goes wide for a shared runtime module, and names the file and why', () => {
+  const { got } = selected(['runtime/core/src/rs/src/entry.rs']);
+  expect(got.wideAll).toBe(true);
+  expect(got.wideDevices).toBeNull();
+  expect(got.wide[0]).toMatchObject({ file: 'runtime/core/src/rs/src/entry.rs' });
+  expect(got.wide[0]!.why).toContain('shared runtime module dkrt::entry');
+});
+
+it('goes wide for a path with no area that reaches device tests, whatever else changed', () => {
+  for (const file of ['packages/patchkit/src/x.rs', 'runtime/core/owners.toml', 'sdk/sdk.toml']) {
+    const { got } = selected(['runtime/core/src/rs/src/boot.rs', file]);
+    expect(got.wideAll, file).toBe(true);
+    expect(got.wide.map((w: { file: string }) => w.file)).toEqual([file]);
+  }
+  // an unowned file of the runtime is wide, not smoke only
+  expect(selected(['runtime/core/src/rs/src/newmod.rs']).got.wideAll).toBe(true);
+});
+
+it('stays precise when every path that reaches device tests names an area; a path no test reaches is ignored', () => {
+  const { got } = selected(['runtime/core/src/rs/src/boot.rs', 'docs/x.md', 'apps/web/a.ts']);
+  expect(got.wideAll).toBe(false);
+  expect(got.wide).toEqual([]);
+});
+
+it('maps the port file of one plug-in point to its area, not to wide', () => {
+  const { got } = selected(['ports/fw/lfo.toml']);
+  expect(got.wideAll).toBe(false);
+  expect(got.mapped).toEqual([{ file: 'ports/fw/lfo.toml', areas: ['S:lfo'] }]);
+});
+
+it('widens a device file to the halves of its device only', () => {
+  const { got } = selected(['devices/x-device.toml']);
+  expect(got.wideAll).toBe(true);
+  expect(got.wideDevices).toEqual([d3]);
+  const halves = [`a:test-device--x--${d1}`, `a:test-device--x--${d3}`, `b:test-device--${d3}`];
+  expect(halvesOfDevices(halves, got.wideDevices)).toEqual([`a:test-device--x--${d3}`, `b:test-device--${d3}`]);
+  // with a path that has no area the device filter is gone
+  expect(selected(['devices/x-device.toml', 'sdk/sdk.toml']).got.wideDevices).toBeNull();
+  expect(halvesOfDevices(halves, null)).toEqual(halves);
+});
+
+it('selects the conformance of a changed module, all of it for loading, types or a wide path', () => {
+  const affected = new Set(['core/m:test-conformance', 'core/other:test-conformance', 'core/m:pack']);
+  const conf = (changed: string[]) => {
+    const got = selected(changed).got;
+    return conformanceSelection(affected, areaGraph, { changed, tags: got.tags, wideAll: got.wideAll });
+  };
+  expect(conf(['modules/m/src/a.c'])).toEqual(['core/m:test-conformance']);
+  expect(conf(['runtime/core/src/rs/src/boot.rs'])).toEqual([]);
+  expect(conf(['packages/patchkit/src/x.rs'])).toEqual(['core/m:test-conformance', 'core/other:test-conformance']);
+  const loading = conformanceSelection(affected, areaGraph, { changed: [], tags: ['C:loading'], wideAll: false });
+  expect(loading).toHaveLength(2);
 });
 
 it('selects the records of a changed module and the smoke set', () => {
@@ -331,7 +387,7 @@ it('reports the device halves that affected selects and the area gate leaves out
     [`core/m:test-device--${d1}`],
   );
   expect(skipped).toEqual([`core/rt-tests:test-device--storage--${d1}`]);
-  expect(skipText(skipped)).toBe('1 device halves of 1 projects: core/rt-tests 1');
+  expect(skipText(skipped)).toBe('1 device halves and conformance tasks of 1 projects: core/rt-tests 1');
 });
 
 it('names gate-smoke and gate-pins as affected when only a dependency selects their task', () => {

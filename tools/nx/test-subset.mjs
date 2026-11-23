@@ -6,8 +6,11 @@
 // `--base REF` adds the tests whose subject changed since REF (`git diff REF`, with the working tree): a record's subject is the
 // source of its project (not its tests) and of the projects of its `modules`, so a change to a machine selects the records that load it.
 // Area gate (`--base`, and `--gate` for the merge gate): the changed paths also name areas (tools/nx/area-paths.mjs: owners.toml and the
-// service directories), and the tests of those areas join the selection. A path with no area (a shared module, the SDK, profiles, patchkit)
-// selects the fixed smoke set, gate-device-smoke, and nothing more; tags name more. What `affected` selects and the gate skips is listed.
+// service directories, firmware declaration files by their users, device files), and the tests of those areas join the selection with the
+// fixed smoke set gate-device-smoke. Precise when the area is known, wide when it is not: when any changed path that reaches device tests
+// names no area (a shared module, the SDK, patchkit, owners.toml), every device test `affected` selects runs, and the gate prints the
+// path that forced it; a device file alone widens to the halves of its device. Conformance follows the same rule (a module's own
+// conformance on its changes; the loading and types areas, or a wide path: all). What `affected` selects and the gate skips is listed.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -62,7 +65,7 @@ const subjectRoots = (rec, root, subjects, rootOf, skip = new Set()) =>
 // The changed files that are source of a record's subject, or a test file it lists.
 export const subjectFiles = (rec, root, changed, rootOf, subjects = [], skip = new Set()) => {
   const roots = subjectRoots(rec, root, subjects, rootOf, skip);
-  const files = (rec.files ?? []).map((f) => `${root}/${f}`);
+  const files = [...(rec.files ?? []).map((f) => `${root}/${f}`), ...(rec.sources ?? [])];
   return changed.filter((file) => files.includes(file) || roots.some((r) => isSource(file, r)));
 };
 
@@ -194,7 +197,14 @@ export const affectedTasks = (base) => {
   rmSync(file, { force: true });
   const done = spawnSync(
     'node',
-    ['tools/nx/nx.mjs', 'affected', `--base=${base}`, '-t', 'test-device,smoke,pins', `--graph=${file}`],
+    [
+      'tools/nx/nx.mjs',
+      'affected',
+      `--base=${base}`,
+      '-t',
+      'test-device,test-conformance,smoke,pins',
+      `--graph=${file}`,
+    ],
     { cwd: root, encoding: 'utf8' },
   );
   if (done.status !== 0) {
@@ -217,6 +227,9 @@ export const affectedTasks = (base) => {
 export const deviceHalves = (tasks) =>
   [...tasks].filter((id) => new RegExp(`^[^:]+:test-device--(?:.+--)?(?:${DEVICES.join('|')})$`).test(id));
 
+// The conformance tasks (`project:test-conformance`) among `tasks`.
+export const conformanceTasks = (tasks) => [...tasks].filter((id) => id.endsWith(':test-conformance'));
+
 // The halves of the smoke set, from the dependencies of its target in the graph nodes (`projects[].targetDeps`).
 export const smokeHalves = (projects) =>
   (projects.find((p) => p.name === DEVICE_SMOKE.project)?.targetDeps?.[DEVICE_SMOKE.target] ?? []).flatMap((d) =>
@@ -226,7 +239,7 @@ export const smokeHalves = (projects) =>
 // `chosen`: the `{ project, target }` pairs of the selection (the smoke set included). Returns what `affected` selects and the gate skips.
 export const skippedHalves = (affected, chosen, smoke = []) => {
   const run = new Set([...chosen.map((p) => `${p.project}:${p.target}`), ...smoke]);
-  return deviceHalves(affected).filter((id) => !run.has(id));
+  return [...deviceHalves(affected), ...conformanceTasks(affected)].filter((id) => !run.has(id));
 };
 
 // `skipped`: task ids -> the line the gate prints, by project.
@@ -234,27 +247,64 @@ export const skipText = (skipped) => {
   const by = new Map();
   for (const id of skipped) by.set(id.split(':')[0], (by.get(id.split(':')[0]) ?? 0) + 1);
   const list = [...by].map(([project, n]) => `${project} ${n}`);
-  return `${skipped.length} device halves of ${by.size} projects: ${list.slice(0, 12).join(', ')}${list.length > 12 ? `, ${list.length - 12} more projects` : ''}`;
+  return `${skipped.length} device halves and conformance tasks of ${by.size} projects: ${list.slice(0, 12).join(', ')}${list.length > 12 ? `, ${list.length - 12} more projects` : ''}`;
 };
+
+// The areas whose change reaches every conformance test: the runtime paths of loading modules and of the machine types.
+export const CONFORMANCE_AREAS = ['C:loading', 'C:types'];
+
+// The halves among `halves` (`project:test-device--...--<dev>`) of the devices in `devices` (all when null).
+export const halvesOfDevices = (halves, devices) =>
+  devices ? halves.filter((id) => devices.some((d) => id.endsWith(`--${d}`))) : halves;
 
 // Tags and changed paths -> the selection of the area gate: the tests of the given tags, of the areas the paths name, of the records
 // whose own project or modules changed and of the tests that import a changed file. `ctx`: area-paths.mjs `areaContext`.
-// Returns what `resolveSubset` returns, with `mapped` ([{ file, areas }]) and `noArea` (changed shared files that name no area).
+// Returns what `resolveSubset` returns, with `mapped` ([{ file, areas }]) and `wide`: [{ file, why, devices? }], the changed paths that
+// reach device tests and name no area (`devices`: a device file, which widens to the halves of that device only), and `wideDevices`:
+// null when the selection is not wide or a path widens it for every device, else the devices to widen to; `wideAll` says the selection
+// is wide. A shared input (patchkit, the runtime, the SDK) counts as reaching device tests; a path no test reaches is ignored.
 export const areaSelection = (tags, projects, { changed, closureOf, ctx }) => {
   const mapped = [];
-  const noArea = [];
+  const wide = [];
   const derived = new Set();
   for (const file of changed) {
     const found = areasOfPath(file, ctx);
     if (found.areas) {
       mapped.push({ file, areas: found.areas });
       found.areas.forEach((a) => derived.add(a));
-    } else if (sharedInput(file, projects)) noArea.push(file);
+    } else if (found.devices)
+      wide.push({ file, why: `device file of ${found.devices.join(' ')}`, devices: found.devices });
+    else if (found.unknown) {
+      const reach = sharedInput(file, projects);
+      if (reach) wide.push({ file, why: `${found.unknown}; ${reach}` });
+    }
   }
   const all = [...new Set([...tags, ...derived])];
   const got = resolveSubset(all, projects, { changed, closureOf, excludeSubjects: SHARED_PROJECTS });
+  const wideAll = wide.length > 0;
+  const wideDevices = wideAll && wide.every((w) => w.devices) ? [...new Set(wide.flatMap((w) => w.devices))] : null;
   // A derived tag without a record is no error (the area has no device test); a tag the caller gave is.
-  return { ...got, unknown: got.unknown.filter((t) => tags.includes(t)), mapped, noArea, tags: all };
+  return {
+    ...got,
+    unknown: got.unknown.filter((t) => tags.includes(t)),
+    mapped,
+    wide,
+    wideAll,
+    wideDevices,
+    tags: all,
+  };
+};
+
+// The conformance tasks (`project:test-conformance`) of the area gate among the `affected` tasks: all when the selection is wide or an
+// area of CONFORMANCE_AREAS changed, else the modules whose own source changed. `projects`: the graph nodes (name, root).
+export const conformanceSelection = (affected, projects, { changed, tags, wideAll }) => {
+  const have = conformanceTasks(affected);
+  if (wideAll || tags.some((t) => CONFORMANCE_AREAS.includes(t))) return have;
+  const roots = new Map(projects.map((p) => [p.name, p.root]));
+  return have.filter((id) => {
+    const root = roots.get(id.slice(0, -':test-conformance'.length));
+    return root !== undefined && changed.some((file) => isSource(file, root));
+  });
 };
 
 // Files changed since `base`: the tracked diff (committed and working tree) and the untracked files. `git`: runs git in `root`.
@@ -322,8 +372,17 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
     });
     selection.changed = changed;
-  } else selection = { ...resolveSubset(tags, projects), mapped: [], noArea: [], changed: [] };
-  const { tests, unknown, mapped, noArea } = selection;
+  } else
+    selection = {
+      ...resolveSubset(tags, projects),
+      mapped: [],
+      wide: [],
+      wideAll: false,
+      wideDevices: null,
+      tags,
+      changed: [],
+    };
+  const { tests, unknown, mapped, wide, wideAll, wideDevices } = selection;
   const problem = baseProblem({ base, changed: selection.changed });
   if (problem) {
     console.error(`test:subset: ${problem}`);
@@ -340,13 +399,34 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const fixed = gate ? [] : affectedFixed(base ?? process.env.DIGI_GATE_BASE ?? 'main');
   // The device smoke set runs whenever the old gate would have run a device test: some input of the device tests changed.
   const smoke = base && deviceHalves(affected).length ? [DEVICE_SMOKE] : [];
-  const pairs = selectionPairs(tests, projects, [...fixed, ...smoke]);
+  // A wide selection runs every device half `affected` selects (of the devices a device file names, else all), and the conformance
+  // tasks follow the rule of conformanceSelection.
+  const wideHalves = wideAll ? halvesOfDevices(deviceHalves(affected), wideDevices) : [];
+  const conformance = base
+    ? conformanceSelection(affected, projects, { changed: selection.changed, ...selection })
+    : [];
+  const idPair = (id) => ({ project: id.slice(0, id.indexOf(':')), target: id.slice(id.indexOf(':') + 1) });
+  const pairs = [
+    ...new Map(
+      [...selectionPairs(tests, projects, [...fixed, ...smoke]), ...[...wideHalves, ...conformance].map(idPair)].map(
+        (p) => [`${p.project}:${p.target}`, p],
+      ),
+    ).values(),
+  ];
   console.log(`test:subset: ${[...tags, ...(base ? [`--base ${base}`] : [])].join(' ')}`);
   for (const { file, areas } of mapped.slice(0, 20)) console.log(`  area ${areas.join(' ')} <- ${file}`);
   if (mapped.length > 20) console.log(`  area: ${mapped.length - 20} more changed files`);
-  if (noArea.length)
+  if (wideAll)
     console.log(
-      `  no area (the smoke set only): ${noArea.slice(0, 5).join(', ')}${noArea.length > 5 ? `, ${noArea.length - 5} more` : ''}`,
+      `  wide (${wideDevices ? `halves of ${wideDevices.join(' ')}` : 'every affected device test'}), forced by: ` +
+        `${wide
+          .slice(0, 5)
+          .map((w) => `${w.file} (${w.why})`)
+          .join('; ')}${wide.length > 5 ? `; ${wide.length - 5} more` : ''}`,
+    );
+  if (base)
+    console.log(
+      `  conformance: ${conformance.length ? conformance.map((id) => id.split(':')[0]).join(' ') : 'none selected'}`,
     );
   for (const t of tests) {
     console.log(`  ${t.project} ${t.file}: ${t.targets.join(' ')}`);
