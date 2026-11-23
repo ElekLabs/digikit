@@ -105,7 +105,7 @@ Builds and benchmarks use `tools/devtools/benchlock.py`. `coupled_ab.py`, `nativ
 
 ## Sub-agents and reports
 
-One agent per step with a self-contained brief: branch, files, exact checks, and named device targets (change -> test), never area tags. Resume an agent only for a one-line follow-up; after a rebase or a review round start a fresh agent. Project agents live in `.claude/agents/` (`lane-worker` for implementation lanes, `core-worker` for core runtime steps with subtle rules (stronger model), `coder`, `scout`, `reviewer`).
+One agent per step with a self-contained brief: branch, files, exact checks, and named device targets (change -> test), never area tags. Resume an agent only for a one-line follow-up; after a rebase or a review round start a fresh agent. Project agents live in `.claude/agents/` (`lane-worker` for implementation lanes, `coder`, `scout`, `reviewer`).
 
 Report contract, at most 200 words: Result (one line); Commits (hashes); Checks (target: pass/fail); Device runs (targets, minutes); Open items. Details belong in commit messages and the PR text. A reviewer reports ranked findings with `file:line` and a failure scenario, at most about 300 words.
 
