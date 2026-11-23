@@ -1069,7 +1069,6 @@
   "tools/nx/tests/module-builds.test.ts": 2,
   "tools/nx/tests/runtime-inputs.test.ts": 9,
   "tools/nx/tests/selection.test.ts": 6,
-  "tools/nx/tests/test-subset.test.ts": 22,
   "tools/nx/wasm.mjs": 1,
   "tools/patchkit/dsp_master_hook.py": 9,
   "tools/patchkit/dsp_patch.py": 1,
