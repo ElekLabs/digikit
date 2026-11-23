@@ -1,4 +1,4 @@
-//! The rule for the effect records of one module, shared by the service's `check` (load) and `Fx::validate_records` (a host tool on a built module).
+//! The rule for the effect records of one module, shared by the service's `Records::check` (load) and `records::validate` (a host tool on a built module).
 //! One record is checked by `fxpage::check_body`; the set must not hold more effects than the chain takes, and no effect index twice.
 use crate::fxpage::{check_body, KIND_EFFECT, LEN_EFFECT};
 use dkrt_abi::dsp::MAX_FX;

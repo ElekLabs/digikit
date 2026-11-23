@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::fxpage;
-use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp;
 use dkrt_sdk::*;
 
@@ -29,8 +28,8 @@ pub(super) fn allowed_choices(allowed: u8, row: u32, pending_sends: u32, slots: 
     })
 }
 
-/// The route options the menu can offer for this row, given the edits the caller has pending.
-pub unsafe fn route_choices<C: CoreApi>(core: &C, request: RouteChoicesV1) -> Result<u32, i32> {
+/// The route options the menu can offer for this row, given the edits the caller has pending. The send cells of the image are those of the table `Fx::start` bound.
+pub fn route_choices(request: RouteChoicesV1) -> Result<u32, i32> {
     let RouteChoicesV1 { row, pending_sends } = request;
     if row >= dsp::MAX_FX as u32 || pending_sends >> dsp::MAX_FX != 0 {
         return Err(E_CONTRACT);
@@ -42,6 +41,6 @@ pub unsafe fn route_choices<C: CoreApi>(core: &C, request: RouteChoicesV1) -> Re
         ss().allow[row as usize],
         row,
         pending_sends,
-        slots(core),
+        bound_slots(),
     ))
 }

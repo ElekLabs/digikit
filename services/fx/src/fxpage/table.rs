@@ -22,7 +22,7 @@ const fn fnv1a(s: &[u8]) -> u32 {
 
 /// Words of the table (byte offsets / 4); the value indices are bytes from byte 80. Words 0 to `IMAGE_WORDS` - 1 are the image's `fxpages_info` (version 4: data only,
 /// the indices and the device numbers; the words 10, 11 and 49 to 60 held firmware addresses in version 3 and are 0 in the image: the service names the firmware and
-/// the port file resolves it; `set_firmware` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the rows, the list, the counters)
+/// the port file resolves it; `bind` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the rows, the list, the counters)
 /// and the three computed words are this service's (`bind_table`): the state lives in this file's bss, next to the hooks that use it.
 pub(super) mod w {
     pub const MAGIC: usize = 0;
@@ -83,32 +83,62 @@ pub const ASM_OFFSETS: &[(&str, usize)] = &[
     ("T_MARK_OFF", w::MARK_OFF),
 ];
 
-/// The two firmware words the service file gives (`set_firmware`): the stock list of the FX view and the `moveq N,D1` of its builder (the byte at +1 is the stock count).
-static mut FW_WORDS: [u32; 2] = [0; 2];
+/// The two firmware words of the hooks' file: the stock list of the FX view and the `moveq N,D1` of its builder (the byte at +1 is the stock count). They are the
+/// `dk_fw_` words (`DKRT_FXP_FW`) of the file's assembler, which the port file resolves; a host build has no firmware and no words.
+pub(crate) fn firmware() -> [u32; 2] {
+    #[cfg(target_arch = "m68k")]
+    {
+        extern "C" {
+            static DKRT_FXP_FW: [u32; 2];
+        }
+        // SAFETY: the words are data of the service file's assembler, linked with this crate
+        unsafe { read_volatile(core::ptr::addr_of!(DKRT_FXP_FW)) }
+    }
+    #[cfg(not(target_arch = "m68k"))]
+    {
+        [0, 0]
+    }
+}
 
-/// The firmware addresses the hooks' file resolved (its `dk_fw_` words): the stock page list and the address of the instruction whose byte at +1 is the stock count. The file
-/// calls it from its `setup`, before `info` binds the table.
-pub unsafe fn set_firmware(stock: u32, stock_n: u32) {
-    write_volatile(addr_of_mut!(FW_WORDS), [stock, stock_n]);
+/// The table of the effect pages when it is bound, or null (`bind` was not called or refused).
+pub(crate) fn bound() -> *const u32 {
+    let tab = addr_of_mut!(DKRT_FXP_TAB) as *const u32;
+    // SAFETY: `tab` is this file's static
+    if unsafe { read_volatile(tab.add(w::MAGIC)) } == INFO_MAGIC {
+        tab
+    } else {
+        core::ptr::null()
+    }
 }
 
 /// The table of the effect pages as this service reads it, or null (no `core/fxpages` in the image, another device, an older table than the hooks need). The first
-/// call copies the image table (`CoreApi::info`) into `DKRT_FXP_TAB` and fills the words that point at the state of the hooks; the service file's `init` makes that call
-/// before its hooks are installed (`setup`).
+/// call copies the image table (`CoreApi::info`) into `DKRT_FXP_TAB` and fills the words that point at the state of the hooks; `Fx::start` makes that call (`bind`) before the
+/// file's hooks are installed. A later call binds with no firmware words (a host test that changes the fake image table).
 pub(crate) unsafe fn info<C: CoreApi>(core: &C) -> *const u32 {
-    let tab = addr_of_mut!(DKRT_FXP_TAB) as *mut u32;
-    if read_volatile(tab.add(w::MAGIC)) == INFO_MAGIC {
+    let tab = bound();
+    if !tab.is_null() {
         return tab;
     }
+    bind_with(core, [0, 0])
+}
+
+/// Copy the image table into the bound table, with `fw` as the firmware words (null: refused).
+unsafe fn bind_with<C: CoreApi>(core: &C, fw: [u32; 2]) -> *const u32 {
+    let tab = addr_of_mut!(DKRT_FXP_TAB) as *mut u32;
     let src = core.info(INFO_HASH);
-    if src.is_null() || !bind_table(core, src, tab) {
+    if src.is_null() || !bind_table(core, src, tab, fw) {
         return core::ptr::null();
     }
     tab
 }
 
 /// Is the image table `src` one this service can use, and its words copied to `tab` with the state words filled in.
-pub(super) unsafe fn bind_table<C: CoreApi>(core: &C, src: *const u32, tab: *mut u32) -> bool {
+pub(super) unsafe fn bind_table<C: CoreApi>(
+    core: &C,
+    src: *const u32,
+    tab: *mut u32,
+    fw: [u32; 2],
+) -> bool {
     if read_volatile(src.add(w::MAGIC)) != INFO_MAGIC
         || read_volatile(src.add(w::VERSION)) < INFO_VERSION
         || read_volatile(src.add(w::DEVICE)) != core.device_id()
@@ -134,7 +164,6 @@ pub(super) unsafe fn bind_table<C: CoreApi>(core: &C, src: *const u32, tab: *mut
         i += 1;
     }
     let at = |p: usize| p as u32;
-    let fw = read_volatile(addr_of_mut!(FW_WORDS));
     write_volatile(tab.add(w::STOCK), fw[0]);
     write_volatile(tab.add(w::STOCK_N), fw[1]);
     let state = [
@@ -180,16 +209,17 @@ pub(super) unsafe fn bind_table<C: CoreApi>(core: &C, src: *const u32, tab: *mut
     true
 }
 
-/// The service file's `init` step before its hooks are installed: the table is bound, or the file is refused (`E_NO_REGISTRY`: no usable `core/fxpages` in the image).
-pub unsafe fn setup<C: CoreApi>(core: &C) -> i32 {
-    if info(core).is_null() {
+/// What `Fx::start` does before the file's hooks are installed: the table is bound with the firmware words `fw`, or the file is refused (`E_NO_REGISTRY`: no usable
+/// `core/fxpages` in the image).
+pub unsafe fn bind<C: CoreApi>(core: &C, fw: [u32; 2]) -> i32 {
+    if bind_with(core, fw).is_null() {
         E_NO_REGISTRY
     } else {
         OK
     }
 }
 
-/// Forget the bound table: the next `info` reads the image table again (host tests that change the fake image table; a service file that is unloaded).
+/// Forget the bound table: the next `info` reads the image table again (host tests that change the fake image table).
 pub unsafe fn unbind() {
     write_volatile(addr_of_mut!(DKRT_FXP_TAB) as *mut u32, 0);
 }

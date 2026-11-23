@@ -1,19 +1,19 @@
 //! The builder calls of the effects (docs/plans/sdk.md 6.2) and their commit (6.3), as the fx service has them: the calls that name an effect, its page and its knobs
-//! (`dk_module_ctx_add_fx`, `dk_fx_add_page`, `dk_page_add_fx_param`, `dk_fx_routes`, `dk_fx_mix`) are the service's exports (`dks/src/builder.rs`), and the state they fill is a
-//! static of this service: one module is in `init` at a time.
+//! (`dk_module_ctx_add_fx`, `dk_fx_add_page`, `dk_page_add_fx_param`, `dk_fx_routes`, `dk_fx_mix`) are the service's exports (`dks/src/builder.rs`), and the state they fill is the
+//! owner's [`Builder`]: one module is in `init` at a time.
 //!
-//! `module_begin` opens the state for module record `rec`, every call appends to it, and `module_commit` checks it and lowers it to the effect records of the `register` section
-//! in two passes over the loader's `RecordSink` (`PREPARE` checks and measures, `WRITE` writes and declares the route flags and defaults of the effects' DSP rows). The loader
-//! gives the block to the registry walker, which calls this service's `check` and `apply_record`. The effect ids of the modules that are loaded are kept here, for the duplicate check.
+//! `Records::begin` opens the collection for module record `rec`, every call appends to it, and `Records::commit` checks it and lowers it to the effect records of the `register`
+//! section in two passes over the loader's `RecordSink` (`PREPARE` checks and measures, `WRITE` writes and declares the route flags and defaults of the effects' DSP rows). The
+//! loader gives the block to the registry walker, which calls this service's `check` and `apply`.
 //!
 //! A call never fails one by one: on overflow, on a bad argument, outside `init` or with a handle that is not ours it returns the placeholder handle (`placeholder`), the
 //! first error is kept, and the setters ignore a placeholder. The error is reported at the commit.
 use crate::fxpage::{KIND_EFFECT, LEN_EFFECT};
-use core::ptr::{addr_of, addr_of_mut};
 use dkneeds::{FXF_DEFAULT_SEND, FXF_NOMASTER, FXF_SEND};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::MAX_FX;
 use dkrt_abi::keys::KeysCopy;
+use dkrt_abi::provider::Status;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
@@ -126,10 +126,16 @@ impl Build {
         room(&mut self.err, &mut self.records, MAX_PA)
     }
 
-    pub fn add_fx(&mut self, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
+    pub fn add_fx(
+        &mut self,
+        gate: &Gate,
+        index: u32,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
         if self.nf >= MAX_FX || !self.room() {
             self.fail(E_DECL_FULL);
-            return placeholder();
+            return gate.placeholder();
         }
         let i = self.nf;
         let mut f = F0;
@@ -148,14 +154,20 @@ impl Build {
         &mut self.fxs[i] as *mut CFx as *mut u8
     }
 
-    pub fn fx_add_page(&mut self, f: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
+    pub fn fx_add_page(
+        &mut self,
+        gate: &Gate,
+        f: *mut u8,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
         let owner = match find(&self.fxs, f) {
             Some(i) => i,
-            None => return placeholder(),
+            None => return gate.placeholder(),
         };
         if self.np >= MAX_FX || !self.room() {
             self.fail(E_DECL_FULL);
-            return placeholder();
+            return gate.placeholder();
         }
         let i = self.np;
         let mut g = G0;
@@ -183,6 +195,7 @@ impl Build {
     #[allow(clippy::too_many_arguments)]
     pub fn page_add_fx_param(
         &mut self,
+        gate: &Gate,
         p: *mut u8,
         name: *const u8,
         short: *const u8,
@@ -194,15 +207,15 @@ impl Build {
         let pg = match find(&self.pages, p) {
             Some(i) => i,
             None => {
-                if gate().foreign(p) {
+                if gate.foreign(p) {
                     self.fail(E_FORMAT);
                 }
-                return placeholder();
+                return gate.placeholder();
             }
         };
         if self.nparam >= MAX_PA || !self.room() {
             self.fail(E_DECL_FULL);
-            return placeholder();
+            return gate.placeholder();
         }
         let i = self.nparam;
         let mut q = P0;
@@ -239,91 +252,114 @@ impl Build {
 
 // ---- the open collection and the placeholder ------------------------------------------------------------------------------------
 
-static mut BUILD: Build = Build::new();
-static mut GATE: Gate = Gate::new();
-
-fn gate() -> &'static mut Gate {
-    unsafe { &mut *addr_of_mut!(GATE) }
+/// The collection of one module's `init` and the gate that says whose `init` is open: the part of the owner `Fx` that the builder calls reach (`Fx::builder`). The calls
+/// that name a handle are refused (the placeholder) unless the gate is open for the module whose code runs.
+pub struct Builder {
+    build: Build,
+    gate: Gate,
 }
 
-/// The placeholder handle of a refused call.
-pub fn placeholder() -> *mut u8 {
-    gate().placeholder()
-}
-
-/// The collection (host tests read it).
-pub fn build() -> &'static mut Build {
-    unsafe { &mut *addr_of_mut!(BUILD) }
-}
-
-/// `module_begin`: forget what an earlier module collected and open the collection for module record `rec`.
-pub unsafe fn begin(rec: usize) {
-    core::ptr::write(addr_of_mut!(BUILD), Build::new());
-    gate().begin(rec);
-}
-
-/// Close the collection: later builder calls return the placeholder.
-pub unsafe fn end() {
-    gate().end();
-}
-
-/// Module record `rec` goes away: close the collection.
-pub unsafe fn release(_rec: usize) {
-    end();
-}
-
-// the builder calls (exported by the service file: `dks/src/builder.rs`); a call that names a handle comes from the module whose `init` is open
-
-pub unsafe fn add_fx<C: CoreApi>(
-    core: &C,
-    ctx: *mut u8,
-    index: u32,
-    name: *const u8,
-    short: *const u8,
-) -> *mut u8 {
-    if gate().open_for(core, ctx) {
-        build().add_fx(index, name, short)
-    } else {
-        placeholder()
+impl Builder {
+    pub const fn new() -> Builder {
+        Builder {
+            build: Build::new(),
+            gate: Gate::new(),
+        }
     }
-}
-pub unsafe fn fx_add_page<C: CoreApi>(
-    core: &C,
-    f: *mut u8,
-    name: *const u8,
-    short: *const u8,
-) -> *mut u8 {
-    if gate().open_any(core) {
-        build().fx_add_page(f, name, short)
-    } else {
-        placeholder()
+
+    /// The placeholder handle of a refused call.
+    pub fn placeholder(&self) -> *mut u8 {
+        self.gate.placeholder()
     }
-}
-#[allow(clippy::too_many_arguments)]
-pub unsafe fn page_add_fx_param<C: CoreApi>(
-    core: &C,
-    p: *mut u8,
-    name: *const u8,
-    short: *const u8,
-    kind: u32,
-    min: f32,
-    max: f32,
-    def: f32,
-) -> *mut u8 {
-    if gate().open_any(core) {
-        build().page_add_fx_param(p, name, short, kind, min, max, def)
-    } else {
-        placeholder()
+
+    /// The collection (host tests read it).
+    pub fn build(&self) -> &Build {
+        &self.build
     }
-}
-pub unsafe fn fx_routes<C: CoreApi>(core: &C, f: *mut u8, allowed: u32, def: u32) {
-    if gate().open_any(core) {
-        build().fx_routes(f, allowed, def);
+
+    /// The collection, for a host test that fills it by hand.
+    pub fn build_mut(&mut self) -> &mut Build {
+        &mut self.build
     }
-}
-pub unsafe fn fx_mix<C: CoreApi>(core: &C, f: *mut u8, def: u32) {
-    if gate().open_any(core) {
-        build().fx_mix(f, def);
+
+    /// `Records::begin`: forget what an earlier module collected and open the collection for module record `rec`.
+    pub fn begin(&mut self, rec: usize) {
+        self.build = Build::new();
+        self.gate.begin(rec);
+    }
+
+    /// Close the collection: later builder calls return the placeholder.
+    pub fn end(&mut self) {
+        self.gate.end();
+    }
+
+    // the builder calls (exported by the service file: `dks/src/builder.rs`); a call that names a handle comes from the module whose `init` is open
+
+    /// # Safety
+    /// `ctx` is any pointer (the core only compares it); `name` and `short` are C strings or null.
+    pub unsafe fn add_fx<C: CoreApi>(
+        &mut self,
+        core: &C,
+        ctx: *mut u8,
+        index: u32,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
+        if self.gate.open_for(core, ctx) {
+            self.build.add_fx(&self.gate, index, name, short)
+        } else {
+            self.placeholder()
+        }
+    }
+
+    /// # Safety
+    /// `f` is any pointer; `name` and `short` are C strings or null.
+    pub unsafe fn fx_add_page<C: CoreApi>(
+        &mut self,
+        core: &C,
+        f: *mut u8,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
+        if self.gate.open_any(core) {
+            self.build.fx_add_page(&self.gate, f, name, short)
+        } else {
+            self.placeholder()
+        }
+    }
+
+    /// # Safety
+    /// `p` is any pointer; `name` and `short` are C strings or null.
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn page_add_fx_param<C: CoreApi>(
+        &mut self,
+        core: &C,
+        p: *mut u8,
+        name: *const u8,
+        short: *const u8,
+        kind: u32,
+        min: f32,
+        max: f32,
+        def: f32,
+    ) -> *mut u8 {
+        if self.gate.open_any(core) {
+            self.build
+                .page_add_fx_param(&self.gate, p, name, short, kind, min, max, def)
+        } else {
+            self.placeholder()
+        }
+    }
+
+    pub fn fx_routes<C: CoreApi>(&mut self, core: &C, f: *mut u8, allowed: u32, def: u32) {
+        if self.gate.open_any(core) {
+            self.build.fx_routes(f, allowed, def);
+        }
+    }
+
+    pub fn fx_mix<C: CoreApi>(&mut self, core: &C, f: *mut u8, def: u32) {
+        if self.gate.open_any(core) {
+            self.build.fx_mix(f, def);
+        }
     }
 }
 
@@ -341,7 +377,7 @@ pub fn fx_id(keys: &KeysCopy, f: &CFx) -> u32 {
 
 /// Lower the collection into `o`: the EFFECT record of each effect with a page (its tab label is the first three characters of its short name). `o` without a buffer only
 /// measures. The errors are refusals of the commit.
-pub fn lower(b: &Build, keys: &KeysCopy, o: &mut RecordSink) -> Result<(), i32> {
+pub fn lower(b: &Build, keys: &KeysCopy, o: &mut RecordSink) -> Result<(), Status> {
     if b.err != 0 {
         return Err(b.err);
     }
@@ -468,61 +504,72 @@ pub fn check_commit(b: &Build, keys: &KeysCopy) -> i32 {
     OK
 }
 
-// ---- the commit (Service::module_commit) ---------------------------------------------------------------------------------------
+// ---- the commit (Records::commit) ---------------------------------------------------------------------------------------------
 
-/// The commit of module record `rec` (`Service::module_commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them; `DECLARE` (after the registry walker's
-/// check) declares the route flags and defaults of the effects' DSP rows and keeps the module's effect ids. The collection is closed after the `DECLARE` pass.
-pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
-    let b = build();
-    if !gate().is_open_for(rec) {
-        return OK; // no `module_begin` for this record: nothing was collected
-    }
-    if b.err != 0 {
-        return b.err;
-    }
-    // a provider adds no effect of its own
-    if rec >= MAX_MODULES {
-        return if b.is_empty() { OK } else { E_FORMAT };
-    }
-    let sink = &mut *c.sink;
-    if c.phase == commit_phase::PREPARE {
-        if b.is_empty() {
-            return OK;
+impl Builder {
+    /// The commit of module record `rec` (`Records::commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them; `DECLARE` (after the registry walker's
+    /// check) declares the route flags and defaults of the effects' DSP rows. The collection is closed after the `DECLARE` pass.
+    ///
+    /// # Safety
+    /// `c.sink` is the loader's sink.
+    pub unsafe fn commit<C: CoreApi>(
+        &mut self,
+        core: &C,
+        rec: usize,
+        c: &ModuleCommitCtx,
+    ) -> Result<(), Status> {
+        let b = &self.build;
+        if !self.gate.is_open_for(rec) {
+            return Ok(()); // no `begin` for this record: nothing was collected
         }
-        let r = check_commit(b, c.keys);
-        if r != OK {
-            return r;
+        if b.err != 0 {
+            return Err(b.err);
         }
-        return match lower(b, c.keys, sink) {
-            Ok(()) => OK,
-            Err(e) => e,
-        };
-    }
-    if c.phase == commit_phase::WRITE {
+        // a provider adds no effect of its own
+        if rec >= MAX_MODULES {
+            return if b.is_empty() { Ok(()) } else { Err(E_FORMAT) };
+        }
+        let sink = &mut *c.sink;
+        if c.phase == commit_phase::PREPARE {
+            if b.is_empty() {
+                return Ok(());
+            }
+            let r = check_commit(b, c.keys);
+            if r != OK {
+                return Err(r);
+            }
+            return lower(b, c.keys, sink);
+        }
+        if c.phase == commit_phase::WRITE {
+            if !b.is_empty() {
+                lower(b, c.keys, sink)?;
+            }
+            return Ok(());
+        }
+        // DECLARE: the walker's check found nothing wrong
         if !b.is_empty() {
-            if let Err(e) = lower(b, c.keys, sink) {
-                return e;
+            // the routes and defaults of each effect's row; without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field)
+            let mut f = 0;
+            while f < b.nf {
+                let fx = &b.fxs[f];
+                let par = if fx.page >= 0 {
+                    Some(fx_defaults(b, f))
+                } else {
+                    None
+                };
+                if !crate::dsp::fx_set_declared(
+                    core,
+                    rec,
+                    fx.index,
+                    Some(fx_flags_of_decl(fx)),
+                    par,
+                ) {
+                    return Err(E_FORMAT); // no such effect in the module's DSP section
+                }
+                f += 1;
             }
         }
-        return OK;
+        self.end();
+        Ok(())
     }
-    // DECLARE: the walker's check found nothing wrong
-    if !b.is_empty() {
-        // the routes and defaults of each effect's row; without `dk_fx_routes` the effect runs on the master only (the rule of the old `routes` field)
-        let mut f = 0;
-        while f < b.nf {
-            let fx = &b.fxs[f];
-            let par = if fx.page >= 0 {
-                Some(fx_defaults(b, f))
-            } else {
-                None
-            };
-            if !crate::dsp::fx_set_declared(core, rec, fx.index, Some(fx_flags_of_decl(fx)), par) {
-                return E_FORMAT; // no such effect in the module's DSP section
-            }
-            f += 1;
-        }
-    }
-    end();
-    OK
 }

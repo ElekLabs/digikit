@@ -25,19 +25,10 @@
 //! (the stock lists and the return of each hook) are not in the table any more: `bind` resolves them.
 #[cfg(target_arch = "m68k")]
 use core::arch::global_asm;
-use dkrt_svc_rt::ImportCore;
-
 #[cfg(target_arch = "m68k")]
 extern "C" {
     /// Two words of the asm below: the stock page list of the FX view and the instruction of its builder that holds the stock count (`dk_fw_` words, resolved by the port file).
     static DKRT_FXP_FW: [u32; 2];
-}
-
-/// The service's `setup`: give the table the two firmware words, then bind it (`fxpage::setup`). A host build has no firmware: both words are 0.
-pub unsafe fn setup(core: &ImportCore) -> i32 {
-    #[cfg(target_arch = "m68k")]
-    dkrt_svc_fx::fxpage::set_firmware(DKRT_FXP_FW[0], DKRT_FXP_FW[1]);
-    dkrt_svc_fx::fxpage::setup(core)
 }
 
 macro_rules! entries {

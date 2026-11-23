@@ -1,5 +1,7 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the fx service on both profiles. The call lists below stand for the shared fixtures
-//! `tests/fixtures/modules/dyn-fx-gain` and `dyn-fx-gain-b`: each makes the builder calls of its `src/module.c` through the service's `build::*`.
+//! `tests/fixtures/modules/dyn-fx-gain` and `dyn-fx-gain-b`: each makes the builder calls of its `src/module.c` through the owner's builder (`build::*` below reaches the owner that the
+//! suite's driver started).
+//! The parts the file adopts are read from the row its own `service!` call declares (the file's source is compiled in by path).
 use core::ptr::addr_of;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX};
@@ -7,15 +9,98 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{ALL, DT2};
 use dkrt_sdk::records::KINDS_FX;
-use dkrt_svc_fx::build::{self, ROUTE_MASTER, ROUTE_SEND};
+use dkrt_svc_fx::builder::{ROUTE_MASTER, ROUTE_SEND};
+use dkrt_svc_fx::fx::Fx;
 use dkrt_svc_fx::fxpage::{self, INFO_HASH};
 use dkrt_svc_fx::fxsend;
-use dkrt_svc_fx::records::Fx;
 use dkrt_svc_fx::rows::{self, FxRows};
 use dkrt_test_support::contract::{
-    contract, locked, Dsp, Fixture, Init, Late, Lifecycle, Module, ParkedKnobs, Rows,
+    locked, Dsp, Fixture, Init, Late, Lifecycle, Module, ParkedKnobs, Rows,
 };
-use dkrt_test_support::FakeCore;
+use dkrt_test_support::{provider_contract, subject, FakeCore, Provided, Recipe, RowBuilder};
+
+// the core imports of the file's code (no runtime is linked)
+mod stubs;
+
+// the service file's source: its `service!` call is the one place that lists the parts
+#[path = "../dks/src/lib.rs"]
+pub mod file;
+pub use file::{builder, rt, DK_SVC_OWNER};
+
+/// The parts the file adopts, read from the row its `service!` call declares.
+struct FxRecipe;
+
+impl Recipe for FxRecipe {
+    type P = Fx;
+    const NAME: &'static str = "fx";
+    fn parts(b: RowBuilder<Fx>) -> RowBuilder<Fx> {
+        use dkrt_abi::provider::{
+            check, PartLookup, DESCRIBE_NEWEST, DSP_NEWEST, PART_DESCRIBE, PART_DSP, PART_QUERY,
+            PART_RECORDS, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
+        };
+        // SAFETY: the row is a static of this binary
+        let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+        let has = |tag, newest| matches!(row.part(tag, newest), PartLookup::Found { .. });
+        assert!(
+            has(PART_RECORDS, RECORDS_NEWEST)
+                && has(PART_DSP, DSP_NEWEST)
+                && has(PART_TICK, TICK_NEWEST)
+                && has(PART_QUERY, QUERY_NEWEST)
+                && has(PART_DESCRIBE, DESCRIBE_NEWEST),
+            "the file adopts the five parts this recipe builds"
+        );
+        b.records(&KINDS_FX).dsp().tick().query().describe()
+    }
+}
+
+/// The builder calls of a module's `init`, on the owner that the suite's driver started.
+mod build {
+    use super::*;
+
+    pub unsafe fn add_fx(
+        core: &FakeCore,
+        ctx: *mut u8,
+        index: u32,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
+        subject::<Fx, _>(|fx| fx.builder().add_fx(core, ctx, index, name, short))
+    }
+
+    pub unsafe fn fx_add_page(
+        core: &FakeCore,
+        f: *mut u8,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
+        subject::<Fx, _>(|fx| fx.builder().fx_add_page(core, f, name, short))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn page_add_fx_param(
+        core: &FakeCore,
+        p: *mut u8,
+        name: *const u8,
+        short: *const u8,
+        kind: u32,
+        min: f32,
+        max: f32,
+        def: f32,
+    ) -> *mut u8 {
+        subject::<Fx, _>(|fx| {
+            fx.builder()
+                .page_add_fx_param(core, p, name, short, kind, min, max, def)
+        })
+    }
+
+    pub fn fx_routes(core: &FakeCore, f: *mut u8, allowed: u32, def: u32) {
+        subject::<Fx, _>(|fx| fx.builder().fx_routes(core, f, allowed, def))
+    }
+
+    pub fn fx_mix(core: &FakeCore, f: *mut u8, def: u32) {
+        subject::<Fx, _>(|fx| fx.builder().fx_mix(core, f, def))
+    }
+}
 
 /// The effect ids of the keys tables of the two modules (what `DK_FX_ID_GAIN` is the index of).
 const ID_A: u32 = 0x0000_1001;
@@ -298,7 +383,7 @@ fn fixture(device: u32) -> Fixture {
 #[test]
 fn the_fx_service_passes_the_contract_on_every_device_with_a_dsp() {
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
-        contract::<Fx>(&fixture(p.id));
+        provider_contract::<FxRecipe>(&fixture(p.id));
     }
 }
 
@@ -308,7 +393,7 @@ fn the_fx_service_passes_the_contract_on_every_device_with_a_dsp() {
 fn an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks() {
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Fx>::new(&f);
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     // the table's words as the firmware sees them: the halfwords the service wrote through the core
     let defs = || -> Vec<i32> {
         let at = unsafe { addr_of!(fxpage::DKRT_FXP_DEFS) } as u32;
@@ -333,7 +418,7 @@ fn an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks() {
 fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Fx>::new(&f);
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
     let words = || unsafe { (FwMem::rd(&l.core, rows), FwMem::rd(&l.core, rows + 4)) };
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
@@ -412,15 +497,17 @@ fn parked_knobs() -> ParkedKnobs {
 fn a_reloaded_effect_gets_its_send_cell_and_page_row_back() {
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Fx>::new(&f);
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     unsafe {
         // the effect with the default route "send": a send cell
         assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
         assert_eq!(fxsend::used(), 1, "the effect has its send cell");
         l.core.live_op.set(1);
         assert_eq!(
-            <Fx as dkrt_abi::service::Service<FakeCore>>::teardown_refusal(&l.core, 1),
-            dkrt_sdk::OK,
+            l.driver.with_instance(
+                |fx| <Fx as dkrt_abi::provider::Provider<FakeCore>>::can_stop(fx, &l.core)
+            ),
+            Ok(()),
             "an effect with a send route is torn down"
         );
         l.unload(0);
@@ -441,7 +528,7 @@ fn the_removal_of_another_effect_does_not_refresh_the_stamp_of_a_parked_row() {
     let _g = locked();
     let mut f = fixture(DT2.id);
     f.image = image_with_kit;
-    let l = Lifecycle::<Fx>::new(&f);
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     let k = parked_knobs();
     unsafe {
         (k.kit)(&l.core, 0);

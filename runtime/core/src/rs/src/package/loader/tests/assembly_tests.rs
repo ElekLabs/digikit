@@ -551,9 +551,14 @@ impl Images for Card {
         }
         let name: &'static str = Box::leak(stem.into_boxed_str());
         let kinds: &'static [(u32, u32)] = Box::leak(kinds.into_boxed_slice());
-        let row: &'static ServiceRow = if self.real_rows && name == "fx" {
-            crate::package::handlers::fx_fixture::row()
-        } else if self.real_rows && name == "machines" {
+        if self.real_rows && name == "fx" {
+            // the fx file provides a `ProviderRow` over its owner: the file's own row and an instance (what its `init` makes before the declarations)
+            crate::package::handlers::dks_decls::fx_stop();
+            let instance = crate::package::handlers::dks_decls::fx_start().expect("the owner of the fx file starts");
+            self.provider_recs.push(rec);
+            return crate::package::collect::dk_provider_declare_row(ctx, crate::package::handlers::dks_decls::fx_row(), instance);
+        }
+        let row: &'static ServiceRow = if self.real_rows && name == "machines" {
             crate::package::handlers::exports::machines_row()
         } else {
             Box::leak(Box::new(ServiceRow::of::<Nothing, crate::package::core_api::RealCore>(name, kinds)))
@@ -569,6 +574,7 @@ impl Images for Card {
         if let Some(at) = self.provider_recs.iter().position(|r| *r == rec) {
             self.provider_recs.remove(at);
             dkrt_fixture_local_ping::dk_svc_stop();
+            crate::package::handlers::dks_decls::fx_stop();
         }
     }
 }
@@ -593,6 +599,7 @@ pub(super) fn clean() -> Clean {
         CALLED_NEED = [0; NEEDS_LEN];
         // a case that ended early left the instance of the provider fixture started
         dkrt_fixture_local_ping::dk_svc_stop();
+        crate::package::handlers::dks_decls::fx_stop();
         // the link script is a static: a test with no DSP part never calls `script_link`, and would see the strict tick drop of the initial value or the state of
         // whichever test ran before it
         crate::package::cleanup_tests::lenient_tick_drop();
@@ -1842,8 +1849,12 @@ fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
             let request = [0u32, 0];
             let mut reply = u32::MAX;
             let out = (&mut reply as *mut u32).cast();
+            // the entry answers from the owner in the file's cell: this case runs no `init`, so it starts the owner as `init` does, and ends it after
+            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_MISSING, "no owner, no provider");
+            crate::package::handlers::dks_decls::fx_start().expect("the owner starts");
             assert_eq!(ask(1, request.as_ptr().cast(), 4, out, 4), E_CONTRACT);
             assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_NOT_FOUND);
+            crate::package::handlers::dks_decls::fx_stop();
             assert_eq!(reply, u32::MAX, "the service has no loaded FX page to report");
         }
         clean_state();
@@ -2305,7 +2316,7 @@ fn an_effect_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leave
             assert_eq!(run.code(0), E_DECL_ID, "{}: {:?}", dev.name, run.refusal(0));
             nothing_left(&l, dev.name);
             // `init` returned OK and the commit refused: a content module's `fini` does not run (only a provider file's does)
-            assert!(!l.m.hooks.iter().any(|(fini, _)| *fini), "{}: no fini of a content module", dev.name);
+            assert!(!l.m.hooks.iter().any(|(fini, rec)| *fini && *rec < MAX_MODULES), "{}: no fini of a content module", dev.name);
         }
         let _ = clean_state();
     }

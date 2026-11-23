@@ -4,8 +4,37 @@
 /// `dk_svc_declare` of a service file: the declarations of `init` without `setup`, for the device that `device` gives.
 pub type DeclareFn = unsafe fn(*mut u8, fn() -> u32) -> i32;
 
-/// Host entry of the FX service's resident query. The packed ColdFire entry is tested before this host call.
+/// Host entry of the FX service's resident query: the entry of the file over the owner in its cell (`E_MISSING` before `fx_start`). The packed ColdFire entry is tested before this host call.
 pub const FX_QUERY: dkrt_sdk::ResidentQueryV1 = dkrt_svc_fx_dks::dk_service_query_v1;
+
+/// The row of the fx file: what its `service!` call declares.
+pub fn fx_row() -> &'static dkrt_abi::provider::ProviderRow {
+    dkrt_svc_fx_dks::dk_svc_row()
+}
+
+/// The owner of the fx file in its cell, made as the file's `init` makes it before the declarations, except that no table of the effect pages is bound: a host test binds it
+/// when it first needs it (`fxpage::info`), as the old row did. `E_LOADED` when the cell holds one.
+pub fn fx_start() -> Result<*mut u8, i32> {
+    dkrt_svc_fx_dks::DK_SVC_OWNER
+        .start(|slot| {
+            slot.write(dkrt_svc_fx::fx::Fx::new());
+            Ok(())
+        })
+        .map(|instance| instance as *mut u8)
+}
+
+/// What the file's `fini` does: the owner is dropped (nothing when there is none).
+pub fn fx_stop() {
+    dkrt_svc_fx_dks::dk_svc_stop()
+}
+
+/// The builder call `dk_module_ctx_add_fx` of the file, for the module whose context is `ctx`: the export that a module's `init` calls.
+///
+/// # Safety
+/// `ctx` is any pointer (the core only compares it).
+pub unsafe fn fx_add_fx(ctx: *mut u8, index: u32) {
+    dkrt_svc_fx_dks::builder::dk_module_ctx_add_fx(ctx, index, b"Test\0".as_ptr(), b"TST\0".as_ptr());
+}
 
 /// The Rust service files: (file name, declarations).
 pub fn declarations() -> [(&'static str, DeclareFn); 6] {

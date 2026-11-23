@@ -1,12 +1,9 @@
 //! The fx service as the runtime has it: a service file (`fx.dks`), not a row of the image. A host test of the DSP section, the effect rows or the attribution of
 //! an effect needs its row: this adds it to the table as `Registry::add` does at the commit of the loaded file, and takes it out as `Registry::remove` does at the unload.
 //! Take the test lock first (`test_lock::LOCK`): the row table is a static.
-use crate::package::core_api::RealCore;
-use crate::package::svc_rows;
-use dkrt_abi::service::ServiceRow;
-use dkrt_sdk::records::KINDS_FX;
+use crate::package::handlers::dks_decls;
+use crate::package::svc_rows::{self, RowSource};
 use dkrt_sdk::OK;
-use dkrt_svc_fx::records::Fx;
 
 /// The module record of the service file in these tests.
 const FILE_REC: usize = 7;
@@ -22,22 +19,21 @@ pub(crate) fn reset_rows() {
     dkrt_svc_fx::rows::reset()
 }
 
-/// The row of the fx service file as the host tests have it.
-pub(crate) fn row() -> &'static ServiceRow {
-    static ROW: ServiceRow = ServiceRow::of::<Fx, RealCore>("fx", &KINDS_FX);
-    &ROW
-}
-
 /// The builder call `dk_module_ctx_add_fx` of the module whose context is `ctx` (its `init` is open), for the effect of `index` of its header table.
 pub(crate) unsafe fn add_fx(ctx: *mut u8, index: u32) {
-    dkrt_svc_fx::build::add_fx(&RealCore, ctx, index, b"Test\0".as_ptr(), b"TST\0".as_ptr());
+    dks_decls::fx_add_fx(ctx, index);
 }
 
+/// The fx file loaded: its owner is in its cell and its row is in the table, as the loader leaves them after the commit of the loaded file.
 pub(crate) struct LoadedFx;
 
 impl LoadedFx {
     pub(crate) fn new() -> LoadedFx {
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, row(), None) }, OK);
+        // an owner that an earlier case left is not this file's
+        dks_decls::fx_stop();
+        let instance = dks_decls::fx_start().expect("the owner of the fx file starts");
+        let row = RowSource::Provider { row: dks_decls::fx_row(), instance, extent: 0..usize::MAX };
+        assert_eq!(unsafe { svc_rows::add(FILE_REC, row, None) }, OK);
         LoadedFx
     }
 }
@@ -45,5 +41,6 @@ impl LoadedFx {
 impl Drop for LoadedFx {
     fn drop(&mut self) {
         unsafe { svc_rows::remove(FILE_REC) };
+        dks_decls::fx_stop();
     }
 }
