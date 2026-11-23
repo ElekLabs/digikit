@@ -8,8 +8,9 @@ Make the desktop Workbench easier to navigate and safer to change. Each feature 
 | --- | --- | --- |
 | Log and tool drawers | Committed as `056dd95ec` | Desktop host and type checks, simulated drawer and save checks, independent review. Review caught a live fixture behavior change that was corrected before the commit. |
 | Emulator lifetime | Committed as `ae185d45c` | The window owner discards late startup results and clears its polls. A single controller stop waits for pending firmware work. The final desktop host and type checks, both simulated scenarios, and an independent re-review passed. |
-| Firmware operations and shell | Verified and reviewed | Firmware and default-module jobs have separate owners. `WorkbenchShell` composes Navigation, FirmwareToolbar, StatusBar, and the drawers. The desktop host suite, type checks, production UI build, and simulated preview checks passed. |
-| Inspector, Samples, and adapter | Planned | Separate edit surfaces once the shell-facing interfaces are stable. |
+| Firmware operations and shell | Committed as `c6b4bde53` | Firmware and default-module jobs have separate owners. `WorkbenchShell` composes Navigation, FirmwareToolbar, StatusBar, and the drawers. The desktop host suite, type checks, production UI build, and simulated preview checks passed. |
+| Profile and Calibration | Verified and reviewed | The target-bound owner governs reads, recording, and DSP release. History and saved comparison have separate views. The desktop suite, type checks, production UI build, and simulated Profile, Calibration, and Performance checks passed. |
+| Samples and Tauri adapter | Planned | Separate edit surfaces with the shell-facing interfaces in place. |
 
 ## Ownership and dependencies
 
@@ -85,6 +86,15 @@ These edit surfaces can proceed in separate worktrees once shell-facing interfac
 | Profile and Calibration | Move target-bound polling and action coordination out of `ProfilePanel.tsx`. Retain `createReadGate` and the `Recorder` lifecycle API. Move the recorder to `profile/recorder.ts` and extract the history and reference views. Keep calibration's counter ownership and replace broad state setters only where the callers expose a useful command. | Host cases for target change, in-flight reads, or calibration ownership as affected. Check Profile and Calibration in the preview. |
 | Samples | Move the Samples slot wiring out of `desktop-env.ts` into the Samples feature. Create window-owned local-folder, target-folder, and upload state. Preserve the shared Transfer slot, independent local and device reads, target reset behavior, cancellation, and bulk fallback. Keep selection gestures in the pane and reuse Transfer's existing primitives. | Existing Samples host tests plus a focused stale-result or isolation regression if the seam changes. Exercise cancel, folder navigation, and target switching against preview fixtures. |
 | Tauri adapter | Prove analyzer open/read/close ordering across drawer lifetimes and recovery after a rejected call. Test the desktop adapter by intercepting IPC at the Tauri boundary. Keep representative byte and header assertions tied to the Rust command contract. | Focused host adapter tests. Use native checks when the behavior depends on Rust or the webview. |
+
+### Profile and Calibration acceptance
+
+- A Profile owner belongs to one target binding. It drops results from an invalidated read, stops its polling at disposal, and releases the original recorder's DSP capture after any pending action settles. An export that has already started can finish saving before release.
+- Profile and Performance share one recording. Full reads follow the visible Profile tab, and the Performance drawer can collect spans in the background.
+- Calibration keeps its run owner across tab changes. A host integration case uses the Profile owner, Calibration state, and their shared hub over fake I/O. It checks that a pending profile result is discarded, no new reads or recording actions start during calibration, and reads resume afterward.
+- Move the recorder to `profile/recorder.ts` without changing its API. Update the preview mock alias with its import. Split the history and reference views while keeping the saved comparison as target-bound state.
+- The desktop host suite covers target leave, recording release, export completion, refresh, and Calibration handing reads back. Reference tests cover stale file and symbol replies and disposal.
+- The simulated preview exercised `performance-spans`, `profile-nodebug`, `profile-calibration-run`, `profile-calibration-fit`, and `profile-calibration-estimate`. A rendered smoke check loaded a saved reference and verified that the comparison and hotspots survived a tab change. The Profile owner and handoff tests use fake I/O.
 
 ## Navigation and naming
 

@@ -91,9 +91,7 @@ export default function CalibrationPanel(props: {
     emulator: onEmulator,
     visible: () => props.visible,
     blocked: () => app.jobs.busy('target'),
-    onRunning: (r) => {
-      props.hub.setCalibrating(r);
-    },
+    onRunning: untrack(() => props.hub.setCalibrating),
   });
   onCleanup(() => calibration.dispose());
 

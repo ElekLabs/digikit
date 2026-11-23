@@ -2,7 +2,7 @@
 // profileState / profileAll, PROFILE_STATE and PROFILE_READ), and on the emulator also `cf.profile` and `sharc.profile` of the controller (the
 // Host's `rpc`). One recorder per panel: no module state; the session, the rpc, the library and dkprof.wasm are arguments, so a test gives fakes.
 // The preview replaces this module (preview/profile-backend.mock.ts). Host tests: tests/profile-backend.test.ts.
-import { latestDeviceHealth } from './device-health';
+import { latestDeviceHealth } from '../device-health';
 import { CAP } from '@digi/dk-session/gen_proto';
 import { DkError, type DkSession, type PollSlot } from '@digi/dk-session';
 import type { DkProf } from '@digi/dk-session/dkprof';
@@ -31,9 +31,9 @@ import {
   type Snapshot,
 } from '@digi/workbench-core/profile/profile-core.ts';
 import { stockImageHash, type LogNames } from '@digi/dk-session/log-names';
-import { createDspBlockRecording, type DspBlockCapture } from './dsp-block-recording';
-import type { FrozenTrace } from './span-recording';
-import { sampledPcs, type Hotspot } from './profile-hotspots';
+import { createDspBlockRecording, type DspBlockCapture } from '../dsp-block-recording';
+import type { FrozenTrace } from '../span-recording';
+import { sampledPcs, type Hotspot } from './hotspots';
 
 /** The part of the session the pane uses. */
 export type ProfileSession = Pick<

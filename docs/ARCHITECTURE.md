@@ -210,7 +210,7 @@ Three sources feed one recorder. The Profile pane and the `wb` CLI show the resu
  sharc.profile (emulator only)            needs a DSP and a separate build (feature sharc-profile)
           |
           v
- recorder (apps/desktop/ui/src/profile-backend.ts)
+ recorder (apps/desktop/ui/src/profile/recorder.ts)
    one start / stop / reset / read interface per source;
    a source that is missing or fails is reported with its reason
           |

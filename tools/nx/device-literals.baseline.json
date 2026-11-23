@@ -26,7 +26,6 @@
   "apps/desktop/ui/preview/samples-backend.mock.ts": 2,
   "apps/desktop/ui/preview/tauri-mock.ts": 1,
   "apps/desktop/ui/src/CardPanel.tsx": 1,
-  "apps/desktop/ui/src/ProfilePanel.tsx": 2,
   "apps/desktop/ui/src/memory-core.ts": 1,
   "apps/desktop/ui/tests/calibration-backend.test.ts": 1,
   "apps/desktop/ui/tests/card-api.test.ts": 6,

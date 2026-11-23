@@ -13,7 +13,7 @@ export default mergeConfig(desktop, {
       { find: '@tauri-apps/api/core', replacement: here('./tauri-mock.ts') },
       { find: /^\.\/memory-backend$/, replacement: here('./memory-backend.mock.ts') },
       { find: /^\.\/calibration-backend$/, replacement: here('./calibration-backend.mock.ts') },
-      { find: /^\.\/profile-backend$/, replacement: here('./profile-backend.mock.ts') },
+      { find: /^\.\/recorder$/, replacement: here('./profile-backend.mock.ts') },
       { find: /^\.\/samples-backend$/, replacement: here('./samples-backend.mock.ts') },
     ],
   },

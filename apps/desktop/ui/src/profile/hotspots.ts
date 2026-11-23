@@ -73,3 +73,5 @@ export function hotspotLabel({ addr, name }: Hotspot): string {
   const hex = `0x${addr.toString(16)}`;
   return name ? `${hex} ${name}` : hex;
 }
+
+export const fmtPct = (share: number) => `${(share * 100).toFixed(share > 0 && share < 0.001 ? 2 : 1)}%`;

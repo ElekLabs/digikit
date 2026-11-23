@@ -1,15 +1,15 @@
-// The Profile pane's backend in the preview (replaces ../src/profile-backend.ts): a recorder over a made-up device, so the pane's own code draws
+// The Profile pane's backend in the preview (replaces ../src/profile/recorder.ts): a recorder over a made-up device, so the pane's own code draws
 // the three states. The state is in the address: `prof=rec` (recording), `prof=stopped` (the default, ready to record), `prof=nodebug` (no debug
 // module); `card=dn2|dt2` names the device, and the Remote page (`page=remote`) reads a device, the Emulator page the emulator.
 // The shares follow a fixed model per owner (a machine, an effect that is loaded after 19 s, the debug module, phases and polls); the clock is real
 // time, one reading a second. The numbers show layout, not measurements. The DSP figures go through the app's own `dspView`.
 import { dspView } from '@digi/workbench-core/profile/profile-core.ts';
 import type { ModuleRef, Snapshot, SpanIn } from '@digi/workbench-core/profile/profile-core.ts';
-import { cfView, DSP_BLOCKS_NOT_ARMED } from '../src/profile-backend';
+import { cfView, DSP_BLOCKS_NOT_ARMED } from '../src/profile/recorder';
 import type { Part } from '@digi/workbench-core/profile/profile-artifact.ts';
-import type { ProfileDeps, ProfileReading, Recorder } from '../src/profile-backend';
+import type { ProfileDeps, ProfileReading, Recorder } from '../src/profile/recorder';
 
-export { isDebugMissing } from '../src/profile-backend';
+export { isDebugMissing } from '../src/profile/recorder';
 
 const query = new URLSearchParams(location.search);
 const state = query.get('prof') ?? 'stopped';

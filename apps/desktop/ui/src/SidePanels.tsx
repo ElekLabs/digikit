@@ -4,7 +4,7 @@ import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
 import type { SpanRecording } from './span-recording';
-import ProfilePanel from './ProfilePanel';
+import ProfilePanel from './profile/ProfilePanel';
 import CalibrationPanel from './CalibrationPanel';
 import { createCalibrationHub } from './calibration-hub';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
