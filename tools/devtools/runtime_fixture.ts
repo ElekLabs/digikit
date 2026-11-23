@@ -13,13 +13,13 @@
 // Replay: coupled-run --syx firmware.syx --dsp-image dsp-image.bin --dsp-state dsp-state.snap.dsp
 //         --cf-snapshot cf-snapshot.snap [--card-image card.img]
 // The daemon is the plain build of the device's generated core: --binary, else DIGI_EMUD_<DEV>,
-// else `dist/daemons.json` (written by `digi-control:daemons`).
+// else `dist/daemons.json` (written by `digi-control:daemons`); a device without a DSP: `dist/bin/digi-emud-nodsp`.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { resolveInputs, repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
+import { hasDsp, noDspDaemon, resolveInputs, repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
 import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
 import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
 import { MS, Session } from '../../packages/test-support/src/session.ts';
@@ -45,6 +45,7 @@ function git(root: string, ...args: string[]): string {
 function daemonBinary(root: string, device: Device, given?: string): string {
   const named = given ?? process.env[`DIGI_EMUD_${device.toUpperCase()}`];
   if (named) return path.resolve(named);
+  if (!hasDsp(device)) return noDspDaemon(device);
   const file = path.join(root, 'dist/daemons.json');
   const key = `DIGI_EMUD_${device.toUpperCase()}`;
   const fromFile = fs.existsSync(file)

@@ -7,6 +7,7 @@ import {
   stockSyx,
   stockImage as stockImageOf,
 } from '@digi/workbench-core/node/stock-image.ts';
+import { registry } from '@digi/devices/node';
 import { parse as parseToml } from 'smol-toml';
 import { resolveTiers } from './emulator-config.ts';
 
@@ -51,6 +52,22 @@ export function repoRoot(): string {
     if (up === dir) throw new Error('repo root (pnpm-workspace.yaml) not found');
     dir = up;
   }
+}
+
+/** Whether the device has a SHARC DSP: `[capabilities] dsp` of its device file is not "none" (the shared device registry). */
+export function hasDsp(device: Device): boolean {
+  return registry().get(device).capabilities.dsp !== 'none';
+}
+
+/**
+ * The daemon of a device without a DSP: the no-core build `dist/bin/digi-emud-nodsp` (`digi-control:daemon-nodsp`; such a device has
+ * no entry in dist/daemons.json). Throws, naming the Nx target, when it is not built; a test never spawns the build.
+ */
+export function noDspDaemon(device: Device): string {
+  const binary = path.join(repoRoot(), 'dist/bin/digi-emud-nodsp');
+  if (!fs.existsSync(binary))
+    throw new Error(`the ${device} daemon ${binary} is missing: run pnpm nx:pilot run digi-control:daemon-nodsp`);
+  return binary;
 }
 
 /** `DIGI_SHARC_CORE_LIB_<DEV>`: the core library a daemon of this device loads (`verify_build daemons|cores` writes it to

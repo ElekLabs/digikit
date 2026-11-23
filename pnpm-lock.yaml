@@ -371,6 +371,9 @@ importers:
       '@digi/control-client':
         specifier: workspace:*
         version: link:../control-client
+      '@digi/devices':
+        specifier: workspace:*
+        version: link:../devices
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../dk-session
