@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "Framework that adds parameter descriptors (names, range, default, formatter) to the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter, every reader repointed and bounded"
+summary = "The parameter rows of the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter (descriptors: names, range, default, formatter), every reader repointed and bounded, and the reserved rows that the run-time machines, the effect pages and the send page fill (rows_info)"
 requires = []
 conflicts = []
 
@@ -33,6 +33,20 @@ conflicts = []
 # word), and the table is 321 rows.
 # Loops that visit every code (the defaults refresh, the per-owner lookup maps, the owner enumeration of the modulation
 # destination list) end on `bne`/`beq`, not on a clamp, and keep the stock count: the new rows do not enter them.
+
+# The reservation. The image makes room: `[[entry]]` with a `count` stands for that many rows, the count an expression over the device file's
+# `[limits]` (module.toml of the patchkit manifest, docs/PATCHING.md). Three blocks, in this order, so a code is `params.<block>0.index + k`:
+#   dp  the parameters of the run-time machines (`[limits] param_rows`), filled by the machines and fx services
+#   fp  the knobs of the effect pages: 7 knobs and the level of a page for each effect slot (`8 * fx_slots`)
+#   fs  the cells of the send page of the track FX key (`send_rows`, at least `send_slots`; finding 64)
+# Each user fills its own block at load and clears it at unload; the template is a stock row that is valid for the value-class lookup. No
+# other module adds a row to this registry in the image (packages/patchkit/tests/rows.rs). `rows_info` (src/cf/rows-info-<dev>.s) says where
+# the blocks are and how a row is made; the cap words of the admission point at it.
+
+[[gen]]
+kind = "gas"
+path = "build/gen/device-{dev}.inc"
+uses = ["DEVICE_ID", "LIMIT_PARAM_ROWS", "LIMIT_PAGE_ROWS", "LIMIT_SEND_ROWS", "LIMIT_FX_SLOTS", "LIMIT_MACHINE_ROWS", "LIMIT_SEND_SLOTS"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -288,6 +302,121 @@ devices = ["dn2"]
 
 [[claim]]
 resource = "cf.params.sites"
+
+# ---- the reserved rows ---------------------------------------------------------------------------------------------------
+
+[[entry]]
+registry = "params"
+id = "dp"
+count = "param_rows"
+name = ""
+short = ""
+template = 0xd1
+slot = 0
+min = 0
+max = 0
+default = 0
+devices = ["dt2"]
+
+[[entry]]
+registry = "params"
+id = "dp"
+count = "param_rows"
+name = ""
+short = ""
+template = 0xd5       # A Env Decay: a plain 0 .. 127 word on the sound-array slot 25
+slot = 25
+min = 0
+max = 0
+default = 0
+devices = ["dn2"]
+
+# The template is a placeholder (Delay "Feedback HPF"); a service writes the row from its record.
+[[entry]]
+registry = "params"
+id = "fp"
+count = "8 * fx_slots"
+name = ""
+short = ""
+template = 0x75
+slot = 0
+min = 0
+max = 0
+default = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "params"
+id = "fs"
+count = "send_rows"
+name = ""
+short = ""
+template = 0x75
+slot = 0
+min = 0
+max = 0
+default = 0
+devices = ["dt2", "dn2"]
+
+# ---- rows_info -----------------------------------------------------------------------------------------------------------
+
+[[object]]
+path = "build/rows-info-dt2.dko.json"
+sources = ["src/cf/rows-info-dt2.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+_rw_table = "pf_table"
+_rw_rows = "params.rows"
+_rw_row_size = "params.row_size"
+_rw_first = "params.first"
+_rw_count = "params.count"
+_rw_dp0 = "params.dp0.index"
+_rw_fp0 = "params.fp0.index"
+_rw_fs0 = "params.fs0.index"
+
+[[object]]
+path = "build/rows-info-dn2.dko.json"
+sources = ["src/cf/rows-info-dn2.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[object.externs]
+_rw_table = "pf_table"
+_rw_rows = "params.rows"
+_rw_row_size = "params.row_size"
+_rw_first = "params.first"
+_rw_count = "params.count"
+_rw_dp0 = "params.dp0.index"
+_rw_fp0 = "params.fp0.index"
+_rw_fs0 = "params.fs0.index"
+
+# The table of this module, in the image's info table (`dkrt_info_table`), and the capacity limits it reserves, as `cap_<kind>` entries: each
+# points at the u32 word that holds the limit, so the planner knows the limit before any service file is loaded (docs/PATCHING.md).
+[[info]]
+name = "rows_info"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "cap_machine_rows"
+symbol = "rows_info + 156"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "cap_param_rows"
+symbol = "rows_info + 160"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "cap_page_rows"
+symbol = "rows_info + 164"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "cap_send_slots"
+symbol = "rows_info + 168"
+devices = ["dt2", "dn2"]
 
 # ---- anchor rules -------------------------------------------------------------------------------------------------------
 

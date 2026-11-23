@@ -202,6 +202,7 @@ arena_bytes = 524288
 stage_bytes = 131072
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)
 send_slots = 2 # of them effects that run on a send bus (core/fx send route, the send page of the FX key: one knob each; at most the entries of [fx] send_indices)
+send_rows = 2  # parameter rows core/rows reserves for the send page's cells (the two devices share the count, so the parameter table has one layout); at least send_slots
 param_rows = 16
 page_rows = 0
 

@@ -358,6 +358,22 @@ fn a_limit_above_the_contract_maximum_is_refused() {
 }
 
 #[test]
+fn a_send_page_cell_needs_a_parameter_row() {
+    let (first, second) = device_texts();
+    // fewer reserved rows than send slots: a cell would have no row
+    let bad = first.replace("send_rows = 2", "send_rows = 1");
+    assert_ne!(bad, first);
+    let e = Facts::from_texts([bad.as_str(), second.as_str()])
+        .unwrap_err()
+        .0;
+    assert!(e.contains("send_rows") && e.contains("send_slots"), "{e}");
+    // as many rows as slots is a device choice (the second device has one slot: one row is enough)
+    let one = second.replace("send_rows = 2", "send_rows = 1");
+    assert_ne!(one, second);
+    Facts::from_texts([first.as_str(), one.as_str()]).unwrap();
+}
+
+#[test]
 fn machine_rows_are_the_run_time_machine_types_of_types_toml() {
     let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
         return;
@@ -418,19 +434,11 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
         return;
     };
     let m = lib.get("core/fxpages").unwrap();
-    let rows = m
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "params" && e.id.starts_with("fp"))
-        .count() as u64;
-    // and one more row for each send cell of the send page (`[limits] send_slots`, finding 64)
-    let send_rows = m
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "params" && e.id.starts_with("fs"))
-        .count() as u64;
+    // the rows themselves are core/rows' (the count of each block against the device file: tests/rows.rs)
+    assert!(
+        m.manifest.entry.iter().all(|e| e.registry != "params"),
+        "core/fxpages reserves no parameter rows"
+    );
     assert!(
         m.manifest
             .module
@@ -445,7 +453,8 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
         )
         .unwrap();
         let slots = t["limits"]["fx_slots"].as_integer().unwrap() as u64;
-        assert_eq!(rows, 8 * slots, "{file}");
+        let rows = 8 * slots;
+        let send_rows = t["limits"]["send_rows"].as_integer().unwrap() as u64;
         let idx = t["fx"]["value_indices"].as_array().unwrap();
         assert!(
             idx.len() as u64 >= rows,
@@ -456,7 +465,7 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
         if let Some(track_page) = t["fx"].get("track_page").and_then(|v| v.as_integer()) {
             let send = t["limits"]["send_slots"].as_integer().unwrap() as u64;
             let n = t["fx"]["send_indices"].as_array().unwrap().len() as u64;
-            // the rows are shared by both devices (as many as the device with the most send cells); a device uses n of them
+            // the device reserves send_rows rows (both devices the same number); it uses n of them
             assert!(
                 track_page > 0 && send <= n && n <= send_rows,
                 "{file}: {send} {n} {send_rows}"
@@ -532,11 +541,6 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
             voices(dev),
             l["machine_rows"].as_integer().unwrap() as u64,
             "{dev} voice rows of core/dyndsp"
-        );
-        assert_eq!(
-            count("params", dev),
-            l["param_rows"].as_integer().unwrap() as u64,
-            "{dev} parameter rows of core/dynreg"
         );
         assert_eq!(
             count("pages", dev),

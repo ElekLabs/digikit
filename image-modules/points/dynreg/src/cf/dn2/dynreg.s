@@ -111,7 +111,7 @@ dynreg_info:
     .long   _dr_p_first                 | 92 params.first
     .long   _dr_p_count                 | 96 params.count
     .long   _dr_p_dyn0                  | 100 code of the first reserved parameter
-    .long   16                          | 104 reserved parameters
+    .long   LIMIT_PARAM_ROWS            | 104 reserved parameters
     .long   60                          | 108 parameter table row size
     .long   8                           | 112 offset of `template` in a params.rows row
     .long   dynreg_empty                | 116 address of an empty string

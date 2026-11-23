@@ -364,6 +364,12 @@ devices = ["dt2"]
 patchkit refuses an entry for an unknown registry, an unknown or missing field, a value that does not fit, a
 `cstr` that is too long and an id used twice.
 
+**Reservations (`count`).** A framework that makes room for rows of run-time modules states the number once: `count = "8 * fx_slots"` on an
+`[[entry]]` stands for `<id>0`, `<id>1`, ... on each device in `devices` (so `params.fp0.index` is the first), the count an expression over the
+device file's `[limits]` (`param_rows`, `send_rows`, `fx_slots`, ...; [device data](../docs/design/device-data.md)). The expansion happens when the manifest
+loads, so everything after it sees plain entries. `devices` is required; a count of 0 reserves nothing; a negative count or an unknown limit is an
+error. `core/rows` reserves the parameter rows this way.
+
 ### Machine rows
 
 A patched-in machine is written as `[[entry]]` rows (`machines`, `params`, `pages`, `voices`), as in the examples below. The C declaration macros
@@ -517,4 +523,4 @@ Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 The frameworks themselves are ordinary modules: `image-modules/points/machines/` (about 24 ColdFire anchors, six copied
 tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `runtime/platform/rows/` and
 `image-modules/points/dsp-voice/`. Their routines are unit-tested on the emulated ColdFire core (`tools/patchkit/pk_cfunit.py`,
-`image-modules/points/machines/tests/test_pk_machines_fw.py`, `runtime/platform/rows/tests/test_pk_params_fw.py`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).
+`image-modules/points/machines/tests/test_pk_machines_fw.py`; the parameter table: `packages/patchkit/tests/rows.rs`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).

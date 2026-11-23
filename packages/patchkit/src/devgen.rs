@@ -191,6 +191,7 @@ struct Limits {
     stage_bytes: u64,
     fx_slots: u64,
     send_slots: u64,
+    send_rows: u64,
     param_rows: u64,
     page_rows: u64,
 }
@@ -470,10 +471,8 @@ struct LimitsF {
     stage_bytes: u64,
     fx_slots: u64,
     send_slots: u64,
-    // Not written into the generated files (the runtime reads the rows from core/dynreg's device object): checked against the maxima only.
-    #[allow(dead_code)]
+    send_rows: u64,
     param_rows: u64,
-    #[allow(dead_code)]
     page_rows: u64,
 }
 #[derive(Debug)]
@@ -673,6 +672,7 @@ impl Facts {
                             stage_bytes: l.stage_bytes,
                             fx_slots: l.fx_slots,
                             send_slots: l.send_slots,
+                            send_rows: l.send_rows,
                             param_rows: l.param_rows,
                             page_rows: l.page_rows,
                         },
@@ -775,6 +775,13 @@ fn check_limits(
     }
     if l.modules == 0 {
         return Err(err!("{short}: [limits] modules must be at least 1"));
+    }
+    if l.send_rows < l.send_slots {
+        return Err(err!(
+            "{short}: [limits] send_rows ({}) is below send_slots ({}): a send cell needs a parameter row",
+            l.send_rows,
+            l.send_slots
+        ));
     }
     Ok(())
 }
@@ -1756,6 +1763,21 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "LIMIT_FX_SLOTS",
             e.limits.fx_slots,
             "[limits] fx_slots (effects in the chain: CAPACITY's limit and the free effect rows of core/dynfx)",
+        ),
+        c(
+            "LIMIT_PARAM_ROWS",
+            e.limits.param_rows,
+            "[limits] param_rows (parameter rows the run-time machines fill: the first block of core/rows)",
+        ),
+        c(
+            "LIMIT_PAGE_ROWS",
+            e.limits.page_rows,
+            "[limits] page_rows (machine page rows; 0 on a device that keeps the knobs in the machine row)",
+        ),
+        c(
+            "LIMIT_SEND_ROWS",
+            e.limits.send_rows,
+            "[limits] send_rows (parameter rows reserved for the cells of the send page)",
         ),
         c(
             "LIMIT_STAGE_BYTES",

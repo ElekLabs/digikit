@@ -1,0 +1,136 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".rodata",
+   "symbol": "_rw_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".rodata",
+   "symbol": "_rw_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".rodata",
+   "symbol": "_rw_row_size",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".rodata",
+   "symbol": "_rw_first",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".rodata",
+   "symbol": "_rw_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".rodata",
+   "symbol": "_rw_dp0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 64,
+   "section": ".rodata",
+   "symbol": "_rw_fp0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".rodata",
+   "symbol": "_rw_fs0",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "524f57530000000100000002000000000000003c000000000000000000000008000000000000000000000003000000010000000000000010000000d500000002000000000000001800000075000000030000000000000002000000750000002a000000000000010800000100000001010000010200000014000000180000001c0000002000000024000001030000002c00000104000000340000003800000008000000100000000800000001",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 172
+  }
+ ],
+ "source_sha256": "52a4a252d59f806520b521f1145eeaf42156888515922b8803909bafd9bc5e2e",
+ "symbols": [
+  {
+   "global": true,
+   "name": "_rw_count",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_dp0",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_fp0",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_fs0",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_row_size",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_table",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "rows_info",
+   "section": ".rodata",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "0",
+  "isa_check": "7aea6b48cf2bc654bad77e4f4cdf60da794451a4a43234a9c241ab53b4ce37d9",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

@@ -1458,9 +1458,8 @@ the behaviour and the evidence above stand; what changed is who builds the table
   function answers 2 for type 5 and 1 for 0..4 before it), so `bcs` with the raised bound changes the answer for added types
   only; no stock type changes.
 - **Unit tests:** `tools/patchkit/pk_cfunit.py` runs one hook routine on the native core with chosen registers, flags and stack (tails and
-  exits are stubs that report where the routine left); `tests/patchkit/test_pk_machines_fw.py`, `test_pk_machines_dn2_fw.py`,
-  `test_pk_params_fw.py`; the manifest row expressions are evaluated by `tools/patchkit/pk_expr.py` and compared with the old Rust
-  row builders' formulas. Integration: `packages/patchkit/tests/frameworks.rs` (real modules on the real images).
+  exits are stubs that report where the routine left); `tests/patchkit/test_pk_machines_fw.py`, `test_pk_machines_dn2_fw.py`; the parameter table's row expressions and write ops, its `pf_t2` routine (on the ColdFire core of the `coldfire` crate) and `rows_info` are
+  checked by `packages/patchkit/tests/rows.rs` against an independent row builder. Integration: `packages/patchkit/tests/frameworks.rs` (real modules on the real images).
 - **Hot-path cost matters to the proofs [D]:** the Digitone II hooks on the frame builder (vector 191), the type reader and the
   type maps run for every audio block or parameter access. A first version saved registers before it knew the type was a
   stock one; the patched image then cold-booted half a DSP block (32 frames) off the stock timeline and the exact

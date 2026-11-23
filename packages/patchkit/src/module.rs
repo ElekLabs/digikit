@@ -207,6 +207,71 @@ impl Manifest {
         Ok(())
     }
 
+    /// Turn each reservation (`[[entry]] ... count = EXPR`) into its entries: `<id>0 ..= <id>(n-1)` for each device the entry names, in
+    /// place, with n from the device file's `[limits]`. The count is device data; the manifest holds one line for a block of rows.
+    fn expand_reservations(&mut self) -> Result<()> {
+        struct Limits<'a>(&'a crate::devdata::DeviceInfo);
+        impl crate::expr::Env for Limits<'_> {
+            fn symbol(&self, name: &str) -> Option<i64> {
+                self.0.limit_of(name).map(|v| v as i64)
+            }
+            fn field(&self, _: &str) -> Option<i64> {
+                None
+            }
+            fn image(&self, _: &str, _: i64, _: u8) -> Result<i64> {
+                Err(err!("a reservation count reads device limits only"))
+            }
+        }
+        if self.entry.iter().all(|e| e.count.is_none()) {
+            return Ok(());
+        }
+        let who = self.module.id.clone();
+        let mut out = Vec::with_capacity(self.entry.len());
+        for e in std::mem::take(&mut self.entry) {
+            let Some(count) = &e.count else {
+                out.push(e);
+                continue;
+            };
+            if e.devices.is_empty() {
+                return Err(err!(
+                    "{who}: reservation {}.{} names no devices (its count is a device limit)",
+                    e.registry,
+                    e.id
+                ));
+            }
+            for dev in &e.devices {
+                let info = crate::devdata::by_short(dev).ok_or_else(|| {
+                    err!(
+                        "{who}: reservation {}.{}: unknown device {dev}",
+                        e.registry,
+                        e.id
+                    )
+                })?;
+                let n = crate::expr::eval_str(&count.text(), &Limits(info)).map_err(|x| {
+                    err!("{who}: reservation {}.{} on {dev}: {x}", e.registry, e.id)
+                })?;
+                if n < 0 {
+                    return Err(err!(
+                        "{who}: reservation {}.{} on {dev}: count {n} is negative",
+                        e.registry,
+                        e.id
+                    ));
+                }
+                for k in 0..n {
+                    out.push(EntryDef {
+                        registry: e.registry.clone(),
+                        id: format!("{}{k}", e.id),
+                        devices: vec![dev.clone()],
+                        count: None,
+                        fields: e.fields.clone(),
+                    });
+                }
+            }
+        }
+        self.entry = out;
+        Ok(())
+    }
+
     /// What a `role = "service"` module provides (`None` for any other role). SDK services keep their generated exports.
     pub fn provided_service(&self) -> Result<Option<crate::dkm::Provided>> {
         let id = &self.module.id;
@@ -792,6 +857,10 @@ pub struct EntryDef {
     pub id: String,
     #[serde(default)]
     pub devices: Vec<String>,
+    /// A reservation: the entry stands for `<id>0 ..= <id>(n-1)` on each of its `devices`, n being this expression over the device file's
+    /// `[limits]` (`8 * fx_slots`). Expanded when the manifest loads (`Manifest::expand_reservations`); no entry keeps it afterwards.
+    #[serde(default)]
+    pub count: Option<ExprSrc>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, toml::Value>,
 }
@@ -1078,8 +1147,9 @@ impl Module {
         read: &dyn Fn(&str) -> Result<String>,
         lenient: bool,
     ) -> Result<Module> {
-        let manifest: Manifest = toml::from_str(manifest_text)?;
+        let mut manifest: Manifest = toml::from_str(manifest_text)?;
         manifest.validate_header()?;
+        manifest.expand_reservations()?;
         let mut objects = vec![];
         let mut all = manifest_text.to_string();
         for o in &manifest.object {
@@ -1855,6 +1925,84 @@ mod manifest_tests {
         let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n").unwrap_err();
         assert!(e.to_string().contains("declared twice"), "{e}");
         assert!(load("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp-up\"\n").is_ok());
+    }
+
+    fn reserved(extra: &str) -> Result<Vec<EntryDef>> {
+        let mut m = load(extra)?;
+        m.expand_reservations()?;
+        Ok(m.entry)
+    }
+
+    /// Short names of the devices whose file reserves `limit` rows.
+    fn devices_with(limit: &str, at_least: u64) -> Vec<&'static str> {
+        crate::devdata::all()
+            .iter()
+            .filter(|d| d.limit_of(limit).is_some_and(|v| v >= at_least))
+            .map(|d| d.short.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_reservation_is_one_entry_for_each_row_of_the_device_limit() {
+        let devs = devices_with("fx_slots", 1);
+        assert!(devs.len() >= 2);
+        let list = devs
+            .iter()
+            .map(|d| format!("\"{d}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let rows = reserved(&format!(
+            "[[entry]]\nregistry = \"params\"\nid = \"fp\"\ncount = \"8 * fx_slots\"\ntemplate = 117\ndevices = [{list}]\n\
+             [[entry]]\nregistry = \"params\"\nid = \"keep\"\ntemplate = 1\n"
+        ))
+        .unwrap();
+        for dev in devs {
+            let mine: Vec<_> = rows
+                .iter()
+                .filter(|e| e.id.starts_with("fp"))
+                .filter(|e| e.devices == [dev])
+                .collect();
+            let n = 8 * crate::devdata::by_short(dev)
+                .unwrap()
+                .limit_of("fx_slots")
+                .unwrap() as usize;
+            assert_eq!(mine.len(), n, "{dev}");
+            // numbered in order, the other fields of the line on every row, no count left
+            assert!(
+                mine.iter()
+                    .enumerate()
+                    .all(|(k, e)| e.id == format!("fp{k}")
+                        && e.count.is_none()
+                        && e.fields["template"].as_integer() == Some(117))
+            );
+        }
+        // an entry without a count passes through, in place
+        assert_eq!(rows.last().unwrap().id, "keep");
+        // a limit of 0 reserves nothing (a device without the feature)
+        let none = crate::devdata::all()
+            .iter()
+            .find(|d| d.limit_of("send_rows") == Some(0))
+            .expect("a device without send rows")
+            .short
+            .clone();
+        assert!(reserved(&format!("[[entry]]\nregistry = \"params\"\nid = \"fs\"\ncount = \"send_rows\"\ndevices = [\"{none}\"]\n")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_reservation_needs_devices_known_limits_and_a_count_of_zero_or_more() {
+        let dev = devices_with("fx_slots", 1)[0];
+        let line = |count: &str, devices: &str| {
+            reserved(&format!(
+                "[[entry]]\nregistry = \"params\"\nid = \"fp\"\ncount = \"{count}\"\n{devices}"
+            ))
+            .unwrap_err()
+            .to_string()
+        };
+        assert!(line("fx_slots", "").contains("names no devices"));
+        let on = format!("devices = [\"{dev}\"]\n");
+        assert!(line("no_such_limit", &on).contains("unknown symbol no_such_limit"));
+        assert!(line("fx_slots", "devices = [\"zz9\"]\n").contains("unknown device zz9"));
+        assert!(line("fx_slots - 9", &on).contains("negative"));
     }
 }
 

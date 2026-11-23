@@ -41,6 +41,8 @@ pub struct DeviceInfo {
     pub modules: Option<u64>,
     /// `[limits] fx_slots`: effects the device's chain takes (at most the contract's `DK_FX_MAX`).
     pub fx_slots: Option<u64>,
+    /// Every key of `[limits]` (`param_rows`, `send_rows`, ...): what a reservation's `count` expression reads.
+    pub limits: BTreeMap<String, u64>,
     /// `[patch_sets]`: named module sets as roots (the modules they require are added), e.g. `emulator` and `device`.
     pub patch_sets: BTreeMap<String, Vec<String>>,
     /// `[board] dsp_clock_hz` and `dsp_blocks_per_second`: the DSP block length the budget starts from.
@@ -163,6 +165,11 @@ impl DeviceInfo {
         })
     }
 
+    /// Any key of the device file's `[limits]`; `None` when the file has no such key.
+    pub fn limit_of(&self, name: &str) -> Option<u64> {
+        self.limits.get(name).copied()
+    }
+
     /// A device limit by the name a registry's `limit` key uses; `None` for an unknown name or a device file without it.
     pub fn limit(&self, name: &str) -> Option<u64> {
         match name {
@@ -225,10 +232,7 @@ struct FirmwareDoc {
     dsp: Option<toml::Value>,
 }
 #[derive(Deserialize)]
-struct LimitsDoc {
-    modules: Option<u64>,
-    fx_slots: Option<u64>,
-}
+struct LimitsDoc(BTreeMap<String, u64>);
 #[derive(Deserialize)]
 struct Dev {
     name: String,
@@ -453,8 +457,9 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
                     })?)
                 }
             },
-            modules: f.limits.as_ref().and_then(|l| l.modules),
-            fx_slots: f.limits.and_then(|l| l.fx_slots),
+            modules: f.limits.as_ref().and_then(|l| l.0.get("modules").copied()),
+            fx_slots: f.limits.as_ref().and_then(|l| l.0.get("fx_slots").copied()),
+            limits: f.limits.map(|l| l.0).unwrap_or_default(),
             patch_sets: f.patch_sets,
             dsp_clock_hz: f.board.as_ref().and_then(|b| b.dsp_clock_hz),
             dsp_blocks_per_second: f.board.as_ref().and_then(|b| b.dsp_blocks_per_second),

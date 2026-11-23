@@ -140,7 +140,8 @@ The runtime object is built once and used on every device, so it has no device v
 (`DeviceProfile::by_id(core.device_id())`, `abi/src/profiles.rs`; the `rust-profiles` kind writes the table from the same facts as the object, so the two
 cannot differ). The sizes of the runtime's static arrays (`ARENA_BYTES`, `STAGE_BYTES`, `MACHINE_ROWS` and the selection's `SEL_MAX`) are constants of
 `abi.toml`; `gen` checks that the device files' `[limits]` agree with them, and the runtime checks at start that the device's machine type count fits
-(`dev::valid`).
+(`dev::valid`). The parameter rows of the image are the file's `[limits]` too: `core/rows` reserves `param_rows` rows for run-time machines, `8 * fx_slots` for the
+effect pages and `send_rows` (at least `send_slots`) for the send page, and generates `rows_info` and the cap words from them (`LIMIT_PARAM_ROWS`, `LIMIT_PAGE_ROWS`, `LIMIT_SEND_ROWS`).
 
 `uses = [...]` is required on the kinds `gas` and `sharc`: it lists the constant names the module reads.
 A trailing `*` matches a family by prefix (`FX_VALUE_*`). The generator writes only the listed names, in its own order. It refuses:
