@@ -8,6 +8,7 @@
         "{workspaceRoot}/Cargo.toml",
         "{workspaceRoot}/Cargo.lock",
         "{workspaceRoot}/runtime/platform/ui/src/settings_rows.{c,h}",
+        "{workspaceRoot}/runtime/platform/ui/src/dialog_slot.{c,h}",
         "{workspaceRoot}/runtime/platform/ui/src/view_pool.{c,h}",
         "{workspaceRoot}/runtime/platform/ui/src/key_map.{c,h}",
         "{workspaceRoot}/runtime/platform/ui/src/key_defer.{c,h}",

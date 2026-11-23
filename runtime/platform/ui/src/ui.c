@@ -15,8 +15,9 @@
  * slot 4 (paint) and, for a list, slot 2 (key) replaced; the replacement calls the stock thunk for everything it does not handle.
  *
  * Dialogs. ConfirmWindow and MultiChoiceWindow are make_shared blocks built by hand (0x10 control block, then the object), pushed
- * on the Brain's view manager. The firmware frees them in its sweep. One dialog at a time: g_open holds the serial of the open
- * one; the answer callback clears it, and so does the detach callback of the window (a choice cancelled with NO has no answer).
+ * on the Brain's view manager. The firmware frees them in its sweep. One dialog at a time: g_dialog (dialog_slot.h) holds the serial of the open
+ * one, who asked for it and its answer function; the answer callback frees the slot, and so does the detach callback of the window (a choice cancelled
+ * with NO has no answer). The window keeps no pointer into the asker's code: when the asker is unloaded the slot drops its answer function.
  *
  * Module RAM is written only by this code, never by the firmware (the menu proof checks stray writes). */
 #include <stdint.h>
@@ -27,6 +28,7 @@
 #include "dk_ui_core.h"
 #include "tick.h"
 #include "settings_rows.h"
+#include "dialog_slot.h"
 #include "view_pool.h"
 #include "canvas_map.h"
 #include "text_input.h"
@@ -816,18 +818,22 @@ static void toggle_check(dk_ui_menu *m, int row_)
         m->d->check(m->d->arg, row_, on);
 }
 
+/* The owner of what a module or a service file hands in: its handle, which dk_ui_open made from the owner id of its record (and dk_ui_core_handle for core modules). */
+static uintptr_t owner_of(dk_ui *ui)
+{
+    return (uintptr_t)ui;
+}
+
 /* ---- dialogs ---------------------------------------------------------------------------------------------------------- */
 
-static uint32_t g_open; /* serial of the open dialog, 0: none */
+static ui_dialog_slot g_dialog; /* the one open dialog */
 static uint32_t g_serial;
 
-/* the answer: the window closed itself first, then runs this */
+/* the answer: the window closed itself first, then the slot frees itself and runs the asker's function if the asker is still loaded */
 static void inv_answer(const uint32_t *any, int arg)
 {
-    g_open = 0;
-    void (*done)(void *, int) = (void (*)(void *, int))any[0];
-    if (done)
-        done((void *)any[1], arg);
+    (void)any;
+    ui_dialog_answer(&g_dialog, arg);
 }
 
 static void inv_answer_bool(const uint32_t *any, int arg)
@@ -838,8 +844,7 @@ static void inv_answer_bool(const uint32_t *any, int arg)
 /* the window left the view stack (detach, with the manager and the view as arguments): any way of closing ends the dialog */
 static void inv_detach(const uint32_t *any)
 {
-    if (g_open == any[0])
-        g_open = 0;
+    ui_dialog_detach(&g_dialog, any[0]);
 }
 
 static void on_detach(uint8_t *view, uint32_t serial)
@@ -887,8 +892,7 @@ static int show(uint8_t *blk, uint32_t serial)
 int32_t dk_ui_confirm(dk_ui *ui, const char *title, const char *text, dk_ui_confirm_fn *done,
                       void *arg)
 {
-    (void)ui;
-    if (g_open)
+    if (ui_dialog_is_open(&g_dialog))
         return -1;
     uint8_t *blk = new_block(0x7c, &fw_confirm_cb_vt);
     if (!blk)
@@ -900,14 +904,14 @@ int32_t dk_ui_confirm(dk_ui *ui, const char *title, const char *text, dk_ui_conf
     uint32_t st, sx;
     dk_fw_string_std_string_ctor(&st, t, &alloc);
     dk_fw_string_std_string_ctor(&sx, x, &alloc);
-    fn cb = make_fn((uint32_t)done, (uint32_t)arg, inv_answer_bool);
+    fn cb = make_fn(0, 0, inv_answer_bool);
     uint32_t serial = ++g_serial;
     dk_fw_window_confirm_ctor(blk + 0x10, &st, &sx, (const std_function *)&cb, 0);
     dk_fw_string_std_string_dtor(&sx);
     dk_fw_string_std_string_dtor(&st);
-    g_open = serial;
+    ui_dialog_begin(&g_dialog, serial, owner_of(ui), done, arg);
     if (show(blk, serial) != 0) {
-        g_open = 0;
+        ui_dialog_detach(&g_dialog, serial);
         return -1;
     }
     return 0;
@@ -916,8 +920,7 @@ int32_t dk_ui_confirm(dk_ui *ui, const char *title, const char *text, dk_ui_conf
 int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
                      dk_ui_choice_fn *done, void *arg)
 {
-    (void)ui;
-    if (g_open || !items || n <= 0 || n > MAX_CHOICE)
+    if (ui_dialog_is_open(&g_dialog) || !items || n <= 0 || n > MAX_CHOICE)
         return -1;
     uint8_t *blk = new_block(0xd8, &fw_choice_cb_vt);
     uint32_t *strs = (uint32_t *)fw_new(4 * (uint32_t)n);
@@ -933,16 +936,16 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
     uint32_t st;
     cut(buf, sizeof buf, title);
     dk_fw_string_std_string_ctor(&st, buf, &alloc);
-    fn cb = make_fn((uint32_t)done, (uint32_t)arg, inv_answer);
+    fn cb = make_fn(0, 0, inv_answer);
     uint32_t serial = ++g_serial;
     dk_fw_window_multichoice_ctor(blk + 0x10, vec, &st, (const std_function *)&cb, 1);
     dk_fw_string_std_string_dtor(&st);
     for (int i = 0; i < n; i++)
         dk_fw_string_std_string_dtor(&strs[i]);
     dk_fw_mem_free((uint8_t *)strs);
-    g_open = serial;
+    ui_dialog_begin(&g_dialog, serial, owner_of(ui), done, arg);
     if (show(blk, serial) != 0) {
-        g_open = 0;
+        ui_dialog_detach(&g_dialog, serial);
         return -1;
     }
     return 0;
@@ -962,12 +965,6 @@ int32_t dk_ui_toast(dk_ui *ui, const char *text)
 /* The timers (tick.h). One function, ui_poll, is on the runtime's per-pass list (dkrt_poll_add) while any timer runs: the UI loop calls it
    in the UI task, the task of every UI callback. The runtime's block clock (1500 per second) times the periods; without one the passes
    of the UI loop (about 120 per second) do. */
-/* The owner of what a module hands in: its handle, which dk_ui_open made from the module's owner id (and dk_ui_core_handle for core modules). */
-static uintptr_t owner_of(dk_ui *ui)
-{
-    return (uintptr_t)ui;
-}
-
 static ui_ticks g_ticks;
 static uint32_t g_passes;
 static int g_polling;
@@ -1045,6 +1042,7 @@ static void ui_owner_gone(uint32_t owner)
 {
     uintptr_t key = (uintptr_t)owner + 1;
     ui_rows_remove_owner(&g_rows, key);
+    ui_dialog_drop_owner(&g_dialog, key);
     ui_views_close_owner(&g_views, key);
     ui_ticks_remove_owner(&g_ticks, key);
     ui_defer_drop_owner(&g_defer, key);
@@ -1079,25 +1077,23 @@ void ui_settings_rows_tail(uint8_t *settings_menu)
                         (void *)g_rows.row[i].key);
 }
 
-/* The name of the loaded module whose owner handle this is (its record index + 1): what a SETTINGS row is keyed by, which a reload of the module gives again. */
-static void module_name_of(uintptr_t handle, char out[DK_UI_MODULE_NAME])
+/* The name of the record (a module or a service file) whose owner handle this is (its record index + 1): what a SETTINGS row is keyed by, which a reload of the
+   file gives again. Empty when the record is not loaded: ui_rows_add refuses a row with no name. */
+static void owner_name_of(uintptr_t handle, char out[DK_UI_MODULE_NAME])
 {
-    DkrtModule m;
+    uint8_t name[DK_UI_MODULE_NAME];
     out[0] = 0;
-    for (uint32_t i = 0; dkrt_module(i, &m) == 0; i++) {
-        if (m.ctx && (uintptr_t)dkrt_ctx_owner(m.ctx) + 1 == handle) {
-            for (uint32_t k = 0; k < DK_UI_MODULE_NAME; k++)
-                out[k] = (char)m.name[k];
-            out[DK_UI_MODULE_NAME - 1] = 0;
-            return;
-        }
-    }
+    if (handle == 0 || dkrt_record_name((uint32_t)(handle - 1), name) != 0)
+        return;
+    for (uint32_t k = 0; k < DK_UI_MODULE_NAME; k++)
+        out[k] = (char)name[k];
+    out[DK_UI_MODULE_NAME - 1] = 0;
 }
 
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
     char name[DK_UI_MODULE_NAME];
-    module_name_of(owner_of(ui), name);
+    owner_name_of(owner_of(ui), name);
     return ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text, open,
                        arg);
 }

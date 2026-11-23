@@ -41,7 +41,7 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
         overlay_remove: Some(overlay_remove),
     },
     provider: ProviderHooks { query: Some(provider_query) },
-    ui: UiHooks { settings_rows: Some(crate::package::menu::dk_app_settings_rows) },
+    ui: UiHooks { settings_rows: Some(crate::package::menu::dk_app_settings_rows), record_name: Some(record_name) },
 };
 
 /// The package's first-use setup (`init_once`): the package gets the resident table and the resident core gets the hooks. A resident table the package cannot use (`dkrt_abi::resident::check`) gives the
@@ -134,12 +134,23 @@ unsafe extern "C" fn command_run_registered(cmd: u32, seq: u32, body: *const u8,
 
 // ---- modules -------------------------------------------------------------------------------------------------------------
 
-/// A service file's context is not given out: the unload observers are for content modules.
+/// The owner of a live context: the record of a content module or of a service file.
 unsafe extern "C" fn ctx_owner(ctx: usize) -> i32 {
     match entry::ctx_owner(ctx as *mut u8) {
-        Some(rec) if rec < dkrt_abi::MAX_MODULES => rec as i32,
+        Some(rec) if rec < dkrt_abi::REC_MAX => rec as i32,
         _ => E_CONTRACT,
     }
+}
+
+/// The name of the loaded record `owner`, a module or a service file: its 32 bytes as the loader wrote them.
+unsafe extern "C" fn record_name(owner: u32, out: *mut u8) -> i32 {
+    let rec = owner as usize;
+    if rec >= dkrt_abi::REC_MAX || crate::package::loader::records::module(rec).used == 0 {
+        return dkrt_sdk::E_NOT_FOUND;
+    }
+    let name = &crate::package::loader::records::module(rec).name;
+    core::ptr::copy_nonoverlapping(name.as_ptr(), out, name.len());
+    dkrt_sdk::OK
 }
 
 unsafe extern "C" fn load_file(path: *const u8) -> i32 {

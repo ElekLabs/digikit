@@ -84,7 +84,7 @@ typedef struct dk_ui_menu_desc {
 dk_ui_menu *dk_ui_menu_new(dk_ui *ui, const dk_ui_menu_desc *desc);
 
 /* A choice of `n` items. `done(arg, index)` gets the index; NO closes the dialog without calling `done`. Returns 0 when shown, a negative code when not
-   (out of memory, or another dialog is open). `title` up to 80 characters. Context: ui. Since api 2.11. */
+   (out of memory, or another dialog is open). `title` and every item are cut to DK_UI_ROW - 1 (23) characters. Context: ui. Since api 2.11. */
 int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
                      dk_ui_choice_fn *done, void *arg);
 

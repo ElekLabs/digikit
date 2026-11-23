@@ -43,6 +43,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", ui_src.display());
     for f in [
         "settings_rows.c",
+        "dialog_slot.c",
         "view_pool.c",
         "key_defer.c",
         "key_map.c",

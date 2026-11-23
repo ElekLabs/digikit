@@ -62,14 +62,14 @@ int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *name, int 
     uint32_t i = 0, index = 0;
     if (!in_init)
         return DK_E_CONTEXT;
-    if (!text || !open)
+    if (!text || !open || !name || !name[0])
         return DK_E_CONTRACT;
     if (s->n == DK_UI_SETTINGS_ROWS)
         return DK_E_NOMEM;
     for (i = 0; i < s->n; i++)
         if (s->row[i].owner == owner)
             index++;
-    key = key_of(s, name ? name : "", index);
+    key = key_of(s, name, index);
     if (!key)
         return DK_E_NOMEM;
     r = &s->row[s->n];

@@ -288,5 +288,14 @@ pub(crate) unsafe fn ui_settings_rows(menu: *mut u8) {
     }
 }
 
+/// The name of the loaded record `owner` (core/ui keys what an owner holds by it). Default: `E_NOT_FOUND` (no package, a package built before the entry, or a null entry).
+pub(crate) unsafe fn ui_record_name(owner: u32, out: *mut u8) -> i32 {
+    if has_group(dkrt_abi::hooks::UI_RECORD_NAME_SINCE) {
+        call!(ui.record_name(owner, out), E_NOT_FOUND)
+    } else {
+        E_NOT_FOUND
+    }
+}
+
 #[cfg(test)]
 mod tests;

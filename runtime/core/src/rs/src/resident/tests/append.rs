@@ -149,11 +149,15 @@ fn a_missing_group_is_refused_by_name() {
 #[test]
 fn the_ui_hooks_are_the_last_group_of_the_package_hooks() {
     use core::mem::{offset_of, size_of};
-    use dkrt_abi::hooks::{PackageHooks, ProviderHooks, UiHooks, UI_HOOKS_SINCE};
+    use dkrt_abi::hooks::{PackageHooks, ProviderHooks, UiHooks, UI_HOOKS_SINCE, UI_RECORD_NAME_SINCE};
     assert_eq!(offset_of!(PackageHooks, provider) + size_of::<ProviderHooks>(), offset_of!(PackageHooks, ui));
     assert_eq!(offset_of!(PackageHooks, ui) + size_of::<UiHooks>(), size_of::<PackageHooks>());
     assert_eq!(UI_HOOKS_SINCE, 3, "the group came with table minor 3 (RC2s-3)");
     assert!(RESIDENT_MINOR >= UI_HOOKS_SINCE);
+    // minor 4 appended `record_name` after `settings_rows` inside that group, so a minor-3 package's `ui` group is a prefix of the one the core reads
+    assert_eq!(UI_RECORD_NAME_SINCE, 4, "the entry came with table minor 4 (E1 step 1)");
+    assert_eq!(offset_of!(UiHooks, settings_rows) + size_of::<Option<unsafe extern "C" fn(*mut u8)>>(), offset_of!(UiHooks, record_name));
+    assert_eq!(offset_of!(UiHooks, record_name) + size_of::<Option<unsafe extern "C" fn(u32, *mut u8) -> i32>>(), size_of::<UiHooks>());
 }
 
 /// `links` is the group that version 1.1 appended (RC2s-2 step c), `host_dir` the one of 1.2 (the host directory) and `exports` the one of 1.3 (the menu's calls, RC2s-3): the
@@ -162,7 +166,7 @@ fn the_ui_hooks_are_the_last_group_of_the_package_hooks() {
 #[test]
 fn the_appended_groups_are_the_last_ones_so_an_older_package_is_a_prefix() {
     use core::mem::{offset_of, size_of};
-    assert_eq!(RESIDENT_MINOR, 3, "this test is about the appends of 1.1 to 1.3: a later minor appends after `exports` and needs its own case");
+    assert_eq!(RESIDENT_MINOR, 4, "this test is about the appends of 1.1 to 1.3; minor 4 appended only an entry to the `ui` group of `PackageHooks` (above): a later minor that appends to this table after `exports` needs its own case");
     let pointer = size_of::<*const ()>();
     assert_eq!(offset_of!(ResidentTable, links) + pointer, offset_of!(ResidentTable, host_dir));
     assert_eq!(offset_of!(ResidentTable, host_dir) + pointer, offset_of!(ResidentTable, exports));

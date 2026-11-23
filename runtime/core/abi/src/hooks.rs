@@ -193,12 +193,18 @@ pub struct ProviderHooks {
 /// group the package predates (`hooks.rs` of the runtime crate), so the entry has its default there.
 pub const UI_HOOKS_SINCE: u16 = 3;
 
-/// What `core/ui` asks of the package: the rows the DIGIKIT menu adds to the SETTINGS rebuild.
+/// The first resident table minor whose package has `UiHooks::record_name`: the `ui` group of an older package ends before it, so the core does not read the entry there.
+pub const UI_RECORD_NAME_SINCE: u16 = 4;
+
+/// What `core/ui` asks of the package: the rows the DIGIKIT menu adds to the SETTINGS rebuild, and the name of a record.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct UiHooks {
     /// Add the app's rows to the stock SETTINGS menu `menu` (the menu object the rebuild's hook gets). A null entry adds nothing: the stock menu stays as it is.
     pub settings_rows: Option<unsafe extern "C" fn(menu: *mut u8)>,
+    /// The name of the loaded record `owner` (a module or a service file) into `out` (32 bytes, NUL padded): 0, or `E_NOT_FOUND` for a record that is not loaded. Appended with
+    /// table minor `UI_RECORD_NAME_SINCE`.
+    pub record_name: Option<unsafe extern "C" fn(owner: u32, out: *mut u8) -> i32>,
 }
 
 /// Every crossing from the resident core into the system package, by owner.
