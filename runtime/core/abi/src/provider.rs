@@ -14,6 +14,7 @@
 mod consumer;
 mod contract;
 mod declarations;
+mod enter;
 mod handle;
 mod parts;
 mod row;
@@ -24,6 +25,7 @@ mod word_sink;
 pub use consumer::{Consumer, ConsumerId, Records as ConsumerRecords};
 pub use contract::Provider;
 pub use declarations::{Declarations, Limit, MAX_ENTRIES, MAX_RESOURCES};
+pub use enter::{Enter, Plain};
 pub use handle::ProviderHandle;
 pub use parts::{Describe, DspPart, Query, Records, Ticker};
 pub use row::{

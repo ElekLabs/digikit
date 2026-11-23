@@ -48,6 +48,18 @@ What goes where (copy this split):
 
 - A failed start leaves nothing to drop: write the state fully before returning `Ok`, or return `Err` without partial state (the cell stays empty and `stop` never runs on it).
 
+Re-entry (every service):
+
+- Every call into the owner runs under its busy state: the part functions of the tables (through the `Enter` guard that `service!` gives them, `Owner::run`), `DK_SVC_OWNER.with`
+  and `DK_SVC_OWNER.post`. While one runs, a second `&mut` to the object is never formed: a nested `with` or part call is refused (`None`, or the part's refusal such as `E_BUSY`;
+  counted in `DK_SVC_OWNER.refused()`).
+- A callback that must still reach the object (a pool event fired inside `tick`, say) is an event. The service adopts the part `Reentry` (`parts = [.., Reentry]`): `type Event: Copy`,
+  `const QUEUE: usize` (how many wait) and `fn apply(&mut self, event)`. The callback calls `DK_SVC_OWNER.post(event)`: idle, it runs at once; busy, it is queued and `Owner` runs it
+  after the outer call returns, in order, in the same task, before the owner is idle. A full queue is `Post::Full`, counted in `refused()`, never silent. No heap: the queue is
+  `N` slots in the cell. A service with no such callback adopts nothing and pays one flag.
+- The busy flag belongs to the UI task. The I/O task and interrupts never go through the owner (they have no way to wait); a job that runs there works on state it owns apart
+  from the object, or its service says why its access is safe.
+
 Steps for a new service:
 
 1. The owner file `src/<name>.rs`: private state, `Provider` (`start_in`, `detach`) and the other parts in one `impl` block each.

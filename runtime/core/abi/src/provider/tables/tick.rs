@@ -1,4 +1,5 @@
 use crate::core_api::CoreApi;
+use crate::provider::{Enter, Plain};
 use crate::provider::{Provider, Ticker};
 use core::ffi::c_void;
 
@@ -17,14 +18,21 @@ unsafe impl Sync for TickV1 {}
 impl TickV1 {
     /// The table of owner object `P` over core `C`.
     pub const fn of<P: Provider<C> + Ticker<C>, C: CoreApi + 'static>() -> TickV1 {
-        TickV1 { tick: tick::<C, P> }
+        Self::of_in::<P, C, Plain>()
+    }
+
+    /// As `of`, with the way a function reaches the instance: `G` (`Enter`; the service file's `service!` gives the owner's guard).
+    pub const fn of_in<P: Provider<C> + Ticker<C>, C: CoreApi + 'static, G: Enter<P>>() -> TickV1 {
+        TickV1 {
+            tick: tick::<C, P, G>,
+        }
     }
 }
 
-unsafe extern "C" fn tick<C: CoreApi, P: Provider<C> + Ticker<C>>(
+unsafe extern "C" fn tick<C: CoreApi, P: Provider<C> + Ticker<C>, G: Enter<P>>(
     inst: *mut c_void,
     core: *const c_void,
     phase: u32,
 ) {
-    (*(inst as *mut P)).tick(&*(core as *const C), phase)
+    G::enter(inst, (), |p: &mut P| p.tick(&*(core as *const C), phase))
 }

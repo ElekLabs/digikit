@@ -17,7 +17,7 @@ macro_rules! hook_device {
 
 /// The glue of a service file that provides a `ProviderRow` (RC3): `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], hooks = [...], fills = [...],
 /// exports = ..., tick = f)` for an owner object `Shortcuts: Provider<ImportCore>` that also implements the traits of the parts it names. `parts` lists the optional parts the
-/// object adopts (`Records`, `Dsp`, `Tick`, `Query`, `Describe`; the lifecycle part is always there); the later lists are those of the old form, all optional but in the same
+/// object adopts (`Records`, `Dsp`, `Tick`, `Query`, `Describe`; the lifecycle part is always there; `Reentry` has no table: it gives the owner an event queue, see `Reentry`); the later lists are those of the old form, all optional but in the same
 /// order. `parts = [..], hooks = [..], fills = [..]` with no `exports` is the form of a service with no `provided` imports (it declares no export). The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start` before the declarations, `fini`
 /// stops it) and the module record; `Query` also declares the resident query entry and points it at the part. `kinds` need the `Records` part.
 ///
@@ -136,22 +136,31 @@ macro_rules! service {
         );
 
         static DK_SVC_LIFECYCLE: $crate::dkrt_abi::provider::LifecycleV1 =
-            $crate::dkrt_abi::provider::LifecycleV1::of::<$svc, $crate::ImportCore>();
+            $crate::dkrt_abi::provider::LifecycleV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
         $($crate::service!(@part_table $part, $svc, DK_SVC_KINDS);)*
 
-        static DK_SVC_PARTS: &[$crate::dkrt_abi::provider::PartRef] = &[
+        static DK_SVC_PARTS: &[$crate::dkrt_abi::provider::PartRef] = &$crate::service!(@part_refs [
             $crate::dkrt_abi::provider::PartRef::new(
                 $crate::dkrt_abi::provider::PART_LIFECYCLE,
                 $crate::dkrt_abi::provider::LIFECYCLE_NEWEST,
                 &DK_SVC_LIFECYCLE as *const _ as *const (),
             ),
-            $($crate::service!(@part_ref $part)),*
-        ];
+        ] [$($part),*]);
         static DK_SVC_ROW: $crate::dkrt_abi::provider::ProviderRow =
             $crate::dkrt_abi::provider::ProviderRow::new($crate::name_hash($name), DK_SVC_PARTS);
 
-        /// The owner object: made by `start` in `init`, taken by `stop` in `fini`. The file's hooks reach it with `DK_SVC_OWNER.with(|s| ...)`.
-        pub static DK_SVC_OWNER: $crate::Owner<$svc> = $crate::Owner::new();
+        /// The owner object: made by `start` in `init`, taken by `stop` in `fini`. The file's hooks reach it with `DK_SVC_OWNER.with(|s| ...)`; every call into it,
+        /// the part functions of the tables too, runs under its busy state (`Owner`), and with the `Reentry` part a call that arrives meanwhile is queued with
+        /// `DK_SVC_OWNER.post(event)`.
+        pub static DK_SVC_OWNER: $crate::service!(@owner_ty $svc; [$($part),*]) = $crate::service!(@owner_new $svc; [$($part),*]);
+
+        /// The way the tables of this file reach the object: through the owner's busy state, so a part function never runs inside another call into the object.
+        struct DkSvcEnter;
+        impl $crate::dkrt_abi::provider::Enter<$svc> for DkSvcEnter {
+            unsafe fn enter<R>(_inst: *mut core::ffi::c_void, refused: R, f: impl FnOnce(&mut $svc) -> R) -> R {
+                DK_SVC_OWNER.run(refused, f)
+            }
+        }
 
         $crate::service!(@resident_query $svc, $($part),*);
 
@@ -232,26 +241,48 @@ macro_rules! service {
             unsafe { $crate::sys::dkc_panic() }
         }
     };
+    // the part list of the row: the lifecycle entry and one entry for each adopted part with a table; `Reentry` has none (it only gives the owner its event queue)
+    (@part_refs [$($acc:expr,)*] []) => {
+        [$($acc),*]
+    };
+    (@part_refs [$($acc:expr,)*] [Reentry $(, $rest:ident)*]) => {
+        $crate::service!(@part_refs [$($acc,)*] [$($rest),*])
+    };
+    (@part_refs [$($acc:expr,)*] [$p:ident $(, $rest:ident)*]) => {
+        $crate::service!(@part_refs [$($acc,)* $crate::service!(@part_ref $p),] [$($rest),*])
+    };
+    // the type of the owner cell and its constructor: `Reentry` among the parts gives it the event queue of the service
+    (@owner_ty $svc:ty; []) => { $crate::Owner<$svc> };
+    (@owner_ty $svc:ty; [Reentry $(, $rest:ident)*]) => {
+        $crate::Owner<$svc, <$svc as $crate::Reentry>::Event, { <$svc as $crate::Reentry>::QUEUE }>
+    };
+    (@owner_ty $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_ty $svc; [$($rest),*]) };
+    (@owner_new $svc:ty; []) => { $crate::Owner::new() };
+    (@owner_new $svc:ty; [Reentry $(, $rest:ident)*]) => {
+        $crate::Owner::with_events(<$svc as $crate::Reentry>::apply)
+    };
+    (@owner_new $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_new $svc; [$($rest),*]) };
     // the table of one adopted part (an item) and its entry in the part list (an expression)
+    (@part_table Reentry, $svc:ty, $kinds:expr) => {};
     (@part_table Records, $svc:ty, $kinds:expr) => {
         static DK_SVC_RECORDS: $crate::dkrt_abi::provider::RecordsV1 =
-            $crate::dkrt_abi::provider::RecordsV1::of::<$svc, $crate::ImportCore>($kinds);
+            $crate::dkrt_abi::provider::RecordsV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>($kinds);
     };
     (@part_table Dsp, $svc:ty, $kinds:expr) => {
         static DK_SVC_DSP: $crate::dkrt_abi::provider::DspV1 =
-            $crate::dkrt_abi::provider::DspV1::of::<$svc, $crate::ImportCore>();
+            $crate::dkrt_abi::provider::DspV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
     };
     (@part_table Tick, $svc:ty, $kinds:expr) => {
         static DK_SVC_TICK: $crate::dkrt_abi::provider::TickV1 =
-            $crate::dkrt_abi::provider::TickV1::of::<$svc, $crate::ImportCore>();
+            $crate::dkrt_abi::provider::TickV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
     };
     (@part_table Query, $svc:ty, $kinds:expr) => {
         static DK_SVC_QUERY: $crate::dkrt_abi::provider::QueryV1 =
-            $crate::dkrt_abi::provider::QueryV1::of::<$svc>();
+            $crate::dkrt_abi::provider::QueryV1::of_in::<$svc, DkSvcEnter>();
     };
     (@part_table Describe, $svc:ty, $kinds:expr) => {
         static DK_SVC_DESCRIBE: $crate::dkrt_abi::provider::DescribeV1 =
-            $crate::dkrt_abi::provider::DescribeV1::of::<$svc, $crate::ImportCore>();
+            $crate::dkrt_abi::provider::DescribeV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
     };
     (@part_ref Records) => {
         $crate::dkrt_abi::provider::PartRef::new(

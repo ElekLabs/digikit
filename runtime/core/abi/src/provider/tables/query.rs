@@ -1,5 +1,7 @@
 use crate::provider::Query;
+use crate::provider::{Enter, Plain};
 use core::ffi::c_void;
+use dkrt_sdk::E_BUSY;
 
 /// The newest version of the query part the core knows.
 pub const QUERY_NEWEST: u16 = 1;
@@ -17,11 +19,18 @@ unsafe impl Sync for QueryV1 {}
 impl QueryV1 {
     /// The table of owner object `P`.
     pub const fn of<P: Query>() -> QueryV1 {
-        QueryV1 { query: query::<P> }
+        Self::of_in::<P, Plain>()
+    }
+
+    /// As `of`, with the way a function reaches the instance: `G` (`Enter`; the service file's own `service!` gives the owner's guard).
+    pub const fn of_in<P: Query, G: Enter<P>>() -> QueryV1 {
+        QueryV1 {
+            query: query::<P, G>,
+        }
     }
 }
 
-unsafe extern "C" fn query<P: Query>(
+unsafe extern "C" fn query<P: Query, G: Enter<P>>(
     inst: *mut c_void,
     op: u32,
     req: *const u8,
@@ -39,7 +48,7 @@ unsafe extern "C" fn query<P: Query>(
     } else {
         core::slice::from_raw_parts_mut(reply, reply_len as usize)
     };
-    match (*(inst as *mut P)).query(op, req, reply) {
+    match G::enter(inst, Err(E_BUSY), |p: &mut P| p.query(op, req, reply)) {
         Ok(len) => len as i32,
         Err(status) => status,
     }
