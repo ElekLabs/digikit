@@ -493,6 +493,11 @@ fn the_saved_route_picked_again_while_its_reload_waits_says_it_is_pending() {
     routing.poll_job(&a.core, &mut ui);
     routing.pick_effect(&a.core, &mut ui, 0);
     routing.pick_route(&a.core, &mut ui, 1);
+    // the pick queues the reload again; the playing transport defers it again
+    a.core
+        .live_job
+        .set([2, E_PLAYING as u32, 7, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
     assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER ON STOP");
     // the deferred reload ran (the effect is torn down): the saved route is the applied one
     routing.effect_gone(&a.core, 1);
@@ -510,4 +515,27 @@ fn the_longest_toast_fits_the_line() {
         .put(route_text(Route::Master))
         .put(ON_STOP);
     assert_eq!(line.as_str(), "ABCDEFGHIJKL: MASTER ON STOP");
+}
+
+#[test]
+fn a_new_pick_after_the_runtime_gave_up_the_deferred_retry_queues_a_fresh_reload() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    a.core
+        .live_job
+        .set([2, E_PLAYING as u32, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER ON STOP");
+    // the runtime's retry gave up; the effect was never detached; the user picks again
+    let queued = a.core.live_calls.borrow().len();
+    routing.pick_effect(&a.core, &mut ui, 0);
+    routing.pick_route(&a.core, &mut ui, 1);
+    assert_eq!(
+        a.core.live_calls.borrow().len(),
+        queued + 1,
+        "a fresh reload"
+    );
+    assert_eq!(ui.toasts.len(), 1, "no stale ON STOP toast");
 }

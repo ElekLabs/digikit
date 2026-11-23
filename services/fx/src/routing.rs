@@ -244,17 +244,22 @@ impl Routing {
         };
         let mut line = Line::new();
         line.put(name_of(effect.id())).put(b": ");
-        if route != effect.saved {
+        // a deferred wait may be stale (the runtime gave up its retry at stop): a new pick runs the whole pick again and replaces it
+        let stale = matches!(self.waiting, Some(w) if w.deferred && w.owner == effect.owner && w.id() == effect.id());
+        if route != effect.saved || stale {
+            let changed = route != effect.saved;
             // SAFETY: as above
-            if unsafe { fxsend::save_route(core, self.row, route) } != 0 {
+            if changed && unsafe { fxsend::save_route(core, self.row, route) } != 0 {
                 ui.toast(line.put(b"NOT SAVED"));
                 return;
             }
             // SAFETY: as above; the path is NUL terminated and lives in the runtime's module table
             let queued = unsafe { core.live(LIVE_RELOAD, core.module_path(effect.owner)) };
             if queued == E_BUSY {
-                // SAFETY: as above; the old value was readable, so this put is the one that could fail only the same way
-                unsafe { fxsend::save_route(core, self.row, effect.saved) };
+                if changed {
+                    // SAFETY: as above; the old value was readable, so this put is the one that could fail only the same way
+                    unsafe { fxsend::save_route(core, self.row, effect.saved) };
+                }
                 ui.toast(&Line::of("BUSY: TRY AGAIN"));
                 return;
             }
