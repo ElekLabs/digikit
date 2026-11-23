@@ -31,3 +31,17 @@ test('every live session shares the snapshot store; only a mirror or fresh one g
   expect(mirror.runDir).toBeUndefined();
   expect(fresh.runDir).toBeUndefined();
 });
+
+test('a mirror or fresh session does not claim the cached run dir', async () => {
+  vi.resetModules();
+  const claim = vi.fn();
+  vi.doMock('../runtime/devices.ts', async (original) => {
+    const real = await original<typeof import('../runtime/devices.ts')>();
+    return { ...real, cachedRunDir: claim };
+  });
+  const { liveOptions: fresh } = await import('../runtime/live-options.ts');
+  fresh(device, { mirror: true });
+  fresh(device, { fresh: true });
+  expect(claim).not.toHaveBeenCalled();
+  vi.doUnmock('../runtime/devices.ts');
+});

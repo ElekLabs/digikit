@@ -153,7 +153,7 @@ export function cardSpecKey(
  * Write the read-only `card.key` of a card dir. The text goes to a unique temp file that is renamed onto the target, so two workers never
  * write the same file. If the rename fails because another writer won, the existing text must equal ours.
  */
-function writeIdFile(idFile: string, key: string): void {
+export function writeIdFile(idFile: string, key: string): void {
   const tmp = `${idFile}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
   fs.writeFileSync(tmp, key, { mode: 0o444 });
   try {

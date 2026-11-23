@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
+import { writeIdFile } from './card-cache.ts';
 import { cardStore, deviceProfile, expansionRegion, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
@@ -160,7 +161,7 @@ export function linkCard(base: string, dir: string, overlay: Buffer): string {
       .update(`${fs.readFileSync(baseId, 'utf8').trim()}\0${createHash('sha256').update(overlay).digest('hex')}`)
       .digest('hex')
       .slice(0, 32);
-    fs.writeFileSync(id, text);
+    writeIdFile(id, text);
   }
   return card;
 }
