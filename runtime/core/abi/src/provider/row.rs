@@ -135,11 +135,13 @@ impl CheckedRow<'_> {
         self.name
     }
 
-    /// Find the part with `tag`. `newest` is the newest version of that part the core knows.
+    /// Find the part with `tag`. `newest` is the newest version of that part the core knows; version 0 does not exist and is refused like a newer one.
     pub fn part(&self, tag: u32, newest: u16) -> PartLookup {
         match self.parts.iter().find(|p| p.tag == tag) {
             None => PartLookup::Missing,
-            Some(p) if p.version > newest => PartLookup::TooNew { version: p.version },
+            Some(p) if p.version == 0 || p.version > newest => {
+                PartLookup::TooNew { version: p.version }
+            }
             Some(p) => PartLookup::Found {
                 table: p.table,
                 version: p.version,

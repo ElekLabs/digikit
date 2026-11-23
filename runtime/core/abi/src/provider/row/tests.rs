@@ -152,3 +152,12 @@ fn the_field_order_is_the_abi() {
             && offset_of!(PartRef, reserved) < offset_of!(PartRef, table)
     );
 }
+
+#[test]
+fn version_zero_is_refused() {
+    let row = ProviderRow::new(7, parts(&[PartRef::new(PART_LIFECYCLE, 0, table(&LIFE))]));
+    assert_eq!(
+        lookup(&row).part(PART_LIFECYCLE, 1),
+        PartLookup::TooNew { version: 0 }
+    );
+}

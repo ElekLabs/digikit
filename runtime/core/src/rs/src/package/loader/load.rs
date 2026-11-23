@@ -224,7 +224,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         let r = self.commit(rec, &*(block as *const crate::package::collect::Collect), keys, image_size);
         self.m.free(blk.addr);
         if r != OK {
-            return self.fail(rec, r);
+            return self.fail_started(rec, r);
         }
         OK
     }
@@ -244,6 +244,16 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             crate::package::resident::intro::commit(rec);
             crate::package::module_ui::publish(rec);
         }
+    }
+
+    /// `fail` for a record whose `init` returned `OK`: its `fini` runs first, so what `init` made (a provider's owner object, `Owner::stop`) is given back, as the unload does.
+    pub(super) unsafe fn fail_started(&mut self, rec: usize, r: i32) -> i32 {
+        let fini = records::module(rec).fini;
+        if fini != 0 {
+            let ctx = crate::package::entry::ctx_ptr(rec);
+            self.m.enter_fini(rec, fini, ctx);
+        }
+        self.fail(rec, r)
     }
 
     /// Undo what `init` and the checks before the commit did for record `rec`; `r` is the result to return (`E_BUSY` when a step of the module is still running).

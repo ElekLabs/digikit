@@ -3207,6 +3207,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "636d046582d9bfc777a8cad412a85f82feaac5c590359a11ba7c61e12ba17116",
 =======
  "source_sha256": "ce363d193ccc35b0fe45ac3ea2e23fe018ef5ad235d27e9850b7ec04a826ca51",
@@ -3217,6 +3218,9 @@
 =======
  "source_sha256": "fa94826a775df3f313a53ed26bf43802a96d6fa68a15389851e7fca36b5b2088",
 >>>>>>> 52037284 (Add the provider contract path: part tables, owner cell, one table of both row kinds, local-ping ported)
+=======
+ "source_sha256": "82d28f796d2ee31fc29c1448d6f33821b5827e60c78a70eaf5340778f6a66949",
+>>>>>>> a2b8b5d (Close the RC3-1 contract path review findings)
  "symbols": [
   {
    "global": false,

@@ -161,6 +161,7 @@ fn fixture(device: u32) -> Fixture {
         rows: Rows::NONE,
         absent_rows: None,
         live: None,
+        stateless: false,
         salt_same: &[
             ("memory", "the service writes no firmware word"),
             ("dsp", "the service has no DSP section"),

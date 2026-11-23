@@ -65,6 +65,7 @@ fn fixture(device: u32) -> Fixture {
         rows: Rows::NONE,
         absent_rows: None,
         live: None,
+        stateless: false,
         salt_same: &[
             ("memory", "the track table is the service's own state, shown by the state view; no firmware word"),
             ("dsp", "a track-table record changes no DSP state"),

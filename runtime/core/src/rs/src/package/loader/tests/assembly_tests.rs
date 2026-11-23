@@ -330,6 +330,15 @@ fn newer_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
     &ROW
 }
 
+fn other_name_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
+    use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, LIFECYCLE_NEWEST, PART_LIFECYCLE};
+    use crate::package::core_api::RealCore;
+    static LIFE: LifecycleV1 = LifecycleV1::of::<dkrt_fixture_local_ping::LocalPing, RealCore>();
+    static PARTS: [PartRef; 1] = [PartRef::new(PART_LIFECYCLE, LIFECYCLE_NEWEST, &LIFE as *const _ as *const ())];
+    static ROW: ProviderRow = ProviderRow::new(dkrt_abi::provider::name_hash("local-pong"), &PARTS);
+    &ROW
+}
+
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
 /// table declares (no ColdFire code runs on the host).
 pub(super) struct Card {
@@ -355,6 +364,8 @@ pub(super) struct Card {
     /// The provider fixture declares a row whose tick part is a version newer than this core knows (a thin variant of the fixture: the host runs no file code, so the row is the
     /// test's).
     pub(super) newer_parts: bool,
+    /// The `local-ping` row declares another service name than the file PROVIDES.
+    pub(super) wrong_name: bool,
     /// The device addresses of the runtime's functions that the imports of a service file name (`svc_import_addr`).
     imports: crate::fake_platform::address_map::AddressMap,
 }
@@ -393,6 +404,7 @@ impl Card {
             hooks: Vec::new(),
             provider_recs: Vec::new(),
             newer_parts: false,
+            wrong_name: false,
             imports: crate::fake_platform::address_map::AddressMap::new(),
         }
     }
@@ -534,7 +546,7 @@ impl Images for Card {
             dkrt_fixture_local_ping::dk_svc_stop();
             let instance = dkrt_fixture_local_ping::dk_svc_start().expect("the instance of local-ping starts");
             self.provider_recs.push(rec);
-            let row = if self.newer_parts { newer_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
+            let row = if self.wrong_name { other_name_ping_row() } else if self.newer_parts { newer_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
             return crate::package::collect::dk_provider_declare_row(ctx, row, instance);
         }
         let name: &'static str = Box::leak(stem.into_boxed_str());

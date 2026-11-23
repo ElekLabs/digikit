@@ -45,7 +45,7 @@ fn table_of<T>(found: PartLookup, extent: &Range<usize>) -> Result<*const T, Sta
 }
 
 impl ProviderHandle {
-    /// Resolve `row` (read from a package that lies in `extent`) for `instance`. `E_FORMAT` for a row or a table outside `extent` or a null instance, `E_SVC_ABI` for a
+    /// Resolve `row` (read from a package that lies in `extent`) for `instance`. `E_FORMAT` for a row, a table or a record kinds array outside `extent` or a null instance, `E_SVC_ABI` for a
     /// part whose version is newer than this core knows.
     ///
     /// # Safety
@@ -61,11 +61,26 @@ impl ProviderHandle {
         let row: CheckedRow<'_> = check(row, extent.clone())?;
         let lifecycle =
             table_of::<LifecycleV1>(row.part(PART_LIFECYCLE, LIFECYCLE_NEWEST), &extent)?;
+        let records = table_of::<RecordsV1>(row.part(PART_RECORDS, RECORDS_NEWEST), &extent)?;
+        if !records.is_null() && unsafe { (*records).nkinds } != 0 {
+            // SAFETY: `table_of` checked that the table lies inside `extent`, which the caller guarantees readable.
+            let (kinds, n) = unsafe { ((*records).kinds, (*records).nkinds as usize) };
+            let at = kinds as usize;
+            let len = n.checked_mul(size_of::<(u32, u32)>());
+            let end = len.and_then(|l| at.checked_add(l));
+            if kinds.is_null()
+                || at % align_of::<(u32, u32)>() != 0
+                || at < extent.start
+                || end.is_none_or(|e| e > extent.end)
+            {
+                return Err(E_FORMAT);
+            }
+        }
         Ok(ProviderHandle {
             name: row.name(),
             instance,
             lifecycle,
-            records: table_of(row.part(PART_RECORDS, RECORDS_NEWEST), &extent)?,
+            records,
             dsp: table_of(row.part(PART_DSP, DSP_NEWEST), &extent)?,
             tick: table_of(row.part(PART_TICK, TICK_NEWEST), &extent)?,
             query: table_of(row.part(PART_QUERY, QUERY_NEWEST), &extent)?,

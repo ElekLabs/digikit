@@ -137,6 +137,15 @@ impl Rows {
     };
 }
 
+/// Whether case 7 may skip "loaded A and a2 differ": only a fixture that declares itself `stateless` and names every area as equal (a service with no state of
+/// its own). Every other service keeps the full assertion, whatever its `salt_same` lists.
+fn excuses_equal_loads(stateless: bool, salt_same: &[(&str, &str)]) -> bool {
+    stateless
+        && ["memory", "dsp", "settings", "state"]
+            .iter()
+            .all(|area| salt_same.iter().any(|(a, _)| a == area))
+}
+
 /// What a service gives the suite: the profile, the kinds it owns (`[records.kinds]`), the image tables its core has, its modules and a view of its own state.
 pub struct Fixture {
     pub name: &'static str,
@@ -178,6 +187,9 @@ pub struct Fixture {
     /// The areas (`memory`, `dsp`, `settings`, `state`, and `survives` when the fixture has it) in which loaded `A` and loaded `a2` may be equal, each with its reason. Every other area must differ, or the
     /// comparison of case 7 cannot see a leftover there.
     pub salt_same: &'static [(&'static str, &'static str)],
+    /// The service declares it has no state of its own (the `local-ping` test service): with every area in `salt_same`, case 7 does not ask that loaded A and loaded a2
+    /// differ. `false` for every service with state.
+    pub stateless: bool,
     /// The service's data that outlives a module's unload on purpose (the project service keeps what modules put into the current project: it is the project's, not the
     /// module's), as words, `None` when the service keeps none. It is left out of every "back at the start" comparison and is the area `survives` when `A` and `a2` are
     /// compared (the area `state` is `Fixture::state` alone), so a module that fills it makes the two differ. Each use has its reason in the fixture.
@@ -1866,9 +1878,7 @@ fn leaves_no_residue<S: Subject>(f: &Fixture) {
     }
     let loaded_a2 = l.snapshot();
     // a fixture that names every area as equal keeps nothing a module could leave behind (a service with no state of its own): there is no leftover to see
-    let stateless = ["memory", "dsp", "settings", "state"]
-        .iter()
-        .all(|area| f.salt_same.iter().any(|(a, _)| a == area));
+    let stateless = excuses_equal_loads(f.stateless, f.salt_same);
     assert!(
         stateless
             || loaded_a.same_after_unload(&loaded_a2, true).is_err()
@@ -1999,3 +2009,6 @@ fn a_refusal_during_apply_leaves_nothing<S: Subject>(f: &Fixture) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

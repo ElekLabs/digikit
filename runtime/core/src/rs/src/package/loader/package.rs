@@ -204,7 +204,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if role == 1 {
             let r = self.derive_entries(rec, entries);
             if r != OK {
-                return Err(self.fail(rec, r));
+                return Err(self.fail_started(rec, r));
             }
         }
         Ok(())
@@ -263,12 +263,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if size == 0 {
             // no records: an old row has nothing to apply, but a provider hears every consumer that comes up (`Provider::attach`)
             let c = dkrt_abi::service::ApplyCtx { owner: rec as u8 + 1, reg: core::ptr::null(), base };
+            // a refusal has undone the providers that attached: nothing else to give back
             let r = table.attach_providers(&c);
-            if r != OK {
-                crate::package::registry::remove_with(table, rec as u8 + 1);
-                return Err(r);
-            }
-            return Ok(());
+            return if r == OK { Ok(()) } else { Err(r) };
         }
         // a record whose kind a loaded service owns that the module does not need is refused before anything is applied (the module's needs and its builder imports are the same data: a
         // module whose file says otherwise is not one the packer made)

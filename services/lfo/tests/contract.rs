@@ -122,6 +122,7 @@ fn fixture(device: u32) -> Fixture {
         rows: Rows::NONE,
         absent_rows: None,
         live: None,
+        stateless: false,
         salt_same: &[
             ("memory", "the maximum of the WAVE rows is the highest loaded number << 8, and A and a2 have the same key, so the same number"),
             ("dsp", "an LFO shape has no DSP section"),

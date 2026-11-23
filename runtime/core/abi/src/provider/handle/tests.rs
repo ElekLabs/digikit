@@ -242,3 +242,71 @@ fn a_table_outside_the_package_a_null_instance_and_a_misaligned_table_are_refuse
     )]);
     assert_eq!(resolve(odd, instance(0)).err(), Some(E_FORMAT));
 }
+
+/// A row, its part list, the lifecycle and records tables and the kinds array in one buffer, like a package.
+#[repr(C)]
+struct Pack {
+    row: ProviderRow,
+    parts: [PartRef; 2],
+    records: RecordsV1,
+    kinds: [(u32, u32); 2],
+}
+
+fn pack(kinds: *const (u32, u32), nkinds: u32) -> &'static mut Pack {
+    let p = Box::leak(Box::new(Pack {
+        row: ProviderRow::new(0xabcd, &[]),
+        parts: [part(PART_LIFECYCLE, 1, lifecycle()); 2],
+        records: RecordsV1 {
+            kinds,
+            nkinds,
+            begin,
+            commit,
+            check: check_step,
+            apply,
+        },
+        kinds: [(30, 24), (31, 8)],
+    }));
+    p.parts[1] = PartRef::new(PART_RECORDS, 1, &p.records as *const RecordsV1 as *const ());
+    // SAFETY: the buffer is leaked and its part list is never moved.
+    p.row = ProviderRow::new(0xabcd, unsafe { &*(&p.parts[..] as *const [PartRef]) });
+    p
+}
+
+#[test]
+fn a_kinds_array_that_leaves_the_package_or_overflows_is_refused() {
+    let resolve_in = |p: &Pack, e: Range<usize>| unsafe {
+        ProviderHandle::resolve(&p.row, e, instance(0)).err()
+    };
+    let whole_pack = |p: &Pack| {
+        let a = p as *const Pack as usize;
+        a..a + size_of::<Pack>()
+    };
+    // the lifecycle table is a static outside the buffer: extend the extent to hold it
+    let lc = lifecycle() as *const LifecycleV1 as usize;
+    let widen = |p: &Pack| {
+        let w = whole_pack(p);
+        w.start.min(lc)..w.end.max(lc + size_of::<LifecycleV1>())
+    };
+    let ok = pack(core::ptr::null(), 0);
+    ok.records.kinds = ok.kinds.as_ptr();
+    ok.records.nkinds = 2;
+    assert_eq!(resolve_in(ok, widen(ok)), None);
+    // more kinds than the package holds
+    let long = pack(core::ptr::null(), 0);
+    long.records.kinds = long.kinds.as_ptr();
+    long.records.nkinds = 3;
+    assert_eq!(resolve_in(long, widen(long)), Some(E_FORMAT));
+    // a kinds array outside the package
+    let out = pack(KINDS.as_ptr(), 2);
+    assert_eq!(resolve_in(out, widen(out)), Some(E_FORMAT));
+    // a length that overflows the address space
+    let big = pack(core::ptr::null(), 0);
+    big.records.kinds = big.kinds.as_ptr();
+    big.records.nkinds = u32::MAX;
+    assert_eq!(resolve_in(big, widen(big)), Some(E_FORMAT));
+    // a misaligned array
+    let odd = pack(core::ptr::null(), 0);
+    odd.records.kinds = (odd.kinds.as_ptr() as usize + 1) as *const (u32, u32);
+    odd.records.nkinds = 1;
+    assert_eq!(resolve_in(odd, widen(odd)), Some(E_FORMAT));
+}

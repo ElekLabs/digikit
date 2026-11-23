@@ -505,6 +505,7 @@ fn fixture(device: u32) -> Fixture {
         absent_rows: Some(absent_rows),
         // the machines service queues no live value for its rows
         live: None,
+        stateless: false,
         salt_same: &[
             ("settings", "a load writes no setting"),
             (

@@ -200,7 +200,8 @@ impl ServiceTable {
         }
         OK
     }
-    /// `Provider::attach` of every provider row in table order, for a consumer without records (an old row has nothing to apply then): the first refusal.
+    /// `Provider::attach` of every provider row in table order, for a consumer without records (an old row has nothing to apply then): the first refusal, after the
+    /// providers that attached before it were detached (last first); the refusing provider and those after it are not detached, they never attached.
     #[inline]
     pub unsafe fn attach_providers(&self, c: &ApplyCtx) -> i32 {
         let mut i = 0;
@@ -208,6 +209,13 @@ impl ServiceTable {
             if let Row::Provider(h) = self.rows[i] {
                 let r = h.attach(self.core, c);
                 if r != OK {
+                    let mut j = i;
+                    while j > 0 {
+                        j -= 1;
+                        if let Row::Provider(done) = self.rows[j] {
+                            done.detach(self.core, c.owner);
+                        }
+                    }
                     return r;
                 }
             }
@@ -536,3 +544,6 @@ impl ServiceTable {
         None
     }
 }
+
+#[cfg(test)]
+mod tests;

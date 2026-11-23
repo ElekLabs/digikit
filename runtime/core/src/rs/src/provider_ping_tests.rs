@@ -54,6 +54,7 @@ fn fixture(device: u32) -> Fixture {
         absent_rows: None,
         live: None,
         survives: None,
+        stateless: true,
         salt_same: &[
             ("memory", "the fixture writes no firmware memory"),
             ("dsp", "the fixture has no DSP section"),

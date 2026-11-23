@@ -280,6 +280,7 @@ fn fixture(device: u32) -> Fixture {
         absent_rows: None,
         // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one
         live: LIVE,
+        stateless: false,
         salt_same: &[("settings", "a load writes no setting")],
         bad: module(2, keys_none, dyn_fx_gain, 1),
         bad_late: Some(Late {

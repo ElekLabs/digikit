@@ -153,6 +153,38 @@ fn a_provider_row_with_a_part_newer_than_the_core_knows_is_refused_and_leaves_no
             );
             assert!(!crate::package::svc_rows::has("local-ping"), "{}: no row stays", dev.name);
             assert!(l.m.live.is_empty(), "{}: every block of the arena is back", dev.name);
+            assert_provider_stopped(&l, dev.name);
+        }
+        clean_state();
+    }
+}
+
+/// The file's `init` ran (it made the owner object) and its commit refused the row: the loader ran the file's `fini`, so `Owner::stop` ran and the cell is empty.
+fn assert_provider_stopped(l: &Boot, dev: &str) {
+    assert!(l.m.hooks.iter().any(|(fini, _)| *fini), "{dev}: the loader ran the fini of a provider whose commit was refused after its init");
+    assert!(dkrt_fixture_local_ping::DK_SVC_OWNER.instance().is_null(), "{dev}: the owner cell is empty");
+}
+
+#[test]
+fn a_provider_row_that_names_another_service_is_refused_and_its_owner_is_stopped() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            l.m.wrong_name = true;
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            let mut at = [None; MAX_MODULES];
+            at[0] = Some(path.as_ptr());
+            let mut s = Session::new(&mut l as *mut _, at);
+            let manifest = RtManifest::of(&mut s, 1);
+            let (placer, linker, installers, host) = s.seams();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let report = pm.boot(&[id(0)]).unwrap();
+            assert!(report.brought_up().is_empty(), "{}", dev.name);
+            assert!(!report.refused().is_empty(), "{}", dev.name);
+            assert!(!crate::package::svc_rows::has("local-ping"), "{}: no row stays", dev.name);
+            assert_provider_stopped(&l, dev.name);
         }
         clean_state();
     }
