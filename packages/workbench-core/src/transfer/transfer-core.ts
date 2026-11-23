@@ -593,7 +593,8 @@ export function rowStatus(p: Progress | undefined, verified: Verified, path: str
 }
 
 /** Attached services are represented by their module's badge and stay in the card inventory. */
-function visibleDeviceRows(rows: TransferRow[]): TransferRow[] {
+function visibleDeviceRows(view: TransferView, rows = onDevice(view)): TransferRow[] {
+  if (view.incomplete_card_needs) return rows;
   const attached = new Set(rows.flatMap((r) => (r.card_services ?? []).map((service) => service.path)));
   return rows.filter((r) => !attached.has(r.path));
 }
@@ -602,7 +603,7 @@ function visibleDeviceRows(rows: TransferRow[]): TransferRow[] {
  * During an install, an attached service being updated also gets a temporary progress row. */
 export function onDeviceWithPending(view: TransferView, p: Progress | undefined, installing = false): TransferRow[] {
   const inventory = onDevice(view);
-  const rows = visibleDeviceRows(inventory);
+  const rows = visibleDeviceRows(view, inventory);
   const have = new Set(rows.map((r) => r.path));
   const onCard = new Set(inventory.map((r) => r.path));
   for (const m of p?.modules ?? []) {
@@ -631,7 +632,7 @@ export function applyVerified(v: Verified, e: TransferEvent): Verified {
 
 /** The store paths ticked in the On device pane, in list order (ticks of rows that are gone are dropped). */
 export function deletePaths(view: TransferView, ticked: Set<string>): string[] {
-  return visibleDeviceRows(onDevice(view))
+  return visibleDeviceRows(view)
     .filter((r) => ticked.has(r.path))
     .map((r) => r.path);
 }

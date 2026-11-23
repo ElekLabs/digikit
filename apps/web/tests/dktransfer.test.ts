@@ -982,6 +982,24 @@ test('the installed copy supplies the destination dependencies, including transi
   );
 });
 
+test('an unread card header keeps services available for explicit deletion', async () => {
+  const dev = new FakeDevice();
+  const fx = service('fx');
+  dev.files.set('modules/shot.dkm', needing('someone/shot', ['fx']));
+  dev.files.set('modules/unread.dkm', needing('someone/unread', []));
+  dev.files.set(fx.path, fx.bytes);
+  const s = session(dev);
+  const header = s.header.bind(s);
+  s.header = async (path) => {
+    if (path === 'modules/unread.dkm') throw new DkError({ error: 'Unreadable header', kind: 'device' });
+    return header(path);
+  };
+  const view = await buildView(s, []);
+  const paths = onDeviceWithPending(view, undefined).map((row) => row.path);
+  assert.ok(paths.includes(fx.path));
+  assert.deepEqual(deletePaths(view, new Set(paths)), paths);
+});
+
 test('installed dependencies still appear without any library services', async () => {
   const dev = new FakeDevice();
   const fx = service('fx');

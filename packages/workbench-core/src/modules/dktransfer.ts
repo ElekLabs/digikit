@@ -89,6 +89,8 @@ export interface TransferView {
   capacity?: Caps | null;
   modules: TransferRow[];
   card_only: TransferRow[];
+  /** Keep service files selectable when incomplete card reads prevent automatic service cleanup. */
+  incomplete_card_needs?: boolean;
   /** The service refusals of the library modules (also on their rows); set only when the view was built with `InstallDeps`. */
   refusals?: ServiceRefusal[];
 }
@@ -793,6 +795,7 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
     }
   }
   let sv: ServiceView | undefined;
+  let incompleteCardNeeds = false;
   let refused: ServiceRefusal[] = [];
   if (deps || hasCap(info, 'READ')) {
     const files: ServiceView['services'] = (deps?.services ?? []).map((file) => ({
@@ -801,7 +804,8 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
     }));
     const facts = hasCap(info, 'READ')
       ? await cardFacts(s, card, library, headers)
-      : { needs: [], provides: {}, portFw: {} };
+      : { needs: [], provides: {}, portFw: {}, unread: 0 };
+    incompleteCardNeeds = facts.unread > 0;
     sv = {
       services: files,
       card: facts.needs,
@@ -832,6 +836,7 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
     loaded,
     capacity: cap,
     ...merged,
+    ...(incompleteCardNeeds ? { incomplete_card_needs: true } : {}),
     ...(deps ? { refusals: refused } : {}),
   };
 }
