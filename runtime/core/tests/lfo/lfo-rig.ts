@@ -65,7 +65,9 @@ const GAP = 'the gap between encoder events (the stock encoder scales by event r
 
 /** Track 1, LFO 1, set with MIDI CC. Create it after the runtime is up; it reads the Sound words of track 1 from firmware memory. */
 export class LfoRig {
+  private soundBase: number | undefined;
   private opened = false;
+  private mainLoopSeen = false;
 
   readonly rt: Rt;
 
@@ -81,10 +83,12 @@ export class LfoRig {
   }
 
   private async base(): Promise<number> {
-    const { fx } = deviceProfile(this.device);
-    // The Sound array of track 1 starts 0x14 into its Sound object; the kit object holds the Sound objects from `sound_off` on. The kit pointer is read at every access, not once:
-    // a kit object that the firmware replaces after the rig was made would leave a cached address pointing at the old object, whose words no CC writes.
-    return (await word(this.session, fx.kit_ptr)) + fx.sound_off + 0x14;
+    if (this.soundBase === undefined) {
+      const { fx } = deviceProfile(this.device);
+      // the Sound array of track 1 starts 0x14 into its Sound object; the kit object holds the Sound objects from `sound_off` on
+      this.soundBase = (await word(this.session, fx.kit_ptr)) + fx.sound_off + 0x14;
+    }
+    return this.soundBase;
   }
 
   /** Sound word `index` of track 1: the stored knob value (the LFO does not write it). */
@@ -192,8 +196,26 @@ export class LfoRig {
     return halfword(this.session, deviceProfile(this.device).fx.lfo_live + 2 * index);
   }
 
+  /**
+   * Before the first CC: wait until the stock main loop, which takes the MIDI input, has passed twice more (`cf.mainloop_hits` of the daemon status) since the call. The runtime's ready wait ends at the first UI pass
+   * (FW_READY, `ui_reached`), when the main loop has run only a few times; a CC sent in that first moment was seen to be dropped (Sound word unchanged). Emulated time; no event shows this.
+   */
+  private async untilMainLoop(): Promise<void> {
+    if (this.mainLoopSeen) return;
+    const hits = async () => (await this.session.status()).cf.mainloop_hits;
+    const first = await hits();
+    await pollUntil(this.rt.clock, hits, (got) => got >= first + 2, {
+      withinMs: 5000,
+      intervalMs: 20,
+      message: () => `the stock main loop did not pass after the runtime was ready (mainloop_hits stayed ${first})`,
+    });
+    console.info(`lfo-rig ${this.device}: main loop running (mainloop_hits ${first} at the first CC, t=${await this.rt.clock.now()} ms)`);
+    this.mainLoopSeen = true;
+  }
+
   /** Send CC `cc` on channel 1 and wait until the Sound word `word` and then its smoothed copy are `value << 8` (firmware state). */
   private async setCc(name: string, cc: number, word: number, value: number): Promise<void> {
+    await this.untilMainLoop();
     await sendCc(this.rt, 1, cc, value);
     const want = value << 8;
     await pollUntil(this.rt.clock, () => this.word(word), (got) => got === want, {
