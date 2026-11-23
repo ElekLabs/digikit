@@ -16,7 +16,10 @@ vi.mock('@digi/test-support', async (original) => ({
   repoRoot: () => dir,
 }));
 import { cardKey } from '../runtime/card-cache.ts';
+import { selectDevices } from '../runtime/devices.ts';
 import { installSystemPackage, SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '../runtime/system-package.ts';
+
+const device = selectDevices()[0]!;
 
 // what `toolIdentity` reads: the profile trees and the plusdrive binary
 for (const tree of ['devices', 'ports']) fs.mkdirSync(path.join(dir, tree), { recursive: true });
@@ -32,7 +35,7 @@ const writePackage = (bytes: string) => {
 test('a missing package is an error that names the Nx target, and no card key stands for it', () => {
   fs.rmSync(path.dirname(systemPackageFile()), { recursive: true, force: true });
   expect(() => installSystemPackage(path.join(dir, 'seed'))).toThrow('nx run core/runtime:package');
-  expect(cardKey('dn2', { a: 1 })).toMatch(/^[0-9a-f]{32}$/);
+  expect(cardKey(device, { a: 1 })).toMatch(/^[0-9a-f]{32}$/);
 });
 
 test('the package goes to its store path below the card folder digikit/', () => {
@@ -44,10 +47,10 @@ test('the package goes to its store path below the card folder digikit/', () => 
 
 test('the card key follows the package bytes and nothing else about the file', () => {
   writePackage('package one');
-  const one = cardKey('dn2', { a: 1 });
-  expect(cardKey('dn2', { a: 1 }), 'the same package gives the same key').toBe(one);
+  const one = cardKey(device, { a: 1 });
+  expect(cardKey(device, { a: 1 }), 'the same package gives the same key').toBe(one);
   writePackage('package two');
-  expect(cardKey('dn2', { a: 1 }), 'a changed package gives a new key').not.toBe(one);
+  expect(cardKey(device, { a: 1 }), 'a changed package gives a new key').not.toBe(one);
   writePackage('package one');
-  expect(cardKey('dn2', { a: 1 }), 'and the old bytes the old key').toBe(one);
+  expect(cardKey(device, { a: 1 }), 'and the old bytes the old key').toBe(one);
 });
