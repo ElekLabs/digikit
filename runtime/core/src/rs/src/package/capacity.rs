@@ -66,7 +66,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         (CAPK_DSP_COST, PLATFORM.dsp_headroom(), dsp_used, dsp_top),
         (CAPK_DSP_VOICES, PLATFORM.dsp_voices(), 0, 0),
         // the system package block, apart from the arena: its bytes and what the placed package takes of them
-        (CAPK_PACKAGE, PACKAGE_BYTES as u32, crate::package::placed::placed_bytes(), 0),
+        (CAPK_PACKAGE, PACKAGE_BYTES as u32, s.package_bytes, 0),
     ];
     // one entry per kind of `[capacity.kinds]`, in its order; a kind with no row above reports zeros
     let mut k = 0;

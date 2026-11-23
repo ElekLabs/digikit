@@ -199,3 +199,18 @@ fn the_appended_groups_are_the_last_ones_so_an_older_package_is_a_prefix() {
     assert!(open(&copy(), 0).is_ok());
     assert_eq!(copy().header.minor, RESIDENT_MINOR);
 }
+
+/// `PackageState.package_bytes` was appended to a shared view (RC2s-3): a view layout change is a major bump (`resident.rs`, "Shared views"), so the major is 2. A package built
+/// for major 2 refuses a core of major 1 (which has the shorter `PackageState`) with the version reason, and a package of major 1 refuses this core: no package reads a view
+/// laid out for another major.
+#[test]
+fn a_change_of_a_shared_view_layout_is_a_major_version() {
+    assert_eq!(dkrt_abi::resident::RESIDENT_MAJOR, 2, "package_bytes was appended to PackageState: the major is 2");
+    let mut previous_core = copy();
+    previous_core.header.major = 1;
+    let refused = open(&previous_core, RESIDENT_MINOR).err().expect("a major-2 package on a major-1 core is refused");
+    assert_eq!((refused.reason, refused.found, refused.need), (Reason::Major, 1, 2));
+    let mut newer_core = copy();
+    newer_core.header.major = 3;
+    assert_eq!(open(&newer_core, RESIDENT_MINOR).err().map(|r| r.reason), Some(Reason::Major));
+}

@@ -24,7 +24,7 @@ mod build {
     use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES as BODY_HEADER, relocate};
     use dkrt_sdk::syspkg::{HEADER_BYTES, Header};
     use patchkit::dko::{Dko, DkoReloc, DkoSection, DkoSymbol, FORMAT};
-    use patchkit::syspkg::{ENTRY, PLACED_SYMBOL, TABLE_SYMBOL, build};
+    use patchkit::syspkg::{ENTRY, TABLE_SYMBOL, build};
 
     fn section(name: &str, kind: &str, bytes: &[u8]) -> DkoSection {
         DkoSection {
@@ -128,24 +128,6 @@ mod build {
     }
 
     #[test]
-    fn the_placed_size_word_of_the_package_holds_what_the_block_takes() {
-        let mut o = package();
-        // a fourth data word that is the unset value, and its symbol
-        let data = o.sections.iter_mut().find(|s| s.name == ".data").unwrap();
-        let mut bytes = patchkit::error::unhex(&data.hex).unwrap();
-        bytes.extend_from_slice(&0xffff_ffffu32.to_be_bytes());
-        data.size = bytes.len() as u32;
-        data.hex = patchkit::error::hex(&bytes);
-        o.symbols.push(symbol(PLACED_SYMBOL, Some(".data"), 12));
-        let file = build(&o).unwrap();
-        let body = &file[HEADER_BYTES..];
-        let b = BodyHeader::decode(body).unwrap();
-        let at = BODY_HEADER + 4 + 12;
-        let word = u32::from_be_bytes(body[at..at + 4].try_into().unwrap());
-        assert_eq!(word as u64, b.placed_bytes());
-    }
-
-    #[test]
     fn a_symbol_the_package_does_not_define_is_refused() {
         let mut o = package();
         o.symbols.push(symbol("dk_ui_menu_new", None, 0));
@@ -176,7 +158,7 @@ mod artifact {
     use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES, relocate};
     use patchkit::dko::Dko;
     use patchkit::link::link;
-    use patchkit::syspkg::{PLACED_SYMBOL, body};
+    use patchkit::syspkg::body;
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -193,14 +175,8 @@ mod artifact {
         let (bytes, _, _) = body(&obj).unwrap();
         let h = BodyHeader::decode(&bytes).unwrap();
         let mut image = bytes[HEADER_BYTES..HEADER_BYTES + h.image as usize].to_vec();
-        let mut at_zero = link(&obj, 0, &BTreeMap::new()).unwrap();
-        let mut at_base = link(&obj, BASE, &BTreeMap::new()).unwrap();
-        // the one word `syspkg build` writes after the link (the bytes the package takes in its block) is the body's in both links
-        if let Some(&w) = at_zero.symbols.get(PLACED_SYMBOL) {
-            let w = w as usize;
-            at_zero.image[w..w + 4].copy_from_slice(&image[w..w + 4]);
-            at_base.image[w..w + 4].copy_from_slice(&image[w..w + 4]);
-        }
+        let at_zero = link(&obj, 0, &BTreeMap::new()).unwrap();
+        let at_base = link(&obj, BASE, &BTreeMap::new()).unwrap();
         assert_eq!(image, at_zero.image, "the body's image is the link at 0");
         relocate(&mut image, h.reloc_table(&bytes), BASE as u32).unwrap();
         let differing: Vec<usize> = (0..image.len())

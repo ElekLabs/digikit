@@ -1057,10 +1057,8 @@ fn parse(text: &str) -> Result<Sdk> {
         {
             return Err(err!("{SOURCE}: capacity kind {v} ({n}) is 0 or twice"));
         }
-        if k.fit != k.label.is_some() {
-            return Err(err!(
-                "{SOURCE}: capacity kind {n}: a label belongs to a fit kind and a fit kind has one"
-            ));
+        if k.fit && k.label.is_none() {
+            return Err(err!("{SOURCE}: capacity kind {n}: a fit kind has a label"));
         }
     }
     match (
@@ -1673,9 +1671,14 @@ fn ts_proto(sdk: &Sdk) -> String {
         let _ = writeln!(s, "  {n}: {k},");
     }
     s.push_str("} as const;\n\n/** What a person calls a capacity kind a fit looks at, by kind number. */\nexport const CAPACITY_LABELS: Record<number, string> = {\n");
-    let mut fit: Vec<_> = sdk.capacity.kinds.values().filter(|k| k.fit).collect();
-    fit.sort_by_key(|k| k.id);
-    for k in fit {
+    let mut named: Vec<_> = sdk
+        .capacity
+        .kinds
+        .values()
+        .filter(|k| k.label.is_some())
+        .collect();
+    named.sort_by_key(|k| k.id);
+    for k in named {
         let _ = writeln!(
             s,
             "  {}: {},",

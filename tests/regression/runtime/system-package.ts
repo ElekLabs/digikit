@@ -33,3 +33,15 @@ export const systemPackageSectors = (): number => Math.ceil(fs.statSync(systemPa
 
 /** CAPACITY's STORE `used` (KiB) of a store that holds the package only: the header sector and the package's sectors, rounded up. */
 export const systemPackageUsedKib = (): number => Math.ceil((1 + systemPackageSectors()) / 2);
+
+/** Bytes of the file header before the body (`syspkg::Header`) and of the body header (`BodyHeader`, runtime/core/sdk/src/syspkg/body.rs). */
+const FILE_HEADER_BYTES = 48;
+const BODY_HEADER_BYTES = 32;
+
+/** The bytes the package takes in its block (`BodyHeader::placed_bytes`: body header, image, the larger of the bss and the relocation table), read from the artifact's own body header: what CAPACITY reports as PACKAGE `used`. */
+export function systemPackagePlacedBytes(): number {
+  const f = fs.readFileSync(systemPackageFile());
+  const word = (i: number): number => f.readUInt32BE(FILE_HEADER_BYTES + 4 * i);
+  const [image, bss, relocs] = [word(1), word(2), word(3)] as [number, number, number];
+  return BODY_HEADER_BYTES + image + Math.max(4 * relocs, bss);
+}

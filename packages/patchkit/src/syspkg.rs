@@ -18,9 +18,6 @@ use std::collections::BTreeMap;
 pub const ENTRY: &str = "dkpkg_entry";
 /// The word the package holds: the resident table version it was built against, `major << 16 | minor`.
 pub const TABLE_SYMBOL: &str = "DKPKG_TABLE";
-/// The word the package may hold for its capacity report: the bytes it takes in the package block (`BodyHeader::placed_bytes`), written here after the link. `UNSET` before.
-pub const PLACED_SYMBOL: &str = "DKPKG_PLACED";
-const PLACED_UNSET: u32 = 0xffff_ffff;
 
 /// The body of the package object `obj` and the resident table version it was built against. The package is linked at address 0 with no import: a reference to a symbol
 /// the object does not define would be a link by name, which the package does not have (it calls the resident core through its table).
@@ -57,7 +54,7 @@ pub fn body(obj: &Dko) -> Result<(Vec<u8>, u16, u16)> {
             undefined.join(", ")
         ));
     }
-    let mut linked = link::link(obj, 0, &BTreeMap::new())?;
+    let linked = link::link(obj, 0, &BTreeMap::new())?;
     let kind_of: BTreeMap<&str, &str> = obj
         .sections
         .iter()
@@ -116,16 +113,6 @@ pub fn body(obj: &Dko) -> Result<(Vec<u8>, u16, u16)> {
             header.placed_bytes(),
             dkrt_sdk::PACKAGE_BYTES
         ));
-    }
-    if let Some(&at) = linked.symbols.get(PLACED_SYMBOL) {
-        let at = at as usize;
-        linked
-            .image
-            .get(at..at + 4)
-            .filter(|w| u32::from_be_bytes([w[0], w[1], w[2], w[3]]) == PLACED_UNSET)
-            .ok_or_else(|| err!("{PLACED_SYMBOL} is not an unset word of the image"))?;
-        // `placed_bytes` is at most PACKAGE_BYTES here, so it is never the unset value
-        linked.image[at..at + 4].copy_from_slice(&(header.placed_bytes() as u32).to_be_bytes());
     }
     let mut out = header.encode().to_vec();
     debug_assert_eq!(out.len(), HEADER_BYTES);

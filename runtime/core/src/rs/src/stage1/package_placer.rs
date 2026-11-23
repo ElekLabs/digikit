@@ -45,6 +45,8 @@ impl Placer for PackagePlacer {
         }
         self.block = block;
         self.header = Some(h);
+        // the one owner of the placed size: the capacity report reads it from the state
+        unsafe { crate::platform::st().package_bytes = need };
         Ok(())
     }
 
@@ -56,6 +58,7 @@ impl Placer for PackagePlacer {
     fn abandon(&mut self) {
         self.block = DevAddr::NULL;
         self.header = None;
+        unsafe { crate::platform::st().package_bytes = 0 };
     }
 
     fn finish(&mut self) -> Result<DevAddr, i32> {

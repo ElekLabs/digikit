@@ -6,6 +6,7 @@ import { cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts
 import { needsOf, parseDspSection, relocate } from '@digi/regression/runtime/dkm.ts';
 import { dspBytes } from '@digi/regression/runtime/fx-live.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { systemPackagePlacedBytes } from '@digi/regression/runtime/system-package.ts';
 import { bootEntries, COUPLED_ROOTS, expectBoot, SYMBOLS, type Entry } from './capacity-helpers.ts';
 import {
   ARENA_HDR,
@@ -121,7 +122,7 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
         'the arena has all its bytes free in one block: the package is not in it',
       ).toEqual([g.arenaBytes, 0, g.arenaBytes - ARENA_HDR]);
       expect(got.cap.PACKAGE!.limit, 'the package block is its own constant').toBe(g.packageBytes);
-      expect(got.cap.PACKAGE!.used, 'the package fits its block').toBeLessThanOrEqual(g.packageBytes);
+      expect(got.cap.PACKAGE!.used, 'the package takes what its body header says: image, and the larger of bss and relocation table').toBe(systemPackagePlacedBytes());
     },
   );
 

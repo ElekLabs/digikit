@@ -1984,7 +1984,7 @@ FW_ID = 18          # the INFO reply ends with `fw_id` after `svc_abi`: 8 bytes,
 LIVE = 19           # the LOAD and UNLOAD commands (a content module is loaded or unloaded without a boot); RELOAD_STATE reports them too
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
-                   # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code); every kind is in CAP_KINDS
+                   # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code; a fit kind needs a label, a kind may have one without `fit`); every kind is in CAP_KINDS
 MODULES = { id = 1, fit = true, label = "module records" }   # module records; used: loaded; largest: 0
 SELECTION = { id = 2, fit = true, label = "selection paths" }   # paths of the selection record; used: paths this boot loaded
 ARENA = { id = 3, fit = true, label = "CPU memory" }   # ColdFire arena bytes; used: taken (headers included); largest: the largest free block's payload
@@ -2001,7 +2001,7 @@ SETTINGS = { id = 13 }   # the settings record, in bytes: limit: the area of one
 SEND_SLOTS = { id = 14, ceiling = "send_slots" }   # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
 DSP_COST = { id = 15, fit = true, label = "DSP load" }   # DSP instructions per block: limit: the headroom of the device (the generated profile: the stock firmware's load and the safety margin taken out of the block); used: the load of the loaded modules, `max(per-voice machine cost) * DSP_VOICES + sum(effect costs)`; largest: the largest per-voice machine cost loaded (the state of that maximum)
 DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machine cost counts for (the generated profile); used and largest: 0; a fit reads the limit, it is not short of it
-PACKAGE = { id = 17 }   # the system package block (`[[const]] PACKAGE_BYTES` of runtime/core/abi.toml), outside the module arena; limit: its bytes; used: what the placed package takes (0 at the core-only level); largest: 0
+PACKAGE = { id = 17, label = "system package" }   # the system package block (`[[const]] PACKAGE_BYTES` of runtime/core/abi.toml), outside the module arena (a label without `fit`: a host names it, a fit does not look at it); limit: its bytes; used: what the placed package takes (`State.package_bytes`, 0 at the core-only level); largest: 0
 
 # The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
 # voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before

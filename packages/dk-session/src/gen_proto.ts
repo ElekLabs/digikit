@@ -305,6 +305,7 @@ export const CAPACITY_LABELS: Record<number, string> = {
   10: 'effect slots',
   15: 'DSP load',
   16: 'DSP voices',
+  17: 'system package',
 };
 
 /** The `kind` of a LOG event. */

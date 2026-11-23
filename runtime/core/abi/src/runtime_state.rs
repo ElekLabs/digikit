@@ -30,6 +30,9 @@ pub struct StateOf<A> {
     pub log_next: u32,
     pub modules: [Module; MAX_MODULES],
     pub log: [LogEntry; LOG_ENTRIES],
+    /// The bytes the system package takes in its block (`BodyHeader::placed_bytes`): stage 1 sets it when it places the package and clears it when the block is given back, so it is 0
+    /// with no package. The capacity report (`CAPK_PACKAGE`) reads it. Appended at the end: the offsets before it do not move.
+    pub package_bytes: u32,
 }
 
 /// The arena's own words in `State` (resident only; the arena owns them).
@@ -89,6 +92,10 @@ mod tests {
             offset_of!(PackageState, modules)
         );
         assert_eq!(offset_of!(State, log), offset_of!(PackageState, log));
+        assert_eq!(
+            offset_of!(State, package_bytes),
+            offset_of!(PackageState, package_bytes)
+        );
     }
 
     /// The arena words that the health proof of patchkit reads stay where they were: after the six words, `free_head`, `lo`, `hi`.

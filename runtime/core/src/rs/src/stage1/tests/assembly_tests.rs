@@ -130,6 +130,8 @@ mod package_block {
             core::ptr::write_bytes(block.ptr::<u8>(), 0xa5, round16(need) as usize);
             let mut s = Stage1::new(StorageSource::new(&card), PackagePlacer::new(), &mut chunk);
             assert_eq!(s.load(), PackageStatus::Ok);
+            // the capacity report's `used` for PACKAGE: the header-derived placed size that stage 1 recorded, (the package's capacity report reads this word; its own test is in `package/capacity.rs`)
+            assert_eq!(crate::platform::st().package_bytes, need);
             let (entry, minor) = s.placed().expect("a placed package has its entry");
             assert_eq!(minor, RESIDENT_TABLE_MINOR);
             let base = entry.get() - h.entry;
@@ -152,6 +154,7 @@ mod package_block {
             // an abandoned package leaves no placed package and the arena whole
             s.abandon();
             assert!(s.placed().is_none());
+            assert_eq!(crate::platform::st().package_bytes, 0);
             assert_eq!(arena::stats(), whole_arena());
         }
     }
