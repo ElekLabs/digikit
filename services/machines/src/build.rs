@@ -11,22 +11,22 @@
 //!
 //! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `dynreg_info` table.
 
-mod args;
-mod calls;
-mod check;
+mod apply_args;
+mod builder;
 mod collection;
 mod commit;
+mod commit_check;
 mod lower;
+mod open_collection;
 mod profile;
-mod state;
 mod voices;
 
-pub use args::*;
-pub use calls::*;
-pub use check::*;
+pub use apply_args::*;
+pub use builder::*;
 pub use collection::*;
 pub use commit::*;
+pub use commit_check::*;
 pub use lower::*;
+pub use open_collection::*;
 pub use profile::*;
-pub use state::*;
 pub use voices::*;

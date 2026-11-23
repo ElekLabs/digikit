@@ -8,8 +8,8 @@ use crate::check::{
 };
 use crate::parking::{give_way, park_absent, BUSY_PASSES, LOGGED, MISSING_ROWS, PARK_TRIES};
 use crate::registry::{counts, MAX_MACH};
+use crate::selection_view::refresh_view;
 use crate::unload::{remove, reset_machine_row};
-use crate::view::refresh_view;
 use crate::{dsp, slots};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{DspSec, Job};

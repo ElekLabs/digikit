@@ -5,22 +5,20 @@
 //! one takes it by reference (`core: &C`, `fw: &impl Fw`): the runtime passes its `RealCore` and `RuntimeFw` (zero-sized types, so the calls are static) and a
 //! host test passes a `FakeCore` and a `FakeFw`. The click state (`slots`) and the state between `apply` and `apply_record` (`records`) are statics of
 //! this crate: one machines service, one set. The runtime's hooks (`dkrt_page_key`, `dkrt_page_turn`) are thin wrappers in `handlers.rs`.
-//! Layout (the service template, `sdk/templates/service`): `records` (the `Service` handlers), `check` (the load check), `apply` (the rows of a module), `unload` and `parking` (give rows back; absent numbers), `registry` (the registry state), `slots` `tests/` (host tests over `FakeCore`); `nativepage`, `paramapi` and `dsp/` are the service's own modules.
+//! Layout (the service template, `sdk/templates/service`): `records` (the `Service` handlers and the state between `apply` and `apply_record`), `check/` (the load check),
+//! `apply` (the rows of a module), `unload` and `parking` (give rows back; absent numbers), `registry` (the registry state), `slots/` (the click state; host tests in
+//! `slots/tests.rs`), `build/` (the builder calls and their commit), `assign` (sticky type numbers), `guard` (the machine guard's diagnostics), `modules` (the MODULES reply),
+//! `validate` (the record rules), `rows` (the voice rows), `info` (the image table), `device_profile` (the device's profile), `selection_view` (the machine selection view),
+//! `nativepage`, `paramapi` and `dsp/` (the service's own modules). Tests that cross the crate are in `tests/`.
 #![no_std]
 #[cfg(test)]
 extern crate std;
-/// The profile of the device the runtime runs on, by the device id (the generated table `dkrt_abi::profiles`): the run-time machine types of the device.
-/// `None` for an id without a profile.
-pub(crate) fn profile<C: dkrt_abi::core_api::CoreApi>(
-    core: &C,
-) -> Option<dkrt_abi::platform::DeviceProfile> {
-    dkrt_abi::platform::DeviceProfile::by_id(core.device_id())
-}
 
 pub mod apply;
 pub mod assign;
 pub mod build;
 pub mod check;
+pub mod device_profile;
 pub mod dsp;
 pub mod guard;
 pub mod info;
@@ -31,7 +29,9 @@ pub mod parking;
 pub mod records;
 pub mod registry;
 pub mod rows;
+pub mod selection_view;
 pub mod slots;
 pub mod unload;
 pub mod validate;
-pub mod view;
+
+pub(crate) use device_profile::profile;

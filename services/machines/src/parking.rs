@@ -1,8 +1,8 @@
 //! Parking of absent machine numbers: a number the sticky map holds that no module has reads MISSING and plays silence; the state of the passes, and the events for a number without a placeholder.
 use crate::dsp;
 use crate::registry::{rstate, MAX_MACH};
+use crate::selection_view::refresh_view;
 use crate::unload::reset_machine_row;
-use crate::view::refresh_view;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
 use dkrt_svc_params::dynreg::w;
