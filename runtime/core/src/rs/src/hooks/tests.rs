@@ -45,6 +45,7 @@ fn the_package_table_has_every_hook() {
         ("settings.overlay_put", t.settings.overlay_put.is_none()),
         ("settings.overlay_remove", t.settings.overlay_remove.is_none()),
         ("provider.query", t.provider.query.is_none()),
+        ("ui.settings_rows", t.ui.settings_rows.is_none()),
     ];
     let gone: std::vec::Vec<&str> = missing.iter().filter(|(_, none)| *none).map(|(n, _)| *n).collect();
     assert!(gone.is_empty(), "hooks the package does not give: {gone:?}");

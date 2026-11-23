@@ -30,6 +30,10 @@ pub(crate) mod invariants;
 pub(crate) mod lifecycle;
 pub(crate) mod link;
 pub(crate) mod loader;
+pub(crate) mod menu;
+// The C menu's symbols: only the package artifact links the menu.
+#[cfg(feature = "package-image")]
+mod menu_link;
 pub(crate) mod live_cmds;
 pub(crate) mod module_cmds;
 pub mod registry;

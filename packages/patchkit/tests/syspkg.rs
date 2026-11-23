@@ -140,10 +140,9 @@ mod artifact {
 
     const BASE: u64 = 0x0001_0000;
 
+    /// The committed package object with the DIGIKIT menu linked into it, as `patchkit syspkg build --part` makes the artifact.
     fn package_object() -> Dko {
-        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../runtime/core/build/package.dko.json");
-        Dko::parse(&std::fs::read_to_string(p).unwrap()).unwrap()
+        super::menu_part::linked()
     }
 
     #[test]
@@ -166,5 +165,135 @@ mod artifact {
             differing[0]
         );
         assert!(h.relocs > 1000, "the package has many addresses of its own");
+    }
+}
+
+/// The DIGIKIT menu (C, `runtime/apps/digikit-menu`) as a part of the package: the committed objects of the package and of the menu, linked by `syspkg build --part`. One case that
+/// fits (every symbol the menu needs is one the package defines, and its entry is inside the image) and the refusals of the part (a missing symbol, a name defined twice).
+mod menu_part {
+    use patchkit::dko::Dko;
+    use patchkit::link::link;
+    use patchkit::syspkg::{body, with_part};
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    fn read(rel: &str) -> Dko {
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(rel);
+        Dko::parse(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
+            .unwrap()
+    }
+
+    pub fn package() -> Dko {
+        read("runtime/core/build/package.dko.json")
+    }
+
+    pub fn menu() -> Dko {
+        read("runtime/apps/digikit-menu/build/digikit-menu.dko.json")
+    }
+
+    pub fn linked() -> Dko {
+        with_part(&package(), &menu()).unwrap()
+    }
+
+    fn needs(o: &Dko) -> Vec<String> {
+        let mut v: Vec<String> = o
+            .symbols
+            .iter()
+            .filter(|s| s.section.is_none())
+            .map(|s| s.name.clone())
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// The `dkrt_*` exports of abi.toml.
+    fn exports() -> Vec<String> {
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/abi.toml");
+        let t: toml::Table = std::fs::read_to_string(p).unwrap().parse().unwrap();
+        t["fn"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_menu_links_into_the_package_and_every_symbol_it_needs_is_one_the_package_defines() {
+        let menu = menu();
+        let needed = needs(&menu);
+        assert!(
+            needed.iter().any(|n| n.starts_with("dkrt_")),
+            "the menu calls the runtime: {needed:?}"
+        );
+        // a runtime call of the menu is an export of abi.toml; the rest are core/ui calls
+        let exported = exports();
+        for n in &needed {
+            assert!(
+                n.starts_with("dk_ui_") || exported.contains(n),
+                "{n} is neither a core/ui call nor an export of abi.toml"
+            );
+        }
+        // the package alone does not define them (it would link without the menu, and have no menu); with the part every one is defined
+        let package = package();
+        assert!(
+            body(&package).is_err(),
+            "the package needs the menu's entry: its hook points at dk_app_settings_rows"
+        );
+        let both = with_part(&package, &menu).unwrap();
+        let (bytes, _, _) =
+            body(&both).expect("the package with the menu has no symbol left to resolve");
+        let defined: Vec<&str> = both
+            .symbols
+            .iter()
+            .filter(|s| s.section.is_some())
+            .map(|s| s.name.as_str())
+            .collect();
+        for n in &needed {
+            assert!(defined.contains(&n.as_str()), "{n}");
+        }
+        // the menu's hook function lies inside the image
+        let at = link(&both, 0, &BTreeMap::new()).unwrap();
+        let hook = at.symbols["dk_app_settings_rows"] as usize;
+        assert!(hook < at.image.len() && bytes.len() > at.image.len());
+    }
+
+    #[test]
+    fn a_symbol_of_the_menu_that_the_package_does_not_define_is_refused() {
+        let mut package = package();
+        package.symbols.retain(|s| s.name != "dkrt_boot_info");
+        let e = body(&with_part(&package, &menu()).unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("links only through the resident table") && e.contains("dkrt_boot_info"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn a_part_that_repeats_a_section_or_a_symbol_of_the_package_is_refused() {
+        let package = package();
+        let again = with_part(&package, &menu()).unwrap();
+        let e = with_part(&again, &menu()).unwrap_err().to_string();
+        assert!(e.contains("is in the package and in the part"), "{e}");
+        // a symbol of the package defined again in a section of its own
+        let mut clash = menu();
+        clash.sections.truncate(1);
+        clash.sections[0].name = ".text.clash".into();
+        clash.relocs.clear();
+        let mut sym = clash
+            .symbols
+            .iter()
+            .find(|s| s.section.is_some())
+            .unwrap()
+            .clone();
+        sym.name = patchkit::syspkg::ENTRY.into();
+        sym.section = Some(".text.clash".into());
+        clash.symbols = vec![sym];
+        let e = with_part(&package, &clash).unwrap_err().to_string();
+        assert!(e.contains("defined by the package and by the part"), "{e}");
     }
 }

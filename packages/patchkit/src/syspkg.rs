@@ -2,8 +2,9 @@
 //! The header is `dkrt_sdk::syspkg::Header`, the type the runtime reads it with: patchkit only adds the body's sha256.
 //!
 //! - `patchkit syspkg pack BODY --out FILE --table MAJOR.MINOR`: any body (the stage-1 test fixture). `--table` is the resident table version the body was built against.
-//! - `patchkit syspkg build OBJECT --out FILE`: the package artifact. `OBJECT` is the `[system_package]` object of `core/runtime` (`build/package.dko.json`); the body is
-//!   its linked image, its bss size and its relocations (`dkrt_sdk::syspkg::body`), and the table version is the one the package holds in `DKPKG_TABLE`.
+//! - `patchkit syspkg build OBJECT [--part OBJECT]... --out FILE`: the package artifact. `OBJECT` is the `[system_package]` object of `core/runtime` (`build/package.dko.json`); a
+//!   `--part` is another object of the package (the DIGIKIT menu's C object, `[package_part]` of its module.toml) that is linked into it: the symbols it needs the package defines.
+//!   The body is the linked image, its bss size and its relocations (`dkrt_sdk::syspkg::body`), and the table version is the one the package holds in `DKPKG_TABLE`.
 
 use crate::dko::Dko;
 use crate::error::*;
@@ -122,6 +123,58 @@ pub fn build(obj: &Dko) -> Result<Vec<u8>> {
     pack(&body, major, minor)
 }
 
+/// The package object with the object `part` linked into it: its sections, symbols and relocations are added, and a symbol the part needs that the package defines is resolved.
+/// A section or a defined symbol that both have is an error (two owners for one name).
+pub fn with_part(obj: &Dko, part: &Dko) -> Result<Dko> {
+    if obj.arch != part.arch {
+        return Err(err!(
+            "a package part is {} code, the package is {}",
+            part.arch,
+            obj.arch
+        ));
+    }
+    let mut out = obj.clone();
+    let have: std::collections::BTreeSet<&str> =
+        obj.sections.iter().map(|s| s.name.as_str()).collect();
+    if let Some(s) = part
+        .sections
+        .iter()
+        .find(|s| have.contains(s.name.as_str()))
+    {
+        return Err(err!("section {} is in the package and in the part", s.name));
+    }
+    let defined: std::collections::BTreeSet<&str> = obj
+        .symbols
+        .iter()
+        .filter(|s| s.section.is_some())
+        .map(|s| s.name.as_str())
+        .collect();
+    if let Some(s) = part
+        .symbols
+        .iter()
+        .find(|s| s.section.is_some() && defined.contains(s.name.as_str()))
+    {
+        return Err(err!(
+            "symbol {} is defined by the package and by the part",
+            s.name
+        ));
+    }
+    out.sections.extend(part.sections.iter().cloned());
+    out.symbols.extend(part.symbols.iter().cloned());
+    out.relocs.extend(part.relocs.iter().cloned());
+    // a name that is defined now is no longer an undefined entry; the other undefined names are listed once
+    let now: std::collections::BTreeSet<String> = out
+        .symbols
+        .iter()
+        .filter(|s| s.section.is_some())
+        .map(|s| s.name.clone())
+        .collect();
+    let mut seen = std::collections::BTreeSet::new();
+    out.symbols
+        .retain(|s| s.section.is_some() || (!now.contains(&s.name) && seen.insert(s.name.clone())));
+    Ok(out)
+}
+
 /// The package file of `body` built against resident table `table_major.table_minor`.
 pub fn pack(body: &[u8], table_major: u16, table_minor: u16) -> Result<Vec<u8>> {
     let size = u32::try_from(body.len())
@@ -145,10 +198,11 @@ fn table(s: &str) -> Result<(u16, u16)> {
     Ok((num(major)?, num(minor)?))
 }
 
-const USAGE: &str = "usage: patchkit syspkg pack BODY --out FILE --table MAJOR.MINOR\n       patchkit syspkg build OBJECT --out FILE";
+const USAGE: &str = "usage: patchkit syspkg pack BODY --out FILE --table MAJOR.MINOR\n       patchkit syspkg build OBJECT [--part OBJECT]... --out FILE";
 
 pub fn run(args: &[String]) -> Result<()> {
     let (mut body, mut out, mut tab) = (None, None, None);
+    let mut parts: Vec<&String> = vec![];
     let mut it = args.iter();
     let build_cmd = match it.next().map(String::as_str) {
         Some("pack") => false,
@@ -159,6 +213,7 @@ pub fn run(args: &[String]) -> Result<()> {
         match a.as_str() {
             "--out" => out = it.next(),
             "--table" => tab = it.next(),
+            "--part" => parts.push(it.next().ok_or_else(|| err!("{USAGE}"))?),
             _ if body.is_none() => body = Some(a),
             _ => return Err(err!("{USAGE}")),
         }
@@ -173,10 +228,18 @@ pub fn run(args: &[String]) -> Result<()> {
             ));
         }
         let text = std::fs::read_to_string(body).map_err(|e| err!("{body}: {e}"))?;
-        let obj = Dko::parse(&text).map_err(|e| err!("{body}: {e}"))?;
+        let mut obj = Dko::parse(&text).map_err(|e| err!("{body}: {e}"))?;
+        for p in &parts {
+            let text = std::fs::read_to_string(p).map_err(|e| err!("{p}: {e}"))?;
+            let part = Dko::parse(&text).map_err(|e| err!("{p}: {e}"))?;
+            obj = with_part(&obj, &part).map_err(|e| err!("{p}: {e}"))?;
+        }
         let (b, major, minor) = self::body(&obj).map_err(|e| err!("{body}: {e}"))?;
         (pack(&b, major, minor)?, major, minor)
     } else {
+        if !parts.is_empty() {
+            return Err(err!("--part belongs to syspkg build"));
+        }
         let Some(tab) = tab else {
             return Err(err!("{USAGE}"));
         };

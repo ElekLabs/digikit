@@ -5,7 +5,7 @@ export const HOST_DIR_MAGIC = 0x44484b44;
 /** `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml). */
 export const HOST_DIR_READY = 0x52454459;
 /** The ids this build knows (`[[host_dir]]` of abi.toml); a core may have fewer, which its directory says in `count`. */
-export const HOST_COUNT = 6;
+export const HOST_COUNT = 25;
 
 /** The package statics that tools read by name, and their ids in the host directory (`DKRT_HOST_DIR`). */
 export const HOST_ID = {
@@ -15,6 +15,25 @@ export const HOST_ID = {
   TABLE_BAD: 3,
   PACKAGE_LO: 4,
   PACKAGE_HI: 5,
+  MENU_LOAD: 6,
+  MENU_LOAD_N: 7,
+  MENU_POPUP: 8,
+  MENU_POPUP_TEXT: 9,
+  MENU_POPUPS: 10,
+  MENU_ABOUT: 11,
+  MENU_ABOUT_N: 12,
+  MENU_PANEL: 13,
+  MENU_PANEL_N: 14,
+  MENU_MEM: 15,
+  MENU_MEM_N: 16,
+  MENU_TICK: 17,
+  MENU_FXR_PEND: 18,
+  MENU_FXR_SET: 19,
+  MENU_FXR_FLUSH: 20,
+  MENU_APPLIES: 21,
+  MENU_ROUTE_N: 22,
+  MENU_ROUTE_ITEM: 23,
+  MENU_LOADED: 24,
 } as const;
 /** Who fills each entry of the directory: the package at its entry, or the core before it starts the package. */
 export const HOST_OWNER = {
@@ -24,6 +43,25 @@ export const HOST_OWNER = {
   TABLE_BAD: 'package',
   PACKAGE_LO: 'core',
   PACKAGE_HI: 'core',
+  MENU_LOAD: 'package',
+  MENU_LOAD_N: 'package',
+  MENU_POPUP: 'package',
+  MENU_POPUP_TEXT: 'package',
+  MENU_POPUPS: 'package',
+  MENU_ABOUT: 'package',
+  MENU_ABOUT_N: 'package',
+  MENU_PANEL: 'package',
+  MENU_PANEL_N: 'package',
+  MENU_MEM: 'package',
+  MENU_MEM_N: 'package',
+  MENU_TICK: 'package',
+  MENU_FXR_PEND: 'package',
+  MENU_FXR_SET: 'package',
+  MENU_FXR_FLUSH: 'package',
+  MENU_APPLIES: 'package',
+  MENU_ROUTE_N: 'package',
+  MENU_ROUTE_ITEM: 'package',
+  MENU_LOADED: 'package',
 } as const;
 /** The boot level the core reports: `DkrtBootInfo.reason` (`SAFE_*`), `DkrtBootInfo.core_cause` (`CORE_*`) and the counter thresholds of abi.toml. */
 export const BOOT_LEVEL = {

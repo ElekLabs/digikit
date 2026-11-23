@@ -998,3 +998,100 @@ name = "dkrt_ui_settings_rows"
 sig = "void dkrt_ui_settings_rows(u8 *settings_menu)"
 doc = "Called by core/ui at the end of the SETTINGS rebuild (the `ui.settings_rows` hook of the system package): the package adds its rows to the stock menu `settings_menu` (the menu object the rebuild's hook gets) with dk_ui_stock_row. With no package, a package built before the hook, or a null hook entry, it does nothing: the stock menu stays as it is."
 at = "menu_exports"
+
+# The DIGIKIT menu is C code in the package; the statics its tests read are package-owned ids of the host directory (appended; the C names are the `DK_*` globals of menu.c).
+
+[[host_dir]]
+name = "MENU_LOAD"
+owner = "package"
+doc = "DK_LOAD of the DIGIKIT menu: the MODULES page's rows as text (40 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_LOAD_N"
+owner = "package"
+doc = "DK_LOAD_N of the DIGIKIT menu: the number of rows in MENU_LOAD."
+
+[[host_dir]]
+name = "MENU_POPUP"
+owner = "package"
+doc = "DK_POPUP of the DIGIKIT menu: the title of the last dialog the menu opened."
+
+[[host_dir]]
+name = "MENU_POPUP_TEXT"
+owner = "package"
+doc = "DK_POPUP_TEXT of the DIGIKIT menu: the text of the last dialog the menu opened."
+
+[[host_dir]]
+name = "MENU_POPUPS"
+owner = "package"
+doc = "DK_POPUPS of the DIGIKIT menu: how many dialogs the menu opened."
+
+[[host_dir]]
+name = "MENU_ABOUT"
+owner = "package"
+doc = "DK_ABOUT of the DIGIKIT menu: the ABOUT page's rows as text (24 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_ABOUT_N"
+owner = "package"
+doc = "DK_ABOUT_N of the DIGIKIT menu: the number of rows in MENU_ABOUT."
+
+[[host_dir]]
+name = "MENU_PANEL"
+owner = "package"
+doc = "DK_PANEL of the DIGIKIT menu: the rows of the last side panel as text (4 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_PANEL_N"
+owner = "package"
+doc = "DK_PANEL_N of the DIGIKIT menu: the number of rows in MENU_PANEL."
+
+[[host_dir]]
+name = "MENU_MEM"
+owner = "package"
+doc = "DK_MEM of the DIGIKIT menu: the MEMORY page's rows as text (8 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_MEM_N"
+owner = "package"
+doc = "DK_MEM_N of the DIGIKIT menu: the number of rows in MENU_MEM."
+
+[[host_dir]]
+name = "MENU_TICK"
+owner = "package"
+doc = "TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row."
+
+[[host_dir]]
+name = "MENU_FXR_PEND"
+owner = "package"
+doc = "DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send)."
+
+[[host_dir]]
+name = "MENU_FXR_SET"
+owner = "package"
+doc = "DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`)."
+
+[[host_dir]]
+name = "MENU_FXR_FLUSH"
+owner = "package"
+doc = "DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush."
+
+[[host_dir]]
+name = "MENU_APPLIES"
+owner = "package"
+doc = "DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran."
+
+[[host_dir]]
+name = "MENU_ROUTE_N"
+owner = "package"
+doc = "DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered."
+
+[[host_dir]]
+name = "MENU_ROUTE_ITEM"
+owner = "package"
+doc = "DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown."
+
+[[host_dir]]
+name = "MENU_LOADED"
+owner = "package"
+doc = "LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads."

@@ -566,10 +566,14 @@ pub unsafe fn blit(dst: *mut u8, src: *mut u8) {
 }
 
 /// The firmware's own save of the working state: the project into the persistent arena, the arena into the boot record.
+///
+/// Host tests link no firmware: there both saves do nothing (the restart export is in the resident table, so a test binary holds `dkrt_restart`).
 pub unsafe fn project_serialize() {
+    #[cfg(not(test))]
     dkfw::project::serialize();
 }
 pub unsafe fn boot_record_write() {
+    #[cfg(not(test))]
     dkfw::storage::boot_record_write();
 }
 

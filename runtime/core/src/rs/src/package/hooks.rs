@@ -41,8 +41,7 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
         overlay_remove: Some(overlay_remove),
     },
     provider: ProviderHooks { query: Some(provider_query) },
-    // the DIGIKIT menu fills it when it is part of the package
-    ui: UiHooks { settings_rows: None },
+    ui: UiHooks { settings_rows: Some(crate::package::menu::dk_app_settings_rows) },
 };
 
 /// The package's first-use setup (`init_once`): the package gets the resident table, the in-crate services declare their record kinds and the runtime compares them with

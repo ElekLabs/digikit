@@ -317,12 +317,19 @@ fn a_core_only_boot_attaches_no_package_and_runs_none_of_its_code() {
             let b = boot_with(&f, &env, End::FirstPass);
             assert_eq!((b.safe, b.core_only, b.reason, b.cause), (true, true, SAFE_CORE_ONLY, CORE_MISSING));
             assert!(!hooks::installed(), "no package hook is installed after a core-only boot");
+            // core/ui's SETTINGS hook asks the runtime for the package's rows: with no package it adds nothing (stock behaviour)
+            crate::package::menu::tests::take();
+            crate::menu_exports::dkrt_ui_settings_rows(0x1000 as *mut u8);
+            assert_eq!(crate::package::menu::tests::take(), 0, "no package: the hook has no row to add");
             assert!(env.steps.borrow().contains(&"stage1") && !env.steps.borrow().contains(&"package"), "stage 1 looked, the package was not started");
             assert!(!env.steps.borrow().contains(&"safe"), "the package was not told to go safe");
             // the same core boots normally the next time: the boot attaches the package
             let b = boot(&f, End::Early);
             assert!(b.loaded);
             assert!(hooks::installed());
+            // ... and then the same call reaches the package's menu with the menu object it was given
+            crate::menu_exports::dkrt_ui_settings_rows(0x1000 as *mut u8);
+            assert_eq!(crate::package::menu::tests::take(), 0x1000, "a package is attached: its menu gets the stock menu");
         });
     }
 }

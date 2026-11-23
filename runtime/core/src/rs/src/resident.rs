@@ -8,6 +8,7 @@ mod arena;
 mod boot;
 mod card;
 mod dlog;
+mod exports;
 mod fault;
 mod host_dir;
 mod imports;

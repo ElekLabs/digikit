@@ -71,6 +71,7 @@ groups! {
     imports: ImportRows,
     links: LinkRows,
     host_dir: HostDirFns,
+    exports: ExportFns,
 }
 
 // The table holds pointers to groups of function pointers and to the resident statics: it is built once and only read.

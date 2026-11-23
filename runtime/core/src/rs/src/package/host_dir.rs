@@ -20,6 +20,8 @@ fn address_of(id: u32) -> DevAddr {
         DevAddr::of_published(addr_of!(DKRT_TICKS))
     } else if id == HOST_TABLE_BAD {
         DevAddr::of_published(addr_of!(DKRT_TABLE_BAD))
+    } else if let Some(a) = crate::package::menu::published(id) {
+        a
     } else {
         DevAddr::NULL
     }

@@ -143,23 +143,33 @@ fn a_missing_group_is_refused_by_name() {
     each_group!(one);
 }
 
-/// `links` is the group that version 1.1 appended (RC2s-2 step c) and `host_dir` the one of 1.2 (the host directory): the layout of an older package is the prefix of a newer
-/// table and of the checked `Resident`, so a 1.0 or 1.1 package reads a 1.2 table at the offsets it always had, and a newer package finds an older core out by its minor (and
-/// by the pointer the table is too short for).
+/// `links` is the group that version 1.1 appended (RC2s-2 step c), `host_dir` the one of 1.2 (the host directory) and `exports` the one of 1.3 (the menu's calls, RC2s-3): the
+/// layout of an older package is the prefix of a newer table and of the checked `Resident`, so a 1.0, 1.1 or 1.2 package reads a 1.3 table at the offsets it always had, and a
+/// newer package finds an older core out by its minor (and by the pointer the table is too short for).
 #[test]
 fn the_appended_groups_are_the_last_ones_so_an_older_package_is_a_prefix() {
     use core::mem::{offset_of, size_of};
-    assert_eq!(RESIDENT_MINOR, 3, "this test is about the appends of 1.1 and 1.2: a later minor appends after `host_dir` and needs its own case");
+    assert_eq!(RESIDENT_MINOR, 3, "this test is about the appends of 1.1 to 1.3: a later minor appends after `exports` and needs its own case");
     let pointer = size_of::<*const ()>();
     assert_eq!(offset_of!(ResidentTable, links) + pointer, offset_of!(ResidentTable, host_dir));
-    assert_eq!(offset_of!(ResidentTable, host_dir) + pointer, size_of::<ResidentTable>());
+    assert_eq!(offset_of!(ResidentTable, host_dir) + pointer, offset_of!(ResidentTable, exports));
+    assert_eq!(offset_of!(ResidentTable, exports) + pointer, size_of::<ResidentTable>());
     assert_eq!(offset_of!(Resident, links) + size_of::<dkrt_abi::resident::LinkRows>(), offset_of!(Resident, host_dir));
-    assert_eq!(offset_of!(Resident, host_dir) + size_of::<dkrt_abi::resident::HostDirFns>(), size_of::<Resident>());
+    assert_eq!(offset_of!(Resident, host_dir) + size_of::<dkrt_abi::resident::HostDirFns>(), offset_of!(Resident, exports));
+    assert_eq!(offset_of!(Resident, exports) + size_of::<dkrt_abi::resident::ExportFns>(), size_of::<Resident>());
+    // the 1.2 table, as the 1.2 core built it: no `exports` pointer, minor 2
+    let mut core_1_2 = copy();
+    core_1_2.header.minor = 2;
+    core_1_2.header.size = offset_of!(ResidentTable, exports) as u32;
+    core_1_2.exports = core::ptr::null();
+    let refused = open(&core_1_2, 3).err().expect("a 1.3 package on a 1.2 core is refused");
+    assert_eq!((refused.reason, refused.found, refused.need), (Reason::Minor, 2, 3));
     // the 1.1 table, as the 1.1 core built it: no `host_dir` pointer, minor 1
     let mut core_1_1 = copy();
     core_1_1.header.minor = 1;
     core_1_1.header.size = offset_of!(ResidentTable, host_dir) as u32;
     core_1_1.host_dir = core::ptr::null();
+    core_1_1.exports = core::ptr::null();
     let refused = open(&core_1_1, 2).err().expect("a 1.2 package on a 1.1 core is refused");
     assert_eq!((refused.reason, refused.found, refused.need), (Reason::Minor, 1, 2));
     // the 1.0 table, as the 1.0 core built it: no `links` and no `host_dir`, minor 0
@@ -168,6 +178,7 @@ fn the_appended_groups_are_the_last_ones_so_an_older_package_is_a_prefix() {
     core_1_0.header.size = offset_of!(ResidentTable, links) as u32;
     core_1_0.links = core::ptr::null();
     core_1_0.host_dir = core::ptr::null();
+    core_1_0.exports = core::ptr::null();
     let refused = open(&core_1_0, 1).err().expect("a 1.1 package on a 1.0 core is refused");
     assert_eq!((refused.reason, refused.found, refused.need), (Reason::Minor, 0, 1));
     // an older package on the newest table: accepted (the version rule); it reads the groups it knows as they were

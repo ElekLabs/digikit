@@ -5,7 +5,7 @@ pub const HOST_DIR_MAGIC: u32 = 0x44484b44;
 /// `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml).
 pub const HOST_DIR_READY: u32 = 0x52454459;
 /// The ids this build knows (`[[host_dir]]` of abi.toml).
-pub const HOST_COUNT: usize = 6;
+pub const HOST_COUNT: usize = 25;
 /// DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area).
 pub const HOST_DSP: u32 = 0;
 /// DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header).
@@ -18,6 +18,44 @@ pub const HOST_TABLE_BAD: u32 = 3;
 pub const HOST_PACKAGE_LO: u32 = 4;
 /// One past the last byte of that block.
 pub const HOST_PACKAGE_HI: u32 = 5;
+/// DK_LOAD of the DIGIKIT menu: the MODULES page's rows as text (40 rows of 24 bytes).
+pub const HOST_MENU_LOAD: u32 = 6;
+/// DK_LOAD_N of the DIGIKIT menu: the number of rows in MENU_LOAD.
+pub const HOST_MENU_LOAD_N: u32 = 7;
+/// DK_POPUP of the DIGIKIT menu: the title of the last dialog the menu opened.
+pub const HOST_MENU_POPUP: u32 = 8;
+/// DK_POPUP_TEXT of the DIGIKIT menu: the text of the last dialog the menu opened.
+pub const HOST_MENU_POPUP_TEXT: u32 = 9;
+/// DK_POPUPS of the DIGIKIT menu: how many dialogs the menu opened.
+pub const HOST_MENU_POPUPS: u32 = 10;
+/// DK_ABOUT of the DIGIKIT menu: the ABOUT page's rows as text (24 rows of 24 bytes).
+pub const HOST_MENU_ABOUT: u32 = 11;
+/// DK_ABOUT_N of the DIGIKIT menu: the number of rows in MENU_ABOUT.
+pub const HOST_MENU_ABOUT_N: u32 = 12;
+/// DK_PANEL of the DIGIKIT menu: the rows of the last side panel as text (4 rows of 24 bytes).
+pub const HOST_MENU_PANEL: u32 = 13;
+/// DK_PANEL_N of the DIGIKIT menu: the number of rows in MENU_PANEL.
+pub const HOST_MENU_PANEL_N: u32 = 14;
+/// DK_MEM of the DIGIKIT menu: the MEMORY page's rows as text (8 rows of 24 bytes).
+pub const HOST_MENU_MEM: u32 = 15;
+/// DK_MEM_N of the DIGIKIT menu: the number of rows in MENU_MEM.
+pub const HOST_MENU_MEM_N: u32 = 16;
+/// TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row.
+pub const HOST_MENU_TICK: u32 = 17;
+/// DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send).
+pub const HOST_MENU_FXR_PEND: u32 = 18;
+/// DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`).
+pub const HOST_MENU_FXR_SET: u32 = 19;
+/// DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush.
+pub const HOST_MENU_FXR_FLUSH: u32 = 20;
+/// DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran.
+pub const HOST_MENU_APPLIES: u32 = 21;
+/// DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered.
+pub const HOST_MENU_ROUTE_N: u32 = 22;
+/// DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown.
+pub const HOST_MENU_ROUTE_ITEM: u32 = 23;
+/// LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads.
+pub const HOST_MENU_LOADED: u32 = 24;
 /// Every id with the name of the static it stands for, in id order.
 #[rustfmt::skip]
 pub const HOST_NAMES: [&str; HOST_COUNT] = [
@@ -27,4 +65,23 @@ pub const HOST_NAMES: [&str; HOST_COUNT] = [
     "DKRT_TABLE_BAD",
     "DKRT_PACKAGE_LO",
     "DKRT_PACKAGE_HI",
+    "DKRT_MENU_LOAD",
+    "DKRT_MENU_LOAD_N",
+    "DKRT_MENU_POPUP",
+    "DKRT_MENU_POPUP_TEXT",
+    "DKRT_MENU_POPUPS",
+    "DKRT_MENU_ABOUT",
+    "DKRT_MENU_ABOUT_N",
+    "DKRT_MENU_PANEL",
+    "DKRT_MENU_PANEL_N",
+    "DKRT_MENU_MEM",
+    "DKRT_MENU_MEM_N",
+    "DKRT_MENU_TICK",
+    "DKRT_MENU_FXR_PEND",
+    "DKRT_MENU_FXR_SET",
+    "DKRT_MENU_FXR_FLUSH",
+    "DKRT_MENU_APPLIES",
+    "DKRT_MENU_ROUTE_N",
+    "DKRT_MENU_ROUTE_ITEM",
+    "DKRT_MENU_LOADED",
 ];

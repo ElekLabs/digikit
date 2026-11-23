@@ -101,6 +101,10 @@ pub struct ModuleToml {
     /// `patchkit syspkg build` packs it (docs/plans/resident-core-and-system-package.md).
     #[serde(default)]
     system_package: Option<ObjectToml>,
+    /// An object that `patchkit syspkg build --part` links into the system package (`[package_part]`: the DIGIKIT menu's C object). It is built and checked like the
+    /// others and is not linked into the image.
+    #[serde(default)]
+    package_part: Option<ObjectToml>,
 }
 
 #[derive(Deserialize)]
@@ -150,9 +154,12 @@ impl ModuleToml {
         &self.module.id
     }
 
-    /// Every object the build makes: the `[[object]]` list and the `[system_package]` object.
+    /// Every object the build makes: the `[[object]]` list, the `[system_package]` object and the `[package_part]` object.
     fn built(&self) -> impl Iterator<Item = &ObjectToml> {
-        self.object.iter().chain(self.system_package.iter())
+        self.object
+            .iter()
+            .chain(self.system_package.iter())
+            .chain(self.package_part.iter())
     }
 
     /// A content module: its objects are build output (the cache), not committed.

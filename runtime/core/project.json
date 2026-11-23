@@ -35,15 +35,16 @@
     "package": {
       "executor": "nx:run-commands",
       "cache": true,
-      "description": "The system package artifact: dist/syspkg/runtime/system.dksp, the card file digikit/system.dksp (`patchkit syspkg build` of the committed [system_package] object build/package.dko.json: header, image, bss size, relocations). A stale object is the failure of patchkit:objects-check.",
+      "description": "The system package artifact: dist/syspkg/runtime/system.dksp, the card file digikit/system.dksp (`patchkit syspkg build` of the committed [system_package] object build/package.dko.json and the DIGIKIT menu's [package_part] object: header, image, bss size, relocations). A stale object is the failure of patchkit:objects-check.",
       "inputs": [
         "{projectRoot}/build/package.dko.json",
+        "{workspaceRoot}/runtime/apps/digikit-menu/build/digikit-menu.dko.json",
         { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
       ],
       "dependsOn": ["patchkit:cli"],
       "outputs": ["{workspaceRoot}/dist/syspkg/runtime"],
       "options": {
-        "command": "dist/patchkit/patchkit --root . syspkg build runtime/core/build/package.dko.json --out dist/syspkg/runtime/system.dksp",
+        "command": "dist/patchkit/patchkit --root . syspkg build runtime/core/build/package.dko.json --part runtime/apps/digikit-menu/build/digikit-menu.dko.json --out dist/syspkg/runtime/system.dksp",
         "cwd": "."
       }
     },

@@ -1,6 +1,6 @@
 # core/digikit-menu
 
-Adds **SETTINGS > DIGIKIT** (the ninth row, after SYSTEM). Written in C on `<dk/platform/ui.h>` (`sdk/include/dk/platform/ui.h`); `core/ui` draws it with the firmware's own views. Emulator only: nothing here has run on a device.
+Adds **SETTINGS > DIGIKIT** (the ninth row, after SYSTEM). Written in C on `<dk/platform/ui.h>` (`sdk/include/dk/platform/ui.h`); `core/ui` draws it with the firmware's own views. It is **part of the system package** (`digikit/system.dksp` on the card), not of the flashed image: `patchkit syspkg build --part` links its object into the package, which defines the `dkrt_*` and `dk_ui_*` symbols it calls (`runtime/core/src/rs/src/package/menu_link.rs`). With no package (a core-only boot) there is no DIGIKIT row. Emulator only: nothing here has run on a device.
 
 The DIGIKIT menu has the rows ABOUT, HEALTH, MEMORY, and MODULES (a safe-mode row `SAFE: <reason>` comes first in safe mode). There is no DEBUG row: the debug log is on while `digikit/debug` is loaded. The check mark of a MODULES row is the only on/off of a module (there is no REMOTE switch).
 
@@ -23,7 +23,7 @@ The module `requires` `core/runtime` and `core/ui`. The runtime's exported C fun
 
 ## Notes
 
-- No hook and no firmware include (an app, `layercheck` enforces it): `core/ui` owns the hook at the end of the SETTINGS item list rebuild and calls the menu's `dk_app_settings_rows`, which adds the DIGIKIT row. Everything else is `<dk/platform/ui.h>`; the firmware's menu classes (finding 28, 71) are `core/ui`'s concern.
+- No hook and no firmware include (an app, `layercheck` enforces it): `core/ui` owns the hook at the end of the SETTINGS item list rebuild and asks the runtime for the package's rows (`dkrt_ui_settings_rows`, the `ui.settings_rows` hook), which calls the menu's `dk_app_settings_rows` to add the DIGIKIT row. Everything else is `<dk/platform/ui.h>`; the firmware's menu classes (finding 28, 71) are `core/ui`'s concern.
 - Memory: the scan table (32 entries), the fit result and the pending state are statics of the module. The card read of INFO is done by the runtime (`dkrt_module_header`, in its own DMA-safe buffer); module RAM is written by this code only (the proofs check stray writes). The module links without `memcpy` and `memset`.
 - Globals read by the proofs by name (layout: 24-byte text rows): `STORE`, `NENT`, `NOK`, `LOADED`, `TICK` (the checked rows), `DK_LOAD`/`DK_LOAD_N` (the first 23 bytes of each MODULES label), `DK_PANEL`/`DK_PANEL_N` (the side panel), `DK_ROUTE_N`/`DK_ROUTE_ITEM` (the routes the last choice offered), `DK_FXR_PEND` (pending routes), `DK_ABOUT`/`DK_ABOUT_N`, `DK_MEM`/`DK_MEM_N`, `DK_LINES`, `DK_HEALTH`, `DK_HEALTH_MENU`, `DK_REDRAWS`, `DK_POLLS`, `dk_poll`, `DK_POPUP`, `DK_POPUP_TEXT` and `DK_POPUPS` (the last confirm), `DK_PENDING`, `DK_APPLIES`, `DK_APPLY_SET`, `DK_APPLY_RESTART`, `DK_FXR_SET`, `DK_FXR_FLUSH`, `DK_NEEDS_READS` and `dk_entry_count`.
 - Findings: [28](../../../docs/findings/28-digikit-menu.md), [34](../../../docs/findings/34-digikit-robustness.md), [38](../../../docs/findings/38-digikit-menu-restart.md), [65](../../../docs/findings/65-fx-routes.md), [71](../../../docs/findings/71-ui-components-1-17.md).

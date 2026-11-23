@@ -93,7 +93,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   service-check DIR... [--sdk sdk/sdk.toml]
                                          the structure check of a service crate (services/NAME): layout, one exported entry,
                                          declarations equal to the manifest in sdk.toml (`module:check service/NAME`)
-  syspkg build OBJECT --out FILE         the system package from the package object (`core/runtime` `build/package.dko.json`): header, image, bss size and relocations
+  syspkg build OBJECT [--part OBJECT]... --out FILE
+                                         the system package from the package object (`core/runtime` `build/package.dko.json`) and the objects linked into it (the DIGIKIT menu's): header, image, bss size and relocations
   syspkg pack BODY --out FILE --table MAJOR.MINOR
                                          the system package: the 48-byte header (`dkrt_sdk::syspkg`) in front of BODY
   owners RUNTIME.dko.json [--owners runtime/core/owners.toml] --out DIR

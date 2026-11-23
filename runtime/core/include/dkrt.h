@@ -165,7 +165,45 @@
 #define DKRT_HOST_PACKAGE_LO 4
 /* One past the last byte of that block. */
 #define DKRT_HOST_PACKAGE_HI 5
-#define DKRT_HOST_COUNT 6
+/* DK_LOAD of the DIGIKIT menu: the MODULES page's rows as text (40 rows of 24 bytes). */
+#define DKRT_HOST_MENU_LOAD 6
+/* DK_LOAD_N of the DIGIKIT menu: the number of rows in MENU_LOAD. */
+#define DKRT_HOST_MENU_LOAD_N 7
+/* DK_POPUP of the DIGIKIT menu: the title of the last dialog the menu opened. */
+#define DKRT_HOST_MENU_POPUP 8
+/* DK_POPUP_TEXT of the DIGIKIT menu: the text of the last dialog the menu opened. */
+#define DKRT_HOST_MENU_POPUP_TEXT 9
+/* DK_POPUPS of the DIGIKIT menu: how many dialogs the menu opened. */
+#define DKRT_HOST_MENU_POPUPS 10
+/* DK_ABOUT of the DIGIKIT menu: the ABOUT page's rows as text (24 rows of 24 bytes). */
+#define DKRT_HOST_MENU_ABOUT 11
+/* DK_ABOUT_N of the DIGIKIT menu: the number of rows in MENU_ABOUT. */
+#define DKRT_HOST_MENU_ABOUT_N 12
+/* DK_PANEL of the DIGIKIT menu: the rows of the last side panel as text (4 rows of 24 bytes). */
+#define DKRT_HOST_MENU_PANEL 13
+/* DK_PANEL_N of the DIGIKIT menu: the number of rows in MENU_PANEL. */
+#define DKRT_HOST_MENU_PANEL_N 14
+/* DK_MEM of the DIGIKIT menu: the MEMORY page's rows as text (8 rows of 24 bytes). */
+#define DKRT_HOST_MENU_MEM 15
+/* DK_MEM_N of the DIGIKIT menu: the number of rows in MENU_MEM. */
+#define DKRT_HOST_MENU_MEM_N 16
+/* TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row. */
+#define DKRT_HOST_MENU_TICK 17
+/* DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send). */
+#define DKRT_HOST_MENU_FXR_PEND 18
+/* DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`). */
+#define DKRT_HOST_MENU_FXR_SET 19
+/* DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush. */
+#define DKRT_HOST_MENU_FXR_FLUSH 20
+/* DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran. */
+#define DKRT_HOST_MENU_APPLIES 21
+/* DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered. */
+#define DKRT_HOST_MENU_ROUTE_N 22
+/* DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown. */
+#define DKRT_HOST_MENU_ROUTE_ITEM 23
+/* LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads. */
+#define DKRT_HOST_MENU_LOADED 24
+#define DKRT_HOST_COUNT 25
 
 /* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */
 #define DKRT_E_NOT_FOUND (-1)            /* no store, or no such file or module */
