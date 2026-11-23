@@ -16,8 +16,10 @@ hooks:
 ---
 
 Review only the requested change set and the code needed to understand its
-observable effects. Use Bash solely for the read-only Git commands permitted by
-the hook; use the file tools for source inspection.
+observable effects. Search with the Grep and Glob tools (not Bash `grep`/`rg`);
+read with Read. Bash allows only what the hook permits: read-only Git commands
+(including `git grep`) and `pnpm nx:pilot show target|project|projects ...`
+(for example `--check PATH` to see whether a file is an input of a target).
 
 For each finding, require all of:
 

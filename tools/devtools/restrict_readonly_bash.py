@@ -3,9 +3,11 @@
 
 This script is the PreToolUse hook of the read-only project agents (`.claude/agents/`).
 
-Default profile (reviewer): read-only Git commands only.
-``--profile architect``: the same Git commands, plus the read-only firmware
-query CLI ``uv run python -m tools.coldfire.fw SUBCOMMAND ...``.
+Default profile (reviewer): read-only Git commands (including ``git grep``) and
+the read-only Nx graph queries ``pnpm nx:pilot show target|project|projects ...``
+(``--check PATH`` answers whether a file is a target input).
+``--profile architect``: the same, plus the read-only firmware query CLI
+``uv run python -m tools.coldfire.fw SUBCOMMAND ...``.
 """
 
 import json
@@ -20,6 +22,7 @@ ALLOWED_SUBCOMMANDS = {
     "diff-files",
     "diff-index",
     "diff-tree",
+    "grep",
     "log",
     "ls-files",
     "ls-tree",
@@ -54,6 +57,8 @@ FW_SUBCOMMANDS = {
     "str",
     "xref",
 }
+NX_SHOW_PREFIX = ["pnpm", "nx:pilot", "show"]
+NX_SHOW_SUBCOMMANDS = {"project", "projects", "target"}
 PROFILES = {"reviewer", "architect"}
 
 FORBIDDEN_ARGUMENTS = {
@@ -62,6 +67,8 @@ FORBIDDEN_ARGUMENTS = {
     "--paginate",
     "--textconv",
     "-p",
+    # git grep: runs a program on the matches
+    "-O",
 }
 
 
@@ -90,6 +97,13 @@ def check_fw(words: list[str]) -> None:
     print("{}")
 
 
+def check_nx_show(words: list[str]) -> None:
+    rest = words[len(NX_SHOW_PREFIX) :]
+    if not rest or rest[0] not in NX_SHOW_SUBCOMMANDS:
+        deny("only `pnpm nx:pilot show target|project|projects` is allowed")
+    print("{}")
+
+
 def main() -> None:
     global PROFILE
     PROFILE = parse_profile()
@@ -113,6 +127,10 @@ def main() -> None:
 
     if PROFILE == "architect" and words[: len(FW_PREFIX)] == FW_PREFIX:
         check_fw(words)
+        return
+
+    if words[: len(NX_SHOW_PREFIX)] == NX_SHOW_PREFIX:
+        check_nx_show(words)
         return
 
     if not words or words[0] != "git":
@@ -143,6 +161,10 @@ def main() -> None:
             deny("Git configuration overrides are not allowed")
         if word.startswith("--config-env") or word.startswith("--exec-path"):
             deny("Git execution/configuration overrides are not allowed")
+        if word.startswith("--open-files-in-pager") or (
+            word.startswith("-O") and len(word) > 2
+        ):
+            deny("commands may not run a program on the matches")
         if word.startswith("--output"):
             deny("commands may not write output files")
 
