@@ -5,7 +5,7 @@
 //! one takes it by reference (`core: &C`, `fw: &impl Fw`): the runtime passes its `RealCore` and `RuntimeFw` (zero-sized types, so the calls are static) and a
 //! host test passes a `FakeCore` and a `FakeFw`. The click state (`slots`) and the state between `apply` and `apply_record` (`records`) are statics of
 //! this crate: one machines service, one set. The runtime's hooks (`dkrt_page_key`, `dkrt_page_turn`) are thin wrappers in `handlers.rs`.
-//! Layout (the service template, `sdk/templates/service`): `records` (the `Service` handlers), `slots` `tests/` (host tests over `FakeCore`); `nativepage`, `paramapi` and `dsp/` are the service's own modules.
+//! Layout (the service template, `sdk/templates/service`): `records` (the `Service` handlers), `check` (the load check), `apply` (the rows of a module), `unload` and `parking` (give rows back; absent numbers), `registry` (the registry state), `slots` `tests/` (host tests over `FakeCore`); `nativepage`, `paramapi` and `dsp/` are the service's own modules.
 #![no_std]
 #[cfg(test)]
 extern crate std;
@@ -17,14 +17,21 @@ pub(crate) fn profile<C: dkrt_abi::core_api::CoreApi>(
     dkrt_abi::platform::DeviceProfile::by_id(core.device_id())
 }
 
+pub mod apply;
 pub mod assign;
 pub mod build;
+pub mod check;
 pub mod dsp;
 pub mod guard;
 pub mod info;
+pub mod modules;
 pub mod nativepage;
 pub mod paramapi;
+pub mod parking;
 pub mod records;
+pub mod registry;
 pub mod rows;
 pub mod slots;
+pub mod unload;
 pub mod validate;
+pub mod view;

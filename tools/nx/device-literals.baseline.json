@@ -623,7 +623,6 @@
   "services/machines/dks/src/lib.rs": 10,
   "services/machines/dks/tests/image.rs": 6,
   "services/machines/src/assign.rs": 1,
-  "services/machines/src/build.rs": 1,
   "services/machines/src/info.rs": 6,
   "services/machines/tests/assign.rs": 13,
   "services/machines/tests/build.rs": 51,
