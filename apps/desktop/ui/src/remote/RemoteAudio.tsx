@@ -2,7 +2,7 @@ import { For, Show, createEffect, on, onCleanup, onMount, untrack } from 'solid-
 import type { RemoteAudioHost } from '@digi/workbench-core/host/host.ts';
 import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { createRemoteAudio } from './remote-audio';
+import { createRemoteAudio } from './audio';
 
 export default function RemoteAudio(props: { host: RemoteAudioHost; source: () => TargetBinding }) {
   const app = useTransferApp();

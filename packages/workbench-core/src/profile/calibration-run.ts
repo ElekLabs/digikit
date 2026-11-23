@@ -3,7 +3,7 @@
 // No module state: the session, the MIDI sink and the modules are arguments, so a test gives fakes. Host tests: tests/calibration-run.test.ts.
 import { MidiOut, RuntimeEvents, wallClock, type Clock, type DkSession, type MidiSink } from '@digi/dk-session';
 import { SPAN_PHASES } from '@digi/dk-session/gen_proto';
-import { registry } from '../data/device-profiles.ts';
+import { deviceOfInfoPort, registry } from '../data/device-profiles.ts';
 import { restartDevice } from '../modules/dktransfer.ts';
 import {
   CalibrationRunError,
@@ -73,8 +73,8 @@ const hex = (d: ArrayBuffer): string => Array.from(new Uint8Array(d), (b) => b.t
 
 /** The device a session reports: the id of its INFO port (`<id>-<version>`), which must be in the registry and have a `[midi]` table. */
 export function deviceOfInfo(port: string): string {
-  const id = port.split('-')[0] ?? '';
-  if (!registry.ids.includes(id)) throw new Error(`the target reports port ${port}, which is no known device`);
+  const id = deviceOfInfoPort(port);
+  if (id === undefined) throw new Error(`the target reports port ${port}, which is no known device`);
   return id;
 }
 

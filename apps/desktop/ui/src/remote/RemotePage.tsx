@@ -7,10 +7,9 @@ import { Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import PanelArt from '@digi/workbench-core/ui/components/PanelArt.tsx';
 import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
-import { registry, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
+import { deviceOfInfoPort, registry, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { identifyDevice, type DkSession, type RemoteState } from '@digi/dk-session';
 import {
-  deviceOfPort,
   infoDue,
   isRemoteMissing,
   keyErrorLine,
@@ -21,8 +20,8 @@ import {
   remoteRuntime,
   remoteStateWanted,
   stateProbeKey,
-} from './remote-core';
-import { windowShown } from './log-follow-core';
+} from './session';
+import { windowShown } from '../log-follow-core';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
@@ -129,7 +128,7 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
           if (!alive || t !== target()) return;
           infoKey = key;
           infoAt = Date.now();
-          const d = deviceOfPort(identity.id);
+          const d = deviceOfInfoPort(identity.id);
           setDevice(d);
           stock = !identity.info;
           stockOs = identity.os;

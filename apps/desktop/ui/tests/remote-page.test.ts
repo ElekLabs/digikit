@@ -1,11 +1,10 @@
 import { createFakeTransferApp, createFakeSessions } from '@digi/workbench-core/transfer/fake-app.ts';
-// The pure logic of the desktop Remote page (apps/desktop/ui/src/remote-core.ts).
+// The pure logic of the desktop Remote page (apps/desktop/ui/src/remote/session.ts).
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DkError, type DkSession } from '@digi/dk-session';
 import {
   INFO_EVERY_MS,
-  deviceOfPort,
   infoDue,
   isRemoteMissing,
   keyErrorLine,
@@ -16,7 +15,7 @@ import {
   remoteRuntime,
   remoteStateWanted,
   stateProbeKey,
-} from '../src/remote-core.ts';
+} from '../src/remote/session.ts';
 
 test('the notice: nothing when the module is on, where to check it, how to load the module', () => {
   assert.equal(remoteNotice({ enabled: true, format: 1, turnLimit: 30 }), '');
@@ -26,12 +25,6 @@ test('the notice: nothing when the module is on, where to check it, how to load 
   assert.match(remoteNotice(undefined, noModule), /not loaded.*Transfer page/);
   const other = new DkError({ error: 'no reply from the device', kind: 'timeout' });
   assert.equal(remoteNotice(undefined, other), 'no reply from the device');
-});
-
-test('the device behind a session', () => {
-  assert.equal(deviceOfPort('dt2'), 'dt2');
-  assert.equal(deviceOfPort('dn2-1.12'), 'dn2');
-  assert.equal(deviceOfPort('other'), undefined);
 });
 
 test('the runtime of the faceplate sends one request per key and turn', async () => {

@@ -1,7 +1,7 @@
 import { createEffect, on, onCleanup, onMount } from 'solid-js';
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
-import { SPECTRUM_FLOOR, type AnalyzerFrame } from './analyzer-frame';
+import { SPECTRUM_FLOOR, type AnalyzerFrame } from './frame';
 
 export type AnalyzerMode = 'Scope' | 'Spectrum';
 

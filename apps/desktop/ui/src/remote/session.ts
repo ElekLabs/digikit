@@ -1,10 +1,9 @@
-// The Remote page's logic, without the page: what the state of digikit/remote says to the user, the device behind a session, and the
+// The Remote page's logic, without the page: what the state of digikit/remote says to the user and the
 // runtime object the faceplate presses keys on. Pure, so host tests can run it (apps/desktop/ui/tests/remote-page.test.ts).
 import { DkError, type DkSession, type RemoteState } from '@digi/dk-session';
 import { writing } from '@digi/workbench-core/transfer/transfer-core.ts';
 import { isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
-import { isDeviceId, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 
 /**
  * The message under the faceplate for the state of digikit/remote (or for the error that asking for it gave). `listed` tells whether MODULES lists
@@ -116,12 +115,6 @@ export function remoteRuntime(get: () => Promise<DkSession>, report?: KeyReport,
     },
     turn: (encoder: number, detents: number) => run((s) => s.remoteTurn(encoder, detents)),
   };
-}
-
-/** The device id from the INFO port name of a session (the id, or the id and a version: `<id>-1.17`), or undefined when it is not a known device. */
-export function deviceOfPort(port: string): DeviceId | undefined {
-  const d = port.split('-')[0] ?? '';
-  return isDeviceId(d) ? d : undefined;
 }
 
 /** The Remote page asks INFO (it only names the device) at most this often while the target stays the same. */

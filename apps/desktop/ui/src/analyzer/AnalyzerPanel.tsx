@@ -11,8 +11,8 @@ import {
   frequencyAt,
   type AnalyzerInput,
   type AnalyzerResult,
-} from './analyzer-frame';
-import { createAnalyzerStream, type AnalyzerStatus } from './analyzer-stream';
+} from './frame';
+import { createAnalyzerStream, type AnalyzerStatus } from './stream';
 import './analyzer-panel.css';
 
 const AnalyzerPlot = lazy(() => import('./AnalyzerPlot'));

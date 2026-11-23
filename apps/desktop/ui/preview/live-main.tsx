@@ -19,7 +19,7 @@ import { createTauriHost } from '../src/host/tauri-host';
 import { installNativeFeel } from '../src/native';
 import LivePanel from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
-import RemotePage from '../src/RemotePage';
+import RemotePage from '../src/remote/RemotePage';
 import SidePanels from '../src/SidePanels';
 import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
 import { createLogFollow, followSession } from '../src/log-follow';

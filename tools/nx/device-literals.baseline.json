@@ -37,7 +37,6 @@
   "apps/desktop/ui/tests/memory.test.ts": 17,
   "apps/desktop/ui/tests/native-runtime.test.ts": 1,
   "apps/desktop/ui/tests/profile-backend.test.ts": 2,
-  "apps/desktop/ui/tests/remote-page.test.ts": 4,
   "apps/web/astro.config.mjs": 3,
   "apps/web/scripts/site-shots.mjs": 4,
   "apps/web/src/components/Faceplate.tsx": 2,

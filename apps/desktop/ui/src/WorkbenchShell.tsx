@@ -47,8 +47,8 @@ import type { Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
 import { setInspectorOpen, setInspectorTab } from './panel-open';
-import RemotePage from './RemotePage';
-import RemoteAudio from './RemoteAudio';
+import RemotePage from './remote/RemotePage';
+import RemoteAudio from './remote/RemoteAudio';
 import type { WorkerFactory } from '@digi/workbench-core/workers.ts';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { dspLine } from './dsp-core';
@@ -68,7 +68,7 @@ import { JobBusyError } from '@digi/workbench-core/jobs/jobs.ts';
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const PerformancePanel = lazy(() => import('./PerformancePanel'));
-const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
+const AnalyzerPanel = lazy(() => import('./analyzer/AnalyzerPanel'));
 
 export interface WorkbenchShellOptions {
   modulePages?: ModulePageSource;

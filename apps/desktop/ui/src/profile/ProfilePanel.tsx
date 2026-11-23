@@ -24,7 +24,7 @@ import RecordingButton from '../RecordingButton';
 import { cardRefresh } from '../card-state';
 import { createDkProfLoader } from '../dkprof-env';
 import { createEmulatorNames, createDeviceNames } from '../log-names-backend';
-import { deviceOfPort } from '../remote-core';
+import { deviceOfInfoPort } from '@digi/workbench-core/data/device-profiles.ts';
 import { createRecorder } from './recorder';
 import { createProfileSession } from './session';
 import HistoryGraph from './HistoryGraph';
@@ -128,7 +128,7 @@ export default function ProfilePanel(props: {
   /** The device display name and firmware version from a `<device-id>-<version>` port name. */
   const device = () => {
     const port = reading()?.port ?? '';
-    const d = deviceOfPort(port);
+    const d = deviceOfInfoPort(port);
     const version = port.slice(port.indexOf('-') + 1);
     return d ? `${panels[d].name}${version && version !== port ? ` ${version}` : ''}` : '';
   };
@@ -136,7 +136,7 @@ export default function ProfilePanel(props: {
   const emu = () => reading()?.emulator ?? onEmulator;
   const where = () => (emu() ? 'emulator' : 'USB');
   /** The calibration kept for the device of the reading, and what it estimates for the DSP rows (emulator only: a device measures cycles itself). */
-  const calibration = () => props.hub.active.get(deviceOfPort(reading()?.port ?? ''));
+  const calibration = () => props.hub.active.get(deviceOfInfoPort(reading()?.port ?? ''));
   const estimate = (v: DspView) => {
     const c = calibration();
     return c && emu() ? estimateDsp(v, c.doc) : undefined;

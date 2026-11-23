@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAnalyzerStream } from '../src/analyzer-stream';
+import { createAnalyzerStream } from '../src/analyzer/stream';
 
 const PCM = { generation: 1, rate: 48000, left: [0], right: [0] };
 

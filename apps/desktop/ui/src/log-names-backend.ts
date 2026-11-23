@@ -9,7 +9,7 @@ import type { DkProf } from '@digi/dk-session/dkprof';
 import { createLogNames, type LogNames, type NameSources, type RuntimeMaps } from '@digi/dk-session/log-names';
 import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { stockImageHash, type NameSession, type ShipSource } from '@digi/dk-session/log-names';
-import { deviceOfPort } from './remote-core';
+import { deviceOfInfoPort } from '@digi/workbench-core/data/device-profiles.ts';
 
 type SymbolHost = Pick<Host, 'library' | 'symbols'>;
 
@@ -27,7 +27,7 @@ async function emulatorShip(host: Pick<Host, 'rpc'>): Promise<ShipSource> {
 
 async function deviceShip(host: SymbolHost, session: NameSession): Promise<ShipSource | { unavailable: string }> {
   const info = await session.info();
-  const device = deviceOfPort(info.port ?? '');
+  const device = deviceOfInfoPort(info.port ?? '');
   if (!device || !info.image_id)
     return { unavailable: 'the device does not report its image id (flash it from the Firmware page)' };
   const record = (await host.library.readMaps(device)).ships.find((s) => s.image_id === info.image_id);

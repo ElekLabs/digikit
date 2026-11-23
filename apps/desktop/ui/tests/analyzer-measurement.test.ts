@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { dbfs, FFT_SIZE, frequencyAt, SPECTRUM_FLOOR, type AnalyzerInput } from '../src/analyzer-frame';
-import { createAnalyzerMeasurement } from '../src/analyzer-measurement';
+import { dbfs, FFT_SIZE, frequencyAt, SPECTRUM_FLOOR, type AnalyzerInput } from '../src/analyzer/frame';
+import { createAnalyzerMeasurement } from '../src/analyzer/measurement';
 
 const RATE = 48000;
 

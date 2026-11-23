@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnalyzerPcm } from '@digi/workbench-core/host/host.ts';
-import { createAnalyzerStream } from '../src/analyzer-stream';
+import { createAnalyzerStream } from '../src/analyzer/stream';
 import { createTauriHost } from '../src/host/tauri-host';
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));

@@ -13,7 +13,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 import { cardRefresh } from './card-state';
-import { deviceOfPort } from './remote-core';
+import { deviceOfInfoPort } from '@digi/workbench-core/data/device-profiles.ts';
 import { freeTitle, moduleRows, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
@@ -111,7 +111,7 @@ export default function MemoryPanel(props: {
   });
 
   const device = () => {
-    const d = deviceOfPort(reading()?.port ?? '');
+    const d = deviceOfInfoPort(reading()?.port ?? '');
     return d ? panels[d].name : '';
   };
 
