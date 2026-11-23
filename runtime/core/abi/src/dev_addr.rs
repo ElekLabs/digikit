@@ -58,6 +58,12 @@ impl DevAddr {
         self.0 as usize as *mut T
     }
 
+    /// The address of a static that the package publishes for host tools (`host_dir`): on the device the pointer value, as `of_ptr`.
+    #[inline(always)]
+    pub fn of_published<T>(p: *const T) -> DevAddr {
+        DevAddr(p as u32)
+    }
+
     /// The device address that module code passed as a pointer argument of the C ABI (`dk_service_declare_*`): the module runs in the device's space, so the pointer value is the
     /// address.
     #[inline(always)]
@@ -141,6 +147,16 @@ mod host {
                     "DevAddr::of_ptr({:#x}) on a host thread with no address space installed",
                     p as usize
                 ),
+            }
+        }
+
+        /// The address of a static that the package publishes for host tools (`host_dir`): the mapped device address when the installed space covers it, else the low 32 bits of
+        /// the host pointer (no tool reads a host test's directory by address; a test that checks the address maps the static).
+        #[inline(always)]
+        pub fn of_published<T>(p: *const T) -> DevAddr {
+            match current(|s| s.of_host(p as *const u8)) {
+                Some(Some(a)) => DevAddr(a),
+                _ => DevAddr(p as usize as u32),
             }
         }
 

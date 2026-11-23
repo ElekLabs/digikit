@@ -11,6 +11,7 @@ pub(crate) mod boot;
 pub(crate) mod card;
 pub(crate) mod dlog;
 pub(crate) mod fault;
+pub(crate) mod host_dir;
 pub(crate) mod io;
 pub(crate) mod intro;
 pub(crate) mod links;

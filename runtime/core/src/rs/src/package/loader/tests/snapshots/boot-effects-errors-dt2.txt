@@ -76,7 +76,7 @@ arena blocks
 contexts and ticks
   2 magic 0x444b4358 rec 2 tick blk7+266
 live set 2
-boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 core_cause 0 stable 0 unloads 0 reloads 0
   module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -99,7 +99,7 @@ arena blocks
 contexts and ticks
   2 magic 0x444b4358 rec 2 tick blk7+266
 live set 2
-boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 core_cause 0 stable 0 unloads 0 reloads 0
   module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -122,7 +122,7 @@ arena blocks
 contexts and ticks
   2 magic 0x444b4358 rec 2 tick blk7+266
 live set 2
-boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 core_cause 0 stable 0 unloads 0 reloads 0
   module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -145,7 +145,7 @@ arena blocks
 contexts and ticks
   2 magic 0x444b4358 rec 2 tick blk7+266
 live set 2
-boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+boot info magic 0x444b4254 version 1 safe 0 reason 0 counter 0 seq 1 copy 0 count 3 loaded 1 ui 0 core_cause 0 stable 0 unloads 0 reloads 0
   module 0 lfo-shape.dkm result -5 state 6 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 1 local-ping-user.dkm result -73 state 2 detail [ee7f2383, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 2 entry-demo.dkm result 0 state 5 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -166,7 +166,7 @@ events
   kind 4 flags 0x0004 args [3, 0, 0, 3, 1]
   kind 3 flags 0x0001 args [3, 0, 3, 0, 0]
 installed sites 0
-boot info magic 0x444b4254 version 1 safe 1 reason 3 counter 0 seq 3 copy 0 count 3 loaded 0 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+boot info magic 0x444b4254 version 1 safe 1 reason 3 counter 0 seq 3 copy 0 count 3 loaded 0 ui 0 core_cause 0 stable 0 unloads 0 reloads 0
   module 0 lfo-shape.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 1 local-ping-user.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 2 entry-demo.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -182,7 +182,7 @@ events
   kind 4 flags 0x0004 args [5, 0, 2, 3, 0]
   kind 3 flags 0x0001 args [1, 2, 5, 0, 0]
 installed sites 0
-boot info magic 0x444b4254 version 1 safe 1 reason 1 counter 2 seq 5 copy 0 count 3 loaded 0 ui 0 dsp_wait 0 stable 0 unloads 0 reloads 0
+boot info magic 0x444b4254 version 1 safe 1 reason 1 counter 2 seq 5 copy 0 count 3 loaded 0 ui 0 core_cause 0 stable 0 unloads 0 reloads 0
   module 0 lfo-shape.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 1 local-ping-user.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   module 2 entry-demo.dkm result -44 state 7 detail [0, 0] needs [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]

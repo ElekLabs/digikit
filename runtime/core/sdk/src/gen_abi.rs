@@ -114,6 +114,8 @@ pub const CARD_FOREIGN: u32 = 3;
 pub const CARD_UNREADABLE: u32 = 4;
 /// DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store.
 pub const CARD_TOO_SMALL: u32 = 5;
+/// HostDir.magic, "DKHD" (the host directory `DKRT_HOST_DIR`).
+pub const HOST_DIR_MAGIC: u32 = 0x44484b44;
 /// DkrtDiag.magic, "DIAG".
 pub const DIAG_MAGIC: u32 = 0x44494147;
 /// Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter).
@@ -140,6 +142,16 @@ pub const FIT_BRIEF: usize = 32;
 pub const FIT_MEM: usize = 8;
 /// Paths of the selection (`[limits.max] modules` of sdk/sdk.toml).
 pub const SEL_MAX: usize = 8;
+/// DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area).
+pub const HOST_DSP: u32 = 0;
+/// DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header).
+pub const HOST_PROVIDERS: u32 = 1;
+/// DKRT_TICKS: the tick counter of each module record.
+pub const HOST_TICKS: u32 = 2;
+/// DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word).
+pub const HOST_TABLE_BAD: u32 = 3;
+/// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).
+pub const HOST_COUNT: usize = 4;
 /// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.
 pub const PROVIDER_MAX: usize = 8;
 
@@ -511,8 +523,8 @@ pub struct DkrtBootInfo {
     pub ui_reached: u32,
     /// OK, a negative code, or LOADING (the CF part is live, the DSP part is still going) per selected module, in selection order
     pub results: [i32; SEL_MAX],
-    /// reserved (0): the boot does not wait for DSP code
-    pub dsp_wait: u32,
+    /// CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE (0) otherwise. This was a reserved word (the boot never waited for DSP code), so a reader of the older layout sees 0 in a normal boot
+    pub core_cause: u32,
     /// 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot
     pub stable: u32,
     /// per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise
@@ -525,10 +537,8 @@ pub struct DkrtBootInfo {
     pub unloads: u32,
     /// reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes
     pub reloads: u32,
-    /// CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE otherwise
-    pub core_cause: u32,
 }
-const _: () = assert!(size_of::<DkrtBootInfo>() == 260, "DkrtBootInfo size");
+const _: () = assert!(size_of::<DkrtBootInfo>() == 256, "DkrtBootInfo size");
 const _: () = assert!(offset_of!(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 const _: () = assert!(offset_of!(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 const _: () = assert!(offset_of!(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -540,14 +550,13 @@ const _: () = assert!(offset_of!(DkrtBootInfo, count) == 28, "DkrtBootInfo.count
 const _: () = assert!(offset_of!(DkrtBootInfo, loaded) == 32, "DkrtBootInfo.loaded");
 const _: () = assert!(offset_of!(DkrtBootInfo, ui_reached) == 36, "DkrtBootInfo.ui_reached");
 const _: () = assert!(offset_of!(DkrtBootInfo, results) == 40, "DkrtBootInfo.results");
-const _: () = assert!(offset_of!(DkrtBootInfo, dsp_wait) == 72, "DkrtBootInfo.dsp_wait");
+const _: () = assert!(offset_of!(DkrtBootInfo, core_cause) == 72, "DkrtBootInfo.core_cause");
 const _: () = assert!(offset_of!(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
 const _: () = assert!(offset_of!(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
 const _: () = assert!(offset_of!(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
 const _: () = assert!(offset_of!(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
 const _: () = assert!(offset_of!(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
 const _: () = assert!(offset_of!(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
-const _: () = assert!(offset_of!(DkrtBootInfo, core_cause) == 256, "DkrtBootInfo.core_cause");
 
 /// dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end.
 #[repr(C)]

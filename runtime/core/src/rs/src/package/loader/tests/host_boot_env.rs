@@ -32,9 +32,11 @@ impl BootEnv for HostBootEnv {
     unsafe fn load_package(&self) -> crate::level::PackageStatus {
         crate::level::PackageStatus::Ok
     }
-    unsafe fn start_package(&self) {
+    unsafe fn start_package(&self) -> bool {
         crate::hooks::attach_package(&crate::resident::TABLE);
+        true
     }
+    unsafe fn abandon_package(&self) {}
     /// The host has no settings store (`FakeStorage` models the files, not the record).
     unsafe fn settings_load(&self) {}
     /// The keep area is firmware RAM at a raw address.

@@ -15,7 +15,7 @@
 
 use crate::platform::st;
 use crate::boot_env::{BootEnv, RealBootEnv};
-use crate::level::{decide, Inputs, Level, SafeReason};
+use crate::level::{decide, CoreOnlyReason, Inputs, Level, SafeReason};
 use crate::safe_mode::{key_held_with, DKRT_STABLE_BLOCKS, KEEP_COUNTER, LATE_FLOOR};
 use crate::selection::{current_with, update_with, Choice, REC, REC_COPY, REC_VALID};
 use crate::{card, fault, dlog, store};
@@ -42,14 +42,13 @@ pub static mut DKRT_BOOT: DkrtBootInfo = DkrtBootInfo {
     loaded: 0,
     ui_reached: 0,
     results: [0; SEL_MAX],
-    dsp_wait: 0,
+    core_cause: 0,
     stable: 0,
     needs: [[0; NEEDS_LEN]; SEL_MAX],
     states: [STATE_SELECTED; SEL_MAX],
     detail: [[0; 2]; SEL_MAX],
     unloads: 0,
     reloads: 0,
-    core_cause: 0,
 };
 
 /// The file name of each module of this boot's selection (the part of its path after the last `/`, up to `NAME_LEN - 1` bytes, NUL padded): the LOADS
@@ -125,6 +124,15 @@ pub(crate) unsafe fn enter<E: BootEnv>(device_valid: bool, env: &E) {
 
 /// The boot over `env` (`dkrt_boot` with the device's, the host tests with a fake card): the selection record, the safe-mode decision, the boot counter, the tables of the
 /// selection, the providers and the package manager's load. The firmware's own parts (the settings, the crash record's RAM, the intro screen) are `BootEnv` steps.
+fn is_core_only(level: Level) -> bool {
+    // if chain, no `match` (see `level::SafeReason`)
+    if let Level::CoreOnly(_) = level {
+        true
+    } else {
+        false
+    }
+}
+
 pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     let b = info();
     b.magic = INFO_MAGIC;
@@ -164,7 +172,7 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     }
     // the level of this boot (`level::decide`): the record cannot be read, or it asked for safe mode, or the key, or a DSP hang or panic record, or too many boots
     // that did not reach the stable period; and the state of the system package, which can make the boot core-only
-    let level = decide(&Inputs {
+    let mut level = decide(&Inputs {
         record_unreadable: unreadable,
         safe_once: r.flags & sel::FLAG_SAFE_ONCE != 0,
         safe_key_held: key_held_with(env.platform()),
@@ -179,12 +187,34 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
         dlog::INFO,
         [r.seq, copy, r.boot_counter, r.count, r.flags],
     );
-    KEEP_COUNTER = level.keeps_counter();
-    let core_only = if let Level::CoreOnly(_) = level { true } else { false };
-    if !core_only {
-        // the package gets the resident table and gives its hooks (declare-check-commit of its services); a core-only boot runs none of its code
-        env.start_package();
+    // a boot that the counter or crashes caused counts itself, and the one-shot flag is consumed, before any package code runs: a fault or a hang in the package's
+    // entry then counts toward safe mode and core-only (`Level::counts_boot`); the stable period clears the counter
+    if level == Level::Safe(SafeReason::Flag) || (is_core_only(level) && r.flags & sel::FLAG_SAFE_ONCE != 0) {
+        // honoured once, or overruled by core-only (which comes first): clear the flag, so that RETRY or a new package is not followed by a surprise safe boot
+        // (the counter is left as it is; the stable period clears it)
+        r.flags &= !sel::FLAG_SAFE_ONCE;
+        update_with(env.platform(), r, copy, valid);
     }
+    let mut counted = crate::safe_mode::count_boot_with(env.platform(), level, r, copy, valid, card::writable());
+    // the package gets the resident table and gives its hooks (declare-check-commit of its services); a core-only boot runs none of its code. The host directory is empty
+    // until the package fills it at its entry.
+    crate::host_dir::clear();
+    if is_core_only(level) {
+        // stage 1 may have placed the package (core-only by crashes): give its block back
+        env.abandon_package();
+    } else if !env.start_package() {
+        // the package was placed and its table accepted, yet it gave no hooks: it cannot run on this core
+        env.abandon_package();
+        crate::host_dir::clear();
+        level = Level::CoreOnly(CoreOnlyReason::PackageIncompatible);
+        // core-only comes first: it consumes the one-shot flag too (the record as counted above, so the count stays)
+        if counted.flags & sel::FLAG_SAFE_ONCE != 0 {
+            counted.flags &= !sel::FLAG_SAFE_ONCE;
+            update_with(env.platform(), counted, copy, valid);
+        }
+    }
+    KEEP_COUNTER = level.keeps_counter();
+    let core_only = is_core_only(level);
     if level != Level::Normal {
         // if chains, not a `match` (a jump table is not ColdFire code)
         let reason = if let Level::Safe(why) = level {
@@ -201,14 +231,6 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
         b.core_cause = core_only_code;
         LATE_FLOOR = 0;
         dlog::ev(logk::SAFE, logk::F_ERROR, [reason, r.boot_counter, r.seq, core_only_code, 0]);
-        if level == Level::Safe(SafeReason::Flag) || (core_only && r.flags & sel::FLAG_SAFE_ONCE != 0) {
-            // honoured once, or overruled by core-only (which comes first): clear the flag, so that RETRY or a new package is not followed by a surprise safe boot
-            // (the counter is left as it is; the stable period clears it)
-            r.flags &= !sel::FLAG_SAFE_ONCE;
-            update_with(env.platform(), r, copy, valid);
-        }
-        // a boot that the counter or crashes caused counts itself, before the screen: the stable period clears it
-        crate::safe_mode::count_boot_with(env.platform(), level, r, copy, valid, card::writable());
         // a safe or core-only boot loads no module: show its screen in place of the stock intro (no storage access, built here on the main-OS task)
         if let Level::CoreOnly(why) = level {
             crate::intro::show_core_only(why);
@@ -231,7 +253,7 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
     // raise the counter before anything of a module runs; the stable period clears it. This counts from the first boot: with no record
     // yet (a fresh flash) the write creates one. On a card the runtime does not write there is no counter, so no safe mode by counter
     // (ABOUT says so).
-    r = crate::safe_mode::count_boot_with(env.platform(), level, r, copy, valid, card::writable());
+    r = counted;
     // The frames that carry DSP code do not flow yet (they start with the sound engine, later in the task), so a module's CF part
     // goes live now and its DSP part follows over the UI-loop passes (`LOADING` in the report until then).
     // the header table of every file of the selection, before the first load (reads the files; the staging buffer is free): the plan reads them
@@ -443,14 +465,13 @@ pub unsafe fn boot_info(out: *mut DkrtBootInfo) {
         loaded: b.loaded,
         ui_reached: b.ui_reached,
         results: b.results,
-        dsp_wait: b.dsp_wait,
+        core_cause: b.core_cause,
         stable: b.stable,
         needs: b.needs,
         states: b.states,
         detail: b.detail,
         unloads: b.unloads,
         reloads: b.reloads,
-        core_cause: b.core_cause,
     };
 }
 

@@ -24,6 +24,7 @@ pub(crate) mod handlers;
 mod image;
 pub(crate) mod hooks;
 pub(crate) use hooks::attach;
+pub(crate) mod host_dir;
 pub(crate) mod imports;
 pub(crate) mod invariants;
 pub(crate) mod lifecycle;

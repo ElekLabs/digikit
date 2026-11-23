@@ -31,6 +31,7 @@ pub mod fw;
 pub mod fw_id;
 pub mod gen_svc_abi;
 pub mod hooks;
+pub mod host_dir;
 pub mod image;
 pub mod keys;
 pub mod link;

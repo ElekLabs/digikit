@@ -35,6 +35,7 @@ pub mod dlog;
 mod gen_abi_check;
 mod resident_query;
 mod hooks;
+mod host_dir;
 mod resident;
 mod menu_exports;
 pub mod settings;

@@ -3,6 +3,7 @@
 #   runtime/core/include/dkrt.h             the C header (structs with size and offset checks, constants, prototypes)
 #   runtime/core/sdk/src/gen_abi.rs         the same for Rust (`dkrt-sdk`), and one function type per export (`sig`)
 #   runtime/core/src/rs/src/gen_abi_check.rs  the runtime's functions checked against those types: a changed signature fails the build
+#   packages/dk-session/src/gen_host_dir.ts, packages/dkaddrmap/src/gen_host_dir.rs  the host directory ids for the TypeScript and Rust tools
 # The result codes (`E_*`) and the CAPACITY kinds (`CAPK_*`) are in sdk/sdk.toml ([load.status], [capacity.kinds]) and `SEL_MAX` is
 # [limits.max] modules there; the C header repeats them with the prefix DKRT_.
 #
@@ -349,6 +350,12 @@ value = 5
 doc = "DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store."
 
 [[const]]
+name = "HOST_DIR_MAGIC"
+type = "u32"
+value = 0x44484b44
+doc = "HostDir.magic, \"DKHD\" (the host directory `DKRT_HOST_DIR`)."
+
+[[const]]
 name = "DIAG_MAGIC"
 type = "u32"
 value = 0x44494147
@@ -600,14 +607,13 @@ fields = [
     "u32 loaded // how many of them loaded without an error",
     "u32 ui_reached // 1 once the UI loop has run (the boot counter is back to 0)",
     "i32 results[SEL_MAX] // OK, a negative code, or LOADING (the CF part is live, the DSP part is still going) per selected module, in selection order",
-    "u32 dsp_wait // reserved (0): the boot does not wait for DSP code",
+    "u32 core_cause // CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE (0) otherwise. This was a reserved word (the boot never waited for DSP code), so a reader of the older layout sees 0 in a normal boot",
     "u32 stable // 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot",
     "u8 needs[SEL_MAX][NEEDS_LEN] // per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise",
     "u8 states[SEL_MAX] // per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED",
     "u32 detail[SEL_MAX][2] // per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise",
     "u32 unloads // modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes",
     "u32 reloads // reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes",
-    "u32 core_cause // CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE otherwise",
 ]
 
 [[struct]]
@@ -688,6 +694,30 @@ fields = [
     "u8 line[FIT_LINE] // DSP 52% CPU 1%; empty when nothing is ticked",
     "DkrtFitRow rows[SCAN_MAX]",
 ]
+
+# ---- host directory ---------------------------------------------------------------------------------------------------------
+#
+# The statics of the system package that host tools (the harness, the daemon, `patchkit addr`) read by address. The package is a card file placed at a different address
+# each boot, so it has no symbol in the image: the resident core owns one table of addresses, `DKRT_HOST_DIR` (`HostDir` of `dkrt_abi`): a magic, the count of ids this core
+# knows, and one 32-bit address per id. Stage 1 clears it before it starts the package; the package fills each entry at its entry (the `host_dir` group of the resident
+# table); a core-only boot leaves it empty. A tool reads the one resident symbol and follows the address of the id it needs: an empty entry means no package is loaded.
+# Ids are append-only: a new one goes at the end and its meaning never changes. Resident statics are not listed: they stay plain symbols.
+
+[[host_dir]]
+name = "DSP"
+doc = "DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area)."
+
+[[host_dir]]
+name = "PROVIDERS"
+doc = "DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header)."
+
+[[host_dir]]
+name = "TICKS"
+doc = "DKRT_TICKS: the tick counter of each module record."
+
+[[host_dir]]
+name = "TABLE_BAD"
+doc = "DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word)."
 
 # ---- exports ---------------------------------------------------------------------------------------------------------------
 

@@ -119,6 +119,8 @@
 #define DKRT_CARD_UNREADABLE 4
 /* DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store. */
 #define DKRT_CARD_TOO_SMALL 5
+/* HostDir.magic, "DKHD" (the host directory `DKRT_HOST_DIR`). */
+#define DKRT_HOST_DIR_MAGIC 0x44484b44u
 /* DkrtDiag.magic, "DIAG". */
 #define DKRT_DIAG_MAGIC 0x44494147u
 /* Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter). */
@@ -145,6 +147,17 @@
 #define DKRT_FIT_MEM 8
 /* Paths of the selection ([limits.max] modules of sdk/sdk.toml). */
 #define DKRT_SEL_MAX 8
+
+/* Ids of the host directory (`DKRT_HOST_DIR`): the package statics that host tools read, by id. */
+/* DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area). */
+#define DKRT_HOST_DSP 0
+/* DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header). */
+#define DKRT_HOST_PROVIDERS 1
+/* DKRT_TICKS: the tick counter of each module record. */
+#define DKRT_HOST_TICKS 2
+/* DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word). */
+#define DKRT_HOST_TABLE_BAD 3
+#define DKRT_HOST_COUNT 4
 
 /* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */
 #define DKRT_E_NOT_FOUND (-1)            /* no store, or no such file or module */
@@ -392,14 +405,13 @@ typedef struct DkrtBootInfo {
     uint32_t loaded;                             /* how many of them loaded without an error */
     uint32_t ui_reached;                         /* 1 once the UI loop has run (the boot counter is back to 0) */
     int32_t results[DKRT_SEL_MAX];               /* OK, a negative code, or LOADING (the CF part is live, the DSP part is still going) per selected module, in selection order */
-    uint32_t dsp_wait;                           /* reserved (0): the boot does not wait for DSP code */
+    uint32_t core_cause;                         /* CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE (0) otherwise. This was a reserved word (the boot never waited for DSP code), so a reader of the older layout sees 0 in a normal boot */
     uint32_t stable;                             /* 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot */
     uint8_t needs[DKRT_SEL_MAX][DKRT_NEEDS_LEN]; /* per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise */
     uint8_t states[DKRT_SEL_MAX];                /* per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED */
     uint32_t detail[DKRT_SEL_MAX][2];            /* per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise */
     uint32_t unloads;                            /* modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes */
     uint32_t reloads;                            /* reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes */
-    uint32_t core_cause;                         /* CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE otherwise */
 } DkrtBootInfo;
 
 /* dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end. */
@@ -581,7 +593,7 @@ _Static_assert(sizeof(DkrtSelection) == 456, "DkrtSelection size");
 _Static_assert(offsetof(DkrtSelection, count) == 0, "DkrtSelection.count");
 _Static_assert(offsetof(DkrtSelection, flags) == 4, "DkrtSelection.flags");
 _Static_assert(offsetof(DkrtSelection, paths) == 8, "DkrtSelection.paths");
-_Static_assert(sizeof(DkrtBootInfo) == 260, "DkrtBootInfo size");
+_Static_assert(sizeof(DkrtBootInfo) == 256, "DkrtBootInfo size");
 _Static_assert(offsetof(DkrtBootInfo, magic) == 0, "DkrtBootInfo.magic");
 _Static_assert(offsetof(DkrtBootInfo, version) == 4, "DkrtBootInfo.version");
 _Static_assert(offsetof(DkrtBootInfo, safe) == 8, "DkrtBootInfo.safe");
@@ -593,14 +605,13 @@ _Static_assert(offsetof(DkrtBootInfo, count) == 28, "DkrtBootInfo.count");
 _Static_assert(offsetof(DkrtBootInfo, loaded) == 32, "DkrtBootInfo.loaded");
 _Static_assert(offsetof(DkrtBootInfo, ui_reached) == 36, "DkrtBootInfo.ui_reached");
 _Static_assert(offsetof(DkrtBootInfo, results) == 40, "DkrtBootInfo.results");
-_Static_assert(offsetof(DkrtBootInfo, dsp_wait) == 72, "DkrtBootInfo.dsp_wait");
+_Static_assert(offsetof(DkrtBootInfo, core_cause) == 72, "DkrtBootInfo.core_cause");
 _Static_assert(offsetof(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
 _Static_assert(offsetof(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
 _Static_assert(offsetof(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
 _Static_assert(offsetof(DkrtBootInfo, detail) == 184, "DkrtBootInfo.detail");
 _Static_assert(offsetof(DkrtBootInfo, unloads) == 248, "DkrtBootInfo.unloads");
 _Static_assert(offsetof(DkrtBootInfo, reloads) == 252, "DkrtBootInfo.reloads");
-_Static_assert(offsetof(DkrtBootInfo, core_cause) == 256, "DkrtBootInfo.core_cause");
 _Static_assert(sizeof(DkrtDiag) == 172, "DkrtDiag size");
 _Static_assert(offsetof(DkrtDiag, magic) == 0, "DkrtDiag.magic");
 _Static_assert(offsetof(DkrtDiag, version) == 4, "DkrtDiag.version");

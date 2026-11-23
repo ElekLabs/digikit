@@ -392,3 +392,17 @@ fn the_import_rows_name_the_owners_functions() {
     all.dedup();
     assert_eq!(all.len(), served.len(), "no two imports share a function");
 }
+
+/// The host directory group: what the package publishes through the table is what a tool reads in `DKRT_HOST_DIR` by id.
+#[test]
+fn the_host_dir_group_fills_the_directory_the_tools_read() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        crate::host_dir::clear();
+        let r = real();
+        assert!((r.host_dir.publish)(dkrt_sdk::HOST_TABLE_BAD, 0x4000_0040));
+        assert_eq!((*addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(dkrt_sdk::HOST_TABLE_BAD), Some(0x4000_0040));
+        assert!(!(r.host_dir.publish)(dkrt_sdk::HOST_COUNT as u32, 4));
+        crate::host_dir::clear();
+    }
+}

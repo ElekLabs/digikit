@@ -450,3 +450,66 @@ fn every_way_a_package_is_refused_is_a_core_only_boot_with_its_own_cause() {
         }
     }
 }
+
+/// A fault or a hang in the package's entry never returns, so the boot is counted before the package starts: the record holds the count when the entry runs, boot after boot
+/// until the counter reaches `CORE_ONLY_AFTER` and the boot runs no package code at all.
+#[test]
+fn a_fault_in_the_package_entry_counts_toward_safe_mode_and_core_only() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        let mut seen_at_start = Vec::new();
+        for _ in 0..CORE_ONLY_AFTER {
+            let env = FakeBootEnv::new(&f);
+            boot_with(&f, &env, End::Early);
+            assert!(env.steps.borrow().contains(&"package"), "the package starts while the counter is below the limit");
+            seen_at_start.push(env.counter_at_start.get());
+        }
+        // what the card held at the moment the package's entry ran (a reset there leaves exactly this): this boot already counted
+        assert_eq!(seen_at_start, [Some(1), Some(2), Some(3), Some(4)]);
+        let env = FakeBootEnv::new(&f);
+        let b = hooks::without_package(|| boot_with(&f, &env, End::Early));
+        assert_eq!((b.safe, b.core_only, b.cause), (true, true, CORE_CRASHES));
+        assert!(!env.steps.borrow().contains(&"package"), "no package code runs once the boots are counted out");
+    }
+}
+
+/// A package that was placed and accepted but gives no hooks cannot run on this core: the boot is core-only with `CORE_INCOMPATIBLE` (nothing crashed, so the counter
+/// is cleared by the stable period as for any package refusal), the block goes back and the host directory is empty.
+#[test]
+fn a_package_that_gives_no_hooks_makes_a_core_only_boot_that_is_incompatible() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        hooks::without_package(|| {
+            let env = FakeBootEnv::new(&f);
+            env.start_fails.set(true);
+            let b = boot_with(&f, &env, End::Stable);
+            assert_eq!((b.safe, b.core_only, b.reason, b.cause, b.loaded), (true, true, SAFE_CORE_ONLY, CORE_INCOMPATIBLE, false));
+            let steps = env.steps.borrow().clone();
+            assert!(steps.contains(&"package") && steps.contains(&"abandon") && !steps.contains(&"load"), "{steps:?}");
+            assert!(!hooks::installed(), "no hooks were installed");
+            assert_eq!(counter(&f), 0, "the stable period of a core-only boot that no crash caused clears the count");
+            assert!((0..dkrt_sdk::HOST_COUNT as u32).all(|id| (*core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(id).is_none()));
+        });
+    }
+}
+
+/// Core-only by crashes gives the placed package's block back, and a core-only boot leaves the host directory empty.
+#[test]
+fn a_core_only_boot_by_crashes_abandons_the_placed_package_and_leaves_the_host_directory_empty() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        for _ in 0..CORE_ONLY_AFTER {
+            boot(&f, End::Early);
+        }
+        // the previous boots filled the directory (the package of this binary publishes at its entry)
+        assert!((*core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(dkrt_sdk::HOST_DSP).is_some());
+        let env = FakeBootEnv::new(&f);
+        let b = hooks::without_package(|| boot_with(&f, &env, End::Early));
+        assert_eq!((b.core_only, b.cause), (true, CORE_CRASHES));
+        assert!(env.steps.borrow().contains(&"abandon"));
+        assert!((0..dkrt_sdk::HOST_COUNT as u32).all(|id| (*core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(id).is_none()), "no package, no entries");
+    }
+}

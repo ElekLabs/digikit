@@ -13,3 +13,19 @@ pub trait Placer {
     /// the body does not hold together (a relocation outside the image): stage 1 abandons it.
     fn finish(&mut self) -> Result<DevAddr, i32>;
 }
+
+/// A placer that lives longer than one `Stage1` (the boot keeps the package's block to give it back).
+impl<P: Placer> Placer for &mut P {
+    fn begin(&mut self, size: u32, head: &[u8]) -> Result<(), i32> {
+        (**self).begin(size, head)
+    }
+    fn write(&mut self, offset: u32, bytes: &[u8]) {
+        (**self).write(offset, bytes)
+    }
+    fn abandon(&mut self) {
+        (**self).abandon()
+    }
+    fn finish(&mut self) -> Result<DevAddr, i32> {
+        (**self).finish()
+    }
+}

@@ -72,3 +72,24 @@ fn the_table_check_refuses_a_null_table_and_a_newer_package_with_the_reason_in_t
         }
     }
 }
+
+/// `load_checked` is the order the boot runs: load, ask the table, and on a refusal log it, give the block back and answer `Incompatible`. A table that fits leaves the
+/// package placed. 
+#[test]
+fn load_checked_logs_a_refused_table_and_abandons_the_package_but_keeps_one_that_fits() {
+    let _lock = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let file = super::package(RESIDENT_TABLE_MAJOR, RESIDENT_TABLE_MINOR, &super::body(700));
+    let storage = super::card_with(&file);
+    let mut buf = std::vec![0u8; 512];
+    unsafe {
+        // a table that fits: placed, kept
+        let mut s = Stage1::new(super::StorageSource::new(&storage), super::RecordingPlacer::default(), &mut buf);
+        assert_eq!(s.load_checked(&TABLE), PackageStatus::Ok);
+        assert!(s.placed().is_some() && !s.placer().abandoned);
+        // a table the check refuses (none): logged with its reason, abandoned, not placed
+        let mut s = Stage1::new(super::StorageSource::new(&storage), super::RecordingPlacer::default(), &mut buf);
+        assert_eq!(s.load_checked(core::ptr::null()), PackageStatus::Incompatible);
+        assert!(s.placed().is_none() && s.placer().abandoned, "the block goes back");
+        assert_eq!(last_log(), "resident: no table");
+    }
+}

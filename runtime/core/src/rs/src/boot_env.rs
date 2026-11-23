@@ -5,9 +5,9 @@ use crate::platform::RealPlatform;
 use crate::fault;
 use crate::level::PackageStatus;
 use crate::hooks;
-use crate::stage1::{self, ArenaPlacer, Stage1, StoreSource, PACKAGE_PATH};
+use crate::stage1::{self, ArenaPlacer, Placer, Stage1, StoreSource, PACKAGE_PATH};
 use crate::state::DKRT_STAGE;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::ptr::addr_of_mut;
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::platform::Platform;
@@ -30,7 +30,10 @@ pub(crate) trait BootEnv {
     /// decision that is not read from the record, the key or the crash records. A package that is not `Ok` is not left in the arena.
     unsafe fn load_package(&self) -> PackageStatus;
     /// Give the placed package the resident table and take its hooks (`stage1::start`). Only after `load_package` gave `Ok`, and only when the level runs the package.
-    unsafe fn start_package(&self);
+    /// False when the package gave no hooks: the boot then runs core-only.
+    unsafe fn start_package(&self) -> bool;
+    /// The placed package is not going to run this boot (core-only by crashes, or it gave no hooks): its block goes back to the arena. Harmless when nothing was placed.
+    unsafe fn abandon_package(&self);
     /// A safe boot: the installer writes nothing.
     unsafe fn set_safe(&self);
     /// Read the file of each selected module and keep its header table for the boot's graph.
@@ -45,11 +48,13 @@ pub(crate) trait BootEnv {
 /// resident table minor it was built against.
 pub(crate) struct RealBootEnv {
     placed: Cell<Option<(DevAddr, u16)>>,
+    /// The placer of stage 1: it keeps the package's block, so that the boot can give it back (`abandon_package`) after stage 1 is done.
+    placer: RefCell<ArenaPlacer>,
 }
 
 impl RealBootEnv {
     pub(crate) const fn new() -> RealBootEnv {
-        RealBootEnv { placed: Cell::new(None) }
+        RealBootEnv { placed: Cell::new(None), placer: RefCell::new(ArenaPlacer::new()) }
     }
 }
 
@@ -70,23 +75,25 @@ impl BootEnv for RealBootEnv {
     }
     unsafe fn load_package(&self) -> PackageStatus {
         let chunk = &mut (*addr_of_mut!(DKRT_STAGE)).0;
-        let mut stage1 = Stage1::new(StoreSource::new(PACKAGE_PATH), ArenaPlacer::new(), chunk);
-        let status = stage1.load();
-        let Some((entry, built_minor)) = stage1.placed() else { return status };
-        // the table must fit the package before its entry is called: a refusal has its reason in the log and the block goes back to the arena
-        if let Err(why) = stage1::accept_table(&crate::resident::TABLE, built_minor) {
-            stage1::log_refusal(&why);
-            stage1.abandon();
-            return PackageStatus::Incompatible;
-        }
-        self.placed.set(Some((entry, built_minor)));
+        let mut placer = self.placer.borrow_mut();
+        let mut stage1 = Stage1::new(StoreSource::new(PACKAGE_PATH), &mut *placer, chunk);
+        let status = stage1.load_checked(&crate::resident::TABLE);
+        self.placed.set(stage1.placed());
         status
     }
-    unsafe fn start_package(&self) {
-        let Some((entry, _)) = self.placed.get() else { return };
-        if let Some(hooks) = stage1::start(entry, &crate::resident::TABLE) {
-            hooks::install(hooks);
+    unsafe fn start_package(&self) -> bool {
+        let Some((entry, _)) = self.placed.get() else { return false };
+        match stage1::start(entry, &crate::resident::TABLE) {
+            Some(hooks) => {
+                hooks::install(hooks);
+                true
+            }
+            None => false,
         }
+    }
+    unsafe fn abandon_package(&self) {
+        self.placer.borrow_mut().abandon();
+        self.placed.set(None);
     }
     unsafe fn set_safe(&self) {
         hooks::boot_safe()
@@ -101,3 +108,6 @@ impl BootEnv for RealBootEnv {
         hooks::boot_load(rec)
     }
 }
+
+#[cfg(test)]
+mod tests;

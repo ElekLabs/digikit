@@ -167,8 +167,8 @@ impl Phases {
     unsafe fn boot_info(g: &mut Golden) {
         let info = crate::boot::info();
         g.line(std::format!(
-            "boot info magic {:#x} version {} safe {} reason {} counter {} seq {} copy {} count {} loaded {} ui {} dsp_wait {} stable {} unloads {} reloads {}",
-            info.magic, info.version, info.safe, info.reason, info.counter, info.seq, info.copy, info.count, info.loaded, info.ui_reached, info.dsp_wait, info.stable, info.unloads, info.reloads
+            "boot info magic {:#x} version {} safe {} reason {} counter {} seq {} copy {} count {} loaded {} ui {} core_cause {} stable {} unloads {} reloads {}",
+            info.magic, info.version, info.safe, info.reason, info.counter, info.seq, info.copy, info.count, info.loaded, info.ui_reached, info.core_cause, info.stable, info.unloads, info.reloads
         ));
         for k in 0..info.count as usize {
             let name = std::str::from_utf8(&(*crate::boot::loads_view().names)[k])

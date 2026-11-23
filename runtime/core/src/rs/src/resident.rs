@@ -9,6 +9,7 @@ mod boot;
 mod card;
 mod dlog;
 mod fault;
+mod host_dir;
 mod imports;
 mod intro;
 mod io;

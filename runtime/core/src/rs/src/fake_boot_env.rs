@@ -18,6 +18,10 @@ pub(crate) struct FakeBootEnv<'a> {
     /// The boot before left a DSP hang record / a panic record.
     pub hang: Cell<bool>,
     pub panic: Cell<bool>,
+    /// The package gives no hooks when started.
+    pub start_fails: Cell<bool>,
+    /// The boot counter the card held when the package started (what a fault in its entry leaves behind); `None` before it started or without a record.
+    pub counter_at_start: Cell<Option<u32>>,
     /// The steps that ran, in order.
     pub steps: RefCell<Vec<&'static str>>,
 }
@@ -30,6 +34,8 @@ impl<'a> FakeBootEnv<'a> {
             late_crash: Cell::new(false),
             hang: Cell::new(false),
             panic: Cell::new(false),
+            start_fails: Cell::new(false),
+            counter_at_start: Cell::new(None),
             steps: RefCell::new(Vec::new()),
         }
     }
@@ -55,9 +61,21 @@ impl BootEnv for FakeBootEnv<'_> {
         self.package.get()
     }
     /// The test-only attach: the package of this binary gets the resident table (the device's stage 1 places the package file instead).
-    unsafe fn start_package(&self) {
+    unsafe fn start_package(&self) -> bool {
         self.note("package");
+        let held = match crate::selection::current_with(self.p) {
+            crate::selection::Choice::Use { record, .. } => Some(record.boot_counter),
+            _ => None,
+        };
+        self.counter_at_start.set(held);
+        if self.start_fails.get() {
+            return false;
+        }
         crate::hooks::attach_package(&crate::resident::TABLE);
+        true
+    }
+    unsafe fn abandon_package(&self) {
+        self.note("abandon");
     }
     unsafe fn settings_load(&self) {
         self.note("settings");

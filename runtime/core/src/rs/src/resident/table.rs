@@ -24,4 +24,5 @@ pub(crate) static TABLE: ResidentTable = ResidentTable {
     state: &super::state::FNS,
     imports: &super::imports::ROWS,
     links: &super::links::ROWS,
+    host_dir: &super::host_dir::FNS,
 };

@@ -9,9 +9,11 @@
 //! - `source`: where the bytes come from (`PackageSource`), and the store implementation;
 //! - `placer`: where the bytes go (`Placer`), and `arena_placer`, the device's: a block at the arena top, relocated in place;
 //! - `load`: the steps;
+//! - `checked`: the steps and the table check, as the boot runs them;
 //! - `start`: the table check before the entry and the call of the entry.
 
 mod arena_placer;
+mod checked;
 mod load;
 mod placer;
 mod source;

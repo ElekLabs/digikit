@@ -49,6 +49,8 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
 pub(crate) unsafe fn attach(table: &'static ResidentTable) -> Result<&'static PackageHooks, Refusal> {
     resident::install(table)?;
     handlers::check_declarations();
+    // the core's directory of the package statics that host tools read: the package has no symbol in the image
+    crate::package::host_dir::publish_all();
     Ok(&HOOKS)
 }
 
