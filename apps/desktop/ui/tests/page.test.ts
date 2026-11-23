@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { CAP } from '@digi/dk-session/gen_proto';
+import { runtimeDeviceIds } from '@digi/workbench-core/data/device-profiles.ts';
 import { createFakeSessions, createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
 import { readTransfer } from '@digi/workbench-core/transfer/read-transfer.ts';
 
@@ -26,6 +27,8 @@ it('browses the local library without opening a stopped emulator session', async
 });
 
 it('shows the card modules while reading service details, even when the provisional library is still building', async () => {
+  const browseDevice = runtimeDeviceIds[0]!;
+  const targetDevice = runtimeDeviceIds[1]!;
   let finishProvisional!: (files: []) => void;
   const provisionalLibrary = new Promise<[]>((resolve) => {
     finishProvisional = resolve;
@@ -36,7 +39,7 @@ it('shows the card modules while reading service details, even when the provisio
     sessions: createFakeSessions(() => ({
       info: async () => {
         infoRequests++;
-        return { port: 'dn2', runtime: 4, free_bytes: 1024, caps: (1 << CAP.FOLDERS) | (1 << CAP.MODULES) };
+        return { port: targetDevice, runtime: 4, free_bytes: 1024, caps: (1 << CAP.FOLDERS) | (1 << CAP.MODULES) };
       },
       rpc: async () => new Uint8Array(),
       list: async (prefix: string) => {
@@ -53,18 +56,18 @@ it('shows the card modules while reading service details, even when the provisio
     })),
     env: {
       library: {
-        scan: async (device) => (device === 'dt2' ? provisionalLibrary : []),
+        scan: async (device) => (device === browseDevice ? provisionalLibrary : []),
         read: async () => new Uint8Array(),
       },
     },
   });
-  app.state.setBrowseDevice('dt2');
+  app.state.setBrowseDevice(browseDevice);
   try {
     await readTransfer(app);
   } finally {
     finishProvisional([]);
   }
   expect(showedModulesBeforeServices).toBe(true);
-  expect(app.state.deviceInfo()?.name).toBe('dn2');
+  expect(app.state.deviceInfo()?.name).toBe(targetDevice);
   expect(infoRequests).toBe(1);
 });

@@ -222,7 +222,7 @@ export function createTransferBackend({
     async list(
       device: string,
       showLibrary: (view: TransferView) => void,
-      showModules: (view: TransferView) => void,
+      showModules?: (view: TransferView) => void,
     ): Promise<TransferView> {
       const selected = target();
       let actualDevice: string | undefined;
