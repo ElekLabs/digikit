@@ -121,8 +121,8 @@ def abbreviates_forbidden(word: str) -> bool:
 
 
 def unquoted_expansion(command: str) -> str | None:
-    """The first character the shell would expand: `$` or a backquote outside single quotes; a glob, brace or tilde
-    character outside any quotes. The word checks run on shlex words, so text the shell rewrites must not pass."""
+    """The first character the shell would expand: `$` or a backquote outside single quotes; a glob, brace, tilde,
+    parenthesis or `!` outside any quotes. The word checks run on shlex words, so text the shell rewrites must not pass."""
     single = double = False
     escaped = False
     for ch in command:
@@ -140,7 +140,8 @@ def unquoted_expansion(command: str) -> str | None:
             continue
         if ch in "$`" and not single:
             return ch
-        if ch in "{}*?[]~" and not single and not double:
+        # globs, braces, tilde; zsh `=(...)` process substitution and `!` history expansion
+        if ch in "{}*?[]~()!" and not single and not double:
             return ch
     return None
 
