@@ -229,7 +229,11 @@ export function shipModules(out, root = repoRoot, extraModules = new Set(), { si
       if (simulated) {
         const group = d.machine?.length ? 'machine' : d.fx?.length ? 'fx' : 'tool';
         const keys = (d[group] ?? []).map((entry) => entry.id);
-        devices[dev] = { file: `${dev}/${leaf}.dkm`, size: 4096, fixture: { group, keys, uses: d.uses?.[dev] ?? {} } };
+        devices[dev] = {
+          file: `${dev}/${leaf}.dkm`,
+          size: 4096,
+          fixture: { group, keys, uses: d.uses?.[dev] ?? {}, extraServices: d.workbench_preview?.extra_services ?? [] },
+        };
         continue;
       }
       const bytes = packed[dev][m.id];

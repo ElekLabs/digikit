@@ -28,3 +28,6 @@ sources = [
   "src/c/grid_cursor.c",
 ]
 place = "cf.expansion"
+
+[workbench_preview]
+extra_services = ["shortcuts"]

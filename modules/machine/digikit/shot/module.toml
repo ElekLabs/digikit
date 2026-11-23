@@ -48,3 +48,6 @@ param_rows = 5
 page_rows = 1
 record_bytes = 940
 dsp_cost_voice = 2658
+
+[workbench_preview]
+extra_services = ["samples"]

@@ -7,18 +7,14 @@ import { fakeDkm } from '@digi/workbench-core/target-ops/fake-store.ts';
 export interface ModuleFixture {
   group: 'machine' | 'fx' | 'tool';
   keys: string[];
+  extraServices: string[];
   uses: Record<string, number>;
 }
 
 export function previewModule(module: { id: string; version: string }, fixture: ModuleFixture, size: number) {
   const { keys, group } = fixture;
   const words = [TABLE_MAGIC, 1 << 16];
-  // Additional services exercised by the preview's Transfer scenarios.
-  const extra: Record<string, string[]> = { 'digikit/shot': ['samples'], 'digikit/track-manager': ['shortcuts'] };
-  const services = [
-    ...(group === 'machine' ? ['machines'] : group === 'fx' ? ['fx'] : []),
-    ...(extra[module.id] ?? []),
-  ];
+  const services = [...(group === 'machine' ? ['machines'] : group === 'fx' ? ['fx'] : []), ...fixture.extraServices];
   if (services.length) {
     words[1]++;
     words.push((1 << 16) | services.length, services.length * 12);
