@@ -22,23 +22,25 @@
 //!
 //! Everything runs in the UI task. No float arithmetic runs in an interrupt; the arithmetic is the compiler's soft float.
 pub use dkrt_sdk::records::{KIND_EFFECT, LEN_EFFECT};
+mod aligned16;
 mod apply;
-mod hookstate;
 mod kit;
 mod layout;
 mod list;
 mod record;
 mod state;
+mod symbols;
 mod table;
 #[cfg(test)]
 mod tests;
 mod tick;
+pub use aligned16::*;
 pub use apply::*;
-pub use hookstate::*;
 pub(crate) use kit::*;
 use layout::*;
 pub use list::*;
 pub use record::*;
 pub use state::*;
+pub use symbols::*;
 pub use table::*;
 pub use tick::*;

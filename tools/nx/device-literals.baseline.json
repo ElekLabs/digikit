@@ -608,6 +608,8 @@
   "services/fx/dks/dsp/fxsend-slots.inc": 1,
   "services/fx/dks/module.toml": 6,
   "services/fx/dks/src/hooks.rs": 2,
+  "services/fx/src/fxpage/kit.rs": 1,
+  "services/fx/src/fxpage/mod.rs": 1,
   "services/fx/tests/build.rs": 9,
   "services/fx/tests/contract.rs": 5,
   "services/lfo/dks/build/lfo.dko.json": 84,
