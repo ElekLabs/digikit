@@ -49,4 +49,4 @@ How it works:
 - `Provider::detach` is the teardown of an effect module, whatever route it runs on: page, list entry, send cell and defaults go back (the `DspPart::clear` before it frees the DSP row).
   `can_stop` keeps its default: the service never holds up a reload. The route and the send amounts are settings keyed by the module id, so the next load of the module gets them back; the
   knob values stay in the kit's array.
-- The resident query answers `0` on success, as `dk_fx_route_choices` (`sdk/include/dk/fx/route-query.h`) checks for it, and writes the allowed routes into the reply word only on success.
+- The resident query answers `0` on success, as `dk_fx_route_choices` (`sdk/include/dk/fx/route-query.h`) checks for it, and writes the allowed routes into the reply word only on success. It stays so to keep RC3 behaviour-neutral; the E1 step deletes it.
