@@ -114,17 +114,28 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
     /// not called, before `start`, after `stop` and inside another call into the same owner (the latter counted in `refused()`). The tables of a service file reach
     /// the object through this (`Enter`).
     pub fn run<R>(&self, refused: R, f: impl FnOnce(&mut T) -> R) -> R {
-        if !self.live.get() || self.transition.get() {
+        let at = self.begin();
+        if at.is_null() {
             return refused;
+        }
+        // SAFETY: `begin` made the owner busy, so this is the only reference, and `live` says the cell holds a value.
+        let r = f(unsafe { &mut *at });
+        self.leave();
+        r
+    }
+
+    /// Start of a call: the object's address and the owner is busy, or null (and nothing changes but the count) when there is no live object or a call runs already. One copy
+    /// for every `run`, so the checks are not repeated in each part function's guard.
+    #[inline(never)]
+    fn begin(&self) -> *mut T {
+        if !self.live.get() || self.transition.get() {
+            return core::ptr::null_mut();
         }
         if self.busy.replace(true) {
             self.refused.set(self.refused.get() + 1);
-            return refused;
+            return core::ptr::null_mut();
         }
-        // SAFETY: as `start`; `busy` keeps this the only reference, and `live` says the cell holds a value.
-        let r = f(unsafe { &mut *(self.cell.get() as *mut T) });
-        self.leave();
-        r
+        self.cell.get() as *mut T
     }
 
     /// Hand `event` to the object. When the owner is idle it runs at once; inside a call it is queued, to run right after that call returns (see the type).
@@ -151,6 +162,7 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
     }
 
     /// End of a call: run the queued events in order (each may queue more), then the owner is idle.
+    #[inline(never)]
     fn leave(&self) {
         while self.len.get() > 0 {
             let at = self.head.get();
