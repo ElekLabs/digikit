@@ -7,7 +7,7 @@
 use crate::dsp;
 use crate::peakwin::{PeakJob, PeakJobs, PeakWindows};
 use crate::pool::Pool;
-use crate::table::{PoolCell, POOL_TABLE};
+use crate::table::{PoolCell, PoolTable, POOL_TABLE};
 use crate::tracks::Tracks;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
@@ -135,7 +135,7 @@ impl<C: CoreApi> Provider<C> for Samples {
     fn start(core: &C) -> Result<Samples, Status> {
         // SAFETY: the table of the image holds the addresses of the adapter's functions
         let pool = unsafe { Pool::from_info(core) };
-        POOL_TABLE.with(core, |t| t.reset(pool.present()));
+        PoolTable::reset(&POOL_TABLE, core, pool.present());
         Ok(Samples::new(pool, &POOL_TABLE))
     }
 
@@ -149,7 +149,7 @@ impl<C: CoreApi> Provider<C> for Samples {
             let pool = Pool::from_info(core);
             addr_of_mut!((*p).pool).write(pool);
             addr_of_mut!((*p).table).write(&POOL_TABLE);
-            POOL_TABLE.with(core, |t| t.reset(pool.present()));
+            PoolTable::reset(&POOL_TABLE, core, pool.present());
         }
         Ok(())
     }
@@ -168,9 +168,7 @@ impl<C: CoreApi> DspPart<C> for Samples {
 
     fn claim(&mut self, core: &C, c: &mut Claim) {
         // SAFETY: as `admit`
-        unsafe { dsp::claim(&mut self.tracks, c) }
-        // the client is open now: the calls of the module find its table
-        self.tracks.mirror(core, self.table);
+        unsafe { dsp::claim(core, self.table, &mut self.tracks, c) }
     }
 
     /// Give back the client slots of the module: its tracks are unbound, the pool references released and its peak window stopped.

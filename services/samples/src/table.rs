@@ -84,13 +84,6 @@ impl PoolTable {
         }
     }
 
-    /// The empty table (`start`), with `backed` said whether an adapter is installed. Zeroed in place: no copy of the 9 kB through the stack.
-    pub fn reset(&mut self, backed: bool) {
-        // SAFETY: all-zero bytes are the empty table (`new`): integers, `false`, `Req::None` is the first variant.
-        unsafe { (self as *mut PoolTable).write_bytes(0, 1) };
-        self.backed = backed;
-    }
-
     /// The client of a handle if its table is open.
     fn client(&self, handle: u32) -> Result<usize, i32> {
         let h = handle as usize;
@@ -216,6 +209,27 @@ impl PoolTable {
                 }
             }
         }
+    }
+}
+
+impl PoolTable {
+    /// Empty the cell (`start`), with `backed` said whether an adapter is installed, in sections of one slot each (about 190 bytes), never one of the whole 6 kB. The first
+    /// section closes every client and drops `backed`, so while the rest runs a call that comes in (a task that preempts the start) finds no client and answers `E_NOT_FOUND`
+    /// or `E_CONTRACT`, and nothing reads a slot that is half cleared; the last section sets `backed`. Zeroed in place: no copy through the stack.
+    pub fn reset<C: CoreApi>(cell: &PoolCell, core: &C, backed: bool) {
+        cell.with(core, |t| {
+            t.backed = false;
+            t.open = [false; CLIENTS];
+        });
+        for c in 0..CLIENTS {
+            for k in 0..ENTRIES {
+                // SAFETY: all-zero bytes are the empty slot (`SLOT0`): integers, `Req::None` is the first variant.
+                cell.with(core, |t| unsafe {
+                    (&mut t.slots[c][k] as *mut Slot).write_bytes(0, 1)
+                });
+            }
+        }
+        cell.with(core, |t| t.backed = backed);
     }
 }
 

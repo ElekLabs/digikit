@@ -130,7 +130,7 @@ fn the_pool_calls_answer_at_once_while_the_owner_is_inside_a_call() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
     dk_svc_start().expect("start");
     // a host build has no sample-pool adapter: say there is one, then publish the client
-    POOL_TABLE.with(&ImportCore, |t| t.reset(true));
+    dkrt_svc_samples::table::PoolTable::reset(&POOL_TABLE, &ImportCore, true);
     claim_a_table(true);
     let h = 1 as *mut u8;
     let refused = DK_SVC_OWNER.refused();

@@ -243,11 +243,13 @@ fn a_table_outside_the_package_a_null_instance_and_a_misaligned_table_are_refuse
     assert_eq!(resolve(odd, instance(0)).err(), Some(E_FORMAT));
 }
 
-/// A row, its part list, the lifecycle and records tables and the kinds array in one buffer, like a package.
+/// A row, its part list, the lifecycle and records tables and the kinds array in one buffer, like a package: the extent of the buffer holds every table the row names,
+/// so no test depends on where statics and heap blocks lie.
 #[repr(C)]
 struct Pack {
     row: ProviderRow,
     parts: [PartRef; 2],
+    lc: LifecycleV1,
     records: RecordsV1,
     kinds: [(u32, u32); 2],
 }
@@ -256,6 +258,13 @@ fn pack(kinds: *const (u32, u32), nkinds: u32) -> &'static mut Pack {
     let p = Box::leak(Box::new(Pack {
         row: ProviderRow::new(0xabcd, &[]),
         parts: [part(PART_LIFECYCLE, 1, lifecycle()); 2],
+        lc: LifecycleV1 {
+            attach,
+            detach,
+            can_stop,
+            settle,
+            reload_done,
+        },
         records: RecordsV1 {
             kinds,
             nkinds,
@@ -266,6 +275,7 @@ fn pack(kinds: *const (u32, u32), nkinds: u32) -> &'static mut Pack {
         },
         kinds: [(30, 24), (31, 8)],
     }));
+    p.parts[0] = PartRef::new(PART_LIFECYCLE, 1, &p.lc as *const LifecycleV1 as *const ());
     p.parts[1] = PartRef::new(PART_RECORDS, 1, &p.records as *const RecordsV1 as *const ());
     // SAFETY: the buffer is leaked and its part list is never moved.
     p.row = ProviderRow::new(0xabcd, unsafe { &*(&p.parts[..] as *const [PartRef]) });
@@ -281,12 +291,7 @@ fn a_kinds_array_that_leaves_the_package_or_overflows_is_refused() {
         let a = p as *const Pack as usize;
         a..a + size_of::<Pack>()
     };
-    // the lifecycle table is a static outside the buffer: extend the extent to hold it
-    let lc = lifecycle() as *const LifecycleV1 as usize;
-    let widen = |p: &Pack| {
-        let w = whole_pack(p);
-        w.start.min(lc)..w.end.max(lc + size_of::<LifecycleV1>())
-    };
+    let widen = whole_pack;
     let ok = pack(core::ptr::null(), 0);
     ok.records.kinds = ok.kinds.as_ptr();
     ok.records.nkinds = 2;

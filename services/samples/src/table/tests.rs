@@ -25,8 +25,7 @@ impl Rig {
         let core = FakeCore::new();
         let mut tracks = Box::new(Tracks::new());
         let table = cell(true);
-        assert!(tracks.reserve(4, 1, 0x1000, 0x2000));
-        tracks.mirror(&core, table);
+        assert!(tracks.reserve(&core, table, 4, 1, 0x1000, 0x2000));
         Rig {
             core,
             tracks,
@@ -59,19 +58,17 @@ impl Rig {
 }
 
 #[test]
-fn a_client_is_visible_to_the_calls_once_the_owner_published_it() {
+fn a_client_is_visible_to_the_calls_from_its_reserve_on() {
     let core = FakeCore::new();
     let table = cell(true);
     assert_eq!(pool_status(table, &core, 1, 0), E_NOT_FOUND);
     let mut tracks = Box::new(Tracks::new());
-    assert!(tracks.reserve(4, 1, 0x1000, 0x2000));
-    assert_eq!(
-        pool_status(table, &core, 1, 0),
-        E_NOT_FOUND,
-        "not published yet"
-    );
-    tracks.mirror(&core, table);
+    assert!(tracks.reserve(&core, table, 4, 1, 0x1000, 0x2000));
+    // no mirror and no tick since: the table already answers, and an add between reserve and claim succeeds
     assert_eq!(pool_status(table, &core, 1, 0), UNUSED);
+    let z = b"SND/A\0";
+    assert_eq!(unsafe { pool_add(table, &core, 1, z.as_ptr()) }, 0);
+    assert_eq!(pool_status(table, &core, 1, 0), QUEUED);
     assert_eq!(
         pool_status(table, &core, 2, 0),
         E_NOT_FOUND,
@@ -248,8 +245,7 @@ fn a_released_client_has_no_entries_and_no_requests() {
     r.tracks.mirror(&r.core, r.table);
     assert_eq!(r.status(0), E_NOT_FOUND);
     // the slot is taken by another module: it starts empty
-    assert!(r.tracks.reserve(6, 1, 0x3000, 0x4000));
-    r.tracks.mirror(&r.core, r.table);
+    assert!(r.tracks.reserve(&r.core, r.table, 6, 1, 0x3000, 0x4000));
     assert_eq!(r.status(0), UNUSED);
     r.tracks.intake(&r.core, r.table);
     assert_eq!(
@@ -319,15 +315,25 @@ fn a_task_switch_between_two_adds_cannot_make_them_share_an_entry() {
 }
 
 #[test]
-fn a_reset_empties_the_table_in_place() {
-    let mut t = PoolTable::new();
-    t.backed = true;
-    t.open[1] = true;
-    t.slots[1][5].status = 3;
-    t.slots[1][5].req = Req::Select;
-    t.reset(false);
-    assert!(!t.backed && !t.open[1]);
-    assert!(t.slots[1][5].status == UNUSED && t.slots[1][5].req == Req::None);
-    t.reset(true);
-    assert!(t.backed);
+fn a_reset_empties_the_table_in_short_sections_never_one_over_the_whole_table() {
+    let core = FakeCore::new();
+    let c = cell(true);
+    c.with(&core, |t| {
+        t.open[1] = true;
+        t.slots[1][5].status = 3;
+        t.slots[1][5].req = Req::Select;
+    });
+    let before = core.host.masks_taken.get();
+    PoolTable::reset(c, &core, false);
+    let sections = core.host.masks_taken.get() - before;
+    assert!(
+        sections >= (CLIENTS * ENTRIES) as u32,
+        "{sections} sections: each slot is cleared in its own"
+    );
+    c.with(&core, |t| {
+        assert!(!t.backed && !t.open[1]);
+        assert!(t.slots[1][5].status == UNUSED && t.slots[1][5].req == Req::None);
+    });
+    PoolTable::reset(c, &core, true);
+    c.with(&core, |t| assert!(t.backed));
 }

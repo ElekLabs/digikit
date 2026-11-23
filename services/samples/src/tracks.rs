@@ -98,8 +98,10 @@ impl Tracks {
 
     /// A module's track table was found in its DSP section: `records` and `control` are the L2 byte addresses of its 16 records and 16
     /// control sets. Nothing is written to the DSP before `ready`.
-    pub(crate) fn reserve(
+    pub(crate) fn reserve<C: CoreApi>(
         &mut self,
+        core: &C,
+        table: &PoolCell,
         rec: usize,
         local_id: u32,
         records: u32,
@@ -116,6 +118,8 @@ impl Tracks {
                     write_volatile(addr_of_mut!(DKRT_SMP_RECORDS[i]), records);
                     write_volatile(addr_of_mut!(DKRT_SMP_CONTROL[i]), control);
                 }
+                // the client is open from here, so the calls of the module find its table from here on (as before the table existed)
+                self.mirror(core, table);
                 return true;
             }
             i += 1;

@@ -1,5 +1,7 @@
 //! Sample part of the DSP loader: the track-table record of a DSP section.
+use crate::table::PoolCell;
 use crate::tracks::Tracks;
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{in_sec, rd32le, DspSec, Job, FX_REC};
 use dkrt_abi::mem::rd32;
 use dkrt_abi::provider::Status;
@@ -91,10 +93,17 @@ pub(crate) unsafe fn admit(tracks: &Tracks, job: &Job) -> Result<(), Status> {
 }
 
 /// Bind the module's track table to a client slot (`admit` checked one free).
-pub(crate) unsafe fn claim(tracks: &mut Tracks, c: &mut Claim) {
+pub(crate) unsafe fn claim<C: CoreApi>(
+    core: &C,
+    table: &PoolCell,
+    tracks: &mut Tracks,
+    c: &mut Claim,
+) {
     let (rec, job, base) = (c.rec, c.job, c.base);
     if !job.bank.is_null() {
         tracks.reserve(
+            core,
+            table,
             rec,
             rd32le(job.bank.add(4)),
             base + rd32le(job.bank.add(8)),
