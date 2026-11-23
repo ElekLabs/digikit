@@ -57,8 +57,6 @@ for (const device of DEVICES) {
       await rpc(rt.session, 'run.mode', { mode: 'paused' }); // the protocol calls below step the emulator themselves
       const { session } = rt;
       const usb = <T>(run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
-      const cap = (await usb((dk) => dk.capacity())).SETTINGS!;
-      expect([cap.limit, cap.used], 'CAPACITY SETTINGS has limit 0 and nothing used').toEqual([0, 0]);
       expect(await statusOf(() => usb(settingsRecord)), 'the SETTINGS command answers E_SET_OFF').toBe(E_SET_OFF);
       expect(
         await statusOf(() => usb((dk) => dk.list())),

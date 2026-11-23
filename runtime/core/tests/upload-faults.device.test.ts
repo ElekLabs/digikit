@@ -9,10 +9,14 @@ import { analysisJson, frames, pcmMatches, peak, playNote, readFloatWav, SETTLE 
 import { selectSine, type FxProfile } from '@digi/regression/runtime/fx-session.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
 import { deviceListing, uploadTests } from '@digi/regression/runtime/upload-kit.ts';
 import type { DkSession } from '@digi/dk-session';
 
 /** Python tools/patchkit/pk_digikit_upload.py: the `cut`, `clearcut` and `playback` parts (faults during an upload, and an upload while a note plays). */
+
+/** The listing of the files the test uploaded: the seeded card also holds the system package, which no case here touches. */
+const ours = <T>(l: Record<string, T>): Record<string, T> => Object.fromEntries(Object.entries(l).filter(([p]) => p !== SYSTEM_PACKAGE_STORE_PATH));
 
 /** The card is a store a fault left (`want`): the next boot reads it whole, the plusdrive reader agrees, and one more upload works and commits. */
 async function expectStoreAfterFault(
@@ -23,15 +27,15 @@ async function expectStoreAfterFault(
   next: { path: string; data: Buffer },
 ): Promise<void> {
   const dk = await rig.pausedBoot(card);
-  expect(await deviceListing(dk), `${label}: the next boot reads the store, whole`).toEqual(listing(want));
+  expect(ours(await deviceListing(dk)), `${label}: the next boot reads the store, whole`).toEqual(listing(want));
   const view = await rig.view(`${label}-v`);
-  expect(listing(view.files), `${label}: plusdrive reads the same from the card ${view.head}`).toEqual(listing(want));
+  expect(ours(listing(view.files)), `${label}: plusdrive reads the same from the card ${view.head}`).toEqual(listing(want));
   const status = await statusOf(() => dk.put(next.path, next.data));
   const files = { ...want, [next.path]: next.data };
   const after = await rig.view(`${label}-w`);
   check(
     `${label}: the next upload works and commits`,
-    status === 0 && isDeepStrictEqual(listing(after.files), listing(files)),
+    status === 0 && isDeepStrictEqual(ours(listing(after.files)), listing(files)),
     `${status} ${Object.keys(after.files).sort().join()} ${after.head}`,
   );
 }
