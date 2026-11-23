@@ -5,7 +5,7 @@ use crate::package::resident::platform::PLATFORM;
 use crate::package::resident::state::{init_once, st};
 use crate::package::resident::{arena, boot, card, settings, store};
 use dkrt_abi::MAX_MODULES;
-use dkrt_sdk::STAGE_BYTES;
+use dkrt_sdk::{PACKAGE_BYTES, STAGE_BYTES};
 use crate::package::{dsp};
 use core::ptr::read_volatile;
 use dkrt_abi::package_platform::PackagePlatform;
@@ -55,7 +55,7 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
     // the services declare their own counts (machine, voice, parameter and page rows, effect and send slots, map entries), per kind
     let table = services();
     // the values of each kind (a table, not a `match`: a jump table would put data in .text)
-    let entries: [(u8, u32, u32, u32); 9] = [
+    let entries: [(u8, u32, u32, u32); 10] = [
         (CAPK_MODULES, MAX_MODULES as u32, mods, 0),
         (CAPK_SELECTION, dkrt_sdk::SEL_MAX as u32, boot::selected(), 0),
         (CAPK_ARENA, arena, arena - af, al),
@@ -65,6 +65,8 @@ pub unsafe extern "C" fn dkrt_capacity(out: *mut DkrtCap, max: u32) -> u32 {
         (CAPK_SETTINGS, set_limit, set_used, 0),
         (CAPK_DSP_COST, PLATFORM.dsp_headroom(), dsp_used, dsp_top),
         (CAPK_DSP_VOICES, PLATFORM.dsp_voices(), 0, 0),
+        // the system package block, apart from the arena: its bytes and what the placed package takes of them
+        (CAPK_PACKAGE, PACKAGE_BYTES as u32, crate::package::placed::placed_bytes(), 0),
     ];
     // one entry per kind of `[capacity.kinds]`, in its order; a kind with no row above reports zeros
     let mut k = 0;

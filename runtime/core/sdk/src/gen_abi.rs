@@ -28,6 +28,8 @@ pub const LIVE_RELOAD: u32 = 3;
 pub const CAP_MAX: usize = 20;
 /// The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it).
 pub const ARENA_BYTES: usize = 524288;
+/// The system package block: a static array of the runtime's bss, outside the module arena. Stage 1 places the package in it (a body whose placed size is larger is refused, by patchkit at build and by stage 1 at load).
+pub const PACKAGE_BYTES: usize = 327680;
 /// The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml).
 pub const STAGE_BYTES: usize = 131072;
 /// Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start).

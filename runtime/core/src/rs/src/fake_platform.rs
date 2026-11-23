@@ -98,6 +98,7 @@ impl FakePlatform {
         storage.samples_path_max.set(profile.sample_path_max);
         let addresses = address_map::AddressMap::new();
         addresses.map_arena();
+        addresses.map_package();
         FakePlatform {
             profile,
             card: RefCell::new(BTreeMap::new()),

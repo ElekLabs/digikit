@@ -24,7 +24,7 @@ mod build {
     use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES as BODY_HEADER, relocate};
     use dkrt_sdk::syspkg::{HEADER_BYTES, Header};
     use patchkit::dko::{Dko, DkoReloc, DkoSection, DkoSymbol, FORMAT};
-    use patchkit::syspkg::{ENTRY, TABLE_SYMBOL, build};
+    use patchkit::syspkg::{ENTRY, PLACED_SYMBOL, TABLE_SYMBOL, build};
 
     fn section(name: &str, kind: &str, bytes: &[u8]) -> DkoSection {
         DkoSection {
@@ -104,6 +104,48 @@ mod build {
     }
 
     #[test]
+    fn a_package_larger_than_the_package_block_is_refused_and_one_that_fills_it_is_built() {
+        // placed bytes: 32 header + image + the larger of bss and relocation table; the fixture image is 16 bytes
+        let with_bss = |bss: u32| {
+            let mut o = package();
+            o.sections
+                .iter_mut()
+                .find(|s| s.kind == "bss")
+                .unwrap()
+                .size = bss;
+            o
+        };
+        let fits = dkrt_sdk::PACKAGE_BYTES as u32 - 32 - 16;
+        assert!(
+            build(&with_bss(fits)).is_ok(),
+            "a package that fills the block exactly is built"
+        );
+        let e = build(&with_bss(fits + 1)).unwrap_err().to_string();
+        assert!(
+            e.contains("package block") && e.contains("PACKAGE_BYTES"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn the_placed_size_word_of_the_package_holds_what_the_block_takes() {
+        let mut o = package();
+        // a fourth data word that is the unset value, and its symbol
+        let data = o.sections.iter_mut().find(|s| s.name == ".data").unwrap();
+        let mut bytes = patchkit::error::unhex(&data.hex).unwrap();
+        bytes.extend_from_slice(&0xffff_ffffu32.to_be_bytes());
+        data.size = bytes.len() as u32;
+        data.hex = patchkit::error::hex(&bytes);
+        o.symbols.push(symbol(PLACED_SYMBOL, Some(".data"), 12));
+        let file = build(&o).unwrap();
+        let body = &file[HEADER_BYTES..];
+        let b = BodyHeader::decode(body).unwrap();
+        let at = BODY_HEADER + 4 + 12;
+        let word = u32::from_be_bytes(body[at..at + 4].try_into().unwrap());
+        assert_eq!(word as u64, b.placed_bytes());
+    }
+
+    #[test]
     fn a_symbol_the_package_does_not_define_is_refused() {
         let mut o = package();
         o.symbols.push(symbol("dk_ui_menu_new", None, 0));
@@ -134,7 +176,7 @@ mod artifact {
     use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES, relocate};
     use patchkit::dko::Dko;
     use patchkit::link::link;
-    use patchkit::syspkg::body;
+    use patchkit::syspkg::{PLACED_SYMBOL, body};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
 
@@ -151,10 +193,16 @@ mod artifact {
         let (bytes, _, _) = body(&obj).unwrap();
         let h = BodyHeader::decode(&bytes).unwrap();
         let mut image = bytes[HEADER_BYTES..HEADER_BYTES + h.image as usize].to_vec();
-        let at_zero = link(&obj, 0, &BTreeMap::new()).unwrap();
+        let mut at_zero = link(&obj, 0, &BTreeMap::new()).unwrap();
+        let mut at_base = link(&obj, BASE, &BTreeMap::new()).unwrap();
+        // the one word `syspkg build` writes after the link (the bytes the package takes in its block) is the body's in both links
+        if let Some(&w) = at_zero.symbols.get(PLACED_SYMBOL) {
+            let w = w as usize;
+            at_zero.image[w..w + 4].copy_from_slice(&image[w..w + 4]);
+            at_base.image[w..w + 4].copy_from_slice(&image[w..w + 4]);
+        }
         assert_eq!(image, at_zero.image, "the body's image is the link at 0");
         relocate(&mut image, h.reloc_table(&bytes), BASE as u32).unwrap();
-        let at_base = link(&obj, BASE, &BTreeMap::new()).unwrap();
         let differing: Vec<usize> = (0..image.len())
             .filter(|&i| image[i] != at_base.image[i])
             .collect();

@@ -4,8 +4,8 @@
 //! mapping covers. An address that nothing covers is an error of the test, not of the code under test: every lookup answers `None` and `DevAddr` panics with the address.
 
 use core::cell::{Cell, RefCell};
-use dkrt_sdk::ARENA_BYTES;
-use crate::{state::DKRT_ARENA};
+use dkrt_sdk::{ARENA_BYTES, PACKAGE_BYTES};
+use crate::state::{DKRT_ARENA, DKRT_PKG};
 use core::ops::Range;
 use core::ptr::addr_of_mut;
 use dkrt_abi::dev_addr::{install, with_space, AddressSpace, SpaceGuard};
@@ -18,6 +18,8 @@ const FN_STEP: u32 = 4;
 const PLACE_BASE: u32 = 0x4000_0000;
 /// The device address where `map_arena` puts the module arena.
 const ARENA_DEV_BASE: u32 = 0x2000_0000;
+/// The device address where `map_package` puts the system package block.
+const PACKAGE_DEV_BASE: u32 = 0x2800_0000;
 
 struct Mapping {
     range: Range<u32>,
@@ -57,6 +59,13 @@ impl AddressMap {
         let host = addr_of_mut!(DKRT_ARENA) as *mut u8;
         let start = ARENA_DEV_BASE + (host as usize & 15) as u32;
         self.map(start..start + ARENA_BYTES as u32, host);
+    }
+
+    /// The system package block (`DKRT_PKG`) at the device addresses from `PACKAGE_DEV_BASE`, aligned as `map_arena` does.
+    pub fn map_package(&self) {
+        let host = addr_of_mut!(DKRT_PKG) as *mut u8;
+        let start = PACKAGE_DEV_BASE + (host as usize & 15) as u32;
+        self.map(start..start + PACKAGE_BYTES as u32, host);
     }
 
     /// The device address of the host memory of `len` bytes at `host`: the one it has, or a new range from `PLACE_BASE` on. The memory stays valid while the map is installed.

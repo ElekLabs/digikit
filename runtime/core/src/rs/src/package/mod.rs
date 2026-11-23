@@ -15,6 +15,7 @@ pub mod core_api;
 pub mod dsp;
 pub mod dsp_stats;
 pub mod entry;
+pub(crate) mod placed;
 pub(crate) mod files;
 #[rustfmt::skip]
 pub(crate) mod gen_services;

@@ -1,6 +1,6 @@
 use dkrt_abi::dev_addr::DevAddr;
 
-/// Where stage 1 puts the package body. The real placer (`ArenaPlacer`) copies it to the arena top (`core.package`) and makes it runnable; a host test records the bytes.
+/// Where stage 1 puts the package body. The real placer (`PackagePlacer`) copies it to the package block (`PACKAGE_BYTES`, outside the module arena) and makes it runnable; a host test records the bytes.
 pub trait Placer {
     /// A body of `size` bytes is coming; `head` is its first bytes (as many as stage 1 has read, at least the file's first chunk less its header). An error (an `E_*`
     /// code) means it does not fit or is no body: stage 1 loads nothing.

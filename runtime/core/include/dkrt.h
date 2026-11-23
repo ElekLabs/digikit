@@ -33,6 +33,8 @@
 #define DKRT_CAP_MAX 20
 /* The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it). */
 #define DKRT_ARENA_BYTES 524288
+/* The system package block: a static array of the runtime's bss, outside the module arena. Stage 1 places the package in it (a body whose placed size is larger is refused, by patchkit at build and by stage 1 at load). */
+#define DKRT_PACKAGE_BYTES 327680
 /* The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml). */
 #define DKRT_STAGE_BYTES 131072
 /* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
@@ -305,6 +307,7 @@
 #define DKRT_CAPK_SEND_SLOTS 14
 #define DKRT_CAPK_DSP_COST 15
 #define DKRT_CAPK_DSP_VOICES 16
+#define DKRT_CAPK_PACKAGE 17
 
 /* dkrt_status result. The caller owns the memory; the layout only grows at the end. */
 typedef struct DkrtStatus {

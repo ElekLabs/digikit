@@ -92,6 +92,12 @@ value = 524288
 doc = "The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it)."
 
 [[const]]
+name = "PACKAGE_BYTES"
+type = "usize"
+value = 327680
+doc = "The system package block: a static array of the runtime's bss, outside the module arena. Stage 1 places the package in it (a body whose placed size is larger is refused, by patchkit at build and by stage 1 at load)."
+
+[[const]]
 name = "STAGE_BYTES"
 type = "usize"
 value = 131072

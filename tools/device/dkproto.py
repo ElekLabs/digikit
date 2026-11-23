@@ -336,6 +336,7 @@ CAPACITY_KINDS: dict[str, int] = {
     "SEND_SLOTS": 14,
     "DSP_COST": 15,
     "DSP_VOICES": 16,
+    "PACKAGE": 17,
 }
 
 SETTINGS_SECTORS = 16  # one copy of the settings record

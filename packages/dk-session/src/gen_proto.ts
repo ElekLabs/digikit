@@ -288,6 +288,7 @@ export const CAPACITY_KINDS = {
   SEND_SLOTS: 14,
   DSP_COST: 15,
   DSP_VOICES: 16,
+  PACKAGE: 17,
 } as const;
 
 /** What a person calls a capacity kind a fit looks at, by kind number. */

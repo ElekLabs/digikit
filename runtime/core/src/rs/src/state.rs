@@ -11,6 +11,8 @@ use dkrt_sdk::*;
 pub use dkrt_sdk::ARENA_BYTES;
 /// Staging buffer for a `.dkm` file (and the store directory): files are at most this size in v0.
 pub use dkrt_sdk::STAGE_BYTES;
+/// The system package block: `PACKAGE_BYTES` of the runtime's bss that hold the package for the whole boot (`stage1`), apart from the module arena.
+pub use dkrt_sdk::PACKAGE_BYTES;
 pub use dkrt_abi::MAX_MODULES;
 /// Records of the loader: the module records (`DKRT_STATE.modules`, `MAX_MODULES`) and the records of provider files, after them (`loader/records.rs`).
 pub use dkrt_abi::REC_MAX;
@@ -19,10 +21,15 @@ pub use dkrt_abi::runtime_state::{LogEntry, State, LOG_ENTRIES, STATE_MAGIC};
 #[repr(C, align(16))]
 pub struct Arena(pub [u8; ARENA_BYTES]);
 #[repr(C, align(16))]
+pub struct PackageBlock(pub [u8; PACKAGE_BYTES]);
+#[repr(C, align(16))]
 pub struct Stage(pub [u8; STAGE_BYTES]);
 
 #[no_mangle]
 pub static mut DKRT_ARENA: Arena = Arena([0; ARENA_BYTES]);
+/// The block of the system package (`stage1`'s placer relocates the package where it lies); the module arena does not hold it.
+#[no_mangle]
+pub static mut DKRT_PKG: PackageBlock = PackageBlock([0; PACKAGE_BYTES]);
 #[no_mangle]
 pub static mut DKRT_STAGE: Stage = Stage([0; STAGE_BYTES]);
 
@@ -38,6 +45,11 @@ pub static mut DKRT_MENUS: [u32; MAX_MODULES] = [0; MAX_MODULES];
 /// reloaded. Cleared when a module loads into the record.
 #[no_mangle]
 pub static mut DKRT_MENU_OBJS: [u8; MAX_MODULES] = [0; MAX_MODULES];
+
+/// The package block: its device address and its size in bytes.
+pub(crate) fn package_block() -> (dkrt_abi::dev_addr::DevAddr, u32) {
+    (dkrt_abi::dev_addr::DevAddr::of_ptr(core::ptr::addr_of_mut!(DKRT_PKG)), PACKAGE_BYTES as u32)
+}
 
 /// Was a menu object built for module record `rec` (`dkrt_menu_built`)?
 pub(crate) unsafe fn menus_held(rec: usize) -> bool {

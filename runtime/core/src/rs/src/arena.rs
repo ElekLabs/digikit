@@ -84,55 +84,6 @@ unsafe fn alloc_walk(n: u32) -> *mut u8 {
     null_mut()
 }
 
-/// A block of at least `n` bytes at the very top of the arena (16-byte aligned), for what stays for the whole boot: the system package (`stage1`). The block is the
-/// end of the last free block, which must reach the top of the arena (nothing is allocated above it); the rest of that block stays free, so allocations below keep
-/// the addresses they have always had. `NULL` when the top is taken or the block is too small. The block is an ordinary one (`free` gives it back, for a package
-/// that failed its checks), and the capacity report counts it as used.
-pub unsafe fn alloc_top(n: u32) -> DevAddr {
-    let sr = crate::platform::irq_mask();
-    let a = alloc_top_walk(n);
-    crate::platform::irq_restore(sr);
-    DevAddr::of_ptr(a)
-}
-
-unsafe fn alloc_top_walk(n: u32) -> *mut u8 {
-    let s = st();
-    if n == 0 || n > ARENA_BYTES as u32 {
-        return null_mut();
-    }
-    let need = ((n + 15) & !15) + HDR;
-    let mut prev: *mut u32 = null_mut();
-    let mut cur = block(s.arena.free_head);
-    while !cur.is_null() && *cur.add(1) != 0 {
-        prev = cur;
-        cur = block(*cur.add(1));
-    }
-    // the last free block must end at the top, and keep a block of its own (or be taken whole)
-    if cur.is_null() || addr(cur) + *cur != s.arena.hi {
-        return null_mut();
-    }
-    let sz = *cur;
-    if sz < need {
-        return null_mut();
-    }
-    let rem = sz - need;
-    let used = if rem >= 2 * HDR {
-        *cur = rem;
-        block(addr(cur) + rem)
-    } else {
-        // too little would stay: take the whole block
-        if prev.is_null() {
-            s.arena.free_head = 0;
-        } else {
-            *prev.add(1) = 0;
-        }
-        cur
-    };
-    *used = if rem >= 2 * HDR { need } else { sz };
-    *used.add(1) = USED;
-    (used as *mut u8).add(HDR as usize)
-}
-
 /// Return a block. An address that is not a live block of this arena is ignored; returns whether it was freed.
 pub unsafe fn free(p: DevAddr) -> bool {
     let sr = crate::platform::irq_mask();
@@ -199,6 +150,3 @@ pub unsafe fn stats() -> (u32, u32) {
     }
     (total, if largest > HDR { largest - HDR } else { 0 })
 }
-
-#[cfg(test)]
-mod tests;

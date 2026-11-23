@@ -68,25 +68,31 @@ fn the_built_package_artifact_has_its_entry_and_links_only_through_the_table() {
     }
 }
 
-// ---- the arena placer: the real artifact at the arena top -------------------------------------------------------------------
+// ---- the package placer: the real artifact in the package block -------------------------------------------------------------------
 
-mod arena_top {
+mod package_block {
     use super::*;
     use crate::arena;
     use crate::fake_platform::test_arena::TestArena;
     use crate::platform::st;
     use dkrt_sdk::syspkg::body::BodyHeader;
+    use dkrt_sdk::PACKAGE_BYTES;
+
+    /// The arena after `init`, nothing allocated: all its bytes free, one block.
+    fn whole_arena() -> (u32, u32) {
+        (ARENA_BYTES as u32, ARENA_BYTES as u32 - dkneeds::ARENA_HDR)
+    }
 
     const BASE_CHUNK: usize = 4096;
 
     /// Stage 1 over `file` with the device's placer, in a fresh arena; `then` sees the result while the arena is up.
-    fn placed<R>(file: &[u8], then: impl FnOnce(PackageStatus, &Stage1<'_, StorageSource<'_>, ArenaPlacer>) -> R) -> R {
+    fn placed<R>(file: &[u8], then: impl FnOnce(PackageStatus, &Stage1<'_, StorageSource<'_>, PackagePlacer>) -> R) -> R {
         let _arena = TestArena::lock();
         let card = card_with(file);
         let mut chunk = vec![0u8; BASE_CHUNK];
         unsafe {
             arena::init();
-            let mut s = Stage1::new(StorageSource::new(&card), ArenaPlacer::new(), &mut chunk);
+            let mut s = Stage1::new(StorageSource::new(&card), PackagePlacer::new(), &mut chunk);
             let status = s.load();
             then(status, &s)
         }
@@ -108,7 +114,7 @@ mod arena_top {
     }
 
     #[test]
-    fn the_built_artifact_sits_at_the_arena_top_relocated_to_its_block_with_its_bss_cleared() {
+    fn the_built_artifact_sits_in_the_package_block_relocated_with_its_bss_cleared_and_the_arena_stays_whole() {
         let f = artifact();
         let body = &f[HEADER_BYTES..];
         let h = BodyHeader::decode(body).unwrap();
@@ -117,20 +123,21 @@ mod arena_top {
         let mut chunk = vec![0u8; BASE_CHUNK];
         unsafe {
             arena::init();
-            let before = arena::stats();
+            assert_eq!(arena::stats(), whole_arena());
             // dirty memory where the package will lie: a bss that stage 1 did not clear, or a relocation table left in it, shows
             let need = h.placed_bytes() as u32;
-            let hi = st().arena.hi;
-            core::ptr::write_bytes(DevAddr::new(hi - round16(need)).ptr::<u8>(), 0xa5, round16(need) as usize);
-            let mut s = Stage1::new(StorageSource::new(&card), ArenaPlacer::new(), &mut chunk);
+            let (block, bytes) = crate::state::package_block();
+            core::ptr::write_bytes(block.ptr::<u8>(), 0xa5, round16(need) as usize);
+            let mut s = Stage1::new(StorageSource::new(&card), PackagePlacer::new(), &mut chunk);
             assert_eq!(s.load(), PackageStatus::Ok);
             let (entry, minor) = s.placed().expect("a placed package has its entry");
             assert_eq!(minor, RESIDENT_TABLE_MINOR);
             let base = entry.get() - h.entry;
-            // the block ends at the top of the arena, and the arena counts it as used (headers included)
-            assert_eq!(base - dkrt_sdk::syspkg::body::HEADER_BYTES as u32 + round16(need), hi, "the block ends at the arena top");
-            let (free_now, _) = arena::stats();
-            assert_eq!(before.0 - free_now, round16(need) + dkneeds::ARENA_HDR);
+            // the package starts at its own block, which is `PACKAGE_BYTES` and holds it; the arena is as free as before: all 512 KiB
+            assert_eq!(base - dkrt_sdk::syspkg::body::HEADER_BYTES as u32, block.get(), "the package starts at the package block");
+            assert!(need <= bytes && bytes as usize == PACKAGE_BYTES);
+            assert_eq!(arena::stats(), whole_arena(), "the package takes nothing of the arena");
+            assert_eq!(arena::stats().0, ARENA_BYTES as u32);
             // the image is the unrelocated one plus the base at each relocation entry
             let mut want = body[dkrt_sdk::syspkg::body::HEADER_BYTES..][..h.image as usize].to_vec();
             relocate(&mut want, h.reloc_table(body), base).unwrap();
@@ -142,20 +149,26 @@ mod arena_top {
             // the entry is inside the image, and the table it was built against fits this core's
             assert!(entry.get() >= base && entry.get() < base + h.image);
             accept_table(&crate::resident::TABLE, minor).expect("the artifact's table fits this core");
-            // an abandoned package gives the arena back whole
+            // an abandoned package leaves no placed package and the arena whole
             s.abandon();
-            assert_eq!(arena::stats(), before);
+            assert!(s.placed().is_none());
+            assert_eq!(arena::stats(), whole_arena());
         }
     }
 
     #[test]
-    fn a_package_that_does_not_fit_the_arena_is_damaged_and_takes_none_of_it() {
-        placed(&small_package(16, ARENA_BYTES as u32, &[]), |status, s| {
-            assert_eq!(status, PackageStatus::Damaged);
+    fn a_package_larger_than_the_package_block_is_damaged_and_a_full_block_is_accepted() {
+        // placed bytes: 32 header + image + the larger of bss and relocation table
+        let fits = PACKAGE_BYTES as u32 - 32 - 16;
+        placed(&small_package(16, fits, &[]), |status, s| {
+            assert_eq!(status, PackageStatus::Ok, "a package that fills the block exactly is placed");
+            assert!(s.placed().is_some());
+            assert_eq!(unsafe { arena::stats() }, whole_arena());
+        });
+        placed(&small_package(16, fits + 1, &[]), |status, s| {
+            assert_eq!(status, PackageStatus::Damaged, "one byte more is refused: the core-only cause of an unusable package");
             assert!(s.placed().is_none());
-            let (free, largest) = unsafe { arena::stats() };
-            assert!(free >= largest && largest > 0, "the arena is whole");
-            assert!(unsafe { !arena::alloc(ARENA_BYTES as u32 - 64).is_null() }, "the whole arena is still free");
+            assert_eq!(unsafe { arena::stats() }, whole_arena(), "the arena is untouched");
         });
     }
 

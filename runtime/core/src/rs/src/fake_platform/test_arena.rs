@@ -21,6 +21,7 @@ impl ArenaMap {
     pub(crate) fn install() -> ArenaMap {
         let map = Box::new(AddressMap::new());
         map.map_arena();
+        map.map_package();
         // SAFETY: the box is owned by the returned value and outlives the guard, which `drop` releases first.
         let space = unsafe { core::mem::transmute::<SpaceGuard<'_>, SpaceGuard<'static>>(map.install()) };
         ArenaMap { space: Some(space), map }

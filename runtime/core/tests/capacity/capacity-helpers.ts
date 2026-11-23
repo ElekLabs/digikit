@@ -83,6 +83,10 @@ export async function expectBoot(
   expect(cap.MODULES!, 'CAPACITY modules').toMatchObject({ limit: g.modules, used: loaded.length });
   expect(cap.SELECTION!.used, 'CAPACITY selection').toBe(entries.length);
   expect(cap.ARENA!.limit, 'CAPACITY arena').toBe(g.arenaFree);
+  // the system package has a block of its own: it is reported apart and never counted in the arena
+  expect(cap.PACKAGE!.limit, 'CAPACITY package block').toBe(g.packageBytes);
+  expect(cap.PACKAGE!.used, 'the placed package takes part of its block').toBeGreaterThan(0);
+  expect(cap.PACKAGE!.used).toBeLessThanOrEqual(g.packageBytes);
   expect(cap.STAGE!, 'CAPACITY stage').toMatchObject({ limit: g.stageBytes, largest: g.stageBytes });
   expect(cap.DSP_AREA!.limit, 'CAPACITY DSP area').toBe(g.dspArea);
   expect(cap.VOICE_ROWS!, 'CAPACITY voice rows are the owned rows').toMatchObject({

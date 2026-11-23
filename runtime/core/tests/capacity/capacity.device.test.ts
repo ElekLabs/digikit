@@ -109,6 +109,23 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
   );
 
   test(
+    'no modules: the arena is whole (512 KiB, nothing used) and the system package has its own block, reported apart',
+    async () => {
+      await rig.first();
+      const g = geometryOf(rig.device, rig.plan);
+      const got = await bootEntries(rig, 'idle', []);
+      await expectBoot(rig, g, [], got);
+      expect(g.arenaBytes, 'every device has the 512 KiB arena').toBe(524288);
+      expect(
+        [got.cap.ARENA!.limit, got.cap.ARENA!.used, got.cap.ARENA!.largest],
+        'the arena has all its bytes free in one block: the package is not in it',
+      ).toEqual([g.arenaBytes, 0, g.arenaBytes - ARENA_HDR]);
+      expect(got.cap.PACKAGE!.limit, 'the package block is its own constant').toBe(g.packageBytes);
+      expect(got.cap.PACKAGE!.used, 'the package fits its block').toBeLessThanOrEqual(g.packageBytes);
+    },
+  );
+
+  test(
     'files: a file of the staging buffer size loads with its whole image, 4 bytes more is E_TOO_BIG',
     async () => {
       await rig.first();

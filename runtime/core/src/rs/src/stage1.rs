@@ -7,19 +7,19 @@
 //! `dkrt_sdk::syspkg::Header` (patchkit writes it with the same type).
 //!
 //! - `source`: where the bytes come from (`PackageSource`), and the store implementation;
-//! - `placer`: where the bytes go (`Placer`), and `arena_placer`, the device's: a block at the arena top, relocated in place;
+//! - `placer`: where the bytes go (`Placer`), and `package_placer`, the device's: the package block, relocated in place;
 //! - `load`: the steps;
 //! - `checked`: the steps and the table check, as the boot runs them;
 //! - `start`: the table check before the entry and the call of the entry.
 
-mod arena_placer;
+mod package_placer;
 mod checked;
 mod load;
 mod placer;
 mod source;
 mod start;
 
-pub use arena_placer::ArenaPlacer;
+pub use package_placer::PackagePlacer;
 pub use placer::Placer;
 pub use source::{PackageSource, StoreSource};
 pub use start::{accept_table, log_refusal, start};
@@ -55,7 +55,7 @@ impl<'a, S: PackageSource, P: Placer> Stage1<'a, S, P> {
         self.placed
     }
 
-    /// Give the placed package back (its table was refused after all): the block returns to the arena and `placed` is empty.
+    /// Give the placed package back (its table was refused after all): the block is free again and `placed` is empty.
     pub fn abandon(&mut self) {
         self.placer.abandon();
         self.placed = None;

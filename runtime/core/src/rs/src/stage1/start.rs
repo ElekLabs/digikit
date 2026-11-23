@@ -25,7 +25,7 @@ pub unsafe fn log_refusal(why: &Refusal) {
 /// with the package's built minor, so a null answer is the package's own refusal, not a version mismatch.
 ///
 /// # Safety
-/// `entry` is the entry of a package that `ArenaPlacer::finish` made runnable, and `table` outlives the boot.
+/// `entry` is the entry of a package that `PackagePlacer::finish` made runnable, and `table` outlives the boot.
 pub unsafe fn start(entry: DevAddr, table: &'static ResidentTable) -> Option<&'static PackageHooks> {
     let hooks = call_at(entry, &[table as *const ResidentTable as usize]) as *const PackageHooks;
     if hooks.is_null() {

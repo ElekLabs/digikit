@@ -3,7 +3,7 @@ use dkrt_abi::resident::ResidentTable;
 
 impl<S: PackageSource, P: Placer> Stage1<'_, S, P> {
     /// Stage 1 as the boot runs it: `load`, and then the resident table must fit the package before its entry is called (`accept_table`, built with the minor the package
-    /// was built against). A table that does not fit has its reason in the log (`log_refusal`), the block goes back to the arena (`abandon`) and the status is
+    /// was built against). A table that does not fit has its reason in the log (`log_refusal`), the block is free again (`abandon`) and the status is
     /// `Incompatible`: a card state, never a crash. Any other status is `load`'s.
     ///
     /// # Safety
