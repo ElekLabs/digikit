@@ -638,7 +638,7 @@ fn event_count() -> u32 {
 }
 
 fn dropped_events(since: u32) -> usize {
-    events_since(since).iter().filter(|e| e.0 == dkrt_sdk::logk::UPLOAD && e.2[0] == store_cmds::CLEAR_DROPPED_PACKAGE).count()
+    events_since(since).iter().filter(|e| e.0 == dkrt_sdk::logk::UPLOAD && e.2[0] == crate::storage::upload_codes::CLEAR_DROPPED_PACKAGE).count()
 }
 
 #[test]
@@ -650,7 +650,7 @@ fn clear_of_a_full_store_drops_the_system_package_and_logs_it() {
     assert_eq!(clear_with(CLEAR_MAGIC), OK, "a full store is cleared: that is how repack gets space back");
     assert!(held().is_empty(), "no room for the package's table: everything is gone");
     assert_eq!(dropped_events(before), 1, "one event names the dropped package");
-    let e = events_since(before).into_iter().find(|e| e.2[0] == store_cmds::CLEAR_DROPPED_PACKAGE).unwrap();
+    let e = events_since(before).into_iter().find(|e| e.2[0] == crate::storage::upload_codes::CLEAR_DROPPED_PACKAGE).unwrap();
     assert_eq!(e.1 & dkrt_sdk::logk::F_ERROR, dkrt_sdk::logk::F_ERROR);
     assert_eq!(upload("c/z", &pattern(100, 7)), OK, "the cleared store takes files");
 }

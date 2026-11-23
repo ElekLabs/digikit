@@ -22,3 +22,4 @@ pub mod sdk_files;
 pub mod storage_adapter;
 pub mod store;
 pub mod store_writer;
+pub mod upload_codes;

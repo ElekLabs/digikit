@@ -187,7 +187,7 @@ pub unsafe fn tick() {
         return;
     }
     if u.kind != NONE && now().wrapping_sub(u.last) >= limit {
-        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [0xb6, u.kind as u32, u.owner as u32, u.next, u.size]);
+        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::PENDING_DROPPED, u.kind as u32, u.owner as u32, u.next, u.size]);
         drop_sdk(u);
     }
     unlock();
@@ -778,7 +778,7 @@ unsafe extern "C" fn pend_step(_: *mut u8) -> i32 {
             p.retrying = false; // else entries with a leased target stay: `commit_pending` set the pause
         }
     } else {
-        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [0xb8, r as u32, p.n as u32, 0, 0]);
+        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::WRITE_FAILED, r as u32, p.n as u32, 0, 0]);
         p.retrying = true;
         p.retry_at = now().wrapping_add(PENDING_RETRY);
     }

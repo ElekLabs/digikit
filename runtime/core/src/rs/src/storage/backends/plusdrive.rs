@@ -119,7 +119,7 @@ pub(crate) unsafe fn tick() {
             write_volatile(addr_of_mut!(PD_RECOVERED), true);
             if out[0] != 0 || out[1] != 0 || out[2] != 0 || out[3] != 0 {
                 // renamed into place, deleted, our leftovers that stayed, entries that are not ours (left alone)
-                crate::dlog::ev(dkrt_sdk::logk::UPLOAD, 0, [0xb7, out[0], out[1], out[2], out[3]]);
+                crate::dlog::ev(dkrt_sdk::logk::UPLOAD, 0, [crate::storage::upload_codes::PLUSDRIVE_REPLY, out[0], out[1], out[2], out[3]]);
             }
         }
     }

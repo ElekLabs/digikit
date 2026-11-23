@@ -99,7 +99,7 @@ pub unsafe fn acquire() -> bool {
             return true;
         }
         if !waits || n >= WAIT_STEPS {
-            crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [0xb5, E_BUSY as u32, 0, 0, 0]);
+            crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::LOCK_BUSY, E_BUSY as u32, 0, 0, 0]);
             return false;
         }
         pause();

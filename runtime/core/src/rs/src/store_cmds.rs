@@ -352,9 +352,6 @@ pub(crate) unsafe fn cmd_verify(seq: u32, buf: *mut u8, body: *const u8, blen: u
     reply(CMD_VERIFY, seq, OK, 32)
 }
 
-/// The first argument of the `logk::UPLOAD` event that says CLEAR had no room for the table of the system package and dropped it.
-pub(crate) const CLEAR_DROPPED_PACKAGE: u32 = 0xb7;
-
 pub(crate) unsafe fn cmd_clear(seq: u32, buf: *mut u8, body: *const u8, blen: usize) -> i32 {
     // CLEAR frees every extent: a reader that still reads one (a sample load) keeps the store as it is
     if sw::leased_any() {
@@ -381,7 +378,7 @@ pub(crate) unsafe fn cmd_clear(seq: u32, buf: *mut u8, body: *const u8, blen: us
             if r == E_FULL {
                 r = do_commit(buf, &t.h, Edit::Clear, None);
                 if r == OK {
-                    crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [CLEAR_DROPPED_PACKAGE, 0, 0, 0, 0]);
+                    crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::CLEAR_DROPPED_PACKAGE, 0, 0, 0, 0]);
                 }
             }
         }
