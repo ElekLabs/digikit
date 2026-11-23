@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileHashHex } from '@digi/dk-session';
-import { LOG_KIND, RUNTIME_SERVICE_NAMES } from '@digi/dk-session/gen_proto';
+import { LOG_KIND, RUNTIME_SERVICE_NAMES, STATUS } from '@digi/dk-session/gen_proto';
 import { repoRoot } from '@digi/test-support';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { expect, test } from 'vitest';
@@ -30,7 +30,7 @@ import { rpc } from '@digi/regression/runtime/fx-live.ts';
 import { installDefaults, type DefaultOps } from '../../../packages/workbench-core/src/firmware/default-modules-core.ts';
 import { deleteFiles, install, libraryModule } from '../../../packages/workbench-core/src/modules/dktransfer.ts';
 import { nameHash, portFileOf, serviceFileOf } from '../../../packages/workbench-core/src/modules/services.ts';
-import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile, withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
+import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '@digi/regression/runtime/system-package.ts';
 
 /**
  * The store's file hash (version 4: the +Drive content hash in the table's 32-byte slot) and what a store of another version is. Both devices.
@@ -78,6 +78,7 @@ const oldSectors = (v3: Record<number, Buffer>, first: number, card: string): nu
 
 
 const { SAFE_CORE_ONLY, CORE_MISSING } = BOOT_LEVEL;
+const E_PROTO = STATUS.find(([, name]) => name === 'E_PROTO')![0];
 
 cardRigs(
   'store format 4',
@@ -176,6 +177,9 @@ cardRigs(
         const changed = oldSectors(v3, store.first, quiet);
         check('the old bytes are untouched by a boot', changed.length === 0, `changed store sectors ${changed.join()}`);
 
+        // the resident core takes the MODULES command only with the package: it refuses it in this boot
+        expect(await statusOf(() => h.usb(rt, (dk) => dk.modules())), 'MODULES is refused in the core-only boot').toBe(E_PROTO);
+
         // the first upload makes a version 4 store
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put(MOD_PATH, file))), 'the upload works').toBe(0);
         const listed = await h.usb(rt, (dk) => dk.list());
@@ -194,7 +198,9 @@ cardRigs(
         await rpc(h.session, 'run.mode', { mode: 'paused' });
         expect(again, 'the next boot is core-only too').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY, coreCause: CORE_MISSING, loaded: 0 });
         facts.selectionAfterRestart = (await h.records()).map((r: SelRecord | null) => r && r.paths);
-        expect((await h.usb(rt, (dk) => dk.list())).map((e) => e.path), 'the version 4 store lists the uploaded file').toEqual([MOD_PATH]);
+        // read from the card after the restart, not from the daemon: the dump parses the store sectors
+        const restarted = await dump(await h.after('v4-restart'));
+        expect(restarted.store.files.map((f: { path: string }) => f.path), 'the card holds the version 4 store with the uploaded file').toEqual([MOD_PATH]);
 
         // again: a second file, and what the old bytes are then
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put('modules/b.dkm', blob(3000, 5))))).toBe(0);
@@ -241,9 +247,9 @@ cardRigs(
         ]);
         expect(events.filter((e) => e.event === 'verify').every((e) => e.ok), 'every file verifies').toBe(true);
         expect(
-          withoutSystemPackage(await h.usb(rt, (dk) => dk.list())).map((e) => e.path).sort(),
-          'the card holds the port file, the service and both modules',
-        ).toEqual([...library.map((m) => m.path), port.path, 'services/svc-test.dks'].sort());
+          (await h.usb(rt, (dk) => dk.list())).map((e) => e.path).sort(),
+          'the card holds the package, the port file, the service and both modules',
+        ).toEqual([...library.map((m) => m.path), port.path, 'services/svc-test.dks', SYSTEM_PACKAGE_STORE_PATH].sort());
         const again: typeof events = [];
         await h.usb(rt, (dk) => install(dk, ids, library, (e) => again.push(e), deps));
         expect(again.filter((e) => e.event === 'skip').length, 'the second install sends nothing').toBe(4);

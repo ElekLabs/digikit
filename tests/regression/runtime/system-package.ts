@@ -25,10 +25,6 @@ export function installSystemPackage(seed: string): void {
   fs.copyFileSync(file, to);
 }
 
-/** The entries of a store listing without the system package: a test of the store's files lists the files it put there. */
-export const withoutSystemPackage = <T extends { path: string }>(entries: T[]): T[] =>
-  entries.filter((e) => e.path !== SYSTEM_PACKAGE_STORE_PATH);
-
 /** The system package as a store file of a card that carries it: a test's expected listing starts from this. */
 export const systemPackageFiles = (): Files => ({ [SYSTEM_PACKAGE_STORE_PATH]: fs.readFileSync(systemPackageFile()) });
 

@@ -6,7 +6,7 @@ import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { portFile } from '@digi/regression/runtime/service-files.ts';
-import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
+import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
@@ -36,8 +36,8 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect((await session.status()).epoch, 'CLI RESTART boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'installed-store', entries);
-  const modulePaths = (files: { path: string }[]) => withoutSystemPackage(files).map((f) => f.path).filter((p) => !p.endsWith('.dks') && !p.endsWith('.dkport')).sort();
-  expect(modulePaths(entries), 'upload survives the soft reset').toEqual([debugPath, modulePath].sort());
+  const modulePaths = (files: { path: string }[]) => files.map((f) => f.path).filter((p) => !p.endsWith('.dks') && !p.endsWith('.dkport')).sort();
+  expect(modulePaths(entries), 'upload survives the soft reset').toEqual([debugPath, modulePath, SYSTEM_PACKAGE_STORE_PATH].sort());
   // the services the modules need went on the card with them
   const services = entries.map((e) => e.path).filter((p) => p.startsWith('services/') && p.endsWith('.dks'));
   expect(services, 'the needed services are in the store listing').not.toEqual([]);
@@ -51,7 +51,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   expect(folder.folder, 'card.folder reports the session-owned mirror').toBe(mirror);
   expect(folder.continuous, 'card.folder continuously mirrors the store').toBe(true);
   expect(
-    withoutSystemPackage(folder.files)
+    folder.files
       .filter((f) => !f.path.endsWith('.dks') && !f.path.endsWith('.dkport'))
       .map(({ path, hash }) => ({ path, hash }))
       .sort((x, y) => x.path.localeCompare(y.path)),
@@ -60,6 +60,7 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
     [
       { path: debugPath, hash: entries.find((e) => e.path === debugPath)!.hash },
       { path: modulePath, hash: entry.hash },
+      { path: SYSTEM_PACKAGE_STORE_PATH, hash: entries.find((e) => e.path === SYSTEM_PACKAGE_STORE_PATH)!.hash },
     ].sort((x, y) => x.path.localeCompare(y.path)),
   );
 
@@ -70,11 +71,11 @@ async function expectTransferLive({ session, dk }: PatchedSession): Promise<void
   ).toBe(true);
   const emptyStore = await dk.list();
   record(artifacts, 'deleted-store', emptyStore);
-  expect(modulePaths(emptyStore), 'CLI delete removes the module and leaves the debug module').toEqual([debugPath]);
+  expect(modulePaths(emptyStore), 'CLI delete removes the module and leaves the debug module and the package').toEqual([debugPath, SYSTEM_PACKAGE_STORE_PATH].sort());
   const synced = await session.client.call<FolderResult>('card.sync');
   record(artifacts, 'deleted-folder', synced);
   expect(fs.existsSync(mirrored), 'card.sync removes the deleted module from the folder').toBe(false);
-  expect(modulePaths(synced.files), 'card.sync reports the debug module only').toEqual([debugPath]);
+  expect(modulePaths(synced.files), 'card.sync reports the debug module and the package only').toEqual([debugPath, SYSTEM_PACKAGE_STORE_PATH].sort());
 
   // DELETE keeps the selection. Exactly one more protocol restart preserves the original
   // boot-loop history: another early restart could enter safe mode instead of trying the path.

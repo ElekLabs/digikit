@@ -21,7 +21,7 @@ import {
   storeHeader,
   suiteName,
 } from './settings-support.ts';
-import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
+import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
 
 /** The settings store, part 3 (see settings.device.test.ts): a store that overlaps the settings area, and a card with the older header B. */
 
@@ -101,9 +101,9 @@ for (const device of DEVICES) {
       expect(ev[0]!.args[0], 'the settings store is on (no valid copy yet)').toBe(0);
       expect(cap.SETTINGS!.limit).toBe(8192);
       expect(
-        withoutSystemPackage(await usb((dk) => dk.list())).map((e) => e.path),
-        'the store reports its file',
-      ).toEqual([mod.name]);
+        (await usb((dk) => dk.list())).map((e) => e.path).sort(),
+        'the store reports its file and the package',
+      ).toEqual([mod.name, SYSTEM_PACKAGE_STORE_PATH].sort());
       await settingsMailbox(session, kit.plan).put(ROUTE, byte(1));
       await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
       expect(
@@ -122,12 +122,12 @@ for (const device of DEVICES) {
       const ha = sectorOf(after, first);
       expect(hb.subarray(0, 4).toString(), 'header B at the new place').toBe('DKST');
       expect(hb.subarray(24, 28).equals(ha.subarray(24, 28)), 'a header of the same seq as A').toBe(true);
-      expect(withoutSystemPackage(await usb((dk) => dk.list())).map((e) => e.path).sort(), 'the store lists both files').toEqual(
-        [mod.name, 't.bin'].sort(),
+      expect((await usb((dk) => dk.list())).map((e) => e.path).sort(), 'the store lists both files and the package').toEqual(
+        [mod.name, 't.bin', SYSTEM_PACKAGE_STORE_PATH].sort(),
       );
       const d = await dumpJson(after);
-      expect(d.store.files.map((f: { path: string }) => f.path).sort(), 'two files').toEqual(
-        [mod.name, 't.bin'].sort(),
+      expect(d.store.files.map((f: { path: string }) => f.path).sort(), 'the card holds the two files and the package').toEqual(
+        [mod.name, 't.bin', SYSTEM_PACKAGE_STORE_PATH].sort(),
       );
       expect(d.selection.a.paths, 'the selection kept').toEqual([mod.name]);
       expect(d.settings.active, 'the key in settings copy A').toBe('A');

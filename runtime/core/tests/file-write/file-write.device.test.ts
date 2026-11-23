@@ -8,7 +8,7 @@ import { SETTLE, word } from '@digi/regression/runtime/fx-live.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
-import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
+import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
 
 /**
  * Store file writes from a module (api 1.10: <dk/platform/file.h>, <dk/platform/io.h>, <dk/platform/hash32.h>). The fixture test/file-write starts an I/O job from a service
@@ -89,9 +89,9 @@ for (const device of DEVICES) {
     const advanceLong = async (rt: TestRuntime, ms: number) => {
       for (let left = ms; left > 0; left -= 1000) await rt.ui.wait({ ms: Math.min(1000, left), why: SETTLE });
     };
-    /** The store's files besides the module itself. */
+    /** The store's files besides the module itself (the system package is one of them). */
     const files = async (rt: TestRuntime) =>
-      new Map(withoutSystemPackage(await usb(rt, (dk) => dk.list())).filter((e) => !spec.selection.includes(e.path)).map((e) => [e.path, e]));
+      new Map((await usb(rt, (dk) => dk.list())).filter((e) => !spec.selection.includes(e.path)).map((e) => [e.path, e]));
     const boot = async (tag: string) => {
       const rt = await kit.load(tag, spec);
       expect((await bootInfo(rt.session, kit.plan)).results, 'both modules load').toEqual([0, 0]);
@@ -182,12 +182,12 @@ for (const device of DEVICES) {
       expect(await start(rt, WRITE_BAD_HASH, 9000, 'data/bad.bin')).toBe(0);
       const bad = await until(rt, 2);
       expect([bad.close, bad.job], 'file_close checks hash4').toEqual([E_HASH, E_HASH]);
-      expect([...(await files(rt)).keys()], 'nothing was stored').toEqual([]);
+      expect(names(await files(rt)), 'nothing was stored').toEqual(withPackage([]));
 
       expect(await start(rt, ABORT, 9000, 'data/aborted.bin')).toBe(0);
       const ab = await until(rt, 2);
       expect([ab.abort, ab.job, ab.written], 'one chunk written, then file_abort').toEqual([0, 0, 4096]);
-      expect([...(await files(rt)).keys()], 'nothing was stored').toEqual([]);
+      expect(names(await files(rt)), 'nothing was stored').toEqual(withPackage([]));
 
       expect(await start(rt, WRITE, 5000, 'data/aborted.bin'), 'the same path can be written now').toBe(0);
       expect((await until(rt, 2)).close).toBe(0);
@@ -195,7 +195,7 @@ for (const device of DEVICES) {
 
       expect(await start(rt, DELETE, 0, 'data/aborted.bin')).toBe(0);
       expect((await until(rt, 2)).close, 'file_delete').toBe(0);
-      expect([...(await files(rt)).keys()], 'the file is gone').toEqual([]);
+      expect(names(await files(rt)), 'the file is gone').toEqual(withPackage([]));
       await rt.session.expectNoFault('abort and delete');
     }, 900_000);
 
@@ -220,7 +220,7 @@ for (const device of DEVICES) {
       expect((await usb(rt, (dk) => dk.request(CMD + 2))).status, 'io_wake').toBe(0);
       const done = await until(rt, 2);
       expect([done.abort, done.job], 'the woken job aborted its file and ended').toEqual([0, 0]);
-      expect([...(await files(rt)).keys()], 'the held file never reached the table').toEqual([]);
+      expect(names(await files(rt)), 'the held file never reached the table').toEqual(withPackage([]));
       await usb(rt, (dk) => dk.put('data/sysex.bin', upload));
       expect((await files(rt)).get('data/sysex.bin')?.hash, 'SysEx writes again').toBe(sha(upload));
       await rt.session.expectNoFault('E_BUSY');
@@ -263,7 +263,7 @@ for (const device of DEVICES) {
       expect(await start(rt, STALE, 4096, 'data/stale.bin')).toBe(0);
       const stale = await until(rt, 2);
       expect(stale.aux, 'file_write, file_close and file_abort on a closed handle say E_STATE').toEqual([E_STATE, E_STATE, E_STATE]);
-      expect([...(await files(rt)).keys()], 'nothing was stored').toEqual([]);
+      expect(names(await files(rt)), 'nothing was stored').toEqual(withPackage([]));
       await rt.session.expectNoFault('E_CONTEXT');
     }, 900_000);
 
@@ -294,7 +294,7 @@ for (const device of DEVICES) {
       expect(await start(rt, WRITE, 1000, 'data/after-expiry.bin')).toBe(0);
       expect((await until(rt, 2)).close, 'the SDK writes again').toBe(0);
       expect((await files(rt)).get('data/after-expiry.bin')?.hash).toBe(sha(pattern(1000)));
-      expect([...(await files(rt)).keys()], 'the abandoned file never reached the store').toEqual(['data/after-expiry.bin']);
+      expect(names(await files(rt)), 'the abandoned file never reached the store').toEqual(withPackage(['data/after-expiry.bin']));
     }, 900_000);
     /** A batch job: `n` deferred files `<base>00`, `<base>01`, ... of `size` bytes each. */
     const startBatch = async (rt: TestRuntime, base: string, n: number, size: number, mode: number) =>
@@ -309,6 +309,8 @@ for (const device of DEVICES) {
       throw new Error(`the job did not close ${n} files`);
     };
     const names = (m: Map<string, unknown>) => [...m.keys()].sort();
+    /** The listing of a card that carries the system package. */
+    const withPackage = (list: string[]) => [...list, SYSTEM_PACKAGE_STORE_PATH].sort();
     const batchNames = (base: string, from: number, to: number) =>
       Array.from({ length: to - from }, (_, k) => `${base}${String(from + k).padStart(2, '0')}`);
 
@@ -320,7 +322,7 @@ for (const device of DEVICES) {
       expect([s.job, s.close, s.steps], 'five files closed, the job ended ok').toEqual([0, 0, 5]);
       expect(s.aux, 'five pending after the last close, the commit returned 0, none pending after it').toEqual([5, 0, 0]);
       const got = await files(rt);
-      expect(names(got), 'all five are in the store').toEqual(batchNames('batch/c', 0, 5));
+      expect(names(got), 'all five are in the store').toEqual(withPackage(batchNames('batch/c', 0, 5)));
       for (let i = 0; i < 5; i++) {
         expect(got.get(`batch/c${String(i).padStart(2, '0')}`)?.hash, `file ${i} has its own hash`).toBe(sha(shifted(size, i)));
       }
@@ -334,9 +336,9 @@ for (const device of DEVICES) {
       const s = await closed(rt, 17);
       expect(s.state, 'the job sleeps after the 17th close').toBe(1);
       expect(s.aux[0], 'one pending: the 16th close committed the first 16').toBe(1);
-      expect(names(await files(rt)), 'the first 16 are in the store, the 17th is not').toEqual(batchNames('batch/l', 0, 16));
+      expect(names(await files(rt)), 'the first 16 are in the store, the 17th is not').toEqual(withPackage(batchNames('batch/l', 0, 16)));
       await advanceLong(rt, 2000);
-      expect(names(await files(rt)), 'after the idle second the 17th is named too').toEqual(batchNames('batch/l', 0, 17));
+      expect(names(await files(rt)), 'after the idle second the 17th is named too').toEqual(withPackage(batchNames('batch/l', 0, 17)));
       await usb(rt, (dk) => dk.request(CMD + 2));
       const end = await until(rt, 2);
       expect([end.job, end.aux[2]], 'the job ends ok with nothing pending').toEqual([0, 0]);
@@ -347,10 +349,10 @@ for (const device of DEVICES) {
       expect(await startBatch(rt, 'batch/i', 3, 1500, WAIT_IDLE)).toBe(0);
       const s = await closed(rt, 3);
       expect([s.state, s.aux[0]], 'three pending, the job sleeps').toEqual([1, 3]);
-      expect(names(await files(rt)), 'a pending file is not listed').toEqual([]);
+      expect(names(await files(rt)), 'a pending file is not listed').toEqual(withPackage([]));
       await usb(rt, (dk) => dk.delete('batch/i00'));
       await advanceLong(rt, 2000);
-      expect(names(await files(rt)), 'the deleted pending file never reaches the store; the others are named by the idle commit').toEqual(batchNames('batch/i', 1, 3));
+      expect(names(await files(rt)), 'the deleted pending file never reaches the store; the others are named by the idle commit').toEqual(withPackage(batchNames('batch/i', 1, 3)));
       expect((await files(rt)).get('batch/i01')?.hash).toBe(sha(shifted(1500, 1)));
       await usb(rt, (dk) => dk.request(CMD + 2));
       expect((await until(rt, 2)).job).toBe(0);
@@ -362,7 +364,7 @@ for (const device of DEVICES) {
       const s = await until(rt, 2);
       expect([s.job, s.aux[0]], 'four pending when the job ended').toEqual([0, 4]);
       await rt.ui.wait({ ms: 300, why: SETTLE });
-      expect(names(await files(rt)), 'named well before the 1 s idle time').toEqual(batchNames('batch/e', 0, 4));
+      expect(names(await files(rt)), 'named well before the 1 s idle time').toEqual(withPackage(batchNames('batch/e', 0, 4)));
     }, 900_000);
     test('a SysEx BEGIN of a pending path takes its slot (the pending bytes are never committed over it) and a path inside a pending file is E_PATH', async () => {
       const rt = await boot('defer-begin');
@@ -376,7 +378,7 @@ for (const device of DEVICES) {
       expect((await files(rt)).get('batch/p00')?.hash, 'the SysEx file is stored at once').toBe(sha(bytes));
       await advanceLong(rt, 2000);
       const got = await files(rt);
-      expect(names(got), 'the other pending file is named by the idle commit').toEqual(['batch/p00', 'batch/p01']);
+      expect(names(got), 'the other pending file is named by the idle commit').toEqual(withPackage(['batch/p00', 'batch/p01']));
       expect(got.get('batch/p00')?.hash, 'the replaced pending entry did not come back').toBe(sha(bytes));
       expect(got.get('batch/p01')?.hash).toBe(sha(shifted(1500, 1)));
       await usb(rt, (dk) => dk.request(CMD + 2));
@@ -388,7 +390,7 @@ for (const device of DEVICES) {
       expect(await startBatch(rt, 'batch/old', 1, 1200, END_JOB)).toBe(0);
       await until(rt, 2);
       await rt.ui.wait({ ms: 300, why: SETTLE });
-      expect(names(await files(rt))).toEqual(['batch/old00']);
+      expect(names(await files(rt))).toEqual(withPackage(['batch/old00']));
       expect(await startBatch(rt, 'batch/p', 2, 1500, WAIT_IDLE)).toBe(0);
       expect((await closed(rt, 2)).aux[0], 'two pending').toBe(2);
       // refuse every card write from now on: the CLEAR commit fails
@@ -396,9 +398,9 @@ for (const device of DEVICES) {
       await pokeKnob(rt.session, kit.plan, 'DKRT_UPLOAD_CUT', writes);
       await expect(usb(rt, (dk) => dk.clear()), 'the CLEAR is refused its write').rejects.toBeDefined();
       await pokeKnob(rt.session, kit.plan, 'DKRT_UPLOAD_CUT', 0);
-      expect(names(await files(rt)), 'the old store is intact and the pending files are not listed').toEqual(['batch/old00']);
+      expect(names(await files(rt)), 'the old store is intact and the pending files are not listed').toEqual(withPackage(['batch/old00']));
       await advanceLong(rt, 2500);
-      expect(names(await files(rt)), 'the pending files survived the failed CLEAR and are committed').toEqual(['batch/old00', 'batch/p00', 'batch/p01']);
+      expect(names(await files(rt)), 'the pending files survived the failed CLEAR and are committed').toEqual(withPackage(['batch/old00', 'batch/p00', 'batch/p01']));
       await usb(rt, (dk) => dk.request(CMD + 2));
       expect((await until(rt, 2)).job).toBe(0);
     }, 900_000);

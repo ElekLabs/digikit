@@ -104,7 +104,7 @@ cardRigs('core-only boots and recovery', { uploads: true, roots: RT, symbols: CA
     expect((await h.usb(rt, (dk) => dk.list())).map((e) => e.path), 'the store has no package').not.toContain(PACKAGE);
     const bytes = package_();
     await h.usb(rt, (dk) => dk.put(PACKAGE, bytes));
-    expect(await counter(), 'the upload leaves the counter at zero').toBe(0);
+    expect((await h.usb(rt, (dk) => dk.list())).map((e) => e.path), 'the package is in the store now').toContain(PACKAGE);
     await normalAfter(rt);
   });
 });
