@@ -32,6 +32,11 @@ if (!existsSync(depsDir) && !daemonDepFile) {
   console.error('cargo-depfiles: no dep-info: run the hermetic rust-tests targets or digi-control:daemon-nodsp first');
   process.exit(2);
 }
+if (!daemonDepFile) {
+  console.error(
+    'cargo-depfiles: no daemon dep-info (digi-control:daemon-nodsp not built here): the daemon inputs are not checked',
+  );
+}
 
 const under = (path, r) => path === r || path.startsWith(r + '/');
 const closure = (name) => {

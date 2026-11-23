@@ -213,6 +213,8 @@ export const DAEMON_NODSP_EXTRA = [
   '{workspaceRoot}/tools/nx/cargo.mjs',
   '{workspaceRoot}/tools/nx/rust-env.mjs',
   '{workspaceRoot}/devices/**/*',
+  '{workspaceRoot}/ports/*.toml',
+  '{workspaceRoot}/ports/fw/**/*',
   '{workspaceRoot}/sdk/sdk.toml',
   '{workspaceRoot}/runtime/core/abi.toml',
   '{workspaceRoot}/config/test-source-patterns.json',

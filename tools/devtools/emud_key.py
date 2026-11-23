@@ -63,7 +63,7 @@ SOURCE_GLOBS = (
     "devices/**",
     "ports/*.toml",
     "ports/fw/**",
-    "tests/scenarios/dn2.json",
+    "tests/scenarios/*.json",
     "sdk/sdk.toml",
     "runtime/core/abi.toml",
     "tools/patchkit/toolchain/**",

@@ -967,7 +967,7 @@
   "tools/devtools/coupled_ab.py": 12,
   "tools/devtools/dual_core_check.py": 27,
   "tools/devtools/emu_live.py": 5,
-  "tools/devtools/emud_key.py": 4,
+  "tools/devtools/emud_key.py": 3,
   "tools/devtools/fast_roots.py": 19,
   "tools/devtools/fastcov.py": 4,
   "tools/devtools/firmware_shots.mjs": 67,
