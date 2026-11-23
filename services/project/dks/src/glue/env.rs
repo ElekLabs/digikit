@@ -1,14 +1,13 @@
-//! `DkEnv`: the engine's `Env` over the runtime's core, the firmware's slot records and the SDK imports (the UI task).
+//! `Env` of the engine for `DkHost`: the engine's environment over the runtime's core, the firmware's slot records and the SDK imports (the UI task).
 use super::c_strings::{cpath, cstr};
-use super::files::{io_done, io_step};
 use super::firmware_project::{
     firmware_mmcfs, firmware_slot, REC_BASE, REC_NAME, REC_SIZE, REC_STAMP,
 };
+use super::host::DkHost;
 use super::sdk_imports as sys;
 use super::sdk_imports::{FILE_KIND, POLL_END, POLL_ROW, STORE};
-use super::service_state::{ENTRY, FILES, PASSES, TICKET};
 use super::toast::{show, show_name};
-use core::ptr::{addr_of, addr_of_mut, read_volatile};
+use core::ptr::{addr_of, read_volatile};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_svc_project::dkp::Ignore;
 use dkrt_svc_project::engine::{
@@ -19,9 +18,7 @@ use dkrt_svc_rt::ImportCore;
 
 const CORE: ImportCore = ImportCore;
 
-pub struct DkEnv;
-
-impl Env for DkEnv {
+impl Env for DkHost {
     fn device(&self) -> u16 {
         CORE.device_id() as u16
     }
@@ -36,7 +33,7 @@ impl Env for DkEnv {
             if b != 0 {
                 b / 3 * 2
             } else {
-                read_volatile(addr_of!(PASSES)).wrapping_mul(8)
+                read_volatile(addr_of!(self.passes)).wrapping_mul(8)
             }
         }
     }
@@ -82,14 +79,14 @@ impl Env for DkEnv {
         // SAFETY: the handle was opened in `init`.
         unsafe {
             let t = sys::dk_files_list(
-                read_volatile(addr_of!(FILES)),
+                read_volatile(addr_of!(self.files)),
                 STORE,
                 b"projects\0".as_ptr(),
                 None,
                 core::ptr::null_mut(),
             );
             if t > 0 {
-                TICKET = t as u32;
+                self.ticket = t as u32;
                 return 0;
             }
             if t == 0 {
@@ -99,13 +96,13 @@ impl Env for DkEnv {
         }
     }
     fn list_next(&mut self, row: &mut ListRow) -> ListPoll {
-        // SAFETY: `ENTRY` is this file's own buffer of one `dk_file_entry` (304 bytes).
+        // SAFETY: `self.entry` is this file's own buffer of one `dk_file_entry` (304 bytes).
         unsafe {
             loop {
                 let r = sys::dk_files_poll(
-                    read_volatile(addr_of!(FILES)),
-                    TICKET,
-                    addr_of_mut!(ENTRY) as *mut u8,
+                    read_volatile(addr_of!(self.files)),
+                    self.ticket,
+                    self.entry.0.as_mut_ptr(),
                     304,
                 );
                 if r == 0 {
@@ -122,7 +119,7 @@ impl Env for DkEnv {
                         ListPoll::Err(r)
                     };
                 }
-                let e = &*addr_of!(ENTRY);
+                let e = &self.entry;
                 let kind = u32::from_be_bytes([e.0[0], e.0[1], e.0[2], e.0[3]]);
                 if kind != FILE_KIND {
                     continue;
@@ -146,7 +143,7 @@ impl Env for DkEnv {
         // SAFETY: `buf` is the image's own buffer; the handle was opened in `init`.
         unsafe {
             sys::dk_files_read(
-                read_volatile(addr_of!(FILES)),
+                read_volatile(addr_of!(self.files)),
                 cpath(path, &mut c),
                 buf.as_mut_ptr(),
                 buf.len() as u32,
@@ -155,7 +152,13 @@ impl Env for DkEnv {
     }
     fn post(&mut self) -> i32 {
         // SAFETY: the step and the done function are this file's; the job reaches the state through the statics.
-        unsafe { sys::dk_io_post(Some(io_step), Some(io_done), core::ptr::null_mut()) }
+        unsafe {
+            sys::dk_io_post(
+                Some(super::files::io_step),
+                Some(super::files::io_done),
+                core::ptr::null_mut(),
+            )
+        }
     }
     fn log(&mut self, kind: u16, args: [u32; 5]) {
         // SAFETY: the log of the runtime.
@@ -163,11 +166,14 @@ impl Env for DkEnv {
     }
     fn toast(&mut self, reason: u32) {
         // one short line for a file that is not used (docs/design/digikit-project.md section 6); the facts are in the log (PROJECT_IGNORED)
-        show(&[if reason == Ignore::Store as u32 {
-            b"PROJECT DATA NOT READ"
-        } else {
-            b"PROJECT DATA IGNORED"
-        }]);
+        show(
+            self.ui,
+            &[if reason == Ignore::Store as u32 {
+                b"PROJECT DATA NOT READ"
+            } else {
+                b"PROJECT DATA IGNORED"
+            }],
+        );
     }
     fn record_get(&mut self, key: &[u8], out: &mut [u8]) -> i32 {
         // SAFETY: the settings record of the runtime (device scope), through the core.
@@ -231,10 +237,10 @@ impl Env for DkEnv {
     fn warn_module(&mut self, warning: ModuleWarning, id: &ModuleId) {
         // the module's own name, as the menu shows it; `PROJECT_MODULE` carries the facts
         match warning {
-            ModuleWarning::Missing => show(&[b"MODULE MISSING: ", id.name()]),
-            ModuleWarning::NoFit => show_name(id.name(), b" DOES NOT FIT"),
-            ModuleWarning::Refused => show_name(id.name(), b" NOT LOADED"),
-            ModuleWarning::NotKept => show_name(id.name(), b" NOT KEPT"),
+            ModuleWarning::Missing => show(self.ui, &[b"MODULE MISSING: ", id.name()]),
+            ModuleWarning::NoFit => show_name(self.ui, id.name(), b" DOES NOT FIT"),
+            ModuleWarning::Refused => show_name(self.ui, id.name(), b" NOT LOADED"),
+            ModuleWarning::NotKept => show_name(self.ui, id.name(), b" NOT KEPT"),
         }
     }
 }

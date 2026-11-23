@@ -70,7 +70,7 @@ entry = "project_hook_paste"
 
 ### Lifecycle
 
-The service is `ProjectService` (`engine/mod.rs`). Its tick reads in three steps: take the hook records, finish a job that ended, advance the stage. Each part owns its state and does its own work:
+The service is the owner `Project` (`project.rs`) over the engine `ProjectService` (`engine/mod.rs`). Its tick reads in three steps: take the hook records, finish a job that ended, advance the stage. Each part owns its state and does its own work:
 
 | State | Owner | Meaning |
 | --- | --- | --- |

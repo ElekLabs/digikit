@@ -1,4 +1,4 @@
-//! The SDK imports the engine runs over (files, I/O job, block clock, toast) and the consts of their answers. A host build (the assembly test of the runtime runs the declarations of `service!`) has no SDK imports to link: the calls are stubs with the answer of a missing service.
+//! The SDK imports the engine runs over (files, I/O job, block clock, toast) and the consts of their answers. A host build (the assembly test of the runtime runs the declarations of `service!`) has no SDK imports to link: the calls are stubs with the answer of a missing service (but `dk_files_open`, which opens a dummy handle).
 
 /// `DK_FILES_STORE` and `DK_FILE_REPLACE` (<dk/platform/files.h>).
 pub(super) const STORE: u32 = 2;
@@ -62,8 +62,10 @@ mod stub {
     pub type IoStepFn = unsafe extern "C" fn(*mut u8) -> i32;
     pub type IoDoneFn = unsafe extern "C" fn(*mut u8, i32);
     const MISSING: i32 = super::E_MISSING;
-    pub unsafe fn dk_files_open(_: *mut u8, _: *mut *mut u8) -> i32 {
-        MISSING
+    /// The listing client opens: the handle is a dummy that the other stubs ignore, so a host test can start the owner.
+    pub unsafe fn dk_files_open(_: *mut u8, out: *mut *mut u8) -> i32 {
+        *out = 1 as *mut u8;
+        0
     }
     pub unsafe fn dk_files_list(
         _: *mut u8,

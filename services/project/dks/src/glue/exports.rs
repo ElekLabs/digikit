@@ -1,11 +1,14 @@
 //! The exports of the file: `dk_project_current` and `dk_project_status`.
-use super::service_state::PROJECT;
-use core::ptr::addr_of;
+use crate::DK_SVC_OWNER;
 
 /// `dk_project_current` (export of the file): the slot and the name of the current project, `E_NOT_FOUND` without one.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_project_current(slot: *mut u32, name: *mut u8) -> i32 {
-    match (*addr_of!(PROJECT)).current() {
+    // no owner: no current project
+    match DK_SVC_OWNER
+        .with(|p| p.current())
+        .unwrap_or(Err(dkrt_sdk::E_NOT_FOUND))
+    {
         Ok((s, n)) => {
             if !slot.is_null() {
                 *slot = s;
@@ -26,5 +29,5 @@ pub unsafe extern "C" fn dk_project_current(slot: *mut u32, name: *mut u8) -> i3
 /// `dk_project_status` (export of the file): the state bits.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_project_status() -> u32 {
-    (*addr_of!(PROJECT)).status()
+    DK_SVC_OWNER.with(|p| p.status()).unwrap_or(0)
 }

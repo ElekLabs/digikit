@@ -1,7 +1,7 @@
 //! The project scope table that the runtime's settings overlay forwards to.
-use super::service_state::PROJECT;
-use core::ptr::{addr_of, addr_of_mut};
+use crate::DK_SVC_OWNER;
 use dkrt_abi::service::{SettingsOverlay, SETTINGS_OVERLAY_VERSION};
+use dkrt_sdk::proto::{E_SET_NOKEY, E_SET_OFF};
 
 unsafe fn bytes<'a>(p: *const u8, n: u32) -> &'a [u8] {
     if n == 0 {
@@ -24,7 +24,10 @@ unsafe extern "C" fn scope_get(
     } else {
         core::slice::from_raw_parts_mut(out, cap as usize)
     };
-    (*addr_of!(PROJECT)).scope_get(bytes(id, id_len), bytes(key, key_len), o)
+    // no owner (before `init` or after `fini`): no value
+    DK_SVC_OWNER
+        .with(|p| p.scope_get(bytes(id, id_len), bytes(key, key_len), o))
+        .unwrap_or(E_SET_NOKEY)
 }
 
 unsafe extern "C" fn scope_put(
@@ -35,11 +38,16 @@ unsafe extern "C" fn scope_put(
     value: *const u8,
     len: u32,
 ) -> i32 {
-    (*addr_of_mut!(PROJECT)).scope_put(bytes(id, id_len), bytes(key, key_len), bytes(value, len))
+    // no owner: the layer has nothing to hold, the record alone takes the change
+    DK_SVC_OWNER
+        .with(|p| p.scope_put(bytes(id, id_len), bytes(key, key_len), bytes(value, len)))
+        .unwrap_or(E_SET_OFF)
 }
 
 unsafe extern "C" fn scope_remove(id: *const u8, id_len: u32, key: *const u8, key_len: u32) -> i32 {
-    (*addr_of_mut!(PROJECT)).scope_remove(bytes(id, id_len), bytes(key, key_len))
+    DK_SVC_OWNER
+        .with(|p| p.scope_remove(bytes(id, id_len), bytes(key, key_len)))
+        .unwrap_or(E_SET_OFF)
 }
 
 /// The table `dkc_settings_overlay_set` hands to the runtime.
