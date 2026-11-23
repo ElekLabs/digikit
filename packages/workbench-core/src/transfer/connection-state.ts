@@ -6,19 +6,25 @@ import { isCancelled, isNoRuntime } from '../modules/backend';
 import { CONNECTING, isLost, lostReason, step, type Connection, type ConnectionEvent } from './connection-core';
 
 /** `deviceName` is the app's (`TransferEnv.deviceName`): the name of the device with this id. */
-export function createConnection(env: { deviceName(device: string): Promise<string> }) {
+export function createConnection(env: { deviceName(device: string): Promise<string> }, invalidate?: () => void) {
   const [connection, setConnection] = createSignal<Connection>(CONNECTING);
 
+  let selection = 0;
   const noteConnection = (e: ConnectionEvent): void => {
-    setConnection(step(connection(), e));
+    if (e.type === 'target') selection++;
+    const next = step(connection(), e);
+    if (e.type === 'target' || e.type === 'lost' || e.type === 'closed' || e.type === 'noruntime') invalidate?.();
+    setConnection(next);
   };
 
   /** Run a request of the session; a failure that means "the device cannot be reached" shows in the indicator, and is thrown on. */
   async function asked<T>(f: () => Promise<T>): Promise<T> {
+    const asking = selection;
     noteConnection({ type: 'asking' });
     try {
       return await f();
     } catch (e) {
+      if (asking !== selection) throw e;
       if (isCancelled(e)) noteConnection({ type: 'cancelled' });
       else if (isNoRuntime(e)) noteConnection({ type: 'noruntime', reason: (e as Error).message });
       else if (isLost(e)) noteConnection({ type: 'lost', reason: lostReason(e) });

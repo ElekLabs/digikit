@@ -1,18 +1,25 @@
-import { describe, expect, it } from 'vitest';
-import { pageFor } from '../src/page-core';
+import { expect, it } from 'vitest';
+import { createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
+import { readTransfer } from '@digi/workbench-core/transfer/read-transfer.ts';
 
-describe('page choice', () => {
-  it('sends Transfer back to Run when the emulator has no runtime', () => {
-    expect(pageFor('transfer', { kind: 'emulator' }, false)).toBe('run');
-    expect(pageFor('run', { kind: 'emulator' }, false)).toBe('run');
+it('browses the local library without opening a stopped emulator session', async () => {
+  const scanned: string[] = [];
+  const app = createFakeTransferApp({
+    env: {
+      library: {
+        scan: async (device) => {
+          scanned.push(device);
+          return [];
+        },
+        read: async () => new Uint8Array(),
+      },
+    },
   });
-  it('keeps the pages for a device on a MIDI port, whatever the emulator runs', () => {
-    expect(pageFor('transfer', { kind: 'midi' }, false)).toBe('transfer');
-    expect(pageFor('run', { kind: 'midi' }, false)).toBe('run');
-  });
-  it('keeps every page when the emulator has a runtime, and the other pages always', () => {
-    expect(pageFor('transfer', { kind: 'emulator' }, true)).toBe('transfer');
-    expect(pageFor('firmware', { kind: 'emulator' }, false)).toBe('firmware');
-    expect(pageFor('run', { kind: 'midi' }, false)).toBe('run');
-  });
+  app.target.setEmulatorAvailable(false);
+  await readTransfer(app);
+  expect(scanned).toEqual([app.state.browseDevice()]);
+  expect(app.sessions.made).toEqual([]);
+  expect(app.state.browsing()).toBe(true);
+  expect(app.state.lastView()?.card_only).toEqual([]);
+  expect(app.state.deviceInfo()).toBeUndefined();
 });

@@ -775,12 +775,21 @@ async function cardFacts(
   return { needs, provides, portFw, unread };
 }
 
+export async function readLoadedModules(s: DkSession, info: DkInfoFull) {
+  return hasCap(info, 'MODULES') ? s.modules() : [];
+}
+
 /** The merged view for the device behind `s`. READ supplies installed dependency data. With `deps` the library rows list the services they need and any install refusal. */
-export async function buildView(s: DkSession, library: LibraryModule[], deps?: InstallDeps): Promise<TransferView> {
+export async function buildView(
+  s: DkSession,
+  library: LibraryModule[],
+  deps?: InstallDeps,
+  readLoaded = readLoadedModules,
+): Promise<TransferView> {
   const info = await s.info();
   requireRuntime(info);
   const card = [...(await listModules(s, info)), ...(await listServices(s, info)), ...(await listPorts(s, info))];
-  const loaded = hasCap(info, 'MODULES') ? (await s.modules()).map((m) => m.name) : [];
+  const loaded = (await readLoaded(s, info)).map((m) => m.name);
   const cap = hasCap(info, 'CAPACITY') ? await s.capacity() : null;
   const states = hasCap(info, 'LOADS') ? await s.loadStates() : [];
   const mine = new Set(library.map((m) => m.path));

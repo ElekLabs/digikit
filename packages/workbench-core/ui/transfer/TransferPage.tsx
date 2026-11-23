@@ -9,7 +9,7 @@ import { Match, Show, Switch, batch, createEffect, createMemo, createSignal, on,
 import { Dynamic } from 'solid-js/web';
 import Segmented from '../components/Segmented';
 import { isCancelled, isNoRuntime, isTimeout } from '../../src/modules/backend';
-import { isDeviceId, runtimeDeviceIds } from '../../src/data/device-profiles';
+import { readTransfer } from '../../src/transfer/read-transfer';
 import { noteActivity } from '../../src/transfer/activity';
 import AutoRefresh from './AutoRefresh';
 import ConnectionBadge from './ConnectionBadge';
@@ -18,57 +18,11 @@ import { useTransferApp } from '../../src/transfer/app-context';
 import ModulesMode from './ModulesMode';
 import SourcePanel from './SourcePanel';
 import TransferBar from './TransferBar';
-import { MODES, modulesBar, parseMode, rowKey, storageLine, type TransferView } from '../../src/transfer/transfer-core';
+import { MODES, modulesBar, parseMode } from '../../src/transfer/transfer-core';
 import { targetLabel } from '../../src/transfer/target';
 import { writing, type CancelledRun, type PageCtx } from './TransferParts';
 import { failureLine } from '../../src/transfer/wait-core';
 import './transfer-page.css';
-
-/** Tick the modules named in the page URL (`?add=`) once the list has them; a row's id is the full module id (`<author>/<name>`). */
-function applyPendingAdd(app: TransferApp, view: TransferView): void {
-  const { pendingAdd, setTicks, setPendingAdd } = app.state;
-  const pending = pendingAdd();
-  if (!pending.length) return;
-  const keys = view.modules.filter((r) => r.id && pending.some((p) => p === r.id)).map(rowKey);
-  setTicks((t) => new Set([...t, ...keys]));
-  setPendingAdd([]);
-}
-
-/** Read what the mode shows, both sides: the device and the computer (the library, or the chosen samples folder). */
-async function read(app: TransferApp): Promise<void> {
-  const { env } = app;
-  const { target } = app.target;
-  const { activeMode, browseDevice, browsing, lastView, setBrowsing, setBrowseDevice, setDeviceInfo, setLastView } =
-    app.state;
-  if (activeMode() === 'samples' && env.extras?.samples) return env.extras.samples.read();
-  const readingTarget = target();
-  const current = () => target() === readingTarget && activeMode() === 'modules';
-  let local: TransferView | undefined;
-  const showLocal = (library: TransferView) => {
-    setBrowsing(true);
-    setLastView(library);
-    setDeviceInfo(undefined);
-    applyPendingAdd(app, library);
-  };
-  let v: TransferView;
-  try {
-    v = await app.backend.list(browseDevice(), (library) => {
-      local = library;
-      // Keep the previous device rows during a refresh; only a first read needs the library-only view.
-      if (current() && (!lastView() || browsing())) showLocal(library);
-    });
-  } catch (e) {
-    if (current() && local) showLocal(local);
-    throw e;
-  }
-  if (!current()) return;
-  setBrowsing(false);
-  setBrowseDevice(isDeviceId(v.device) ? v.device : ((env.libraryDevices ?? runtimeDeviceIds)[0] ?? ''));
-  setLastView(v);
-  applyPendingAdd(app, v);
-  const name = await env.deviceName(v.device);
-  if (current()) setDeviceInfo({ name, runtime: v.runtime, storage: storageLine(v) });
-}
 
 const haltOn = (app: TransferApp, e: unknown): void => {
   app.state.setHalted(isTimeout(e) || isNoRuntime(e));
@@ -114,7 +68,7 @@ const run = async (app: TransferApp, what: string, f: () => Promise<void | Cance
   } finally {
     if (!skipRead)
       try {
-        await read(app);
+        await readTransfer(app);
       } catch (e) {
         haltOn(app, e);
         if (!error()) setError(failureLine(e, targetLabel(target())));
@@ -138,11 +92,10 @@ const cancelJob = (app: TransferApp): void => {
 export default function TransferPage(props: { onFlash?: () => void }): JSX.Element {
   const app = useTransferApp();
   const { env } = app;
-  const { target, emulatorRuntime, rescanTargets } = app.target;
+  const { target, rescanTargets } = app.target;
   const { connection } = app.connection;
   const {
     activeMode,
-    browsing,
     busy,
     error,
     halted,
@@ -154,9 +107,7 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
     setDeviceInfo,
     setError,
     setHalted,
-    setLastView,
     setMode,
-    setTicks,
   } = app.state;
   const [reload, setReload] = createSignal(0);
 
@@ -171,9 +122,9 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
   // a change of the emulator's runtime, or a reconnect, lets a halted page read again
   createEffect(
     on(
-      emulatorRuntime,
+      app.target.libraryOnly,
       () => {
-        if (halted() && target().kind === 'emulator') readNow();
+        if (target().kind === 'emulator') readNow();
       },
       { defer: true },
     ),
@@ -198,10 +149,7 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
       target,
       () => {
         setHalted(false);
-        setLastView(undefined);
         setDeviceInfo(undefined);
-        // ticks made before a device was plugged in survive (the list shows the library alone then)
-        if (!browsing()) setTicks(new Set<string>());
         setDelTicks(new Set<string>());
         env.extras?.samples?.reset();
         void run(app, 'Reading', async () => {});

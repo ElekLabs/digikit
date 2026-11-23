@@ -36,6 +36,19 @@ export function createTransferState({
   jobs: JobsApp;
 }) {
   const [lastView, setLastView] = createSignal<TransferView>();
+  // Retain the local scan across disconnects, including when Transfer is unmounted.
+  let libraryView: TransferView | undefined;
+  const rememberLibrary = (view: TransferView) => {
+    libraryView = view;
+  };
+  const forgetDevice = () => {
+    if (lastView() && !browsing()) setTicks(new Set<string>());
+    setLastView(libraryView);
+    setBrowsing(true);
+    setDeviceInfo(undefined);
+    setVerified({});
+    setDelTicks(new Set<string>());
+  };
   /** The library modules ticked for install. */
   const [ticks, setTicks] = createSignal<Set<string>>(new Set());
   /** The store paths ticked in the On device pane (for Delete). */
@@ -129,6 +142,8 @@ export function createTransferState({
   const [noRuntime, setNoRuntime] = createSignal(false);
 
   return {
+    rememberLibrary,
+    forgetDevice,
     lastView,
     setLastView,
     ticks,

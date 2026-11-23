@@ -43,7 +43,7 @@ import type { SpanRecording } from './span-recording';
 import type { PerformanceView } from './PerformancePanel';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
-import { pageFor, type Page } from './page-core';
+import type { Page } from './page-core';
 import {
   CHART,
   DOWN,
@@ -258,7 +258,35 @@ export default function Console(
   const dspIsPending = () => dspHere() && dspPending(bootDsp(), info()?.dsp);
   const noRuntimeTitle = () => `${deviceNameOf(device())} has no digikit runtime: not available on this device`;
   createEffect(() => {
-    setPage(pageFor(page(), target(), !!status() && runtimeHere()));
+    app.target.setEmulatorAvailable(emulatorLoaded() && runtimeHere());
+  });
+  const inventoryConnected = createMemo(() => connectionState() === 'connected');
+  // Keep loaded modules available to the shell while Transfer is closed. Transfer's own
+  // read publishes to the same inventory when it is open.
+  createEffect(() => {
+    const current = target();
+    cardRefresh();
+    inventoryConnected();
+    if (
+      page() === 'transfer' ||
+      busy('target') ||
+      app.target.libraryOnly() ||
+      app.target.switching() ||
+      current.kind === 'none' ||
+      (current.kind === 'emulator' && paused()) ||
+      untrack(connectionState) === 'noruntime'
+    )
+      return;
+    const binding = app.target.bindSession();
+    const read = app.inventory.reader();
+    void binding
+      .session()
+      .then(async (s) => {
+        const info = await s.info(true);
+        binding.check();
+        await read(s, info);
+      })
+      .catch(() => {});
   });
   // The "Load on start" boot that the start deferred because the target was a device.
   const [deferredBoot, setDeferredBoot] = createSignal<string>();
@@ -954,12 +982,7 @@ export default function Console(
             class="side"
             classList={{ on: page() === 'transfer' }}
             aria-current={page() === 'transfer' ? 'page' : undefined}
-            disabled={(!status() && target().kind === 'emulator') || (target().kind === 'emulator' && !runtimeHere())}
-            title={
-              target().kind === 'emulator' && !runtimeHere()
-                ? noRuntimeTitle()
-                : 'Choose the modules that run on the target (the emulator or a device on a MIDI port) and install them'
-            }
+            title="Browse local modules and transfer files to the selected target"
             onClick={() => setPage('transfer')}
           >
             <Icon d={MODULES} />
