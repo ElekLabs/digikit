@@ -8,7 +8,7 @@ import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.
 import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
 import { rpc, word } from './guest-access.ts';
-import { installSystemPackage, withoutSystemPackage } from './system-package.ts';
+import { installSystemPackage } from './system-package.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
@@ -224,7 +224,7 @@ export interface StoreEntry {
   hash: string;
 }
 
-/** `plusdrive store ls`: the header line (used sectors, version, seq, header copy) and the files with their hash slot, without the system package every test card carries. Fails on a card with no store. */
+/** `plusdrive store ls`: the header line (used sectors, version, seq, header copy) and every entry with its hash slot, the system package of a card that carries it included. Fails on a card with no store. */
 export async function storeList(cardImage: string, device: Device): Promise<{ head: string; entries: StoreEntry[] }> {
   const { stdout } = await exec(
     plusdriveBinary(),
@@ -245,7 +245,7 @@ export async function storeList(cardImage: string, device: Device): Promise<{ he
       hash: dir ? '' : sha,
     };
   });
-  return { head: head!, entries: withoutSystemPackage(entries) };
+  return { head: head!, entries };
 }
 
 // ---- guest memory and the test mailbox ----------------------------------------------------------------------------------------------

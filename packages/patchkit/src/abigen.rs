@@ -327,6 +327,15 @@ fn host_ts(abi: &Abi, ids: &[HostDirToml]) -> String {
         let _ = writeln!(s, "  {}: '{}',", h.name, h.owner);
     }
     s.push_str("} as const;\n");
+    s.push_str("/** The boot level the core reports: `DkrtBootInfo.reason` (`SAFE_*`), `DkrtBootInfo.core_cause` (`CORE_*`) and the counter thresholds of abi.toml. */\nexport const BOOT_LEVEL = {\n");
+    for c in abi
+        .r#const
+        .iter()
+        .filter(|c| c.name.starts_with("SAFE_") || c.name.starts_with("CORE_"))
+    {
+        let _ = writeln!(s, "  {}: {},", c.name, c.value);
+    }
+    s.push_str("} as const;\n");
     s
 }
 

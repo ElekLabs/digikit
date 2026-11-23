@@ -9,7 +9,7 @@ import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE, installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
 import { neededServices, portFile, servicePath } from '@digi/regression/runtime/service-files.ts';
-import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
+import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '@digi/regression/runtime/system-package.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import type { RuntimeModule } from './manifests.ts';
 
@@ -28,14 +28,17 @@ export async function expectModuleLoad(
   const names = [...new Set([DEBUG_MODULE, module.id])];
   // the service files the module needs (services/<name>.dks) go on the card with it
   const services = neededServices([artifact]).map((s) => servicePath(s.service));
-  // a service on the card brings the port file of the device's firmware
-  const paths = [...new Set([debugPath, storePath, ...services, ...(services.length ? [portFile(session.options.device as Device).name] : [])])].sort();
+  // a service on the card brings the port file of the device's firmware; every test card holds the system package
+  const paths = [...new Set([SYSTEM_PACKAGE_STORE_PATH, debugPath, storePath, ...services, ...(services.length ? [portFile(session.options.device as Device).name] : [])])].sort();
   const hash = fileHashHex(bytes);
   const artifacts = path.join(liveArtifacts(session, 'module-load'), module.id.split('/')[1]!);
   fs.mkdirSync(artifacts, { recursive: true });
 
   await expectRuntimeReady(session);
-  expect(withoutSystemPackage(await dk.list()), 'fresh daemon has an empty store').toEqual([]);
+  expect(
+    (await dk.list()).map((entry) => entry.path),
+    'a fresh card holds the system package and nothing else',
+  ).toEqual([SYSTEM_PACKAGE_STORE_PATH]);
   expect(await dk.modules(), 'fresh runtime has no uploaded modules').toEqual([]);
   const epoch = (await session.status()).epoch;
   if (typeof epoch !== 'number') throw new Error('daemon status must report a numeric epoch');
@@ -46,14 +49,20 @@ export async function expectModuleLoad(
     'only the uploaded module and the debug module are registered',
   ).toEqual(names);
   expect((await session.status()).epoch, 'protocol restart boots another epoch').toBeGreaterThan(epoch);
-  const entries = withoutSystemPackage(await dk.list());
+  const entries = await dk.list();
   record(artifacts, 'store', entries);
   expect(entries.find((entry) => entry.path === storePath)).toEqual({
     path: storePath,
     size: bytes.length,
     hash,
   });
-  expect(entries.map((entry) => entry.path).sort(), 'the store holds the module files and the service files they need (any order)').toEqual(paths);
+  expect(entries.map((entry) => entry.path).sort(), 'the store holds the system package, the module files and the service files they need (any order)').toEqual(paths);
+  const packageBytes = fs.readFileSync(systemPackageFile());
+  expect(entries.find((entry) => entry.path === SYSTEM_PACKAGE_STORE_PATH), 'the system package is whole').toEqual({
+    path: SYSTEM_PACKAGE_STORE_PATH,
+    size: packageBytes.length,
+    hash: fileHashHex(packageBytes),
+  });
   expect(await dk.verifyFile(storePath, bytes), 'module bytes survive reboot').toBe(true);
 
   try {

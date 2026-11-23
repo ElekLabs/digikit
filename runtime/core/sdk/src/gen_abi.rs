@@ -100,6 +100,8 @@ pub const CORE_UNREADABLE: u32 = 5;
 pub const FAULT_ROWS: usize = 4;
 /// Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode.
 pub const SAFE_AFTER: u32 = 2;
+/// Boots in a row that did not stay up for STABLE_BLOCKS after which the next one runs the resident core only (no system package): the crashes went on in safe mode, so the package or the core is the likely cause.
+pub const CORE_ONLY_AFTER: u32 = 4;
 /// The stable period: DSP blocks (1500 per second) of UI loop after which the boot counter is cleared (30 seconds).
 pub const STABLE_BLOCKS: u32 = 45000;
 /// DkrtDiag.card_state: not checked.

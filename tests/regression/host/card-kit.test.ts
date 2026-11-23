@@ -153,7 +153,7 @@ describe('card content id of a linked card', () => {
 
 describe('system package on the card', () => {
   const ready = fs.existsSync(plusdriveBinary()) && fs.existsSync(systemPackageFile());
-  /** The store paths of a card as `plusdrive store ls` lists them (the harness's `storeList` hides the package). */
+  /** The store paths of a card as `plusdrive store ls` lists them, with the package. */
   const storePaths = (card: string) =>
     execFileSync(plusdriveBinary(), ['store', 'ls', card, '--device', device], { encoding: 'utf8' })
       .trim()

@@ -3,10 +3,6 @@
 
 use dkrt_sdk::*;
 
-/// Boots in a row that did not stay up for `STABLE_BLOCKS` after which the next one runs the resident core only (no system package): the crashes
-/// went on in safe mode, so the package or the core is the likely cause. Only the runtime reads it.
-pub const CORE_ONLY_AFTER: u32 = 4;
-
 /// What the system package turned out to be when stage 1 looked for it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PackageStatus {

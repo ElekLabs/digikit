@@ -25,3 +25,22 @@ export const HOST_OWNER = {
   PACKAGE_LO: 'core',
   PACKAGE_HI: 'core',
 } as const;
+/** The boot level the core reports: `DkrtBootInfo.reason` (`SAFE_*`), `DkrtBootInfo.core_cause` (`CORE_*`) and the counter thresholds of abi.toml. */
+export const BOOT_LEVEL = {
+  SAFE_NONE: 0,
+  SAFE_COUNTER: 1,
+  SAFE_KEY: 2,
+  SAFE_FLAG: 3,
+  SAFE_DSP: 4,
+  SAFE_PANIC: 5,
+  SAFE_READ: 6,
+  SAFE_CORE_ONLY: 7,
+  CORE_NONE: 0,
+  CORE_CRASHES: 1,
+  CORE_MISSING: 2,
+  CORE_INCOMPATIBLE: 3,
+  CORE_DAMAGED: 4,
+  CORE_UNREADABLE: 5,
+  SAFE_AFTER: 2,
+  CORE_ONLY_AFTER: 4,
+} as const;

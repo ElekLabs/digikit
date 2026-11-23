@@ -4,7 +4,7 @@ use crate::boot::{self, info};
 use crate::fake_boot_env::FakeBootEnv;
 use crate::fake_platform::FakePlatform;
 use crate::hooks;
-use crate::level::{PackageStatus, CORE_ONLY_AFTER};
+use crate::level::PackageStatus;
 use crate::storage::layout::TEST_LAYOUT;
 use crate::test_lock::LOCK;
 use dkrt_abi::profiles;

@@ -308,6 +308,12 @@ value = 2
 doc = "Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode."
 
 [[const]]
+name = "CORE_ONLY_AFTER"
+type = "u32"
+value = 4
+doc = "Boots in a row that did not stay up for STABLE_BLOCKS after which the next one runs the resident core only (no system package): the crashes went on in safe mode, so the package or the core is the likely cause."
+
+[[const]]
 name = "STABLE_BLOCKS"
 type = "u32"
 value = 45000

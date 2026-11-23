@@ -37,7 +37,6 @@ import {
   usbSend,
   usbTake,
 } from '@digi/regression/runtime/upload-kit.ts';
-import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /** Python tools/patchkit/pk_digikit_upload.py: the `quick`, `ops`, `folders`, `stock`, `txfull` and `screenshot` parts. */
 
@@ -122,7 +121,7 @@ async function ops(rig: CardRig, quick: boolean): Promise<void> {
       !info.upload_open,
     JSON.stringify(info),
   );
-  check('LIST of a card with no store: empty', withoutSystemPackage(await dk.list()).length === 0);
+  check('LIST of a card with no store: empty', (await dk.list()).length === 0);
 
   const a = blob(70_000, 1); // three chunks, the last partial
   files['modules/a.dkm'] = a;
@@ -296,7 +295,7 @@ async function folders(rig: CardRig): Promise<void> {
   /** LIST and the card after the guest's writes list the files sent and the folders with nothing in them; returns the first sectors. */
   const verify = async (label: string, dirs: string[]): Promise<Record<string, number>> => {
     const store = await rig.ls(`fold-${++step}`);
-    const listed = withoutSystemPackage(await dk.list());
+    const listed = await dk.list();
     const isFolder = (e: { size: number; hash: string }) => e.size === 0 && e.hash === zeroHash;
     expect(
       Object.fromEntries(listed.filter((e) => !isFolder(e)).map((e) => [e.path, [e.size, e.hash]])),

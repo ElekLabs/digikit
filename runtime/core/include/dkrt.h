@@ -105,6 +105,8 @@
 #define DKRT_FAULT_ROWS 4
 /* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode. */
 #define DKRT_SAFE_AFTER 2
+/* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one runs the resident core only (no system package): the crashes went on in safe mode, so the package or the core is the likely cause. */
+#define DKRT_CORE_ONLY_AFTER 4
 /* The stable period: DSP blocks (1500 per second) of UI loop after which the boot counter is cleared (30 seconds). */
 #define DKRT_STABLE_BLOCKS 45000
 /* DkrtDiag.card_state: not checked. */
