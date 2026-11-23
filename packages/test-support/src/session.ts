@@ -1,3 +1,4 @@
+import { oledPng } from './oled-png.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -674,6 +675,12 @@ export class Session {
   /** Hex SHA-256 of the 1024 decoded OLED bytes. */
   frameHash(): Promise<string> {
     return this.client.frameHash();
+  }
+  /** The current OLED as a grayscale PNG (4x scale). */
+  async framePng(): Promise<Buffer> {
+    const r = await this.client.framebufferGet();
+    if (!r.data_b64) throw new Error('framebuffer.get returned no data');
+    return oledPng(Buffer.from(r.data_b64, 'base64'));
   }
   leds(): Promise<LedsResult> {
     return this.client.ledsGet();

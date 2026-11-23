@@ -7,7 +7,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'smol-toml';
-import { HERMETIC, pathDeps } from './cargo.mjs';
+import { matchesGlob } from 'node:path';
+import { DAEMON_NODSP_EXTRA, HERMETIC, pathDeps } from './cargo.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WS = '{workspaceRoot}/';
@@ -23,9 +24,18 @@ for (const r of members) {
 const roots = [...byName.values()];
 
 const depsDir = join(root, 'dist/cargo-tests/release/deps');
-if (!existsSync(depsDir)) {
-  console.error('cargo-depfiles: dist/cargo-tests/release/deps missing: run the hermetic rust-tests targets first');
+// The dep-info of the daemon build (`digi-control:daemon-nodsp`: variant cfprof of the no-core target dir, in dist/ in a worktree).
+const daemonDepFile = ['dist/native-target', 'out/native/target']
+  .map((d) => join(root, d, 'nogen/cfprof/release/digi-emud.d'))
+  .find((f) => existsSync(f));
+if (!existsSync(depsDir) && !daemonDepFile) {
+  console.error('cargo-depfiles: no dep-info: run the hermetic rust-tests targets or digi-control:daemon-nodsp first');
   process.exit(2);
+}
+if (!daemonDepFile) {
+  console.error(
+    'cargo-depfiles: no daemon dep-info (digi-control:daemon-nodsp not built here): the daemon inputs are not checked',
+  );
 }
 
 const under = (path, r) => path === r || path.startsWith(r + '/');
@@ -60,7 +70,7 @@ const rel = (p) => relative(root, resolve(root, p));
 let units = 0;
 const owners = new Set();
 const bad = [];
-for (const file of readdirSync(depsDir).filter((f) => f.endsWith('.d'))) {
+for (const file of (existsSync(depsDir) ? readdirSync(depsDir) : []).filter((f) => f.endsWith('.d'))) {
   const deps = parseDepFile(readFileSync(join(depsDir, file), 'utf8'));
   if (!deps.length) continue;
   const first = rel(deps[0]);
@@ -83,8 +93,26 @@ for (const file of readdirSync(depsDir).filter((f) => f.endsWith('.d'))) {
     if (!ok) bad.push(`${name}: ${path} (${file})`);
   }
 }
+
+// The daemon: every repository file the build read is in a crate of digi-control's graph (the `^default` input) or matches
+// DAEMON_NODSP_EXTRA. Cargo reads `tests.rs` and `README.md` files of the crates too (module and doc includes), so `production` is not enough.
+// A directory read as a whole (devices) is covered by a glob below it.
+let daemonFiles = 0;
+if (daemonDepFile) {
+  const crates = closure('digi-control');
+  const extras = DAEMON_NODSP_EXTRA.map((e) => e.replace(WS, ''));
+  for (const dep of parseDepFile(readFileSync(daemonDepFile, 'utf8'))) {
+    const path = rel(dep);
+    if (path.startsWith('..') || under(path, 'dist') || under(path, 'out')) continue;
+    daemonFiles++;
+    const ok =
+      crates.some((c) => under(path, byName.get(c))) ||
+      extras.some((e) => matchesGlob(path, e) || matchesGlob(`${path}/x`, e));
+    if (!ok) bad.push(`digi-emud: ${path} (${daemonDepFile})`);
+  }
+}
 if (bad.length) {
   console.error(bad.join('\n'));
   process.exit(1);
 }
-console.log(`cargo-depfiles: ${units} units of ${owners.size} crates covered`);
+console.log(`cargo-depfiles: ${units} units of ${owners.size} crates covered; digi-emud: ${daemonFiles} files covered`);

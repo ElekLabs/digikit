@@ -2,6 +2,7 @@
 // conformance, test-only and regression nodes. The cache keys are in device-test-keys.mjs; build and pack targets are in module-build.mjs.
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { noDspShorts } from './device-files.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { isUploadable, mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
@@ -27,6 +28,9 @@ export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
 // Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
 // shared inputs of every device test (`test:subset --base` cannot select by path for them).
 export const SHARED_TASKS = ['patchkit:cli', 'digi-control:daemons', TEST_ASSEMBLY];
+// The daemon of the devices without a SHARC DSP (cargo.mjs `daemon-nodsp`, dist/bin/digi-emud-nodsp).
+export const DAEMON_NODSP = 'digi-control:daemon-nodsp';
+const NO_DSP = noDspShorts();
 export const SHARED_PROJECTS = SHARED_TASKS.map((task) => task.split(':')[0]);
 // Device and conformance tasks run behind this wrapper: it takes one machine-wide emulator slot. It only schedules and is
 // no input: it cannot change a result, and Nx does not cache failures.
@@ -139,6 +143,8 @@ export const deviceTargets = (
         ...target,
         // a device outside the acceptance devices has no daemon key, image hashes or patchkit key in dist/bytes, so a cached result could not follow its inputs
         ...(ALL_DEVICES.includes(device) ? {} : { cache: false }),
+        // a device without a SHARC DSP has no entry in dist/daemons.json: its daemon is the build without a core
+        ...(NO_DSP.includes(device) ? { dependsOn: [...target.dependsOn, DAEMON_NODSP] } : {}),
         inputs: [...forDevice(target.inputs, device), { env: 'DIGI_DEVICE' }],
         options: { ...target.options, env: { ...target.options.env, DIGI_DEVICE: device } },
       };

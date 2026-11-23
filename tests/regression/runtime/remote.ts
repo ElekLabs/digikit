@@ -1,16 +1,13 @@
-import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
 import type { DkSession } from '@digi/dk-session';
-import { emulatorClock, pollUntil, repoRoot, type Clock, type Session } from '@digi/test-support';
+import { emulatorClock, pollUntil, type Clock, type Session } from '@digi/test-support';
 import { aggregate, type PatchedSession } from '../support.ts';
 import { liveArtifacts, record } from './artifacts.ts';
 import { installModule, moduleArtifact } from './install.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 
-const exec = promisify(execFile);
-const root = repoRoot();
 /** Prepare an exact loaded-image ABOUT plan, then install only the remote module. */
 export async function prepareRemote(runtime: PatchedSession): Promise<RuntimePlan> {
   const { session, dk } = runtime;
@@ -89,9 +86,7 @@ export async function withRemoteRelease(dk: DkSession, clock: Clock, action: () 
 export async function captureRemoteOled(session: Session, name: string): Promise<string> {
   const dir = liveArtifacts(session, 'remote-input');
   const png = path.join(dir, `${name}.png`);
-  await exec('uv', ['run', 'python', '-m', 'tools.control.digi_client', '--run-dir', session.runDir, 'frame', png], {
-    cwd: root,
-    timeout: 10_000,
-  });
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(png, await session.framePng());
   return png;
 }

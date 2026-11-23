@@ -11,7 +11,7 @@
 // runs a new Python tool must list it there.
 import { existsSync, globSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { nonCellGlobs, otherFiles } from './device-files.mjs';
+import { noDspShorts, nonCellGlobs, otherFiles } from './device-files.mjs';
 import { testSourceGlobs } from './test-source.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
 
@@ -124,7 +124,9 @@ const PATCHKIT_BINARIES = ['dist/patchkit/patchkit', 'dist/daemons.json'];
 // What a test result follows when it does not run patchkit itself: the patched images, plans and address maps, and the daemon key
 // without the sources that only patchkit reads and without the files of the other devices (`emud_key.test_key_of`, written by
 // `verify_build daemons`). Both files are per device: `{device}` is replaced for each half by `forDevice`.
-const MERGE_BYTES = ['dist/bytes/images-{device}.sha256', 'dist/bytes/daemon-test-{device}.key'];
+const DAEMON_TEST_KEY = 'dist/bytes/daemon-test-{device}.key';
+const DAEMON_NODSP_HASH = 'dist/bytes/daemon-nodsp.sha256';
+const MERGE_BYTES = ['dist/bytes/images-{device}.sha256', DAEMON_TEST_KEY];
 export const BUILT_OUTPUTS = outputFiles([...SHARED_BUILT, ...PATCHKIT_BINARIES]);
 // Merge keys: the same without the binaries; a test that runs patchkit live (PATCHKIT_LIVE) follows the patchkit key of its device instead
 // (tools/nx/patchkit-key.mjs, written by `patchkit:cli`): the sources patchkit was built from, without the other devices' files.
@@ -172,8 +174,13 @@ export const forDevice = (inputs, device) =>
       );
     if (input === OTHER_DEVICE_FILES) return device ? otherFiles(device).map((glob) => `!{workspaceRoot}/${glob}`) : [];
     const pattern = input?.dependentTasksOutputFiles;
-    if (typeof pattern === 'string' && pattern.includes('{device}'))
-      return [{ ...input, dependentTasksOutputFiles: pattern.replaceAll('{device}', device ?? '*') }];
+    if (typeof pattern === 'string' && pattern.includes('{device}')) {
+      // a device without a SHARC DSP has no daemon-test-<device>.key (`verify_build daemons` builds the DSP devices): its daemon is the
+      // build of `digi-control:daemon-nodsp`, and the half follows the hash of that binary
+      const file =
+        device && noDspShorts().includes(device) && pattern === DAEMON_TEST_KEY ? DAEMON_NODSP_HASH : pattern;
+      return [{ ...input, dependentTasksOutputFiles: file.replaceAll('{device}', device ?? '*') }];
+    }
     return [input];
   });
 // Tests that run `patchkit build` or `pack` at run time, or patch with explicit fixture modules, compile sources:

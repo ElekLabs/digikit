@@ -9,3 +9,4 @@ export * from './emulated-clock.ts';
 export * from './input.ts';
 export * from './boot-window.ts';
 export * from './boot-window-emulator.ts';
+export * from './oled-png.ts';

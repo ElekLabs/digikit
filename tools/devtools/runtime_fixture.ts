@@ -13,7 +13,7 @@
 // Replay: coupled-run --syx firmware.syx --dsp-image dsp-image.bin --dsp-state dsp-state.snap.dsp
 //         --cf-snapshot cf-snapshot.snap [--card-image card.img]
 // The daemon is the plain build of the device's generated core: --binary, else DIGI_EMUD_<DEV>,
-// else `tools.emulator.native_emu --daemon --build-only` (a no-op when the build is fresh).
+// else `dist/daemons.json` (written by `digi-control:daemons`).
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -42,20 +42,16 @@ function git(root: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 }
 
-function daemonBinary(root: string, device: Device, syx: string, given?: string): string {
+function daemonBinary(root: string, device: Device, given?: string): string {
   const named = given ?? process.env[`DIGI_EMUD_${device.toUpperCase()}`];
   if (named) return path.resolve(named);
-  const out = execFileSync(
-    'uv',
-    ['run', 'python', '-m', 'tools.emulator.native_emu', '--daemon', '--build-only', syx],
-    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
-  );
-  const last = out
-    .split('\n')
-    .filter((l) => l.trim())
-    .pop();
-  if (!last || !fs.existsSync(last)) throw new Error(`native_emu --build-only printed no binary: ${out.slice(-300)}`);
-  return last;
+  const file = path.join(root, 'dist/daemons.json');
+  const key = `DIGI_EMUD_${device.toUpperCase()}`;
+  const fromFile = fs.existsSync(file)
+    ? (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key]
+    : undefined;
+  if (!fromFile) throw new Error(`no ${key} in ${file}: run pnpm nx:pilot run digi-control:daemons, or pass --binary`);
+  return fromFile;
 }
 
 const { values } = parseArgs({
@@ -99,7 +95,7 @@ if (samples && !fs.existsSync(samples)) {
 }
 
 const inputs = resolveInputs(device, firmware);
-const binary = daemonBinary(root, device, inputs.syx, values.binary);
+const binary = daemonBinary(root, device, values.binary);
 fs.rmSync(tmpDir, { recursive: true, force: true });
 fs.mkdirSync(tmpDir, { recursive: true });
 fs.mkdirSync(runDir, { recursive: true });

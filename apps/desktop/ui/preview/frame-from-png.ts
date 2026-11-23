@@ -1,5 +1,7 @@
 // `?frame=NAME` in the preview: a 128 x 64 monochrome PNG (at any integer scale) shown on the device screen instead of the test pattern.
 // NAME is a file of apps/web/public/images without the extension.
+import { OLED_FRAME_BYTES, OLED_HEIGHT, OLED_WIDTH, setOledPixel } from '@digi/workbench-core/oled-frame.ts';
+
 const images = import.meta.glob('../../../web/public/images/*.png', {
   query: '?url',
   import: 'default',
@@ -21,13 +23,13 @@ export async function framePixels(url: string): Promise<Uint8Array> {
 
 export function screenBytes(image: ImageData): Uint8Array {
   const { data, width, height } = image;
-  const cw = width / 128;
-  const ch = height / 64;
-  const buf = new Uint8Array(1024);
-  for (let y = 0; y < 64; y++)
-    for (let x = 0; x < 128; x++) {
+  const cw = width / OLED_WIDTH;
+  const ch = height / OLED_HEIGHT;
+  const buf = new Uint8Array(OLED_FRAME_BYTES);
+  for (let y = 0; y < OLED_HEIGHT; y++)
+    for (let x = 0; x < OLED_WIDTH; x++) {
       const i = (Math.floor((y + 0.5) * ch) * width + Math.floor((x + 0.5) * cw)) * 4;
-      if ((data[i] + data[i + 1] + data[i + 2]) / 3 >= 128) buf[7 - (y >> 3) + 8 * x] |= 1 << (y & 7);
+      if ((data[i] + data[i + 1] + data[i + 2]) / 3 >= 128) setOledPixel(buf, x, y);
     }
   return buf;
 }
