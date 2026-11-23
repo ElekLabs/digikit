@@ -3,9 +3,11 @@
 
 This script is the PreToolUse hook of the read-only project agents (`.claude/agents/`).
 
-Default profile (reviewer): read-only Git commands only.
-``--profile architect``: the same Git commands, plus the read-only firmware
-query CLI ``uv run python -m tools.coldfire.fw SUBCOMMAND ...``.
+Default profile (reviewer): read-only Git commands (including ``git grep``) and
+the read-only Nx graph queries ``pnpm nx:pilot show target|project|projects ...``
+(``--check PATH`` answers whether a file is a target input).
+``--profile architect``: the same, plus the read-only firmware query CLI
+``uv run python -m tools.coldfire.fw SUBCOMMAND ...``.
 """
 
 import json
@@ -20,6 +22,7 @@ ALLOWED_SUBCOMMANDS = {
     "diff-files",
     "diff-index",
     "diff-tree",
+    "grep",
     "log",
     "ls-files",
     "ls-tree",
@@ -54,7 +57,119 @@ FW_SUBCOMMANDS = {
     "str",
     "xref",
 }
+NX_SHOW_PREFIX = ["pnpm", "nx:pilot", "show"]
+NX_SHOW_SUBCOMMANDS = {"project", "projects", "target"}
 PROFILES = {"reviewer", "architect"}
+
+# Long options that run programs or write files. git accepts any unambiguous prefix of a long option, so a word that
+# abbreviates one of these is refused too.
+FORBIDDEN_LONG = (
+    "--ext-diff",
+    "--textconv",
+    "--no-index",
+    "--output",
+    "--paginate",
+    "--open-files-in-pager",
+    "--exec-path",
+)
+
+# git grep is checked against a positive allowlist: short flags (also clustered), flags with a value, long flags.
+GREP_SHORT = set("nilwLcEFPhHvIoz")
+GREP_VALUE_SHORT = {"-e", "-f", "-A", "-B", "-C", "-m"}
+GREP_LONG = {
+    "--line-number",
+    "--ignore-case",
+    "--word-regexp",
+    "--files-with-matches",
+    "--name-only",
+    "--files-without-match",
+    "--count",
+    "--extended-regexp",
+    "--basic-regexp",
+    "--fixed-strings",
+    "--perl-regexp",
+    "--invert-match",
+    "--no-color",
+    "--heading",
+    "--break",
+    "--full-name",
+    "--null",
+    "--column",
+    "--only-matching",
+    "--cached",
+    "--untracked",
+    "--and",
+    "--or",
+    "--not",
+    "--all-match",
+    "--text",
+    "--max-depth",
+    "--context",
+    "--after-context",
+    "--before-context",
+    "--max-count",
+    "--function-context",
+    "--show-function",
+}
+
+
+def abbreviates_forbidden(word: str) -> bool:
+    if not word.startswith("--") or len(word) < 4:
+        return False
+    name = word.split("=", 1)[0]
+    return any(opt.startswith(name) for opt in FORBIDDEN_LONG)
+
+
+def unquoted_expansion(command: str) -> str | None:
+    """The first character the shell would expand: `$` or a backquote outside single quotes; a glob, brace, tilde,
+    parenthesis or `!` outside any quotes. The word checks run on shlex words, so text the shell rewrites must not pass."""
+    single = double = False
+    escaped = False
+    for ch in command:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and not single:
+            escaped = True
+            continue
+        if ch == "'" and not double:
+            single = not single
+            continue
+        if ch == '"' and not single:
+            double = not double
+            continue
+        if ch in "$`" and not single:
+            return ch
+        # globs, braces, tilde; zsh `=(...)` process substitution and `!` history expansion
+        if ch in "{}*?[]~()!" and not single and not double:
+            return ch
+    return None
+
+
+def check_grep(args: list[str]) -> None:
+    index = 0
+    while index < len(args):
+        word = args[index]
+        if word == "--":
+            return
+        if not word.startswith("-") or word == "-":
+            index += 1
+            continue
+        if word in GREP_VALUE_SHORT:
+            index += 2
+            continue
+        if re.fullmatch(r"-[ABCm]\d+", word):
+            index += 1
+            continue
+        if word.startswith("--"):
+            if word.split("=", 1)[0] not in GREP_LONG:
+                deny(f"git grep option {word} is not on the allowlist")
+            index += 1
+            continue
+        if not set(word[1:]) <= GREP_SHORT:
+            deny(f"git grep option {word} is not on the allowlist")
+        index += 1
+
 
 FORBIDDEN_ARGUMENTS = {
     "--ext-diff",
@@ -90,6 +205,13 @@ def check_fw(words: list[str]) -> None:
     print("{}")
 
 
+def check_nx_show(words: list[str]) -> None:
+    rest = words[len(NX_SHOW_PREFIX) :]
+    if not rest or rest[0] not in NX_SHOW_SUBCOMMANDS:
+        deny("only `pnpm nx:pilot show target|project|projects` is allowed")
+    print("{}")
+
+
 def main() -> None:
     global PROFILE
     PROFILE = parse_profile()
@@ -106,6 +228,10 @@ def main() -> None:
     if re.search(r"[\n;&|<>`]", command) or "$(" in command:
         deny("shell operators, substitutions, and redirections are not allowed")
 
+    expanded = unquoted_expansion(command)
+    if expanded is not None:
+        deny(f"unquoted {expanded!r}: shell expansion is not allowed (quote patterns)")
+
     try:
         words = shlex.split(command, posix=True)
     except ValueError:
@@ -113,6 +239,10 @@ def main() -> None:
 
     if PROFILE == "architect" and words[: len(FW_PREFIX)] == FW_PREFIX:
         check_fw(words)
+        return
+
+    if words[: len(NX_SHOW_PREFIX)] == NX_SHOW_PREFIX:
+        check_nx_show(words)
         return
 
     if not words or words[0] != "git":
@@ -136,13 +266,22 @@ def main() -> None:
     if index >= len(words) or words[index] not in ALLOWED_SUBCOMMANDS:
         deny(f"Git subcommand is not on the {PROFILE} allowlist")
 
+    if words[index] == "grep":
+        check_grep(words[index + 1 :])
+
     for word in words[index + 1 :]:
+        if abbreviates_forbidden(word):
+            deny(f"{word} is (an abbreviation of) a forbidden option")
         if word in FORBIDDEN_ARGUMENTS:
             deny(f"{word} is not allowed")
         if word == "-c" or word.startswith("-c="):
             deny("Git configuration overrides are not allowed")
         if word.startswith("--config-env") or word.startswith("--exec-path"):
             deny("Git execution/configuration overrides are not allowed")
+        if word.startswith("--open-files-in-pager") or (
+            word.startswith("-O") and len(word) > 2
+        ):
+            deny("commands may not run a program on the matches")
         if word.startswith("--output"):
             deny("commands may not write output files")
 
