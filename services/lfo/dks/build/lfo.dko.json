@@ -3867,6 +3867,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "37c51e92e89a3b6852fb5496578ff64482aa46ee453653bb68978e082f991af2",
 =======
  "source_sha256": "b4abf1e3bccfd11e44f5c43f628793245f248d3a28c5241aba4eb3050db3ee94",
@@ -3883,6 +3884,9 @@
 =======
  "source_sha256": "ac47171ff52af72dc24a44ea8522b89eeddd17321fcf3da1dbce5048e462bde8",
 >>>>>>> 4c99e9c (Contract path for the first provider port: owner cell in .bss and in place, kinds rule, test subject)
+=======
+ "source_sha256": "fb2a50778ed7d8ed6d5b247500839befb7384d54737f01d6a709d20c66b8f1d6",
+>>>>>>> 5d06538 (Regenerate the core service objects after the service! macro change)
  "symbols": [
   {
    "global": false,

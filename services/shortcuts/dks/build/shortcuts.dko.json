@@ -3208,6 +3208,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "636d046582d9bfc777a8cad412a85f82feaac5c590359a11ba7c61e12ba17116",
 =======
  "source_sha256": "ce363d193ccc35b0fe45ac3ea2e23fe018ef5ad235d27e9850b7ec04a826ca51",
@@ -3221,6 +3222,9 @@
 =======
  "source_sha256": "82d28f796d2ee31fc29c1448d6f33821b5827e60c78a70eaf5340778f6a66949",
 >>>>>>> a2b8b5d (Close the RC3-1 contract path review findings)
+=======
+ "source_sha256": "56f9fb26aeab658cce49da4d4e708208a724f41fcb0d9aa5733c961a5ad26693",
+>>>>>>> 5d06538 (Regenerate the core service objects after the service! macro change)
  "symbols": [
   {
    "global": false,
