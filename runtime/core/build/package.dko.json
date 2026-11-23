@@ -20003,63 +20003,98 @@
   },
   {
    "addend": 0,
-   "offset": 6,
+   "offset": 8,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table6GROUPS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 24,
+   "offset": 26,
    "section": ".text.dkpkg_entry",
    "symbol": "_RNvNtNtCsaGmOzcP47sg_8dkrt_abi8resident5check5check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 52,
+   "offset": 58,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table6GROUPS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 58,
-   "section": ".text.dkpkg_entry",
-   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 64,
    "section": ".text.dkpkg_entry",
-   "symbol": ".sec..rodata.global.2F",
+   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 70,
    "section": ".text.dkpkg_entry",
-   "symbol": ".sec..text._RNvMsa_NtCsaGmOzcP47sg_8dkrt_abi7serviceNtB5_12ServiceTable18check_declarations",
+   "symbol": ".sec..rodata.global.2F",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 76,
    "section": ".text.dkpkg_entry",
+   "symbol": ".sec..text._RNvMsa_NtCsaGmOzcP47sg_8dkrt_abi7serviceNtB5_12ServiceTable18check_declarations",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package8handlers6FAILED",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 112,
+   "offset": 118,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 140,
+   "offset": 146,
+   "section": ".text.dkpkg_entry",
+   "symbol": ".sec..bss.DKRT_DSP",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 156,
+   "section": ".text.dkpkg_entry",
+   "symbol": ".sec..bss.DKRT_PROVIDERS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 166,
+   "section": ".text.dkpkg_entry",
+   "symbol": ".sec..bss.DKRT_TICKS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
+   "section": ".text.dkpkg_entry",
+   "symbol": ".sec..bss.DKRT_TABLE_BAD",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 194,
+   "section": ".text.dkpkg_entry",
+   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 228,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..rodata._RNvNtNtCsacrnCRhYs1l_4dkrt7package5hooks5HOOKS",
    "type": "cf.32"
@@ -24510,10 +24545,10 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
+   "addend": 9,
    "offset": 702,
    "section": ".text._RNvNtCsaGmOzcP47sg_8dkrt_abi5state8loads_v2",
-   "symbol": ".sec..rodata.global.1z",
+   "symbol": ".sec..rodata.global.1A",
    "type": "cf.32"
   },
   {
@@ -24534,14 +24569,14 @@
    "addend": 8,
    "offset": 178,
    "section": ".text._RNvNtNtCsaGmOzcP47sg_8dkrt_abi8resident5check5check",
-   "symbol": ".sec..rodata.global.1w",
+   "symbol": ".sec..rodata.global.1x",
    "type": "cf.32"
   },
   {
-   "addend": 488,
+   "addend": 512,
    "offset": 226,
    "section": ".text._RNvNtNtCsaGmOzcP47sg_8dkrt_abi8resident5check5check",
-   "symbol": ".sec..rodata.global.1w",
+   "symbol": ".sec..rodata.global.1x",
    "type": "cf.32"
   },
   {
@@ -24552,10 +24587,10 @@
    "type": "cf.32"
   },
   {
-   "addend": 488,
+   "addend": 512,
    "offset": 286,
    "section": ".text._RNvNtNtCsaGmOzcP47sg_8dkrt_abi8resident5check5check",
-   "symbol": ".sec..rodata.global.1w",
+   "symbol": ".sec..rodata.global.1x",
    "type": "cf.32"
   },
   {
@@ -24743,141 +24778,148 @@
   {
    "addend": 29,
    "offset": 0,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1c",
    "type": "cf.32"
   },
   {
    "addend": 2,
    "offset": 24,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1d",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 48,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1e",
    "type": "cf.32"
   },
   {
    "addend": 152,
    "offset": 72,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1f",
    "type": "cf.32"
   },
   {
    "addend": 65,
    "offset": 96,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1g",
    "type": "cf.32"
   },
   {
    "addend": 67,
    "offset": 120,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1h",
    "type": "cf.32"
   },
   {
    "addend": 49,
    "offset": 144,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1i",
    "type": "cf.32"
   },
   {
    "addend": 25,
    "offset": 168,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1j",
    "type": "cf.32"
   },
   {
    "addend": 14,
    "offset": 192,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1k",
    "type": "cf.32"
   },
   {
    "addend": 9,
    "offset": 216,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 240,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1m",
    "type": "cf.32"
   },
   {
    "addend": 1,
    "offset": 264,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1n",
    "type": "cf.32"
   },
   {
    "addend": 3,
    "offset": 288,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 11,
    "offset": 312,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1p",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 336,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1q",
    "type": "cf.32"
   },
   {
    "addend": 3,
    "offset": 360,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1r",
    "type": "cf.32"
   },
   {
    "addend": 137,
    "offset": 384,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1s",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 408,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1t",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 432,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1u",
    "type": "cf.32"
   },
   {
    "addend": 18,
    "offset": 456,
-   "section": ".rodata.global.1w",
+   "section": ".rodata.global.1x",
    "symbol": ".sec..rodata.global.1v",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 480,
+   "section": ".rodata.global.1x",
+   "symbol": ".sec..rodata.global.1w",
    "type": "cf.32"
   },
   {
@@ -29546,10 +29588,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffd8487900000000487800012f2e000841eeffda4eb9000000004fef000c71aeffea0c80000000ff670642804e5e4e75203c0000000023c0000000004879000000004eb90000000023c000000000588f4a80673472ff2d41ffec72b12d41fff02d40fff442aefff842aefffc207900000000486effec4878000148780005206800a84e904fef000c203c00000000609c",
+   "hex": "4e56ffc42f0a487900000000487800022f2e000841eeffca4eb9000000004fef000c71aeffda0c80000000ff670a4280246effc04e5e4e75203c0000000023c0000000004879000000004eb90000000023c000000000588f4a80673472ff2d41ffec72b12d41fff02d40fff442aefff842aefffc207900000000486effec4878000148780005206800a84e904fef000c223c000000002d41ffdc43f9000000002d49ffe0203c000000002d40ffe4223c000000002d41ffe845eeffdc42aeffc443f90000000020512f1a2f2effc4206802dc4e9052aeffc4508f7004b0aeffc466de203c000000006000ff46",
    "kind": "text",
    "name": ".text.dkpkg_entry",
-   "size": 146
+   "size": 236
   },
   {
    "align": 1,
@@ -30134,10 +30176,10 @@
   },
   {
    "align": 1,
-   "hex": "73686f727463757473",
+   "hex": "73686f727463757473000000",
    "kind": "data",
    "name": ".rodata.global.1A",
-   "size": 9
+   "size": 12
   },
   {
    "align": 16,
@@ -30270,7 +30312,7 @@
    "hex": "",
    "kind": "bss",
    "name": ".bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table6GROUPS",
-   "size": 732
+   "size": 736
   },
   {
    "align": 2,
@@ -30561,7 +30603,7 @@
   },
   {
    "align": 2,
-   "hex": "00010001",
+   "hex": "00010002",
    "kind": "data",
    "name": ".rodata.DKPKG_TABLE",
    "size": 4
@@ -31632,7 +31674,7 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec48d70c0424484aaf00186738266f001820130c80c44b5254674420bc0000000142a8000421400008223cc44b52542141000c740111420010200a4cd70c044fef00144e7520bc0000000142a8000442a8000842a8000c42001140001060da266f0018322b000471c17401b4806722307c0002700124bc0000000142aa000473c1254100082540000c30081540001060a8322b000671c1204071ef001eb088630000ce71ef001e307c000360c847f9000000002f4b000c204b43e8fff82f4900102010266f0018227308004a89676022112028000cb280657641e80018223c00000000b1c166d2266f000c2f2b000c202f0024d0ab00042f002013206f002020300800d0ab00082f004eb9000000007018d1af00184fef000c223c00000000b2af000c66c250c1154100106000ff0c206f0010249043e800042551000442aa000842aa000c7005154000106000feec206f0010249043e8000425510004254100082540000c7006154000106000fecc266f0018202b0008725bb2806500ff3024bc0000000142aa000425400008725c2541000c7404154200106000fe9e",
+   "hex": "4fefffec48d70c0424484aaf00186738266f001820130c80c44b5254674420bc0000000142a8000421400008223cc44b52542141000c740111420010200a4cd70c044fef00144e7520bc0000000142a8000442a8000842a8000c42001140001060da266f0018322b000471c17401b4806722307c0002700124bc0000000142aa000473c1254100082540000c30081540001060a8322b000671c1204071ef001eb088630000ce71ef001e307c000360c847f9000000002f4b000c204b43e8fff82f4900102010266f0018227308004a89676022112028000cb280657641e80018223c00000000b1c166d2266f000c2f2b000c202f0024d0ab00042f002013206f002020300800d0ab00082f004eb9000000007018d1af00184fef000c223c00000000b2af000c66c250c1154100106000ff0c206f0010249043e800042551000442aa000842aa000c7005154000106000feec206f0010249043e8000425510004254100082540000c7006154000106000fecc266f0018202b0008725fb2806500ff3024bc0000000142aa00042540000872602541000c7404154200106000fe9e",
    "kind": "text",
    "name": ".text._RNvNtNtCsaGmOzcP47sg_8dkrt_abi8resident5check5check",
    "size": 416
@@ -31652,18 +31694,18 @@
    "size": 1148
   },
   {
-   "align": 1,
-   "hex": "000000",
+   "align": 16,
+   "hex": "00000000000000050000000c00000000000000040000001c0000000000000008000000100000001c0000000400000064000000000000000400000014000000800000000400000028000000000000000400000018000000a8000000040000003400000000000000050000001c000000dc000000040000001c000000000000000c00000020000000f8000000040000000c00000000000000040000002400000104000000040000000400000000000000080000002800000108000000040000001c00000000000000050000002c00000124000000040000001400000000000000090000003000000138000000040000000c00000000000000060000003400000144000000040000000c00000000000000020000003800000150000000040000000400000000000000050000003c0000015400000004000000080000000000000009000000400000015c000000040000001c00000000000000030000004400000178000000040000000c00000000000000050000004800000184000000040000000400000000000000090000004c0000018800000004000000080000000000000005000000500000019000000004000000040000000000000007000000540000019400000004000000940000000000000005000000580000022800000004000000b400000000000000080000005c000002dc0000000400000004",
    "kind": "data",
-   "name": ".rodata.global.1z",
-   "size": 3
+   "name": ".rodata.global.1x",
+   "size": 504
   },
   {
-   "align": 16,
-   "hex": "00000000000000050000000c00000000000000040000001c0000000000000008000000100000001c0000000400000064000000000000000400000014000000800000000400000028000000000000000400000018000000a8000000040000003400000000000000050000001c000000dc000000040000001c000000000000000c00000020000000f8000000040000000c00000000000000040000002400000104000000040000000400000000000000080000002800000108000000040000001c00000000000000050000002c00000124000000040000001400000000000000090000003000000138000000040000000c00000000000000060000003400000144000000040000000c00000000000000020000003800000150000000040000000400000000000000050000003c0000015400000004000000080000000000000009000000400000015c000000040000001c00000000000000030000004400000178000000040000000c00000000000000050000004800000184000000040000000400000000000000090000004c0000018800000004000000080000000000000005000000500000019000000004000000040000000000000007000000540000019400000004000000940000000000000005000000580000022800000004000000b4",
+   "align": 1,
+   "hex": "686f73745f646972",
    "kind": "data",
    "name": ".rodata.global.1w",
-   "size": 480
+   "size": 8
   },
   {
    "align": 1,
@@ -32450,7 +32492,7 @@
    "size": 24
   }
  ],
- "source_sha256": "4a12714e9ccbd013de7216d329ee4046233c7fd0411185307021dadb9fe1515b",
+ "source_sha256": "03043be4bb7725a7519b77bb1c39ea56e8a78da512c27c7d6eff01a1891f99ff",
  "symbols": [
   {
    "global": false,
@@ -32994,8 +33036,8 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.global.1z",
-   "section": ".rodata.global.1z",
+   "name": ".sec..rodata.global.1x",
+   "section": ".rodata.global.1x",
    "value": 0
   },
   {
@@ -37417,8 +37459,8 @@
  ],
  "toolchain": {
   "exports": "DKPKG_TABLE DKRT_CTXS DKRT_DSP DKRT_PROVIDERS DKRT_TABLE_BAD DKRT_TICKS dk_dsp_stats_ctl dk_dsp_stats_read dkpkg_entry dkrt_dsp_stats_feed",
-  "instructions_redecoded": "48027",
-  "isa_check": "d264730efb4872a55cfad813a9c89e5292058fb0f12a58558dff7bad2860a721",
+  "instructions_redecoded": "48050",
+  "isa_check": "8957f2369fd236902f40e9d230ec35895c22c38703c93495b6deeadd205580ce",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
