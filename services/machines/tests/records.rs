@@ -10,7 +10,7 @@ use dkrt_sdk::*;
 use dkrt_svc_machines::info;
 use dkrt_svc_machines::records::*;
 use dkrt_svc_machines::slots;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 use dkrt_test_support::{Call, FakeCore, FakeFw};
 use std::cell::RefCell;
 use std::rc::Rc;

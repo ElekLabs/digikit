@@ -10,7 +10,7 @@ use dkrt_abi::registry::each;
 use dkrt_abi::service::ApplyCtx;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::{w, MACH_TEXT};
+use dkrt_svc_rows::dynreg::{w, MACH_TEXT};
 
 /// What `apply` reads: the owner, the section, the load address and the words of `dynreg_info`.
 pub(crate) struct AppCtx {
@@ -65,7 +65,7 @@ pub(crate) unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
         np += 1;
         copy_text(s.s.param_name[k].as_mut_ptr(), b.add(24), 32);
         copy_text(s.s.param_short[k].as_mut_ptr(), b.add(56), 16);
-        dkrt_svc_params::write_param_row(
+        dkrt_svc_rows::write_param_row(
             core,
             inf,
             code,
@@ -111,12 +111,12 @@ pub(crate) unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
             b.add(40 + MACH_TEXT),
             MACH_TEXT,
         );
-        let name = dkrt_svc_params::make_rep(
+        let name = dkrt_svc_rows::make_rep(
             s.s.rep_pname[k].as_mut_ptr(),
             s.s.page_name[k].as_ptr(),
             false,
         );
-        let title = dkrt_svc_params::make_rep(
+        let title = dkrt_svc_rows::make_rep(
             s.s.rep_ptitle[k].as_mut_ptr(),
             s.s.page_title[k].as_ptr(),
             false,

@@ -1279,7 +1279,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
  "dkrt-svc-rt",
  "dkrt-test-support",
 ]
@@ -1292,7 +1292,7 @@ dependencies = [
  "dkrt-abi",
  "dkrt-sdk",
  "dkrt-svc-bitmap",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
  "dkrt-svc-rt",
  "dkrt-test-support",
 ]
@@ -1304,17 +1304,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
- "dkrt-test-support",
-]
-
-[[package]]
-name = "dkrt-svc-params"
-version = "0.1.0"
-dependencies = [
- "dkneeds",
- "dkrt-abi",
- "dkrt-sdk",
+ "dkrt-svc-rows",
  "dkrt-test-support",
 ]
 
@@ -1325,6 +1315,16 @@ dependencies = [
  "dkrt-abi",
  "dkrt-sdk",
  "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-rows"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
  "dkrt-test-support",
 ]
 
@@ -1354,7 +1354,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
  "dkrt-svc-rt",
  "dkrt-test-support",
 ]

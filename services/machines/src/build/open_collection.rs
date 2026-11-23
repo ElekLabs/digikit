@@ -1,7 +1,7 @@
 //! The open collection of the module in `init`: the collection, the gate and the placeholder handle.
 use super::*;
 use core::ptr::addr_of_mut;
-use dkrt_svc_params::builder::Gate;
+use dkrt_svc_rows::builder::Gate;
 
 /// Zero at the start (a `.bss` of the service file, not 5 KiB of initialised data in it): `begin` writes `Build::new()` before the first builder call of every module.
 pub(super) static mut BUILD: Build = unsafe { core::mem::zeroed() };

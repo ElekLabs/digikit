@@ -61,7 +61,7 @@ impl<C: CoreApi> Service<C> for Machines {
 
     unsafe fn check(core: &C, step: u32, c: &CheckCtx) -> i32 {
         use check_step as st;
-        let inf = dkrt_svc_params::dynreg(core);
+        let inf = dkrt_svc_rows::dynreg(core);
         if inf.is_null() || !fits(inf) {
             // the machine, parameter, page, action and native page records need this registry: a section without them does not
             let none = counts_of(c.reg) == (0, 0, 0, 0, 0);
@@ -96,7 +96,7 @@ impl<C: CoreApi> Service<C> for Machines {
     }
 
     unsafe fn apply(core: &C, c: &ApplyCtx) -> i32 {
-        let inf = dkrt_svc_params::dynreg(core);
+        let inf = dkrt_svc_rows::dynreg(core);
         if inf.is_null() {
             return if counts_of(c.reg) == (0, 0, 0, 0, 0) {
                 OK
@@ -124,7 +124,7 @@ impl<C: CoreApi> Service<C> for Machines {
         dsp::free_placeholders(core);
         // the machine rows of a pinned number whose module did not come back (a MISSING row with no voice row would play the first stock machine's sound): gap rows. A
         // number the map holds stays MISSING (E5d), and `tick` parks its voice row if it has none.
-        let inf = dkrt_svc_params::dynreg(core);
+        let inf = dkrt_svc_rows::dynreg(core);
         if !inf.is_null() {
             let s = rstate();
             let mut k = 0;

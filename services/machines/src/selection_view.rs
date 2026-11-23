@@ -1,13 +1,13 @@
 //! The machine selection view: its item list is built again after the rows changed.
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 
 /// The firmware builds the machine selection view's item list once, from the list getter, and keeps it. After the rows changed, build it again (the builder clears
 /// its items first); nothing to do while the view does not exist yet, or on an image without the hook that remembers it (the variable and the builder are words 48 and 49
 /// of `dynreg_info`).
 pub(crate) unsafe fn refresh_view<C: CoreApi>(core: &C) {
-    let inf = dkrt_svc_params::dynreg(core);
+    let inf = dkrt_svc_rows::dynreg(core);
     if inf.is_null() {
         return;
     }

@@ -5,7 +5,7 @@ use crate::selection_view::refresh_view;
 use crate::unload::reset_machine_row;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 
 /// The machine rows (bit k) of a pinned number that a reload left as a MISSING placeholder: the new version's rows clear the bit, and the end of the reload writes a gap row
 /// for the rest (a MISSING row with no voice row would play the first stock machine's sound). A number the sticky map holds stays MISSING and is not in this mask.
@@ -50,7 +50,7 @@ unsafe fn reads_missing<C: CoreApi>(core: &C, inf: *const u32, t: u32) -> bool {
 /// A real load took the placeholder of type `t` (`dsp::make_room`): its machine row falls back to the gap row (the stock sound) and the event says so; the number is parked
 /// again when a row frees (`park_absent`).
 pub(crate) unsafe fn give_way<C: CoreApi>(core: &C, t: u32) {
-    let inf = dkrt_svc_params::dynreg(core);
+    let inf = dkrt_svc_rows::dynreg(core);
     let d0 = iw(inf, w::M_DYN0);
     if inf.is_null() || t < d0 || (t - d0) as usize >= MAX_MACH {
         return;
@@ -67,7 +67,7 @@ pub(crate) unsafe fn give_way<C: CoreApi>(core: &C, t: u32) {
 /// (`boot_index` is `u32::MAX` again) and the DSP loader is idle, a free row exists and the write is taken; only then the machine row reads MISSING. A number that cannot be
 /// parked (no free row, or the write failed `PARK_MAX` passes in a row) keeps the gap row and one error event says why. Nothing runs during a live operation.
 pub(crate) unsafe fn park_absent<C: CoreApi>(core: &C) {
-    let inf = dkrt_svc_params::dynreg(core);
+    let inf = dkrt_svc_rows::dynreg(core);
     if inf.is_null() || core.live_op() != 0 || core.boot_index() != u32::MAX {
         return;
     }

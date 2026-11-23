@@ -7,7 +7,7 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::iw;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 
 /// The commit of module record `rec` (`Service::module_commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them, counts the rows and keeps the callback
 /// arguments for `apply`; `DECLARE` (after the registry walker's check) declares the voice rows' ranges. The collection is closed after the `DECLARE` pass.
@@ -27,7 +27,7 @@ pub unsafe fn commit<C: CoreApi>(core: &C, rec: usize, c: &ModuleCommitCtx) -> i
     if rec >= dkrt_abi::MAX_MODULES {
         return E_FORMAT;
     }
-    let inf = dkrt_svc_params::dynreg(core);
+    let inf = dkrt_svc_rows::dynreg(core);
     if inf.is_null() || iw(inf, w::VERSION) < 3 {
         return E_NO_REGISTRY;
     }

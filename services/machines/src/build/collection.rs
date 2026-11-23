@@ -1,7 +1,7 @@
 //! What `init` declared of the machines: the collected machines, pages and parameters (`Build`).
 use super::*;
 use dkrt_sdk::*;
-use dkrt_svc_params::builder::{fail, find, put_text, room};
+use dkrt_svc_rows::builder::{fail, find, put_text, room};
 
 /// The most machines, pages and records (machines, pages, parameters and click actions together) of one module.
 pub const MAX_M: usize = limits::MACHINE_ROWS;

@@ -3,7 +3,7 @@ use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::{w, RegState, MACH_TEXT};
+use dkrt_svc_rows::dynreg::{w, RegState, MACH_TEXT};
 
 /// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
 /// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
@@ -17,7 +17,7 @@ pub fn rstate() -> &'static mut RegState {
 /// The code of the first run-time parameter row (a row `k` has code `param_first + k`); `u32::MAX` without a registry.
 pub fn param_first<C: CoreApi>(core: &C) -> u32 {
     unsafe {
-        let inf = dkrt_svc_params::dynreg(core);
+        let inf = dkrt_svc_rows::dynreg(core);
         if inf.is_null() {
             u32::MAX
         } else {
@@ -33,7 +33,7 @@ pub fn param_owners() -> &'static [u8] {
 
 /// The reserved machine, parameter and page rows as (rows the registry has, rows in use); (0, 0) without a registry (for CAPACITY).
 pub(crate) unsafe fn counts<C: CoreApi>(core: &C) -> [(u32, u32); 3] {
-    let inf = dkrt_svc_params::dynreg(core);
+    let inf = dkrt_svc_rows::dynreg(core);
     if inf.is_null() {
         return [(0, 0); 3];
     }
@@ -75,12 +75,12 @@ pub(crate) unsafe fn machine_text(
     copy_text(s.s.mach_name[k].as_mut_ptr(), long, MACH_TEXT);
     copy_text(s.s.mach_short[k].as_mut_ptr(), short, MACH_TEXT);
     (
-        dkrt_svc_params::make_rep(
+        dkrt_svc_rows::make_rep(
             s.s.rep_long[k].as_mut_ptr(),
             s.s.mach_name[k].as_ptr(),
             upper,
         ),
-        dkrt_svc_params::make_rep(
+        dkrt_svc_rows::make_rep(
             s.s.rep_short[k].as_mut_ptr(),
             s.s.mach_short[k].as_ptr(),
             upper,

@@ -8,7 +8,7 @@ use dkrt_abi::registry::each;
 use dkrt_abi::service::Problem;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 
 /// What the checks read: the section and the words of `dynreg_info`.
 pub(crate) struct Ctx {

@@ -175,7 +175,7 @@ impl FakeCore {
         k.push((at, kind, keys.to_vec()));
     }
 
-    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_params::dynreg` finds it through `CoreApi::info`.
+    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_rows::dynreg` finds it through `CoreApi::info`.
     pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
         table[0] = 0x4459_4e52;
         let hash = fnv1a("dynreg_info");

@@ -106,9 +106,9 @@ pub(super) unsafe fn write_knob_row<C: CoreApi>(
     def_n: i32,
 ) {
     let wi = k * WORDS + j;
-    dkrt_svc_params::write_fx_param_row(
+    dkrt_svc_rows::write_fx_param_row(
         c,
-        dkrt_svc_params::dynreg(c),
+        dkrt_svc_rows::dynreg(c),
         code,
         tpl,
         idx,

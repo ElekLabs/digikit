@@ -303,12 +303,12 @@ fn image(core: &mut FakeCore) {
     t[63] = 0x80;
     core.info_tables.push((INFO_HASH, t));
     let mut d = vec![0u32; 96];
-    d[dkrt_svc_params::dynreg::w::P_TABLE] = 0x10000;
-    d[dkrt_svc_params::dynreg::w::PF_SIZE] = 0x40;
-    d[dkrt_svc_params::dynreg::w::P_ROWS] = 0x20000;
-    d[dkrt_svc_params::dynreg::w::P_ROW_SIZE] = 0x20;
-    d[dkrt_svc_params::dynreg::w::P_FIRST] = 0;
-    d[dkrt_svc_params::dynreg::w::P_TEMPLATE_OFF] = 8;
+    d[dkrt_svc_rows::dynreg::w::P_TABLE] = 0x10000;
+    d[dkrt_svc_rows::dynreg::w::PF_SIZE] = 0x40;
+    d[dkrt_svc_rows::dynreg::w::P_ROWS] = 0x20000;
+    d[dkrt_svc_rows::dynreg::w::P_ROW_SIZE] = 0x20;
+    d[dkrt_svc_rows::dynreg::w::P_FIRST] = 0;
+    d[dkrt_svc_rows::dynreg::w::P_TEMPLATE_OFF] = 8;
     core.set_dynreg(d);
     core.set_dynfx(6, 4);
     unsafe { fxpage::unbind() };

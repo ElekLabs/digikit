@@ -45,7 +45,7 @@ R2b crossings and their replacements:
 | R2b crossing | Replacement |
 | --- | --- |
 | `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | The DSP link queue of the core (R6a, `link.rs`): live values with `link_set`, owner requests with `link_submit`. No writer asks whether the link is busy |
-| `fx` needs `machines` rows | Both write parameter rows with the shared crate `dkrt-svc-params` and find `dynreg_info` through `CoreApi::info`; neither calls a function of the other (RS-C: no registry state or table in `CoreApi`) |
+| `fx` needs `machines` rows | Both write parameter rows with the shared crate `dkrt-svc-rows` and find `dynreg_info` through `CoreApi::info`; neither calls a function of the other (RS-C: no registry state or table in `CoreApi`) |
 | `pageclick` reads registry rows | `dkrt_svc_machines::records::param_first`, `param_owners`: the registry state `DKRT_REG` is a static of `machines.dks` |
 | `fxsend` uses `settings` | `CoreApi::settings_get` and `settings_put` (a broker resource) |
 | `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Service::settle` plans the numbers once per boot from the machine keys of the selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |

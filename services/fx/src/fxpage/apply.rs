@@ -35,8 +35,8 @@ pub unsafe fn apply<C: CoreApi>(core: &C, owner: u8, b: *const u8) -> i32 {
     // strings
     copy_text(s.tab[k].as_mut_ptr(), b.add(16), 8);
     copy_text(s.title[k].as_mut_ptr(), b.add(24), TEXT);
-    let tab = dkrt_svc_params::make_rep(s.rep_tab[k].as_mut_ptr(), s.tab[k].as_ptr(), false);
-    let title = dkrt_svc_params::make_rep(s.rep_title[k].as_mut_ptr(), s.title[k].as_ptr(), false);
+    let tab = dkrt_svc_rows::make_rep(s.rep_tab[k].as_mut_ptr(), s.tab[k].as_ptr(), false);
+    let title = dkrt_svc_rows::make_rep(s.rep_title[k].as_mut_ptr(), s.title[k].as_ptr(), false);
     // the page's nine codes: 0 where no knob stands
     let mut codes = [0u32; 9];
     let mut j = 0;
@@ -149,7 +149,7 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
                 c += 1;
             }
             // name and title: the empty string, so no word of the row points to the state of the effect that left
-            let empty = dkrt_svc_params::make_rep(
+            let empty = dkrt_svc_rows::make_rep(
                 addr_of_mut!(DKRT_FXP_EMPTY) as *mut u8,
                 b"\0".as_ptr(),
                 false,
@@ -165,9 +165,9 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             publish_row(core, inf, k, 0);
             j = 0;
             while j < WORDS {
-                dkrt_svc_params::reset_param_row(
+                dkrt_svc_rows::reset_param_row(
                     core,
-                    dkrt_svc_params::dynreg(core),
+                    dkrt_svc_rows::dynreg(core),
                     iw(inf, w::P_FIRST) + (k * WORDS + j) as u32,
                 );
                 s.cur[k][j] = 0;

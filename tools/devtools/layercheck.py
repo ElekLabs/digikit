@@ -1106,8 +1106,8 @@ def check_runtime_platform(root: Path) -> list[Violation]:
 
 
 SERVICE_CRATES = "services"
-# dkrt-svc-params is the parameter row writers that machines and fx share (no service names the other); dkrt-svc-bitmap the firmware tile objects of lfo
-SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-params", "dkrt-svc-bitmap"}
+# dkrt-svc-rows is the parameter row writers that machines and fx share (no service names the other); dkrt-svc-bitmap the firmware tile objects of lfo
+SERVICE_DEPS = {"dkrt-abi", "dkrt-sdk", "dkneeds", "dkrt-svc-rows", "dkrt-svc-bitmap"}
 SERVICE_DEV_DEPS = SERVICE_DEPS | {"dkrt-test-support", "dkrt-svc-rt"}
 # `dkrt_svc_rt` is the support crate of a service file (runtime/core/svc-rt), not a service
 SERVICE_CRATE_REF = re.compile(r"\bdkrt_svc_(?!rt\b)\w+")

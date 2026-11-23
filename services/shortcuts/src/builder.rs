@@ -14,7 +14,7 @@ use dkrt_abi::provider::Status;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx};
 use dkrt_sdk::records::{KIND_SHORTCUT, LEN_SHORTCUT};
 use dkrt_sdk::*;
-use dkrt_svc_params::builder::{fail, Gate};
+use dkrt_svc_rows::builder::{fail, Gate};
 
 /// The struct a module passes to `dk_shortcut_add` (`dk_shortcut_def` of <dk/platform/shortcuts.h>): the same layout on the ColdFire.
 #[repr(C)]
@@ -182,7 +182,7 @@ impl Default for Builder {
 
 /// The C string `src` into the NUL padded field `dst`: null, empty or without room for the NUL is `E_FORMAT`.
 unsafe fn put(dst: &mut [u8], src: *const u8, err: &mut i32) {
-    dkrt_svc_params::builder::put_text(dst, src, err);
+    dkrt_svc_rows::builder::put_text(dst, src, err);
 }
 
 fn be(buf: &mut [u8; BODY_LEN], off: usize, v: u32) {

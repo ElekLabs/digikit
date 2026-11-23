@@ -7,7 +7,7 @@ use dkrt_sdk::records::{
     LEN_ACTION, LEN_MACHINE, LEN_NATIVE_PAGE, LEN_NATIVE_PAGE_V2, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::*;
-use dkrt_svc_params::builder::len_of;
+use dkrt_svc_rows::builder::len_of;
 
 // ---- lowering to records -----------------------------------------------------------------------------------------------------
 

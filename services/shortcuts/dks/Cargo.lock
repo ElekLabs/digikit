@@ -19,7 +19,7 @@ name = "dkrt-sdk"
 version = "0.1.0"
 
 [[package]]
-name = "dkrt-svc-params"
+name = "dkrt-svc-rows"
 version = "0.1.0"
 dependencies = [
  "dkneeds",
@@ -42,7 +42,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
 ]
 
 [[package]]

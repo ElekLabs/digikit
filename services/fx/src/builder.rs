@@ -17,7 +17,7 @@ use dkrt_abi::provider::Status;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
-use dkrt_svc_params::builder::{fail, find, len_of, put_text, room, Gate};
+use dkrt_svc_rows::builder::{fail, find, len_of, put_text, room, Gate};
 
 const MAX_PA: usize = dkneeds::MAX_RECORDS as usize;
 const TEXT: usize = 24;

@@ -14,7 +14,7 @@ use dkrt_svc_machines::build;
 use dkrt_svc_machines::dsp::dyndsp;
 use dkrt_svc_machines::records::{rstate, types_of, Machines};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Late, Module, Rows};
 use dkrt_test_support::FakeCore;
 
@@ -987,7 +987,7 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
 /// The machine row of the first run-time type: (its list name is empty, its long name reads MISSING, own_dsp is 1).
 fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
     let s = &rstate().s;
-    let inf = unsafe { dkrt_svc_params::dynreg(core) };
+    let inf = unsafe { dkrt_svc_rows::dynreg(core) };
     let (empty, own, name) = unsafe {
         let row = dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1215,7 +1215,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
         "the descriptor's long name is a firmware string of the text"
     );
     assert_eq!(rep(&s.rep_short[0]), (4, "MISS".to_string()));
-    let inf = unsafe { dkrt_svc_params::dynreg(&l.core) };
+    let inf = unsafe { dkrt_svc_rows::dynreg(&l.core) };
     let row = unsafe {
         dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))

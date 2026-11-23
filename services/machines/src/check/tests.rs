@@ -4,7 +4,7 @@
 use super::*;
 use crate::records::validate;
 use dkrt_sdk::records::*;
-use dkrt_svc_params::dynreg::MACH_TEXT;
+use dkrt_svc_rows::dynreg::MACH_TEXT;
 use dkrt_test_support::FakeCore;
 use std::vec::Vec;
 

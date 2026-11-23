@@ -3,7 +3,7 @@ use super::*;
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::iw;
 use dkrt_sdk::*;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 
 // ---- the commit checks -----------------------------------------------------------------------------------------------------------
 

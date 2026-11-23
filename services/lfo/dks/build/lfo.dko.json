@@ -382,6 +382,7 @@
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 28,
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9number_of",
    "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7SETTLED",
@@ -405,13 +406,22 @@
    "addend": 0,
    "offset": 52,
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9number_of",
+=======
+   "offset": 56,
+   "section": ".text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 66,
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9number_of",
+=======
+   "offset": 70,
+   "section": ".text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
@@ -425,61 +435,70 @@
   {
    "addend": 0,
    "offset": 24,
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "symbol": "_RNvCsf4iJLEeHUpX_15dkrt_svc_params9stock_row",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvCseQtBFPkyhVO_13dkrt_svc_rows9stock_row",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 30,
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "symbol": ".sec..text._RINvCsf4iJLEeHUpX_15dkrt_svc_params11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 80,
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "symbol": "_RNvCsf4iJLEeHUpX_15dkrt_svc_params9stock_row",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvCseQtBFPkyhVO_13dkrt_svc_rows9stock_row",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 6,
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": ".sec..rodata.global.10",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": "_RNvNtCshSkmfNJ5zIR_7dkneeds4keys9name_hash",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 24,
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi4info",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 22,
+<<<<<<< HEAD
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 42,
+<<<<<<< HEAD
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 48,
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7SETTLED",
@@ -496,13 +515,22 @@
    "addend": 0,
    "offset": 62,
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "offset": 50,
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 76,
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "offset": 64,
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
@@ -523,26 +551,41 @@
   {
    "addend": 0,
    "offset": 22,
+<<<<<<< HEAD
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 42,
+<<<<<<< HEAD
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 118,
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9number_of",
+=======
+   "offset": 128,
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 130,
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4slot",
@@ -658,11 +701,17 @@
    "offset": 34,
    "section": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": ".sec..text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "offset": 140,
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4slot",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 90,
+<<<<<<< HEAD
    "section": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": ".sec..text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "type": "cf.32"
@@ -776,158 +825,548 @@
    "addend": 0,
    "offset": 90,
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 100,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 160,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 172,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 178,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 188,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 322,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky10referenced",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 342,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky11lowest_free",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 452,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 462,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 580,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 590,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 596,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 606,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 658,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 668,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 686,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky10referenced",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 706,
+<<<<<<< HEAD
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky11lowest_free",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 10,
    "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..rodata.global.16",
+=======
+   "offset": 46,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 66,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtNtCs6uNbiqmv1Ak_4core5slice5index16slice_index_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 146,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.13",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 156,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi12settings_put",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 32,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.13",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi12settings_get",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo5words",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 16,
-   "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
-   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 48,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 58,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
    "type": "cf.32"
   },
   {
    "addend": 0,
+   "offset": 66,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+<<<<<<< HEAD
+   "offset": 16,
+   "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+=======
+   "offset": 8,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave8wave_max",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 112,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 128,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 138,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 148,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 158,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 32,
+   "offset": 168,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 36,
+   "offset": 178,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 186,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 192,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 198,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 218,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 248,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 268,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 280,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi8irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi8irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 156,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 164,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 196,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 210,
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+<<<<<<< HEAD
    "offset": 30,
    "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..rodata.global.17",
+=======
+   "offset": 2,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
+   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 36,
    "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+=======
+   "offset": 8,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
+   "symbol": ".sec..text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE4stopNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop0EB1E_",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 50,
    "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
    "symbol": ".sec..rodata.global.18",
@@ -1316,6 +1755,11 @@
    "offset": 78,
    "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks11dk_svc_init",
    "symbol": ".sec..text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
+=======
+   "offset": 2,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_fini",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
@@ -1327,27 +1771,751 @@
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 34,
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "offset": 6,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text._RNvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB4_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE8instanceCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.16",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 34,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.17",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 54,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.18",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 74,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.19",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1a",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 132,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1b",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1c",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 158,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 172,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1d",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 178,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 196,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1e",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 202,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 216,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1f",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 222,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 236,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1g",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 242,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 256,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1h",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 262,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 280,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1i",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 286,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 300,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1j",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 306,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 320,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.1k",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 326,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider3row9name_hash",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 340,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 88,
+   "offset": 364,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 132,
+   "offset": 388,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 176,
+   "offset": 412,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 270,
+   "offset": 436,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 314,
+   "offset": 460,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 676,
+   "offset": 484,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 764,
+   "offset": 508,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 808,
+   "offset": 532,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 852,
+   "offset": 556,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 946,
+   "offset": 580,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 990,
+   "offset": 604,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 360,
+   "offset": 628,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 438,
+   "offset": 650,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 516,
+   "offset": 670,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 708,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 718,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DK_SVC_ROW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 728,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": ".sec..rodata.global.15",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 738,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "symbol": "_RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare16declare_provider",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs4NVp4pdP0rZ_8dkrt_abi3mem4rd32",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 46,
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi10boot_index",
+=======
+   "offset": 86,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi10boot_index",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 56,
-   "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9number_of",
+   "offset": 102,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
    "type": "cf.32"
   },
   {
    "addend": 0,
+   "offset": 114,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4slot",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 152,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 212,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 238,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 318,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 332,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 342,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi7live_op",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 402,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 416,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 430,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 68,
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi10boot_index",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 154,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 190,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.1v",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 214,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 256,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi10boot_index",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 308,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 334,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi7live_op",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 354,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 2112,
+   "offset": 376,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 424,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 440,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 2112,
+   "offset": 484,
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7retract",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky5clean",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 130,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi7keys_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 186,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 216,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 366,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 380,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 386,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 398,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 404,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 416,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE8start_inCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE8start_inCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": "memset",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
+   "section": ".text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE5startNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start0EB1F_",
+   "symbol": ".sec..text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE8start_inCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
+   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
+   "symbol": ".sec..text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE5startNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start0EB1F_",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "symbol": "_RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare12set_init_ctx",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 46,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "symbol": "_RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare14running_device",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+<<<<<<< HEAD
+   "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9number_of",
+=======
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+<<<<<<< HEAD
    "offset": 68,
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4slot",
@@ -1757,41 +2925,78 @@
    "offset": 6,
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk7declareNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "symbol": ".sec..text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE7declareCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "offset": 70,
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 82,
    "section": ".text.dk_lfo_eval",
+<<<<<<< HEAD
    "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
+=======
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 14,
    "section": ".text.dk_lfo_graph",
-   "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6lookup",
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6lookup",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 14,
    "section": ".text.dk_lfo_name",
+<<<<<<< HEAD
    "symbol": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9name_into",
+=======
+   "symbol": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes9name_into",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
+<<<<<<< HEAD
    "section": ".rodata.global.1r",
    "symbol": ".sec..text._RNSNvYNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB9_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtBX_7ProblemEE9call_once6vtableCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".rodata.global.1v",
+   "symbol": ".sec..text._RNSNvYNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBb_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtNtB17_7service7ProblemEE9call_once6vtableCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 16,
+<<<<<<< HEAD
    "section": ".rodata.global.1r",
    "symbol": ".sec..text._RNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB4_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0Cs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".rodata.global.1v",
+   "symbol": ".sec..text._RNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB6_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0CsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".rodata.global.14",
+   "symbol": ".sec..rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".rodata.global.14",
+   "symbol": ".sec..rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
@@ -1826,19 +3031,96 @@
    "addend": 0,
    "offset": 0,
    "section": ".rodata.dk_module",
-   "symbol": ".sec..text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks11dk_svc_init",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+<<<<<<< HEAD
+   "offset": 0,
+   "section": ".rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
+   "symbol": ".sec..rodata.global.14",
+=======
+   "offset": 4,
+   "section": ".rodata.dk_module",
+   "symbol": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_fini",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 0,
-   "section": ".rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
-   "symbol": ".sec..rodata.global.14",
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 8,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 0,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "symbol": ".sec..rodata.global.15",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records6commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "symbol": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+<<<<<<< HEAD
    "section": ".rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
    "symbol": ".sec..rodata.global.15",
    "type": "cf.32"
@@ -2009,6 +3291,10 @@
    "offset": 108,
    "section": ".rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12dsp_row_stepNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DK_SVC_ROW",
+   "symbol": ".sec..rodata.global.14",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
@@ -2133,126 +3419,232 @@
   {
    "addend": 0,
    "offset": 4,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7highest",
    "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 54,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4same",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4same",
    "symbol": "memcmp",
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
+=======
+   "offset": 2,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": "DKRT_LFO_FW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 8,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": "DKRT_LFO_FW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 14,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": "DKRT_LFO_FW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 20,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 26,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 32,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 38,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": "DKRT_LFO_FW",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 44,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 40,
+   "offset": 52,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2,
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave8wave_max",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "offset": 30,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph5build",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4rows",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 62,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph5build",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 156,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph5build",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7columns",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7columns",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 214,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph5build",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 50,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6lookup",
-   "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6GRAPHS",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6lookup",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6GRAPHS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 64,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6lookup",
    "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7highest",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6lookup",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 26,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7publish",
-   "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6GRAPHS",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6GRAPHS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 44,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7publish",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph5build",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 102,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7publish",
-   "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4MASK",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4MASK",
    "type": "cf.32"
   },
   {
    "addend": 112,
    "offset": 108,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7publish",
-   "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4MASK",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4MASK",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 18,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7retract",
-   "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6GRAPHS",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7retract",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6GRAPHS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
    "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 22,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
    "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4kept",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4kept",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 2,
    "offset": 68,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
    "symbol": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+   "symbol": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 84,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 96,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
@@ -2266,119 +3658,129 @@
   {
    "addend": 0,
    "offset": 26,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9name_into",
    "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes9name_into",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 112,
+<<<<<<< HEAD
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9name_into",
    "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7highest",
+=======
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes9name_into",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "type": "cf.32"
   },
   {
    "addend": 25,
    "offset": 50,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.17",
    "type": "cf.32"
   },
   {
    "addend": 26,
    "offset": 154,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.1e",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 262,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate7body_ok",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate7body_ok",
    "type": "cf.32"
   },
   {
    "addend": 26,
    "offset": 298,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.18",
    "type": "cf.32"
   },
   {
    "addend": 25,
    "offset": 368,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.19",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 436,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 446,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 25,
    "offset": 474,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.1d",
    "type": "cf.32"
   },
   {
    "addend": 26,
    "offset": 572,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.1b",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 634,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4same",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4same",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 666,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4same",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4same",
    "type": "cf.32"
   },
   {
    "addend": 25,
    "offset": 704,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.1c",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 762,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4word",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4word",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 790,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
-   "symbol": ".sec..text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4word",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "symbol": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4word",
    "type": "cf.32"
   },
   {
    "addend": 25,
    "offset": 854,
-   "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "symbol": ".sec..rodata.global.1a",
    "type": "cf.32"
   },
@@ -2801,13 +4203,18 @@
    "align": 2,
    "hex": "4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11dsp_releaseNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 2
   },
   {
    "align": 2,
    "hex": "4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12module_beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 2
   },
@@ -2844,26 +4251,38 @@
    "hex": "4e75",
    "kind": "text",
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9on_loadedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 2
   },
   {
    "align": 2,
    "hex": "206f000420504a906608226f000820a900184e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB4_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0Cs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB6_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0CsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 20
   },
   {
    "align": 2,
    "hex": "42804e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records6commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 4
   },
   {
    "align": 2,
    "hex": "42804e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11table_checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 4
   },
@@ -2943,79 +4362,144 @@
    "kind": "text",
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12dsp_row_stepNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 4
+=======
+   "name": ".text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
+   "size": 120
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
    "hex": "4fefffe4206f00242e982f5800042f5800082f58000c2f5800102f5800142f500018206f002020504a90660420af00184fef001c4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNSNvYNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB9_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtBX_7ProblemEE9call_once6vtableCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RNSNvYNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBb_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtNtB17_7service7ProblemEE9call_once6vtableCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 54
   },
   {
    "align": 2,
+<<<<<<< HEAD
+=======
+   "hex": "42804e75",
+   "kind": "text",
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "42804e75",
+   "kind": "text",
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 4
+  },
+  {
+   "align": 2,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "hex": "518f2f0e2c482f2f001c2f2f001c2f2f001c41ef00124eb900000000302f00124fef000c4a406714206f0008202800082d4000022d68000c000670013c80200e2c5f508f4e75",
    "kind": "text",
-   "name": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "name": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "size": 70
   },
   {
    "align": 2,
    "hex": "4fefffe82f0e2c482f2f002c2f2f002c2f2f002c2f2f002c41ef001c4eb900000000302f001c4fef00104a406754202f000e2f400004202f00122f4000082f2f002c2f2f002c2f2f002c41ef00224eb900000000302f00224fef000c4a406722206f0018216f00300008216f0034000c202f00042d400002202f00082d40000670013c80200e2c5f4fef00184e75",
    "kind": "text",
-   "name": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "name": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "size": 142
   },
   {
    "align": 2,
    "hex": "4878000b4879000000004eb9000000002f002f2f00104eb9000000004fef00104a80670c223c44594e522040b29066024e75428060fa",
    "kind": "text",
-   "name": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "name": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "size": 54
   },
   {
    "align": 2,
    "hex": "4fefffd448d77cfc246f0030286f0034486a000c4eb9000000002e00588f4a80670000c04284741047f9000000004bf9000000002c3c00000000605048790000000048780040487800404eb9000000005288b08867245889bc8867e07390b28566eebdd166ea601ce788206c0004d1c0208e7048214000046038206c000c20bcfffffffbd4835284b8876756487228004e932a00487228044e932600508f7008b08566e04df22808225420117208b28064b65291206c00082a102f0e4e932c40588fbaad024464bc202d02404a8067aa41f90000000043f900000000d0886000ff7c4cd77cfc4fef002c4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE4stopNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop0EB1E_",
+   "size": 58
+  },
+  {
+   "align": 2,
+   "hex": "4fefffd448d77cfc246f0030286f0034486a000c4eb9000000002c00588f4a80670000c04285741047f900000000605048790000000048780040487800404eb9000000005288b08867245889be8867e07390b28466eebdd166ea601ce788206c0004d1c0208e7048214000046038206c001020bcfffffffbd4835285ba866762487228004e932800487228044e932600508f7008b08466e04df22808225420117208b28064b652912a6c0008206c000c28102f0e4e932c40588fb8ad024464b8202d02404a8067a6224d41ed02002e0d068700000240d08d0680000002006000ff704cd77cfc4fef002c4e75",
+   "kind": "text",
+   "name": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 236
   },
   {
    "align": 2,
    "hex": "4fefffd848d75c3c246f002c286f0030486a000c4eb9000000002a00588f4a80677442843c7c001047f9000000006016205420bcfffffff2206c00085290ddc25284ba8467504872e8004e9326004872e8044e932400508f7008b08366e020544a9066da206c000426104872e8084e932f002f034eb9000000002f0041ef00324eb9000000004fef001071ef00227201b280669c60a24cd75c3c4fef00284e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 160
+=======
+   "name": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 170
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffc448d73cfc282e001c266e0020246e0024202e00304a80674c206e00284286222e002c2d41fff660022c05bcaefff6672042982a065285ba8066ee202efff6428242aefff62a6e00182d40fffa60000158206efff64879000000002f082f064eb90000000020044a846726246e0018226e001091c84280242e0014221ab488671ab29956c17301448180815288b88866ea4cee3cfcffc44e5e4e754879000000002f2e00142f084eb9000000004879000000002f0a2f024eb9000000004a826712204b4280b2906700022458885280b48066f24a84670001c6204d4283600858885283b684674220104a8067f2b3800c80000000ff62e8b684640000c422353c0073812241200190ae0008721fc280204172012008e1a9c2aefff64a81670000b070013d40fffe6008428342403d40fffe2f042f0d2f2e000c2f2e00084eb90000000080aefff62f002f2e000c2f2e00084eb90000000022404fef001c4a80670001764a6efffe670000f6b883630ae18f220982872b813c00260996ae0008721fc6817201e7a983aefff6b4aefffa640000f8206e002821892c00200252805282ba806300fec0b48a6700ff0222332c002e01e08f6600ff062002528060e04879000000002f042f034eb9000000004a896700ff4e60a2242effee93c960ac58885280b08a67582210b5810c81000000ff6326bc8066e82409b9c4645241f5cc0020107180224042904a806700ff7e4a6efffe6600ff56604c222efff22d49ffee5881528cb9c467ae204124104a8267f0204b42802d41fff2226effee60a84879000000002f002f004eb9000000004879000000002f042f0c4eb9000000004a846700ff16204d428320094a90670e58885283b88366f422406000fefe22406000feea22446000ff04226efffa4879000000002f092f024eb9000000002f042f0d2f2e000c2f2e00084eb90000000080aefff62f002f2e000c2f2e00084eb90000000026004fef001c4a80661a4a8467b242413d41fffe2d4dfff299cc220d2d42ffee6000ff4422406000fe8e200252806000feac",
+   "kind": "text",
+   "name": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 760
   },
   {
    "align": 2,
    "hex": "4e56ffc448d70c1c246e000c41eeffdc200e59804218b08866fa260e0683ffffffdc740442aeffd8280e598447f9000000006034202effd841f208002d50fffc487900000000487800042f04487800042f034e9358aeffd8588258834fef00147020b0aeffd8671cb4aeffd864c6487900000000487800202f022f2effd84eb90000000048780020486effdc4878000a4879000000002f2e00084eb9000000004fef00144a8057c044804cee0c1cffc44e5e4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 180
   },
   {
    "align": 2,
    "hex": "4e56ffdc2d48ffdc43eeffe04219bdc966fa48780020486effe04878000a4879000000002f2e00084eb9000000004fef00147220b280671a226effdc22090681000000204299b28966fa202effdc4e5e4e75486effe0206effdc4eb900000000588f60e6",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 100
   },
   {
    "align": 2,
    "hex": "4fefffc048d77c0c26482f2f00444eb900000000240042af002242af002642af002a42af002e42af003242af00364df90000000045ef0022263c00000000588f4bf90000000049f900000000603a276f001e0002276f00220006276f0026000a276f002a000e276f002e0012276f003200167201602e588e24af0038256f003c0004508ab68e67c62f162f152f022f2f005041ef00464e94322f00464fef00104a4166d23681200b4cd77c0c4fef00404e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 178
   },
   {
    "align": 2,
    "hex": "4fefffb42f0e4ab900000000660a42802c5f4fef004c4e752f2f005441ef00224eb900000000588f70ec4a6f001e67e02f6f002000382f6f0024003c2f6f002800402f6f002c00442f6f003000482f6f0034004c2f2f00544eb9000000002f4000124eb9000000002f40000a588f4a390000000066484a80679441ef003823d00000000041ef003c23d00000000041ef004023d00000000041ef004423d00000000041ef004823d00000000041ef004c23d000000000700113c0000000004df90000000041f9000000002f48000a604e4aaf000656c0448013c0000000006000ff2e204e202f00062f002f10206f001258af00122f1841f9000000002f102f2f001e2f2f006841ef002a4eb900000000508e4fef0018bdfc0000000067b24aaf000666be204e202e000460bc",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 300
   },
   {
    "align": 2,
+<<<<<<< HEAD
    "hex": "4e56ffc448d73cfc282e001c266e0020246e0024202e00304a80674c206e00284286222e002c2d41fff660022c05bcaefff6672042982a065285ba8066ee202efff6428242aefff62a6e00182d40fffa60000158206efff64879000000002f082f064eb90000000020044a846726246e0018226e001091c84280242e0014221ab488671ab29956c17301448180815288b88866ea4cee3cfcffc44e5e4e754879000000002f2e00142f084eb9000000004879000000002f0a2f024eb9000000004a826712204b4280b2906700022458885280b48066f24a84670001c6204d4283600858885283b684674220104a8067f2b3800c80000000ff62e8b684640000c422353c0073812241200190ae0008721fc280204172012008e1a9c2aefff64a81670000b070013d40fffe6008428342403d40fffe2f042f0d2f2e000c2f2e00084eb90000000080aefff62f002f2e000c2f2e00084eb90000000022404fef001c4a80670001764a6efffe670000f6b883630ae18f220982872b813c00260996ae0008721fc6817201e7a983aefff6b4aefffa640000f8206e002821892c00200252805282ba806300fec0b48a6700ff0222332c002e01e08f6600ff062002528060e04879000000002f042f034eb9000000004a896700ff4e60a2242effee93c960ac58885280b08a67582210b5810c81000000ff6326bc8066e82409b9c4645241f5cc0020107180224042904a806700ff7e4a6efffe6600ff56604c222efff22d49ffee5881528cb9c467ae204124104a8267f0204b42802d41fff2226effee60a84879000000002f002f004eb9000000004879000000002f042f0c4eb9000000004a846700ff16204d428320094a90670e58885283b88366f422406000fefe22406000feea22446000ff04226efffa4879000000002f092f024eb9000000002f042f0d2f2e000c2f2e00084eb90000000080aefff62f002f2e000c2f2e00084eb90000000026004fef001c4a80661a4a8467b242413d41fffe2d4dfff299cc220d2d42ffee6000ff4422406000fe8e200252806000feac",
    "kind": "text",
    "name": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
@@ -3027,13 +4511,38 @@
    "kind": "text",
    "name": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
    "size": 718
+=======
+   "hex": "2f022f2f00084eb900000000588f7207b2af000c652c222f000c243c000001084c02180041f9000000004202118218002f002f2f000c4eb900000000508f241f4e75487900000000487800082f2f00144eb900000000",
+   "kind": "text",
+   "name": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 86
+  },
+  {
+   "align": 2,
+   "hex": "4e56fdec48d7040c41eeff004280428120c020c1bdc866f4226e001c41eeff0070017359741fc480246e001c75722a002601484342432083948121420004528050887221b28066da48780100486eff00486efe004eb9000000002f2e00084eb90000000024004fef00107007b0ae000c65501d6e0013fdf81d6e0017fdf92d6e0018fdfa202e000c223c000001084c01080048780108486efdf80680000000002f004eb9000000002f022f2e00084eb9000000004fef00144cee040cfdec4e5e4e75487900000000487800082f2e000c4eb900000000",
+   "kind": "text",
+   "name": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 214
+  },
+  {
+   "align": 2,
+   "hex": "4879000000004eb900000000588f4e75",
+   "kind": "text",
+   "name": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
+   "size": 16
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
    "hex": "2f2f00044eb90000000020790000000022390000000020390000000023c80000000023c10000000023c00000000041f90000000023d000000000420013c0000000004879000000002f2f000c4eb9000000004fef000c4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks11dk_svc_init",
    "size": 88
+=======
+   "name": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_fini",
+   "size": 8
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
@@ -3046,6 +4555,7 @@
    "align": 2,
    "hex": "4e56fd8c48d70c1c7008b0ae000c670c42804cee0c1cfd8c4e5e4e752f2e00104eb90000000026002f2e00084eb9000000002f032f004eb9000000002f0041eefffa4eb9000000004fef00144a6efffa670001ac262efffc2d43fda87807b8836500016e2003223c000001084c0108002040d1fc000000002d48fda21610670e7183206e00147390b2806600015842001d40fdac1d40fdad1d40fdae1d40fdaf48790000000048780004206e00104868000448780004486efdac4eb9000000004fef001441eefdb0200e0680fffffdf04258b08866fa206e0010508843eefdb0262e0010068300000048244942017190e188758284801428000134c27001c28071c2780fe8a8808112005488b68866de206e00141d50fda7246efdac41eefef8220e51814282428320c220c3b28866f441eefef872017559761fc68147f63a00776bfdb02802484442442084968221430004528150887621b68166da7601b18348780100486efef8486efdf847f9000000004e932f2e00084eb9000000002400182efda71d44fdf01d43fdf12d4afdf248780108486efdf02f2efda24e932f022f2e00084eb9000000004fef00242f03486efdb02f2efda84eb9000000002f2e00084eb9000000004fef00106000fe44487900000000487800082f2efda84eb9000000002f2e00084eb9000000007783588fb0836700fe9870e96000fe1670f26000fe10",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 516
   },
@@ -3054,47 +4564,124 @@
    "hex": "2f2f00102f2f00102f2f00102f2f00104eb9000000004fef00104e75",
    "kind": "text",
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12apply_recordNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RNvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB4_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE8instanceCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 28
   },
   {
    "align": 2,
    "hex": "4e56ff582f02202e000c7205b28067127407b480670000ba4280242eff544e5e4e7541eeff62200e0680ffffffaa20bc0000000142a800045088b1c066f042aeffaa42aeffae2f2e00084eb9000000002d40ffb241eeffaa2d48ffb643eeff622d49ffba41eeffb22d48ffbe43eeffae2d49ffc2486effb6206e00102f104eb90000000042aeffc6202effaa4fef000c4a806606202effae608043eeffc62d49ffca487900000000486effca7209b280640270092f00486eff624eb900000000202effc64fef00104a806600ff4e60c442aeffce42aeffd22f2e00084eb9000000002d40ffd641eeffce2d48ffda43eeffd62d49ffde41eeffd22d48ffe2486effda226e00102f114eb9000000004fef000c4aaeffce6720202effce6000fefc2f2e00084eb900000000588f4a00672e91c871806000008a41f9000000002d48ff5842aeff5c600c41e80108b1fc0000000067cc4a1067f052aeff5c60ea91c8222effd2202eff5cd08190887408b480655c4aaeffce66a04a81679c4ab90000000067942f2e000841eeffe64eb900000000588f71eeffe67201b2806700ff7a74ec2d42ffce6000ff70223c00000108d3aeff58226eff58b3fc0000000067a0226eff587391b28066e0528860dc70f22d40ffce6000ff42",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 472
+=======
+   "name": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "size": 750
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff9848d70c0c24487008b0ae0010671642804241348125400002200a4cee0c0cff984e5e4e757247b2ae0018650670fb720160e0206e001c1628000c1d43ffb32f2e00144eb9000000002d40ffae2f2e000c4eb9000000002f2effae2f002f2e00084eb9000000002f0041eefffa4eb9000000004fef00184a6efffa660670f272016090262efffc2d43ffae7007b083650000a841f9000000002003223c000001084c010800103008001d40ffad670e71aeffb373aeffadb2806600009242031d43ffb61d43ffb71d43ffb81d43ffb948790000000048780004206e00144868000448780004486effb64eb9000000004fef001441eeffba200e5d804258b08866fa206e0014508843eeffba47eefffa2d4bffa842017190e188758284801428000132c27001c08173c2760fe6a98280b3eeffa86736548860dc487900000000487800082f2effae4eb9000000002f2e000c4eb90000000073aeffad588fb0816700ff5c70e972016000feaa240e0682ffffffba2f022f2effb67601b3832f0371aeffb32f002f2effae2f2e000c4eb9000000002f032f022f2effae4eb9000000004fef00242f2e000c4eb900000000588f4a8056c1488144816000fe58",
+   "kind": "text",
+   "name": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 448
+  },
+  {
+   "align": 2,
+   "hex": "4e56ffec222e0014202e0018206e001c1d50fff82d680006fff442aeffec2d680002fff04a8066027201486effec2f002f012f2e00102f2e000c2f2e000841eefffa4eb9000000004fef00184a6efffa6708202efffc4e5e4e75428060f8",
+   "kind": "text",
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 94
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff4c2f022d48ff4c202e00107205b28067207407b480670000d842814240206eff4c3080214100022008242eff484e5e4e7543eeff5a200e0680ffffffa222bc0000000142a900045089b08966f042aeffa242aeffa62f2e000c4eb9000000002d40ffaa41eeffa22d48ffae43eeff5a2d49ffb2202e00082d40ffb641eeffaa2d48ffba43eeffa62d49ffbe486effae206e00142f104eb90000000042aeffc2202effa24fef000c4a806606222effa6603243eeffc22d49ffc6487900000000486effc67209b280640270092f00486eff5a4eb900000000222effc24fef00104a8167c84a8156c0488044806000ff3042aeffca42aeffce2f2e000c4eb9000000002d40ffd241eeffca2d48ffd6226e00082d49ffda41eeffd22d48ffde43eeffce2d49ffe2486effd6206e00142f104eb9000000004fef000c4aaeffca671e222effca609e2f2e000c4eb900000000588f4a00673091c871806000008c43f9000000002d49ff50204942aeff54600c41e80108b1fc0000000067ca4a1067f052aeff5460ea91c8222effce202eff54d08190887408b480655c4aaeffca66a04a81679c4ab90000000067942f2e000c41eeffe64eb900000000588f71eeffe67201b2806700ff7a74ec2d42ffca6000ff70223c00000108d3aeff50226eff50b3fc0000000067a0226eff507391b28066e0528860dc70f22d40ffca6000ff42",
+   "kind": "text",
+   "name": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 514
+  },
+  {
+   "align": 2,
+   "hex": "518f2f2f00182f2f00182f2f00182f2f001841ef00124eb9000000004fef00104a6f00026708202f0004508f4e75428060f8",
+   "kind": "text",
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 50
+  },
+  {
+   "align": 2,
+   "hex": "4fefffec48d71c0c45f900000000428277af002349f90000000047f90000000060222f2f001c4eb9000000004cef1c0c00044fef00184e75528245ea01087008b08267de7192b08366ee2f024e942f022f2f00244e934fef000c60dc",
+   "kind": "text",
+   "name": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 92
+  },
+  {
+   "align": 2,
+   "hex": "71af000f2f002f2f000c2f2f000c4eb9000000004fef000c4e75",
+   "kind": "text",
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "4e56ff8448d70c7c262e000c266e000842ab0240206e001020107208b28064027008266e0008274002442f0341eeffa04eb900000000588f41eeffc0200e0680ffffffe04298b08866fa48780008486effc048780008486effa04878000e487800074eb9000000004fef0018266e00084aab024467124282280e0684ffffffe045f90000000060642f0e266e00082f2b024048780040486b0100487800402f0b48780008486effc048780008486effa04878000e487800074eb9000000004fef00304a80660a4cee0c7cff844e5e4e75486effc02f034eb900000000508f60e65282266e0008b4ab0244649c41eeffe04298bdc866fa2f04487800082f022f034e924fef00104a8067d641eeffe07a099a807209266e0008202b02407c3fbc8065bed0ae000822401342020053814a81673a2258266e0008202b02407c3fbc80653e266e000827890c00202b02407c3fbc80653e266e000843f30c0042a9010052ab0240b28566ac6000ff7648790000000048780008487800084eb900000000487900000000487800402f004eb900000000487900000000487800402f004eb900000000",
+   "kind": "text",
+   "name": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 420
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
    "hex": "2f2f000c2f2f000c2f2f000c4eb9000000004fef000c4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 24
   },
   {
    "align": 2,
    "hex": "4fefffe448d73c1c282f002045f900000000428277af00274bf90000000049f90000000047f90000000060202f044eb9000000004cef3c1c00044fef00204e75528245ea01087008b08267e07192b68066ee2f024e952f044e9442122f002f044e934fef001060d8",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6removeCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 104
+=======
+   "name": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE8start_inCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 42
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
    "hex": "71af000b2f002f2f00084eb900000000508f4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk6removeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 20
+=======
+   "name": ".text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE5startNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start0EB1F_",
+   "size": 108
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
    "hex": "4e56ff8448d71c3c262e000842b900000000206e000c20107208b2806402700823c0000000002f0341eeffa04eb900000000588f41eeffc0200e0680ffffffe04298b08866fa48780008486effc048780008486effa04878000e487800074eb9000000004fef00184ab9000000006710428247f90000000045f90000000060662f0e41f9000000002f28024048780040487900000000487800402f0848780008486effc048780008486effa04878000e487800074eb9000000004fef00304a80660a4cee1c3cff844e5e4e75486effc02f034eb900000000508f60e65282b4b900000000649a41eeffe04298bdc866fa486effe0487800082f022f034eb9000000004fef00104a8067d241eeffe07809988070092239000000007a3fba8165bc1782180053804a80673622582239000000007a3fba81653c49f90000000029891c002239000000007a3fba81653842b21c0052b900000000b08466b86000ff7e48790000000048780008487800084eb900000000487900000000487800402f014eb900000000487900000000487800402f014eb900000000",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 408
+=======
+   "name": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
+   "size": 50
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
    "hex": "2f2f00082f2f00084eb900000000508f4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 18
   },
@@ -3111,6 +4698,10 @@
    "kind": "text",
    "name": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk7declareNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "size": 14
+=======
+   "name": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "size": 76
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
@@ -3303,10 +4894,38 @@
   },
   {
    "align": 2,
+<<<<<<< HEAD
    "hex": "00000000000000030000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
    "size": 112
+=======
+   "hex": "0000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "size": 20
+  },
+  {
+   "align": 2,
+   "hex": "000000000000000100000000000000000000000000000000",
+   "kind": "data",
+   "name": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "size": 24
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "size": 588
+  },
+  {
+   "align": 2,
+   "hex": "000000015768d0680000000000020000",
+   "kind": "data",
+   "name": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DK_SVC_ROW",
+   "size": 16
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   },
   {
    "align": 2,
@@ -3403,77 +5022,113 @@
    "align": 2,
    "hex": "4fefffe848d7047c2808226f001c162f002320080680000000704298b08866fa2044741c605e20027a1c4c4500012c3c092492494c06180020017a1beaa8d0807b7108007171080290857c0ceca9028100007fff4c00180048454245244545f21a00200a484048c02200e7899280068100004000700fe0a17a079a8120c553824a82670a4a03669e721c928260a020044cd7047c4fef00184e75",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4rows",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4rows",
    "size": 154
   },
   {
    "align": 2,
    "hex": "2f0241f90000000072074280600c41e801085281740fb48167084a1067f0200160ec241f4e75",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7highest",
+=======
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 38
   },
   {
    "align": 2,
    "hex": "206f0008202f000cd08022405089b1c96322068000000009b088641c206f000473b09800e1891230080070014840424030014e75424060f4424060f0",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4word",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4word",
    "size": 60
   },
   {
    "align": 2,
    "hex": "4fefffd848d73cfc2848266f002c20080680000000704298b08866fa244b204c2e0b0687000000707c1b7a01603a4480604a220db3cd6c022209280db3cd6f022809b8816d1a22482410701f9081761fc0832605e1ab84835281b8816cec228252865888be8a673c2a5a2206741c4c42100022730c00200d90896bb27606b6806db0b3cd6e1043f5980122096a025281e281280d60acd3cd28096a025284e284220d609e200c4cd73cfc4fef00284e75",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7columns",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7columns",
    "size": 176
   },
   {
    "align": 2,
    "hex": "202f001472fbb280640842007201c0814e7522005881b2af000862ee206f00045888b2af001062e22f00202f001058802f002f084eb9000000004fef000c4a8057c0448060c6",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate4same",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4same",
    "size": 70
   },
   {
    "align": 2,
    "hex": "202f00085f807207b28064144280424130812140000220084e754280424160f0223c000001084c001800226f00044a31180067e6720160d8",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4kept",
+=======
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4kept",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 56
   },
   {
    "align": 2,
+<<<<<<< HEAD
+=======
+   "hex": "20790000000022390000000020390000000023c80000000023c10000000023c00000000041f90000000023d000000000420013c0000000004e75",
+   "kind": "text",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "size": 58
+  },
+  {
+   "align": 2,
+   "hex": "4feffff448d7001c2608242f0010224820080680000000204299b08966fa2242204306820000002071917818e9a8028100ffffffd28071a90001484042400281ff00ffffd28071a90002e1880281ffff00ffd2801229000320c15889b3c266c820034cd7001c4fef000c4e75",
+   "kind": "text",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo5words",
+   "size": 108
+  },
+  {
+   "align": 2,
+   "hex": "4eb900000000e1884e75",
+   "kind": "text",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave8wave_max",
+   "size": 10
+  },
+  {
+   "align": 2,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "hex": "4e56fc6448d71c1c2648242e000842a72f02260e0683fffffc80204345f9000000004e92487800012f0241eefcf04e9245eefd60487800702f032f0a283c0000000020444e90240e0682fffffdd048780070486efcf02f0228444e94224341eefcf02d48fc7c204222030681000000704fef0028700e909924c0700e286efc7c58aefc7c909c20c0b28966e8486efd60280e0684fffffe40204445f9000000004e92486efdd041eefeb04e92486efc80260e0683ffffff2020434e92486efcf0240e0682ffffff9020424e92487800702f042f0b45f9000000004e9248780070486efeb0486b00704e924fef0028487800702f03486b00e04e92487800702f02486b01504e924fef0018200b4cee1c1cfc644e5e4e75",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph5build",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
    "size": 278
   },
   {
    "align": 2,
    "hex": "2f02222f000c7006b0af000865064280241f4e75740eb4af000865f24a8167ee202f00085f80243c000002444c02080006800000000020404aa8000c66204eb900000000b0af000854c07100448060c0204022280010206f0010108160b241e80014224043e90084600a208141e8001cb1c967dcb29066f260f2",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6lookup",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6lookup",
    "size": 122
   },
   {
    "align": 2,
    "hex": "4feffe3448d7400c202f01d0223c000002444c0108002c40ddfc0000000042ae000c2f2f01d441ef00104eb900000000203c00000080d08f588f223c00000084204041e8ff9043f6180022d8b08866fa0681000000700680000000700c810000024466dc223c00000000203c00000000204120fcfffe0000b08866f64aae0018671871af01db2d40001070012d40000c4cd7400c4fef01cc4e7541ee0018200e068000000084240e068200000088224822fc0000001c22bc0000000f7601214300082140000c2141001042a8001441e8001c068000000070b48866d2200e0680000000142c800680000000702d4000042d400008608c",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7publish",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
    "size": 246
   },
   {
    "align": 2,
    "hex": "202f0004223c000002444c0108002040d1fc0000000042a8000c4e75",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph7retract",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7retract",
    "size": 28
   },
   {
    "align": 2,
    "hex": "202f00045f807207b280640e4280424130812140000220084e75720160f2",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4slot",
+=======
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4slot",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 30
   },
   {
@@ -3487,7 +5142,11 @@
    "align": 2,
    "hex": "518f2f0e2c482f2f001048790000000041ef000e4eb900000000508f4a6f0006660c42001c80200e2c5f508f4e75202f00087207b280651a223c000001084c01080041f900000000d1c02d500001700160d2487900000000487800082f004eb900000000",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records7name_of",
+=======
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 100
   },
   {
@@ -3501,21 +5160,25 @@
    "align": 2,
    "hex": "4feffff42f0e2f022c6f001c242f0018e0822f0241ef000f4eb900000000588f4a2f000b67422f6f000c00104aaf0020675a226f00207004b0896404327c000441ef001042801210670e52881d8108005280b08966f0200942011d810800241f2c5f4fef000c4e757006b08264244eb900000000b082651a722d1f4100101f4100111f4100121f41001360a0202f002060c6428060c8",
    "kind": "text",
+<<<<<<< HEAD
    "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9name_into",
+=======
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes9name_into",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 150
   },
   {
    "align": 2,
    "hex": "2f02202f000c7203b280641e7407b4806418226f00085889206f000860084a8867084a186630b1c966f442007201c081241f4e755289747eb48865eeb3c167124a89670e101175802042741fb48864da60e2700160d6222f0008508160de",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate7body_ok",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate7body_ok",
    "size": 94
   },
   {
    "align": 2,
    "hex": "4e56ff0c48d73cfc282e000c2e2e0010286e00144a8467067008b084644242413d41ff3c42aeff3e3d41ff4242aeff44263c000000002d43ff48701a2d40ff4c72082d41ff5076fb2d43ff54486eff3c2f07206c00104e90508f4a8467000300246e0008740142aeff382a0e0685ffffff5842832d43ff347048b0aa0004675470013d40ff58262eff342d43ff5a42403d40ff5e42aeff60223c000000002d41ff6476182d43ff6870082d40ff6c72fb2d41ff702f052f07206c00104e90508f52aeff34508a20025280b48464000290240060a42a5241ed000443ed0008600a52887180727eb2806512b1c9677a4a88677610107380761fb68165e44206487800482f0d4eb900000000508f4a00664276013d43ff74262eff342d43ff7642403d40ff7a42aeff7c223c000000002d41ff8076312d43ff8470082d40ff8872fb2d41ff8c486eff742f07206c00104e90508f4aaeff3467000198266e000842832d42ff38600000ac7c0160927211203c0000000076013d43ffe4262eff342d43ffe642433d43ffea42aeffec2d40fff02d41fff470082d40fff872fb2d41fffc486effe42f07206c00104e90508f6000ff104879000000002f032f034eb90000000070013d40ffac222eff342d41ffae3d40ffb22d43ffb441f9000000002d48ffb8701d2d40ffbc72082d41ffc070fb2d40ffc4486effac2f07206c00104e90508f5283b6aeff34670000e2508bb68467a07048b0ab000466e8241320152042b090664072013d41ff90206eff342d48ff923d41ff962d43ff98203c000000002d40ff9c721c2d41ffa070082d40ffa472e92d41ffa8486eff902f07206c00104e90508f4a06679a48780004487800482f0d487800482f024eb9000000004fef00144a006600ff3c48780003487800482f0d487800482f024eb9000000004fef00144a006700ff5c72013d41ffc8206eff342d48ffca3d41ffce2d43ffd0203c000000002d40ffd472552d41ffd870082d40ffdc72fb2d41ffe0486effc82f07206c00104e90508f6000ff18242eff3842a7487800482f0d4eb9000000004fef000c2200424148414a416700fdb43d40ff38760147f9000000007d4060107140b0866600fd9c52837020b083671c2f03487800482f0d4e934fef000c2200424148414a4166d86000fd784a6eff386700fe1c7215203c000000006000fe184cee3cfcff0c4e5e4e75",
    "kind": "text",
-   "name": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+   "name": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "size": 872
   },
   {
@@ -3529,7 +5192,11 @@
    "align": 4,
    "hex": "",
    "kind": "bss",
+<<<<<<< HEAD
    "name": ".bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
+=======
+   "name": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "size": 2112
   },
   {
@@ -3543,21 +5210,31 @@
    "align": 4,
    "hex": "",
    "kind": "bss",
-   "name": ".bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6GRAPHS",
+   "name": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6GRAPHS",
    "size": 4640
   },
   {
    "align": 2,
    "hex": "",
    "kind": "bss",
-   "name": ".bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4MASK",
+   "name": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4MASK",
    "size": 112
   },
   {
    "align": 2,
+<<<<<<< HEAD
+=======
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "size": 42
+  },
+  {
+   "align": 2,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "hex": "4fefffe448d7041c202f00244aaf0020674a4a80675cb0af00286240246f0020226a006c222a00504a89674a4a81674c242f002894802f42001026094c4320004a80663e282f00104c434004b8aa005c6436202f0010d081720160044280424130812140000220084cd7041c4fef001c4e75424160ea2009424160e42001424160de4280424160d8424160d4",
    "kind": "text",
-   "name": ".text._RNvCsf4iJLEeHUpX_15dkrt_svc_params9stock_row",
+   "name": ".text._RNvCseQtBFPkyhVO_13dkrt_svc_rows9stock_row",
    "size": 140
   },
   {
@@ -3868,6 +5545,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "37c51e92e89a3b6852fb5496578ff64482aa46ee453653bb68978e082f991af2",
 =======
  "source_sha256": "b4abf1e3bccfd11e44f5c43f628793245f248d3a28c5241aba4eb3050db3ee94",
@@ -3890,24 +5568,48 @@
  "symbols": [
   {
    "global": false,
+=======
+ "source_sha256": "d15e756cc1f4ee41de02dbb9c265a790bc1d2d97033ec6e33a18f6e63951a2cc",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "section": ".bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "value": 0
+  },
+  {
+   "global": false,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "name": ".sec..bss._RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare8INIT_CTX",
    "section": ".bss._RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare8INIT_CTX",
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4MASK",
    "section": ".bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph4MASK",
+=======
+   "name": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "section": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6GRAPHS",
-   "section": ".bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo5graph6GRAPHS",
+   "name": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4MASK",
+   "section": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4MASK",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+   "name": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6GRAPHS",
+   "section": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6GRAPHS",
+   "value": 0
+  },
+  {
+   "global": false,
+<<<<<<< HEAD
    "name": ".sec..bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
    "section": ".bss._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6SHAPES",
    "value": 0
@@ -3916,16 +5618,35 @@
    "global": false,
    "name": ".sec..data",
    "section": ".data",
+=======
+   "name": ".sec..bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "section": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
-   "section": ".rodata._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks10DK_SVC_ROW",
+   "name": ".sec..rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DK_SVC_ROW",
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DK_SVC_ROW",
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
+=======
+   "name": ".sec..rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14DK_SVC_RECORDS",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "section": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks16DK_SVC_LIFECYCLE",
+   "value": 0
+  },
+  {
+   "global": false,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "name": ".sec..rodata.global.10",
    "section": ".rodata.global.10",
    "value": 0
@@ -4106,20 +5827,20 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RINvCsf4iJLEeHUpX_15dkrt_svc_params11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "name": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows11stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..text._RINvCsf4iJLEeHUpX_15dkrt_svc_params15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "name": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows15set_stock_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
-   "section": ".text._RINvCsf4iJLEeHUpX_15dkrt_svc_params6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+   "name": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "value": 0
   },
   {
@@ -4130,14 +5851,36 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE4stopNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop0EB1E_",
+   "section": ".text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE4stopNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop0EB1E_",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtB4_7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE5startNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start0EB1F_",
+   "section": ".text._RINvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE5startNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start0EB1F_",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5check0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCs4NVp4pdP0rZ_8dkrt_abi8registry4eachNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBM_3lfo3LfoINtNtNtB4_8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks0_0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
@@ -4148,96 +5891,172 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtBN_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo4saveNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo6storedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCseyDGMeTgrva_12dkrt_svc_lfo7records9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky6assignNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtBK_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settle0ECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11dsp_releaseNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11dsp_releaseNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4freeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11table_checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk11table_checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes5storeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12apply_recordNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12apply_recordNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12dsp_row_stepNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12dsp_row_stepNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12module_beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk12module_beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk13module_commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk13module_commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records6commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records6commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14dsp_check_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk14dsp_check_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk15dsp_check_typesNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk15dsp_check_typesNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk16teardown_refusalNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk18dsp_check_sectionsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk18dsp_check_sectionsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk3capNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk3capNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "value": 0
@@ -4318,6 +6137,10 @@
    "global": false,
    "name": ".sec..text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9on_loadedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RINvNtNtCs4NVp4pdP0rZ_8dkrt_abi7service5thunk9on_loadedNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCseyDGMeTgrva_12dkrt_svc_lfo7records3LfoECs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
@@ -4334,32 +6157,70 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB4_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0Cs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB4_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0Cs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB6_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0CsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB6_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0CsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNSNvYNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB9_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtBX_7ProblemEE9call_once6vtableCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNSNvYNCNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB9_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtBX_7ProblemEE9call_once6vtableCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNSNvYNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBb_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtNtB17_7service7ProblemEE9call_once6vtableCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNSNvYNCNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtBb_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checks_0INtNtNtCs6uNbiqmv1Ak_4core3ops8function6FnOnceTNtNtB17_7service7ProblemEE9call_once6vtableCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "value": 0
   },
   {
    "global": false,
-   "name": ".sec..text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks11dk_svc_init",
-   "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks11dk_svc_init",
+   "name": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_fini",
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_fini",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+   "name": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_init",
+   "value": 0
+  },
+  {
+   "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
    "section": ".text._RNvCs1oHnP7Y72L3_16dkrt_svc_lfo_dks14dk_svc_declare",
+=======
+   "name": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
    "value": 0
   },
   {
    "global": false,
+   "name": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+   "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
+   "value": 0
+  },
+  {
+   "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvMs1_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_7Declare3add",
    "section": ".text._RNvMs1_NtCs4NVp4pdP0rZ_8dkrt_abi7serviceNtB5_7Declare3add",
+=======
+   "name": ".sec..text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
+   "section": ".text._RNvMNtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB2_3Lfo9number_of",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
@@ -4382,6 +6243,15 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
+=======
+   "name": ".sec..text._RNvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB4_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE8instanceCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNvMs_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB4_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE8instanceCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "value": 0
+  },
+  {
+   "global": false,
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "name": ".sec..text._RNvMsa_NtCs6uNbiqmv1Ak_4core3fmtNtB5_9Formatter12pad_integral",
    "section": ".text._RNvMsa_NtCs6uNbiqmv1Ak_4core3fmtNtB5_9Formatter12pad_integral",
    "value": 0
@@ -4412,6 +6282,7 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare4init",
    "section": ".text._RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare4init",
    "value": 0
@@ -4478,6 +6349,8 @@
   },
   {
    "global": false,
+=======
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "name": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky14referenced_but",
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk6sticky14referenced_but",
    "value": 0
@@ -4486,6 +6359,60 @@
    "global": false,
    "name": ".sec..text._RNvNtCshSkmfNJ5zIR_7dkneeds4keys15name_hash_bytes",
    "section": ".text._RNvNtCshSkmfNJ5zIR_7dkneeds4keys15name_hash_bytes",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4rows",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph4rows",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph5build",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7columns",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7columns",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4kept",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4kept",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7highest",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes7name_of",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4same",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4same",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4word",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate4word",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate7body_ok",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate7body_ok",
    "value": 0
   },
   {
@@ -4526,32 +6453,57 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE12apply_recordCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5applyCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNvXNtCsiu542U2B5NE_12dkrt_svc_lfo7recordsNtNtB4_3lfo3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider5parts7RecordsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE5checkCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6removeCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6removeCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6detachCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE6settleCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE7declareCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
    "section": ".text._RNvXNtCseyDGMeTgrva_12dkrt_svc_lfo7recordsNtB2_3LfoINtNtCs4NVp4pdP0rZ_8dkrt_abi7service7ServiceNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE7declareCs1oHnP7Y72L3_16dkrt_svc_lfo_dks",
+=======
+   "name": ".sec..text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE8start_inCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RNvXs0_NtCsiu542U2B5NE_12dkrt_svc_lfo3lfoNtB5_3LfoINtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider8contract8ProviderNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreE8start_inCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
@@ -4592,8 +6544,8 @@
   },
   {
    "global": false,
-   "name": "_RNvCsf4iJLEeHUpX_15dkrt_svc_params9stock_row",
-   "section": ".text._RNvCsf4iJLEeHUpX_15dkrt_svc_params9stock_row",
+   "name": "_RNvCseQtBFPkyhVO_13dkrt_svc_rows9stock_row",
+   "section": ".text._RNvCseQtBFPkyhVO_13dkrt_svc_rows9stock_row",
    "value": 0
   },
   {
@@ -4640,6 +6592,7 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": "_RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare7declare",
    "section": ".text._RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare7declare",
    "value": 0
@@ -4708,6 +6661,10 @@
    "global": false,
    "name": "_RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
    "section": ".text._RNvNtCseyDGMeTgrva_12dkrt_svc_lfo8validate9check_set",
+=======
+   "name": "_RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare16declare_provider",
+   "section": ".text._RNvNtCs8bqlSpJqGKy_11dkrt_svc_rt7declare16declare_provider",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
    "value": 0
   },
   {
@@ -4732,6 +6689,72 @@
    "global": false,
    "name": "_RNvNtCshSkmfNJ5zIR_7dkneeds4keys9name_hash",
    "section": ".text._RNvNtCshSkmfNJ5zIR_7dkneeds4keys9name_hash",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo13bind_firmware",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo5words",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo5words",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "section": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave4WAVE",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave8wave_max",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave8wave_max",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6lookup",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph6lookup",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7publish",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7retract",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo5graph7retract",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4slot",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes4slot",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "section": ".bss._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes6SHAPES",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes9name_into",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo6shapes9name_into",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
+   "section": ".text._RNvNtCsiu542U2B5NE_12dkrt_svc_lfo8validate9check_set",
    "value": 0
   },
   {
@@ -5217,8 +7240,13 @@
  ],
  "toolchain": {
   "exports": "DKRT_LFO_FW dk_lfo_eval dk_lfo_graph dk_lfo_name dk_module dk_svc_abi lfo_dn2_read_call lfo_dn2_read_slew lfo_dn2_read_start lfo_dn2_tick_call lfo_dn2_tick_slew lfo_dn2_tick_start lfo_dt2_read_call lfo_dt2_read_slew lfo_dt2_read_start lfo_dt2_tick_call lfo_dt2_tick_slew lfo_dt2_tick_start lfo_ui_graph lfo_ui_name3 lfo_ui_name4",
+<<<<<<< HEAD
   "instructions_redecoded": "4001",
   "isa_check": "8d89d60cb1afcba851be5721d41625d54798827c6e480477a096850e65409e8e",
+=======
+  "instructions_redecoded": "4260",
+  "isa_check": "1fd037eb41123dc7ad3cdedfc72c4e675e6ef377fe71bc7b0b923732a26893d9",
+>>>>>>> 241d4be74 (Rename the rows crate dkrt-svc-params to dkrt-svc-rows)
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

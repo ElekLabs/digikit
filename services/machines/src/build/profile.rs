@@ -1,6 +1,6 @@
 //! The device facts of the lowering (`Profile`).
 use dkrt_abi::mem::iw;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 
 /// The device facts of the lowering (a copy of the words of `dynreg_info` from 65; see core/dynreg).
 #[derive(Clone, Copy)]

@@ -6,7 +6,7 @@ use dkrt_sdk::records::*;
 use dkrt_sdk::*;
 use dkrt_svc_machines::build::{self, *};
 use dkrt_svc_machines::records::Machines;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_rows::dynreg::w;
 use dkrt_test_support::FakeCore;
 use std::boxed::Box;
 use std::sync::Mutex;
