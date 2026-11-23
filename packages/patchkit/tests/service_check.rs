@@ -875,3 +875,62 @@ fn the_provider_form_takes_its_resident_query_from_the_query_part() {
     fs::write(&entry, call("Query", ", query = rt::dk_service_query_v1")).unwrap();
     assert!(mentions(&problems(&dir, &sdk), "takes no `query =`"));
 }
+
+#[test]
+fn a_provider_takes_its_kinds_from_the_generated_list_not_from_a_declare() {
+    let call = |kinds: &str| {
+        format!(
+            "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", {kinds}, parts = [Records], hooks = [], fills = []);\n"
+        )
+    };
+    // the manifest gives one kind and records.rs (the template's, which has no `declare` of it) says nothing: the old form would be refused
+    let (dir, sdk) = service("provider-kinds", &["SWEEP_KIND"]);
+    let entry = dir.join("dks/src/lib.rs");
+    fs::write(&entry, call("&KINDS_SWEEP")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::write(&entry, call("&dkrt_sdk::records::KINDS_SWEEP")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // another list than the generated one, or none while the manifest has a kind
+    fs::write(&entry, call("&KINDS_OTHER")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "a provider takes `&KINDS_SWEEP`"
+    ));
+    fs::write(&entry, call("&[]")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "the manifest gives the record kind SWEEP_KIND to `sweep`"
+    ));
+}
+
+#[test]
+fn a_provider_without_record_kinds_needs_no_records_file_and_one_with_kinds_does() {
+    let call = "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &[], parts = [Tick], hooks = [], fills = []);\n";
+    // no kind in the manifest: no records.rs, no `pub mod records`, no slots.rs
+    let (dir, sdk) = service("kindless-provider", &[]);
+    let commented = call.replace("&[],", "// no record kind\n    &[],");
+    fs::write(dir.join("dks/src/lib.rs"), commented).unwrap();
+    fs::remove_file(dir.join("src/records.rs")).unwrap();
+    fs::remove_file(dir.join("src/slots.rs")).unwrap();
+    fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod sweep;\n").unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // the old form with no kinds keeps the rules
+    let (dir, sdk) = service("kindless-old-form", &[]);
+    fs::remove_file(dir.join("src/records.rs")).unwrap();
+    assert!(mentions(&problems(&dir, &sdk), "src/records.rs is missing"));
+    // a provider with kinds keeps them: the file and its declaration
+    let (dir, sdk) = service("provider-with-kinds", &["SWEEP_KIND"]);
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [], fills = []);\n",
+    )
+    .unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::remove_file(dir.join("src/records.rs")).unwrap();
+    assert!(mentions(&problems(&dir, &sdk), "src/records.rs is missing"));
+    fs::write(dir.join("src/lib.rs"), "#![no_std]\n").unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "does not declare `pub mod records;`"
+    ));
+}

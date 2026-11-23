@@ -8920,6 +8920,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "2bd2439869b7463c69f0a78dbb986b60b65f8e0e118932713513ce17b160b891",
 =======
  "source_sha256": "b7be1caa740a28238ecca744ad248b54d94bef0d69c4c759bbd90500a0573197",
@@ -8933,6 +8934,9 @@
 =======
  "source_sha256": "ead2df6124bc32c008a9121428876c3d973b566fb128cb026b7bd2a8a089013c",
 >>>>>>> a2b8b5d (Close the RC3-1 contract path review findings)
+=======
+ "source_sha256": "68fb2dbd460f01d31cb3fbc12562b5e07adce0c84cd256a257582fe4df762c19",
+>>>>>>> 4c99e9c (Contract path for the first provider port: owner cell in .bss and in place, kinds rule, test subject)
  "symbols": [
   {
    "global": false,

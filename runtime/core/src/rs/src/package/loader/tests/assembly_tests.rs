@@ -2061,7 +2061,8 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                 assert_eq!(r, OK, "{} {}: init refused its own declarations", dev.name, s.leaf);
                 for i in 0..col.decl.n {
                     let d = col.decl.items[i];
-                    if d.tag != Declare::ROW {
+                    // the row (of either form) and the provider's instance are the core's own, not entries of the header table
+                    if d.tag != Declare::ROW && d.tag != Declare::PROVIDER_ROW && d.tag != Declare::PROVIDER_INSTANCE {
                         got.push(plain(d.tag, d.a, d.b));
                     }
                 }

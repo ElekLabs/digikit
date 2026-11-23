@@ -18,7 +18,7 @@ macro_rules! hook_device {
 /// The glue of a service file that provides a `ProviderRow` (RC3): `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], hooks = [...], fills = [...],
 /// exports = ..., tick = f)` for an owner object `Shortcuts: Provider<ImportCore>` that also implements the traits of the parts it names. `parts` lists the optional parts the
 /// object adopts (`Records`, `Dsp`, `Tick`, `Query`, `Describe`; the lifecycle part is always there); the later lists are those of the old form, all optional but in the same
-/// order. The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start` before the declarations, `fini`
+/// order. `parts = [..], hooks = [..], fills = [..]` with no `exports` is the form of a service with no `provided` imports (it declares no export). The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start` before the declarations, `fini`
 /// stops it) and the module record; `Query` also declares the resident query entry and points it at the part. `kinds` need the `Records` part.
 ///
 /// The old form: `service!(Lfo, "lfo", KINDS_LFO)` for `impl<C: CoreApi> Service<C> for Lfo`, the name of its `[[service]]` and the record kinds
@@ -35,6 +35,9 @@ macro_rules! service {
     // ---- the provider form: `parts = [...]`
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?] $(,)?) => {
         $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [], fills = [], exports = $crate::service!(@exports), tick = None);
+    };
+    ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*] $(,)?) => {
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*] $(,)?) => {
         $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = None);
@@ -183,15 +186,15 @@ macro_rules! service {
         /// What `init` does before the declarations: make the instance (`Provider::start`) and keep it in `DK_SVC_OWNER`. `E_LOADED` when there is one.
         pub fn dk_svc_start() -> Result<*mut u8, i32> {
             DK_SVC_OWNER
-                .start(|| <$svc as $crate::dkrt_abi::provider::Provider<$crate::ImportCore>>::start(&$crate::ImportCore))
+                .start(|slot| <$svc as $crate::dkrt_abi::provider::Provider<$crate::ImportCore>>::start_in(&$crate::ImportCore, slot))
                 .map(|instance| instance as *mut u8)
         }
 
         /// What `fini` does: `Provider::stop` on the instance, once.
         pub fn dk_svc_stop() {
-            if let Some(instance) = DK_SVC_OWNER.stop() {
-                <$svc as $crate::dkrt_abi::provider::Provider<$crate::ImportCore>>::stop(instance, &$crate::ImportCore);
-            }
+            DK_SVC_OWNER.stop(|instance| {
+                <$svc as $crate::dkrt_abi::provider::Provider<$crate::ImportCore>>::stop(instance, &$crate::ImportCore)
+            });
         }
 
         unsafe extern "C" fn dk_svc_init(ctx: *mut u8) -> i32 {

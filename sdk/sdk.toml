@@ -1433,6 +1433,7 @@ doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when 
 name = "dk_shortcut_add"
 service = "shortcuts"
 provided = true
+wrapper = "builder"
 since = "0.10.5"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"

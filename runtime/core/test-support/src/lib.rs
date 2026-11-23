@@ -9,6 +9,7 @@ mod pool;
 mod provider_driver;
 pub mod routes;
 mod storage;
+mod subject;
 use core::cell::{Cell, RefCell};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspState;
@@ -25,6 +26,7 @@ use std::boxed::Box;
 use std::string::String;
 use std::vec::Vec;
 pub use storage::FakeStorage;
+pub use subject::subject;
 
 /// One call the service made, in order.
 #[derive(Clone, Debug, PartialEq)]

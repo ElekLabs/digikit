@@ -5,7 +5,8 @@
 //!
 //! - **Layout.** `Cargo.toml` (package `dkrt-svc-NAME`), `src/lib.rs`, `src/records.rs`, `src/slots.rs` (required when `dks/module.toml` declares a `[[fill]]`, declared as `pub mod slots;` when present) and `tests/` with at least one `.rs` file. A folder
 //!   `src/dsp/` has a `mod.rs`, and a service whose `Service` impl has `dsp_*` handlers has the folder. `lib.rs` declares `pub mod records` (and `pub mod slots` when the file exists)
-//!   (and `pub mod dsp` with the folder). Other modules in `src/` are the service's own.
+//!   (and `pub mod dsp` with the folder). A provider (`service!` with `parts = [...]`) whose manifest gives it no record kind needs no `records.rs` and no `slots.rs`.
+//!   Other modules in `src/` are the service's own.
 //! - **The service file.** `dks/` holds `module.toml` (id `core/services/NAME`, `role = "service"`, `service = "NAME"`), `Cargo.toml`, `src/lib.rs` (the
 //!   `service!(...)` call and nothing else) and, when needed, `src/hooks.rs` (every hook as assembler; required when the module has `[[hook]]` entries) and
 //!   `src/fw.rs` (firmware calls). It is required when the service's `[[service]]` row has no `rust` (the service is a file), and checked whenever it exists.
@@ -163,6 +164,37 @@ fn declare_body(text: &str) -> Option<&str> {
         }
     }
     None
+}
+
+/// The kinds a provider-form file declares: its `service!(Owner, "name", KINDS, parts = [...])` takes them from the `KINDS_<NAME>` list that `patchkit gen` writes from the
+/// manifest (`&[]` for none), so they are the manifest's by construction; any other expression is a problem. `None` when the file is not the provider form.
+fn provider_kinds(
+    dks_lib: &str,
+    name: &str,
+    manifest: &BTreeSet<String>,
+) -> Option<(BTreeSet<String>, Vec<String>)> {
+    // line comments between the arguments are not part of the kinds expression
+    let dks_lib = Regex::new(r"//[^\n]*").unwrap().replace_all(dks_lib, "");
+    let call =
+        Regex::new(r#"service!\s*\(\s*[A-Za-z_]\w*\s*,\s*"[^"]*"\s*,\s*([^,]*?)\s*,\s*parts\s*="#)
+            .unwrap();
+    let kinds = call.captures(&dks_lib)?[1].to_string();
+    let list = format!("&KINDS_{}", name.to_uppercase());
+    let own = kinds
+        .strip_prefix('&')
+        .is_some_and(|k| k.rsplit("::").next() == Some(&list[1..]));
+    Some(if kinds == "&[]" {
+        (BTreeSet::new(), vec![])
+    } else if own {
+        (manifest.clone(), vec![])
+    } else {
+        (
+            BTreeSet::new(),
+            vec![format!(
+                "dks/src/lib.rs: the kinds argument of service! is `{kinds}`: a provider takes `{list}`, the list `patchkit gen` writes from the manifest"
+            )],
+        )
+    })
 }
 
 /// What `declare` declares: the names `X` of its `d.kind(KIND_X, LEN_X)` calls, and the calls that have no manifest entry.
@@ -922,9 +954,18 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
                 .and_then(|f| f.as_array().map(|a| !a.is_empty()))
         })
         .unwrap_or(false);
-    let mut files = vec!["src/lib.rs", "src/records.rs"];
-    if has_fills {
-        files.push("src/slots.rs");
+    // a provider with no record kinds (the manifest gives it none) has no records.rs and no slot tables: its parts sit with the owner
+    let kindless = {
+        let dks_lib = std::fs::read_to_string(dir.join("dks/src/lib.rs")).unwrap_or_default();
+        manifest(sdk, &name)?.0.is_empty()
+            && provider_kinds(&dks_lib, &name, &BTreeSet::new()).is_some()
+    };
+    let mut files = vec!["src/lib.rs"];
+    if !kindless {
+        files.push("src/records.rs");
+        if has_fills {
+            files.push("src/slots.rs");
+        }
     }
     for f in files {
         if !dir.join(f).is_file() {
@@ -951,8 +992,11 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
         problem("records.rs has dsp_* handlers but the crate has no src/dsp/ folder".into());
     }
     if let Some(lib) = get("src/lib.rs") {
-        let mut mods = vec!["records"];
-        if has_fills || dir.join("src/slots.rs").is_file() {
+        let mut mods = vec![];
+        if !kindless {
+            mods.push("records");
+        }
+        if (has_fills && !kindless) || dir.join("src/slots.rs").is_file() {
             mods.push("slots");
         }
         if dsp_dir.is_dir() {
@@ -1023,7 +1067,17 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
         }
         _ => {}
     }
-    let (decl, other) = declared(records);
+    // a provider takes its kinds from the `service!` call (`Provider` has no `declare`); an old-form service declares them in records.rs
+    let dks_lib = std::fs::read_to_string(dir.join("dks/src/lib.rs")).unwrap_or_default();
+    let (decl, other) = match provider_kinds(&dks_lib, &name, &kinds) {
+        Some((decl, bad)) => {
+            for b in bad {
+                problem(b);
+            }
+            (decl, vec![])
+        }
+        None => declared(records),
+    };
     for o in other {
         problem(format!(
             "records.rs declares `{o}`: the manifest has no place for it"

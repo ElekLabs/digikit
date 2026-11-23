@@ -2,20 +2,26 @@ use super::*;
 
 // the imports a service file makes are the runtime's; this test binary links none, so each answers OK
 mod stubs {
+    /// How many hooks, slot fills and exports were declared, in that order.
+    pub static COUNTS: [core::sync::atomic::AtomicUsize; 3] =
+        [const { core::sync::atomic::AtomicUsize::new(0) }; 3];
     #[no_mangle]
     extern "C" fn dk_service_declare_kind(_: *mut u8, _: u32, _: u32, _: *const u8) -> i32 {
         0
     }
     #[no_mangle]
     extern "C" fn dk_service_declare_hook(_: *mut u8, _: u32, _: *const u8) -> i32 {
+        COUNTS[0].fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         0
     }
     #[no_mangle]
     extern "C" fn dk_service_declare_slot(_: *mut u8, _: u32, _: u32, _: *const u8) -> i32 {
+        COUNTS[1].fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         0
     }
     #[no_mangle]
     extern "C" fn dk_service_declare_export(_: *mut u8, _: u32, _: *const u8) -> i32 {
+        COUNTS[2].fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         0
     }
     #[no_mangle]
@@ -131,7 +137,7 @@ mod provided {
                 ticks: 0,
             })
         }
-        fn stop(self, _: &crate::ImportCore) {
+        fn stop(&mut self, _: &crate::ImportCore) {
             STOPS.fetch_add(1, SeqCst);
         }
     }
@@ -250,4 +256,39 @@ fn init_starts_the_instance_before_the_row_and_a_hook_and_the_parts_reach_that_i
         stops + 1,
         "a second fini stops nothing"
     );
+}
+
+/// A provider file with hooks and fills and no `exports =`: the form of a service with no provided imports.
+mod exportless {
+    use dkrt_abi::provider::{Provider, Status};
+    pub struct S;
+    impl Provider<crate::ImportCore> for S {
+        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+            Ok(S)
+        }
+    }
+    pub fn hook() {}
+    pub fn fill() {}
+    crate::service!(
+        S,
+        "exportless",
+        &[],
+        parts = [],
+        hooks = [("cf.x.hook.a", hook), ("cf.x.hook.b", hook)],
+        fills = [("x_slot", fill)]
+    );
+    pub fn init(ctx: *mut u8) -> i32 {
+        unsafe { dk_svc_init(ctx) }
+    }
+}
+
+#[test]
+fn the_provider_form_without_exports_declares_the_hooks_and_fills_and_no_export() {
+    use core::sync::atomic::Ordering::SeqCst;
+    let before = [0, 1, 2].map(|i| stubs::COUNTS[i].load(SeqCst));
+    assert_eq!(exportless::init(0x1234 as *mut u8), 0);
+    let after = [0, 1, 2].map(|i| stubs::COUNTS[i].load(SeqCst));
+    assert_eq!(after[0] - before[0], 2, "hooks as declared");
+    assert_eq!(after[1] - before[1], 1, "fills as declared");
+    assert_eq!(after[2] - before[2], 0, "no export table");
 }

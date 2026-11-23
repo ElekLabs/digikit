@@ -13,6 +13,13 @@ pub trait Provider<C: CoreApi>: Sized {
     /// The file's `init`, before the declarations. Allocate state; no consumer is attached yet.
     fn start(core: &C) -> Result<Self, Status>;
 
+    /// What the file's `init` calls: `start` into the slot. The default moves the value `start` returns into the slot; a service with a large state overrides it and writes
+    /// the state where it lives (no copy through the stack). It must leave nothing that needs a drop when it fails.
+    fn start_in(core: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), Status> {
+        slot.write(Self::start(core)?);
+        Ok(())
+    }
+
     /// A consumer came up: every provider it needs hears it once, in table order, also when the module has no records. The records of the service's kinds follow, one
     /// `Records::apply` each. A refusal is undone with `detach` for the same consumer.
     fn attach(&mut self, _core: &C, _consumer: &Consumer<'_>) -> Result<(), Status> {
@@ -27,8 +34,8 @@ pub trait Provider<C: CoreApi>: Sized {
         Ok(())
     }
 
-    /// The file's `fini`: last call before the core restores entries and frees the package.
-    fn stop(self, _core: &C) {}
+    /// The file's `fini`: last call before the core restores entries and frees the package. The instance is dropped where it lives right after (it is not moved).
+    fn stop(&mut self, _core: &C) {}
 
     /// The boot has loaded every service its selection needs and loads no module yet; `s` has the keys of each selected module. Once per boot. A service that keeps
     /// state across boots plans and saves it here.

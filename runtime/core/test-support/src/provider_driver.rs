@@ -3,6 +3,7 @@
 //! [`Driver`] of the suite over it. The old static-callback suite and this one are one body (`contract::run`).
 use crate::contract::{run, Fixture};
 use crate::driver::{Driver, Subject};
+use crate::subject::SubjectGuard;
 use crate::FakeCore;
 use core::ffi::c_void;
 use dkrt_abi::dsp::{DspSec, Job};
@@ -38,7 +39,8 @@ pub struct RowBuilder<P> {
 }
 
 unsafe fn stop_of<P: Provider<FakeCore>>(instance: *mut c_void, core: &FakeCore) {
-    P::stop(*Box::from_raw(instance as *mut P), core)
+    let mut boxed = Box::from_raw(instance as *mut P);
+    P::stop(&mut boxed, core)
 }
 
 impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
@@ -176,6 +178,8 @@ impl<R: Recipe> Subject for Provided<R> {
 /// The suite's [`Driver`] over a started provider: every call goes through the part tables of its row.
 pub struct ProviderDriver<R: Recipe> {
     started: Started,
+    /// The instance as the `subject` of the fixture's functions, while the driver lives.
+    _subject: SubjectGuard,
     _r: core::marker::PhantomData<R>,
 }
 
@@ -207,8 +211,10 @@ impl<R: Recipe> Driver for ProviderDriver<R> {
         let started = R::parts(RowBuilder::<R::P>::new(R::NAME))
             .start(core)
             .unwrap_or_else(|e| panic!("{}: start refused with {e}", R::NAME));
+        let _subject = SubjectGuard::publish(started.handle.instance() as *mut R::P);
         ProviderDriver {
             started,
+            _subject,
             _r: core::marker::PhantomData,
         }
     }
